@@ -81,7 +81,7 @@ public class SyncSourcesTool : ITool
         "no required parameters.",
         "action ('check' | 'sync' | 'diff', default 'check'), sources (comma-separated names, optional), limit (diff only, default 100).");
 
-    public Task<ToolResult> ExecuteAsync(JsonElement args, CancellationToken cancellationToken, IProgress<double>? progress = null)
+    public async Task<ToolResult> ExecuteAsync(JsonElement args, CancellationToken cancellationToken, IProgress<double>? progress = null)
     {
         var action = (ToolArgs.GetOptionalString(args, "action", "mode", "op") ?? "check").ToLowerInvariant();
         var rawSources = ToolArgs.GetOptionalString(args, "sources", "source", "scope", "name");
@@ -93,35 +93,35 @@ public class SyncSourcesTool : ITool
         var followable = _syncService.FollowableSources;
         if (followable.Count == 0)
         {
-            return Task.FromResult(new ToolResult(
+            return new ToolResult(
                 "No followable sources configured.\n"
                 + "Add an assemblies path to a [[sources]] block in config.toml, e.g.\n"
                 + "  [[sources]]\n"
                 + "  name       = \"Core\"\n"
                 + "  csharp     = 'S:\\RimWorldSource\\Core'\n"
-                + "  assemblies = 'D:\\SteamLibrary\\steamapps\\common\\RimWorld\\RimWorldWin64_Data\\Managed'"));
+                + "  assemblies = 'D:\\SteamLibrary\\steamapps\\common\\RimWorld\\RimWorldWin64_Data\\Managed'");
         }
 
         try
         {
-            return Task.FromResult(action switch
+            return action switch
             {
-                "sync" or "update" or "run" => RunSync(only, cancellationToken),
+                "sync" or "update" or "run" => await RunSyncAsync(only, cancellationToken),
                 "diff" or "changes" => RunDiff(
                     only,
                     ToolArgs.GetInt(args, 100, "limit", "maxResults"),
                     ToolArgs.GetOptionalString(args, "file", "path", "filePath"),
                     ToolArgs.GetOptionalString(args, "version", "versionId")),
                 _ => RunCheck()
-            });
+            };
         }
         catch (OperationCanceledException)
         {
-            return Task.FromResult(new ToolResult("Sync cancelled.", true));
+            return new ToolResult("Sync cancelled.", true);
         }
         catch (Exception ex)
         {
-            return Task.FromResult(new ToolResult($"Sync failed: {ex.Message}", true));
+            return new ToolResult($"Sync failed: {ex.Message}", true);
         }
     }
 
@@ -304,9 +304,20 @@ public class SyncSourcesTool : ITool
         }
     }
 
-    private ToolResult RunSync(string[]? only, CancellationToken cancellationToken)
+    private async Task<ToolResult> RunSyncAsync(string[]? only, CancellationToken cancellationToken)
     {
-        var report = _syncService.Sync(only, cancellationToken);
+        var report = await _syncService.SyncAsync(only, cancellationToken);
+
+        // 必须在打印任何统计之前拦掉：拒绝执行时 Changes 是空的，落到下面的循环里
+        // 会输出一句「Sync finished in 0 ms」外加零条变更——看起来像「跑完了，没事可做」，
+        // 而真相是压根没跑。
+        if (report.AlreadyRunning)
+        {
+            return new ToolResult(
+                "A sync is already running in this server process. Nothing was done — retry once it finishes.",
+                true);
+        }
+
         var builder = new StringBuilder();
 
         builder.AppendLine($"Sync finished in {report.ElapsedMs} ms (game version {_syncService.GameVersion ?? "unknown"}):");
@@ -331,14 +342,17 @@ public class SyncSourcesTool : ITool
 
         // XML 变了不需要反编译，但索引仍是旧的，同样得重扫一遍
         var xmlChanged = SourceChangeProbe.Pending?.ChangedXmlSources.Count > 0;
-        if (xmlChanged && !report.Outcomes.Any(o => o.Success))
+        if (xmlChanged && !report.AnyPromoted)
         {
             builder.AppendLine($"\nXML defs changed in: {string.Join(", ", SourceChangeProbe.Pending!.ChangedXmlSources)}"
                              + " — no decompile needed, reindexing only.");
         }
 
-        // 反编译改的是磁盘，内存里的索引还是旧的，就地重扫一遍；重建期间其它查询会挂起等待
-        if (report.Outcomes.Any(o => o.Success) || xmlChanged)
+        // 反编译改的是磁盘，内存里的索引还是旧的，就地重扫一遍；重建期间其它查询会挂起等待。
+        // 判据是「有源真的转正了」而不是「有程序集反编译成功」：事务化之后，一个源可以
+        // 逐个程序集都成功、却在提交阶段失败并整体回滚，此时磁盘没变，重建只是白白
+        // 清空重扫约 4 秒，期间所有查询挂起。
+        if (report.AnyPromoted || xmlChanged)
         {
             if (_rebuilder == null)
             {
@@ -357,6 +371,8 @@ public class SyncSourcesTool : ITool
             }
         }
 
-        return new ToolResult(builder.ToString().TrimEnd());
+        // 有源整体回滚时必须标成错误：正文里那行「同步失败，已整体回滚」很容易被
+        // 淹在成功源的统计里，而调用方据此决定要不要重试。
+        return new ToolResult(builder.ToString().TrimEnd(), report.Failures.Count > 0);
     }
 }

@@ -159,9 +159,10 @@ public sealed class SourceSyncService
         }
     }
 
-    // 同步桥：SyncSourcesTool 目前还在同步上下文里调用（ExecuteAsync 用 Task.FromResult 包结果）。
-    // 那边改成 await SyncAsync 之后这个方法就可以删掉。
-    public SyncReport Sync(
+    // 仅供测试：产品代码一律走 SyncAsync（SyncSourcesTool 已改成 await）。
+    // 留成 internal 而不是删掉，是因为事务测试要在一次断言里同步观察「跑完之后磁盘长什么样」，
+    // 而这里没有同步上下文，sync-over-async 不会死锁。
+    internal SyncReport Sync(
         IReadOnlyCollection<string>? onlySources,
         CancellationToken cancellationToken = default)
         => SyncAsync(onlySources, cancellationToken).GetAwaiter().GetResult();
