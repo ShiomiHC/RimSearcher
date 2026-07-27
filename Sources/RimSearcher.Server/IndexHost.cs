@@ -32,6 +32,18 @@ public sealed class HostSlot : IDisposable
     }
 }
 
+// 代理连接的有界重试窗口。宿主可能正在建索引（首次冷启动约 4 秒），管道还没开，故不能一探
+// 不着就放弃；但也绝不能等成无界——等不到宿主时自建索引是可接受的兜底，卡住不是。
+// 各字段撑起的上界因此是这条路径的全部：Attempts 次连接超时 + (Attempts-1) 次间隔。
+//
+// 参数化只为测试：让它拿毫秒级窗口跑完整条真实路径。真要等满 10 秒的测试没人会留着，
+// 而「不要退化成无界等待」恰恰是这里最该被钉住的性质。
+public sealed record ProxyRetryWindow(int Attempts, int FirstConnectTimeoutMs, int LaterConnectTimeoutMs, int RetryDelayMs)
+{
+    public static readonly ProxyRetryWindow Default = new(
+        Attempts: 3, FirstConnectTimeoutMs: 1500, LaterConnectTimeoutMs: 4000, RetryDelayMs: 500);
+}
+
 // 每个 MCP client 各 spawn 一个进程，各自持一份完整索引（实测约 1 GB/实例）。开启共享后：
 // 首个实例抢到宿主锁 → 建索引 + 起命名管道；后续实例连上管道，只做 stdio↔管道的逐行转发，
 // 自身不建索引。全机因此只保留一份索引。
@@ -69,22 +81,26 @@ public static class IndexHost
     // 返回 true 表示本进程已作为代理完成全部工作（调用方应直接退出，不要建索引）。
     // protocolOut 必须是真正的 stdout：进程启动时 Console.Out 已被改指 stderr，
     // 拿它当下行出口会把响应全写进 stderr，client 就只能干等到超时。
-    public static async Task<bool> TryRunAsProxyAsync(string configFingerprint, TextWriter protocolOut)
+    public static async Task<bool> TryRunAsProxyAsync(
+        string configFingerprint,
+        TextWriter protocolOut,
+        ProxyRetryWindow? window = null)
     {
         if (!IsSupported) return false;
 
+        var retry = window ?? ProxyRetryWindow.Default;
         var pipeName = BuildPipeName(configFingerprint);
 
-        // 宿主可能正在建索引（首次冷启动数秒），给它一个窗口
-        for (var attempt = 0; attempt < 3; attempt++)
+        for (var attempt = 0; attempt < retry.Attempts; attempt++)
         {
-            if (await TryProxyOnceAsync(pipeName, attempt == 0 ? 1500 : 4000, protocolOut))
+            var timeoutMs = attempt == 0 ? retry.FirstConnectTimeoutMs : retry.LaterConnectTimeoutMs;
+            if (await TryProxyOnceAsync(pipeName, timeoutMs, protocolOut))
                 return true;
 
             // 没有宿主在跑，且本进程也没抢到宿主位——交回调用方自建
             if (!SlotHeldByAnotherProcess(pipeName)) return false;
 
-            await Task.Delay(500);
+            await Task.Delay(retry.RetryDelayMs);
         }
 
         return false;

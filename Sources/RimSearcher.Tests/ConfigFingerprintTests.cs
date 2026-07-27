@@ -80,4 +80,26 @@ public class ConfigFingerprintTests
 
         Assert.Equal(before, IndexHost.BuildPipeName(PathOnly(root)));
     }
+
+    // 同一条分界线的另一半，钉在管道名这一层：源码内容变了要落在同一个门牌号上（否则
+    // 找不到正在跑的宿主），配置变了必须落在不同的门牌号上（否则代理被静默换成宿主的
+    // 配置——skip_path_security 就是这么从一个进程传染到另一个进程的）。
+    [Fact]
+    public void PipeName_MovesWithConfigButNotWithContent()
+    {
+        using var workspace = new TempWorkspace();
+        var root = workspace.Dir("src");
+        workspace.WriteFile("src/Thing.cs", "public class Thing { }");
+
+        var sources = new ResolvedSources([new SourcePathEntry { Name = "s", Path = root }], []);
+        var guarded = new AppConfig { SkipPathSecurity = false };
+        var unguarded = new AppConfig { SkipPathSecurity = true };
+
+        var before = IndexHost.BuildPipeName(IndexFingerprints.ForHost(guarded, sources));
+
+        workspace.WriteFile("src/Thing.cs", "public class Thing { public int Added; }");
+
+        Assert.Equal(before, IndexHost.BuildPipeName(IndexFingerprints.ForHost(guarded, sources)));
+        Assert.NotEqual(before, IndexHost.BuildPipeName(IndexFingerprints.ForHost(unguarded, sources)));
+    }
 }

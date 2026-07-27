@@ -58,7 +58,7 @@ if (scopeCatalog.HasSources)
 }
 
 // 席位竞选必须先于建索引：挂上已有宿主的进程不该再花 4 秒和 1 GB 建第二份
-var hostFingerprint = IndexFingerprints.ForHost(resolvedSources);
+var hostFingerprint = IndexFingerprints.ForHost(appConfig, resolvedSources);
 var election = await HostElection.ElectAsync(appConfig, hasPaths, hostFingerprint, protocolOut);
 if (election.ShouldExitImmediately) return;
 
