@@ -15,6 +15,9 @@ public sealed record PendingSourceUpdate
     // 变更涉及的文件名/类型名，用于判断某个会话查过的东西是否受影响
     public IReadOnlyList<string> Hints { get; init; } = [];
 
+    // 变更源对应的源码根目录。会话查过的类型只要不落在这些目录下，这次变更就与它无关。
+    public IReadOnlyList<string> ChangedRoots { get; init; } = [];
+
     public bool RequiresDecompile => ChangedAssemblySources.Count > 0;
     public bool Any => ChangedAssemblySources.Count > 0 || ChangedXmlSources.Count > 0;
 
@@ -47,12 +50,32 @@ public static class SourceWatcher
 
     public static PendingSourceUpdate? Pending => _pending;
 
-    public static void Configure(SourceSyncService syncService, ResolvedSources sources, string cacheDirectory)
+    // 会话据此把「查过的类型」反查到文件路径，再判断是否落在变更源里
+    public static SourceIndexer? Indexer { get; private set; }
+
+    public static void Configure(
+        SourceSyncService syncService,
+        ResolvedSources sources,
+        string cacheDirectory,
+        SourceIndexer indexer)
     {
         _syncService = syncService;
         _sources = sources;
         _statePath = Path.Combine(cacheDirectory, "xml-state.json");
+        Indexer = indexer;
         Enabled = true;
+    }
+
+    private static List<string> RootsOf(IEnumerable<SourcePathEntry> entries, ICollection<string> sourceNames)
+    {
+        var roots = new List<string>();
+        foreach (var entry in entries)
+        {
+            if (!sourceNames.Contains(entry.Name)) continue;
+            try { roots.Add(Path.GetFullPath(entry.Path)); }
+            catch { roots.Add(entry.Path); }
+        }
+        return roots;
     }
 
     public static SessionUpdateNotice? CreateSessionNotice()
@@ -79,12 +102,19 @@ public static class SourceWatcher
                 return;
             }
 
+            var changedNames = new HashSet<string>(
+                assemblySources.Concat(xmlSources), StringComparer.OrdinalIgnoreCase);
+
             _pending = new PendingSourceUpdate
             {
                 DetectedAtUtc = DateTime.UtcNow,
                 ChangedAssemblySources = assemblySources,
                 ChangedXmlSources = xmlSources,
-                Hints = assemblyHints.Concat(xmlHints).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+                Hints = assemblyHints.Concat(xmlHints).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+                ChangedRoots = RootsOf(_sources!.Csharp, changedNames)
+                    .Concat(RootsOf(_sources!.Xml, changedNames))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList()
             };
 
             await ServerLogger.Warning("SourceWatcher", "Source changes detected",
@@ -272,11 +302,21 @@ public sealed class SessionUpdateNotice
         // 还没问过任何具体东西时不打扰
         if (_askedAbout.Count == 0) return false;
 
-        // 程序集变了，该源的整个 C# 面都可能不一样，没法按名字缩小范围——
-        // 此时只要这个会话查过东西就该提醒，漏报的代价比多问一句大得多。
-        if (pending.RequiresDecompile) return true;
+        // 主判据：把会话问过的名字反查回文件，看它们是否落在变更的源里。
+        // 变的是某个 mod 而这个会话一直在看 vanilla 时，这一步就把提示挡掉了。
+        var indexer = SourceWatcher.Indexer;
+        if (indexer != null && pending.ChangedRoots.Count > 0)
+        {
+            foreach (var term in _askedAbout)
+            {
+                foreach (var path in indexer.GetPathsByType(term))
+                {
+                    if (IsUnderChangedRoot(path, pending.ChangedRoots)) return true;
+                }
+            }
+        }
 
-        // XML 变更影响面小且能定位到具体 def 文件，按名字精确匹配即可
+        // def 不在 C# 类型索引里，退回按 XML 文件名匹配
         foreach (var hint in pending.Hints)
         {
             foreach (var term in _askedAbout)
@@ -285,6 +325,20 @@ public sealed class SessionUpdateNotice
                     || term.Contains(hint, StringComparison.OrdinalIgnoreCase))
                     return true;
             }
+        }
+
+        return false;
+    }
+
+    private static bool IsUnderChangedRoot(string path, IReadOnlyList<string> roots)
+    {
+        string full;
+        try { full = Path.GetFullPath(path); }
+        catch { full = path; }
+
+        foreach (var root in roots)
+        {
+            if (full.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return true;
         }
 
         return false;

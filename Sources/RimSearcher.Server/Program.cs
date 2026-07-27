@@ -189,7 +189,7 @@ var indexRebuilder = new IndexRebuilder(indexer, defIndexer, resolvedSources);
 // 那时若还没 Configure，拿到的就是 null，本会话此后再也不会提示。
 if (appConfig.CheckSourceUpdates && syncService.FollowableSources.Count > 0)
 {
-    SourceWatcher.Configure(syncService, resolvedSources, cacheDirectory);
+    SourceWatcher.Configure(syncService, resolvedSources, cacheDirectory, indexer);
     _ = Task.Run(SourceWatcher.DetectAsync);
 }
 
