@@ -3,6 +3,19 @@
         <BaseOutputPath>$(MSBuildThisFileDirectory).build\bin\$(MSBuildProjectName)\</BaseOutputPath>
         <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory).build\obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
         <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
+
+        <!-- 版本号的唯一事实来源。以前是两处：UpdateChecker 里硬编码 "2.7"，而 csproj 没设 <Version>，
+             程序集元数据就停在默认的 1.0.0.0——运行时自报 2.7、exe 属性页写 1.0.0.0，
+             用户报 bug 时对不上号，更新检查也在拿一个跟发布物无关的字面量做比较。
+             放在 Directory.Build.props 而不是某个 csproj：Core / Server / Tests 属于同一个产品，
+             各自带一套版本号只会重新长出不一致。 -->
+        <Version>2.7</Version>
+
+        <!-- SourceRevisionId 一旦被置上（SourceLink、CI 打包都会），SDK 默认会把
+             "+<commit hash>" 追加到 AssemblyInformationalVersion 上。UpdateChecker.IsNewer
+             是 Split('.') 逐段 int.Parse 的，撞上后缀会抛异常并被 catch 吞掉 —— 结果不是报错，
+             而是更新提示从此永久静默。运行时那侧已经会切掉后缀，这里再从源头关掉，两道都不留。 -->
+        <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     </PropertyGroup>
 
     <!-- 发布产物不带符号：单文件 exe 旁边多一个 pdb 很难看，程序集里也不该留下构建机的绝对路径。

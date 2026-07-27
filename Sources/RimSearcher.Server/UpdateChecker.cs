@@ -1,4 +1,5 @@
 using System.Net.Http;
+using System.Reflection;
 using System.Text.Json;
 using RimSearcher.Core;
 
@@ -6,7 +7,12 @@ namespace RimSearcher.Server;
 
 public static class UpdateChecker
 {
-    public const string CurrentVersion = "2.7";//版本号
+    // 版本号：唯一来源是 Sources/Directory.Build.props 的 <Version>，这里只是读程序集元数据。
+    // 曾经这行是硬编码的 "2.7"，而 csproj 没设 <Version>，于是 exe 的文件版本停在 1.0.0.0——
+    // 同一个二进制自报 2.7、属性页写 1.0.0.0，改版本号时也总有一处会被忘掉。
+    // 取 InformationalVersion 而不是 AssemblyName.Version：后者被规范化成四段（2.7 → 2.7.0.0），
+    // 而这个值要露给 initialize 的 serverInfo.version 和 User-Agent，保持 "2.7" 的原样写法更贴合。
+    public static readonly string CurrentVersion = ReadCurrentVersion();
 
     // fork 时只改这一处：检测源和通知里给出的下载地址都由它推导，
     // 否则版本号一落后就会把本 fork 的用户导流到上游 releases 页。
@@ -77,6 +83,25 @@ public static class UpdateChecker
             ("latest", latestVersion),
             ("repo", Repo),
             ("url", ReleasesUrl));
+    }
+
+    // InformationalVersion 可以带 SemVer 的预发布段与构建元数据（"2.7-rc.1+abc1234"），
+    // 而 IsNewer 是 Split('.') 逐段 int.Parse——非数字段会抛异常并被它的 catch 吞掉，
+    // 表现出来不是报错而是「更新提示永久静默」，最难查的那种坏法。所以在入口就把 '-'/'+'
+    // 之后的部分切掉，只留纯数字点分串，IsNewer 的解析假设保持不变。
+    // 元数据缺失（理论上不会：SDK 总会生成该特性）时退回 AssemblyName.Version，
+    // 那是四段规范化形式，同样能被 IsNewer 正常比较。
+    private static string ReadCurrentVersion()
+    {
+        var assembly = typeof(UpdateChecker).Assembly;
+        var informational = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+
+        if (!string.IsNullOrWhiteSpace(informational))
+        {
+            return informational.Split('-', '+')[0].Trim();
+        }
+
+        return assembly.GetName().Version?.ToString() ?? "0.0";
     }
 
     private static bool IsNewer(string remote, string local)
