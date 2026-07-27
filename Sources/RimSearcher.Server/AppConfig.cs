@@ -11,6 +11,13 @@ public record AppConfig
     public bool SkipPathSecurity { get; init; } = false;
     public bool CheckUpdates { get; init; } = true;
 
+    // 0 = 不启用。父进程守护恒开，故这只是额外的兜底闸。
+    public int IdleTimeoutMinutes { get; init; } = 0;
+
+    // 多个 client 各起一个进程时，索引会被复制 N 份（每份约 1 GB）。开启后首个实例成为
+    // 索引宿主，后续实例只做 stdio↔管道转发，全机只保留一份索引。
+    public bool ShareIndexHost { get; init; } = true;
+
     public static (AppConfig Config, string Path, bool IsLoaded) Load()
     {
         var envPath = Environment.GetEnvironmentVariable(ConfigPathEnvVar);

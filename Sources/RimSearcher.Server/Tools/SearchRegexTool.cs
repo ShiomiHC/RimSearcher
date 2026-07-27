@@ -17,6 +17,11 @@ public class SearchRegexTool : ITool
     public string Description =>
         "Regex search across indexed C# and XML files. Supports optional extension filter (e.g., '.cs').";
 
+    private static readonly ToolArgSpec ArgSpec = new(
+        "rimworld-searcher__search_regex",
+        "pattern (a regex, e.g. 'class.*:.*ThingComp'). Aliases accepted: query, regex.",
+        "pattern (required), ignoreCase, fileFilter (aliases: fileExtension, extension, ext).");
+
     public object JsonSchema => new
     {
         type = "object",
@@ -26,23 +31,19 @@ public class SearchRegexTool : ITool
             {
                 type = "string",
                 minLength = 1,
-                description = "Regex pattern to search. Examples: '<thingClass>Apparel</thingClass>', 'void CompTick\\(\\)', 'class.*:.*ThingComp'."
+                description = "Regex pattern to search. Examples: '<thingClass>Apparel</thingClass>', 'void CompTick\\(\\)', 'class.*:.*ThingComp'. Aliases 'query'/'regex' are also accepted."
             },
             ignoreCase = new { type = "boolean", @default = true, description = "Whether to ignore case, defaults to true." },
-            fileFilter = new { type = "string", description = "Optional extension filter such as '.cs' or '.xml'." }
+            fileFilter = new { type = "string", description = "Optional extension filter such as '.cs' or '.xml'. Aliases 'fileExtension'/'extension'/'ext' are also accepted." }
         },
-        required = new[] { "pattern" },
-        additionalProperties = false
+        required = new[] { "pattern" }
     };
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, CancellationToken cancellationToken, IProgress<double>? progress = null)
     {
-        var pattern = args.GetProperty("pattern").GetString();
-        var ignoreCase = !args.TryGetProperty("ignoreCase", out var ic) || ic.GetBoolean();
-        var fileFilter = args.TryGetProperty("fileFilter", out var ff) ? ff.GetString() : null;
-
-        if (string.IsNullOrEmpty(pattern))
-            return new ToolResult("Pattern cannot be empty.", true);
+        var pattern = ToolArgs.GetRequiredString(args, ArgSpec, "pattern", "query", "regex");
+        var ignoreCase = ToolArgs.GetBool(args, true, "ignoreCase", "caseInsensitive");
+        var fileFilter = ToolArgs.GetOptionalString(args, "fileFilter", "fileExtension", "extension", "ext");
 
         try
         {

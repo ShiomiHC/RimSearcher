@@ -33,14 +33,17 @@ public class LocateTool : ITool
                     "Search text or filtered query. Examples: 'Apparel_ShieldBelt', 'RimWorld.Pawn', 'def:Apparel_ShieldBelt', 'method:CompTick'."
             }
         },
-        required = new[] { "query" },
-        additionalProperties = false
+        required = new[] { "query" }
     };
+
+    private static readonly ToolArgSpec ArgSpec = new(
+        "rimworld-searcher__locate",
+        "query (search text, optionally filtered: 'def:Apparel_ShieldBelt', 'method:CompTick'). Aliases accepted: name, symbol, pattern, search.",
+        "query (required).");
 
     public Task<ToolResult> ExecuteAsync(JsonElement args, CancellationToken cancellationToken, IProgress<double>? progress = null)
     {
-        var rawQuery = args.GetProperty("query").GetString();
-        if (string.IsNullOrEmpty(rawQuery)) return Task.FromResult(new ToolResult("Query cannot be empty.", true));
+        var rawQuery = ToolArgs.GetRequiredString(args, ArgSpec, "query", "name", "symbol", "pattern", "search");
 
         cancellationToken.ThrowIfCancellationRequested();
 

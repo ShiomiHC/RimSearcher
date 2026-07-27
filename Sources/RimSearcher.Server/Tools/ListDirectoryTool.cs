@@ -30,16 +30,18 @@ public class ListDirectoryTool : ITool
                 @default = 100
             }
         },
-        required = new[] { "path" },
-        additionalProperties = false
+        required = new[] { "path" }
     };
+
+    private static readonly ToolArgSpec ArgSpec = new(
+        "rimworld-searcher__list_directory",
+        "path (an absolute directory path). Aliases accepted: query, directory, dir.",
+        "path (required), limit (default 100).");
 
     public Task<ToolResult> ExecuteAsync(JsonElement args, CancellationToken cancellationToken, IProgress<double>? progress = null)
     {
-        var path = args.GetProperty("path").GetString();
-        int limit = args.TryGetProperty("limit", out var l) ? l.GetInt32() : 100;
-
-        if (string.IsNullOrEmpty(path)) return Task.FromResult(new ToolResult("Path cannot be empty.", true));
+        var path = ToolArgs.GetRequiredString(args, ArgSpec, "path", "query", "directory", "dir");
+        int limit = ToolArgs.GetInt(args, 100, "limit", "maxResults", "count");
 
         cancellationToken.ThrowIfCancellationRequested();
 

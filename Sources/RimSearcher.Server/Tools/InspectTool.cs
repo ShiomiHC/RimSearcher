@@ -35,6 +35,12 @@ public class InspectTool : ITool
     public string Description =>
         "Inspect a RimWorld def or C# type. Def mode resolves inherited XML; type mode shows inheritance and outline.";
 
+    private static readonly ToolArgSpec ArgSpec = new(
+        "rimworld-searcher__inspect",
+        "name (an exact DefName or C# type name, e.g. 'Apparel_ShieldBelt' / 'CompShield'). Aliases accepted: query, defName, typeName, symbol.",
+        "name (required).",
+        "A 'def:'/'type:' prefix is stripped automatically. Names are case-sensitive — use rimworld-searcher__locate if unsure of the exact spelling.");
+
     public object JsonSchema => new
     {
         type = "object",
@@ -44,17 +50,16 @@ public class InspectTool : ITool
             {
                 type = "string",
                 minLength = 1,
-                description = "Exact DefName or C# type name. Examples: 'Apparel_ShieldBelt', 'CompShield'."
+                description = "Exact DefName or C# type name. Examples: 'Apparel_ShieldBelt', 'CompShield'. Aliases 'query'/'defName'/'typeName' are also accepted; a 'def:'/'type:' prefix is stripped."
             }
         },
-        required = new[] { "name" },
-        additionalProperties = false
+        required = new[] { "name" }
     };
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, CancellationToken cancellationToken, IProgress<double>? progress = null)
     {
-        var name = args.GetProperty("name").GetString();
-        if (string.IsNullOrEmpty(name)) return new ToolResult("Name cannot be empty.", true);
+        var name = ToolArgs.StripLocateFilterPrefix(
+            ToolArgs.GetRequiredString(args, ArgSpec, "name", "query", "defName", "typeName", "symbol"));
 
         cancellationToken.ThrowIfCancellationRequested();
 

@@ -18,12 +18,18 @@ public class ReadCodeTool : ITool
     public string Description =>
         "Read C# source by method/property/constructor, class body, or raw line range.";
 
+    private static readonly ToolArgSpec ArgSpec = new(
+        "rimworld-searcher__read_code",
+        "path (a FILE: 'CompShield', 'CompShield.cs' or an absolute path). Aliases accepted: query, file, filePath, fileName.",
+        "path (required), methodName, className, extractClass, startLine, lineCount.",
+        "If you only have a search term rather than a file, call rimworld-searcher__locate first.");
+
     public object JsonSchema => new
     {
         type = "object",
         properties = new
         {
-            path = new { type = "string", minLength = 1, description = "File path or indexed file name. Examples: 'CompShield','CompShield.cs','/abs/path/CompShield.cs'." },
+            path = new { type = "string", minLength = 1, description = "File path or indexed file name. Examples: 'CompShield','CompShield.cs','/abs/path/CompShield.cs'. Aliases 'query'/'file'/'filePath' are also accepted." },
             methodName = new
             {
                 type = "string",
@@ -59,14 +65,13 @@ public class ReadCodeTool : ITool
                 description = "Optional number of lines for raw read mode. Default is 150."
             }
         },
-        required = new[] { "path" },
-        additionalProperties = false
+        required = new[] { "path" }
     };
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, CancellationToken cancellationToken, IProgress<double>? progress = null)
     {
-        var path = args.GetProperty("path").GetString();
-        if (string.IsNullOrEmpty(path)) return new ToolResult("Path cannot be empty.", true);
+        var path = ToolArgs.GetRequiredString(args, ArgSpec, "path", "query", "file", "filePath", "fileName");
+        path = ToolArgs.StripLocateFilterPrefix(path);
 
         var resolvedPath = ResolvePath(path);
         if (resolvedPath == null)
@@ -77,38 +82,34 @@ public class ReadCodeTool : ITool
 
         try
         {
-            if (args.TryGetProperty("extractClass", out var ecProp))
+            var extractClass = ToolArgs.GetOptionalString(args, "extractClass", "class");
+            if (!string.IsNullOrEmpty(extractClass))
             {
-                var extractClassName = ecProp.GetString();
-                if (!string.IsNullOrEmpty(extractClassName))
-                {
-                    var classBody = await RoslynHelper.GetClassBodyAsync(path, extractClassName);
-                    if (string.IsNullOrEmpty(classBody) || classBody.Contains("not found"))
-                        return new ToolResult($"Class '{extractClassName}' not found in {Path.GetFileName(path)}. Use inspect tool to verify.", true);
-                    return new ToolResult($"```csharp\n{classBody}\n```");
-                }
+                var extractClassName = ToolArgs.StripLocateFilterPrefix(extractClass);
+                var classBody = await RoslynHelper.GetClassBodyAsync(path, extractClassName);
+                if (string.IsNullOrEmpty(classBody) || classBody.Contains("not found"))
+                    return new ToolResult($"Class '{extractClassName}' not found in {Path.GetFileName(path)}. Use inspect tool to verify.", true);
+                return new ToolResult($"```csharp\n{classBody}\n```");
             }
 
-            if (args.TryGetProperty("methodName", out var mProp))
+            var member = ToolArgs.GetOptionalString(args, "methodName", "method", "member", "memberName");
+            if (!string.IsNullOrEmpty(member))
             {
-                var methodName = mProp.GetString();
-                if (!string.IsNullOrEmpty(methodName))
+                var methodName = ToolArgs.StripLocateFilterPrefix(member);
+                var className = ToolArgs.GetOptionalString(args, "className", "type", "typeName");
+                var body = await RoslynHelper.GetMemberBodyAsync(path, methodName, className);
+                if (string.IsNullOrEmpty(body) || body.Contains("not found"))
                 {
-                    var className = args.TryGetProperty("className", out var cProp) ? cProp.GetString() : null;
-                    var body = await RoslynHelper.GetMemberBodyAsync(path, methodName, className);
-                    if (string.IsNullOrEmpty(body) || body.Contains("not found"))
-                    {
-                        return new ToolResult(
-                            $"Member '{methodName}' not found in {Path.GetFileName(path)}. Use inspect tool to see available members.",
-                            true);
-                    }
-
-                    return new ToolResult($"```csharp\n// {methodName}\n{body}\n```");
+                    return new ToolResult(
+                        $"Member '{methodName}' not found in {Path.GetFileName(path)}. Use inspect tool to see available members.",
+                        true);
                 }
+
+                return new ToolResult($"```csharp\n// {methodName}\n{body}\n```");
             }
 
-            int startLine = args.TryGetProperty("startLine", out var sProp) ? Math.Max(0, sProp.GetInt32()) : 0;
-            int lineCount = args.TryGetProperty("lineCount", out var lProp) ? lProp.GetInt32() : 150;
+            int startLine = Math.Max(0, ToolArgs.GetInt(args, 0, "startLine", "start", "offset"));
+            int lineCount = ToolArgs.GetInt(args, 150, "lineCount", "lines", "count", "limit", "maxResults");
             if (lineCount <= 0)
                 return new ToolResult("lineCount must be greater than 0.", true);
 

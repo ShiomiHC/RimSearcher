@@ -223,14 +223,16 @@ public static class IndexCacheService
 
     private static void WriteBytesAtomic(string targetPath, byte[] bytes)
     {
-        var tempPath = targetPath + ".tmp";
+        // 临时名带 PID：多实例并发保存时固定名会互相截断对方写入中的文件
+        var tempPath = $"{targetPath}.{Environment.ProcessId}.tmp";
         File.WriteAllBytes(tempPath, bytes);
         ReplaceFile(tempPath, targetPath);
     }
 
     private static void WriteTextAtomic(string targetPath, string content)
     {
-        var tempPath = targetPath + ".tmp";
+        // 临时名带 PID：多实例并发保存时固定名会互相截断对方写入中的文件
+        var tempPath = $"{targetPath}.{Environment.ProcessId}.tmp";
         File.WriteAllText(tempPath, content);
         ReplaceFile(tempPath, targetPath);
     }

@@ -37,16 +37,22 @@ public class TraceTool : ITool
                     "Trace mode: 'inheritors' for subclass tree, 'usages' for textual references in C# and XML."
             }
         },
-        required = new[] { "symbol", "mode" },
-        additionalProperties = false
+        required = new[] { "symbol", "mode" }
     };
+
+    private static readonly ToolArgSpec ArgSpec = new(
+        "rimworld-searcher__trace",
+        "symbol (a class or member, e.g. 'ThingComp') and mode ('inheritors' or 'usages'). Aliases accepted for symbol: query, name, type.",
+        "symbol (required), mode (required, 'inheritors' | 'usages').");
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, CancellationToken cancellationToken, IProgress<double>? progress = null)
     {
-        var symbol = args.GetProperty("symbol").GetString();
-        var mode = args.GetProperty("mode").GetString();
+        var symbol = ToolArgs.StripLocateFilterPrefix(
+            ToolArgs.GetRequiredString(args, ArgSpec, "symbol", "query", "name", "type"));
+        var mode = ToolArgs.GetRequiredString(args, ArgSpec, "mode", "traceMode", "direction").ToLowerInvariant();
 
-        if (string.IsNullOrEmpty(symbol)) return new ToolResult("Symbol cannot be empty.", true);
+        if (mode is not ("inheritors" or "usages"))
+            return new ToolResult($"Unknown mode '{mode}'. Use 'inheritors' (subclass tree) or 'usages' (textual references).", true);
 
         if (mode == "inheritors")
         {
