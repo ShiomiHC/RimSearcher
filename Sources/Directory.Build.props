@@ -4,4 +4,22 @@
         <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory).build\obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
         <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
     </PropertyGroup>
+
+    <!-- 发布产物不带符号：单文件 exe 旁边多一个 pdb 很难看，程序集里也不该留下构建机的绝对路径。
+         这个意图本身没错，但它过去是 Server.csproj 里的无条件属性，于是把普通 Release 构建和
+         测试构建的 pdb 一起去掉了——coverlet 拿不到 pdb 就无法把 IL 映射回源码，整个 Server
+         （协议层、启动流程、宿主选举、同步服务）压根进不了覆盖率报告，最该被盯住的部分反而一片空白。
+         所以收窄到发布：_IsPublishing 由 `dotnet publish` 注入，build / test 不会置上。
+
+         放在这里而不是 Server.csproj，是因为只关掉 Server 自己的符号不够——Core 仍按默认的
+         portable 编译，它的调试目录里那条 pdb 绝对路径会随 Core.dll 一起被打进单文件 exe，
+         路径照样泄露。规则只写一份，也免得以后新增项目时又漏一个。
+
+         已知副作用：publish 与 build 的编译参数不同，两者会互相触发一次重编译；publish 之后
+         Core 的输出目录里会残留一个与新 dll 不匹配的旧 pdb，下一次 build / test 会重新生成。
+         发布是低频操作，且 dotnet test 总会先构建，可接受。 -->
+    <PropertyGroup Condition="'$(_IsPublishing)' == 'true'">
+        <DebugType>none</DebugType>
+        <DebugSymbols>false</DebugSymbols>
+    </PropertyGroup>
 </Project>

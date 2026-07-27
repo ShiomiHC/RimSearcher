@@ -14,10 +14,23 @@
         <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
         
         <PublishDir>..\Publish\</PublishDir>
-        <DebugType>none</DebugType>
-        <DebugSymbols>false</DebugSymbols>
+
+        <!-- 只拦「往发布目录拷本项目的符号」这一步，不影响构建输出目录里的 pdb，所以留在无条件组里。
+             真正的去符号条件化在 Sources/Directory.Build.props，那里连 Core 一起管。 -->
         <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
     </PropertyGroup>
+
+    <!-- 保底。正常路径上符号已经在 Directory.Build.props 里被关掉了，这里防的是 _IsPublishing
+         没被置上的发布方式（`msbuild /t:Publish`、`dotnet build /t:Publish`）：那时 pdb 照样生成，
+         而 CopyOutputSymbolsToPublishDirectory 只管本项目自己的那份，ProjectReference 带过来的
+         Core.pdb 不受它约束——历史上 Sources\Publish\ 里就一直躺着一个 48KB 的 Core.pdb。
+         「发布目录一个 pdb 都不留」是硬约束，与其去猜哪个 SDK 开关拦哪一类符号，不如发布完扫一遍。 -->
+    <Target Name="StripSymbolsFromPublishDir" AfterTargets="Publish">
+        <ItemGroup>
+            <_PublishedSymbols Include="$(PublishDir)**\*.pdb" />
+        </ItemGroup>
+        <Delete Files="@(_PublishedSymbols)" />
+    </Target>
 
     <ItemGroup>
       <ProjectReference Include="..\RimSearcher.Core\RimSearcher.Core.csproj" />
