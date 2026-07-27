@@ -13,6 +13,9 @@ public sealed class RimSearcher
     
     private readonly SemaphoreSlim _concurrencyLimit = new(10, 10);
 
+    // 每个会话独立：宿主下多个 client 共享同一批 tool，但「我问过什么」不能串味
+    private readonly SessionUpdateNotice? _updateNotice = SourceWatcher.CreateSessionNotice();
+
     // registerGlobalLogger：宿主为每个管道连接各开一个会话，只有直连 stdio 的那个会话
     // 才接管静态日志钩子，否则后建的会话会把日志抢到别人的连接上。
     public RimSearcher(TextWriter? protocolOut = null, bool registerGlobalLogger = true)
@@ -249,7 +252,19 @@ public sealed class RimSearcher
                     ToolResult result;
                     try
                     {
-                        result = await tool.ExecuteAsync(arguments, ct, progressReporter);
+                        // 索引重建期间挂起：读锁保证不会查到清空到一半的索引。
+                        // sync_sources 自己要触发重建，不能被这把锁挡住。
+                        if (tool is Tools.SyncSourcesTool)
+                        {
+                            result = await tool.ExecuteAsync(arguments, ct, progressReporter);
+                        }
+                        else
+                        {
+                            using (IndexGate.EnterRead())
+                            {
+                                result = await tool.ExecuteAsync(arguments, ct, progressReporter);
+                            }
+                        }
                     }
                     // 参数契约错误是调用方可自行修正的，必须作为工具结果回去（带纠正提示），
                     // 不能变成 -32603 —— 那会被读成服务器故障。
@@ -258,9 +273,14 @@ public sealed class RimSearcher
                         result = new ToolResult(argEx.Message, true);
                     }
 
+                    var notice = _updateNotice?.Consume(toolName, arguments, result.Content);
+
                     await SendResponseAsync(id, new
                     {
-                        content = new[] { new { type = "text", text = result.Content } },
+                        content = new[]
+                        {
+                            new { type = "text", text = notice == null ? result.Content : result.Content + notice }
+                        },
                         isError = result.IsError
                     });
                 }

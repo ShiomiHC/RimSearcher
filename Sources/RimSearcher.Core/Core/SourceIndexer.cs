@@ -112,10 +112,9 @@ public class SourceIndexer
         };
     }
 
-    public void ImportSnapshot(SourceIndexerSnapshot snapshot)
+    // 就地清空以便重扫。索引对象本身不换，故持有它的 tool 无需感知重建。
+    public void Clear()
     {
-        if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
-
         _index.Clear();
         _typeMap.Clear();
         _inheritanceMap.Clear();
@@ -124,7 +123,15 @@ public class SourceIndexer
         _memberIndex.Clear();
         _ngramIndex.Clear();
         _processedFiles.Clear();
+        _cachedAllTypeNames = new List<string>();
         ResetFrozenState();
+    }
+
+    public void ImportSnapshot(SourceIndexerSnapshot snapshot)
+    {
+        if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+
+        Clear();
 
         foreach (var (key, values) in snapshot.FileIndex)
         {

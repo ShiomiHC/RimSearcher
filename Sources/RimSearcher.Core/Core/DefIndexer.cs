@@ -118,16 +118,22 @@ public class DefIndexer
         };
     }
 
-    public void ImportSnapshot(DefIndexerSnapshot snapshot)
+    // 就地清空以便重扫，见 SourceIndexer.Clear
+    public void Clear()
     {
-        if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
-
         _defNameIndex.Clear();
         _parentNameIndex.Clear();
         _labelIndex.Clear();
         _fieldContentIndex.Clear();
         _processedFiles.Clear();
         ResetFrozenState();
+    }
+
+    public void ImportSnapshot(DefIndexerSnapshot snapshot)
+    {
+        if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+
+        Clear();
 
         foreach (var (key, values) in snapshot.DefNameIndex)
         {

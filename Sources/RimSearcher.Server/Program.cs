@@ -13,7 +13,8 @@ Console.SetOut(Console.Error);
 var (appConfig, configPath, isLoaded) = AppConfig.Load();
 await ServerLogger.Info("Program", "Configuration source", ("path", configPath));
 
-bool hasPaths = appConfig.CsharpSourcePaths.Count > 0 || appConfig.XmlSourcePaths.Count > 0;
+var resolvedSources = appConfig.ResolveSources();
+bool hasPaths = resolvedSources.HasAny;
 var cacheDirectory = IndexCacheService.GetDefaultCacheDirectory();
 var canUseCache = IndexCacheService.EnsureCacheDirectory(cacheDirectory, out var cacheInitError);
 await ServerLogger.Info("Program", "Index cache directory", ("path", cacheDirectory));
@@ -32,9 +33,9 @@ else if (!hasPaths)
     await ServerLogger.Warning("Program", "No source paths defined", ("path", configPath));
 }
 
-PathSecurity.Initialize(appConfig.AllPaths, enabled: !appConfig.SkipPathSecurity);
+PathSecurity.Initialize(resolvedSources.AllPaths, enabled: !appConfig.SkipPathSecurity);
 
-var scopeCatalog = ScopeCatalog.Build(appConfig.AllSources, appConfig.ScopeGroups, appConfig.DefaultScope);
+var scopeCatalog = ScopeCatalog.Build(resolvedSources.AllSources, appConfig.ScopeGroups, appConfig.DefaultScope);
 if (scopeCatalog.HasSources)
 {
     await ServerLogger.Info("Program", "Scope catalog ready",
@@ -45,8 +46,8 @@ if (scopeCatalog.HasSources)
 
 // 索引指纹要在建索引前算出来：共享宿主按它分组（不同 config 不共用一份索引）
 var earlyFingerprint = IndexCacheService.ComputeConfigFingerprint(
-    appConfig.CsharpSourcePaths.Select(entry => entry.Path),
-    appConfig.XmlSourcePaths.Select(entry => entry.Path),
+    resolvedSources.Csharp.Select(entry => entry.Path),
+    resolvedSources.Xml.Select(entry => entry.Path),
     appConfig.VerifySourceFreshness);
 
 // 代理路径必须先于建索引：连上已有宿主的进程不该再花 4 秒和 1 GB 建第二份索引
@@ -80,13 +81,13 @@ var failedPaths = new List<string>();
 var existingCsharpPaths = new List<string>();
 var existingXmlPaths = new List<string>();
 
-foreach (var entry in appConfig.CsharpSourcePaths)
+foreach (var entry in resolvedSources.Csharp)
 {
     if (Directory.Exists(entry.Path)) existingCsharpPaths.Add(entry.Path);
     else failedPaths.Add($"C# source '{entry.Name}': {entry.Path}");
 }
 
-foreach (var entry in appConfig.XmlSourcePaths)
+foreach (var entry in resolvedSources.Xml)
 {
     if (Directory.Exists(entry.Path)) existingXmlPaths.Add(entry.Path);
     else failedPaths.Add($"XML source '{entry.Name}': {entry.Path}");
@@ -181,6 +182,17 @@ if (failedPaths.Count > 0)
     await ServerLogger.Warning("Program", "Some configured paths are unavailable", ("count", failedPaths.Count), ("paths", string.Join("; ", failedPaths)));
 }
 
+var syncService = new SourceSyncService(appConfig, resolvedSources, cacheDirectory);
+var indexRebuilder = new IndexRebuilder(indexer, defIndexer, resolvedSources);
+
+// 必须早于任何 RimSearcher 实例化：会话的通知器是在字段初始化时向 SourceWatcher 要的，
+// 那时若还没 Configure，拿到的就是 null，本会话此后再也不会提示。
+if (appConfig.CheckSourceUpdates && syncService.FollowableSources.Count > 0)
+{
+    SourceWatcher.Configure(syncService, resolvedSources, cacheDirectory);
+    _ = Task.Run(SourceWatcher.DetectAsync);
+}
+
 var server = new RimSearcher.Server.RimSearcher(protocolOut);
 
 // tool 实例无会话状态（只持索引引用），故宿主的各管道会话直接共享同一批
@@ -191,7 +203,8 @@ var tools = new ITool[]
     new InspectTool(indexer, defIndexer, scopeCatalog),
     new TraceTool(indexer, scopeCatalog),
     new ReadCodeTool(indexer, scopeCatalog),
-    new SearchRegexTool(indexer, scopeCatalog)
+    new SearchRegexTool(indexer, scopeCatalog),
+    new SyncSourcesTool(syncService, indexRebuilder)
 };
 
 foreach (var tool in tools) server.RegisterTool(tool);
