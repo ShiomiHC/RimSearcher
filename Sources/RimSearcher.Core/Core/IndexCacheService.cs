@@ -8,7 +8,10 @@ namespace RimSearcher.Core;
 
 public static class IndexCacheService
 {
-    public const int SchemaVersion = 2;//缓存结构版本号（2 = def 索引一名多值）
+    // 缓存结构版本号（2 = def 索引一名多值；3 = inheritors 收全部直接超类型，含接口）。
+    // 字段形状没变但内容语义变了：旧缓存里的 InheritorsMap 只有基类型列表第一项，
+    // 直接复用会让「按接口查实现」继续返回空，故必须让旧缓存失效重建。
+    public const int SchemaVersion = 3;
 
     private const string ManifestFileName = "manifest.json";
     private const string IndexFileName = "index.bin";

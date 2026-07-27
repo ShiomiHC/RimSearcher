@@ -8,7 +8,12 @@ public class SourceIndexer
 {
     private readonly ConcurrentDictionary<string, ConcurrentBag<string>> _index = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, ConcurrentBag<string>> _typeMap = new(StringComparer.OrdinalIgnoreCase);
+    // 类型 → 主基类，一对一。只用来向上走链路（GetInheritanceChain），故只存一条边。
+    // 「主基类」是按命名猜的启发式，判定规则与代价见 RoslynHelper.GetPrimaryBaseType。
     private readonly ConcurrentDictionary<string, string> _inheritanceMap = new(StringComparer.OrdinalIgnoreCase);
+
+    // 超类型 → 直接派生/实现它的类型，一对多，收基类型列表的全集（接口也在内）。
+    // GetInheritors 查的是这一份：按接口找实现是本工具的主要用途之一，只记第一项会漏。
     private readonly ConcurrentDictionary<string, ConcurrentBag<string>> _inheritorsMap = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, ConcurrentBag<string>> _shortTypeMap = new(StringComparer.OrdinalIgnoreCase);
 
@@ -200,21 +205,25 @@ public class SourceIndexer
 
             if (internedFile.EndsWith(".cs"))
             {
-                var (inheritance, members) = RoslynHelper.GetClassInfoCombined(internedFile);
-                
-                foreach (var (fullName, baseType) in inheritance)
+                var (types, members) = RoslynHelper.GetClassInfoCombined(internedFile);
+
+                foreach (var type in types)
                 {
-                    _typeMap.GetOrAdd(fullName, _ => new ConcurrentBag<string>()).Add(internedFile);
-                    var shortName = fullName.Contains('.') ? fullName.Split('.').Last() : fullName;
-                    _shortTypeMap.GetOrAdd(shortName, _ => new ConcurrentBag<string>()).Add(fullName);
+                    _typeMap.GetOrAdd(type.FullName, _ => new ConcurrentBag<string>()).Add(internedFile);
+                    var shortName = type.FullName.Contains('.') ? type.FullName.Split('.').Last() : type.FullName;
+                    _shortTypeMap.GetOrAdd(shortName, _ => new ConcurrentBag<string>()).Add(type.FullName);
 
-                    if (!string.IsNullOrEmpty(baseType))
-                    {
-                        _inheritanceMap[fullName] = baseType;
-                        _inheritorsMap.GetOrAdd(baseType, _ => new ConcurrentBag<string>()).Add(fullName);
-                    }
+                    // 两份继承数据分工不同，见 TypeInheritance：
+                    // 主基类链每个类型只有一条出边（GetInheritanceChain 靠它一路向上走），
+                    if (!string.IsNullOrEmpty(type.PrimaryBase))
+                        _inheritanceMap[type.FullName] = type.PrimaryBase;
 
-                    IndexNgrams(fullName);
+                    // 而 inheritors 是反向的一对多，且必须收全部直接超类型（含接口）——
+                    // 原先只收基类型列表第一项，按 IDisposable 查实现者恒为空。
+                    foreach (var superType in type.DirectSuperTypes)
+                        _inheritorsMap.GetOrAdd(superType, _ => new ConcurrentBag<string>()).Add(type.FullName);
+
+                    IndexNgrams(type.FullName);
                     IndexNgrams(shortName);
                 }
                 
