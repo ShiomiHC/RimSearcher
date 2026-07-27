@@ -16,6 +16,24 @@ public sealed class RimSearcher
     // 每个会话独立：宿主下多个 client 共享同一批 tool，但「我问过什么」不能串味
     private readonly SessionUpdateNotice? _updateNotice = SourceChangeProbe.CreateSessionNotice();
 
+    // logging/setLevel 的门槛同样是每会话的：宿主下 A 设成 error 不该让 B 也跟着噤声。
+    // 0 = debug，即默认不过滤——client 没表过态时少发日志比多发更容易掩盖真问题。
+    // 跨线程读写（日志来自工具执行的线程池线程，setLevel 来自另一个请求任务），故用 Volatile。
+    private int _minLogSeverity;
+
+    // RFC 5424 的严重度序，MCP 直接沿用这套名字。数越大越严重，只发 >= 门槛的。
+    private static readonly Dictionary<string, int> LogSeverities = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["debug"] = 0,
+        ["info"] = 1,
+        ["notice"] = 2,
+        ["warning"] = 3,
+        ["error"] = 4,
+        ["critical"] = 5,
+        ["alert"] = 6,
+        ["emergency"] = 7
+    };
+
     // registerGlobalLogger：宿主为每个管道连接各开一个会话，只有直连 stdio 的那个会话
     // 才接管静态日志钩子，否则后建的会话会把日志抢到别人的连接上。
     public RimSearcher(TextWriter? protocolOut = null, bool registerGlobalLogger = true)
@@ -83,7 +101,7 @@ public sealed class RimSearcher
             {
                 var root = doc.RootElement;
                 requestId = ExtractId(root);
-                requestKey = requestId?.ToString();
+                requestKey = RequestKeyOf(requestId);
 
                 if (!root.TryGetProperty("method", out var methodProp) || methodProp.ValueKind != JsonValueKind.String)
                 {
@@ -100,7 +118,7 @@ public sealed class RimSearcher
                     if (root.TryGetProperty("params", out var cancelParams)
                         && (cancelParams.TryGetProperty("requestId", out var cancelId) || cancelParams.TryGetProperty("id", out cancelId)))
                     {
-                        var idToCancel = ScalarIdToString(cancelId);
+                        var idToCancel = RequestKeyOf(ScalarIdValue(cancelId));
                         if (idToCancel != null && _activeRequests.TryRemove(idToCancel, out var targetCts))
                         {
                             // 目标请求可能刚好跑完并在 finally 里把 cts 释放掉了
@@ -117,7 +135,22 @@ public sealed class RimSearcher
                 if (requestKey != null)
                 {
                     cts = new CancellationTokenSource();
-                    _activeRequests[requestKey] = cts;
+
+                    // 必须是 TryAdd 而非直接赋值：同一个 id 在活动期间重复出现时，覆盖登记会让
+                    // 先来的请求丢掉自己的取消通道（此后取消通知只能打到后来者），而且先跑完的
+                    // 那个会在 finally 里把另一个的条目一并删掉。宁可明确报错也不要静默串线。
+                    if (!_activeRequests.TryAdd(requestKey, cts))
+                    {
+                        cts.Dispose();
+                        cts = null;
+                        requestKey = null;  // 置空后 finally 不会误删占着这个键的那个请求
+                        await SendResponseAsync(requestId, error: new
+                        {
+                            code = -32600,
+                            message = "Invalid Request: another request with this id is still in flight"
+                        });
+                        return;
+                    }
                 }
 
                 await _concurrencyLimit.WaitAsync(cts?.Token ?? CancellationToken.None);
@@ -138,7 +171,10 @@ public sealed class RimSearcher
         }
         finally
         {
-            if (requestKey != null) _activeRequests.TryRemove(requestKey, out _);
+            // 按键值对移除：取消通知已经把条目摘走时，同一个 id 可能已被下一个请求重新登记，
+            // 只按键删会把那个无辜的新请求的取消通道扔掉。
+            if (requestKey != null && cts != null)
+                _activeRequests.TryRemove(new KeyValuePair<string, CancellationTokenSource>(requestKey, cts));
             cts?.Dispose();
             if (limitAcquired) _concurrencyLimit.Release();
         }
@@ -146,22 +182,27 @@ public sealed class RimSearcher
 
     // JSON-RPC id 只能是 string / number / null
     private static object? ExtractId(JsonElement root)
-    {
-        if (!root.TryGetProperty("id", out var idProp)) return null;
+        => root.TryGetProperty("id", out var idProp) ? ScalarIdValue(idProp) : null;
 
-        return idProp.ValueKind switch
-        {
-            JsonValueKind.String => idProp.GetString(),
-            JsonValueKind.Number => idProp.TryGetInt64(out var l) ? l : idProp.GetDouble(),
-            _ => null
-        };
-    }
-
-    private static string? ScalarIdToString(JsonElement id)
+    // 整数分支要显式装箱成 long：不加 (object) 的话三元表达式的公共类型是 double，
+    // 整数 id 会被静默转成浮点，超过 2^53 的 id 回显时就丢精度了。
+    private static object? ScalarIdValue(JsonElement id)
         => id.ValueKind switch
         {
             JsonValueKind.String => id.GetString(),
-            JsonValueKind.Number => id.ToString(),
+            JsonValueKind.Number => id.TryGetInt64(out var l) ? l : (object)id.GetDouble(),
+            _ => null
+        };
+
+    // 键必须带上 JSON 类型标记：JSON-RPC 里数值 id 1 和字符串 id "1" 是两个不同的请求，
+    // 只用 ToString() 会把它们撞成同一个字典键，取消通知于是打到另一个请求头上。
+    // 数值一律走 ScalarIdValue 归一化后再格式化，保证登记侧与取消侧算出同一个键。
+    private static string? RequestKeyOf(object? id)
+        => id switch
+        {
+            string s => "s:" + s,
+            long l => "n:" + l.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            double d => "n:" + d.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
             _ => null
         };
 
@@ -197,15 +238,47 @@ public sealed class RimSearcher
                 if (id != null) await SendResponseAsync(id, new { });
             }
             // 未实现的可选能力回空列表，而非让 client 收到错误或干等
-            else if (method is "resources/list" or "resources/templates/list")
+            else if (method == "resources/list")
             {
                 if (id != null) await SendResponseAsync(id, new { resources = Array.Empty<object>() });
+            }
+            // 模板列表的规范字段是 resourceTemplates，不是 resources。字段名错了，
+            // 严格按规范解析的 client 会把这条响应判成协议错误，而不是「没有模板」。
+            else if (method == "resources/templates/list")
+            {
+                if (id != null) await SendResponseAsync(id, new { resourceTemplates = Array.Empty<object>() });
             }
             else if (method == "prompts/list")
             {
                 if (id != null) await SendResponseAsync(id, new { prompts = Array.Empty<object>() });
             }
-            else if (method is "logging/setLevel" or "notifications/roots/list_changed" or "completion/complete")
+            else if (method == "logging/setLevel")
+            {
+                // capabilities 里声明了 logging 就等于承诺按这个级别过滤；只回成功不做事，
+                // client 设了 error 照样收到全部 info 噪音，比不声明该能力更糟。
+                var level = root.TryGetProperty("params", out var levelParams)
+                    && levelParams.ValueKind == JsonValueKind.Object
+                    && levelParams.TryGetProperty("level", out var levelElem)
+                    && levelElem.ValueKind == JsonValueKind.String
+                        ? levelElem.GetString()
+                        : null;
+
+                // 无法识别的级别静默接受会让 client 以为过滤已生效，实际一条也没过滤掉
+                if (level == null || !LogSeverities.TryGetValue(level, out var severity))
+                {
+                    if (id != null)
+                        await SendResponseAsync(id, error: new
+                        {
+                            code = -32602,
+                            message = $"Invalid params: 'level' must be one of {string.Join(", ", LogSeverities.Keys)}"
+                        });
+                    return;
+                }
+
+                Volatile.Write(ref _minLogSeverity, severity);
+                if (id != null) await SendResponseAsync(id, new { });
+            }
+            else if (method is "notifications/roots/list_changed" or "completion/complete")
             {
                 if (id != null) await SendResponseAsync(id, new { });
             }
@@ -244,24 +317,22 @@ public sealed class RimSearcher
                 {
                     // progressToken 只在 client 明确请求时才存在；无 token 时发 progress 通知
                     // 会让规范实现收到无法归属的 token。
-                    IProgress<double>? progressReporter = null;
+                    SerialProgressReporter? progressReporter = null;
                     if (paramsElem.TryGetProperty("_meta", out var meta)
                         && meta.TryGetProperty("progressToken", out var tokenElem)
                         && tokenElem.ValueKind is JsonValueKind.String or JsonValueKind.Number)
                     {
-                        var progressToken = tokenElem.ValueKind == JsonValueKind.String
-                            ? tokenElem.GetString()
-                            : (object?)tokenElem.ToString();
+                        // 规范要求原样回显 token：数字 token 被转成字符串后，严格的 client
+                        // 关联不上自己的请求，进度条直接断掉。这里和 ExtractId 用同一套取值方式。
+                        var progressToken = ScalarIdValue(tokenElem);
 
-                        progressReporter = new Progress<double>(p =>
-                        {
-                            _ = SendNotificationAsync("notifications/progress", new
+                        progressReporter = new SerialProgressReporter(p =>
+                            SendNotificationAsync("notifications/progress", new
                             {
                                 progressToken,
                                 progress = p,
                                 total = 1.0
-                            });
-                        });
+                            }));
                     }
 
                     var arguments = paramsElem.TryGetProperty("arguments", out var argsElem)
@@ -302,6 +373,12 @@ public sealed class RimSearcher
                     catch (ToolArgumentException argEx)
                     {
                         result = new ToolResult(argEx.Message, true);
+                    }
+                    finally
+                    {
+                        // 排空必须在本请求的任何一条响应写出之前，异常路径也要——那些路径同样会写响应。
+                        // 否则 client 会收到一个已经结束的请求的进度更新：轻则日志噪音，重则状态机错乱。
+                        if (progressReporter != null) await progressReporter.DrainAsync();
                     }
 
                     var notice = tool.SuppressStalenessNotice
@@ -361,6 +438,10 @@ public sealed class RimSearcher
     
     public async Task LogAsync(string message, string level = "info", string? logger = "RimSearcher")
     {
+        // 认不出的级别一律放行：宁可多发一条，也不要因为写错了一个级别名就把告警吞掉
+        if (LogSeverities.TryGetValue(level, out var severity) && severity < Volatile.Read(ref _minLogSeverity))
+            return;
+
         if (string.Equals(logger, "RimSearcher", StringComparison.Ordinal) && TrySplitComponentMessage(message, out var component, out var normalizedMessage))
         {
             logger = component;
@@ -395,6 +476,41 @@ public sealed class RimSearcher
         component = prefix;
         normalizedMessage = suffix;
         return true;
+    }
+
+    // 刻意不用 Progress<T>：它的回调是异步调度的（控制台进程没有 SynchronizationContext，
+    // 回调被丢进线程池），加上原来发送侧还是 `_ = SendNotificationAsync(...)` 火后不管，
+    // 于是 (a) 多次 Report 的通知可能乱序落到 stdout，(b) 最终响应写完之后还会继续冒出
+    // 这个请求的进度通知。这里把每次 Report 串成一条任务链，并留一个排空点给响应前调用。
+    //
+    // 链上一环的异常必须吞掉：某次通知写失败不该让后续通知和 DrainAsync 全部跟着炸——
+    // 那会把一个纯粹的进度问题升级成请求失败。
+    private sealed class SerialProgressReporter(Func<double, Task> send) : IProgress<double>
+    {
+        private readonly Lock _sync = new();
+        private Task _tail = Task.CompletedTask;
+
+        public void Report(double value)
+        {
+            lock (_sync)
+            {
+                _tail = SendAfterAsync(_tail, value);
+            }
+        }
+
+        private async Task SendAfterAsync(Task previous, double value)
+        {
+            await previous.ConfigureAwait(false);
+            try { await send(value).ConfigureAwait(false); }
+            catch { /* 见类型注释：单条通知失败不牵连整条链 */ }
+        }
+
+        // 返回的是「到此刻为止已提交的通知」的完成点。之后再 Report 的不算，
+        // 但工具已经返回了，不会再有新的 Report。
+        public Task DrainAsync()
+        {
+            lock (_sync) return _tail;
+        }
     }
 
     private async Task SendNotificationAsync(string method, object? @params = null)
