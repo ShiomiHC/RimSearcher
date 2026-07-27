@@ -123,10 +123,10 @@ public class ReadCodeToolTests : IDisposable
         Assert.Contains("more lines (pass startLine=2000)", result.Content);
     }
 
-    // 同名成员多命中时的分隔符只能放在两条之间。原先每条之后都追加一次，
-    // 正文以「还有下一条」结尾而后面什么也没有，读者只能读成「剩下的被截断了」。
+    // 同名成员多命中时，每条正文之前恰好一行位置注释，且这行自带 `[i/n]`——
+    // 它既分了段又说清了总数，取代了原先那个只说「后面还有」、末尾却又悬空的分隔符。
     [Fact]
-    public async Task MultipleMatchingMembers_DoNotEndWithADanglingSeparator()
+    public async Task MultipleMatchingMembers_EachCarryOneNumberedLocationLine()
     {
         var root = _workspace.Dir("Multi");
         _workspace.WriteFile(Path.Combine("Multi", "Multi.cs"), """
@@ -145,10 +145,11 @@ public class ReadCodeToolTests : IDisposable
         var result = await Run(tool, """{"path":"Multi","methodName":"CompTick"}""");
 
         Assert.False(result.IsError);
-        Assert.Contains("Found 2 matching members", result.Content);
-        Assert.Equal(1, CountOccurrences(result.Content, "--- NEXT MATCH ---"));
-        // 多命中这一支原先整个不报文件名，只有单命中那支有
-        Assert.Contains("// File:", result.Content);
+        Assert.Contains("[1/2] Method CompTick in RimWorld.A — ", result.Content);
+        Assert.Contains("[2/2] Method CompTick in RimWorld.B — ", result.Content);
+        Assert.DoesNotContain("NEXT MATCH", result.Content);
+        // 每条位置行都自带完整 `路径:行`，单看其中一条就能跳过去
+        Assert.Equal(2, CountOccurrences(result.Content, "Multi.cs:"));
     }
 
     private static int CountOccurrences(string text, string needle)

@@ -24,11 +24,19 @@ public enum SourceLookupStatus
     TargetNotFound
 }
 
-public readonly record struct SourceLookupResult(SourceLookupStatus Status, string Content)
+public readonly record struct SourceLookupResult(
+    SourceLookupStatus Status, string Content, string LocationLine = "")
 {
     public bool IsOk => Status == SourceLookupStatus.Ok;
 
+    // 正文（不含开头那行位置注释）。位置注释是本服务加的一行，不是源码：调用方要按类
+    // 自身的行数做截断与报数，把它算进去会让「'Pawn' is 4729 lines」比真实行数多。
+    public string Body => LocationLine.Length == 0 ? Content : Content[(LocationLine.Length + 1)..];
+
     public static SourceLookupResult Ok(string content) => new(SourceLookupStatus.Ok, content);
+
+    public static SourceLookupResult Ok(string locationLine, string body) =>
+        new(SourceLookupStatus.Ok, locationLine + "\n" + body, locationLine);
 
     public static SourceLookupResult Failed(SourceLookupStatus status) => new(status, string.Empty);
 }
@@ -249,10 +257,13 @@ public static class RoslynHelper
             {
                 var underlying = enumDeclaration.BaseList?.Types.FirstOrDefault()?.Type.ToString();
                 sb.AppendLine($"Enum: {fullName}{(underlying != null ? " : " + underlying : string.Empty)}");
+
+                // 不逐行印 `Value: `：一个 enum 声明只有一种成员，上一行的 `Enum:` 已经把
+                // 下面每一行是什么说完了。AltitudeLayer 有 41 个取值，那就是 41 遍。
                 foreach (var value in enumDeclaration.Members)
                 {
                     var assigned = value.EqualsValue != null ? $" {value.EqualsValue}" : string.Empty;
-                    sb.AppendLine($"  Value: {value.Identifier.Text}{assigned}");
+                    sb.AppendLine($"  {value.Identifier.Text}{assigned}");
                 }
                 sb.AppendLine();
                 continue;
@@ -397,30 +408,68 @@ public static class RoslynHelper
         if (candidates.Count == 1)
         {
             var (node, kind) = candidates[0];
-            var lineSpan = node.GetLocation().GetLineSpan();
             return SourceLookupResult.Ok(
-                $"// File: {fileLabel}\n// {kind}, starts at line: {lineSpan.StartLinePosition.Line + 1}\n{node.ToFullString()}");
+                LocationLine(node, kind, memberName, fileLabel, null), node.ToFullString());
         }
 
-        // 多个同名成员时也要给出文件名——单命中那条有，缺了它这一支就成了唯一
-        // 不说自己读的是哪个文件的返回。
         var sb = new StringBuilder();
-        sb.AppendLine($"/* Found {candidates.Count} matching members */");
-        sb.AppendLine($"// File: {fileLabel}");
         for (var i = 0; i < candidates.Count; i++)
         {
             var (node, kind) = candidates[i];
-            var lineSpan = node.GetLocation().GetLineSpan();
 
-            // 分隔符只放在两条之间。原先每条之后都追加一次，末尾那个「还有下一条」的
-            // 标记后面什么也没有，读者只能读成「剩下的被截断了」。
-            if (i > 0) sb.AppendLine("\n// --- NEXT MATCH ---\n");
+            // 两条正文之间空一行。原先这里放的是 `// --- NEXT MATCH ---`：它只说「后面还有」，
+            // 说不出还有几条，末尾那条之后又什么都没有，读者只能读成被截断了。
+            // 换成每条自带的 `[i/n]` 之后，同一个位置既分了段又给了进度。
+            if (i > 0) sb.AppendLine();
 
-            sb.AppendLine($"// {kind} in {OwnerTypeName(node)}");
-            sb.AppendLine($"// Starts at line: {lineSpan.StartLinePosition.Line + 1}");
+            sb.AppendLine(LocationLine(node, kind, memberName, fileLabel, (i + 1, candidates.Count)));
             sb.AppendLine(node.ToFullString());
         }
         return SourceLookupResult.Ok(sb.ToString());
+    }
+
+    // 正文之前的**唯一**一行位置注释。原先这里是三行（`// File: …` / `// Method, starts at
+    // line: …`，再加 read_code 自己补的一行目标名回显），三行说的是同一件事的三个字段，
+    // 而 `path:line` 是所有工具、编辑器、日志共用的写法，一行就够，还能直接复制去跳转。
+    // ownerType 只在多命中时印：同名成员分属不同类型正是这时唯一要分辨的东西；
+    // 单命中时调用方已经点了名，再重复一遍类型没有增量。
+    private static string LocationLine(
+        SyntaxNode node, string kind, string requestedName, string fileLabel, (int Index, int Total)? position)
+    {
+        var line = node.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+        var name = MemberDisplayName(node, requestedName);
+        var prefix = position is { } p ? $"[{p.Index}/{p.Total}] " : string.Empty;
+
+        // 构造函数的名字就是它所属类型的短名，`Constructor IntVec3 in Verse.IntVec3` 里
+        // 后半截一个字都没多说。只有归属类型的短名与成员名不同时才补 `in …`。
+        var owner = position != null ? OwnerTypeName(node) : string.Empty;
+        var ownerNote = owner.Length > 0 && !ShortName(owner).Equals(name, StringComparison.Ordinal)
+            ? $" in {owner}"
+            : string.Empty;
+
+        return $"// {prefix}{kind} {name}{ownerNote} — {fileLabel}:{line}";
+    }
+
+    // 位置行里印的名字。取语法节点自己的标识符而不是调用方传进来的字符串：`.ctor` /
+    // `this` / `indexer` 这几个约定写法要还原成源码里真正写着的名字，否则位置行说的名字
+    // 在正文里根本找不到。字段和事件例外——一条声明可带多个变量（`public int a, b;`），
+    // 节点没有单一名字，此时调用方点的那个名字才是对的。
+    private static string MemberDisplayName(SyntaxNode node, string requestedName) => node switch
+    {
+        MethodDeclarationSyntax m => m.Identifier.Text,
+        PropertyDeclarationSyntax p => p.Identifier.Text,
+        ConstructorDeclarationSyntax c => c.Identifier.Text,
+        IndexerDeclarationSyntax => "this",
+        OperatorDeclarationSyntax o => $"operator {o.OperatorToken.Text}",
+        EnumMemberDeclarationSyntax e => e.Identifier.Text,
+        EventDeclarationSyntax e => e.Identifier.Text,
+        _ => requestedName
+    };
+
+    private static string ShortName(string qualified)
+    {
+        var dot = qualified.LastIndexOf('.');
+        return dot >= 0 && dot < qualified.Length - 1 ? qualified[(dot + 1)..] : qualified;
     }
 
     // 成员原文，不带文件名与行号注释头。给 diff 用：这两样在新旧两版之间本来就会不同，
@@ -636,9 +685,23 @@ public static class RoslynHelper
 
         if (typeMatch == null) return SourceLookupResult.Failed(SourceLookupStatus.TargetNotFound);
 
+        // 与成员模式同一行式：`// <种类> <全名> — <路径>:<行>`。印全限定名而不是调用方
+        // 传进来的短名，是因为同名类型分属不同命名空间时，返回里必须能看出取的是哪一个。
         var lineSpan = typeMatch.GetLocation().GetLineSpan();
         return SourceLookupResult.Ok(
-            $"// File: {filePath}\n// Starts at line: {lineSpan.StartLinePosition.Line + 1}\n{typeMatch.ToFullString()}");
+            $"// {TypeKindOf(typeMatch)} {GetFullTypeName(typeMatch)} — {filePath}:{lineSpan.StartLinePosition.Line + 1}",
+            typeMatch.ToFullString());
     }
+
+    private static string TypeKindOf(SyntaxNode declaration) => declaration switch
+    {
+        RecordDeclarationSyntax => "Record",
+        ClassDeclarationSyntax => "Class",
+        StructDeclarationSyntax => "Struct",
+        InterfaceDeclarationSyntax => "Interface",
+        EnumDeclarationSyntax => "Enum",
+        DelegateDeclarationSyntax => "Delegate",
+        _ => "Type"
+    };
 
 }

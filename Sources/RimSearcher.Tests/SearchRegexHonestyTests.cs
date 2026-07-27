@@ -44,8 +44,9 @@ public class SearchRegexHonestyTests : IDisposable
         var content = await Run(BuildTool(3), """{"pattern":"ZzNeedle","fileFilter":".txt"}""");
 
         Assert.Contains("fileFilter '.txt'", content);
+        // 「0 个文件通过了过滤」自己就把责任说完了；原先还要再用一句话把这个结论复述一遍
         Assert.Contains("0 file(s) matched that filter", content);
-        Assert.Contains("the filter, not the pattern", content);
+        Assert.DoesNotContain("the filter, not the pattern", content);
     }
 
     // 过滤留下了文件、只是没命中，就不该把锅推给过滤器
@@ -66,7 +67,7 @@ public class SearchRegexHonestyTests : IDisposable
     {
         var content = await Run(BuildTool(400), """{"pattern":"ZzNeedle","limit":100}""");
 
-        Assert.Contains("scanning stopped at", content);
+        Assert.Contains("scan stopped at", content);
         Assert.Contains("not the total number of matching files", content);
     }
 
@@ -76,7 +77,9 @@ public class SearchRegexHonestyTests : IDisposable
     {
         var content = await Run(BuildTool(60), """{"pattern":"ZzNeedle","limit":"all"}""");
 
-        Assert.Contains("matching files are listed", content);
+        // 扫描没停，剩下多少文件是数得出来的，故走全服统一的 `... +N more` 文法
+        Assert.Contains("more matching files", content);
+        Assert.Contains("... +", content);
         Assert.DoesNotContain("not the total number of matching files", content);
     }
 
@@ -115,7 +118,7 @@ public class SearchRegexHonestyTests : IDisposable
 
         var content = await Run(tool, """{"pattern":"ZzNeedle"}""");
 
-        Assert.Contains("Incomplete scan", content);
+        Assert.Contains("not scanned in full", content);
         Assert.Contains("only scanned to line", content);
     }
 
@@ -125,7 +128,7 @@ public class SearchRegexHonestyTests : IDisposable
     {
         var content = await Run(BuildTool(3), """{"pattern":"ZzNeedle"}""");
 
-        Assert.DoesNotContain("Incomplete scan", content);
+        Assert.DoesNotContain("not scanned in full", content);
         Assert.DoesNotContain("scanning stopped at", content);
     }
 }

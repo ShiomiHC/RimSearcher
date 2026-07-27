@@ -216,7 +216,7 @@ public class LocateToolTests
         var result = await tool.ExecuteAsync(args.RootElement, CancellationToken.None);
 
         Assert.False(result.IsError);
-        Assert.Contains("**Files:**", result.Content);
+        Assert.Contains("**Files**", result.Content);
         Assert.Contains("Bodies_Humanlike.xml", result.Content);
     }
 
@@ -242,8 +242,8 @@ public class LocateToolTests
         using var args = JsonDocument.Parse("""{"query":"CompTestShield"}""");
         var result = await tool.ExecuteAsync(args.RootElement, CancellationToken.None);
 
-        Assert.Contains("**C# Types:**", result.Content);
-        Assert.DoesNotContain("**Files:**", result.Content);
+        Assert.Contains("**C# Types**", result.Content);
+        Assert.DoesNotContain("**Files**", result.Content);
     }
 
     // 名字只是沾边的文件不该在有命中时被补进来，否则每次查询都拖长一段模糊文件名
@@ -267,7 +267,7 @@ public class LocateToolTests
         var result = await tool.ExecuteAsync(args.RootElement, CancellationToken.None);
 
         Assert.Contains("CompShieldTick", result.Content);
-        Assert.DoesNotContain("**Files:**", result.Content);
+        Assert.DoesNotContain("**Files**", result.Content);
     }
 
     // 零命中时这一段仍是兜底，模糊命中照旧列出——修「有命中时也补」不能把兜底改窄
@@ -288,7 +288,7 @@ public class LocateToolTests
         using var args = JsonDocument.Parse("""{"query":"Patches_Zzq"}""");
         var result = await tool.ExecuteAsync(args.RootElement, CancellationToken.None);
 
-        Assert.Contains("**Files:**", result.Content);
+        Assert.Contains("**Files**", result.Content);
         Assert.Contains("Patches_Zzql.xml", result.Content);
     }
 

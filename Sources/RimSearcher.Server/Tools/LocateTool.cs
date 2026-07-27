@@ -106,13 +106,14 @@ public class LocateTool : ITool
             {
                 hasResults = true;
                 tally.Add(Count(types.Items.Count, "C# type"));
-                sb.AppendLine("\n**C# Types:**");
+                var typeLabels = ScopeArgs.SourceLabeling.Of(types.Items.Select(e => e.SourceName));
+                sb.AppendLine($"\n**C# Types**{typeLabels.Header}:");
                 foreach (var entry in types.Items)
                 {
                     var paths = _sourceIndexer.GetPathsByType(entry.Item);
                     shownTypeNames.Add(entry.Item);
                     sb.AppendLine(
-                        $"- `{entry.Item}` ({entry.Score:F0}%){FileNote(entry.Item, paths)}{ScopeArgs.Label(entry.SourceName)}");
+                        $"- `{entry.Item}` ({entry.Score:F0}%){FileNote(entry.Item, paths)}{typeLabels.Row(entry.SourceName)}");
                 }
 
                 var fold = ScopeArgs.FoldLine(types, limit: limit);
@@ -143,26 +144,32 @@ public class LocateTool : ITool
             if (members.Items.Count > 0)
             {
                 hasResults = true;
-                sb.AppendLine("\n**Members:**");
                 var tallySlot = tally.Count;
                 tally.Add("");
 
                 // 'all' 时不再按组折叠（总量已被硬上限约束住），否则每组各给一半配额
                 var perGroup = limit.Unlimited ? limit.Count : Math.Max(3, limit.Count / 2);
                 var groupedMembers = members.Items.GroupBy(m => m.Item.MemberType).ToList();
-                var shown = 0;
 
-                foreach (var group in groupedMembers)
+                // 来源标签按**实际列出的那些行**判，故先把分组配额切出来再写表头
+                var shownGroups = groupedMembers
+                    .Select(group => (Kind: group.Key, Items: group.Take(perGroup).ToList()))
+                    .ToList();
+                var shown = shownGroups.Sum(g => g.Items.Count);
+
+                var memberLabels = ScopeArgs.SourceLabeling.Of(
+                    shownGroups.SelectMany(g => g.Items).Select(e => e.SourceName));
+                sb.AppendLine($"\n**Members**{memberLabels.Header}:");
+
+                foreach (var (kind, groupItems) in shownGroups)
                 {
-                    var groupItems = group.ToList();
-                    sb.AppendLine($"  {Plural(group.Key)}:");
-                    foreach (var entry in groupItems.Take(perGroup))
+                    sb.AppendLine($"  {Plural(kind)}:");
+                    foreach (var entry in groupItems)
                     {
                         var (typeName, memberName, _, filePath) = entry.Item;
                         sb.AppendLine(
                             $"  - `{typeName}.{memberName}` ({entry.Score:F0}%)"
-                            + $"{FileNote(typeName, [filePath])}{ScopeArgs.Label(entry.SourceName)}");
-                        shown++;
+                            + $"{FileNote(typeName, [filePath])}{memberLabels.Row(entry.SourceName)}");
                     }
                 }
 
@@ -192,7 +199,8 @@ public class LocateTool : ITool
             {
                 hasResults = true;
                 tally.Add(Count(defs.Items.Count, "XML def"));
-                sb.AppendLine("\n**XML Defs:**");
+                var defLabels = ScopeArgs.SourceLabeling.Of(defs.Items.Select(e => e.SourceName));
+                sb.AppendLine($"\n**XML Defs**{defLabels.Header}:");
                 foreach (var entry in defs.Items)
                 {
                     var def = entry.Item;
@@ -205,7 +213,7 @@ public class LocateTool : ITool
                     var localizedTag = !string.IsNullOrEmpty(localized) ? $" / {localized}" : "";
 
                     sb.AppendLine(
-                        $"- `{def.DefName}` ({entry.Score:F0}%) - {def.DefType}{abstractTag}{label}{localizedTag}{ScopeArgs.Label(entry.SourceName)}");
+                        $"- `{def.DefName}` ({entry.Score:F0}%) - {def.DefType}{abstractTag}{label}{localizedTag}{defLabels.Row(entry.SourceName)}");
                 }
 
                 var fold = ScopeArgs.FoldLine(defs, indent: "  ", limit: limit);
@@ -221,14 +229,16 @@ public class LocateTool : ITool
                 {
                     hasResults = true;
                     tally.Add(Count(defsByContent.Items.Count, "content match", "content matches"));
-                    sb.AppendLine("\n**Content Matches:**");
+                    var contentLabels = ScopeArgs.SourceLabeling.Of(
+                        defsByContent.Items.Select(e => e.SourceName));
+                    sb.AppendLine($"\n**Content Matches**{contentLabels.Header}:");
 
                     foreach (var entry in defsByContent.Items)
                     {
                         var (location, matchedFields) = entry.Item;
                         var fieldSummary = string.Join(", ", matchedFields.Take(3));
                         var moreFields = matchedFields.Count > 3 ? $" +{matchedFields.Count - 3}" : "";
-                        sb.AppendLine($"- `{location.DefName}` - {fieldSummary}{moreFields}{ScopeArgs.Label(entry.SourceName)}");
+                        sb.AppendLine($"- `{location.DefName}` - {fieldSummary}{moreFields}{contentLabels.Row(entry.SourceName)}");
                     }
 
                     var fold = ScopeArgs.FoldLine(defsByContent, indent: "  ", limit: limit);
@@ -267,11 +277,12 @@ public class LocateTool : ITool
                 report.Add(files);
 
                 tally.Add(Count(items.Count, "file"));
-                sb.AppendLine("\n**Files:**");
+                var fileLabels = ScopeArgs.SourceLabeling.Of(items.Select(e => e.SourceName));
+                sb.AppendLine($"\n**Files**{fileLabels.Header}:");
                 foreach (var entry in items)
                 {
                     // 原先是「基名 - 全路径」，而基名逐字包含在全路径的末尾，说的是同一件事。
-                    sb.AppendLine($"- {entry.Item}{ScopeArgs.Label(entry.SourceName)}");
+                    sb.AppendLine($"- {entry.Item}{fileLabels.Row(entry.SourceName)}");
                 }
 
                 // 折叠行只对兜底那一支有意义：精确补充本来就只列同名的那几条，没有「还有更多」。
@@ -309,11 +320,16 @@ public class LocateTool : ITool
         {
             var message = new StringBuilder(
                 $"No results for '{ToolArgs.ForEcho(rawQuery)}' in scope '{scope.Expression}'.");
-            message.Append(ScopeArgs.RetryWiderNotice(scope));
+            message.Append(ScopeArgs.RetryWiderNotice(scope, footer != null));
             if (footer != null) message.Append(footer);
             message.Append(scopeNotice);
             message.Append(prefixNotice);
-            message.Append("\n\nTry: partial names, query filters (type:, method:, field:, def:), or search_regex for patterns.");
+
+            // 过滤器清单只列一次。上面的 prefixNotice 在「前缀没被识别」时已经列过一遍
+            // （那正是最该看到它的场合），这里再列就是同一行字紧挨着说两遍。
+            message.Append(query.UnknownPrefixes.Count > 0
+                ? "\n\nTry: partial names, or search_regex for patterns."
+                : "\n\nTry: partial names, query filters (type:, method:, field:, def:), or search_regex for patterns.");
 
             // 零命中是一个正常结果，不是调用失败。isError 留给「工具没能执行」，置 true 会让
             // client 把这次搜索当成故障去重试或上报；同一个服务器里 trace 查不到子类、

@@ -276,9 +276,12 @@ public class InspectTool : ITool
             var sourceName = scope.SourceNameOf(def.FilePath);
             if (!string.IsNullOrEmpty(sourceName)) sb.AppendLine($"Source: {sourceName}");
 
+            // 文件名走与 locate / trace 同一条判据（SymbolRow.FileNote）：`CompShield.cs` 从
+            // `RimWorld.CompShield` 逐字可推，印它只是把同一个词说两遍。原先这里无条件印，
+            // 于是三个工具里两个按判据、一个照印，同一个概念又长出了两套写法。
             var typePaths = _sourceIndexer.GetPathsByType(def.DefType);
             if (typePaths.Count > 0)
-                sb.AppendLine($"C# Class: `{def.DefType}` ({string.Join(", ", typePaths.Select(Path.GetFileName))})");
+                sb.AppendLine($"C# Class: `{def.DefType}`{SymbolRow.FileNote(def.DefType, typePaths)}");
 
             sb.AppendLine($"File: `{def.FilePath}`");
 
@@ -372,10 +375,7 @@ public class InspectTool : ITool
                     foreach (var cls in typesArray)
                     {
                         var paths = _sourceIndexer.GetPathsByType(cls);
-                        if (paths.Count > 0)
-                            sb.AppendLine($"- `{cls}` ({string.Join(", ", paths.Select(Path.GetFileName))})");
-                        else
-                            sb.AppendLine($"- `{cls}` (not indexed)");
+                        sb.AppendLine($"- `{cls}`{SymbolRow.FileNote(cls, paths)}");
                     }
                     if (foundTypes.Count > 10)
                         sb.AppendLine($"  ... +{foundTypes.Count - 10} more types (use locate to find them)");

@@ -787,15 +787,14 @@ public class SourceIndexer
         var matchesByFile = new ConcurrentDictionary<string, int>();
         var regex = new Regex(pattern, (ignoreCase ? RegexOptions.IgnoreCase : RegexOptions.None) | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
 
-        // allFiles 的顺序是下面「分块推进 + 按序号排序」的基准，故它必须是稳定的：
-        // _index 以文件基名为键、每个路径只落在一个键下，FrozenDictionary 的枚举序又固定，
-        // 因此同一份索引恒给同一张表。未冻结分支的 Distinct 防的是重扫时同一路径进同一个 bag 两次。
-        var allFiles = (_frozenIndex != null
+        // allFiles 的顺序是下面「分块推进 + 按序号排序」的基准，也是展示时的分组顺序：
+        // 排成同一张表，截断留下的就恰好是读者看到的那一段的前缀（见 InDisplayOrder）。
+        // 未冻结分支的 Distinct 防的是重扫时同一路径进同一个 bag 两次。
+        var allFiles = InDisplayOrder((_frozenIndex != null
                 ? _frozenIndex.Values.SelectMany(x => x)
                 : _index.Values.SelectMany(x => x).Distinct())
             .Where(path => scope.Contains(path))
-            .Where(path => string.IsNullOrEmpty(fileFilter) || path.EndsWith(fileFilter, StringComparison.OrdinalIgnoreCase))
-            .ToList();
+            .Where(path => string.IsNullOrEmpty(fileFilter) || path.EndsWith(fileFilter, StringComparison.OrdinalIgnoreCase)));
 
         if (maxResults <= 0) maxResults = 100;
 
@@ -957,6 +956,18 @@ public class SourceIndexer
             .Select(x => x.Path)
             .ToArray();
     }
+
+    // 扫盘与展示共用的文件顺序：先按文件名，再按完整路径兜同名。
+    // 两条理由——
+    // ① 展示只印文件名（`` `CompShield.cs` ``），而原先排序键是完整路径，于是同一份列表在
+    //    读者眼里是 C、C、G、D、S、T：每进一个目录字母序就重来一遍，看上去根本没有顺序；
+    // ② 扫盘按同一张表分块推进后，截断留下的恒是它的前缀，limit 调大只会往后追加，
+    //    不会把已经看到的文件换掉——这条对 trace usages 尤其要紧，它原先是满盘并发抢配额，
+    //    `limit:1` 返回哪个文件取决于线程调度，同一条查询两次能给出不同的答案。
+    public static List<string> InDisplayOrder(IEnumerable<string> paths)
+        => paths.OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
     public IEnumerable<string> GetAllFiles(ScopeSelection scope)
     {

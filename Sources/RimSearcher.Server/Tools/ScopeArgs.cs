@@ -157,8 +157,11 @@ public static class ScopeArgs
     // out-of-scope 计数都没有（扫盘类工具本就不统计，模糊搜索也可能真的一条落选都没有），
     // 于是全篇没有任何痕迹提示还有别的地方没找过。默认 scope 来自 config，调用方多半
     // 根本不知道自己被限定在了哪几个源里。
-    public static string? RetryWiderNotice(ScopeSelection scope)
-        => scope.IncludesEverything
+    // hasOutOfScopeFooter：ScopeReport 的脚注已经把这件事说得更全（它点明限制、逐源给出
+    // 落选命中数、并给同一条出路）。两句并排时同一个 scope 表达式在两行里出现三次、
+    // 同一个「改用 scope:'all'」被两套措辞各说一遍，读者以为是两条不同的提示。
+    public static string? RetryWiderNotice(ScopeSelection scope, bool hasOutOfScopeFooter = false)
+        => scope.IncludesEverything || hasOutOfScopeFooter
             ? null
             : $" Only sources in scope '{scope.Expression}' were searched — "
               + $"retry with scope:'{ScopeCatalog.EverythingKeyword}' before concluding it does not exist.";
@@ -167,6 +170,46 @@ public static class ScopeArgs
 
     public static string Label(string? sourceName)
         => string.IsNullOrEmpty(sourceName) ? string.Empty : $" [{sourceName}]";
+
+    // 一批结果行的来源标签该印在哪儿。ScopeCatalog.ShowLabels 只回答「scope 选中了几个源」；
+    // scope 是 'all' 而结果恰好全落在一个源里时，每行仍挂着同一个 ` [vanilla]`——实测
+    // locate 一次 200 条的返回里 412 个标签约 4120 字，占正文 14%。ScopeCatalog 自己的注释
+    // 早写着「单源时来源标签是纯噪音（每行都一样）」，这里把那条判据从 scope 挪到**实际列出
+    // 的行**上：同源就提到表头印一次，混源才逐行印。标签是移位，不是删除。
+    public readonly struct SourceLabeling
+    {
+        private readonly bool _perRow;
+        private readonly string? _common;
+
+        private SourceLabeling(bool perRow, string? common)
+        {
+            _perRow = perRow;
+            _common = common;
+        }
+
+        public static SourceLabeling Of(IEnumerable<string?> rowSources)
+        {
+            string? common = null;
+            var seen = false;
+
+            foreach (var name in rowSources)
+            {
+                // 有一行说不出来源，说明 scope 已经把源钉死了（ShowLabels=false 时 SourceName
+                // 恒为 null），这批本来就一个标签都不该印。
+                if (string.IsNullOrEmpty(name)) return new SourceLabeling(false, null);
+
+                if (!seen) { common = name; seen = true; }
+                else if (!string.Equals(common, name, StringComparison.OrdinalIgnoreCase))
+                    return new SourceLabeling(true, null);
+            }
+
+            return new SourceLabeling(false, common);
+        }
+
+        public string Header => _common == null ? string.Empty : $" [{_common}]";
+
+        public string Row(string? sourceName) => _perRow ? Label(sourceName) : string.Empty;
+    }
 
     // 折叠行。断层收口时说明被折叠的是低匹配度结果，免得读者以为还有同等相关的东西没显示。
     //
@@ -212,6 +255,33 @@ public static class ScopeArgs
         return truncatedByScoreGap
             ? $"{indent}... +{hiddenCount} more (lower relevance, {hint})"
             : $"{indent}... +{hiddenCount} more ({hint})";
+    }
+
+    // 「扫到预览行上限就停了」的尾注。search_regex 与 trace usages 报的是同一件事，原先
+    // 却是两句话——`[Preview lines truncated at limit 1 and scanning stopped there, raise
+    // limit (up to 200) or use limit:'all']` 对 `[scanning stopped at the 1-preview cap
+    // — pass limit:'all' to raise the cap to 200, …]`。同一个事件读两遍不同措辞，调用方
+    // 只能各认一次。
+    //
+    // 与 FoldLine 的差别在于「剩下多少」这里是不知道的：扫描是在上限处停的，后面的候选
+    // 文件根本没打开过。所以不写 `+N more`——那个数没人算得出来，编一个就是假的。
+    // extraNotes 收本工具独有的补充（如「文件数也超了」），一并挂在同一句里。
+    public static string ScanStoppedLine(
+        int previewCap, ResultLimit limit, IReadOnlyList<string>? extraNotes = null)
+    {
+        // 已经顶到硬上限时别再劝 limit:'all'，那只会原地重试；此时把「这就是服务端上限」
+        // 说出来，否则调用方只会看见一个数，不知道它已经是天花板。
+        var cap = limit.Unlimited
+            ? $"scan stopped at the server cap of {previewCap} preview lines"
+            : $"scan stopped at the {previewCap}-preview cap";
+        var route = limit.Unlimited
+            ? "narrow the query or the scope"
+            : $"pass limit:'all' to raise the cap to {HardLimit}, or narrow the query or the scope";
+
+        var notes = new List<string> { cap };
+        if (extraNotes != null) notes.AddRange(extraNotes);
+
+        return $"... more matches exist ({string.Join("; ", notes)}; {route})";
     }
 }
 

@@ -80,9 +80,7 @@ public class SearchRegexTool : ITool
                 // 只是没有一个 .txt 文件。同时报出过滤后的候选文件数，让「筛空了」一眼可见。
                 var filterNote = string.IsNullOrEmpty(fileFilter)
                     ? string.Empty
-                    : $" with fileFilter '{fileFilter}' ({diagnostics.CandidateFiles} file(s) matched that filter"
-                      + (diagnostics.CandidateFiles == 0 ? " — the filter, not the pattern, is what emptied this" : "")
-                      + ")";
+                    : $" with fileFilter '{fileFilter}' ({diagnostics.CandidateFiles} file(s) matched that filter)";
 
                 return new ToolResult(
                     $"No matches for pattern '{pattern}' in scope '{scope.Expression}'{filterNote}."
@@ -93,18 +91,29 @@ public class SearchRegexTool : ITool
             // 不排一下，同一次查询重跑两遍文件顺序就能不一样。
             var allFiles = results
                 .GroupBy(r => r.Path)
-                .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+                // 排序键与印出来的东西必须是同一个：只印文件名却按完整路径排，读者看到的是
+                // 「每进一个目录字母序就重来一遍」。这也正是扫盘推进的顺序（SourceIndexer
+                // .InDisplayOrder），故截断留下的恒是这张表的前缀。
+                .OrderBy(g => System.IO.Path.GetFileName(g.Key), StringComparer.OrdinalIgnoreCase)
+                .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            var shownFiles = allFiles.Take(MaxFilesShown);
+            var shownFiles = allFiles.Take(MaxFilesShown).ToList();
 
             // 未截断时报真实命中总数（各文件命中数之和），而不是预览条数——预览每文件封顶，
             // 两者可以差很远。截断时这个和只覆盖恰好扫到的文件，随线程调度浮动，故只说确定的量。
             var totalMatches = matchesByFile.Values.Sum();
+            // 「扫描在上限处停了」只说一次，说在末尾那行——那里同时给得出下一步。表头
+            // 原先也说一遍（", scan stopped at the limit"），而 "first N" 本就含着这个意思。
+            // 单位改说 "previews"：表头的 N 数的是预览行，与「命中数」是两个量。
             var headline = truncated
-                ? $"first {results.Count} in scope '{scope.Expression}', scan stopped at the limit"
+                ? $"first {results.Count} previews in scope '{scope.Expression}'"
                 : $"{totalMatches} found in scope '{scope.Expression}'";
 
-            var output = $"Regex matches for '{pattern}' ({headline}):\n\n" +
+            // 列出来的文件全同源时标签只印一次（见 ScopeArgs.SourceLabeling）
+            var labels = ScopeArgs.SourceLabeling.Of(
+                shownFiles.Select(g => scope.ShowLabels ? scope.SourceNameOf(g.Key) : null));
+
+            var output = $"Regex matches for '{pattern}' ({headline}){labels.Header}:\n\n" +
                          string.Join("\n\n", shownFiles.Select(g =>
                          {
                              var fileName = System.IO.Path.GetFileName(g.Key);
@@ -120,34 +129,34 @@ public class SearchRegexTool : ITool
                              var inFile = matchesByFile.TryGetValue(g.Key, out var c) ? c : groupItems.Count;
                              var moreCount = inFile > shown ? $"\n  ... +{inFile - shown} more in this file" : "";
 
-                             var label = ScopeArgs.Label(scope.ShowLabels ? scope.SourceNameOf(g.Key) : null);
+                             var label = labels.Row(scope.ShowLabels ? scope.SourceNameOf(g.Key) : null);
                              return $"`{fileName}`{label}\n{string.Join("\n", matches)}{moreCount}";
                          }));
 
             // 两处截断互相独立：truncated 说的是扫描在命中上限处停了，文件数上限则是
             // 这里静默 Take 掉的。原先只有一条提示且挂在前者上，于是「命中没超限但文件超了」
             // 的情况完全不吭声，调用方会把不完整的列表当成全部。
-            var notes = new List<string>();
-            if (truncated) notes.Add($"scanning stopped at the {results.Count}-preview cap");
-
-            // 截断时 allFiles 只是「已扫到的那批预览」里的文件数，不是命中文件总数——扫描早已
-            // 在命中上限处停下，后面的候选文件根本没打开过。原先无条件称其为 "matching files"，
-            // 那个数比真实值小一到两个数量级，而调用方会拿它当结论。
-            if (allFiles.Count > MaxFilesShown)
+            //
+            // 两者的尾注文法也不同，且各自都对：扫描停了就不知道还剩多少（那些文件根本没
+            // 打开过），只有文件数超了才数得出准数，能用全服统一的 `... +N more`。
+            if (truncated)
             {
-                notes.Add(truncated
-                    ? $"only the first {MaxFilesShown} files are listed; {allFiles.Count} distinct files appear among "
-                      + $"the previews scanned so far, which is not the total number of matching files"
-                    : $"only the first {MaxFilesShown} of {allFiles.Count} matching files are listed");
+                // 截断时 allFiles 只是「已扫到的那批预览」里的文件数，不是命中文件总数——扫描早已
+                // 在命中上限处停下，后面的候选文件根本没打开过。原先无条件称其为 "matching files"，
+                // 那个数比真实值小一到两个数量级，而调用方会拿它当结论。
+                var extra = allFiles.Count > MaxFilesShown
+                    ? new[]
+                    {
+                        $"only the first {MaxFilesShown} files are listed, and the {allFiles.Count} distinct files "
+                        + "seen so far are not the total number of matching files"
+                    }
+                    : null;
+                output += "\n\n" + ScopeArgs.ScanStoppedLine(results.Count, limit, extra);
             }
-
-            // 命中上限是这轮唯一能立刻放开的旋钮，原先的出路里偏偏没有它
-            if (notes.Count > 0)
+            else if (allFiles.Count > MaxFilesShown)
             {
-                var route = truncated && !limit.Unlimited
-                    ? $"pass limit:'all' to raise the cap to {ScopeArgs.HardLimit}, or narrow the pattern or the scope"
-                    : "narrow the pattern or the scope";
-                output += $"\n\n[{string.Join("; ", notes)} — {route} to see the rest]";
+                output += $"\n\n... +{allFiles.Count - MaxFilesShown} more matching files "
+                          + "(narrow the pattern or the scope)";
             }
 
             // 「没有尾注即完整」是本工具写在 Description 里的契约，被跳过/被弃扫的文件必须破这个契约
@@ -162,8 +171,8 @@ public class SearchRegexTool : ITool
                 if (diagnostics.LineCappedFiles > 0)
                     incomplete.Add($"{diagnostics.LineCappedFiles} file(s) were only scanned to line {diagnostics.LineCap}");
 
-                output += $"\n\n[Incomplete scan: {string.Join("; ", incomplete)}. Matches below this line's "
-                          + "threshold may exist and are not listed.]";
+                output += $"\n\n... some files were not scanned in full ({string.Join("; ", incomplete)}; "
+                          + "matches in the unscanned parts would not be listed)";
             }
 
             output += scopeNotice;

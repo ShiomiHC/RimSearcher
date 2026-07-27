@@ -310,6 +310,68 @@ public class OutputReadabilityTests : IDisposable
         Assert.Single(runs.Distinct());
     }
 
+    // trace usages 走的是自己那套扫盘，F21 修的只是 search_regex：这里原先仍是整张文件表
+    // 满盘并发抢配额，`limit:1` 返回哪个文件取决于线程调度——实测同一条查询在不同轮次里
+    // 给出过 `Stance_Warmup.cs` 与 `ThingDef.cs` 两个答案，而返回里那句 "first 1" 于是没有定义。
+    [Fact]
+    public async Task TraceUsages_TruncatedResult_IsTheSameEveryTime()
+    {
+        var files = Enumerable.Range(0, 900)
+            .Select(i => ($"Zz_{i:D4}.cs", $"namespace Zz {{ public class Zz_{i:D4} {{ void M() {{ ZzMark.Go(); }} }} }}"))
+            .ToArray();
+        var (indexer, _, catalog) = BuildIndex(files);
+        var tool = new TraceTool(indexer, catalog);
+
+        var runs = new List<string>();
+        for (var i = 0; i < 5; i++)
+            runs.Add(await RunAsync(tool, new { symbol = "ZzMark", mode = "usages", limit = 20 }));
+
+        Assert.Single(runs.Distinct());
+    }
+
+    // 与 search_regex 同款：扫过的恒是文件表的前缀，故放大 limit 只补不换
+    [Fact]
+    public async Task TraceUsages_RaisingTheLimit_OnlyAddsFiles_NeverSwapsThemOut()
+    {
+        var files = Enumerable.Range(0, 900)
+            .Select(i => ($"Zz_{i:D4}.cs", $"namespace Zz {{ public class Zz_{i:D4} {{ void M() {{ ZzMark.Go(); }} }} }}"))
+            .ToArray();
+        var (indexer, _, catalog) = BuildIndex(files);
+
+        var small = await RunAsync(new TraceTool(indexer, catalog), new { symbol = "ZzMark", mode = "usages", limit = 5 });
+        var large = await RunAsync(new TraceTool(indexer, catalog), new { symbol = "ZzMark", mode = "usages", limit = 40 });
+
+        static HashSet<string> Hits(string content) => content.Split('\n')
+            .Where(l => l.StartsWith("`Zz_", StringComparison.Ordinal))
+            .Select(l => l.Split('`')[1]).ToHashSet();
+
+        Assert.NotEmpty(Hits(small));
+        Assert.Subset(Hits(large), Hits(small));
+    }
+
+    // 排序键与印出来的东西必须是同一个。两个工具都只印文件名却按完整路径排，读者看到的
+    // 是「每进一个目录字母序就重来一遍」，无从判断「这个文件不在结果里」是真没有还是被截了。
+    [Fact]
+    public async Task GroupedHitTools_ListFilesInTheOrderTheyArePrinted()
+    {
+        var files = new[]
+        {
+            (Path.Combine("Aaa", "ZzZeta.cs"), "namespace Zz { public class ZzZeta { void M() { ZzMark.Go(); } } }"),
+            (Path.Combine("Bbb", "ZzAlpha.cs"), "namespace Zz { public class ZzAlpha { void M() { ZzMark.Go(); } } }"),
+        };
+        var (indexer, _, catalog) = BuildIndex(files);
+
+        static List<string> Shown(string content) => content.Split('\n')
+            .Where(l => l.StartsWith('`')).Select(l => l.Split('`')[1]).ToList();
+
+        var trace = Shown(await RunAsync(new TraceTool(indexer, catalog), new { symbol = "ZzMark", mode = "usages" }));
+        var regex = Shown(await RunAsync(new SearchRegexTool(indexer, catalog), new { pattern = "ZzMark" }));
+
+        // 按完整路径排是 Aaa/ZzZeta 在前；按印出来的文件名排才是 ZzAlpha 在前
+        Assert.Equal(["ZzAlpha.cs", "ZzZeta.cs"], trace);
+        Assert.Equal(trace, regex);
+    }
+
     // 截断选的是候选表的**前缀**（按索引序），故放大 limit 只会补进更多文件，
     // 不会把上一次给过的换掉。原先随线程调度取任意子集时这条不成立：调用方把 limit
     // 从 5 调到 40 复查，先前那几条可能整批消失，读起来像索引在自己变。
@@ -398,6 +460,218 @@ public class OutputReadabilityTests : IDisposable
 
         AssertSharedFootnoteGrammar(content);
     }
+
+    // ---- R16/R17：read_code 正文之前的位置注释 ----
+
+    // 原先三行说同一件事：read_code 回显目标名、RoslynHelper 印 `// File: <路径>`、
+    // 再印 `// Method, starts at line: N`。`path:line` 是一行就说完的通用写法。
+    [Fact]
+    public async Task ReadCode_Member_LeadsWithExactlyOneLocationLine()
+    {
+        var (indexer, _, catalog) = BuildIndex(
+            ("ZzComp.cs", "namespace Zz\n{\n    public class ZzComp\n    {\n        public void ZzTick() { }\n    }\n}\n"));
+        PathSecurity.Initialize([_workspace.Dir("Core")]);
+
+        var content = await RunAsync(
+            new ReadCodeTool(indexer, catalog), new { path = "ZzComp.cs", methodName = "ZzTick" });
+
+        var lines = content.Split('\n');
+        Assert.StartsWith("```csharp", lines[0]);
+        Assert.Matches(@"^// Method ZzTick — .*ZzComp\.cs:5$", lines[1].TrimEnd());
+        // 位置行只此一行：旧的三行头里那两句已经没有了
+        Assert.DoesNotContain("// File:", content);
+        Assert.DoesNotContain("starts at line", content);
+        Assert.Equal(1, content.Split('\n').Count(l => l.StartsWith("// ", StringComparison.Ordinal)));
+    }
+
+    // extractClass 与 member 走同一条文法，且印全限定名——同名类型分属不同命名空间时，
+    // 返回里必须能看出取的是哪一个。
+    [Fact]
+    public async Task ReadCode_ExtractClass_UsesTheSameLocationLineGrammar()
+    {
+        var (indexer, _, catalog) = BuildIndex(
+            ("ZzComp.cs", "namespace Zz\n{\n    public class ZzComp\n    {\n        public void ZzTick() { }\n    }\n}\n"));
+        PathSecurity.Initialize([_workspace.Dir("Core")]);
+
+        var content = await RunAsync(
+            new ReadCodeTool(indexer, catalog), new { path = "ZzComp.cs", extractClass = "ZzComp" });
+
+        Assert.Matches(@"^// Class Zz\.ZzComp — .*ZzComp\.cs:3$", content.Split('\n')[1].TrimEnd());
+        Assert.DoesNotContain("// File:", content);
+        Assert.DoesNotContain("Starts at line", content);
+    }
+
+    // 多命中：每条正文之前恰好一行，`[i/n]` 同时承担分段与进度。原先的
+    // `// --- NEXT MATCH ---` 只说「后面还有」，说不出还有几条，末尾又悬空。
+    [Fact]
+    public async Task ReadCode_MultipleMatches_ReplaceTheSeparatorWithNumberedLocationLines()
+    {
+        var (indexer, _, catalog) = BuildIndex(
+            ("ZzPair.cs", "namespace Zz\n{\n    public class ZzA { public void ZzTick() { } }\n"
+                          + "    public class ZzB { public void ZzTick() { } }\n}\n"));
+        PathSecurity.Initialize([_workspace.Dir("Core")]);
+
+        var content = await RunAsync(
+            new ReadCodeTool(indexer, catalog), new { path = "ZzPair.cs", methodName = "ZzTick" });
+
+        Assert.Matches(@"^// \[1/2\] Method ZzTick in Zz\.ZzA — .*ZzPair\.cs:3$",
+            content.Split('\n').First(l => l.Contains("[1/2]")).TrimEnd());
+        Assert.Matches(@"^// \[2/2\] Method ZzTick in Zz\.ZzB — .*ZzPair\.cs:4$",
+            content.Split('\n').First(l => l.Contains("[2/2]")).TrimEnd());
+        Assert.DoesNotContain("NEXT MATCH", content);
+        Assert.DoesNotContain("matching members", content);
+    }
+
+    // 构造函数的名字就是它所属类型的短名，`Constructor ZzA in Zz.ZzA` 里后半截一个字都没多说
+    [Fact]
+    public async Task ReadCode_Constructors_DoNotRepeatTheTypeNameAsTheOwner()
+    {
+        var (indexer, _, catalog) = BuildIndex(
+            ("ZzCtor.cs", "namespace Zz\n{\n    public class ZzA\n    {\n        public ZzA() { }\n"
+                          + "        public ZzA(int x) { }\n    }\n}\n"));
+        PathSecurity.Initialize([_workspace.Dir("Core")]);
+
+        var content = await RunAsync(
+            new ReadCodeTool(indexer, catalog), new { path = "ZzCtor.cs", methodName = ".ctor" });
+
+        // `.ctor` 是约定写法，位置行要还原成源码里真正写着的名字，否则它在正文里找不到
+        Assert.Contains("[1/2] Constructor ZzA — ", content);
+        Assert.DoesNotContain(".ctor", content);
+        Assert.DoesNotContain("in Zz.ZzA", content);
+    }
+
+    // ---- R19：结果全同源时，每行末尾那个一模一样的 ` [来源]` ----
+
+    // 两个源在 scope 里，但某一段的结果全落在一个源上时，逐行标签每行都一样。
+    // 实测 locate 一次 200 条的返回里 412 个标签约 4120 字，占正文 14%。
+    [Fact]
+    public async Task Locate_UniformSourceSection_StatesTheSourceOnceOnTheHeader()
+    {
+        var (indexer, defs, catalog) = BuildTwoSourceIndex(
+            [("ZzWidget.cs", "namespace Zz { public class ZzWidget { } }")],
+            [("ZzUnrelated.cs", "namespace Zz { public class ZzUnrelated { } }")]);
+
+        var content = await RunAsync(new LocateTool(indexer, defs, catalog), new { query = "ZzWidget" });
+
+        Assert.Contains("**C# Types** [vanilla]:", content);
+        Assert.DoesNotContain("`ZzWidget` (100%) [vanilla]", content);
+        // 标签是移位不是删除：读者仍要能一眼看出这批结果来自哪儿
+        Assert.Contains("[vanilla]", content);
+    }
+
+    // 反面：真的混源时逐行印才是唯一说得清的写法，表头不能替它做主
+    [Fact]
+    public async Task Locate_MixedSourceSection_KeepsThePerRowLabels()
+    {
+        var (indexer, defs, catalog) = BuildTwoSourceIndex(
+            [("ZzWidget.cs", "namespace Zz { public class ZzWidget { } }")],
+            [("ZzWidgetPatch.cs", "namespace Zz { public class ZzWidgetPatch { } }")]);
+
+        var content = await RunAsync(new LocateTool(indexer, defs, catalog), new { query = "ZzWidget" });
+
+        Assert.Contains("**C# Types**:", content);
+        Assert.Contains("[vanilla]", content);
+        Assert.Contains("[Vethara]", content);
+        Assert.DoesNotContain("**C# Types** [", content);
+    }
+
+    // scope 已经把源钉死时一个标签都不该出现——这条判据原先就在，别被表头那次印破坏
+    [Fact]
+    public async Task Locate_SingleSourceScope_PrintsNoLabelAtAll()
+    {
+        var (indexer, defs, catalog) = BuildIndex(("ZzWidget.cs", "namespace Zz { public class ZzWidget { } }"));
+
+        var content = await RunAsync(new LocateTool(indexer, defs, catalog), new { query = "ZzWidget" });
+
+        Assert.Contains("**C# Types**:", content);
+        Assert.DoesNotContain("[vanilla]", content);
+    }
+
+    // 同一条判据要覆盖所有列结果行的工具，否则「同一个概念每个工具一套写法」原样回来
+    [Fact]
+    public async Task TraceAndSearchRegex_AlsoHoistTheUniformSourceLabel()
+    {
+        var (indexer, _, catalog) = BuildTwoSourceIndex(
+            [("ZzOne.cs", "namespace Zz { public class ZzOne { void M() { ZzMark.Go(); } } }")],
+            [("ZzUnrelated.cs", "namespace Zz { public class ZzUnrelated { } }")]);
+
+        var usages = await RunAsync(new TraceTool(indexer, catalog), new { symbol = "ZzMark", mode = "usages" });
+        var regex = await RunAsync(new SearchRegexTool(indexer, catalog), new { pattern = "ZzMark" });
+
+        Assert.Contains("[vanilla]:", usages);
+        Assert.DoesNotContain("`ZzOne.cs` [vanilla]", usages);
+        Assert.Contains("[vanilla]:", regex);
+        Assert.DoesNotContain("`ZzOne.cs` [vanilla]", regex);
+    }
+
+    private (SourceIndexer Indexer, DefIndexer Defs, ScopeCatalog Catalog) BuildTwoSourceIndex(
+        (string RelPath, string Body)[] vanilla, (string RelPath, string Body)[] vethara)
+    {
+        var vanillaRoot = _workspace.Dir("Vanilla");
+        var vetharaRoot = _workspace.Dir("Vethara");
+        foreach (var (relPath, body) in vanilla) _workspace.WriteFile(Path.Combine("Vanilla", relPath), body);
+        foreach (var (relPath, body) in vethara) _workspace.WriteFile(Path.Combine("Vethara", relPath), body);
+
+        var indexer = new SourceIndexer();
+        indexer.Scan(vanillaRoot);
+        indexer.Scan(vetharaRoot);
+        indexer.FreezeIndex();
+
+        var defs = new DefIndexer();
+        defs.FreezeIndex();
+
+        return (indexer, defs,
+            ScopeCatalog.Build([("vanilla", vanillaRoot), ("Vethara", vetharaRoot)], null, null));
+    }
+
+    // ---- R11/R13：trace usages 与 search_regex 是同一个结构，却长着两副样子 ----
+
+    // 两者都输出「文件名一行 + 缩进的预览行若干」。search_regex 组间空行、trace 不空，
+    // 于是 trace 里上一组的最后一条预览与下一组的组名贴在一起，组的边界只剩缩进能看。
+    [Fact]
+    public async Task TraceUsages_SeparatesFileGroups_TheSameWaySearchRegexDoes()
+    {
+        var (indexer, defs, catalog) = BuildIndex(
+            ("ZzOne.cs", "namespace Zz { public class ZzOne { void M() { ZzMark.Go(); } } }"),
+            ("ZzTwo.cs", "namespace Zz { public class ZzTwo { void M() { ZzMark.Go(); } } }"));
+
+        var trace = await RunAsync(new TraceTool(indexer, catalog), new { symbol = "ZzMark", mode = "usages" });
+        var regex = await RunAsync(new SearchRegexTool(indexer, catalog), new { pattern = "ZzMark" });
+
+        Assert.Equal(GroupLayout(trace), GroupLayout(regex));
+        // 具体是哪一种：组名之前恒有一个空行（首组除外，表头后面本就空着）
+        Assert.Contains("\n\n`ZzTwo.cs`", trace);
+    }
+
+    // 同一个事件（预览行扫到上限、扫描就地停下）原先两个工具各写一句：
+    // `[Preview lines truncated at limit 1 and scanning stopped there, raise limit …]` 对
+    // `[scanning stopped at the 1-preview cap — pass limit:'all' …]`。
+    [Fact]
+    public async Task TraceAndSearchRegex_ReportTheSameScanStopWithTheSameSentence()
+    {
+        var (indexer, defs, catalog) = BuildIndex(
+            ("ZzOne.cs", "namespace Zz { public class ZzOne { void M() { ZzMark.Go(); ZzMark.Go(); } } }"),
+            ("ZzTwo.cs", "namespace Zz { public class ZzTwo { void M() { ZzMark.Go(); ZzMark.Go(); } } }"));
+
+        var trace = await RunAsync(
+            new TraceTool(indexer, catalog), new { symbol = "ZzMark", mode = "usages", limit = 1 });
+        var regex = await RunAsync(
+            new SearchRegexTool(indexer, catalog), new { pattern = "ZzMark", limit = 1 });
+
+        var expected = "... more matches exist (scan stopped at the 1-preview cap; "
+                       + "pass limit:'all' to raise the cap to 200, or narrow the query or the scope)";
+        Assert.Contains(expected, trace);
+        Assert.Contains(expected, regex);
+
+        // 方括号是被统一掉的旧写法——其余各工具的折叠脚注早已不用它
+        Assert.DoesNotContain("[Preview lines", trace);
+        Assert.DoesNotContain("[scanning stopped", regex);
+    }
+
+    // 组名行与预览行的排布骨架，逐字内容无关
+    private static string GroupLayout(string content) =>
+        string.Concat(content.Split('\n').SkipWhile(l => !l.StartsWith('`')).Select(l =>
+            l.Length == 0 ? "_" : l.StartsWith('`') ? "G" : l.StartsWith("  ") ? "p" : "?"));
 
     // 文法：以 `... +N more` 开头，随后一个名词说清「更多的是什么」，括号里给出下一步。
     // 方括号、"available"、"not shown"、"Truncated:" 都是被统一掉的旧写法。

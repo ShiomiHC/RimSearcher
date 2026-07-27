@@ -21,6 +21,10 @@ public class TraceTool : ITool
     // 把整轮扫描的时间吃光，故仍留一道行数闸；越过它时该文件的计数退化为下界。
     private const int MaxLinesScannedPerFile = 20000;
 
+    // 分块推进的块大小。块内仍是满盘并发，只是每块整块扫完才判配额——代价是配额满的那一刻
+    // 最多多扫一块，换来的是「扫过的恒是文件表的一个前缀」。与 search_regex 取同一个数。
+    private const int ScanChunkFiles = 256;
+
     private readonly SourceIndexer _sourceIndexer;
     private readonly ScopeCatalog _scopeCatalog;
 
@@ -121,8 +125,11 @@ public class TraceTool : ITool
                       + "inheritors resolves C# type names only.";
 
                 return new ToolResult(
-                    $"{message}{ScopeArgs.RetryWiderNotice(scope)}{footer ?? string.Empty}{scopeNotice}");
+                    $"{message}{ScopeArgs.RetryWiderNotice(scope, footer != null)}{footer ?? string.Empty}{scopeNotice}");
             }
+
+            // 列出来的类型全同源时标签只印一次（见 ScopeArgs.SourceLabeling）
+            var inheritorLabels = ScopeArgs.SourceLabeling.Of(inheritors.Items.Select(e => e.SourceName));
 
             var results = inheritors.Items.Select(entry =>
             {
@@ -134,7 +141,7 @@ public class TraceTool : ITool
                 // 表头在有深层项时会点明「无标记 = 直接子类」。
                 var depth = depths.TryGetValue(entry.Item, out var d) ? d : 1;
                 var depthLabel = depth == 1 ? "" : $" [depth {depth}]";
-                return $"- `{entry.Item}`{depthLabel}{SymbolRow.FileNote(entry.Item, paths)}{ScopeArgs.Label(entry.SourceName)}";
+                return $"- `{entry.Item}`{depthLabel}{SymbolRow.FileNote(entry.Item, paths)}{inheritorLabels.Row(entry.SourceName)}";
             });
 
             // 这两个数只描述**列出来的这些条目**，不描述整棵树：Items 是截断后的展示切片，
@@ -152,7 +159,7 @@ public class TraceTool : ITool
             sbInheritors.AppendLine(
                 $"Subclasses of '{symbol}' ({inheritors.TotalInScope} in scope '{scope.Expression}', transitive — "
                 + $"indirect descendants included). Listed below: {inheritors.Items.Count} "
-                + $"({shownDirect} direct, deepest {shownDeepest} level(s) down{depthLegend}):");
+                + $"({shownDirect} direct, deepest {shownDeepest} level(s) down{depthLegend}){inheritorLabels.Header}:");
             sbInheritors.AppendLine(string.Join(Environment.NewLine, results));
 
             var fold = ScopeArgs.FoldLine(inheritors, indent: "", limit: limit);
@@ -173,14 +180,14 @@ public class TraceTool : ITool
             var limit = ScopeArgs.GetDisplayLimit(args, fallback: UsagesDefaultLimit);
             var maxTotalResults = limit.Count;
 
-            var results = new ConcurrentBag<(string file, int lineNum, string preview)>();
+            // 每条命中带上它所属文件在 files 里的序号：截断与排序都靠它，才与线程调度无关。
+            var results = new ConcurrentBag<(int ordinal, string file, int lineNum, string preview)>();
             // 每个文件的真实命中数，与 results 里的预览条数是两个量：预览封顶 3 条，计数不封顶。
             var matchesByFile = new ConcurrentDictionary<string, int>();
             // 扫盘类工具不额外统计 scope 外的命中——那要把过滤掉的文件再读一遍，
             // 代价与全域搜索相同，故这里 scope 是硬过滤，只在结果头部标明范围。
-            var files = _sourceIndexer.GetAllFiles(scope)
-                .Where(f => f.EndsWith(".cs") || f.EndsWith(".xml"))
-                .ToList();
+            var files = SourceIndexer.InDisplayOrder(
+                _sourceIndexer.GetAllFiles(scope).Where(f => f.EndsWith(".cs") || f.EndsWith(".xml")));
 
             var regex = new System.Text.RegularExpressions.Regex(
                 $@"\b{System.Text.RegularExpressions.Regex.Escape(symbol)}\b",
@@ -195,8 +202,33 @@ public class TraceTool : ITool
             int totalFiles = files.Count;
             int truncatedFlag = 0;
 
-            await Parallel.ForEachAsync(files, cancellationToken, async (file, ct) =>
+            // 结果取舍必须与线程调度无关。原先是整张 files 满盘并发 + 配额一到就从委托头部
+            // return：**哪些文件赶在配额前被扫到**取决于线程调度，`limit:1` 同一条查询两次
+            // 能给出两个不同的文件，而返回里那句 "first 1" 于是没有定义。改成按 files 顺序
+            // 分块推进——扫过的恒是 files 的一个前缀，而 files 正是展示顺序，故留下的就是
+            // 读者看到的那一段的开头。search_regex 走的是同一套（SourceIndexer 内同名注释）。
+            var stoppedEarly = false;
+            for (var chunkStart = 0; chunkStart < files.Count; chunkStart += ScanChunkFiles)
             {
+                var chunk = new List<(int Ordinal, string Path)>();
+                for (var i = chunkStart; i < Math.Min(chunkStart + ScanChunkFiles, files.Count); i++)
+                    chunk.Add((i, files[i]));
+
+                await ScanChunkAsync(chunk);
+
+                if (Interlocked.CompareExchange(ref collectedCount, 0, 0) >= maxTotalResults)
+                {
+                    stoppedEarly = chunkStart + ScanChunkFiles < files.Count;
+                    if (stoppedEarly) Interlocked.Exchange(ref truncatedFlag, 1);
+                    break;
+                }
+            }
+
+            async Task ScanChunkAsync(List<(int Ordinal, string Path)> chunk) =>
+                await Parallel.ForEachAsync(chunk, cancellationToken, async (item, ct) =>
+            {
+                var (fileOrdinal, file) = item;
+
                 // 配额用尽后整个文件都不再打开——这才是真正的提前收工，表头因此只能给下界。
                 if (Interlocked.CompareExchange(ref collectedCount, 0, 0) >= maxTotalResults)
                 {
@@ -222,19 +254,17 @@ public class TraceTool : ITool
 
                             // 已开始读的文件一律读到底再收工：文件句柄和缓冲都已经付过钱了，
                             // 读完才换得「+N more in this file」是准数而不是猜的。
+                            //
+                            // 本块内的命中一条不丢，全收进来，截断留到最后按 (文件序号, 行号)
+                            // 排完序再做。原先是在这里抢配额、抢不到就丢：分块只保证「扫了哪些
+                            // 文件」是确定的，块**内**谁先抢到那 20 个名额仍看线程调度，
+                            // 于是 limit:20 同一条查询两次还是能给出两批不同的行。
                             if (matchesInFile <= MaxMatchesPerFile)
                             {
-                                var slot = Interlocked.Increment(ref collectedCount);
-                                if (slot <= maxTotalResults)
-                                {
-                                    var preview = line.Trim();
-                                    if (preview.Length > 100) preview = preview[..97] + "...";
-                                    results.Add((file, lineNum, preview));
-                                }
-                                else
-                                {
-                                    Interlocked.Exchange(ref truncatedFlag, 1);
-                                }
+                                Interlocked.Increment(ref collectedCount);
+                                var preview = line.Trim();
+                                if (preview.Length > 100) preview = preview[..97] + "...";
+                                results.Add((fileOrdinal, file, lineNum, preview));
                             }
                         }
 
@@ -265,13 +295,14 @@ public class TraceTool : ITool
                     $"No references to '{symbol}' found in scope '{scope.Expression}'."
                     + $"{ScopeArgs.RetryWiderNotice(scope)}{scopeNotice}");
 
-            // 比较器与 search_regex 的分组排序统一：路径在 Windows 上大小写不敏感，
-            // 两个同形态的工具用两套比较器会给出不同的文件顺序。
-            var grouped = results
-                .GroupBy(r => r.file)
-                .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase);
-
-            var wasTruncated = Interlocked.CompareExchange(ref truncatedFlag, 0, 0) == 1;
+            // 按 (文件序号, 行号) 排完再截：序号来自 files，files 就是展示顺序，故留下的恒是
+            // 读者看到的那一段的前缀。拿 ConcurrentBag 的枚举序去截则每次都可能不同。
+            var ordered = results.OrderBy(r => r.ordinal).ThenBy(r => r.lineNum).ToList();
+            var wasTruncated = Interlocked.CompareExchange(ref truncatedFlag, 0, 0) == 1
+                               || stoppedEarly
+                               || ordered.Count > maxTotalResults;
+            var shownResults = ordered.Take(maxTotalResults).ToList();
+            var grouped = shownResults.GroupBy(r => r.file).ToList();
             int totalMatches = Interlocked.CompareExchange(ref totalMatchCount, 0, 0);
 
             // 未截断时这个数才是真实命中总数——那正是本次修复的目的（原先它是显示条数）。
@@ -279,17 +310,26 @@ public class TraceTool : ITool
             // 文件」，随线程调度浮动，同一次查询重跑两遍会给出两个数。与其报一个不稳定的下界，
             // 不如只说确定的量（显示了多少条、扫描在何处停下），把总数留给末尾的提示。
             var sb = new System.Text.StringBuilder();
+            // 列出来的文件全同源时标签只印一次（见 ScopeArgs.SourceLabeling）
+            var usageLabels = ScopeArgs.SourceLabeling.Of(
+                grouped.Select(g => scope.ShowLabels ? scope.SourceNameOf(g.Key) : null));
+
             sb.AppendLine(wasTruncated
-                ? $"References to '{symbol}' (first {results.Count} in scope '{scope.Expression}', scan stopped at the limit):"
-                : $"References to '{symbol}' ({totalMatches} found in scope '{scope.Expression}'):");
+                ? $"References to '{symbol}' (first {shownResults.Count} previews in scope '{scope.Expression}'){usageLabels.Header}:"
+                : $"References to '{symbol}' ({totalMatches} found in scope '{scope.Expression}'){usageLabels.Header}:");
             sb.AppendLine();
 
+            var groupsWritten = 0;
             foreach (var group in grouped)
             {
+                // 组与组之间空一行。search_regex 输出的是同一个结构（文件名 + 缩进的预览行）
+                // 却一直空着行，两处一密一疏，读者每换一个工具就得重新找组的边界在哪。
+                if (groupsWritten++ > 0) sb.AppendLine();
+
                 // 原先每组挂一个 `[C#]` / `[XML]` 前缀，而紧跟其后的文件名带着 .cs / .xml
                 // 后缀，说的是同一件事。search_regex 同样按文件分组、从来没有这个前缀。
                 var fileName = System.IO.Path.GetFileName(group.Key);
-                sb.AppendLine($"`{fileName}`{ScopeArgs.Label(scope.ShowLabels ? scope.SourceNameOf(group.Key) : null)}");
+                sb.AppendLine($"`{fileName}`{usageLabels.Row(scope.ShowLabels ? scope.SourceNameOf(group.Key) : null)}");
 
                 var shown = 0;
                 foreach (var match in group.OrderBy(m => m.lineNum))
@@ -308,12 +348,11 @@ public class TraceTool : ITool
             // 而 totalMatches 现在是真实命中数——单文件折叠出来的命中会误触发这条提示。
             if (wasTruncated)
             {
-                // 已经顶到硬上限时别再劝 limit:'all'，那只会原地重试。
-                // 文案点明限的是「预览行」：表头的 N+ 是命中数，两个数量不是一回事，
-                // 不说清楚就会被读成「找到 N 条却只让看 50 条」的矛盾。
-                sb.AppendLine(limit.Unlimited
-                    ? $"\n[Preview lines truncated at the server cap of {maxTotalResults} and scanning stopped there, use a more specific symbol or a narrower scope]"
-                    : $"\n[Preview lines truncated at limit {maxTotalResults} and scanning stopped there, raise limit (up to {ScopeArgs.HardLimit}) or use limit:'all']");
+                // 与 search_regex 同一句话：两个工具在同一个事件（预览行扫到上限就停）上原先
+                // 各写各的措辞，而它们的输出结构本来就一样。已顶到硬上限时那句里不会再劝
+                // limit:'all'（原地重试），这条判断在 ScanStoppedLine 内部。
+                sb.AppendLine();
+                sb.AppendLine(ScopeArgs.ScanStoppedLine(maxTotalResults, limit));
             }
 
             // usages 分支是硬 scope 过滤、没有 ScopeReport footer（见上面扫盘的注释），

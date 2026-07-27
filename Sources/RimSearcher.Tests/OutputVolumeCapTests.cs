@@ -157,6 +157,16 @@ public class OutputVolumeCapTests : IDisposable
 
         // 截断说明必须落在围栏之外：混进 ``` 块里就成了源码的一部分，整块复制出去编译不过
         Assert.EndsWith(")", result.Content.TrimEnd());
+
+        // 报的行数是类**自己**的行数。位置注释是本服务加的一行，算进去这个数就偏大，
+        // 而它还会占掉 2000 行额度里的一行。
+        Assert.Contains("'Giant' is 2502 lines", result.Content);
+        Assert.Contains("... +502 more lines", result.Content);
+        var fenced = result.Content.Split("```")[1].TrimEnd('\n').Split('\n');
+        Assert.Equal("csharp", fenced[0]);
+        Assert.StartsWith("// Class RimWorld.Giant — ", fenced[1]);
+        // 围栏里 = 语言标记 + 1 行位置注释 + 恰好 2000 行类体
+        Assert.Equal(2000, fenced.Length - 2);
     }
 
     private async Task<ToolResult> SearchRegex(string fileName, string content, string pattern)

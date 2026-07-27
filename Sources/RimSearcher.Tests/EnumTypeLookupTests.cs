@@ -69,10 +69,12 @@ public class EnumTypeLookupTests : IDisposable
 
         Assert.False(result.IsError);
         Assert.Contains("Enum: RimWorld.ShieldState : byte", result.Content);
-        Assert.Contains("Value: Active", result.Content);
+        // 取值不逐行挂 `Value: `：上一行的 `Enum:` 已经说完下面每行是什么
+        Assert.Contains("\n  Active", result.Content);
         // 显式赋值要跟着一起出来：调用方查 enum 多半就是为了那个数值
-        Assert.Contains("Value: Resetting = 7", result.Content);
-        Assert.Contains("Value: Disabled", result.Content);
+        Assert.Contains("\n  Resetting = 7", result.Content);
+        Assert.Contains("\n  Disabled", result.Content);
+        Assert.DoesNotContain("Value: ", result.Content);
     }
 
     [Fact]
@@ -192,7 +194,7 @@ public class EnumTypeLookupTests : IDisposable
         var body = RoslynHelper.FormatMemberBody(MembersSource, "energy", "CompShield", "CompShield.cs");
 
         Assert.True(body.IsOk);
-        Assert.Contains("Field, starts at line:", body.Content);
+        Assert.Matches(@"^// Field energy — CompShield\.cs:\d+$", body.Content.Split('\n')[0].TrimEnd());
     }
 
     [Fact]

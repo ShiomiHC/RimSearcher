@@ -184,22 +184,24 @@ public class ReadCodeTool : ITool
                 // 整个类型的实现体没有天然上限：反编译出来的巨型类动辄几千行，一次就能吃掉
                 // 整个上下文预算。裸行模式早有 MaxLineCount 夹着，这里沿用同一个数，超出时
                 // 指回 methodName——按成员精读本就比整类通读更贴这个工具的用法。
-                var classLines = classBody.Content.Split('\n');
+                // 数的是类自己的行（Body 已剔掉那行位置注释）。连注释行一起数时，
+                // 「'Pawn' is 4729 lines」比真实行数多，而这些行还会占掉 MaxLineCount 的额度。
+                var classLines = classBody.Body.Split('\n');
                 var classContent = classBody.Content;
                 var classNote = string.Empty;
                 if (classLines.Length > MaxLineCount)
                 {
-                    classContent = string.Join("\n", classLines.Take(MaxLineCount));
+                    classContent = classBody.LocationLine + "\n" + string.Join("\n", classLines.Take(MaxLineCount));
                     classNote =
                         $"\n... +{classLines.Length - MaxLineCount} more lines "
                         + $"('{extractClassName}' is {classLines.Length} lines and the cap is {MaxLineCount}; "
                         + "pass methodName for one member, or startLine to continue)";
                 }
 
-                // 与 member 模式对称地回显目标名。少了这行，同一个文件里连开几个 extractClass
-                // 的返回长得一模一样，读者只能靠正文首行去认这是哪个类。
+                // 目标名不在这里回显：classContent 的首行已经是 `// Class <全名> — <路径>:<行>`，
+                // 再补一行只是把同一个名字说第二遍。
                 return WithUnresolvedScopeNotice(scope,
-                    new ToolResult($"```{Fence(path)}\n{scopeNotice}{Comment(path, extractClassName)}\n{classContent}\n```{classNote}"));
+                    new ToolResult($"```{Fence(path)}\n{scopeNotice}{classContent}\n```{classNote}"));
             }
 
             if (!string.IsNullOrEmpty(memberArg))
@@ -228,7 +230,7 @@ public class ReadCodeTool : ITool
                         Failure(body, path, $"Member '{methodName}'", "Use inspect tool to see available members."));
 
                 return WithUnresolvedScopeNotice(scope,
-                    new ToolResult($"```{Fence(path)}\n{scopeNotice}{Comment(path, methodName)}\n{body.Content}\n```"));
+                    new ToolResult($"```{Fence(path)}\n{scopeNotice}{body.Content}\n```"));
             }
 
             int startLine = Math.Max(0, ToolArgs.GetInt(args, 0, "startLine", "start", "offset"));
@@ -249,8 +251,9 @@ public class ReadCodeTool : ITool
             var sb = new StringBuilder();
             sb.AppendLine($"```{Fence(path)}");
             if (scopeNotice.Length > 0) sb.Append(scopeNotice);
-            // 印解析后的**绝对路径**，与 methodName / extractClass 两个模式的 `// File:` 头对齐。
-            // 只印基名时，path 传的是基名、而索引里有多份同名文件的那种情形在返回里不留痕迹。
+            // 印解析后的**绝对路径**，与 methodName / extractClass 两个模式的位置行对齐——
+            // 三种模式都以恰好一行「读的是哪个文件的哪一段」开头。只印基名时，path 传的是
+            // 基名、而索引里有多份同名文件的那种情形在返回里不留痕迹。
             sb.AppendLine(Comment(path,
                 $"{path} (lines {startLine + 1}-{Math.Min(startLine + lineCount, totalLines)} of {totalLines})"));
             foreach (var line in resultLines) sb.AppendLine(line);
