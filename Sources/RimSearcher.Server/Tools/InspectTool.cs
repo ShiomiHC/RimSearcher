@@ -60,6 +60,19 @@ public class InspectTool : ITool
         required = new[] { "name" }
     };
 
+    // 大纲取不到时说清是哪一种取不到：文件没了 / 文件太大不解析 / 文件里确实没这个类型
+    // （最后一种通常意味着索引落后于磁盘，比如源刚被重新同步过）。
+    private static string DescribeOutlineFailure(SourceLookupStatus status, string typeName) => status switch
+    {
+        SourceLookupStatus.FileNotFound =>
+            "_(file no longer exists — sources may have just been re-synced; retry after sync_sources)_",
+        SourceLookupStatus.FileTooLarge =>
+            $"_(outline skipped: file exceeds the {RoslynHelper.MaxParseFileSize / (1024 * 1024)} MB parse limit; " +
+            "use read_code with startLine/lineCount)_",
+        _ =>
+            $"_(no declaration of `{typeName}` in this file — the index may be stale; retry after sync_sources)_"
+    };
+
     public async Task<ToolResult> ExecuteAsync(JsonElement args, CancellationToken cancellationToken, IProgress<double>? progress = null)
     {
         var name = ToolArgs.StripLocateFilterPrefix(
@@ -185,7 +198,10 @@ public class InspectTool : ITool
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 sb.AppendLine($"**Outline** (`{entry.Item}`){ScopeArgs.Label(entry.SourceName)}:");
-                sb.AppendLine(await RoslynHelper.GetClassOutlineAsync(entry.Item, name));
+
+                // 按状态判断而不是看正文——正文里出现 "not found" 之类的字面量是常态
+                var outline = await RoslynHelper.GetClassOutlineAsync(entry.Item, name);
+                sb.AppendLine(outline.IsOk ? outline.Content : DescribeOutlineFailure(outline.Status, name));
                 sb.AppendLine("---");
             }
 

@@ -6,6 +6,11 @@ namespace RimSearcher.Server.Tools;
 
 public class ReadCodeTool : ITool
 {
+    // 裸行读取的缺省与硬上限。schema 里的 maximum 只是给 client 的提示，client 照样能传
+    // lineCount:100000，所以夹紧必须在服务端做一次（见下面的 Math.Min）。
+    private const int DefaultLineCount = 150;
+    private const int MaxLineCount = 2000;
+
     private readonly SourceIndexer _sourceIndexer;
     private readonly ScopeCatalog _scopeCatalog;
 
@@ -62,9 +67,11 @@ public class ReadCodeTool : ITool
             {
                 type = "integer",
                 minimum = 1,
-                maximum = 2000,
-                @default = 150,
-                description = "Optional number of lines for raw read mode. Default is 150."
+                maximum = MaxLineCount,
+                @default = DefaultLineCount,
+                description =
+                    $"Optional number of lines for raw read mode. Default is {DefaultLineCount}, " +
+                    $"values above {MaxLineCount} are clamped to it."
             },
             scope = ScopeArgs.ScopeSchemaProperty(_scopeCatalog)
         },
@@ -98,9 +105,14 @@ public class ReadCodeTool : ITool
             {
                 var extractClassName = ToolArgs.StripLocateFilterPrefix(extractClass);
                 var classBody = await RoslynHelper.GetClassBodyAsync(path, extractClassName);
-                if (string.IsNullOrEmpty(classBody) || classBody.Contains("not found"))
-                    return new ToolResult($"Class '{extractClassName}' not found in {Path.GetFileName(path)}. Use inspect tool to verify.", true);
-                return new ToolResult($"```csharp\n{scopeNotice}{classBody}\n```");
+
+                // 按状态判断，不看正文内容。原先是 classBody.Contains("not found")——
+                // 反编译产物里 Log.Error("... not found") 这类字面量遍地都是，取到的正文
+                // 一旦含这段文本就会被误报成「类不存在」，而代码明明就在那里。
+                if (!classBody.IsOk)
+                    return Failure(classBody, path, $"Class '{extractClassName}'", "Use inspect tool to verify the type name.");
+
+                return new ToolResult($"```csharp\n{scopeNotice}{classBody.Content}\n```");
             }
 
             var member = ToolArgs.GetOptionalString(args, "methodName", "method", "member", "memberName");
@@ -109,20 +121,18 @@ public class ReadCodeTool : ITool
                 var methodName = ToolArgs.StripLocateFilterPrefix(member);
                 var className = ToolArgs.GetOptionalString(args, "className", "type", "typeName");
                 var body = await RoslynHelper.GetMemberBodyAsync(path, methodName, className);
-                if (string.IsNullOrEmpty(body) || body.Contains("not found"))
-                {
-                    return new ToolResult(
-                        $"Member '{methodName}' not found in {Path.GetFileName(path)}. Use inspect tool to see available members.",
-                        true);
-                }
 
-                return new ToolResult($"```csharp\n{scopeNotice}// {methodName}\n{body}\n```");
+                if (!body.IsOk)
+                    return Failure(body, path, $"Member '{methodName}'", "Use inspect tool to see available members.");
+
+                return new ToolResult($"```csharp\n{scopeNotice}// {methodName}\n{body.Content}\n```");
             }
 
             int startLine = Math.Max(0, ToolArgs.GetInt(args, 0, "startLine", "start", "offset"));
-            int lineCount = ToolArgs.GetInt(args, 150, "lineCount", "lines", "count", "limit", "maxResults");
+            int lineCount = ToolArgs.GetInt(args, DefaultLineCount, "lineCount", "lines", "count", "limit", "maxResults");
             if (lineCount <= 0)
                 return new ToolResult("lineCount must be greater than 0.", true);
+            lineCount = Math.Min(lineCount, MaxLineCount);
 
             var allLines = File.ReadAllLines(path);
             int totalLines = allLines.Length;
@@ -150,6 +160,25 @@ public class ReadCodeTool : ITool
         {
             return new ToolResult($"Read failed: {ex.Message}", true);
         }
+    }
+
+    // 三种失败原因给三种不同的下一步：文件没了要重查、文件过大要改用裸行读、目标不存在才该去 inspect。
+    // 原先它们都被折叠成一句「not found」，读者据此断言「类不存在」，而真相可能是文件被重新同步掉了。
+    private static ToolResult Failure(SourceLookupResult result, string path, string target, string notFoundHint)
+    {
+        var fileName = Path.GetFileName(path);
+
+        var message = result.Status switch
+        {
+            SourceLookupStatus.FileNotFound =>
+                $"File disappeared while reading: '{fileName}'. Sources may have just been re-synced — call locate again.",
+            SourceLookupStatus.FileTooLarge =>
+                $"'{fileName}' is larger than {RoslynHelper.MaxParseFileSize / (1024 * 1024)} MB, so it is not parsed. " +
+                "Read it with startLine/lineCount instead, or narrow down with search_regex.",
+            _ => $"{target} not found in {fileName}. {notFoundHint}"
+        };
+
+        return new ToolResult(message, true);
     }
 
     private string? ResolvePath(string input, ScopeSelection scope, out bool outOfScopeFallback)
