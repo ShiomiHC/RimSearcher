@@ -294,14 +294,14 @@ public static class RoslynHelper
             sb.AppendLine($"{kind}: {fullName}{(typeParams.Length > 0 ? " " + typeParams : string.Empty)}");
             var properties = type.Members.OfType<PropertyDeclarationSyntax>().ToList();
             foreach (var prop in properties.Take(maxMembersPerKind))
-                sb.AppendLine($"  Property: {prop.Type} {prop.Identifier.Text}");
+                sb.AppendLine($"  Property: {Modifiers(prop.Modifiers)}{prop.Type} {prop.Identifier.Text}");
             AppendOutlineFold(sb, properties.Count, maxMembersPerKind, "properties");
 
             var fields = type.Members.OfType<FieldDeclarationSyntax>().ToList();
             foreach (var field in fields.Take(maxMembersPerKind))
             {
                 var fieldName = string.Join(", ", field.Declaration.Variables.Select(v => v.Identifier.Text));
-                sb.AppendLine($"  Field: {field.Declaration.Type} {fieldName}");
+                sb.AppendLine($"  Field: {Modifiers(field.Modifiers)}{field.Declaration.Type} {fieldName}");
             }
             AppendOutlineFold(sb, fields.Count, maxMembersPerKind, "fields");
 
@@ -310,7 +310,8 @@ public static class RoslynHelper
             {
                 var parameters = string.Join(", ",
                     method.ParameterList.Parameters.Select(FormatParameter));
-                sb.AppendLine($"  Method: {method.ReturnType} {method.Identifier.Text}({parameters})");
+                sb.AppendLine(
+                    $"  Method: {Modifiers(method.Modifiers)}{method.ReturnType} {method.Identifier.Text}({parameters})");
             }
             AppendOutlineFold(sb, methods.Count, maxMembersPerKind, "methods");
 
@@ -331,6 +332,15 @@ public static class RoslynHelper
             $"  ... +{total - shownCap} more {kindPlural} not shown "
             + "(find one by name with locate, or read the full declaration with read_code extractClass)");
     }
+
+    // 与 FormatParameter 同一条判据：大纲是「照着它写调用或写 Harmony patch」的抄写样本，
+    // 丢掉修饰符就等于给出错的样本。private 与 public、static 与实例、const 与可写字段
+    // 原先渲染成逐字相同的一行，于是调用方会写出 `comp.ApparelScorePerEnergyMax`（private，
+    // 编译不过）、`someVec.FromVector3(v)`（static，编译不过），或对一个 const 做
+    // AccessTools.FieldRefAccess（const 没有字段槽，运行期炸）；写 patch 时更要靠
+    // static 与否决定要不要 `__instance` 形参。
+    private static string Modifiers(SyntaxTokenList modifiers)
+        => modifiers.Count == 0 ? string.Empty : string.Join(" ", modifiers.Select(m => m.Text)) + " ";
 
     // 原先大纲只渲染 `{类型} {形参名}`，把 out/ref/in/params/this 和默认值全丢了：
     // `PostPreApplyDamage(DamageInfo, out bool absorbed)` 显示成 `(DamageInfo, bool absorbed)`。

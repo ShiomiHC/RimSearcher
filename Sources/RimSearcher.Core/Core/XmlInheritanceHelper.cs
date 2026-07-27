@@ -2,8 +2,30 @@ using System.Xml.Linq;
 
 namespace RimSearcher.Core;
 
+// 一次 ParentName 链合并到底走完没有，以及没走完的话卡在哪。
+//
+// 存在的意义：合并失败是**静默**的——父 def 查不到时循环直接结束，而 CleanupMetadata 又把
+// ParentName 属性删掉，于是「本来就没有父」「父已合进来」「父找不到所以少了一半」三种情形
+// 渲染得逐字同形。而工具描述向调用方承诺的是「the complete effective definition」，
+// 它会把半成品当完整定义：据此断定某个 hediff 没有 hediffClass、不关联任何 C# 类，
+// 然后去补一个「缺失」的字段。
+public sealed record DefInheritanceTrace(
+    IReadOnlyList<string> Chain,
+    string? UnresolvedParent,
+    bool StoppedAtDepthLimit,
+    bool StoppedByCycle)
+{
+    // 只有这三种中断会让合并结果少字段；链自然走到头（没有 ParentName）是正常完成
+    public bool IsComplete => UnresolvedParent == null && !StoppedAtDepthLimit && !StoppedByCycle;
+
+    public static readonly DefInheritanceTrace Empty = new([], null, false, false);
+}
+
 public static class XmlInheritanceHelper
 {
+    // vanilla 里最长的继承链也远在此之下；这个数只是防索引成环时空转
+    private const int MaxChainDepth = 15;
+
     private static readonly HashSet<string> ListContainerNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "comps", "stages", "modExtensions", "lifeStages", "hediffGivers",
@@ -30,19 +52,33 @@ public static class XmlInheritanceHelper
     /// 同上，但起点由调用方给定。挑好了 def 的调用方必须走这条：按名字重查一次会落回
     /// 默认胜者，defType 消歧挑中的那条就被丢掉了，返回里表头与正文来自两条不同的 def。
     /// </summary>
-    public static async Task<XElement?> ResolveDefXmlElementAsync(DefLocation? target, DefIndexer indexer, ScopeSelection scope)
+    public static async Task<XElement?> ResolveDefXmlElementAsync(
+        DefLocation? target, DefIndexer indexer, ScopeSelection scope)
+        => (await ResolveDefXmlWithTraceAsync(target, indexer, scope)).Element;
+
+    // 一并带回链的完整性。调用方**必须**据此决定要不要在输出里加警示：
+    // 少了字段的合并结果和完整的合并结果长得一模一样。
+    public static async Task<(XElement? Element, DefInheritanceTrace Trace)> ResolveDefXmlWithTraceAsync(
+        DefLocation? target, DefIndexer indexer, ScopeSelection scope)
     {
         var targetLoc = target;
-        if (targetLoc == null) return null;
+        if (targetLoc == null) return (null, DefInheritanceTrace.Empty);
 
         var hierarchy = new Stack<XElement>();
         var currentLoc = targetLoc;
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+        var chain = new List<string>();
+        string? unresolvedParent = null;
+        var stoppedAtDepthLimit = false;
+        var stoppedByCycle = false;
+
         while (currentLoc != null)
         {
-            if (!visited.Add(currentLoc.DefName + currentLoc.FilePath)) break;
-            if (visited.Count > 15) break;
+            if (!visited.Add(currentLoc.DefName + currentLoc.FilePath)) { stoppedByCycle = true; break; }
+            if (visited.Count > MaxChainDepth) { stoppedAtDepthLimit = true; break; }
+
+            chain.Add(currentLoc.DefName);
 
             try
             {
@@ -63,20 +99,40 @@ public static class XmlInheritanceHelper
                 {
                     hierarchy.Push(new XElement(node));
                     var parentName = currentLoc.ParentName;
-                    // 父优先在子所在的源里找：撞名时 Milira 的 def 该接 Milira 自己的抽象基
-                    currentLoc = !string.IsNullOrEmpty(parentName)
-                        ? indexer.Lookup(parentName, scope, preferSameSourceAs: currentLoc.FilePath).Location
-                        : null;
+                    if (string.IsNullOrEmpty(parentName))
+                    {
+                        // 链自然走到头，这才是「合并完整」
+                        currentLoc = null;
+                    }
+                    else
+                    {
+                        // 父优先在子所在的源里找：撞名时 Milira 的 def 该接 Milira 自己的抽象基
+                        var parent = indexer.Lookup(
+                            parentName, scope, preferSameSourceAs: currentLoc.FilePath).Location;
+
+                        // 父声明了却查不到——多半是那个源没配进 config，或 scope 把它挡在外面。
+                        // 这里静默 break 掉，结果就少了整条上游链的字段，而输出看不出来。
+                        if (parent == null) unresolvedParent = parentName;
+                        currentLoc = parent;
+                    }
                 }
-                else break;
+                else
+                {
+                    // 索引说这个 def 在这个文件里，实际读不到——索引落后于磁盘
+                    unresolvedParent ??= currentLoc.DefName;
+                    break;
+                }
             }
             catch
             {
+                unresolvedParent ??= currentLoc.DefName;
                 break;
             }
         }
 
-        if (hierarchy.Count == 0) return null;
+        var trace = new DefInheritanceTrace(chain, unresolvedParent, stoppedAtDepthLimit, stoppedByCycle);
+
+        if (hierarchy.Count == 0) return (null, trace);
 
         XElement result = new XElement(hierarchy.Peek().Name);
         while (hierarchy.Count > 0) MergeXml(result, hierarchy.Pop());
@@ -94,7 +150,7 @@ public static class XmlInheritanceHelper
         if (defNameEl != null) result.AddFirst(defNameEl);
 
         CleanupMetadata(result);
-        return result;
+        return (result, trace);
     }
 
     private static void CleanupMetadata(XElement element)

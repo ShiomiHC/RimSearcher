@@ -99,6 +99,7 @@ scope:mods pawn
 **Def 模式**
 - 展示 Def 类型、来源文件、译名（`localization_description` 开启时连译文描述一起）
 - 返回沿整条 `ParentName` 链合并后的 XML，即完整生效定义——任何单个 XML 文件都不含这份内容
+- 头部固定给一行**父链状态**：合并成功印 `Inheritance chain: A <- B`，没有父则明说，某一环查不到则给**警告**并指出「下面这份不是完整生效定义、继承来的字段全缺」。三种情形此前渲染得逐字同形，调用方无从分辨自己拿到的是不是半成品
 - 合并 XML 过长会被截断（首屏给头 200 行 + 尾 50 行）。**续读用 `xmlStartLine`，不要去 `read_code` 读 `File:` 那个路径**：那份文件里只有该 def 自己未合并的几行，继承来的字段恰恰不在其中。截断提示会直接给出下一次该填的 `xmlStartLine`
 - 提取关联 C# 类型并尝试映射到索引文件
 - `defType` 参数用于同名 def 撞车时指定看哪一个（`Human` 同时是 ThingDef、BodyDef 和 HediffGiverSetDef）。不传时返回会列出所有同名类型，据此再传一次即可。它是 def 类型，不用于收窄 C# 模式

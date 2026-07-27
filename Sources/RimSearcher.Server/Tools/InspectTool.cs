@@ -121,6 +121,40 @@ public class InspectTool : ITool
             $"_(no declaration of `{typeName}` in this file — the index may be stale; retry after sync_sources)_"
     };
 
+    // 父链状态必须写进输出。合并是**静默**失败的：父 def 查不到时循环直接结束，
+    // CleanupMetadata 又把 ParentName 属性删掉，于是「本来就没有父」「父已合进来」
+    // 「父找不到所以少了一半」三种情形渲染得逐字同形。而本工具描述向调用方承诺的是
+    // 「the complete effective definition」——它会把半成品当完整定义，据此断定某个 hediff
+    // 没有 hediffClass、不关联任何 C# 类，然后去补一个根本不缺的字段。
+    private static void AppendInheritanceChain(StringBuilder sb, DefInheritanceTrace trace, ScopeSelection scope)
+    {
+        if (trace.Chain.Count > 1)
+            sb.AppendLine($"Inheritance chain: {string.Join(" <- ", trace.Chain)}");
+        else if (trace.IsComplete)
+            sb.AppendLine("Inheritance chain: none (this def declares no ParentName)");
+
+        if (trace.UnresolvedParent != null)
+        {
+            sb.AppendLine(
+                $"\n**Warning: parent '{trace.UnresolvedParent}' was not found in scope '{scope.Expression}', "
+                + "so the XML below is NOT the complete effective definition — every field inherited from it "
+                + "(and from anything above it) is missing.** Re-run with scope:'all'; if it is still missing, "
+                + "that source is not in this server's config.");
+        }
+        else if (trace.StoppedByCycle)
+        {
+            sb.AppendLine(
+                "\n**Warning: the ParentName chain loops back on itself, so the merge stopped early and the "
+                + "XML below may be missing inherited fields.**");
+        }
+        else if (trace.StoppedAtDepthLimit)
+        {
+            sb.AppendLine(
+                "\n**Warning: the ParentName chain is longer than this server merges, so the XML below may be "
+                + "missing fields from the topmost ancestors.**");
+        }
+    }
+
     // 合并后的 XML 一屏放不下时的窗口大小；不带 xmlStartLine 的首次调用按 头 HeadLines +
     // 尾 TailLines 渲染（开头是字段主体，结尾是收尾结构，两头都比中段更常被需要）。
     private const int XmlHeadLines = 200;
@@ -273,13 +307,16 @@ public class InspectTool : ITool
 
             // 传 def 而不是 name：上面已经用 defType 消过歧，按名字重查会落回默认胜者，
             // 表头说的是 ThingDef、正文却给出 BodyDef 的 XML。
-            var resolvedXml = await XmlInheritanceHelper.ResolveDefXmlElementAsync(def, _defIndexer, scope);
+            var (resolvedXml, chainTrace) = await XmlInheritanceHelper.ResolveDefXmlWithTraceAsync(
+                def, _defIndexer, scope);
             if (resolvedXml == null)
             {
                 sb.AppendLine("\n**Resolved XML:** Failed to load Def XML");
                 sb.Append(scopeNotice);
                 return new ToolResult(sb.ToString());
             }
+
+            AppendInheritanceChain(sb, chainTrace, scope);
 
             var resolvedXmlStr = resolvedXml.ToString();
             var xmlLines = resolvedXmlStr.Split('\n');
