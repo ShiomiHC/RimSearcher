@@ -58,7 +58,7 @@ public class LocateTool : ITool
 
     public Task<ToolResult> ExecuteAsync(JsonElement args, CancellationToken cancellationToken, IProgress<double>? progress = null)
     {
-        var rawQuery = ToolArgs.GetRequiredString(args, ArgSpec, "query", "name", "symbol", "pattern", "search");
+        var rawQuery = ToolArgs.GetRequiredFuzzyString(args, ArgSpec, "query", "name", "symbol", "pattern", "search");
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -267,7 +267,8 @@ public class LocateTool : ITool
 
         if (!hasResults)
         {
-            var message = new StringBuilder($"No results for '{rawQuery}' in scope '{scope.Expression}'.");
+            var message = new StringBuilder(
+                $"No results for '{ToolArgs.ForEcho(rawQuery)}' in scope '{scope.Expression}'.");
             message.Append(ScopeArgs.RetryWiderNotice(scope));
             if (footer != null) message.Append(footer);
             message.Append(scopeNotice);

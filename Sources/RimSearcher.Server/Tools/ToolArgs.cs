@@ -55,6 +55,32 @@ public static class ToolArgs
         return text.Trim();
     }
 
+    // 会喂给模糊匹配的参数（locate 的 query / inspect 的 name / trace 的 symbol）的长度闸。
+    //
+    // 这些串要与索引里每一个类型名、成员名、defName 逐一打分，代价是 O(语料 × 串长)：
+    // 实测一条 100 KB 的 query 让服务端 210% CPU 烧了 77 秒，然后把那 100 KB 原样回显进
+    // "No results for '…'"——既拖垮进程，又把等量垃圾塞回调用方的上下文。
+    // 语料里最长的符号名也就几十个字符，256 已经宽得离谱；越过它的一定是误用，
+    // 该立刻给一条能改的错误，而不是先烧一分多钟再说没找到。
+    public const int MaxFuzzyQueryLength = 256;
+
+    public static string GetRequiredFuzzyString(JsonElement args, ToolArgSpec spec, params string[] names)
+    {
+        var text = GetRequiredString(args, spec, names);
+        if (text.Length <= MaxFuzzyQueryLength) return text;
+
+        throw new ToolArgumentException(
+            $"Parameter '{names[0]}' for {spec.ToolName} is {text.Length} characters; the limit is "
+            + $"{MaxFuzzyQueryLength}. This parameter is matched against every indexed name, so a long "
+            + "string costs a full-corpus scan and cannot match anything. Pass just the symbol or def "
+            + "name; to match patterns against file contents use rimworld-searcher__search_regex.\n"
+            + spec.BuildUsage());
+    }
+
+    // 回显调用方给的串时用：错误信息里的原样回显是「输入多大、输出就多大」的放大器
+    public static string ForEcho(string value, int maxLength = 120)
+        => value.Length <= maxLength ? value : value[..maxLength] + $"… ({value.Length} chars total)";
+
     public static string? GetOptionalString(JsonElement args, params string[] names)
         => TryGetElement(args, out var value, names) ? CoerceToString(value)?.Trim() : null;
 

@@ -75,7 +75,7 @@ public class TraceTool : ITool
     public async Task<ToolResult> ExecuteAsync(JsonElement args, CancellationToken cancellationToken, IProgress<double>? progress = null)
     {
         var symbol = ToolArgs.StripLocateFilterPrefix(
-            ToolArgs.GetRequiredString(args, ArgSpec, "symbol", "query", "name", "type"));
+            ToolArgs.GetRequiredFuzzyString(args, ArgSpec, "symbol", "query", "name", "type"));
         var mode = ToolArgs.GetRequiredString(args, ArgSpec, "mode", "traceMode", "direction").ToLowerInvariant();
 
         if (mode is not ("inheritors" or "usages"))

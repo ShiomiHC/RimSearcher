@@ -31,6 +31,10 @@ public class SourceIndexer
     private FrozenDictionary<string, string[]>? _frozenNgramIndex;
     private FrozenDictionary<string, (string TypeName, string MemberName, string MemberType, string FilePath)[]>? _frozenMemberIndex;
     
+    // 索引里实际收进来了多少个文件。启动后用来判定「索引是空的」——空索引下每一条
+    // 「没找到」都是不可信的，调用方必须被告知，否则会把它读成「这东西不存在」。
+    public int IndexedFileCount => _processedFiles.Count;
+
     public void FreezeIndex()
     {
         _frozenIndex = _index.ToFrozenDictionary(

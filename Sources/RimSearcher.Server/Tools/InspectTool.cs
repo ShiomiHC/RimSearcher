@@ -113,7 +113,7 @@ public class InspectTool : ITool
     public async Task<ToolResult> ExecuteAsync(JsonElement args, CancellationToken cancellationToken, IProgress<double>? progress = null)
     {
         var name = ToolArgs.StripLocateFilterPrefix(
-            ToolArgs.GetRequiredString(args, ArgSpec, "name", "query", "defName", "typeName", "symbol"));
+            ToolArgs.GetRequiredFuzzyString(args, ArgSpec, "name", "query", "defName", "typeName", "symbol"));
 
         var scope = ScopeArgs.Resolve(_scopeCatalog, args);
 

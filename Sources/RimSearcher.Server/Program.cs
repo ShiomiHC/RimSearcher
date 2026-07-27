@@ -97,6 +97,29 @@ await IndexBootstrapper.PopulateAsync(
         localizationSources,
         appConfig.LocalizationDescription));
 
+// 上面这一串诊断此刻只到了 stderr——启动阶段 ServerLogger.OnLogAsync 还没接上 MCP 通道，
+// 而真正的调用方是读工具返回文本的 LLM。把「索引不可信」和「布局做过取舍」两类事实
+// 转交给 StartupHealth，由每次工具返回捎带出去。
+var indexedFiles = indexer.IndexedFileCount + defIndexer.IndexedFileCount;
+var blockingReason =
+    !isLoaded
+        ? $"The configuration at '{configPath}' failed to load ({configError ?? "file not found"})."
+        : !hasPaths
+            ? $"The configuration at '{configPath}' defines no source paths."
+            : indexedFiles == 0
+                ? $"The configured source paths under '{configPath}' contain no indexable C# or XML files."
+                : null;
+
+var layoutAdvisories = new List<string>(resolvedSources.Notes);
+if (resolvedSources.Shadowed.Count > 0)
+{
+    layoutAdvisories.Add(
+        $"{resolvedSources.Shadowed.Count} file(s) are shadowed by a higher-priority copy in the same mod "
+        + "and are not indexed (RimWorld's own file-level override rule).");
+}
+
+StartupHealth.Record(blockingReason, layoutAdvisories);
+
 var syncService = new SourceSyncService(appConfig, resolvedSources, cacheDirectory);
 var indexRebuilder = new IndexRebuilder(
     indexer, defIndexer, localization, resolvedSources, localizationSources, appConfig.LocalizationDescription);

@@ -101,6 +101,47 @@ public class ToolArgsTests
         Assert.Empty(ToolArgs.ReceivedKeys(Args("\"scalar\"")));
         Assert.Null(ToolArgs.GetOptionalString(Args("\"scalar\""), "query"));
     }
+
+    // 缺陷回归：模糊匹配参数过去没有长度闸。实测一条 100 KB 的 query 让服务端 210% CPU
+    // 烧了 77 秒，再把那 100 KB 原样回显进 "No results for '…'"——拖垮进程之余，
+    // 还把等量垃圾塞回调用方上下文。语料里最长的符号名远在 256 以内，越界一定是误用。
+    [Fact]
+    public void FuzzyString_OverTheLengthCap_IsRefusedWithAnActionableMessage()
+    {
+        var oversized = new string('A', ToolArgs.MaxFuzzyQueryLength + 1);
+        var args = Args(JsonSerializer.Serialize(new { query = oversized }));
+
+        var ex = Assert.Throws<ToolArgumentException>(
+            () => ToolArgs.GetRequiredFuzzyString(args, Spec, "query", "name"));
+
+        Assert.Contains(ToolArgs.MaxFuzzyQueryLength.ToString(), ex.Message);
+        Assert.Contains("search_regex", ex.Message);
+        // 拒绝消息本身不得成为放大器：原样回显那 100 KB 与直接返回它没有区别
+        Assert.DoesNotContain(oversized, ex.Message);
+        Assert.True(ex.Message.Length < 1000);
+    }
+
+    [Fact]
+    public void FuzzyString_AtExactlyTheCap_IsAccepted()
+    {
+        var exact = new string('A', ToolArgs.MaxFuzzyQueryLength);
+        var args = Args(JsonSerializer.Serialize(new { query = exact }));
+
+        Assert.Equal(exact, ToolArgs.GetRequiredFuzzyString(args, Spec, "query", "name"));
+    }
+
+    [Fact]
+    public void ForEcho_TruncatesAndSaysHowLongTheOriginalWas()
+    {
+        var echoed = ToolArgs.ForEcho(new string('A', 5000));
+
+        Assert.True(echoed.Length < 200);
+        Assert.Contains("5000 chars total", echoed);
+    }
+
+    [Fact]
+    public void ForEcho_LeavesOrdinaryQueriesAlone()
+        => Assert.Equal("type:CompShield", ToolArgs.ForEcho("type:CompShield"));
 }
 
 public class ScopeArgsTests

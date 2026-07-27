@@ -16,6 +16,9 @@ public sealed class RimSearcher
     // 每个会话独立：宿主下多个 client 共享同一批 tool，但「我问过什么」不能串味
     private readonly SessionUpdateNotice? _updateNotice = SourceChangeProbe.CreateSessionNotice();
 
+    // 同上按会话计：启动期诊断只落 stderr，LLM 调用方看不到，得由工具返回捎带出去
+    private readonly StartupHealth.SessionNotice _startupNotice = new();
+
     // logging/setLevel 的门槛同样是每会话的：宿主下 A 设成 error 不该让 B 也跟着噤声。
     // 0 = debug，即默认不过滤——client 没表过态时少发日志比多发更容易掩盖真问题。
     // 跨线程读写（日志来自工具执行的线程池线程，setLevel 来自另一个请求任务），故用 Volatile。
@@ -424,11 +427,15 @@ public sealed class RimSearcher
                         ? null
                         : _updateNotice?.Consume(toolName, arguments, result.Content);
 
+                    // 启动期健康提示不受 SuppressStalenessNotice 影响：那面旗关的是「源变了」
+                    // 这类时效提示，而「索引根本是空的」与时效无关，任何工具都得照说
+                    var health = _startupNotice.Consume();
+
                     await SendResponseAsync(id, new
                     {
                         content = new[]
                         {
-                            new { type = "text", text = notice == null ? result.Content : result.Content + notice }
+                            new { type = "text", text = result.Content + health + notice }
                         },
                         isError = result.IsError
                     });

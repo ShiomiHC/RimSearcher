@@ -609,8 +609,23 @@ public class SyncSourcesTool : ITool
                 ? $"{entry.Name}/{relative} @ {versionId}"
                 : $"{entry.Name}/{relative}::{member} @ {versionId}";
 
+            // 归档里没有旧内容不等于「这一版新增」：没被这一版动过的文件同样不入档。
+            // 两者对调用方的含义正相反（「这次改了」vs「这次没动」），而 sync_sources 的
+            // 主用途就是回答「更新后到底改了什么」，混为一谈会直接给出反向的事实。
             if (archived == null)
-                return new ToolResult($"{header}--- {label}\n(added in this version — no previous content)");
+            {
+                var presentBefore = _syncService.History.WasPresentAt(entry.Name, versionId, file);
+                var verdict = presentBefore switch
+                {
+                    true => "(unchanged in this version — it already existed at this point and this sync did not touch it; "
+                            + "the archive only keeps files a sync overwrote or removed)",
+                    false => "(added in this version — no previous content)",
+                    _ => "(no archived copy, and this version's file list could not be read, so 'added' and "
+                         + "'untouched' cannot be told apart here — run action='diff' without 'file' to see "
+                         + "which files this version actually changed)",
+                };
+                return new ToolResult($"{header}--- {label}\n{verdict}");
+            }
 
             if (current == null)
                 return new ToolResult($"{header}--- {label}\n(removed — only the archived copy remains)");

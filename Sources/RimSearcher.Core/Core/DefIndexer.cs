@@ -80,6 +80,10 @@ public class DefIndexer
     private FrozenDictionary<string, DefLocation[]>? _frozenLabelIndex;
     private FrozenDictionary<string, (DefLocation Location, string FieldPath)[]>? _frozenFieldContentIndex;
 
+    // 同 SourceIndexer.IndexedFileCount：判定索引是否为空，据此决定要不要在工具输出里
+    // 声明「这次的『没找到』不可信」
+    public int IndexedFileCount => _processedFiles.Count;
+
     public void FreezeIndex()
     {
         _frozenDefNameIndex = _defNameIndex.ToFrozenDictionary(

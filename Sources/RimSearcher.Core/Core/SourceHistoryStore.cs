@@ -198,6 +198,49 @@ public sealed class SourceHistoryStore
         }
     }
 
+    // 某个文件在这一版同步「之前」是否就已存在。
+    //
+    // 存在的意义：归档里读不到旧内容（ReadArchived == null）有两种完全相反的成因——
+    // 文件是这一版新增的，或者它压根没被这一版动过（反向增量只归档被改写/删除的旧文件，
+    // 见 Capture 里那句 `if (change.Kind == Added) continue`）。只看归档分不出这两者，
+    // 而 hashes.json 存的是同步前那棵树的完整哈希表，表里有即「那时就在」。
+    //
+    // 返回 null = 哈希表读不出来，调用方应表述为「无法判定」而不是替它选一个。
+    public bool? WasPresentAt(string sourceName, string versionId, string relativePath)
+    {
+        // versionId 是外部输入且参与拼接，与 ResolveArchivedPath 同一条穿越通道
+        var versionDirectory = PathSecurity.ResolveInsideRoot(GetSourceRoot(sourceName), versionId);
+        if (versionDirectory == null) return null;
+
+        var hashesPath = Path.Combine(versionDirectory, HashesFileName);
+        if (!File.Exists(hashesPath)) return null;
+
+        try
+        {
+            var hashes = JsonSerializer.Deserialize<Dictionary<string, string>>(
+                File.ReadAllText(hashesPath), JsonOptions);
+            if (hashes == null) return null;
+
+            // 反序列化出来的字典是默认的序数比较器，且键用的是落盘那台机器的分隔符；
+            // 调用方给的串来自 diff 列表的回显，跨平台/大小写都可能对不上，故两侧都归一
+            var wanted = NormalizeRelativePath(relativePath);
+            foreach (var key in hashes.Keys)
+            {
+                if (string.Equals(NormalizeRelativePath(key), wanted, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string NormalizeRelativePath(string path)
+        => path.Replace('\\', '/').Trim('/');
+
     private static List<FileChange> Compare(
         Dictionary<string, string> before,
         Dictionary<string, string> after)
