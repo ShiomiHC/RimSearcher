@@ -10,7 +10,7 @@ namespace RimSearcher.Tests;
 [Collection("PathSecurity")]
 public class SyncSourcesMemberDiffTests : IDisposable
 {
-    private const string RelativeFile = @"RimWorld\CompShield.cs";
+    private static readonly string RelativeFile = Path.Combine("RimWorld", "CompShield.cs");
 
     // 两个方法，后面只动其中一个——method 参数若没起作用，另一个方法的改动会一起漏出来
     private const string Generation1 = """

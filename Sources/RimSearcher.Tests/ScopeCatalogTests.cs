@@ -124,7 +124,7 @@ public class ScopeCatalogTests
     }
 
     // 嵌套配置（<mod>/Defs 与 <mod>/1.6/Defs 同时在册）时最长根前缀胜出
-    [Fact]
+    [WindowsFact("盘符路径在 Unix 上不是路径，`C:\\mods\\X\\1.6` 只是个普通文件名，分不出前缀层级")]
     public void LongestRootPrefix_Wins()
     {
         var catalog = ScopeCatalog.Build(
@@ -137,7 +137,7 @@ public class ScopeCatalogTests
     }
 
     // 前缀相同但不在目录边界上的路径不算命中：C:\mods\X 不该收下 C:\mods\XY
-    [Fact]
+    [WindowsFact("目录边界由 `\\` 划定，Unix 上它是普通字符，构不成边界之分")]
     public void RootMatching_RespectsDirectoryBoundaries()
     {
         var catalog = ScopeCatalog.Build([("mod", @"C:\mods\X")], null, null);

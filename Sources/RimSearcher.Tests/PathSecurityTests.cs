@@ -20,14 +20,6 @@ public sealed class JunctionFactAttribute : FactAttribute
     }
 }
 
-public sealed class WindowsFactAttribute : FactAttribute
-{
-    public WindowsFactAttribute()
-    {
-        if (!OperatingSystem.IsWindows()) Skip = "Unix 路径大小写敏感，换大小写就是另一个目录";
-    }
-}
-
 internal static class JunctionSupport
 {
     // 探一次复用整轮：每个 [JunctionFact] 的构造都会问一次
@@ -172,7 +164,7 @@ public class PathSecurityTests : IDisposable
     }
 
     // Windows 路径大小写不敏感，同一个目录换个大小写写法仍是它自己
-    [WindowsFact]
+    [WindowsFact("Unix 路径大小写敏感，换大小写就是另一个目录")]
     public void CaseDifferingPath_IsAllowedOnWindows()
     {
         var allowed = _workspace.Dir("Allowed");

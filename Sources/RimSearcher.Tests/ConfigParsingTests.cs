@@ -135,7 +135,7 @@ public class ConfigParsingTests
         Assert.Equal("D:/src/Core", Assert.Single(config.ResolveSources(@"C:/app").Csharp).Path);
     }
 
-    [Fact]
+    [WindowsFact("`D:/x` 只在 Windows 上是绝对路径，Unix 下 GetFullPath 会把它接到 cwd 后面")]
     public void DecompileOutputRoot_OverridesTheDefaultFolder()
     {
         var config = Parse("""
@@ -172,8 +172,16 @@ public class ConfigParsingTests
     [Theory]
     [InlineData("Vanilla Expanded", "Vanilla Expanded")]
     [InlineData("Core/Sub", "Core_Sub")]
-    [InlineData(@"a:b*c", "a_b_c")]
     public void DefaultOutputDirectory_SanitizesSourceName(string name, string expected)
+        => AssertDefaultOutputDirectory(name, expected);
+
+    // `:` 和 `*` 只在 Windows 上是非法目录名字符；Unix 上它们合法，压根不进净化那条路
+    [WindowsTheory("`:` `*` 在 Unix 上是合法目录名字符，不触发净化")]
+    [InlineData(@"a:b*c", "a_b_c")]
+    public void DefaultOutputDirectory_SanitizesWindowsIllegalCharacters(string name, string expected)
+        => AssertDefaultOutputDirectory(name, expected);
+
+    private static void AssertDefaultOutputDirectory(string name, string expected)
     {
         var config = Parse($"""
             [[sources]]
