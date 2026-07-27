@@ -107,19 +107,69 @@ public class ScopeArgsTests
 {
     private static JsonElement Args(string json) => JsonDocument.Parse(json).RootElement.Clone();
 
+    // 显式数字原样生效；'all' 与 0/负数一律解析成「展开到服务端硬上限」，
+    // 不再是一个交给各工具自己翻译的 0 —— TraceTool 曾把它翻译成 50。
     [Theory]
-    [InlineData("""{}""", ScopeArgs.DefaultDisplayLimit)]
-    [InlineData("""{"limit":5}""", 5)]
-    [InlineData("""{"limit":"5"}""", 5)]
-    [InlineData("""{"maxResults":7}""", 7)]
-    [InlineData("""{"top":3}""", 3)]
-    [InlineData("""{"limit":"all"}""", 0)]
-    [InlineData("""{"limit":"*"}""", 0)]
-    [InlineData("""{"limit":"everything"}""", 0)]
-    [InlineData("""{"limit":-1}""", 0)]
-    [InlineData("""{"limit":0}""", 0)]
-    public void GetDisplayLimit_UnderstandsNumbersAndExpandKeywords(string json, int expected)
-        => Assert.Equal(expected, ScopeArgs.GetDisplayLimit(Args(json)));
+    [InlineData("""{}""", ScopeArgs.DefaultDisplayLimit, false)]
+    [InlineData("""{"limit":5}""", 5, false)]
+    [InlineData("""{"limit":"5"}""", 5, false)]
+    [InlineData("""{"maxResults":7}""", 7, false)]
+    [InlineData("""{"top":3}""", 3, false)]
+    [InlineData("""{"limit":"all"}""", ScopeArgs.HardLimit, true)]
+    [InlineData("""{"limit":"*"}""", ScopeArgs.HardLimit, true)]
+    [InlineData("""{"limit":"everything"}""", ScopeArgs.HardLimit, true)]
+    [InlineData("""{"limit":-1}""", ScopeArgs.HardLimit, true)]
+    [InlineData("""{"limit":0}""", ScopeArgs.HardLimit, true)]
+    public void GetDisplayLimit_UnderstandsNumbersAndExpandKeywords(string json, int expectedCount, bool expectedUnlimited)
+    {
+        var limit = ScopeArgs.GetDisplayLimit(Args(json));
+        Assert.Equal(expectedCount, limit.Count);
+        Assert.Equal(expectedUnlimited, limit.Unlimited);
+    }
+
+    // schema 里的 maximum 只是给 client 的提示，夹紧必须由服务端做
+    [Theory]
+    [InlineData("""{"limit":5000}""")]
+    [InlineData("""{"limit":"5000"}""")]
+    [InlineData("""{"maxResults":100000}""")]
+    public void GetDisplayLimit_ClampsRequestsAboveTheServerCap(string json)
+    {
+        var limit = ScopeArgs.GetDisplayLimit(Args(json));
+        Assert.Equal(ScopeArgs.HardLimit, limit.Count);
+        Assert.True(limit.Unlimited);
+    }
+
+    // 显式的小 limit 不得被任何下限抬高（TraceTool 曾写 Math.Max(limit, 50)）
+    [Fact]
+    public void GetDisplayLimit_NeverRaisesAnExplicitSmallLimit()
+    {
+        var limit = ScopeArgs.GetDisplayLimit(Args("""{"limit":5}"""), fallback: 100);
+        Assert.Equal(5, limit.Count);
+        Assert.False(limit.Unlimited);
+    }
+
+    // 放大分组配额时仍不得越过硬上限
+    [Fact]
+    public void ResultLimit_ScaleStaysWithinTheServerCap()
+    {
+        Assert.Equal(30, ScopeArgs.GetDisplayLimit(Args("""{"limit":10}""")).Scale(3).Count);
+        Assert.Equal(ScopeArgs.HardLimit, ScopeArgs.GetDisplayLimit(Args("""{"limit":"all"}""")).Scale(3).Count);
+    }
+
+    // 已经展开到硬上限时不能再劝 'all'——那是让调用方原地重试同一个请求
+    [Fact]
+    public void FoldLine_DoesNotSuggestAllWhenAlreadyExpanded()
+    {
+        var result = new ScopedResult<string>(
+            [new ScopedEntry<string>("a", 100, null)], totalInScope: 5,
+            outOfScope: [], truncatedByScoreGap: false);
+
+        var expanded = ScopeArgs.GetDisplayLimit(Args("""{"limit":"all"}"""));
+        var line = ScopeArgs.FoldLine(result, limit: expanded);
+
+        Assert.DoesNotContain("limit:'all'", line);
+        Assert.Contains($"server cap {ScopeArgs.HardLimit}", line);
+    }
 
     [Fact]
     public void Resolve_AcceptsScopeAliases()

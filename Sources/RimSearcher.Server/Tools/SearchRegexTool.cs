@@ -9,6 +9,10 @@ public class SearchRegexTool : ITool
     // 但截掉了就必须说，见下面的 notes。
     private const int MaxFilesShown = 50;
 
+    // 缺省命中上限。扫盘型工具比列表型工具给得多（默认 10 条对正则搜索没意义），
+    // 但 'all' 一律走 ScopeArgs.HardLimit，不再是原先那个写死的 500。
+    private const int DefaultMatchLimit = 100;
+
     private readonly SourceIndexer _indexer;
     private readonly ScopeCatalog _scopeCatalog;
 
@@ -42,7 +46,7 @@ public class SearchRegexTool : ITool
             ignoreCase = new { type = "boolean", @default = true, description = "Whether to ignore case, defaults to true." },
             fileFilter = new { type = "string", description = "Optional extension filter such as '.cs' or '.xml'. Aliases 'fileExtension'/'extension'/'ext' are also accepted." },
             scope = ScopeArgs.ScopeSchemaProperty(_scopeCatalog),
-            limit = ScopeArgs.LimitSchemaProperty()
+            limit = ScopeArgs.LimitSchemaProperty(DefaultMatchLimit)
         },
         required = new[] { "pattern" }
     };
@@ -53,13 +57,13 @@ public class SearchRegexTool : ITool
         var ignoreCase = ToolArgs.GetBool(args, true, "ignoreCase", "caseInsensitive");
         var fileFilter = ToolArgs.GetOptionalString(args, "fileFilter", "fileExtension", "extension", "ext");
         var scope = ScopeArgs.Resolve(_scopeCatalog, args);
-        var maxResults = ScopeArgs.GetDisplayLimit(args, fallback: 100);
+        var limit = ScopeArgs.GetDisplayLimit(args, fallback: DefaultMatchLimit);
 
         try
         {
             // scope 与 fileFilter 都下推给索引层在扫描前生效——留到这里筛会被命中上限吃空
             var (results, truncated) = await _indexer.SearchRegexAsync(
-                pattern, scope, fileFilter, ignoreCase, maxResults == 0 ? 500 : maxResults, cancellationToken, progress);
+                pattern, scope, fileFilter, ignoreCase, limit.Count, cancellationToken, progress);
 
             if (results.Count == 0)
                 return new ToolResult($"No matches for pattern '{pattern}' in scope '{scope.Expression}'.");

@@ -6,6 +6,15 @@ namespace RimSearcher.Server.Tools;
 
 public class TraceTool : ITool
 {
+    // 两个 mode 的缺省条数不同：继承树本身就是要看全的，故 inheritors 缺省即展开到硬上限；
+    // usages 是扫盘结果、一条命中一行，缺省就给到硬上限会把上下文吃掉，仍按 50 起步。
+    // 两者的显式 limit 与 'all' 都走同一套语义（见 ScopeArgs）。
+    private const int InheritorsDefaultLimit = ScopeArgs.HardLimit;
+    private const int UsagesDefaultLimit = 50;
+
+    // 单文件最多取几条，避免一个文件把配额吃光
+    private const int MaxMatchesPerFile = 3;
+
     private readonly SourceIndexer _sourceIndexer;
     private readonly ScopeCatalog _scopeCatalog;
 
@@ -18,7 +27,8 @@ public class TraceTool : ITool
     public string Name => "rimworld-searcher__trace";
 
     public string Description =>
-        "Cross-reference analysis for C# and XML. Mode: 'inheritors' (subclasses) or 'usages' (file/line references).";
+        "Cross-reference analysis for C# and XML. Mode: 'inheritors' (subclasses and interface implementors) " +
+        "or 'usages' (file/line references).";
 
     public object JsonSchema => new
     {
@@ -36,10 +46,12 @@ public class TraceTool : ITool
                 type = "string",
                 @enum = new[] { "inheritors", "usages" },
                 description =
-                    "Trace mode: 'inheritors' for subclass tree, 'usages' for textual references in C# and XML."
+                    "Trace mode: 'inheritors' for the subclass/implementor tree (interfaces included; lists " +
+                    "every match up to the server cap unless limit says otherwise), " +
+                    "'usages' for textual references in C# and XML."
             },
             scope = ScopeArgs.ScopeSchemaProperty(_scopeCatalog),
-            limit = ScopeArgs.LimitSchemaProperty()
+            limit = ScopeArgs.LimitSchemaProperty(UsagesDefaultLimit)
         },
         required = new[] { "symbol", "mode" }
     };
@@ -59,12 +71,13 @@ public class TraceTool : ITool
             return new ToolResult($"Unknown mode '{mode}'. Use 'inheritors' (subclass tree) or 'usages' (textual references).", true);
 
         var scope = ScopeArgs.Resolve(_scopeCatalog, args);
-        var limit = ScopeArgs.GetDisplayLimit(args, fallback: 0);
 
         if (mode == "inheritors")
         {
+            var limit = ScopeArgs.GetDisplayLimit(args, fallback: InheritorsDefaultLimit);
+
             cancellationToken.ThrowIfCancellationRequested();
-            var inheritors = _sourceIndexer.GetInheritors(symbol, scope, limit);
+            var inheritors = _sourceIndexer.GetInheritors(symbol, scope, limit.Count);
 
             if (inheritors.Items.Count == 0)
             {
@@ -84,7 +97,7 @@ public class TraceTool : ITool
             sbInheritors.AppendLine($"Subclasses of '{symbol}' ({inheritors.TotalInScope} in scope '{scope.Expression}'):");
             sbInheritors.AppendLine(string.Join(Environment.NewLine, results));
 
-            var fold = ScopeArgs.FoldLine(inheritors, indent: "");
+            var fold = ScopeArgs.FoldLine(inheritors, indent: "", limit: limit);
             if (fold != null) sbInheritors.AppendLine(fold);
 
             var inheritorsReport = new ScopeReport();
@@ -96,8 +109,10 @@ public class TraceTool : ITool
         }
         else
         {
-            const int maxMatchesPerFile = 3;
-            var maxTotalResults = limit == 0 ? 50 : Math.Max(limit, 50);
+            // 显式 limit 原样生效：原先写成 `limit == 0 ? 50 : Math.Max(limit, 50)`，
+            // limit:5 会被抬到 50，limit:'all' 又被压在 50 —— 两个方向都不听调用方的。
+            var limit = ScopeArgs.GetDisplayLimit(args, fallback: UsagesDefaultLimit);
+            var maxTotalResults = limit.Count;
 
             var results = new ConcurrentBag<(string file, int lineNum, string preview)>();
             // 扫盘类工具不额外统计 scope 外的命中——那要把过滤掉的文件再读一遍，
@@ -145,7 +160,7 @@ public class TraceTool : ITool
                                 results.Add((file, lineNum, preview));
                             }
                             matchesInFile++;
-                            if (matchesInFile >= maxMatchesPerFile || currentCount >= maxTotalResults)
+                            if (matchesInFile >= MaxMatchesPerFile || currentCount >= maxTotalResults)
                             {
                                 if (currentCount >= maxTotalResults)
                                     Interlocked.Exchange(ref truncatedFlag, 1);
@@ -191,7 +206,10 @@ public class TraceTool : ITool
             var wasTruncated = Interlocked.CompareExchange(ref truncatedFlag, 0, 0) == 1;
             if (wasTruncated || totalMatches >= maxTotalResults)
             {
-                sb.AppendLine($"\n[Results truncated at {maxTotalResults}, use more specific symbol to narrow down]");
+                // 已经顶到硬上限时别再劝 limit:'all'，那只会原地重试
+                sb.AppendLine(limit.Unlimited
+                    ? $"\n[Results truncated at the server cap of {maxTotalResults}, use a more specific symbol or a narrower scope]"
+                    : $"\n[Results truncated at limit {maxTotalResults}, raise limit (up to {ScopeArgs.HardLimit}) or use limit:'all']");
             }
 
             return new ToolResult(sb.ToString());

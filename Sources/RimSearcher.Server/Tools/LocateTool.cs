@@ -71,7 +71,7 @@ public class LocateTool : ITool
         if (query.TypeFilter != null || (string.IsNullOrEmpty(query.MethodFilter) && string.IsNullOrEmpty(query.FieldFilter) && string.IsNullOrEmpty(query.DefFilter)))
         {
             var typeSearchTerm = query.TypeFilter ?? QueryParser.GetCombinedSearchTerm(query);
-            var types = CollapseTypeAliases(_sourceIndexer.FuzzySearchTypes(typeSearchTerm, scope, limit));
+            var types = CollapseTypeAliases(_sourceIndexer.FuzzySearchTypes(typeSearchTerm, scope, limit.Count));
             report.Add(types);
 
             if (types.Items.Count > 0)
@@ -86,7 +86,7 @@ public class LocateTool : ITool
                     sb.AppendLine($"- `{entry.Item}` ({entry.Score:F0}%) - {fileName}{ScopeArgs.Label(entry.SourceName)}");
                 }
 
-                var fold = ScopeArgs.FoldLine(types);
+                var fold = ScopeArgs.FoldLine(types, limit: limit);
                 if (fold != null) sb.AppendLine(fold);
             }
         }
@@ -98,9 +98,10 @@ public class LocateTool : ITool
             if (query.FieldFilter != null) keywords.Add(query.FieldFilter);
             keywords.AddRange(query.Keywords);
 
-            // 成员按 method/property/field 分组显示，每组各给一份配额，故这里要多取一些
+            // 成员按 method/property/field 分组显示，每组各给一份配额，故这里要多取一些；
+            // Scale 放大后仍夹在服务端硬上限内
             var members = _sourceIndexer.SearchMembersByKeywords(
-                keywords.ToArray(), scope, limit == 0 ? 0 : limit * 3);
+                keywords.ToArray(), scope, limit.Scale(3).Count);
             report.Add(members);
 
             if (members.Items.Count > 0)
@@ -108,7 +109,8 @@ public class LocateTool : ITool
                 hasResults = true;
                 sb.AppendLine("\n**Members:**");
 
-                var perGroup = limit == 0 ? int.MaxValue : Math.Max(3, limit / 2);
+                // 'all' 时不再按组折叠（总量已被硬上限约束住），否则每组各给一半配额
+                var perGroup = limit.Unlimited ? limit.Count : Math.Max(3, limit.Count / 2);
                 var groupedMembers = members.Items.GroupBy(m => m.Item.MemberType).ToList();
 
                 foreach (var group in groupedMembers)
@@ -130,7 +132,7 @@ public class LocateTool : ITool
         if (query.DefFilter != null || (string.IsNullOrEmpty(query.TypeFilter) && string.IsNullOrEmpty(query.MethodFilter) && string.IsNullOrEmpty(query.FieldFilter)))
         {
             var defSearchTerm = query.DefFilter ?? QueryParser.GetCombinedSearchTerm(query);
-            var defs = _defIndexer.FuzzySearch(defSearchTerm, scope, limit);
+            var defs = _defIndexer.FuzzySearch(defSearchTerm, scope, limit.Count);
             report.Add(defs);
 
             if (defs.Items.Count > 0)
@@ -146,13 +148,13 @@ public class LocateTool : ITool
                         $"- `{def.DefName}` ({entry.Score:F0}%) - {def.DefType}{abstractTag}{label}{ScopeArgs.Label(entry.SourceName)}");
                 }
 
-                var fold = ScopeArgs.FoldLine(defs, indent: "  ");
+                var fold = ScopeArgs.FoldLine(defs, indent: "  ", limit: limit);
                 if (fold != null) sb.AppendLine(fold);
             }
 
             if (query.Keywords.Count > 0)
             {
-                var defsByContent = _defIndexer.SearchByContent(query.Keywords.ToArray(), scope, limit);
+                var defsByContent = _defIndexer.SearchByContent(query.Keywords.ToArray(), scope, limit.Count);
                 report.Add(defsByContent);
 
                 if (defsByContent.Items.Count > 0)
@@ -168,7 +170,7 @@ public class LocateTool : ITool
                         sb.AppendLine($"- `{location.DefName}` - {fieldSummary}{moreFields}{ScopeArgs.Label(entry.SourceName)}");
                     }
 
-                    var fold = ScopeArgs.FoldLine(defsByContent, indent: "  ");
+                    var fold = ScopeArgs.FoldLine(defsByContent, indent: "  ", limit: limit);
                     if (fold != null) sb.AppendLine(fold);
                 }
             }
@@ -176,7 +178,7 @@ public class LocateTool : ITool
 
         if (!hasResults)
         {
-            var files = _sourceIndexer.Search(rawQuery, scope, limit);
+            var files = _sourceIndexer.Search(rawQuery, scope, limit.Count);
             report.Add(files);
 
             if (files.Items.Count > 0)
@@ -187,7 +189,7 @@ public class LocateTool : ITool
                     sb.AppendLine($"- {Path.GetFileName(entry.Item)} - {entry.Item}{ScopeArgs.Label(entry.SourceName)}");
                 }
 
-                var fold = ScopeArgs.FoldLine(files);
+                var fold = ScopeArgs.FoldLine(files, limit: limit);
                 if (fold != null) sb.AppendLine(fold);
                 hasResults = true;
             }
