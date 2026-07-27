@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -268,14 +269,26 @@ public static class SourceWatcher
 
 // 每个会话一份（IndexHost 为每条管道连接各建一个 RimSearcher）。记录本会话问过什么，
 // 只有变更确实碰到这些东西时才打断用户；否则写日志了事。
+//
+// 线程安全是必需项而非可选项：RimSearcher 每条协议消息各起一个任务，同一会话最多有
+// _concurrencyLimit 个工具调用同时落到 Consume 上。裸 HashSet 并发 Add 会破坏内部桶结构。
 public sealed class SessionUpdateNotice
 {
     private static readonly string[] QueryArgumentNames =
         ["query", "name", "symbol", "pattern", "path", "type", "def"];
 
-    private readonly HashSet<string> _askedAbout = new(StringComparer.OrdinalIgnoreCase);
-    private DateTime _notifiedFor = DateTime.MinValue;
-    private DateTime _notifiedSyncAt = DateTime.MinValue;
+    // 问过的词只增不减，给个上限免得长会话无界增长。到顶后停止收新词而不是清空，
+    // 早期问过的东西仍在集合里，相关性判定不会突然整体失效。
+    private const int MaxTrackedTerms = 512;
+
+    private readonly ConcurrentDictionary<string, byte> _askedAbout = new(StringComparer.OrdinalIgnoreCase);
+
+    // 存 Ticks 而非 DateTime，以便用 Interlocked 原子推进：只有把时间戳推进成功的那个
+    // 线程才发提示，并发调用因此不会对同一批变更重复打断。
+    private long _notifiedForTicks = DateTime.MinValue.Ticks;
+    private long _notifiedSyncTicks = DateTime.MinValue.Ticks;
+
+    internal int TrackedTermCount => _askedAbout.Count;
 
     public string? Consume(string? toolName, JsonElement arguments, string resultContent)
     {
@@ -288,18 +301,15 @@ public sealed class SessionUpdateNotice
         var pending = SourceWatcher.Pending;
         if (pending == null || !pending.Any) return null;
 
-        // 同一批变更只打断一次
-        if (_notifiedFor >= pending.DetectedAtUtc) return null;
+        // 同一批变更只打断一次。抢不到即别的并发调用已经处理过这批。
+        if (!TryClaim(ref _notifiedForTicks, pending.DetectedAtUtc)) return null;
 
         if (!IsRelevant(pending))
         {
             _ = ServerLogger.Info("SourceWatcher", "Change not related to this session's queries",
                 ("tool", toolName ?? "?"));
-            _notifiedFor = pending.DetectedAtUtc;
             return null;
         }
-
-        _notifiedFor = pending.DetectedAtUtc;
 
         var action = pending.RequiresDecompile
             ? "Run rimworld-searcher__sync_sources with action='sync' to re-decompile and rebuild the index "
@@ -315,12 +325,13 @@ public sealed class SessionUpdateNotice
     private string? DescribeSyncedChanges()
     {
         var lastSync = SourceWatcher.LastSync;
-        if (lastSync == null || _notifiedSyncAt >= lastSync.SyncedAtUtc) return null;
+        if (lastSync == null) return null;
 
-        _notifiedSyncAt = lastSync.SyncedAtUtc;
-        if (_askedAbout.Count == 0) return null;
+        // 无论最终报不报，这一版同步都算已消费；抢不到即别的并发调用已经消费过它
+        if (!TryClaim(ref _notifiedSyncTicks, lastSync.SyncedAtUtc)) return null;
+        if (_askedAbout.IsEmpty) return null;
 
-        var affected = _askedAbout
+        var affected = _askedAbout.Keys
             .Where(term => lastSync.ChangedNames.Contains(term))
             .OrderBy(term => term, StringComparer.OrdinalIgnoreCase)
             .Take(8)
@@ -349,22 +360,37 @@ public sealed class SessionUpdateNotice
             foreach (var token in text.Split([':', '.', '/', '\\', ' ', ','],
                          StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             {
-                if (token.Length >= 3) _askedAbout.Add(token);
+                if (token.Length < 3) continue;
+                if (_askedAbout.Count >= MaxTrackedTerms && !_askedAbout.ContainsKey(token)) continue;
+                _askedAbout.TryAdd(token, 0);
             }
+        }
+    }
+
+    // 把时间戳单调推进到 stamp；返回 true 表示本次调用抢到了「为这批变更发一次提示」的资格
+    private static bool TryClaim(ref long slot, DateTime stamp)
+    {
+        var target = stamp.Ticks;
+
+        while (true)
+        {
+            var current = Interlocked.Read(ref slot);
+            if (current >= target) return false;
+            if (Interlocked.CompareExchange(ref slot, target, current) == current) return true;
         }
     }
 
     private bool IsRelevant(PendingSourceUpdate pending)
     {
         // 还没问过任何具体东西时不打扰
-        if (_askedAbout.Count == 0) return false;
+        if (_askedAbout.IsEmpty) return false;
 
         // 主判据：把会话问过的名字反查回文件，看它们是否落在变更的源里。
         // 变的是某个 mod 而这个会话一直在看 vanilla 时，这一步就把提示挡掉了。
         var indexer = SourceWatcher.Indexer;
         if (indexer != null && pending.ChangedRoots.Count > 0)
         {
-            foreach (var term in _askedAbout)
+            foreach (var term in _askedAbout.Keys)
             {
                 foreach (var path in indexer.GetPathsByType(term))
                 {
@@ -376,7 +402,7 @@ public sealed class SessionUpdateNotice
         // def 不在 C# 类型索引里，退回按 XML 文件名匹配
         foreach (var hint in pending.Hints)
         {
-            foreach (var term in _askedAbout)
+            foreach (var term in _askedAbout.Keys)
             {
                 if (hint.Contains(term, StringComparison.OrdinalIgnoreCase)
                     || term.Contains(hint, StringComparison.OrdinalIgnoreCase))

@@ -51,7 +51,7 @@ var earlyFingerprint = IndexCacheService.ComputeConfigFingerprint(
     appConfig.VerifySourceFreshness);
 
 // 代理路径必须先于建索引：连上已有宿主的进程不该再花 4 秒和 1 GB 建第二份索引
-Mutex? hostMutex = null;
+HostSlot? hostSlot = null;
 if (appConfig.ShareIndexHost && hasPaths)
 {
     if (!IndexHost.IsSupported)
@@ -68,8 +68,8 @@ if (appConfig.ShareIndexHost && hasPaths)
             return;
         }
 
-        hostMutex = IndexHost.TryBecomeHost(earlyFingerprint);
-        if (hostMutex == null)
+        hostSlot = IndexHost.TryBecomeHost(earlyFingerprint);
+        if (hostSlot == null)
             await ServerLogger.Info("Program", "Could not claim host slot, running standalone");
     }
 }
@@ -209,7 +209,7 @@ var tools = new ITool[]
 
 foreach (var tool in tools) server.RegisterTool(tool);
 
-if (hostMutex != null)
+if (hostSlot != null)
 {
     // 宿主寿命与第一个 client 解绑：只要还有别的连接就不退
     ProcessGuard.ShouldStayAlive = () => IndexHost.ShouldStayAliveForConnections(TimeSpan.FromSeconds(60));
@@ -224,7 +224,7 @@ else if (!appConfig.ShareIndexHost || !IndexHost.IsSupported || !hasPaths)
 if (isLoaded && hasPaths)
 {
     await ServerLogger.Info("Program", "RimSearcher MCP server started",
-        ("role", hostMutex != null ? "host" : "standalone"));
+        ("role", hostSlot != null ? "host" : "standalone"));
 }
 
 if (appConfig.CheckUpdates)
@@ -235,12 +235,11 @@ if (appConfig.CheckUpdates)
 await server.RunAsync();
 
 // 本地 stdio 结束（自己的 client 走了）但仍有管道连接时，宿主继续服务到最后一个断开
-if (hostMutex != null)
+if (hostSlot != null)
 {
     while (IndexHost.ShouldStayAliveForConnections(TimeSpan.FromSeconds(60)))
         await Task.Delay(TimeSpan.FromSeconds(15));
 
     await ServerLogger.Info("Program", "Index host shutting down");
-    hostMutex.ReleaseMutex();
-    hostMutex.Dispose();
+    hostSlot.Dispose();
 }

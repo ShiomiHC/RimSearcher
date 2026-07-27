@@ -64,6 +64,10 @@ public class LocateTool : ITool
         var sb = new StringBuilder();
         sb.AppendLine($"## '{rawQuery}'" + (scope.IncludesEverything ? "" : $" _(scope: {scope.Expression})_"));
 
+        // 各段落自己置位。曾用 sb.Length 与表头长度比大小来推断，窄 scope 下表头恰好比
+        // 阈值长，零命中也会被判成有结果——「查不到就提示换 scope」那条路径因此永远走不到。
+        var hasResults = false;
+
         if (query.TypeFilter != null || (string.IsNullOrEmpty(query.MethodFilter) && string.IsNullOrEmpty(query.FieldFilter) && string.IsNullOrEmpty(query.DefFilter)))
         {
             var typeSearchTerm = query.TypeFilter ?? QueryParser.GetCombinedSearchTerm(query);
@@ -72,6 +76,7 @@ public class LocateTool : ITool
 
             if (types.Items.Count > 0)
             {
+                hasResults = true;
                 sb.AppendLine("\n**C# Types:**");
                 foreach (var entry in types.Items)
                 {
@@ -100,6 +105,7 @@ public class LocateTool : ITool
 
             if (members.Items.Count > 0)
             {
+                hasResults = true;
                 sb.AppendLine("\n**Members:**");
 
                 var perGroup = limit == 0 ? int.MaxValue : Math.Max(3, limit / 2);
@@ -129,6 +135,7 @@ public class LocateTool : ITool
 
             if (defs.Items.Count > 0)
             {
+                hasResults = true;
                 sb.AppendLine("\n**XML Defs:**");
                 foreach (var entry in defs.Items)
                 {
@@ -150,6 +157,7 @@ public class LocateTool : ITool
 
                 if (defsByContent.Items.Count > 0)
                 {
+                    hasResults = true;
                     sb.AppendLine("\n**Content Matches:**");
 
                     foreach (var entry in defsByContent.Items)
@@ -166,7 +174,6 @@ public class LocateTool : ITool
             }
         }
 
-        bool hasResults = sb.Length > rawQuery.Length + 10 + scope.Expression.Length;
         if (!hasResults)
         {
             var files = _sourceIndexer.Search(rawQuery, scope, limit);

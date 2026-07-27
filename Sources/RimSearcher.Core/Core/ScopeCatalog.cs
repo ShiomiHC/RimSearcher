@@ -209,8 +209,10 @@ public sealed class ScopeCatalog
 
         if (nextRank == 0) return Everything;
 
-        var includesEverything = nextRank == Sources.Count;
-        return new ScopeSelection(this, ranks, effective.Trim(), includesEverything);
+        // 不能拿 nextRank 当选中数：'all,-vanilla' 里 vanilla 先被计入再被排除，nextRank 会多算，
+        // 于是排除了源却仍自称全域——未落在任何源里的路径会被 RankOf 当成命中收进来。
+        var selectedCount = ranks.Count(rank => rank >= 0);
+        return new ScopeSelection(this, ranks, effective.Trim(), selectedCount == Sources.Count);
     }
 
     private bool TryExpandToken(string token, out IReadOnlyList<int> members)

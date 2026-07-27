@@ -23,4 +23,8 @@
       <ProjectReference Include="..\RimSearcher.Core\RimSearcher.Core.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <InternalsVisibleTo Include="RimSearcher.Tests" />
+    </ItemGroup>
+
 </Project>

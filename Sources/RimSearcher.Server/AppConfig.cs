@@ -201,6 +201,10 @@ public record AppConfig
 
         foreach (var definition in Sources)
         {
+            // 转换器对「什么路径都没写」的条目返回 null（config 里多打一个 {} 就是这样），
+            // 不滤掉会在下一行直接 NRE，而这里在 TryLoad 的 catch 之外——整个进程会起不来
+            if (definition == null) continue;
+
             for (var i = 0; i < definition.Csharp.Count; i++)
             {
                 csharp.Add(new SourcePathEntry
