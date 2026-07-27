@@ -95,9 +95,11 @@ public class SyncSourcesTool : ITool
         {
             return Task.FromResult(new ToolResult(
                 "No followable sources configured.\n"
-                + "Add an \"assemblyPath\" to a CsharpSourcePaths entry, e.g.\n"
-                + "  { \"name\": \"Core\", \"path\": \"S:/RimWorldSource/Core\", "
-                + "\"assemblyPath\": \"D:/SteamLibrary/steamapps/common/RimWorld/RimWorldWin64_Data/Managed\" }"));
+                + "Add an assemblies path to a [[sources]] block in config.toml, e.g.\n"
+                + "  [[sources]]\n"
+                + "  name       = \"Core\"\n"
+                + "  csharp     = 'S:\\RimWorldSource\\Core'\n"
+                + "  assemblies = 'D:\\SteamLibrary\\steamapps\\common\\RimWorld\\RimWorldWin64_Data\\Managed'"));
         }
 
         try
@@ -143,7 +145,7 @@ public class SyncSourcesTool : ITool
         if (!_syncService.History.Enabled)
         {
             return new ToolResult(
-                "Source history is disabled. Set \"SourceHistoryDepth\" to 1 or more in config.json "
+                "Source history is disabled. Set source_history_depth to 1 or more in config.toml "
                 + "to keep previous decompiled versions for diffing.", true);
         }
 

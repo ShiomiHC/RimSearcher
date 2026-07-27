@@ -13,14 +13,14 @@ Console.SetOut(Console.Error);
 // Core 层的降级提示接到 Server 的日志出口上（Core 不依赖 Server，故用钩子）
 SourceHistoryStore.OnDiagnostic = (message, level) => _ = ServerLogger.LogAsync(message, level);
 
-var (appConfig, configPath, isLoaded) = AppConfig.Load();
+var (appConfig, configPath, isLoaded, configError) = AppConfig.Load();
 await ServerLogger.Info("Program", "Configuration source", ("path", configPath));
 
 var resolvedSources = appConfig.ResolveSources();
 var hasPaths = resolvedSources.HasAny;
 
 if (!isLoaded)
-    await ServerLogger.Error("Program", "Failed to load configuration", ("path", configPath), ("reason", "file missing or JSON parse error"));
+    await ServerLogger.Error("Program", "Failed to load configuration", ("path", configPath), ("reason", configError ?? "file not found"));
 else if (!hasPaths)
     await ServerLogger.Warning("Program", "No source paths defined", ("path", configPath));
 

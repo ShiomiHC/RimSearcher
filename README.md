@@ -222,14 +222,14 @@ Tool Layer
 ```
 
 **启动流程**
-1. 读取配置（优先 `RIMSEARCHER_CONFIG`，未设置时回退到同目录 `config.json`）
-2. 合并 `Sources` 与旧的 `CsharpSourcePaths` / `XmlSourcePaths` 为统一视图
+1. 读取配置（优先 `RIMSEARCHER_CONFIG`，未设置时回退到同目录 `config.toml`）
+2. 把 `[[sources]]` 摊平为索引侧的统一视图（同名的块归为同一个源）
 3. 初始化路径安全策略
 4. 自动准备缓存目录（`<exe目录>/.cache/index`）
 5. 尝试加载索引缓存（`manifest.json` + `index.bin`）
 6. 缓存未命中时扫描 C# / XML 并建索引，然后回写缓存
 7. 冻结索引（读优化）
-8. 若启用 `CheckSourceUpdates`，后台并行探测程序集与 XML 变更（只记录，不反编译）
+8. 若启用 `check_source_updates`，后台并行探测程序集与 XML 变更（只记录，不反编译）
 9. 注册工具并启动 MCP 服务
 
 **索引重建**：`sync` 之后索引会就地清空重扫，而非新建一份再切换——热替换会让新旧两份索引同时驻留、内存翻倍。代价是重建期间（vanilla 单源实测约 3 秒）到达的查询会挂起等待，完成后统一放行，因此不会读到半成品索引。
@@ -246,7 +246,7 @@ Tool Layer
 5. `trace(symbol=CompShield, mode=usages)`：追踪相关引用
 
 ### 场景：游戏或 mod 更新后跟进变更
-前提：相关源在配置里声明了 `assemblies`，且 `SourceHistoryDepth >= 1`。
+前提：相关源在配置里声明了 `assemblies`，且 `source_history_depth >= 1`。
 
 1. 启动时后台已自动探测过。若变更涉及你正在查的内容，工具返回末尾会出现提示
 2. `sync_sources(action="check")`：确认哪些源的程序集变了
@@ -268,11 +268,11 @@ Tool Layer
 | 模糊匹配 | N-gram 候选过滤 + 评分排序 |
 | 并发控制 | MCP 请求并发上限 10 |
 | 正则搜索保护 | 全局/单文件命中上限 + 行数上限 + regex 超时 |
-| 路径安全 | 白名单根目录校验（`SkipPathSecurity=false` 时生效） |
+| 路径安全 | 白名单根目录校验（`skip_path_security = false` 时生效） |
 | 反编译隔离 | 先写暂存目录、成功后才替换；输出目录缺 `.rimsearcher-decompiled` 标记且非空时拒绝写入 |
 | 产物不外流 | 输出目录内自动写入 `.gitignore`（内容 `*`），避免反编译产物被误提交进版本库 |
 | 索引重建 | 就地清空重扫而非热替换（避免内存翻倍），重建期间查询挂起等待 |
-| 源码历史 | 反向增量，仅存被覆盖的旧文件，按 `SourceHistoryDepth` 轮转 |
+| 源码历史 | 反向增量，仅存被覆盖的旧文件，按 `source_history_depth` 轮转 |
 
 ### 索引缓存说明
 
@@ -281,7 +281,7 @@ Tool Layer
 - 首次启动通常会全量建索引并写缓存；二次启动通常会直接命中缓存，这能显著提升二次启动速度
 - 若需要强制重建，删除 `/.cache/index` 后重启该程序即可
 - 当前策略下，配置路径变化或缓存结构版本变化会触发自动重建
-- `VerifySourceFreshness`（默认开启）会把各源目录下 `.cs`/`.xml` 的**大小与修改时间**摘要一并纳入指纹，于是 Steam 更新过的 mod 也会自动触发重建。只 stat 不读文件内容，成本约百毫秒级；源全是不会变动的手工副本时可以关掉
+- `verify_source_freshness`（默认开启）会把各源目录下 `.cs`/`.xml` 的**大小与修改时间**摘要一并纳入指纹，于是 Steam 更新过的 mod 也会自动触发重建。只 stat 不读文件内容，成本约百毫秒级；源全是不会变动的手工副本时可以关掉
 
 
 ---
@@ -295,75 +295,79 @@ Tool Layer
 
 ### 安装步骤
 1. 从 [Releases](https://github.com/kearril/RimSearcher/releases) 下载 `RimSearcher.Server.exe`。
-2. 创建 `config.json`
+2. 创建 `config.toml`
 
 配置示例：
-```json
-{
-  "Sources": [
-    {
-      "name": "vanilla",
-      "csharp": "C:/RimWorldSource/1.6/Core",
-      "xml": [
-        "C:/SteamLibrary/steamapps/common/RimWorld/Data/Core/Defs",
-        "C:/SteamLibrary/steamapps/common/RimWorld/Data/Royalty/Defs",
-        "C:/SteamLibrary/steamapps/common/RimWorld/Data/Biotech/Defs"
-      ],
-      "assemblies": [ "C:/SteamLibrary/steamapps/common/RimWorld/RimWorldWin64_Data/Managed" ]
-    },
-    {
-      "name": "HAR",
-      "csharp": "C:/RimWorldSource/1.6/HAR",
-      "xml": [
-        "C:/SteamLibrary/steamapps/workshop/content/294100/839005762/Defs",
-        "C:/SteamLibrary/steamapps/workshop/content/294100/839005762/1.6/Defs"
-      ],
-      "assemblies": [ "C:/SteamLibrary/steamapps/workshop/content/294100/839005762/1.6/Assemblies" ]
-    }
-  ],
-  "ScopeGroups": {
-    "base": [ "vanilla", "HAR" ]
-  },
-  "DefaultScope": "base",
-  "VerifySourceFreshness": true,
-  "SkipPathSecurity": false,
-  "CheckUpdates": true,
-  "CheckSourceUpdates": true,
-  "SourceHistoryDepth": 2
-}
+```toml
+default_scope = "base"
+
+verify_source_freshness = true
+skip_path_security      = false
+check_updates           = true
+check_source_updates    = true
+source_history_depth    = 2
+
+# 一个 [[sources]] 块 = 一个逻辑源的全部路径
+[[sources]]
+name       = "vanilla"
+csharp     = 'C:\RimWorldSource\1.6\Core'
+xml        = [
+  'C:\SteamLibrary\steamapps\common\RimWorld\Data\Core\Defs',
+  'C:\SteamLibrary\steamapps\common\RimWorld\Data\Royalty\Defs',
+  'C:\SteamLibrary\steamapps\common\RimWorld\Data\Biotech\Defs',
+]
+assemblies = 'C:\SteamLibrary\steamapps\common\RimWorld\RimWorldWin64_Data\Managed'
+
+[[sources]]
+name       = "HAR"
+csharp     = 'C:\RimWorldSource\1.6\HAR'
+xml        = [
+  'C:\SteamLibrary\steamapps\workshop\content\294100\839005762\Defs',
+  'C:\SteamLibrary\steamapps\workshop\content\294100\839005762\1.6\Defs',
+]
+assemblies = 'C:\SteamLibrary\steamapps\workshop\content\294100\839005762\1.6\Assemblies'
+
+# 组名 → 源名列表
+[scope_groups]
+base = [ "vanilla", "HAR" ]
 ```
+
+> 路径用**单引号**（TOML 字面量字符串）包起来，Windows 路径可以从资源管理器整条粘进去，反斜杠不用转义。
+> 双引号字符串里 `\` 是转义符，那种写法得写成 `C:\\...` 或 `C:/...`。
 
 **最简写法**：省略 `csharp`，只指程序集目录，产物落到 `<exe目录>/Decompiled/<源名>`，无需自己规划源码目录：
 
-```json
-{
-  "Sources": [
-    {
-      "name": "vanilla",
-      "assemblies": "C:/SteamLibrary/steamapps/common/RimWorld/RimWorldWin64_Data/Managed"
-    }
-  ]
-}
+```toml
+[[sources]]
+name       = "vanilla"
+assemblies = 'C:\SteamLibrary\steamapps\common\RimWorld\RimWorldWin64_Data\Managed'
 ```
 
 配好后跑一次 `sync_sources(action="sync")` 即可。目录在首次启动时就会建出来（空目录不影响索引缓存），产物写入后目录内会自动带上 `.gitignore` 和 `.rimsearcher-decompiled` 标记。
 
-字段说明：
-- `Sources`: 一行声明一个逻辑源的全部路径。`csharp` / `xml` / `assemblies` 三者都可以写单个字符串或字符串数组
+字段说明（key 的大小写与 `_` / `-` 分隔不敏感，`source_history_depth`、`source_history_depth`、`source_history_depth` 等价）：
+- `[[sources]]`: 一个块声明一个逻辑源的全部路径。`csharp` / `xml` / `assemblies` 三者都可以写单个字符串或字符串数组
   - `csharp`: 源码目录。**配了 `assemblies` 时，第一个 `csharp` 路径就是反编译输出目标**，其余视为附加的只读源码目录。整个 `csharp` 省略不写时，输出目标默认为 `<exe目录>/Decompiled/<源名>`
   - `xml`: 该源的 Def 目录，可多个（各 DLC 的 `Defs`、mod 的 `Defs` + `1.6/Defs`）
   - `assemblies`: 该源的程序集目录。**配了才能被 `sync_sources` 跟随**；留空即视为手工维护的源码副本，同步流程跳过
-- `ScopeGroups`: 作用域组，组名 → 源名列表；一个源可同属多组，组内顺序即同分时的排序优先级
-- `DefaultScope`: 未显式传 `scope` 参数时使用的作用域表达式；留空即全域
-- `VerifySourceFreshness`: 把源文件的大小/修改时间摘要纳入缓存指纹，让 Steam 更新过的 mod 自动触发索引重建（代价是启动时多几百毫秒的元数据枚举）
-- `SkipPathSecurity`: `true` 时关闭路径白名单检查（仅建议本地可信环境）
-- `CheckUpdates`: 是否启用版本更新提示（指 RimSearcher 自身的版本，与源跟随无关）
-- `CheckSourceUpdates`: 是否在启动时后台探测程序集与 XML 变更。只检测不反编译；发现变更且与当前会话查过的内容相关时，会在工具返回末尾附一条提示。默认 `true`
-- `SourceHistoryDepth`: 保留几代反编译历史供 `diff` 使用，`0` 为不保留（默认）。每代只存本次被覆盖的旧文件（反向增量），一次游戏更新通常只动少量文件，占用远小于同等份数的完整副本
-- `GameVersion`: mod 多版本目录的匹配键（如 `"1.6"`）。留空则从 `assemblies` 路径上溯查找 `Version.txt` 自动判定
-- `DecompileOutputRoot`: 省略 `csharp` 时，默认输出目录的根。留空即 `<exe目录>/Decompiled`（与 `.cache/index` 同处一地）；写相对路径按 exe 目录解析。装在 `C:\Program Files` 之类不可写的位置时，改配一个可写目录
+- `[scope_groups]`: 作用域组，组名 → 源名列表；一个源可同属多组，组内顺序即同分时的排序优先级
+- `default_scope`: 未显式传 `scope` 参数时使用的作用域表达式；留空即全域
+- `verify_source_freshness`: 把源文件的大小/修改时间摘要纳入缓存指纹，让 Steam 更新过的 mod 自动触发索引重建（代价是启动时多几百毫秒的元数据枚举）
+- `skip_path_security`: `true` 时关闭路径白名单检查（仅建议本地可信环境）
+- `check_updates`: 是否启用版本更新提示（指 RimSearcher 自身的版本，与源跟随无关）
+- `check_source_updates`: 是否在启动时后台探测程序集与 XML 变更。只检测不反编译；发现变更且与当前会话查过的内容相关时，会在工具返回末尾附一条提示。默认 `true`
+- `source_history_depth`: 保留几代反编译历史供 `diff` 使用，`0` 为不保留（默认）。每代只存本次被覆盖的旧文件（反向增量），一次游戏更新通常只动少量文件，占用远小于同等份数的完整副本
+- `game_version`: mod 多版本目录的匹配键（如 `"1.6"`）。留空则从 `assemblies` 路径上溯查找 `Version.txt` 自动判定
+- `decompile_output_root`: 省略 `csharp` 时，默认输出目录的根。留空即 `<exe目录>/Decompiled`（与 `.cache/index` 同处一地）；写相对路径按 exe 目录解析。装在 `C:\Program Files` 之类不可写的位置时，改配一个可写目录
 
-**旧格式仍然可用**：`CsharpSourcePaths` / `XmlSourcePaths` 两个列表（含裸字符串写法）继续支持，可与 `Sources` 混用。区别只是旧格式靠 `name` 相同来隐式关联同一个源，而 `Sources` 把它们收拢在一处。
+**写错了会告诉你在第几行**：配置解析失败时，启动日志带的是 TOML 解析器的诊断，形如
+
+```text
+[ERROR] Program: Failed to load configuration | path=D:\...\config.toml,
+        reason=(3,10) : error : Unexpected token found `␤` (token: `newline`) while expecting `]]` (token: `closebracketdouble`) | (4,1) : error : ... (+1 more)
+```
+
+而不是笼统的一句「解析失败」。同一类笔误重复多处时最多列前三条。「文件还没建」与「文件写错了」在日志里是两条不同的原因。
 
 **源命名与作用域**：`name` 相同的多个条目归为**同一个源**，因此一个逻辑源可以跨多个根目录（如 HAR 的 C# 目录 + 两个 Defs 目录）。省略 `name` 时按路径末段推断（会跳过 `Defs`、`1.6` 这类无信息量的段）。
 
@@ -376,7 +380,7 @@ Tool Layer
 | `scope: "vanilla,Milira"` | 并选多个（书写顺序 = 同分时的优先级） |
 | `scope: "all"` | 全部源 |
 | `scope: "all,-vanilla"` | 排除（`-` 或 `!` 前缀） |
-| 不传 | 落到 `DefaultScope` |
+| 不传 | 落到 `default_scope` |
 
 `locate` 还接受写在查询串里的 `scope:` 前缀（如 `"scope:mods pawn"`），与 `type:` / `def:` 等前缀同一套写法。
 
@@ -384,11 +388,11 @@ Tool Layer
 
 `limit` 参数控制每段结果条数（默认 10），传 `"all"` 展开全部。低相关度结果会在出现明显分数断层时折叠，折叠行注明 `lower relevance`。
 
-3. 在 MCP 客户端中把 `RimSearcher.Server.exe` 注册为 **stdio MCP Server**，并设置环境变量 `RIMSEARCHER_CONFIG` 指向上一步的 `config.json`。
+3. 在 MCP 客户端中把 `RimSearcher.Server.exe` 注册为 **stdio MCP Server**，并设置环境变量 `RIMSEARCHER_CONFIG` 指向上一步的 `config.toml`。
 
 > 兼容模式说明：
 > - 若设置了 `RIMSEARCHER_CONFIG`，优先读取该路径。
-> - 若未设置，则回退到 `RimSearcher.Server.exe` 同目录下的 `config.json`。
+> - 若未设置，则回退到 `RimSearcher.Server.exe` 同目录下的 `config.toml`。
 
 ### 安装到 AI 助手（不同客户端配置差异）
 
@@ -400,7 +404,7 @@ Tool Layer
       "command": "D:/Tools/RimSearcher/RimSearcher.Server.exe",
       "args": [],
       "env": {
-        "RIMSEARCHER_CONFIG": "D:/your/custom/path/config.json"
+        "RIMSEARCHER_CONFIG": "D:/your/custom/path/config.toml"
       }
     }
   }
@@ -415,7 +419,7 @@ Tool Layer
       "command": "D:/Tools/RimSearcher/RimSearcher.Server.exe",
       "args": [],
       "env": {
-        "RIMSEARCHER_CONFIG": "D:/your/custom/path/config.json"
+        "RIMSEARCHER_CONFIG": "D:/your/custom/path/config.toml"
       }
     }
   }
@@ -431,7 +435,7 @@ Tool Layer
       "command": ["D:/Tools/RimSearcher/RimSearcher.Server.exe"],
       "enabled": true,
       "environment": {
-        "RIMSEARCHER_CONFIG": "D:/your/custom/path/config.json"
+        "RIMSEARCHER_CONFIG": "D:/your/custom/path/config.toml"
       }
     }
   }
@@ -441,14 +445,14 @@ Tool Layer
 常见注意事项：
 - `command` 使用 `RimSearcher.Server.exe` 的绝对路径。
 - 推荐始终配置 `RIMSEARCHER_CONFIG` 指向明确路径，避免多环境切换时误读配置。
-- 若不设置 `RIMSEARCHER_CONFIG`，才要求 `config.json` 与 exe 在同一目录。
+- 若不设置 `RIMSEARCHER_CONFIG`，才要求 `config.toml` 与 exe 在同一目录。
 - 修改客户端 MCP 配置后，重启客户端或重载 MCP 服务。
 - 若客户端有工具白名单/权限开关，确保已允许 `RimSearcher`。
 
 ### 本地验证
 手动验证时：
-- 方式 A：设置环境变量 `RIMSEARCHER_CONFIG` 指向目标 `config.json`。
-- 方式 B：不设置环境变量，把 `config.json` 放到 `RimSearcher.Server.exe` 同目录。
+- 方式 A：设置环境变量 `RIMSEARCHER_CONFIG` 指向目标 `config.toml`。
+- 方式 B：不设置环境变量，把 `config.toml` 放到 `RimSearcher.Server.exe` 同目录。
 
 ![配置示例](Image/Snipaste_2026-02-07_23-20-57.png)
 
@@ -468,7 +472,7 @@ Tool Layer
 ## 6. 更新提示说明
 
 - 更新检查为非阻塞后台任务，不影响核心检索服务。
-- 仅在 `CheckUpdates=true` 时启用。
+- 仅在 `check_updates = true` 时启用。
 - 若遇到 GitHub 匿名限流，更新检查会静默失败，不影响工具功能。
 - 更新信息默认通过日志通道输出；若 MCP 客户端不展示日志，则可能看不到该提示。
 - 更新检查缓存文件路径：`<exe目录>/.cache/.update-cache`（与 `index` 文件夹同级）。

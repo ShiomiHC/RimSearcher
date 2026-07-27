@@ -1,24 +1,13 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using Tomlyn;
+using Tomlyn.Model;
+using Tomlyn.Parsing;
+using Tomlyn.Syntax;
 
 namespace RimSearcher.Server;
 
-// config 里的一条源路径。旧格式的裸字符串仍可用（名字从路径推断），
-// 新格式 {"name":"HAR","path":"..."} 才能让同一个逻辑源跨 C#/XML 两侧归为一组。
-[JsonConverter(typeof(SourcePathEntryConverter))]
+// 索引侧看到的一条源路径。由 [[sources]] 展开而来——一个逻辑源的 csharp/xml 各条路径
+// 在这里摊平成独立条目，靠 Name 相同重新归组。
 public sealed class SourcePathEntry
-{
-    public string Name { get; init; } = string.Empty;
-    public string Path { get; init; } = string.Empty;
-
-    // 可选：Path 这份源码由哪些程序集目录反编译而来。配了才能跟随更新，
-    // 留空即视为手工副本（现状），同步流程会跳过它。
-    public IReadOnlyList<string> AssemblyPaths { get; init; } = [];
-
-    public bool CanFollow => AssemblyPaths.Count > 0;
-}
-
-public sealed class SourcePathEntryConverter : JsonConverter<SourcePathEntry>
 {
     // 目录末段常是版本号或内容类型，拿它当源名毫无信息量；逐段回退到第一个有意义的段。
     private static readonly HashSet<string> UninformativeSegments = new(StringComparer.OrdinalIgnoreCase)
@@ -27,79 +16,17 @@ public sealed class SourcePathEntryConverter : JsonConverter<SourcePathEntry>
         "1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "common", "data"
     };
 
-    public override SourcePathEntry? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-    {
-        if (reader.TokenType == JsonTokenType.String)
-        {
-            var path = reader.GetString() ?? string.Empty;
-            return new SourcePathEntry { Name = InferName(path), Path = path };
-        }
+    public string Name { get; init; } = string.Empty;
+    public string Path { get; init; } = string.Empty;
 
-        if (reader.TokenType == JsonTokenType.StartObject)
-        {
-            string? name = null;
-            string? path = null;
-            var assemblyPaths = new List<string>();
+    // 可选：Path 这份源码由哪些程序集目录反编译而来。配了才能跟随更新，
+    // 留空即视为手工副本，同步流程会跳过它。
+    public IReadOnlyList<string> AssemblyPaths { get; init; } = [];
 
-            while (reader.Read())
-            {
-                if (reader.TokenType == JsonTokenType.EndObject) break;
-                if (reader.TokenType != JsonTokenType.PropertyName) continue;
+    public bool CanFollow => AssemblyPaths.Count > 0;
 
-                var property = reader.GetString();
-                if (!reader.Read()) break;
-
-                // assemblyPath(s) 单数写字符串、复数写数组都要认，故不能在这里一刀切掉非字符串
-                switch (ConfigJson.NormalizeKey(property ?? string.Empty))
-                {
-                    case "assemblypath" or "assemblypaths" or "assemblies":
-                        ConfigJson.ReadStringOrArray(ref reader, assemblyPaths);
-                        break;
-                    case "name":
-                        if (reader.TokenType == JsonTokenType.String) name = reader.GetString();
-                        else reader.Skip();
-                        break;
-                    case "path":
-                        if (reader.TokenType == JsonTokenType.String) path = reader.GetString();
-                        else reader.Skip();
-                        break;
-                    default:
-                        reader.Skip();
-                        break;
-                }
-            }
-
-            path ??= string.Empty;
-            return new SourcePathEntry
-            {
-                Name = string.IsNullOrWhiteSpace(name) ? InferName(path) : name!.Trim(),
-                Path = path,
-                AssemblyPaths = assemblyPaths
-            };
-        }
-
-        reader.Skip();
-        return null;
-    }
-
-    public override void Write(Utf8JsonWriter writer, SourcePathEntry value, JsonSerializerOptions options)
-    {
-        writer.WriteStartObject();
-        writer.WriteString("name", value.Name);
-        writer.WriteString("path", value.Path);
-        if (value.AssemblyPaths.Count > 0)
-        {
-            writer.WriteStartArray("assemblyPaths");
-            foreach (var assemblyPath in value.AssemblyPaths) writer.WriteStringValue(assemblyPath);
-            writer.WriteEndArray();
-        }
-        writer.WriteEndObject();
-    }
-
-    // SourceDefinition 未显式给 name 时复用同一套推断规则
-    public static string InferNameFrom(string path) => InferName(path);
-
-    private static string InferName(string path)
+    // SourceDefinition 未显式给 name 时按路径推断
+    public static string InferNameFrom(string path)
     {
         if (string.IsNullOrWhiteSpace(path)) return "unnamed";
 
@@ -124,12 +51,11 @@ public record AppConfig
 {
     public const string ConfigPathEnvVar = "RIMSEARCHER_CONFIG";
 
+    public const string ConfigFileName = "config.toml";
+
     public const string DefaultDecompileFolder = "Decompiled";
 
-    public List<SourcePathEntry> CsharpSourcePaths { get; init; } = new();
-    public List<SourcePathEntry> XmlSourcePaths { get; init; } = new();
-
-    // 新格式：一行声明一个逻辑源的全部路径。与上面两个旧列表并存，最终由 ResolveSources() 合并。
+    // 一个 [[sources]] 块声明一个逻辑源的全部路径
     public List<SourceDefinition> Sources { get; init; } = new();
 
     // 组名 → 源名列表。一个源可同属多组；组内顺序即同分时的排序优先级。
@@ -145,7 +71,7 @@ public record AppConfig
     // 其余是历史死代码。留空则从任一 assemblyPath 上溯找 Version.txt 自动判定。
     public string? GameVersion { get; init; }
 
-    // 配了 assemblyPath 的源，在启动时顺带检查程序集有没有变过，并把结果附在工具返回里。
+    // 配了 assemblies 的源，在启动时顺带检查程序集有没有变过，并把结果附在工具返回里。
     // 只做检查不做反编译——反编译由 sync_sources 工具显式触发。
     public bool CheckSourceUpdates { get; init; } = true;
 
@@ -169,19 +95,20 @@ public record AppConfig
     // 索引宿主，后续实例只做 stdio↔管道转发，全机只保留一份索引。
     public bool ShareIndexHost { get; init; } = true;
 
-    // 新旧两种格式合并成下游唯一的事实来源。同名条目不去重：ScopeCatalog 本就按 name 把
+    // [[sources]] 摊平成下游唯一的事实来源。同名条目不去重：ScopeCatalog 本就按 name 把
     // 多个根归到同一个源，重复路径在索引侧也已按文件路径去重。
     //
     // baseDirectory 仅供测试注入，让这里不依赖 AppDomain 就能验证默认目录的推导。
     public ResolvedSources ResolveSources(string? baseDirectory = null)
     {
-        var csharp = new List<SourcePathEntry>(CsharpSourcePaths);
-        var xml = new List<SourcePathEntry>(XmlSourcePaths);
+        var csharp = new List<SourcePathEntry>();
+        var xml = new List<SourcePathEntry>();
 
         foreach (var definition in Sources)
         {
-            // 转换器对「什么路径都没写」的条目返回 null（config 里多打一个 {} 就是这样），
-            // 不滤掉会在下一行直接 NRE，而这里在 TryLoad 的 catch 之外——整个进程会起不来
+            // 「什么路径都没写」的条目（config 里多打一个空 [[sources]] 就是这样）在 Parse 里
+            // 已被丢掉，这里是给直接构造 AppConfig 的调用方兜底：漏进来会在下一行直接 NRE，
+            // 而这一步在 TryLoad 的 catch 之外——整个进程会起不来
             if (definition == null) continue;
 
             // 只写 assemblies、没写 csharp 时补一个默认输出目录。不补的话这个源在下面的
@@ -231,45 +158,133 @@ public record AppConfig
         return cleaned.Length == 0 ? "unnamed" : cleaned;
     }
 
-    public static (AppConfig Config, string Path, bool IsLoaded) Load()
+    public static AppConfig? Parse(string toml) => Parse(toml, out _);
+
+    // TOML 文本 → AppConfig。语法错误返回 null，并把 Tomlyn 的诊断（带行列号）填进 error：
+    // 手写配置漏个引号是常事，只报「解析失败」等于让人拿肉眼去扫整个文件。
+    public static AppConfig? Parse(string toml, out string? error)
+    {
+        error = null;
+
+        TomlTable? table;
+        try
+        {
+            // 反序列化到 TomlTable（弱类型），字段绑定全在下面手写：config 的宽松性
+            // （key 大小写/分隔符不敏感、单值与数组通吃）不是任何模型绑定器能表达的。
+            table = TomlSerializer.Deserialize<TomlTable>(toml, (TomlSerializerOptions?)null);
+        }
+        catch (TomlException ex)
+        {
+            error = Describe(toml, ex);
+            return null;
+        }
+
+        if (table is null)
+        {
+            error = "document did not parse to a table";
+            return null;
+        }
+
+        return new AppConfig
+        {
+            Sources = ConfigToml.Items(ConfigToml.Find(table, "sources", "source"))
+                .Select(SourceDefinition.FromToml)
+                .OfType<SourceDefinition>()
+                .ToList(),
+            ScopeGroups = ReadScopeGroups(ConfigToml.Find(table, "scopeGroups", "groups")),
+            DefaultScope = ConfigToml.String(ConfigToml.Find(table, "defaultScope")),
+            GameVersion = ConfigToml.String(ConfigToml.Find(table, "gameVersion")),
+            DecompileOutputRoot = ConfigToml.String(ConfigToml.Find(table, "decompileOutputRoot")),
+            SkipPathSecurity = ConfigToml.Bool(ConfigToml.Find(table, "skipPathSecurity"), false),
+            CheckUpdates = ConfigToml.Bool(ConfigToml.Find(table, "checkUpdates"), true),
+            CheckSourceUpdates = ConfigToml.Bool(ConfigToml.Find(table, "checkSourceUpdates"), true),
+            VerifySourceFreshness = ConfigToml.Bool(ConfigToml.Find(table, "verifySourceFreshness"), true),
+            ShareIndexHost = ConfigToml.Bool(ConfigToml.Find(table, "shareIndexHost"), true),
+            SourceHistoryDepth = ConfigToml.Int(ConfigToml.Find(table, "sourceHistoryDepth"), 0),
+            IdleTimeoutMinutes = ConfigToml.Int(ConfigToml.Find(table, "idleTimeoutMinutes"), 0)
+        };
+    }
+
+    // 反序列化是 fail-fast 的：抛出时 exception.Diagnostics 只有撞上的第一条。为了一次把问题
+    // 列全（一份配置常常同一类笔误重复好几处），在已经失败的路径上再走一趟纯语法解析——
+    // 它会继续往下扫完整个文档。正常启动走不到这里，多这一次解析不影响启动耗时。
+    //
+    // 只取前三条：全塞进日志会把第一现场淹掉，修完再解析一次即可。
+    // DiagnosticMessage.ToString() 自带 "(行,列) : error : ..." 前缀。
+    private static string Describe(string toml, TomlException exception)
+    {
+        var errors = SyntaxParser.Parse(toml).Diagnostics
+            .Where(message => message.Kind == DiagnosticMessageKind.Error)
+            .Select(message => message.ToString())
+            .ToList();
+
+        if (errors.Count == 0) return exception.Message;
+
+        var head = string.Join(" | ", errors.Take(3));
+
+        return errors.Count > 3 ? $"{head} (+{errors.Count - 3} more)" : head;
+    }
+
+    // [scope_groups] 下每个 key 是组名，值是源名列表。组名保持原样——它要跟用户在
+    // scope 参数里写的名字对上，那侧的大小写宽容由 ScopeCatalog 负责。
+    private static Dictionary<string, List<string>> ReadScopeGroups(object? value)
+    {
+        var groups = new Dictionary<string, List<string>>();
+        if (value is not TomlTable table) return groups;
+
+        foreach (var pair in table)
+        {
+            var members = ConfigToml.StringList(pair.Value);
+            if (members.Count > 0) groups[pair.Key] = members;
+        }
+
+        return groups;
+    }
+
+    // Error 非空即「文件在、但没读成」，与「文件根本不存在」是两回事：
+    // 前者是用户刚改坏了配置，值得把行号摆到脸上；后者只是还没配。
+    public static (AppConfig Config, string Path, bool IsLoaded, string? Error) Load()
     {
         var envPath = Environment.GetEnvironmentVariable(ConfigPathEnvVar);
         if (!string.IsNullOrWhiteSpace(envPath))
         {
             var resolvedEnvPath = ResolvePath(envPath);
-            if (TryLoad(resolvedEnvPath, out var configFromEnv))
-                return (configFromEnv, resolvedEnvPath, true);
+            if (TryLoad(resolvedEnvPath, out var configFromEnv, out var envError))
+                return (configFromEnv, resolvedEnvPath, true, null);
 
-            return (new AppConfig(), resolvedEnvPath, false);
+            return (new AppConfig(), resolvedEnvPath, false, envError);
         }
 
-        var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
-        if (TryLoad(path, out var config))
-            return (config, path, true);
+        var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ConfigFileName);
+        if (TryLoad(path, out var config, out var error))
+            return (config, path, true, null);
 
-        return (new AppConfig(), path, false);
+        return (new AppConfig(), path, false, error);
     }
 
-    private static bool TryLoad(string path, out AppConfig config)
+    // internal 而非 private：Load() 本身要读环境变量和 AppDomain 目录，测不动；
+    // 这一层拿路径就能测，而它正是「文件不存在 / 文件写错了」这个区分的落点。
+    internal static bool TryLoad(string path, out AppConfig config, out string? error)
     {
         config = new AppConfig();
+        error = null;
+
         try
         {
-            if (File.Exists(path))
-            {
-                var json = File.ReadAllText(path);
-                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                var loaded = JsonSerializer.Deserialize<AppConfig>(json, options);
-                if (loaded != null)
-                {
-                    config = loaded;
-                    return true;
-                }
-            }
-        }
-        catch { }
+            if (!File.Exists(path)) return false;
 
-        return false;
+            var loaded = Parse(File.ReadAllText(path), out error);
+            if (loaded == null) return false;
+
+            config = loaded;
+            return true;
+        }
+        catch (Exception exception)
+        {
+            // 读不动文件（权限、占用、编码）也要说清楚是哪一步失败的
+            error = exception.Message;
+            return false;
+        }
     }
 
     private static string ResolvePath(string rawPath, string? baseDirectory = null)

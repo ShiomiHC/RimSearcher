@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 namespace RimSearcher.Core;
 
 // 一个逻辑源常跨多个根目录（HAR = AlienRace 的 C# + Defs + 1.6/Defs），故 Roots 是列表；
-// 同名条目在 CsharpSourcePaths / XmlSourcePaths 两侧都会归到同一个源。
+// 同名条目在 csharp / xml 两侧都会归到同一个源。
 public sealed class ScopeSource
 {
     public ScopeSource(string name, IReadOnlyList<string> roots)
