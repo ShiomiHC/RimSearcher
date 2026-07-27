@@ -41,21 +41,50 @@ public static class AssemblyScanner
         new(@"[\\/](1\.[0-9]+)[\\/]", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     // 运行时与引擎程序集：反编译它们既无意义又会让产物膨胀十倍。
-    // 前缀匹配，覆盖 UnityEngine.*Module.dll / System.*.dll 这类族。
-    private static readonly string[] ExcludedPrefixes =
+    //
+    // 判定分「精确名」与「点分家族」两档，不能一律 StartsWith：裸前缀 StartsWith 会把
+    // SystematicWeapons.dll / UnityEngineTweaks.dll / I18NPlus.dll 这类正常 mod 程序集
+    // 整批当成运行时库排掉，它们的源码永远进不了索引，而用户查不到还看不出原因。
+    // 精确名只匹配整个程序集名；家族前缀带结尾的点，只吃 "Foo." 开头的真·子命名空间。
+
+    // 逐条判断依据：
+    //   mscorlib        只有 mscorlib.dll 这一个，没有 mscorlib.* 家族 → 精确
+    //   netstandard     同上，只有 netstandard.dll → 精确
+    //   System          System.dll 存在，System.Xml/System.Core/... 也存在 → 精确 + 家族
+    //   UnityEngine     UnityEngine.dll 存在，UnityEngine.CoreModule 等模块化拆分也存在 → 精确 + 家族
+    //   I18N            I18N.dll 存在（Mono 的字符集库），I18N.West/I18N.CJK 也存在 → 精确 + 家族
+    //   Newtonsoft.Json Newtonsoft.Json.dll 是本体，Newtonsoft.Json.Bson 之类是同厂扩展；
+    //                   这个命名空间不可能是 mod 名 → 精确 + 家族
+    //   Microsoft.      没有裸 Microsoft.dll，只有 Microsoft.CSharp 这类 → 只家族
+    //   Unity.          没有裸 Unity.dll（引擎本体叫 UnityEngine），只有 Unity.TextMeshPro 这类 → 只家族
+    //   Mono.           没有裸 Mono.dll，只有 Mono.Security / Mono.Posix 这类 → 只家族
+    //   websocket-sharp 游戏 Managed 下的单个第三方库，无家族 → 精确
+    private static readonly string[] ExcludedExactNames =
     [
-        "mscorlib", "netstandard", "System", "Microsoft.",
-        "UnityEngine", "Unity.", "Mono.", "I18N",
-        "Newtonsoft.Json", "websocket-sharp"
+        "mscorlib", "netstandard", "System", "UnityEngine",
+        "I18N", "Newtonsoft.Json", "websocket-sharp"
+    ];
+
+    private static readonly string[] ExcludedFamilyPrefixes =
+    [
+        "System.", "UnityEngine.", "I18N.", "Newtonsoft.Json.",
+        "Microsoft.", "Unity.", "Mono."
     ];
 
     public static bool IsRuntimeAssembly(string fileName)
     {
         var name = System.IO.Path.GetFileNameWithoutExtension(fileName);
-        foreach (var prefix in ExcludedPrefixes)
+
+        foreach (var exact in ExcludedExactNames)
         {
-            if (name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return true;
+            if (name.Equals(exact, StringComparison.OrdinalIgnoreCase)) return true;
         }
+
+        foreach (var family in ExcludedFamilyPrefixes)
+        {
+            if (name.StartsWith(family, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+
         return false;
     }
 

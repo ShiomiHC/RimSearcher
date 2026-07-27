@@ -24,18 +24,41 @@ public class AssemblyScannerTests : IDisposable
         => Assert.Equal("1.6", AssemblyScanner.ExtractGameVersion(@"C:\mods\Pack1.4\1.6\Assemblies\a.dll"));
 
     [Theory]
+    // 精确名：整个程序集名就是它
     [InlineData("mscorlib.dll", true)]
+    [InlineData("netstandard.dll", true)]
+    [InlineData("System.dll", true)]
+    [InlineData("UnityEngine.dll", true)]
+    [InlineData("I18N.dll", true)]
+    [InlineData("Newtonsoft.Json.dll", true)]
+    [InlineData("websocket-sharp.dll", true)]
+    // 点分家族：真·子命名空间
     [InlineData("System.Text.Json.dll", true)]
+    [InlineData("System.Xml.dll", true)]
     [InlineData("UnityEngine.CoreModule.dll", true)]
     [InlineData("Unity.TextMeshPro.dll", true)]
     [InlineData("Microsoft.CSharp.dll", true)]
-    [InlineData("Newtonsoft.Json.dll", true)]
     [InlineData("Mono.Security.dll", true)]
+    [InlineData("I18N.West.dll", true)]
     [InlineData("Assembly-CSharp.dll", false)]
     [InlineData("0Harmony.dll", false)]
     [InlineData("AlienRace.dll", false)]
     public void IsRuntimeAssembly_ExcludesEngineAndRuntimeFamilies(string fileName, bool expected)
         => Assert.Equal(expected, AssemblyScanner.IsRuntimeAssembly(fileName));
+
+    // 回归：裸前缀 StartsWith 会把这些正常 mod 程序集整批当成运行时库排掉，
+    // 它们的源码永远进不了索引，用户查不到还看不出原因。
+    [Theory]
+    [InlineData("SystematicWeapons.dll")]
+    [InlineData("SystemicInfection.dll")]
+    [InlineData("UnityEngineTweaks.dll")]
+    [InlineData("I18NPlus.dll")]
+    [InlineData("MonoModTweaks.dll")]
+    [InlineData("UnityToolbag.dll")]
+    [InlineData("MicrosoftLikeUI.dll")]
+    [InlineData("NewtonsoftJsonShim.dll")]
+    public void IsRuntimeAssembly_KeepsModAssembliesThatMerelyShareAPrefix(string fileName)
+        => Assert.False(AssemblyScanner.IsRuntimeAssembly(fileName));
 
     [Fact]
     public void Enumerate_SkipsRuntimeAssembliesByDefault()
