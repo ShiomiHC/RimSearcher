@@ -22,8 +22,12 @@ public class ReadCodeTool : ITool
 
     public string Name => "rimworld-searcher__read_code";
 
+    // 三种模式的优先级此前只写在下面几个 if 的先后顺序里，调用方同时传 extractClass 和
+    // methodName 时无从知道哪个生效，只能从返回内容倒推。契约就得写在 description 里。
     public string Description =>
-        "Read C# source by method/property/constructor, class body, or raw line range.";
+        "Read C# source out of one specific file — an indexed file name or an absolute path, not a search term. "
+        + "Three exclusive modes: extractClass (the whole type), methodName (one member), or startLine/lineCount "
+        + "(raw lines). If more than one is passed, extractClass wins over methodName, which wins over the line range.";
 
     private static readonly ToolArgSpec ArgSpec = new(
         "rimworld-searcher__read_code",
@@ -87,7 +91,8 @@ public class ReadCodeTool : ITool
 
         var resolvedPath = ResolvePath(path, scope, out var outOfScopeFallback);
         if (resolvedPath == null)
-            return new ToolResult($"File not found: '{Path.GetFileName(path)}'. Use 'locate' to find the correct file first.", true);
+            return WithUnresolvedScopeNotice(scope, new ToolResult(
+                $"File not found: '{Path.GetFileName(path)}'. Use 'locate' to find the correct file first.", true));
 
         path = resolvedPath;
 
@@ -110,9 +115,13 @@ public class ReadCodeTool : ITool
                 // 反编译产物里 Log.Error("... not found") 这类字面量遍地都是，取到的正文
                 // 一旦含这段文本就会被误报成「类不存在」，而代码明明就在那里。
                 if (!classBody.IsOk)
-                    return Failure(classBody, path, $"Class '{extractClassName}'", "Use inspect tool to verify the type name.");
+                    return WithUnresolvedScopeNotice(scope,
+                        Failure(classBody, path, $"Class '{extractClassName}'", "Use inspect tool to verify the type name."));
 
-                return new ToolResult($"```csharp\n{scopeNotice}{classBody.Content}\n```");
+                // 与 member 模式对称地回显目标名。少了这行，同一个文件里连开几个 extractClass
+                // 的返回长得一模一样，读者只能靠正文首行去认这是哪个类。
+                return WithUnresolvedScopeNotice(scope,
+                    new ToolResult($"```csharp\n{scopeNotice}// {extractClassName}\n{classBody.Content}\n```"));
             }
 
             var member = ToolArgs.GetOptionalString(args, "methodName", "method", "member", "memberName");
@@ -123,15 +132,17 @@ public class ReadCodeTool : ITool
                 var body = await RoslynHelper.GetMemberBodyAsync(path, methodName, className);
 
                 if (!body.IsOk)
-                    return Failure(body, path, $"Member '{methodName}'", "Use inspect tool to see available members.");
+                    return WithUnresolvedScopeNotice(scope,
+                        Failure(body, path, $"Member '{methodName}'", "Use inspect tool to see available members."));
 
-                return new ToolResult($"```csharp\n{scopeNotice}// {methodName}\n{body.Content}\n```");
+                return WithUnresolvedScopeNotice(scope,
+                    new ToolResult($"```csharp\n{scopeNotice}// {methodName}\n{body.Content}\n```"));
             }
 
             int startLine = Math.Max(0, ToolArgs.GetInt(args, 0, "startLine", "start", "offset"));
             int lineCount = ToolArgs.GetInt(args, DefaultLineCount, "lineCount", "lines", "count", "limit", "maxResults");
             if (lineCount <= 0)
-                return new ToolResult("lineCount must be greater than 0.", true);
+                return WithUnresolvedScopeNotice(scope, new ToolResult("lineCount must be greater than 0.", true));
             lineCount = Math.Min(lineCount, MaxLineCount);
 
             var allLines = File.ReadAllLines(path);
@@ -140,7 +151,8 @@ public class ReadCodeTool : ITool
             var resultLines = allLines.Skip(startLine).Take(lineCount).Select((line, idx) => $"L{startLine + idx + 1}: {line}").ToList();
 
             if (resultLines.Count == 0)
-                return new ToolResult($"Line range {startLine + 1}-{startLine + lineCount} exceeds file length ({totalLines} lines).", true);
+                return WithUnresolvedScopeNotice(scope, new ToolResult(
+                    $"Line range {startLine + 1}-{startLine + lineCount} exceeds file length ({totalLines} lines).", true));
 
             var sb = new StringBuilder();
             sb.AppendLine($"```csharp");
@@ -154,12 +166,20 @@ public class ReadCodeTool : ITool
                 sb.AppendLine($"\n[{totalLines - (startLine + lineCount)} more lines available, use startLine={startLine + lineCount}]");
             }
 
-            return new ToolResult(sb.ToString());
+            return WithUnresolvedScopeNotice(scope, new ToolResult(sb.ToString()));
         }
         catch (Exception ex)
         {
-            return new ToolResult($"Read failed: {ex.Message}", true);
+            return WithUnresolvedScopeNotice(scope, new ToolResult($"Read failed: {ex.Message}", true));
         }
+    }
+
+    // 拼错的 scope 被 ScopeCatalog 静默退回全域，返回里不说一句，调用方就会以为自己限定过范围。
+    // 一律追加在正文最末尾：正文通常是 ```csharp 代码块，提示混进块里就成了源码的一部分。
+    private ToolResult WithUnresolvedScopeNotice(ScopeSelection scope, ToolResult result)
+    {
+        var notice = ScopeArgs.UnresolvedNotice(_scopeCatalog, scope);
+        return notice == null ? result : result with { Content = result.Content + notice };
     }
 
     // 三种失败原因给三种不同的下一步：文件没了要重查、文件过大要改用裸行读、目标不存在才该去 inspect。

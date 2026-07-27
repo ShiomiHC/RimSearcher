@@ -12,8 +12,14 @@ public class TraceTool : ITool
     private const int InheritorsDefaultLimit = ScopeArgs.HardLimit;
     private const int UsagesDefaultLimit = 50;
 
-    // 单文件最多取几条，避免一个文件把配额吃光
+    // 单文件最多显示几条预览，避免一个文件把配额吃光。
+    // 注意这只限制「显示」：原先命中第 3 条就 break 掉整个文件的扫描，于是该文件剩下的命中
+    // 既不出现在预览里、也不进总数，调用方会把「显示了 3 条」读成「只调用了 3 次」。
     private const int MaxMatchesPerFile = 3;
+
+    // 数完整个文件是为了报准每文件命中数，但不能让一个病态大文件（生成代码、拼接的 XML）
+    // 把整轮扫描的时间吃光，故仍留一道行数闸；越过它时该文件的计数退化为下界。
+    private const int MaxLinesScannedPerFile = 20000;
 
     private readonly SourceIndexer _sourceIndexer;
     private readonly ScopeCatalog _scopeCatalog;
@@ -27,8 +33,10 @@ public class TraceTool : ITool
     public string Name => "rimworld-searcher__trace";
 
     public string Description =>
-        "Cross-reference analysis for C# and XML. Mode: 'inheritors' (subclasses and interface implementors) " +
-        "or 'usages' (file/line references).";
+        "Cross-reference analysis for C# and XML. 'inheritors' lists the subclass/implementor tree and expands " +
+        "to the server cap by default; 'usages' is a line-by-line regex text match (default 50, at most 3 preview " +
+        "lines per file plus a '+N more in this file' count). Usages is not a call graph: same-named members on " +
+        "unrelated types land in one list and inherited calls are missed.";
 
     public object JsonSchema => new
     {
@@ -39,16 +47,19 @@ public class TraceTool : ITool
             {
                 type = "string",
                 minLength = 1,
-                description = "Class or member to trace. Examples: 'ThingComp', 'CompShield', 'TakeDamage'."
+                description =
+                    "Class or member to trace. Examples: 'ThingComp', 'CompShield', 'TakeDamage'. In mode " +
+                    "'usages' it is matched as a case-insensitive whole word, not resolved as a symbol."
             },
             mode = new
             {
                 type = "string",
                 @enum = new[] { "inheritors", "usages" },
                 description =
-                    "Trace mode: 'inheritors' for the subclass/implementor tree (interfaces included; lists " +
-                    "every match up to the server cap unless limit says otherwise), " +
-                    "'usages' for textual references in C# and XML."
+                    "Trace mode: 'inheritors' for the subclass/implementor tree (interfaces included), which " +
+                    "defaults to the server cap so the whole tree comes back; 'usages' for textual references " +
+                    "in C# and XML, which defaults to 50 matches. The 'limit' default noted below is the " +
+                    "'usages' one."
             },
             scope = ScopeArgs.ScopeSchemaProperty(_scopeCatalog),
             limit = ScopeArgs.LimitSchemaProperty(UsagesDefaultLimit)
@@ -72,6 +83,10 @@ public class TraceTool : ITool
 
         var scope = ScopeArgs.Resolve(_scopeCatalog, args);
 
+        // 拼错的 scope 被静默退回全域，两个 mode 的每条返回路径都要带上这行，
+        // 否则调用方会把全域结果当成自己限定过的范围内结果。
+        var scopeNotice = ScopeArgs.UnresolvedNotice(_scopeCatalog, scope) ?? string.Empty;
+
         if (mode == "inheritors")
         {
             var limit = ScopeArgs.GetDisplayLimit(args, fallback: InheritorsDefaultLimit);
@@ -84,7 +99,7 @@ public class TraceTool : ITool
                 var report = new ScopeReport();
                 report.Add(inheritors);
                 var footer = report.Render(scope);
-                return new ToolResult($"No subclasses of '{symbol}' found in scope '{scope.Expression}'.{footer ?? string.Empty}");
+                return new ToolResult($"No subclasses of '{symbol}' found in scope '{scope.Expression}'.{footer ?? string.Empty}{scopeNotice}");
             }
 
             var results = inheritors.Items.Select(entry =>
@@ -104,6 +119,7 @@ public class TraceTool : ITool
             inheritorsReport.Add(inheritors);
             var inheritorsFooter = inheritorsReport.Render(scope);
             if (inheritorsFooter != null) sbInheritors.Append(inheritorsFooter);
+            sbInheritors.Append(scopeNotice);
 
             return new ToolResult(sbInheritors.ToString());
         }
@@ -115,6 +131,8 @@ public class TraceTool : ITool
             var maxTotalResults = limit.Count;
 
             var results = new ConcurrentBag<(string file, int lineNum, string preview)>();
+            // 每个文件的真实命中数，与 results 里的预览条数是两个量：预览封顶 3 条，计数不封顶。
+            var matchesByFile = new ConcurrentDictionary<string, int>();
             // 扫盘类工具不额外统计 scope 外的命中——那要把过滤掉的文件再读一遍，
             // 代价与全域搜索相同，故这里 scope 是硬过滤，只在结果头部标明范围。
             var files = _sourceIndexer.GetAllFiles(scope)
@@ -126,14 +144,18 @@ public class TraceTool : ITool
                 System.Text.RegularExpressions.RegexOptions.IgnoreCase |
                 System.Text.RegularExpressions.RegexOptions.Compiled);
 
-            int globalCount = 0;
+            // collectedCount 是「已占用的预览配额」，totalMatchCount 是「真实命中总数」。
+            // 原先只有一个 globalCount 同时充当这两者，表头才会把显示条数当成命中数报出去。
+            int collectedCount = 0;
+            int totalMatchCount = 0;
             int processedCount = 0;
             int totalFiles = files.Count;
             int truncatedFlag = 0;
 
             await Parallel.ForEachAsync(files, cancellationToken, async (file, ct) =>
             {
-                if (Interlocked.CompareExchange(ref globalCount, 0, 0) >= maxTotalResults)
+                // 配额用尽后整个文件都不再打开——这才是真正的提前收工，表头因此只能给下界。
+                if (Interlocked.CompareExchange(ref collectedCount, 0, 0) >= maxTotalResults)
                 {
                     Interlocked.Exchange(ref truncatedFlag, 1);
                     return;
@@ -152,22 +174,31 @@ public class TraceTool : ITool
                         lineNum++;
                         if (regex.IsMatch(line))
                         {
-                            var currentCount = Interlocked.Increment(ref globalCount);
-                            if (currentCount <= maxTotalResults)
-                            {
-                                var preview = line.Trim();
-                                if (preview.Length > 100) preview = preview[..97] + "...";
-                                results.Add((file, lineNum, preview));
-                            }
                             matchesInFile++;
-                            if (matchesInFile >= MaxMatchesPerFile || currentCount >= maxTotalResults)
+                            Interlocked.Increment(ref totalMatchCount);
+
+                            // 已开始读的文件一律读到底再收工：文件句柄和缓冲都已经付过钱了，
+                            // 读完才换得「+N more in this file」是准数而不是猜的。
+                            if (matchesInFile <= MaxMatchesPerFile)
                             {
-                                if (currentCount >= maxTotalResults)
+                                var slot = Interlocked.Increment(ref collectedCount);
+                                if (slot <= maxTotalResults)
+                                {
+                                    var preview = line.Trim();
+                                    if (preview.Length > 100) preview = preview[..97] + "...";
+                                    results.Add((file, lineNum, preview));
+                                }
+                                else
+                                {
                                     Interlocked.Exchange(ref truncatedFlag, 1);
-                                break;
+                                }
                             }
                         }
+
+                        if (lineNum >= MaxLinesScannedPerFile) break;
                     }
+
+                    if (matchesInFile > 0) matchesByFile[file] = matchesInFile;
                 }
                 catch { }
                 finally
@@ -181,15 +212,23 @@ public class TraceTool : ITool
             });
 
             if (results.Count == 0)
-                return new ToolResult($"No references to '{symbol}' found in scope '{scope.Expression}'.");
+                return new ToolResult($"No references to '{symbol}' found in scope '{scope.Expression}'.{scopeNotice}");
 
             var grouped = results
                 .GroupBy(r => r.file)
                 .OrderBy(g => g.Key);
 
-            int totalMatches = results.Count;
+            var wasTruncated = Interlocked.CompareExchange(ref truncatedFlag, 0, 0) == 1;
+            int totalMatches = Interlocked.CompareExchange(ref totalMatchCount, 0, 0);
+
+            // 未截断时这个数才是真实命中总数——那正是本次修复的目的（原先它是显示条数）。
+            // 截断时不能报它：配额一满就不再打开新文件，totalMatches 只反映「恰好扫到了哪些
+            // 文件」，随线程调度浮动，同一次查询重跑两遍会给出两个数。与其报一个不稳定的下界，
+            // 不如只说确定的量（显示了多少条、扫描在何处停下），把总数留给末尾的提示。
             var sb = new System.Text.StringBuilder();
-            sb.AppendLine($"References to '{symbol}' ({totalMatches} found in scope '{scope.Expression}'):");
+            sb.AppendLine(wasTruncated
+                ? $"References to '{symbol}' (first {results.Count} in scope '{scope.Expression}', scan stopped at the limit):"
+                : $"References to '{symbol}' ({totalMatches} found in scope '{scope.Expression}'):");
             sb.AppendLine();
 
             foreach (var group in grouped)
@@ -197,20 +236,35 @@ public class TraceTool : ITool
                 var fileTag = group.Key.EndsWith(".xml") ? "[XML]" : "[C#]";
                 var fileName = System.IO.Path.GetFileName(group.Key);
                 sb.AppendLine($"{fileTag} `{fileName}`{ScopeArgs.Label(scope.ShowLabels ? scope.SourceNameOf(group.Key) : null)}");
+
+                var shown = 0;
                 foreach (var match in group.OrderBy(m => m.lineNum))
                 {
                     sb.AppendLine($"  L{match.lineNum}: {match.preview}");
+                    shown++;
                 }
+
+                // 减的是实际显示条数而不是 MaxMatchesPerFile：配额在这个文件中途耗尽时
+                // shown 会不足 3，按常数减会少报。文案与 search_regex 保持一致。
+                var inFile = matchesByFile.TryGetValue(group.Key, out var c) ? c : shown;
+                if (inFile > shown) sb.AppendLine($"  ... +{inFile - shown} more in this file");
             }
 
-            var wasTruncated = Interlocked.CompareExchange(ref truncatedFlag, 0, 0) == 1;
-            if (wasTruncated || totalMatches >= maxTotalResults)
+            // 判据只看 truncatedFlag。原先还或上 `totalMatches >= maxTotalResults`，
+            // 而 totalMatches 现在是真实命中数——单文件折叠出来的命中会误触发这条提示。
+            if (wasTruncated)
             {
-                // 已经顶到硬上限时别再劝 limit:'all'，那只会原地重试
+                // 已经顶到硬上限时别再劝 limit:'all'，那只会原地重试。
+                // 文案点明限的是「预览行」：表头的 N+ 是命中数，两个数量不是一回事，
+                // 不说清楚就会被读成「找到 N 条却只让看 50 条」的矛盾。
                 sb.AppendLine(limit.Unlimited
-                    ? $"\n[Results truncated at the server cap of {maxTotalResults}, use a more specific symbol or a narrower scope]"
-                    : $"\n[Results truncated at limit {maxTotalResults}, raise limit (up to {ScopeArgs.HardLimit}) or use limit:'all']");
+                    ? $"\n[Preview lines truncated at the server cap of {maxTotalResults} and scanning stopped there, use a more specific symbol or a narrower scope]"
+                    : $"\n[Preview lines truncated at limit {maxTotalResults} and scanning stopped there, raise limit (up to {ScopeArgs.HardLimit}) or use limit:'all']");
             }
+
+            // usages 分支是硬 scope 过滤、没有 ScopeReport footer（见上面扫盘的注释），
+            // 这行就是它唯一的 scope 级脚注。
+            sb.Append(scopeNotice);
 
             return new ToolResult(sb.ToString());
         }

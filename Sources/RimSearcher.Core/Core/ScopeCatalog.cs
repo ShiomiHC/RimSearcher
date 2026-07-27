@@ -25,16 +25,27 @@ public sealed class ScopeSelection
     private readonly ScopeCatalog _catalog;
     private readonly int[] _rankBySource;
 
-    internal ScopeSelection(ScopeCatalog catalog, int[] rankBySource, string expression, bool includesEverything)
+    internal ScopeSelection(
+        ScopeCatalog catalog,
+        int[] rankBySource,
+        string expression,
+        bool includesEverything,
+        IReadOnlyList<string>? unresolvedTokens = null)
     {
         _catalog = catalog;
         _rankBySource = rankBySource;
         Expression = expression;
         IncludesEverything = includesEverything;
         SelectedCount = rankBySource.Count(rank => rank >= 0);
+        UnresolvedTokens = unresolvedTokens ?? Array.Empty<string>();
     }
 
     public string Expression { get; }
+
+    // 表达式里没能对上任何组名/源名的 token。解析侧不把它当致命错误（见 Resolve 的注释），
+    // 于是「拼错的 scope」在结果里毫无痕迹——调用方拿着全域结果却以为限定过。
+    // 这里把它带出来，由工具在输出里说一句。
+    public IReadOnlyList<string> UnresolvedTokens { get; }
 
     public bool IncludesEverything { get; }
 
@@ -167,6 +178,7 @@ public sealed class ScopeCatalog
         var nextRank = 0;
         var excluded = new HashSet<int>();
         var matchedAnything = false;
+        var unresolved = new List<string>();
 
         foreach (var rawToken in effective.Split(new[] { ',', ';', '|' }, StringSplitOptions.RemoveEmptyEntries))
         {
@@ -177,7 +189,13 @@ public sealed class ScopeCatalog
             if (isExclusion) token = token[1..].Trim();
             if (token.Length == 0) continue;
 
-            if (!TryExpandToken(token, out var members)) continue;
+            if (!TryExpandToken(token, out var members))
+            {
+                // 部分 token 拼错（'vanilla,Typo'）时其余 token 照常生效，那一条就此消失，
+                // 结果看着完全正常。记下来交给调用方，别让它静默。
+                if (!unresolved.Contains(token, StringComparer.OrdinalIgnoreCase)) unresolved.Add(token);
+                continue;
+            }
             matchedAnything = true;
 
             foreach (var member in members)
@@ -195,8 +213,8 @@ public sealed class ScopeCatalog
         }
 
         // 表达式整体无法解析（全是拼错的名字）时退回全域，而不是给出一个空集合——
-        // 空集合会让调用方收到「没有结果」并误判成「不存在」。
-        if (!matchedAnything) return Everything;
+        // 空集合会让调用方收到「没有结果」并误判成「不存在」。退回这件事本身要说出来。
+        if (!matchedAnything) return EverythingWith(unresolved);
 
         // 只写了排除项（如 "-vanilla"）时，未被排除的全部源即为选中集合
         if (nextRank == 0 && excluded.Count > 0)
@@ -207,12 +225,22 @@ public sealed class ScopeCatalog
             }
         }
 
-        if (nextRank == 0) return Everything;
+        if (nextRank == 0) return EverythingWith(unresolved);
 
         // 不能拿 nextRank 当选中数：'all,-vanilla' 里 vanilla 先被计入再被排除，nextRank 会多算，
         // 于是排除了源却仍自称全域——未落在任何源里的路径会被 RankOf 当成命中收进来。
         var selectedCount = ranks.Count(rank => rank >= 0);
-        return new ScopeSelection(this, ranks, effective.Trim(), selectedCount == Sources.Count);
+        return new ScopeSelection(this, ranks, effective.Trim(), selectedCount == Sources.Count, unresolved);
+    }
+
+    // 退回全域的那几条路径共用。Everything 是共享的单例，不能就地挂上本次的未解析 token。
+    private ScopeSelection EverythingWith(IReadOnlyList<string> unresolved)
+    {
+        if (unresolved.Count == 0) return Everything;
+
+        var ranks = new int[Sources.Count];
+        for (int i = 0; i < ranks.Length; i++) ranks[i] = i;
+        return new ScopeSelection(this, ranks, EverythingKeyword, includesEverything: true, unresolved);
     }
 
     private bool TryExpandToken(string token, out IReadOnlyList<int> members)

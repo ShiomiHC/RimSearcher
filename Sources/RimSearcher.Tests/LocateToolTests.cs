@@ -34,7 +34,9 @@ public class LocateToolTests
         using var args = JsonDocument.Parse("""{"query":"ZzNoSuchSymbolZz","scope":"vanilla"}""");
         var result = await tool.ExecuteAsync(args.RootElement, CancellationToken.None);
 
-        Assert.True(result.IsError);
+        // 搜索没命中不是工具执行失败，isError 留给「调用方给错了参数」——
+        // trace 与 search_regex 的零命中一直是 false，locate 曾是 true。
+        Assert.False(result.IsError);
         Assert.Contains("No results", result.Content);
         Assert.Contains("vanilla", result.Content);
     }
@@ -49,7 +51,7 @@ public class LocateToolTests
         using var args = JsonDocument.Parse("""{"query":"ZzNoSuchSymbolZz"}""");
         var result = await tool.ExecuteAsync(args.RootElement, CancellationToken.None);
 
-        Assert.True(result.IsError);
+        Assert.False(result.IsError);
         Assert.Contains("No results", result.Content);
     }
 
@@ -92,7 +94,7 @@ public class LocateToolTests
         using var args = JsonDocument.Parse("""{"query":"scope:milira ZzNoSuchSymbolZz"}""");
         var result = await tool.ExecuteAsync(args.RootElement, CancellationToken.None);
 
-        Assert.True(result.IsError);
+        Assert.False(result.IsError);
         Assert.Contains("milira", result.Content);
     }
 

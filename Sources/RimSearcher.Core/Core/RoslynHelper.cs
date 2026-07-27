@@ -206,7 +206,11 @@ public static class RoslynHelper
                 _ => "Type"
             };
 
-            sb.AppendLine($"{kind}: {fullName} {type.TypeParameterList}");
+            // 非泛型类型的 TypeParameterList 为 null，直接插值会在行尾留一个空格
+            // （`Class: RimWorld.CompShield `）。大纲是要被人和模型逐行读的，
+            // 行尾空格既碍眼又会让「按行比对上一版大纲」凭空多出差异。
+            var typeParams = type.TypeParameterList?.ToString() ?? string.Empty;
+            sb.AppendLine($"{kind}: {fullName}{(typeParams.Length > 0 ? " " + typeParams : string.Empty)}");
             foreach (var prop in type.Members.OfType<PropertyDeclarationSyntax>())
                 sb.AppendLine($"  Property: {prop.Type} {prop.Identifier.Text}");
             foreach (var field in type.Members.OfType<FieldDeclarationSyntax>())
@@ -218,7 +222,7 @@ public static class RoslynHelper
             foreach (var method in type.Members.OfType<MethodDeclarationSyntax>())
             {
                 var parameters = string.Join(", ",
-                    method.ParameterList.Parameters.Select(p => $"{p.Type} {p.Identifier.Text}"));
+                    method.ParameterList.Parameters.Select(FormatParameter));
                 sb.AppendLine($"  Method: {method.ReturnType} {method.Identifier.Text}({parameters})");
             }
             sb.AppendLine();
@@ -227,6 +231,26 @@ public static class RoslynHelper
         return sb.Length > 0
             ? SourceLookupResult.Ok(sb.ToString())
             : SourceLookupResult.Failed(SourceLookupStatus.TargetNotFound);
+    }
+
+    // 原先大纲只渲染 `{类型} {形参名}`，把 out/ref/in/params/this 和默认值全丢了：
+    // `PostPreApplyDamage(DamageInfo, out bool absorbed)` 显示成 `(DamageInfo, bool absorbed)`。
+    // 大纲的用途就是「照着它写调用或写 Harmony patch」，签名失真等于直接给出错的抄写样本——
+    // 少一个 out 编译不过还算好的，params/默认值缺失则会静默地选错重载。
+    private static string FormatParameter(ParameterSyntax parameter)
+    {
+        var sb = new StringBuilder();
+
+        // 修饰符列表常为空，故由它自己在后面补空格，而不是在拼接处硬塞一个分隔符——
+        // 否则无修饰符的参数会渲染成 " int x"，进而在参数间拼出双空格。
+        foreach (var modifier in parameter.Modifiers) sb.Append(modifier.Text).Append(' ');
+
+        sb.Append(parameter.Type).Append(' ').Append(parameter.Identifier.Text);
+
+        // Default 的 ToString() 不含节点自身的前后 trivia，形如 `= 3200`，故这里要补空格
+        if (parameter.Default != null) sb.Append(' ').Append(parameter.Default);
+
+        return sb.ToString();
     }
 
     public static async Task<SourceLookupResult> GetMemberBodyAsync(string filePath, string memberName, string? typeName = null)

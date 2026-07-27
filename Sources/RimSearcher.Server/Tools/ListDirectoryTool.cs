@@ -7,8 +7,12 @@ public class ListDirectoryTool : ITool
 {
     public string Name => "rimworld-searcher__list_directory";
 
+    // 「allowed path」原先没有定义，调用方只能先撞一次 "Path outside allowed directories." 才知道
+    // 白名单是什么。把范围写进 description，那一次越界失败就省了。
     public string Description =>
-        "List files/subdirectories under an absolute allowed path. Directory names are suffixed with '/'.";
+        "List the files and subdirectories of one absolute directory; subdirectory names are suffixed with '/'. "
+        + "The path must be a source path declared in config.toml or a directory below one — anything outside "
+        + "that whitelist is refused.";
 
     public object JsonSchema => new
     {

@@ -282,6 +282,20 @@ public class DefIndexer
         }
     }
 
+    // 三档来源的权重原先是 1.2 / 1.0 / 0.8。CalculateFuzzyScore 的值域是 0~100（精确命中 100），
+    // 乘 1.2 之后精确命中的 def 算出 120，被 LocateTool 的 ({Score:F0}%) 渲染成 "120%" ——
+    // 一个越界的百分比，读的人会以为分数体系另有量纲。
+    // 这里按原比例整体除以 1.2 归一化，而不是单删 defName 那档的 1.2：单删会让 defName 与
+    // ParentName 同权，丢掉「同样的模糊分下 defName 命中优先」这条本来有效的组内排序规则。
+    // 归一化保持三者比值不变，故组内相对次序与改前完全一致，只是分数落回 0~100。
+    private const double DefNameWeight = 1.0;
+    private const double ParentNameWeight = 1.0 / 1.2;
+    private const double LabelWeight = 0.8 / 1.2;
+
+    // 抽象 def 是模板不是可用条目，压一半让具体 def 排在前面；这个因子是有排序意义的，
+    // 与上面被归一化掉的均匀乘子不同，不能一并去掉。
+    private static double AbstractPenalty(DefLocation location) => location.IsAbstract ? 0.5 : 1.0;
+
     public ScopedResult<DefLocation> FuzzySearch(string query, ScopeSelection scope, int limit = 50)
     {
         var defNameSource = ExpandLocations(_frozenDefNameIndex, _defNameIndex);
@@ -294,17 +308,17 @@ public class DefIndexer
             .Select(entry => new
             {
                 Loc = entry.Location,
-                Score = FuzzyMatcher.CalculateFuzzyScore(entry.Key, query) * 1.2 * (entry.Location.IsAbstract ? 0.5 : 1.0)
+                Score = FuzzyMatcher.CalculateFuzzyScore(entry.Key, query) * DefNameWeight * AbstractPenalty(entry.Location)
             })
             .Concat(parentNameSource.Select(entry => new
             {
                 Loc = entry.Location,
-                Score = FuzzyMatcher.CalculateFuzzyScore(entry.Key, query) * 1.0 * (entry.Location.IsAbstract ? 0.5 : 1.0)
+                Score = FuzzyMatcher.CalculateFuzzyScore(entry.Key, query) * ParentNameWeight * AbstractPenalty(entry.Location)
             }))
             .Concat(labelSource.Select(entry => new
             {
                 Loc = entry.Location,
-                Score = FuzzyMatcher.CalculateFuzzyScore(entry.Key, query) * 0.8 * (entry.Location.IsAbstract ? 0.5 : 1.0)
+                Score = FuzzyMatcher.CalculateFuzzyScore(entry.Key, query) * LabelWeight * AbstractPenalty(entry.Location)
             }))
             .Where(x => x.Score > 0)
             // 同名 def 现在可能来自多个源，分组键要带文件路径，否则跨源的同名条目会被合成一条

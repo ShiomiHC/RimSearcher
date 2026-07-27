@@ -34,6 +34,31 @@ public sealed class RimSearcher
         ["emergency"] = 7
     };
 
+    // 跨工具的用法说明放在这里发一次，而不是在七份 description 里各塞半句。
+    // 每个工具的 description 只回答「它做什么」，工具之间怎么接力是这一段的事。
+    private const string ServerInstructions =
+        """
+        RimSearcher indexes RimWorld's decompiled C# and its XML Defs, plus whichever mods and DLCs are
+        configured on this machine. Everything is read from local disk; nothing is fetched or modified
+        except by sync_sources.
+
+        Typical path from a vague name to an answer:
+          1. locate  — fuzzy name -> exact names. Start here whenever the spelling is not already known.
+          2. inspect — exact DefName (XML merged along ParentName) or exact C# type (inheritance + member outline).
+          3. read_code — one member, one class body, or a raw line range out of a specific file.
+          4. trace / search_regex — who references a symbol, or free-form pattern search.
+
+        Two behaviours worth knowing before reading any result:
+          - scope: every query tool takes it, and the server has a configured default that may be narrower
+            than everything installed. When a result footer says N hits fell outside the scope, the symbol
+            does exist — re-run with scope:'all' before concluding it does not.
+          - trace mode:'usages' and search_regex are textual, not semantic: they match identifiers by text,
+            so same-named members of unrelated types land in the same result set.
+
+        After the game or a mod updates, sync_sources check -> sync -> diff re-decompiles and reports what
+        changed; the index is rebuilt in place, no restart needed.
+        """;
+
     // registerGlobalLogger：宿主为每个管道连接各开一个会话，只有直连 stdio 的那个会话
     // 才接管静态日志钩子，否则后建的会话会把日志抢到别人的连接上。
     public RimSearcher(TextWriter? protocolOut = null, bool registerGlobalLogger = true)
@@ -223,9 +248,12 @@ public sealed class RimSearcher
                     serverInfo = new
                     {
                         name = "RimSearcher-Server",
-                        version = UpdateChecker.CurrentVersion,
-                        description = "Specialized MCP server for deep RimWorld source code and XML Def analysis."
-                    }
+                        // 规范的 Implementation 只有 name/title/version；description 不是字段名，
+                        // 严格的 client 会忽略它，展示名于是回落到那个带连字符的标识符。
+                        title = "RimSearcher",
+                        version = UpdateChecker.CurrentVersion
+                    },
+                    instructions = ServerInstructions
                 });
             }
             else if (method == "notifications/initialized" || method == "initialized")
@@ -290,8 +318,19 @@ public sealed class RimSearcher
                     tools = _tools.Values.Select(t => new
                     {
                         name = t.Name,
+                        title = t.Title,
                         description = t.Description,
-                        inputSchema = t.JsonSchema
+                        inputSchema = t.JsonSchema,
+                        annotations = new
+                        {
+                            title = t.Title,
+                            readOnlyHint = t.ReadOnlyHint,
+                            // 只读工具不做破坏性操作也天然幂等；sync_sources 会改磁盘且不可重放
+                            destructiveHint = !t.ReadOnlyHint,
+                            idempotentHint = t.ReadOnlyHint,
+                            // 全部数据来自本机已配置的源目录，没有外部世界可以开放
+                            openWorldHint = false
+                        }
                     })
                 });
             }

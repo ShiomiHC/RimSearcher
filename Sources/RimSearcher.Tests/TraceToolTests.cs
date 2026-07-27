@@ -32,12 +32,11 @@ public class TraceToolTests : IDisposable
         return new TraceTool(indexer, ScopeCatalog.Build([("vanilla", root)], null, null));
     }
 
-    private static int ReportedMatches(string content)
-    {
-        var match = Regex.Match(content, @"\((\d+) found");
-        Assert.True(match.Success, $"unexpected header: {content.Split('\n')[0]}");
-        return int.Parse(match.Groups[1].Value);
-    }
+    // limit 约束的是预览行数，故观测点就是预览行本身。
+    // 曾改成读表头的数字，但表头在截断时说的是「真实命中总数」——配额一满就不再打开新文件，
+    // 那个数只反映恰好扫到了哪些文件，随线程调度浮动，拿它断言 limit 会随机失败。
+    private static int PreviewLines(string content)
+        => Regex.Matches(content, @"(?m)^  L\d+: ").Count;
 
     private static async Task<string> Run(TraceTool tool, string json)
     {
@@ -54,7 +53,7 @@ public class TraceToolTests : IDisposable
         var tool = BuildTool(fileCount: 100);
         var content = await Run(tool, $$"""{"symbol":"{{Symbol}}","mode":"usages","limit":5}""");
 
-        Assert.Equal(5, ReportedMatches(content));
+        Assert.Equal(5, PreviewLines(content));
     }
 
     // 回归：'all' 曾同样被压在 50
@@ -64,7 +63,7 @@ public class TraceToolTests : IDisposable
         var tool = BuildTool(fileCount: 100);
         var content = await Run(tool, $$"""{"symbol":"{{Symbol}}","mode":"usages","limit":"all"}""");
 
-        var matches = ReportedMatches(content);
+        var matches = PreviewLines(content);
         Assert.True(matches > 50, $"expected more than the old hard-coded 50, got {matches}");
         Assert.Equal(ScopeArgs.HardLimit, matches);
         Assert.Contains("server cap", content);
@@ -77,7 +76,7 @@ public class TraceToolTests : IDisposable
         var tool = BuildTool(fileCount: 100);
         var content = await Run(tool, $$"""{"symbol":"{{Symbol}}","mode":"usages","limit":100000}""");
 
-        Assert.Equal(ScopeArgs.HardLimit, ReportedMatches(content));
+        Assert.Equal(ScopeArgs.HardLimit, PreviewLines(content));
     }
 
     // 缺省仍是 50，不因硬上限抬到 200（扫盘结果一条一行，默认就给满会吃掉上下文）
@@ -87,7 +86,7 @@ public class TraceToolTests : IDisposable
         var tool = BuildTool(fileCount: 100);
         var content = await Run(tool, $$"""{"symbol":"{{Symbol}}","mode":"usages"}""");
 
-        Assert.Equal(50, ReportedMatches(content));
+        Assert.Equal(50, PreviewLines(content));
     }
 
     [Fact]

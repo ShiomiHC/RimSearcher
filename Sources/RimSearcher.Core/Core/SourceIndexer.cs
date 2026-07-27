@@ -589,7 +589,18 @@ public class SourceIndexer
 
     // scope 与扩展名过滤都必须在扫描之前生效：这两个条件若留到结果产出后再筛，
     // 命中上限会被过滤掉的文件吃光，筛完就成了假空（fileFilter 原先正是这个写法）。
-    public async Task<(List<(string Path, string Preview)> Results, bool Truncated)> SearchRegexAsync(
+    // 单文件最多留几条预览。只限「留」，不限「数」：原先收满 5 条就 break 掉整个文件，
+    // 于是该文件剩下的命中既不进总数、也不进上层的「+N more in this file」，两个数一起少报，
+    // 调用方据此以为这个文件里就那么几处。
+    private const int MaxPreviewsPerFile = 5;
+
+    // 数完整个文件是为了把每文件命中数报准，但不能让一个病态大文件吃光整轮扫描的时间。
+    private const int MaxLinesScannedPerFile = 20000;
+
+    // MatchesByFile 是每个文件的真实命中数，与 Results 里的预览条数不是一回事。
+    public async Task<(List<(string Path, int LineNumber, string Preview)> Results,
+                       bool Truncated,
+                       IReadOnlyDictionary<string, int> MatchesByFile)> SearchRegexAsync(
         string pattern,
         ScopeSelection scope,
         string? fileFilter = null,
@@ -598,7 +609,8 @@ public class SourceIndexer
         CancellationToken ct = default,
         IProgress<double>? progress = null)
     {
-        var results = new ConcurrentBag<(string Path, string Preview)>();
+        var results = new ConcurrentBag<(string Path, int LineNumber, string Preview)>();
+        var matchesByFile = new ConcurrentDictionary<string, int>();
         var regex = new Regex(pattern, (ignoreCase ? RegexOptions.IgnoreCase : RegexOptions.None) | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
 
         var allFiles = (_frozenIndex != null
@@ -636,21 +648,23 @@ public class SourceIndexer
                     lineNum++;
                     if (regex.IsMatch(line))
                     {
-                        var currentCount = Interlocked.Increment(ref globalCount);
-                        if (currentCount <= maxResults)
-                        {
-                            results.Add((filePath, $"L{lineNum}: {line.Trim()}"));
-                            matchesInThisFile++;
-                        }
+                        matchesInThisFile++;
 
-                        if (matchesInThisFile >= 5 || currentCount >= maxResults)
+                        // 已经打开的文件一律读到底：句柄和缓冲的钱都付过了，读完才换得
+                        // 一个准确的每文件命中数，而不是一个恰好等于上限的假数。
+                        if (matchesInThisFile <= MaxPreviewsPerFile)
                         {
-                            if (currentCount >= maxResults) Interlocked.Exchange(ref truncatedFlag, 1);
-                            break;
+                            var currentCount = Interlocked.Increment(ref globalCount);
+                            if (currentCount <= maxResults)
+                                results.Add((filePath, lineNum, line.Trim()));
+                            else
+                                Interlocked.Exchange(ref truncatedFlag, 1);
                         }
                     }
-                    if (lineNum > 20000) break;
+                    if (lineNum >= MaxLinesScannedPerFile) break;
                 }
+
+                if (matchesInThisFile > 0) matchesByFile[filePath] = matchesInThisFile;
             }
             catch { }
             finally
@@ -662,7 +676,9 @@ public class SourceIndexer
 
         var finalCount = Interlocked.CompareExchange(ref globalCount, 0, 0);
         var wasTruncated = Interlocked.CompareExchange(ref truncatedFlag, 0, 0) == 1;
-        return (results.Take(maxResults).ToList(), wasTruncated || finalCount >= maxResults);
+        return (results.Take(maxResults).ToList(),
+                wasTruncated || finalCount >= maxResults,
+                matchesByFile);
     }
 
     // 同名文件在多个源里都存在时（Ratkin 与 vanilla 同名 .cs 之类），优先给 scope 内的；

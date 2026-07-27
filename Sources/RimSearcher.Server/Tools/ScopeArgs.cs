@@ -70,13 +70,29 @@ public static class ScopeArgs
         description = $"Optional search scope. {catalog.DescribeAvailable()}"
     };
 
+    // 类型必须同时允许数字：描述让调用方「pass a number」，而 schema 只写 string 时，
+    // 按 schema 严格校验的 client 会在发出请求之前就把 limit:10 拒掉。
     public static object LimitSchemaProperty(int defaultLimit = DefaultDisplayLimit) => new
     {
-        type = "string",
+        type = new[] { "integer", "string" },
         description =
             $"Optional result cap per section (default {defaultLimit}). Pass a number, or 'all' to expand " +
             $"up to the server cap of {HardLimit}; larger numbers are clamped to it."
     };
+
+    // 拼错的 scope 会被 ScopeCatalog 静默退回全域（空集合会更糟，见那里的注释）。
+    // 退回本身没问题，无声才是问题：调用方拿着全域结果，会以为自己限定过范围。
+    public static string? UnresolvedNotice(ScopeCatalog catalog, ScopeSelection scope)
+    {
+        if (scope.UnresolvedTokens.Count == 0) return null;
+
+        var names = string.Join(", ", scope.UnresolvedTokens.Select(t => $"'{t}'"));
+        var fellBack = scope.IncludesEverything && scope.UnresolvedTokens.Count > 0;
+
+        return $"\n_Scope {names} matched no configured group or source and was ignored"
+             + (fellBack ? $" — searched everything instead" : $"; searched '{scope.Expression}'")
+             + $". Available — {catalog.DescribeAvailable()}._";
+    }
 
     public static string Label(ScopedEntry<object> entry) => Label(entry.SourceName);
 

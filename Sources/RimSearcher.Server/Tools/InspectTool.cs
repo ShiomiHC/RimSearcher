@@ -45,13 +45,15 @@ public class InspectTool : ITool
     public string Name => "rimworld-searcher__inspect";
 
     public string Description =>
-        "Inspect a RimWorld def or C# type. Def mode resolves inherited XML; type mode shows inheritance and outline.";
+        "Full detail for one exactly-named def or C# type; no fuzzy matching. " +
+        "Def mode returns the XML merged down the whole ParentName chain — the complete effective definition, which no single XML file contains — plus the C# classes referenced from it. " +
+        "Type mode returns the inheritance chain and a member outline; method bodies come from read_code.";
 
     private static readonly ToolArgSpec ArgSpec = new(
         "rimworld-searcher__inspect",
         "name (an exact DefName or C# type name, e.g. 'Apparel_ShieldBelt' / 'CompShield'). Aliases accepted: query, defName, typeName, symbol.",
         "name (required), scope.",
-        "A 'def:'/'type:' prefix is stripped automatically. Names are case-sensitive — use rimworld-searcher__locate if unsure of the exact spelling.");
+        "A 'def:'/'type:' prefix is stripped automatically. Matching ignores case but needs the whole name — partial names and typos do not resolve; use rimworld-searcher__locate to get the exact name first.");
 
     public object JsonSchema => new
     {
@@ -62,7 +64,7 @@ public class InspectTool : ITool
             {
                 type = "string",
                 minLength = 1,
-                description = "Exact DefName or C# type name. Examples: 'Apparel_ShieldBelt', 'CompShield'. Aliases 'query'/'defName'/'typeName' are also accepted; a 'def:'/'type:' prefix is stripped."
+                description = "Complete DefName or C# type name. Examples: 'Apparel_ShieldBelt', 'CompShield'. Matching ignores case — the response echoes the index's canonical spelling — but partial names and typos do not resolve. Aliases 'query'/'defName'/'typeName' are also accepted; a 'def:'/'type:' prefix is stripped."
             },
             scope = ScopeArgs.ScopeSchemaProperty(_scopeCatalog)
         },
@@ -96,6 +98,10 @@ public class InspectTool : ITool
 
         var scope = ScopeArgs.Resolve(_scopeCatalog, args);
 
+        // 拼错的 scope 被静默退回全域，两个分支的每条返回路径都要带上这行，
+        // 否则调用方会把全域结果当成自己限定过的范围内结果。
+        var scopeNotice = ScopeArgs.UnresolvedNotice(_scopeCatalog, scope) ?? string.Empty;
+
         cancellationToken.ThrowIfCancellationRequested();
 
         var sb = new StringBuilder();
@@ -104,7 +110,10 @@ public class InspectTool : ITool
         var def = lookup.Location;
         if (def != null)
         {
-            sb.AppendLine($"## Def: {name}");
+            // 标题回显索引里的 DefName，而不是调用方传进来的拼写：查找是 OrdinalIgnoreCase 的，
+            // 原样回显等于把调用方的错拼盖章成真实 defName，它会照着这个名字继续往下查。
+            // 下面的 Type / File / C# Class 本来就全部取自 def，标题跟着它才是一致的。
+            sb.AppendLine($"## Def: {def.DefName}");
             sb.AppendLine($"Type: {def.DefType}");
 
             // 译文只作为附注，下面的 Resolved XML 一个字不动——那是游戏真实数据，
@@ -134,6 +143,7 @@ public class InspectTool : ITool
             if (resolvedXml == null)
             {
                 sb.AppendLine("\n**Resolved XML:** Failed to load Def XML");
+                sb.Append(scopeNotice);
                 return new ToolResult(sb.ToString());
             }
 
@@ -201,13 +211,14 @@ public class InspectTool : ITool
             {
             }
 
+            sb.Append(scopeNotice);
             return new ToolResult(sb.ToString());
         }
 
         var csharpPaths = _sourceIndexer.GetPathsByType(name, scope);
         if (csharpPaths.Items.Count > 0)
         {
-            sb.AppendLine($"## C# Type: {name}");
+            sb.AppendLine($"## C# Type: {CanonicalTypeName(name)}");
 
             var chain = _sourceIndexer.GetInheritanceChain(name);
             if (chain.Count > 0)
@@ -233,6 +244,7 @@ public class InspectTool : ITool
             typeFooter.Add(csharpPaths);
             var rendered = typeFooter.Render(scope);
             if (rendered != null) sb.Append(rendered);
+            sb.Append(scopeNotice);
 
             return new ToolResult(sb.ToString());
         }
@@ -248,16 +260,34 @@ public class InspectTool : ITool
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        // 这两条保持 isError=true：inspect 要的是精确名，传一个索引里没有的名字属于参数给错，
+        // 而不是「搜了一圈没命中」。locate 的零命中是后者，故只有那一处改成了 false。
         if (distinctElsewhere.Count > 0)
         {
             return new ToolResult(
                 $"'{name}' not found in scope '{scope.Expression}', but it exists in: {string.Join(", ", distinctElsewhere)}.\n" +
-                $"Retry with scope:'{distinctElsewhere[0]}' or scope:'{ScopeCatalog.EverythingKeyword}'.",
+                $"Retry with scope:'{distinctElsewhere[0]}' or scope:'{ScopeCatalog.EverythingKeyword}'." +
+                scopeNotice,
                 true);
         }
 
         return new ToolResult(
-            $"'{name}' not found. Use locate tool first to find exact names (case-sensitive).",
+            $"'{name}' not found. Use locate to find the exact name (matching ignores case, but the whole name is required)." +
+            scopeNotice,
             true);
+    }
+
+    // 索引查找一律 OrdinalIgnoreCase，于是 inspect('compshield') 命中 CompShield 却把标题写成
+    // 'compshield'——调用方会拿这个错拼当真实类型名继续喂给 read_code / trace。索引没有「按名
+    // 取规范拼写」的入口，只能借模糊搜索：完全一致（忽略大小写）恒为满分，必在最前几条。
+    // 这里只是纠正拼写、不换名字形态，与 scope 无关，故用全域查，免得类型在别的源里
+    // 也有定义时被 scope 过滤掉、白白退回原样。取不到就原样返回，宁可不改也不改错。
+    private string CanonicalTypeName(string name)
+    {
+        var matches = _sourceIndexer.FuzzySearchTypes(name, _scopeCatalog.Everything, limit: 5);
+        return matches.Items
+            .Select(entry => entry.Item)
+            .FirstOrDefault(candidate => string.Equals(candidate, name, StringComparison.OrdinalIgnoreCase))
+            ?? name;
     }
 }

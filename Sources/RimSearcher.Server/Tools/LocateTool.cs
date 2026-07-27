@@ -26,7 +26,9 @@ public class LocateTool : ITool
     public string Name => "rimworld-searcher__locate";
 
     public string Description =>
-        "Fuzzy locate RimWorld C# types/members and XML defs. Supports filters: type:, method:, field:, def:, and a scope parameter.";
+        "Fuzzy name lookup: turns a partial or misspelled name into the exact C# type / member / XML def name that other tools require — the only tool that accepts approximate input. " +
+        "Results are split into C# Types, Members, XML Defs and Def content matches, each section capped by limit and folded independently. " +
+        "Filters: type:, method:, field:, def:.";
 
     public object JsonSchema => new
     {
@@ -65,6 +67,11 @@ public class LocateTool : ITool
             ? _scopeCatalog.Resolve(query.ScopeFilter)
             : ScopeArgs.Resolve(_scopeCatalog, args);
         var limit = ScopeArgs.GetDisplayLimit(args);
+
+        // 拼错的 scope 被静默退回全域，每条返回路径都要带上这行，
+        // 否则调用方拿着全域结果却以为自己限定过范围。表头在全域时不打 scope 标注，
+        // 正是这种情况下最没痕迹的地方。
+        var scopeNotice = ScopeArgs.UnresolvedNotice(_scopeCatalog, scope) ?? string.Empty;
 
         var report = new ScopeReport();
         var sb = new StringBuilder();
@@ -213,11 +220,17 @@ public class LocateTool : ITool
         {
             var message = new StringBuilder($"No results for '{rawQuery}' in scope '{scope.Expression}'.");
             if (footer != null) message.Append(footer);
+            message.Append(scopeNotice);
             message.Append("\n\nTry: partial names, query filters (type:, method:, field:, def:), or search_regex for patterns.");
-            return Task.FromResult(new ToolResult(message.ToString(), true));
+
+            // 零命中是一个正常结果，不是调用失败。isError 留给「工具没能执行」，置 true 会让
+            // client 把这次搜索当成故障去重试或上报；同一个服务器里 trace 查不到子类、
+            // search_regex 零命中都是 false，locate 独自为 true 只会让调用方两套判据。
+            return Task.FromResult(new ToolResult(message.ToString()));
         }
 
         if (footer != null) sb.Append(footer);
+        sb.Append(scopeNotice);
 
         return Task.FromResult(new ToolResult(sb.ToString()));
     }

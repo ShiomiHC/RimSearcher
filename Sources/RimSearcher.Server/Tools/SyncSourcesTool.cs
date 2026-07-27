@@ -25,15 +25,17 @@ public class SyncSourcesTool : ITool
     // 返回里已列了本次同步的逐类型 diff，不需要再追加一条过期提示
     public bool SuppressStalenessNotice => true;
 
+    // 全服务器唯一一个会写盘的工具：action='sync' 反编译并就地改写源码目录。
+    // 沿用接口默认的 true 会让 client 把它当查询直接放行，用户没机会在改盘前叫停。
+    public bool ReadOnlyHint => false;
+
+    // 粒度、版本、分页这些细节归各自的参数 description，这里只答「做什么、什么时候别用」。
+    // 原先把四级 diff 粒度在这儿又讲了一遍，与 granularity/file/method 三个参数完全重复，
+    // 长度是其余六个工具的五倍，纯占 tools/list 的上下文预算。
     public string Description =>
-        "Check whether the configured RimWorld/mod assemblies changed since the last decompile, re-decompile them "
-        + "into the indexed source directories, or review what a past decompile changed. "
-        + "action='check' is read-only and fast; action='sync' performs decompilation and may take from seconds to "
-        + "a few minutes; action='diff' reports what changed, at four widening levels of detail: which files changed "
-        + "per source, which members changed inside those files (granularity='members'), the line-level diff of one "
-        + "file ('file'), and the line-level diff of one member ('file' + 'method'). "
-        + "Use 'sources' to restrict any action to one mod or DLC. action='diff' requires source_history_depth > 0 "
-        + "in config.toml.";
+        "Keep the decompiled RimWorld/mod sources current. 'check' reports which assemblies changed (fast); "
+        + "'sync' re-decompiles and reindexes in place (seconds to minutes); 'diff' reviews what a past sync "
+        + "changed (needs source_history_depth > 0).";
 
     public object JsonSchema => new
     {
@@ -142,24 +144,44 @@ public class SyncSourcesTool : ITool
             ? null
             : rawSources.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
+        // action 的合法性必须先判，再判「有没有可跟随的源」。反过来的话 action='typo' 会被
+        // 下面那条早退吃掉：调用方拿到一份 config.toml 配置示例、isError=false，看不出自己
+        // 请求的 diff 压根没被识别。这与「拼错的 action 不许静默落到 check」是同一个坑的两个入口。
+        string? resolved = action switch
+        {
+            "sync" or "update" or "run" => "sync",
+            "diff" or "changes" => "diff",
+            "check" or "status" or "probe" => "check",
+            _ => null
+        };
+
+        if (resolved == null)
+        {
+            return new ToolResult(
+                $"Unknown action '{action}'. Use 'check', 'sync' or 'diff'.\n{ArgSpec.BuildUsage()}", true);
+        }
+
         var followable = _syncService.FollowableSources;
         if (followable.Count == 0)
         {
+            // 标成错误：没有可跟随的源意味着这次请求执行不了，而不是「执行了、结果为空」。
+            // isError=false 会让调用方把这段配置示例当成正常返回接着往下推理。
             return new ToolResult(
                 "No followable sources configured.\n"
                 + "Add an assemblies path to a [[sources]] block in config.toml, e.g.\n"
                 + "  [[sources]]\n"
                 + "  name       = \"Core\"\n"
                 + "  csharp     = 'S:\\RimWorldSource\\Core'\n"
-                + "  assemblies = 'D:\\SteamLibrary\\steamapps\\common\\RimWorld\\RimWorldWin64_Data\\Managed'");
+                + "  assemblies = 'D:\\SteamLibrary\\steamapps\\common\\RimWorld\\RimWorldWin64_Data\\Managed'",
+                true);
         }
 
         try
         {
-            return action switch
+            return resolved switch
             {
-                "sync" or "update" or "run" => await RunSyncAsync(only, cancellationToken),
-                "diff" or "changes" => RunDiff(new DiffRequest(
+                "sync" => await RunSyncAsync(only, cancellationToken),
+                "diff" => RunDiff(new DiffRequest(
                     only,
                     // schema 里的 minimum/maximum 是给调用方看的，不是被强制执行的——服务端自己夹
                     Math.Clamp(ToolArgs.GetInt(args, DefaultLimit, "limit", "maxResults"), 1, MaxLimit),
@@ -169,12 +191,7 @@ public class SyncSourcesTool : ITool
                     ToolArgs.GetOptionalString(args, "className", "class", "type", "typeName"),
                     ToolArgs.GetOptionalString(args, "version", "versionId"),
                     ToolArgs.GetOptionalString(args, "granularity", "detail", "level"))),
-                "check" or "status" or "probe" => RunCheck(),
-
-                // 拼错的 action 此前静默落到 check：调用方拿到一份看起来正常的检查报告，
-                // 无从发现自己要的 diff 根本没跑过。
-                _ => new ToolResult(
-                    $"Unknown action '{action}'. Use 'check', 'sync' or 'diff'.\n{ArgSpec.BuildUsage()}", true)
+                _ => RunCheck()
             };
         }
         catch (OperationCanceledException)
