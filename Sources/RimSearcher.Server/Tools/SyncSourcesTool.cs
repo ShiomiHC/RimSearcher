@@ -26,9 +26,14 @@ public class SyncSourcesTool : ITool
     public bool SuppressStalenessNotice => true;
 
     public string Description =>
-        "Check whether the configured RimWorld/mod assemblies changed since the last decompile, and optionally "
-        + "re-decompile them into the indexed source directories. action='check' is read-only and fast; "
-        + "action='sync' performs decompilation and may take from seconds to a few minutes.";
+        "Check whether the configured RimWorld/mod assemblies changed since the last decompile, re-decompile them "
+        + "into the indexed source directories, or review what a past decompile changed. "
+        + "action='check' is read-only and fast; action='sync' performs decompilation and may take from seconds to "
+        + "a few minutes; action='diff' reports what changed, at four widening levels of detail: which files changed "
+        + "per source, which members changed inside those files (granularity='members'), the line-level diff of one "
+        + "file ('file'), and the line-level diff of one member ('file' + 'method'). "
+        + "Use 'sources' to restrict any action to one mod or DLC. action='diff' requires source_history_depth > 0 "
+        + "in config.toml.";
 
     public object JsonSchema => new
     {
@@ -41,7 +46,7 @@ public class SyncSourcesTool : ITool
                 @enum = new[] { "check", "sync", "diff" },
                 description =
                     "'check' (default) only reports which assemblies changed. 'sync' re-decompiles the changed sources. "
-                    + "'diff' lists the source files added/modified/removed by the last sync (requires SourceHistoryDepth > 0).",
+                    + "'diff' reports what a past sync changed (requires source_history_depth > 0).",
                 @default = "check"
             },
             sources = new
@@ -49,7 +54,18 @@ public class SyncSourcesTool : ITool
                 type = "string",
                 description =
                     "Optional comma-separated source names to limit the operation, matching the 'name' of configured "
-                    + "C# sources. Omit to cover every followable source."
+                    + "C# sources — for a mod that is its name from About.xml. Omit to cover every followable source."
+            },
+            granularity = new
+            {
+                type = "string",
+                @enum = new[] { "files", "members" },
+                description =
+                    "For action='diff': 'files' (default) lists the changed file paths. 'members' also parses each "
+                    + "listed file and reports which methods/properties/fields changed inside it — one syntax tree per "
+                    + "listed file, so narrow it down with 'sources' or a smaller 'limit'. Combined with 'file' it "
+                    + "lists every changed member of that one file instead of its line-level diff.",
+                @default = "files"
             },
             file = new
             {
@@ -58,28 +74,64 @@ public class SyncSourcesTool : ITool
                     "For action='diff': a relative path from the diff listing (e.g. 'RimWorld\\CompShield.cs'). "
                     + "Given, returns the line-level unified diff for that one file instead of the file list."
             },
+            method = new
+            {
+                type = "string",
+                description =
+                    "For action='diff' together with 'file': diff only this member instead of the whole file — a method "
+                    + "('CompTick'), property ('Label'), constructor ('.ctor'), indexer ('this') or operator ('+'). "
+                    + "Aliases 'methodName'/'member' are also accepted."
+            },
+            className = new
+            {
+                type = "string",
+                description =
+                    "Optional companion to 'method': the declaring class, when several types in the file share the "
+                    + "member name."
+            },
             version = new
             {
                 type = "string",
                 description =
-                    "For action='diff': which archived version to compare against (e.g. 'v0002'). Defaults to the most recent."
+                    "For action='diff': which archived version to compare the current sources against. A number counts "
+                    + "backwards — 1 (or -1) is the most recent archived version, 2 the one before it; out-of-range "
+                    + "clamps to the oldest kept version and says so. An explicit id such as 'v0002' also works. "
+                    + "Defaults to the most recent."
             },
             limit = new
             {
                 type = "integer",
                 minimum = 1,
-                maximum = 2000,
-                description = "For action='diff': max changed files to list, or max diff lines when 'file' is given.",
-                @default = 100
+                maximum = MaxLimit,
+                description =
+                    "For action='diff': max changed files to list, or max diff lines when 'file' is given. Under "
+                    + "granularity='members' this is also the parse budget — only the files actually listed get parsed.",
+                @default = DefaultLimit
+            },
+            offset = new
+            {
+                type = "integer",
+                minimum = 0,
+                description =
+                    "For action='diff' without 'file': skip this many changed files before listing, to page through "
+                    + "a change set larger than 'limit'. The listing prints the next offset to use.",
+                @default = 0
             }
         },
         required = Array.Empty<string>()
     };
 
+    private const int DefaultLimit = 100;
+    private const int MaxLimit = 2000;
+
     private static readonly ToolArgSpec ArgSpec = new(
         "rimworld-searcher__sync_sources",
-        "no required parameters.",
-        "action ('check' | 'sync' | 'diff', default 'check'), sources (comma-separated names, optional), limit (diff only, default 100).");
+        "no required parameters — action defaults to 'check'.",
+        "action ('check' | 'sync' | 'diff'), sources (comma-separated names), "
+        + "and for action='diff': granularity ('files' | 'members'), file (relative path), method (+ optional className), "
+        + $"version (a number counting back, or an id like 'v0002'), limit (default {DefaultLimit}, max {MaxLimit}), "
+        + "offset (page through more changes than limit).",
+        "action='diff' needs source_history_depth > 0 in config.toml; without it there is nothing archived to compare against.");
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, CancellationToken cancellationToken, IProgress<double>? progress = null)
     {
@@ -107,12 +159,22 @@ public class SyncSourcesTool : ITool
             return action switch
             {
                 "sync" or "update" or "run" => await RunSyncAsync(only, cancellationToken),
-                "diff" or "changes" => RunDiff(
+                "diff" or "changes" => RunDiff(new DiffRequest(
                     only,
-                    ToolArgs.GetInt(args, 100, "limit", "maxResults"),
+                    // schema 里的 minimum/maximum 是给调用方看的，不是被强制执行的——服务端自己夹
+                    Math.Clamp(ToolArgs.GetInt(args, DefaultLimit, "limit", "maxResults"), 1, MaxLimit),
+                    Math.Max(0, ToolArgs.GetInt(args, 0, "offset", "skip", "start")),
                     ToolArgs.GetOptionalString(args, "file", "path", "filePath"),
-                    ToolArgs.GetOptionalString(args, "version", "versionId")),
-                _ => RunCheck()
+                    ToolArgs.GetOptionalString(args, "method", "methodName", "member", "memberName"),
+                    ToolArgs.GetOptionalString(args, "className", "class", "type", "typeName"),
+                    ToolArgs.GetOptionalString(args, "version", "versionId"),
+                    ToolArgs.GetOptionalString(args, "granularity", "detail", "level"))),
+                "check" or "status" or "probe" => RunCheck(),
+
+                // 拼错的 action 此前静默落到 check：调用方拿到一份看起来正常的检查报告，
+                // 无从发现自己要的 diff 根本没跑过。
+                _ => new ToolResult(
+                    $"Unknown action '{action}'. Use 'check', 'sync' or 'diff'.\n{ArgSpec.BuildUsage()}", true)
             };
         }
         catch (OperationCanceledException)
@@ -140,7 +202,22 @@ public class SyncSourcesTool : ITool
         return new ToolResult(builder.ToString().TrimEnd());
     }
 
-    private ToolResult RunDiff(string[]? only, int limit, string? file, string? version)
+    private sealed record DiffRequest(
+        string[]? Only,
+        int Limit,
+        int Offset,
+        string? FilePath,
+        string? Method,
+        string? ClassName,
+        string? Version,
+        string? Granularity);
+
+    // 概览里单个文件最多列出的成员变化条数。这一条纯粹是防单文件淹没整份概览：
+    // 一个被大改的文件能有上百个成员变动，摊在文件列表里没人读得下去。
+    // 想看全的出口是把 file 收窄到这个文件——那条路径不截断。
+    private const int MaxMembersPerFileInListing = 20;
+
+    private ToolResult RunDiff(DiffRequest request)
     {
         if (!_syncService.History.Enabled)
         {
@@ -149,31 +226,50 @@ public class SyncSourcesTool : ITool
                 + "to keep previous decompiled versions for diffing.", true);
         }
 
-        if (!string.IsNullOrWhiteSpace(file)) return RunFileDiff(only, file!, version, limit);
+        if (!string.IsNullOrWhiteSpace(request.FilePath)) return RunFileDiff(request);
+
+        if (!string.IsNullOrWhiteSpace(request.Method))
+        {
+            return new ToolResult(
+                $"'method' needs a 'file' to look in — pass the path of the file that contains '{request.Method}', "
+                + "as printed by action='diff' without 'file'.", true);
+        }
+
+        var wantMembers = string.Equals(request.Granularity, "members", StringComparison.OrdinalIgnoreCase)
+                          || string.Equals(request.Granularity, "member", StringComparison.OrdinalIgnoreCase);
 
         var builder = new StringBuilder();
         var any = false;
 
         foreach (var entry in _syncService.FollowableSources)
         {
-            if (only is { Length: > 0 }
-                && !only.Contains(entry.Name, StringComparer.OrdinalIgnoreCase)) continue;
+            if (request.Only is { Length: > 0 }
+                && !request.Only.Contains(entry.Name, StringComparer.OrdinalIgnoreCase)) continue;
 
             var versions = _syncService.History.ListVersions(entry.Name);
             if (versions.Count == 0) continue;
 
-            var latest = versions[^1];
-            var diff = _syncService.History.DiffAgainst(entry.Name, entry.Path);
+            if (!TryResolveVersion(versions, request.Version, entry.Name, out var versionId, out var notice, out var error))
+                return new ToolResult(error!, true);
+
+            var target = versions.First(v => v.Id == versionId);
+
+            // 版本是调用方指定的那一版，不再固定取最新一版——此前这里漏传 versionId，
+            // 于是列表模式下 version 参数看着被接受，实际永远在跟最新一版比。
+            var diff = _syncService.History.DiffAgainst(entry.Name, entry.Path, versionId);
             if (diff == null) continue;
 
             any = true;
             builder.AppendLine(
-                $"## {entry.Name} — since {latest.Id} ({latest.CapturedAtUtc:yyyy-MM-dd HH:mm} UTC)");
+                $"## {entry.Name} — since {target.Id} ({target.CapturedAtUtc:yyyy-MM-dd HH:mm} UTC)");
+            if (notice != null) builder.AppendLine(notice);
             builder.AppendLine(
                 $"{diff.Added} added, {diff.Modified} modified, {diff.Removed} removed "
-                + $"({versions.Count} version(s) kept, {latest.ArchivedBytes / 1024} KB archived)");
+                + $"({versions.Count} version(s) kept, {target.ArchivedBytes / 1024} KB archived)");
 
-            foreach (var change in diff.Changes.Take(limit))
+            // 解析预算就是这一页列出的文件数——没有第二个隐藏的天花板。列多少就解析多少，
+            // 代价与输出量始终成正比，调用方用 limit 一个旋钮就能控住。
+            foreach (var change in diff.Changes.Skip(request.Offset).Take(request.Limit))
             {
                 var mark = change.Kind switch
                 {
@@ -182,10 +278,19 @@ public class SyncSourcesTool : ITool
                     _ => "~"
                 };
                 builder.AppendLine($"  {mark} {change.RelativePath}");
+
+                if (wantMembers && change.Kind == FileChangeKind.Modified)
+                    AppendMemberChanges(builder, entry, versionId, change.RelativePath);
             }
 
-            if (diff.Changes.Count > limit)
-                builder.AppendLine($"  ... {diff.Changes.Count - limit} more (raise limit)");
+            var shown = Math.Max(0, Math.Min(diff.Changes.Count - request.Offset, request.Limit));
+            var remaining = diff.Changes.Count - request.Offset - shown;
+            if (remaining > 0)
+            {
+                builder.AppendLine(
+                    $"  ... {remaining} more of {diff.Changes.Count} — next page: offset={request.Offset + shown}"
+                    + (request.Limit < MaxLimit ? $" (or raise limit, max {MaxLimit})" : string.Empty));
+            }
 
             builder.AppendLine();
         }
@@ -195,43 +300,158 @@ public class SyncSourcesTool : ITool
             : "No recorded history yet. Run action='sync' first.");
     }
 
+    // 一个被改写的文件内部，具体是哪些成员变了。只对 Modified 展开：新增/删除的整份文件里
+    // 每个成员当然都是新增/删除的，逐个列出来只是把文件名换了种更长的写法。
+    private void AppendMemberChanges(StringBuilder builder, SourcePathEntry entry, string versionId, string relativePath)
+    {
+        if (!relativePath.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)) return;
+
+        var currentPath = PathSecurity.ResolveInsideRoot(entry.Path, relativePath);
+        if (currentPath == null || !PathSecurity.IsPathSafe(currentPath) || !File.Exists(currentPath)) return;
+
+        if (TooLarge(currentPath))
+        {
+            builder.AppendLine("    (file too large to parse)");
+            return;
+        }
+
+        var archived = _syncService.History.ReadArchived(entry.Name, versionId, relativePath);
+        if (archived == null) return;
+
+        string current;
+        try
+        {
+            current = File.ReadAllText(currentPath);
+        }
+        catch
+        {
+            return;
+        }
+
+        var lines = DiffMembers(archived, current);
+
+        if (lines == null)
+        {
+            builder.AppendLine("    (no parsable members)");
+            return;
+        }
+
+        if (lines.Count == 0)
+        {
+            // 文件哈希变了但成员一个没动：改的是 using、命名空间或成员之外的琐碎内容
+            builder.AppendLine("    (changed outside any member declaration)");
+            return;
+        }
+
+        foreach (var line in lines.Take(MaxMembersPerFileInListing)) builder.AppendLine($"    {line}");
+        if (lines.Count > MaxMembersPerFileInListing)
+        {
+            builder.AppendLine(
+                $"    ... {lines.Count - MaxMembersPerFileInListing} more member(s) — "
+                + $"pass file='{relativePath}' with granularity='members' to list them all");
+        }
+    }
+
+    // 两份内容之间的成员级差异。null 表示两侧都解析不出任何成员（不是 C#，或解析失败），
+    // 与「解析出来了但一个都没变」区分开——后者说明改动落在成员声明之外。
+    private static List<string>? DiffMembers(string archivedText, string currentText)
+    {
+        var before = RoslynHelper.ListMemberTexts(archivedText);
+        var after = RoslynHelper.ListMemberTexts(currentText);
+
+        if (before.Count == 0 && after.Count == 0) return null;
+
+        var lines = new List<string>();
+
+        foreach (var (key, text) in after)
+        {
+            if (!before.TryGetValue(key, out var old)) lines.Add($"+ {key}");
+            else if (!string.Equals(old, text, StringComparison.Ordinal)) lines.Add($"~ {key}");
+        }
+
+        foreach (var key in before.Keys)
+        {
+            if (!after.ContainsKey(key)) lines.Add($"- {key}");
+        }
+
+        lines.Sort(StringComparer.Ordinal);
+        return lines;
+    }
+
+    // 版本选择。数字按「往前数第 n 代」解释（1 与 -1 都是最近一代），超出保留范围时
+    // 夹到最老的一代并说明——夹到最新一代会给出与不传 version 完全相同的结果，
+    // 等于把参数悄悄吃掉。'v0002' 这样的字面量 id 同样接受：index.json 里存的就是它。
+    private static bool TryResolveVersion(
+        IReadOnlyList<HistoryVersion> versions,
+        string? raw,
+        string sourceName,
+        out string versionId,
+        out string? notice,
+        out string? error)
+    {
+        versionId = versions[^1].Id;
+        notice = null;
+        error = null;
+
+        if (string.IsNullOrWhiteSpace(raw)) return true;
+
+        var text = raw.Trim();
+
+        if (int.TryParse(text, out var requested))
+        {
+            var steps = Math.Abs(requested);
+            if (steps == 0) steps = 1;
+
+            if (steps > versions.Count)
+            {
+                versionId = versions[0].Id;
+                notice =
+                    $"(requested {steps} version(s) back, only {versions.Count} kept — using the oldest, {versionId})";
+            }
+            else
+            {
+                versionId = versions[^steps].Id;
+            }
+
+            return true;
+        }
+
+        // 只认索引里真实存在的 Id。放任任意串进去等于让调用方指定历史根下的任意子目录，
+        // 而 files/ 那一层的相对路径校验只保证「不出这个子目录」，管不了子目录选在哪
+        var matched = versions.FirstOrDefault(v => string.Equals(v.Id, text, StringComparison.OrdinalIgnoreCase));
+        if (matched == null)
+        {
+            error =
+                $"Unknown version '{text}' for source '{sourceName}'. "
+                + $"Kept versions: {string.Join(", ", versions.Select(v => v.Id))}. "
+                + "Pass a number instead to count backwards (1 = most recent), or omit 'version' entirely.";
+            return false;
+        }
+
+        versionId = matched.Id;
+        return true;
+    }
+
     // 归档里的旧内容 vs 磁盘上的当前内容。文件在某一侧缺失即为纯新增/纯删除。
     //
     // file 与 version 都是调用方给的裸串，且直接参与路径拼接：不校验的话
     // 「归档 里没有 / 当前有」这一支就是一个任意绝对路径的存在性探针，配上存在的 version
     // 更能把源根与历史根之外的文本读出来。两个根各自独立校验，不共用结论。
-    private ToolResult RunFileDiff(string[]? only, string file, string? version, int limit)
+    private ToolResult RunFileDiff(DiffRequest request)
     {
+        var file = request.FilePath!;
+        var limit = request.Limit;
+
         foreach (var entry in _syncService.FollowableSources)
         {
-            if (only is { Length: > 0 }
-                && !only.Contains(entry.Name, StringComparer.OrdinalIgnoreCase)) continue;
+            if (request.Only is { Length: > 0 }
+                && !request.Only.Contains(entry.Name, StringComparer.OrdinalIgnoreCase)) continue;
 
             var versions = _syncService.History.ListVersions(entry.Name);
             if (versions.Count == 0) continue;
 
-            // 只认索引里真实存在的 Id。放任任意串进去等于让调用方指定历史根下的任意子目录，
-            // 而 files/ 那一层的相对路径校验只保证「不出这个子目录」，管不了子目录选在哪
-            string versionId;
-            if (string.IsNullOrWhiteSpace(version))
-            {
-                versionId = versions[^1].Id;
-            }
-            else
-            {
-                var matched = versions.FirstOrDefault(
-                    v => string.Equals(v.Id, version, StringComparison.OrdinalIgnoreCase));
-
-                if (matched == null)
-                {
-                    return new ToolResult(
-                        $"Unknown version '{version}' for source '{entry.Name}'. "
-                        + $"Kept versions: {string.Join(", ", versions.Select(v => v.Id))}. "
-                        + "Omit 'version' to compare against the most recent one.", true);
-                }
-
-                versionId = matched.Id;
-            }
+            if (!TryResolveVersion(versions, request.Version, entry.Name, out var versionId, out var notice, out var error))
+                return new ToolResult(error!, true);
 
             var currentPath = PathSecurity.ResolveInsideRoot(entry.Path, file);
             var archivedPath = _syncService.History.ResolveArchivedPath(entry.Name, versionId, file);
@@ -276,14 +496,68 @@ public class SyncSourcesTool : ITool
 
             if (archived == null && current == null) continue;
 
+            var header = notice == null ? string.Empty : notice + "\n";
+            var member = request.Method;
+            var label = string.IsNullOrWhiteSpace(member)
+                ? $"{entry.Name}/{relative} @ {versionId}"
+                : $"{entry.Name}/{relative}::{member} @ {versionId}";
+
             if (archived == null)
-                return new ToolResult($"--- {entry.Name}/{relative} @ {versionId}\n(added in this version — no previous content)");
+                return new ToolResult($"{header}--- {label}\n(added in this version — no previous content)");
 
             if (current == null)
-                return new ToolResult($"--- {entry.Name}/{relative} @ {versionId}\n(removed — only the archived copy remains)");
+                return new ToolResult($"{header}--- {label}\n(removed — only the archived copy remains)");
 
-            return new ToolResult(UnifiedDiffFormatter.Format(
-                archived, current, $"{entry.Name}/{relative} @ {versionId}", contextLines: 3, maxLines: limit));
+            // 已经收窄到一个文件了，成员清单就没有再截断的理由——概览里的那道上限
+            // 是为了不让单个文件淹没整份列表，这里没有别的文件要保护
+            if (string.IsNullOrWhiteSpace(member)
+                && string.Equals(request.Granularity, "members", StringComparison.OrdinalIgnoreCase))
+            {
+                var members = DiffMembers(archived, current);
+
+                if (members == null)
+                    return new ToolResult($"{header}--- {label}\n(no parsable members — not C#, or it failed to parse)");
+
+                if (members.Count == 0)
+                    return new ToolResult($"{header}--- {label}\n(changed outside any member declaration)");
+
+                var listing = new StringBuilder();
+                listing.AppendLine($"{header}--- {label}");
+                listing.AppendLine($"{members.Count} member(s) changed:");
+                foreach (var line in members) listing.AppendLine($"  {line}");
+                listing.Append("\nPass 'method' with one of these names for its line-level diff.");
+                return new ToolResult(listing.ToString());
+            }
+
+            if (!string.IsNullOrWhiteSpace(member))
+            {
+                var className = ToolArgs.StripLocateFilterPrefix(request.ClassName ?? string.Empty);
+                var memberName = ToolArgs.StripLocateFilterPrefix(member!);
+                if (className.Length == 0) className = null;
+
+                var before = RoslynHelper.ExtractMemberText(archived, memberName, className);
+                var after = RoslynHelper.ExtractMemberText(current, memberName, className);
+
+                if (!before.IsOk && !after.IsOk)
+                {
+                    return new ToolResult(
+                        $"Member '{memberName}' not found in either version of {relative}. "
+                        + "Use the inspect tool to see the members this file currently declares, or drop 'method' "
+                        + "to diff the whole file.", true);
+                }
+
+                if (!before.IsOk)
+                    return new ToolResult($"{header}--- {label}\n(added in this version)\n```csharp\n{after.Content}\n```");
+
+                if (!after.IsOk)
+                    return new ToolResult($"{header}--- {label}\n(removed in this version)\n```csharp\n{before.Content}\n```");
+
+                return new ToolResult(header + UnifiedDiffFormatter.Format(
+                    before.Content, after.Content, label, contextLines: 3, maxLines: limit));
+            }
+
+            return new ToolResult(header + UnifiedDiffFormatter.Format(
+                archived, current, label, contextLines: 3, maxLines: limit));
         }
 
         return new ToolResult(

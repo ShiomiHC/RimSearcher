@@ -242,8 +242,83 @@ public static class RoslynHelper
             code = await reader.ReadToEndAsync();
         }
 
-        var tree = CSharpSyntaxTree.ParseText(code);
-        var root = await tree.GetRootAsync();
+        return FormatMemberBody(code, memberName, typeName, filePath);
+    }
+
+    // 解析主体，与 GetMemberBodyAsync 共用。单独暴露收 code 的入口，是因为历史归档里的
+    // 旧版本只以内存字符串存在（SourceHistoryStore.ReadArchived），没有可读的磁盘路径，
+    // 而为解析一次落一份临时文件并不划算。
+    public static SourceLookupResult FormatMemberBody(string code, string memberName, string? typeName, string fileLabel)
+    {
+        var candidates = FindMembers(code, memberName, typeName);
+
+        if (candidates.Count == 0) return SourceLookupResult.Failed(SourceLookupStatus.TargetNotFound);
+
+        if (candidates.Count == 1)
+        {
+            var (node, kind) = candidates[0];
+            var lineSpan = node.GetLocation().GetLineSpan();
+            return SourceLookupResult.Ok(
+                $"// File: {fileLabel}\n// {kind}, starts at line: {lineSpan.StartLinePosition.Line + 1}\n{node.ToFullString()}");
+        }
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"/* Found {candidates.Count} matching members */");
+        foreach (var (node, kind) in candidates)
+        {
+            var lineSpan = node.GetLocation().GetLineSpan();
+            var parentType = node.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault();
+            sb.AppendLine($"// {kind} in {(parentType != null ? GetFullTypeName(parentType) : "Unknown")}");
+            sb.AppendLine($"// Starts at line: {lineSpan.StartLinePosition.Line + 1}");
+            sb.AppendLine(node.ToFullString());
+            sb.AppendLine("\n// --- NEXT MATCH ---\n");
+        }
+        return SourceLookupResult.Ok(sb.ToString());
+    }
+
+    // 成员原文，不带文件名与行号注释头。给 diff 用：这两样在新旧两版之间本来就会不同，
+    // 混进去只会变成一片与改动无关的差异行。
+    public static SourceLookupResult ExtractMemberText(string code, string memberName, string? typeName = null)
+    {
+        var candidates = FindMembers(code, memberName, typeName);
+        if (candidates.Count == 0) return SourceLookupResult.Failed(SourceLookupStatus.TargetNotFound);
+
+        if (candidates.Count == 1) return SourceLookupResult.Ok(candidates[0].Node.ToFullString());
+
+        // 多份匹配（重载、或未用 typeName 消歧的同名成员）按稳定键排序后拼接：源码顺序
+        // 在两个版本之间可能变动，照原顺序拼会把「顺序调换」显示成一整片增删。
+        var sb = new StringBuilder();
+        foreach (var (node, kind) in candidates.OrderBy(c => MemberSortKey(c.Node), StringComparer.Ordinal))
+        {
+            var parentType = node.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault();
+            sb.AppendLine($"// {kind} in {(parentType != null ? GetFullTypeName(parentType) : "Unknown")}");
+            sb.AppendLine(node.ToFullString());
+        }
+        return SourceLookupResult.Ok(sb.ToString());
+    }
+
+    private static string MemberSortKey(SyntaxNode node)
+    {
+        var parentType = node.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault();
+        var owner = parentType != null ? GetFullTypeName(parentType) : "Unknown";
+        return owner + ParameterSignature(node);
+    }
+
+    private static string ParameterSignature(SyntaxNode node) => node switch
+    {
+        MethodDeclarationSyntax m => m.ParameterList.ToString(),
+        ConstructorDeclarationSyntax c => c.ParameterList.ToString(),
+        IndexerDeclarationSyntax i => i.ParameterList.ToString(),
+        OperatorDeclarationSyntax o => o.ParameterList.ToString(),
+        _ => string.Empty
+    };
+
+    private static List<(SyntaxNode Node, string Kind)> FindMembers(string code, string memberName, string? typeName)
+    {
+        var candidates = new List<(SyntaxNode Node, string Kind)>();
+
+        var root = TryParse(code);
+        if (root == null) return candidates;
 
         bool TypeFilter(SyntaxNode node)
         {
@@ -253,8 +328,6 @@ public static class RoslynHelper
                 parentType.Identifier.Text.Equals(typeName, StringComparison.OrdinalIgnoreCase) ||
                 GetFullTypeName(parentType).Equals(typeName, StringComparison.OrdinalIgnoreCase));
         }
-
-        var candidates = new List<(SyntaxNode Node, string Kind)>();
 
         foreach (var m in root.DescendantNodes().OfType<MethodDeclarationSyntax>()
                      .Where(m => m.Identifier.Text.Equals(memberName, StringComparison.OrdinalIgnoreCase) && TypeFilter(m)))
@@ -280,28 +353,57 @@ public static class RoslynHelper
                      .Where(o => o.OperatorToken.Text.Equals(memberName, StringComparison.OrdinalIgnoreCase) && TypeFilter(o)))
             candidates.Add((op, "Operator"));
 
-        if (candidates.Count == 0) return SourceLookupResult.Failed(SourceLookupStatus.TargetNotFound);
+        return candidates;
+    }
 
-        if (candidates.Count == 1)
+    // 文件里全部可命名成员及其原文，供逐成员比对得出「这个文件里是哪几个方法变了」。
+    // 键含参数列表，重载之间不会互相顶掉。
+    public static IReadOnlyDictionary<string, string> ListMemberTexts(string code)
+    {
+        var results = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        var root = TryParse(code);
+        if (root == null) return results;
+
+        foreach (var type in root.DescendantNodes().OfType<TypeDeclarationSyntax>())
         {
-            var (node, kind) = candidates[0];
-            var lineSpan = node.GetLocation().GetLineSpan();
-            return SourceLookupResult.Ok(
-                $"// File: {filePath}\n// {kind}, starts at line: {lineSpan.StartLinePosition.Line + 1}\n{node.ToFullString()}");
+            var owner = GetFullTypeName(type);
+
+            foreach (var member in type.Members)
+            {
+                var key = member switch
+                {
+                    MethodDeclarationSyntax m => $"{owner}.{m.Identifier.Text}{m.ParameterList}",
+                    ConstructorDeclarationSyntax c => $"{owner}..ctor{c.ParameterList}",
+                    PropertyDeclarationSyntax p => $"{owner}.{p.Identifier.Text}",
+                    IndexerDeclarationSyntax i => $"{owner}.this{i.ParameterList}",
+                    OperatorDeclarationSyntax o => $"{owner}.operator {o.OperatorToken.Text}{o.ParameterList}",
+                    FieldDeclarationSyntax f =>
+                        $"{owner}.{string.Join(",", f.Declaration.Variables.Select(v => v.Identifier.Text))}",
+                    EventFieldDeclarationSyntax e =>
+                        $"{owner}.{string.Join(",", e.Declaration.Variables.Select(v => v.Identifier.Text))}",
+                    _ => null
+                };
+
+                // 同键重复在合法 C# 里不该出现，但反编译产物不保证；取先见到的那份即可，
+                // 两侧行为一致就不会凭空比出差异
+                if (key != null) results.TryAdd(key, member.ToFullString());
+            }
         }
 
-        var sb = new StringBuilder();
-        sb.AppendLine($"/* Found {candidates.Count} matching members */");
-        foreach (var (node, kind) in candidates)
+        return results;
+    }
+
+    private static CompilationUnitSyntax? TryParse(string code)
+    {
+        try
         {
-            var lineSpan = node.GetLocation().GetLineSpan();
-            var parentType = node.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault();
-            sb.AppendLine($"// {kind} in {(parentType != null ? GetFullTypeName(parentType) : "Unknown")}");
-            sb.AppendLine($"// Starts at line: {lineSpan.StartLinePosition.Line + 1}");
-            sb.AppendLine(node.ToFullString());
-            sb.AppendLine("\n// --- NEXT MATCH ---\n");
+            return CSharpSyntaxTree.ParseText(code).GetCompilationUnitRoot();
         }
-        return SourceLookupResult.Ok(sb.ToString());
+        catch
+        {
+            return null;
+        }
     }
 
     public static async Task<SourceLookupResult> GetClassBodyAsync(string filePath, string className)

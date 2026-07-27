@@ -252,8 +252,16 @@ Tool Layer
 2. `sync_sources(action="check")`：确认哪些源的程序集变了
 3. `sync_sources(action="sync")`：重新反编译并就地重建索引，不需要重启
 4. `sync_sources(action="diff")`：看这次同步改了哪些源码文件
-5. `sync_sources(action="diff", file="RimWorld/CompShield.cs")`：看该文件的行级改动
-6. 此后再查询时，若你先前问过的类型确实在这次同步中变了，返回里会点名提示
+5. `sync_sources(action="diff", sources="某Mod名", granularity="members")`：把范围收到某个 mod，并列出每个文件里具体是哪些方法/属性/字段变了
+6. `sync_sources(action="diff", file="RimWorld/CompShield.cs")`：看该文件的行级改动
+7. `sync_sources(action="diff", file="RimWorld/CompShield.cs", method="CompTick")`：只看某一个成员的行级改动，不必在整文件 diff 里翻找
+8. 此后再查询时，若你先前问过的类型确实在这次同步中变了，返回里会点名提示
+
+`version` 用数字往前数：`1`（或 `-1`）是最近一代归档，`2` 是再往前一代；超出保留代数会夹到最老的一代并在开头说明。写成 `v0002` 这样的字面量 id 同样有效。
+
+`granularity="members"` 要为每个**列出的**文件建两棵语法树，解析量因此始终等于输出量，用 `limit` 一个旋钮就能控住。
+
+**想看全量**：`limit` 单页上限 2000，超出的部分用 `offset` 翻页——列表末尾会直接印出下一页的 `offset` 该填多少。概览里单个文件最多列 20 条成员变化（防止一个被大改的文件淹没整份列表），把 `file` 收窄到该文件再加 `granularity="members"` 就会列出它全部的变动成员，不截断。
 
 **关于提示的克制**：一条提示只在「这个会话确实问过该内容」且「它确实受影响」时才发出。同步前只判得到源级（哪个源变了），同步后有了文件级 diff 才能精确到具体类型；问过的东西一个都没变时不会打扰你。同一批变更在一个会话内也只提示一次。
 
