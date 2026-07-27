@@ -55,12 +55,63 @@ public static class ScopeArgs
             if (raw is "all" or "full" or "*" or "everything") return Unlimited;
         }
 
-        var parsed = ToolArgs.GetInt(args, fallback, "limit", "maxResults", "max", "count", "top");
+        // 解释不了的 limit 必须报错，不能退回默认值。
+        //
+        // 与拼错的 scope 不对称，是因为两者退回的方向相反：scope 退回全域给出的是**超集**，
+        // 调用方少不了东西，一行提示足以；而 limit 退回默认给出的是**子集**——调用方要 100 条、
+        // 拿到 10 条、且它自己没写过 10 这个数。这种「静默给少」在只读工具返回文本的调用方那里
+        // 会直接沉淀成「一共就这么多」。
+        if (!TryCoerceLimit(value, out var parsed))
+        {
+            throw new ToolArgumentException(
+                $"Parameter 'limit' must be a number or one of 'all' / 'full' / '*' / 'everything'; "
+                + $"received {DescribeLimitValue(value)}. Pass a number for a cap, or 'all' to expand up to "
+                + $"the server cap of {HardLimit}.");
+        }
 
         // 0 与负数在旧协议里就是「别截断」，沿用；其余原样尊重，只夹硬上限
         if (parsed <= 0) return Unlimited;
         return parsed >= HardLimit ? Unlimited : new ResultLimit(parsed, false);
     }
+
+    private static bool TryCoerceLimit(JsonElement value, out int parsed)
+    {
+        parsed = 0;
+        switch (value.ValueKind)
+        {
+            case JsonValueKind.Number:
+                if (value.TryGetInt32(out parsed)) return true;
+                if (!value.TryGetDouble(out var asDouble)) return false;
+                parsed = (int)Math.Clamp(asDouble, int.MinValue, int.MaxValue);
+                return true;
+
+            case JsonValueKind.String:
+                var raw = value.GetString()?.Trim();
+                if (int.TryParse(raw, out parsed)) return true;
+                if (double.TryParse(raw, out var fromString))
+                {
+                    parsed = (int)Math.Clamp(fromString, int.MinValue, int.MaxValue);
+                    return true;
+                }
+                return false;
+
+            // 标量位收到单元素数组是客户端序列化的常见抖动，跟着 ToolArgs 的口径认它
+            case JsonValueKind.Array:
+                return value.GetArrayLength() == 1 && TryCoerceLimit(value[0], out parsed);
+
+            default:
+                return false;
+        }
+    }
+
+    private static string DescribeLimitValue(JsonElement value) => value.ValueKind switch
+    {
+        JsonValueKind.String => $"the string '{ToolArgs.ForEcho(value.GetString() ?? string.Empty, 40)}'",
+        JsonValueKind.True or JsonValueKind.False => $"the boolean {value.ValueKind.ToString().ToLowerInvariant()}",
+        JsonValueKind.Array => $"an array of {value.GetArrayLength()} item(s)",
+        JsonValueKind.Object => "an object",
+        _ => value.ValueKind.ToString().ToLowerInvariant()
+    };
 
     private static ResultLimit Unlimited => new(HardLimit, true);
 
@@ -72,13 +123,20 @@ public static class ScopeArgs
 
     // 类型必须同时允许数字：描述让调用方「pass a number」，而 schema 只写 string 时，
     // 按 schema 严格校验的 client 会在发出请求之前就把 limit:10 拒掉。
-    public static object LimitSchemaProperty(int defaultLimit = DefaultDisplayLimit) => new
+    // fuzzy: 结果分段呈现且会按相关度折叠（locate / trace inheritors）；
+    // 非 fuzzy 的 search_regex 两者都没有，照抄那段文案等于告诉调用方存在一批「调多大 limit
+    // 都拿不回来」的结果，而它其实只要 'all' 就能拿全。
+    public static object LimitSchemaProperty(int defaultLimit = DefaultDisplayLimit, bool fuzzy = true) => new
     {
         type = new[] { "integer", "string" },
         description =
-            $"Optional result cap per section (default {defaultLimit}). Pass a number, or 'all' to expand " +
-            $"up to the server cap of {HardLimit}; larger numbers, 0 and negatives are all clamped to that cap. " +
-            "Fuzzy sections also fold away results far below the top score, and those do not come back at any limit."
+            (fuzzy ? $"Optional result cap per section (default {defaultLimit}). " : $"Optional result cap (default {defaultLimit}). ")
+            + $"Pass a number, or 'all' to expand up to the server cap of {HardLimit}; larger numbers, 0 and "
+            + "negatives are all clamped to that cap. Anything else — 'many', true, an object — is rejected "
+            + "rather than silently replaced by the default."
+            + (fuzzy
+                ? " Fuzzy sections also fold away results far below the top score, and those do not come back at any limit."
+                : string.Empty)
     };
 
     // 拼错的 scope 会被 ScopeCatalog 静默退回全域（空集合会更糟，见那里的注释）。

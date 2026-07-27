@@ -33,8 +33,9 @@ public class TraceTool : ITool
     public string Name => "rimworld-searcher__trace";
 
     public string Description =>
-        "Cross-reference analysis for C# and XML. 'inheritors' lists the subclass/implementor tree and expands " +
-        "to the server cap by default; 'usages' is a line-by-line regex text match (default 50, at most 3 preview " +
+        "Cross-reference analysis for C# and XML. 'inheritors' lists the transitive subclass/implementor tree — " +
+        "every descendant, not just direct ones, each tagged with its depth — and expands to the server cap by " +
+        "default; 'usages' is a line-by-line regex text match (default 50, at most 3 preview " +
         "lines per file plus a '+N more in this file' count). Usages is not a call graph: same-named members on " +
         "unrelated types land in one list and inherited calls are missed.";
 
@@ -56,7 +57,8 @@ public class TraceTool : ITool
                 type = "string",
                 @enum = new[] { "inheritors", "usages" },
                 description =
-                    "Trace mode: 'inheritors' for the subclass/implementor tree (interfaces included), which " +
+                    "Trace mode: 'inheritors' for the transitive subclass/implementor tree (interfaces included; " +
+                    "indirect descendants are listed too, each tagged 'direct' or 'depth N'), which " +
                     "defaults to the server cap so the whole tree comes back; 'usages' for textual references " +
                     "in C# and XML, which defaults to 50 matches. The 'limit' default noted below is the " +
                     "'usages' one."
@@ -92,26 +94,53 @@ public class TraceTool : ITool
             var limit = ScopeArgs.GetDisplayLimit(args, fallback: InheritorsDefaultLimit);
 
             cancellationToken.ThrowIfCancellationRequested();
-            var inheritors = _sourceIndexer.GetInheritors(symbol, scope, limit.Count);
+            var inheritors = _sourceIndexer.GetInheritors(symbol, scope, limit.Count, out var depths);
 
             if (inheritors.Items.Count == 0)
             {
                 var report = new ScopeReport();
                 report.Add(inheritors);
                 var footer = report.Render(scope);
+
+                // 「索引里没有这个类型」和「有，但没人继承它」是两件事，下一步也完全不同：
+                // 前者要去确认名字（多半拼错了或不在配置的源里），后者已经是答案。
+                // 原先两者同一句话，调用方读到的都是「没有子类」，于是拿着一个根本不存在的
+                // 名字继续往下查。
+                var known = _sourceIndexer.IsKnownType(symbol);
+                var message = known
+                    ? $"'{symbol}' is indexed, and nothing in scope '{scope.Expression}' derives from it "
+                      + "(this is an answer, not a lookup failure)."
+                    : $"No type named '{symbol}' is in the index, so this is not evidence that it has no "
+                      + "subclasses. Check the spelling with rimworld-searcher__locate, and note that "
+                      + "inheritors resolves C# type names only.";
+
                 return new ToolResult(
-                    $"No subclasses of '{symbol}' found in scope '{scope.Expression}'."
-                    + $"{ScopeArgs.RetryWiderNotice(scope)}{footer ?? string.Empty}{scopeNotice}");
+                    $"{message}{ScopeArgs.RetryWiderNotice(scope)}{footer ?? string.Empty}{scopeNotice}");
             }
 
             var results = inheritors.Items.Select(entry =>
             {
                 var paths = _sourceIndexer.GetPathsByType(entry.Item);
-                return $"- `{entry.Item}` ({string.Join(", ", paths.Select(System.IO.Path.GetFileName))}){ScopeArgs.Label(entry.SourceName)}";
+                // 深度必须逐条标出来：树是拍平成一列返回的，不标就分不出「直接子类」
+                // 和「曾孙」，而这两者在判断「要覆写哪个方法」时含义完全不同。
+                var depth = depths.TryGetValue(entry.Item, out var d) ? d : 1;
+                var depthLabel = depth == 1 ? "direct" : $"depth {depth}";
+                return $"- `{entry.Item}` [{depthLabel}] ({string.Join(", ", paths.Select(System.IO.Path.GetFileName))}){ScopeArgs.Label(entry.SourceName)}";
             });
 
+            // 这两个数只描述**列出来的这些条目**，不描述整棵树：Items 是截断后的展示切片，
+            // 而 depths 覆盖的是 scope 过滤之前的全集。拿任何一边去当另一边的统计量，
+            // 都会造出一个「看起来像结论」的假数字——正是本轮要清除的那类输出。
+            var shownDirect = inheritors.Items.Count(e => !depths.TryGetValue(e.Item, out var d) || d == 1);
+            var shownDeepest = inheritors.Items
+                .Select(e => depths.TryGetValue(e.Item, out var d) ? d : 1)
+                .DefaultIfEmpty(1).Max();
+
             var sbInheritors = new System.Text.StringBuilder();
-            sbInheritors.AppendLine($"Subclasses of '{symbol}' ({inheritors.TotalInScope} in scope '{scope.Expression}'):");
+            sbInheritors.AppendLine(
+                $"Subclasses of '{symbol}' ({inheritors.TotalInScope} in scope '{scope.Expression}', transitive — "
+                + $"indirect descendants included). Listed below: {inheritors.Items.Count} "
+                + $"({shownDirect} direct, deepest {shownDeepest} level(s) down):");
             sbInheritors.AppendLine(string.Join(Environment.NewLine, results));
 
             var fold = ScopeArgs.FoldLine(inheritors, indent: "", limit: limit);

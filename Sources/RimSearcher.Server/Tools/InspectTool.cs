@@ -61,7 +61,7 @@ public class InspectTool : ITool
     private static readonly ToolArgSpec ArgSpec = new(
         "rimworld-searcher__inspect",
         "name (an exact DefName or C# type name, e.g. 'Apparel_ShieldBelt' / 'CompShield'). Aliases accepted: query, defName, typeName, symbol.",
-        "name (required), defType (which def type to show when several share the name), scope.",
+        "name (required), defType (which def type to show when several share the name), xmlStartLine (continue reading a long merged XML), scope.",
         "A 'def:'/'type:' prefix is stripped automatically. Matching ignores case but needs the whole name — partial names and typos do not resolve; use rimworld-searcher__locate to get the exact name first.");
 
     public object JsonSchema => new
@@ -84,6 +84,17 @@ public class InspectTool : ITool
                     + "a BodyDef and a HediffGiverSetDef at once. The response names every type sharing the name, "
                     + "so a first call without this parameter tells you what to pass. Alias 'defTypeName' is also "
                     + "accepted. This is a def type, not a C# type name — it does not narrow type mode."
+            },
+            xmlStartLine = new
+            {
+                type = "integer",
+                minimum = 1,
+                description =
+                    "Def mode only. 1-based line to continue the merged XML from when it was truncated; the "
+                    + $"response reads {XmlWindowLines} lines from there and tells you the next value to pass. "
+                    + "Needed because the merged XML is the whole ParentName chain combined and therefore is not "
+                    + "the content of any file — read_code on the `File:` path returns only the def's own "
+                    + "un-merged lines, without the inherited ones. Ignored in type mode."
             },
             scope = ScopeArgs.ScopeSchemaProperty(_scopeCatalog)
         },
@@ -109,6 +120,68 @@ public class InspectTool : ITool
         _ =>
             $"_(no declaration of `{typeName}` in this file — the index may be stale; retry after sync_sources)_"
     };
+
+    // 合并后的 XML 一屏放不下时的窗口大小；不带 xmlStartLine 的首次调用按 头 HeadLines +
+    // 尾 TailLines 渲染（开头是字段主体，结尾是收尾结构，两头都比中段更常被需要）。
+    private const int XmlHeadLines = 200;
+    private const int XmlTailLines = 50;
+    private const int XmlWindowLines = XmlHeadLines + XmlTailLines;
+
+    // 合并 XML 的续读起点（1-based）。传了就渲染一段连续窗口，不传则走头尾两段。
+    //
+    // 这个参数存在的唯一理由：被截断的是**沿 ParentName 链合并后**的 XML，而它不对应磁盘上
+    // 任何一个文件——上面那行 `File:` 指的是子 def 自己那份未合并的源文件，里面恰恰没有
+    // 继承来的字段。此前截断提示写的是「use read_code on file path above」，照做拿回来的
+    // 是另一份文档，且缺的正是 inspect def 模式唯一的存在理由。续读只能由本工具自己提供。
+    private static int ResolveXmlStartLine(JsonElement args, int totalLines)
+    {
+        var requested = ToolArgs.GetInt(args, 0, "xmlStartLine", "xmlStart", "startLine");
+        if (requested <= 0) return 0;
+        return Math.Min(requested, Math.Max(1, totalLines));
+    }
+
+    private static void AppendResolvedXml(StringBuilder sb, string[] xmlLines, string defName, int startLine)
+    {
+        sb.AppendLine(startLine > 0
+            ? $"\n**Resolved XML** (lines {startLine}-{Math.Min(startLine + XmlWindowLines - 1, xmlLines.Length)} of {xmlLines.Length}):"
+            : "\n**Resolved XML:**");
+
+        // 明确点名续读要回到 inspect，且说清 File: 那一行不是这份 XML 的来源
+        string ContinueHint(int nextStart) =>
+            $"(Full merged XML: {xmlLines.Length} lines. This is the merge of the whole ParentName chain, so it is "
+            + $"not the content of any one file — the `File:` path above holds only {defName}'s own un-merged lines. "
+            + $"For the rest call inspect again with xmlStartLine: {nextStart}.)";
+
+        if (startLine > 0)
+        {
+            var from = startLine - 1;
+            var to = Math.Min(from + XmlWindowLines, xmlLines.Length);
+
+            sb.AppendLine("```xml");
+            for (int i = from; i < to; i++) sb.AppendLine(xmlLines[i]);
+            sb.AppendLine("```");
+
+            sb.AppendLine(to < xmlLines.Length
+                ? ContinueHint(to + 1)
+                : $"(End of the merged XML, {xmlLines.Length} lines total.)");
+            return;
+        }
+
+        if (xmlLines.Length <= XmlWindowLines + XmlTailLines)
+        {
+            sb.AppendLine("```xml");
+            sb.AppendLine(string.Join("\n", xmlLines).TrimEnd('\n'));
+            sb.AppendLine("```");
+            return;
+        }
+
+        sb.AppendLine("```xml");
+        for (int i = 0; i < XmlHeadLines; i++) sb.AppendLine(xmlLines[i]);
+        sb.AppendLine($"\n... [Truncated {xmlLines.Length - XmlWindowLines} lines: {XmlHeadLines + 1}-{xmlLines.Length - XmlTailLines}] ...\n");
+        for (int i = xmlLines.Length - XmlTailLines; i < xmlLines.Length; i++) sb.AppendLine(xmlLines[i]);
+        sb.AppendLine("```");
+        sb.AppendLine(ContinueHint(XmlHeadLines + 1));
+    }
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, CancellationToken cancellationToken, IProgress<double>? progress = null)
     {
@@ -209,24 +282,8 @@ public class InspectTool : ITool
             }
 
             var resolvedXmlStr = resolvedXml.ToString();
-            sb.AppendLine("\n**Resolved XML:**");
-
             var xmlLines = resolvedXmlStr.Split('\n');
-            if (xmlLines.Length > 300)
-            {
-                sb.AppendLine("```xml");
-                for (int i = 0; i < 200; i++) sb.AppendLine(xmlLines[i]);
-                sb.AppendLine($"\n... [Truncated {xmlLines.Length - 250} lines] ...\n");
-                for (int i = xmlLines.Length - 50; i < xmlLines.Length; i++) sb.AppendLine(xmlLines[i]);
-                sb.AppendLine("```");
-                sb.AppendLine($"(Full XML: {xmlLines.Length} lines, use read_code on file path above)");
-            }
-            else
-            {
-                sb.AppendLine("```xml");
-                sb.AppendLine(resolvedXmlStr);
-                sb.AppendLine("```");
-            }
+            AppendResolvedXml(sb, xmlLines, def.DefName, ResolveXmlStartLine(args, xmlLines.Length));
 
             try
             {

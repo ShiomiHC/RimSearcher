@@ -180,6 +180,43 @@ public class ScopeArgsTests
         Assert.True(limit.Unlimited);
     }
 
+    // 缺陷回归：解释不了的 limit 过去被静默换成默认值。
+    //
+    // 与拼错的 scope 不对称，因为两者退回的方向相反：scope 退回全域给的是**超集**，
+    // 调用方少不了东西；limit 退回默认给的是**子集**——要 100 条、拿到 10 条、
+    // 而 10 这个数它自己从没写过。这种「静默给少」在只读文本的调用方那里会直接
+    // 沉淀成「一共就这么多」。
+    [Theory]
+    [InlineData("""{"limit":"many"}""")]
+    [InlineData("""{"limit":"a lot"}""")]
+    [InlineData("""{"limit":true}""")]
+    [InlineData("""{"limit":{}}""")]
+    [InlineData("""{"limit":["5","7"]}""")]
+    public void GetDisplayLimit_RefusesValuesItCannotInterpret(string json)
+    {
+        var ex = Assert.Throws<ToolArgumentException>(() => ScopeArgs.GetDisplayLimit(Args(json)));
+
+        Assert.Contains("'all'", ex.Message);
+        Assert.Contains(ScopeArgs.HardLimit.ToString(), ex.Message);
+    }
+
+    // 标量位收到单元素数组是客户端序列化的常见抖动，仍按 ToolArgs 的口径认下来
+    [Fact]
+    public void GetDisplayLimit_StillAcceptsASingleElementArray()
+        => Assert.Equal(7, ScopeArgs.GetDisplayLimit(Args("""{"limit":[7]}""")).Count);
+
+    // 拒绝消息本身不得成为放大器
+    [Fact]
+    public void GetDisplayLimit_RefusalDoesNotEchoAHugeString()
+    {
+        var huge = new string('x', 5000);
+        var ex = Assert.Throws<ToolArgumentException>(
+            () => ScopeArgs.GetDisplayLimit(Args(JsonSerializer.Serialize(new { limit = huge }))));
+
+        Assert.DoesNotContain(huge, ex.Message);
+        Assert.True(ex.Message.Length < 500);
+    }
+
     // 显式的小 limit 不得被任何下限抬高（TraceTool 曾写 Math.Max(limit, 50)）
     [Fact]
     public void GetDisplayLimit_NeverRaisesAnExplicitSmallLimit()

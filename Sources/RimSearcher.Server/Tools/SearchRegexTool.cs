@@ -48,7 +48,7 @@ public class SearchRegexTool : ITool
             ignoreCase = new { type = "boolean", @default = true, description = "Whether to ignore case, defaults to true." },
             fileFilter = new { type = "string", description = "Optional extension filter such as '.cs' or '.xml'. Aliases 'fileExtension'/'extension'/'ext' are also accepted." },
             scope = ScopeArgs.ScopeSchemaProperty(_scopeCatalog),
-            limit = ScopeArgs.LimitSchemaProperty(DefaultMatchLimit)
+            limit = ScopeArgs.LimitSchemaProperty(DefaultMatchLimit, fuzzy: false)
         },
         required = new[] { "pattern" }
     };
@@ -64,7 +64,7 @@ public class SearchRegexTool : ITool
         try
         {
             // scope 与 fileFilter 都下推给索引层在扫描前生效——留到这里筛会被命中上限吃空
-            var (results, truncated, matchesByFile) = await _indexer.SearchRegexAsync(
+            var (results, truncated, matchesByFile, diagnostics) = await _indexer.SearchRegexAsync(
                 pattern, scope, fileFilter, ignoreCase, limit.Count, cancellationToken, progress);
 
             // 拼错的 scope 被静默退回全域，有结果、无结果两条路径都要说
@@ -72,9 +72,20 @@ public class SearchRegexTool : ITool
 
             // 同 trace usages：scope 对扫盘工具是硬过滤，落选来源不统计，故要显式点一句
             if (results.Count == 0)
+            {
+                // fileFilter 必须出现在零命中消息里：'.txt' 这种把候选集筛成 0 的过滤，
+                // 原先的措辞会说成「scope 'all' 里没有」——而 scope 里有的是命中，
+                // 只是没有一个 .txt 文件。同时报出过滤后的候选文件数，让「筛空了」一眼可见。
+                var filterNote = string.IsNullOrEmpty(fileFilter)
+                    ? string.Empty
+                    : $" with fileFilter '{fileFilter}' ({diagnostics.CandidateFiles} file(s) matched that filter"
+                      + (diagnostics.CandidateFiles == 0 ? " — the filter, not the pattern, is what emptied this" : "")
+                      + ")";
+
                 return new ToolResult(
-                    $"No matches for pattern '{pattern}' in scope '{scope.Expression}'."
+                    $"No matches for pattern '{pattern}' in scope '{scope.Expression}'{filterNote}."
                     + $"{ScopeArgs.RetryWiderNotice(scope)}{scopeNotice}");
+            }
 
             // 索引层是并发扫描后从 ConcurrentBag 收口的，文件之间的先后完全看线程调度；
             // 不排一下，同一次查询重跑两遍文件顺序就能不一样。
@@ -116,10 +127,42 @@ public class SearchRegexTool : ITool
             // 的情况完全不吭声，调用方会把不完整的列表当成全部。
             var notes = new List<string>();
             if (truncated) notes.Add($"scanning stopped at the {results.Count}-preview cap");
-            if (allFiles.Count > MaxFilesShown) notes.Add($"only the first {MaxFilesShown} of {allFiles.Count} matching files are listed");
 
+            // 截断时 allFiles 只是「已扫到的那批预览」里的文件数，不是命中文件总数——扫描早已
+            // 在命中上限处停下，后面的候选文件根本没打开过。原先无条件称其为 "matching files"，
+            // 那个数比真实值小一到两个数量级，而调用方会拿它当结论。
+            if (allFiles.Count > MaxFilesShown)
+            {
+                notes.Add(truncated
+                    ? $"only the first {MaxFilesShown} files are listed; {allFiles.Count} distinct files appear among "
+                      + $"the previews scanned so far, which is not the total number of matching files"
+                    : $"only the first {MaxFilesShown} of {allFiles.Count} matching files are listed");
+            }
+
+            // 命中上限是这轮唯一能立刻放开的旋钮，原先的出路里偏偏没有它
             if (notes.Count > 0)
-                output += $"\n\n[{string.Join("; ", notes)} — narrow the pattern or the scope to see the rest]";
+            {
+                var route = truncated && !limit.Unlimited
+                    ? $"pass limit:'all' to raise the cap to {ScopeArgs.HardLimit}, or narrow the pattern or the scope"
+                    : "narrow the pattern or the scope";
+                output += $"\n\n[{string.Join("; ", notes)} — {route} to see the rest]";
+            }
+
+            // 「没有尾注即完整」是本工具写在 Description 里的契约，被跳过/被弃扫的文件必须破这个契约
+            if (diagnostics.AnyFileIncomplete)
+            {
+                var incomplete = new List<string>();
+                if (diagnostics.TimedOutFiles > 0)
+                    incomplete.Add($"{diagnostics.TimedOutFiles} file(s) were abandoned mid-scan because the pattern "
+                                   + "timed out on them (catastrophic backtracking) — their per-file match counts are missing");
+                if (diagnostics.UnreadableFiles > 0)
+                    incomplete.Add($"{diagnostics.UnreadableFiles} file(s) could not be read and were skipped entirely");
+                if (diagnostics.LineCappedFiles > 0)
+                    incomplete.Add($"{diagnostics.LineCappedFiles} file(s) were only scanned to line {diagnostics.LineCap}");
+
+                output += $"\n\n[Incomplete scan: {string.Join("; ", incomplete)}. Matches below this line's "
+                          + "threshold may exist and are not listed.]";
+            }
 
             output += scopeNotice;
 

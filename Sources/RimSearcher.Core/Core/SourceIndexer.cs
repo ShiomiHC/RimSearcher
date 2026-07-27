@@ -4,6 +4,18 @@ using System.Text.RegularExpressions;
 
 namespace RimSearcher.Core;
 
+// 一次正则扫描里「命中集为什么可能不完整」的全部成因。展示层据此决定尾注怎么写：
+// 本工具对调用方的契约是「没有尾注即完整」，所以任何一项非零都必须说出来。
+public readonly record struct RegexScanDiagnostics(
+    int CandidateFiles,
+    int TimedOutFiles,
+    int UnreadableFiles,
+    int LineCappedFiles,
+    int LineCap)
+{
+    public bool AnyFileIncomplete => TimedOutFiles > 0 || UnreadableFiles > 0 || LineCappedFiles > 0;
+}
+
 public class SourceIndexer
 {
     private readonly ConcurrentDictionary<string, ConcurrentBag<string>> _index = new(StringComparer.OrdinalIgnoreCase);
@@ -283,6 +295,11 @@ public class SourceIndexer
     
     private bool ContainsType(string key) =>
         (_frozenTypeMap?.ContainsKey(key) ?? false) || _typeMap.ContainsKey(key);
+
+    // 「索引里到底有没有这个类型」——零结果时用来把「不存在」和「存在但没有结果」分开。
+    // 全名与短名两条路都要试，否则传短名的调用方会被判成「不存在」。
+    public bool IsKnownType(string typeName)
+        => ContainsType(typeName) || TryGetShortType(typeName, out _);
     
     private IReadOnlyList<string> GetTypeFiles(string key)
     {
@@ -291,18 +308,17 @@ public class SourceIndexer
         return Array.Empty<string>();
     }
 
-    // _inheritorsMap 的值是类型名而非路径，故归属判定要先经 _typeMap 反查定义文件；
-    // 反查不到路径的类型（引用了未索引的基类）按未知源处理，只有全域 scope 才收。
-    public ScopedResult<string> GetInheritors(string baseTypeName, ScopeSelection scope, int limit = 0)
+    // 一个类型名的直接子类/实现者，把「全名 / 短名 / 短名候选」三条查法并起来。
+    private HashSet<string> DirectInheritorsOf(string typeName)
     {
         var results = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        if (TryGetInheritors(baseTypeName, out var directInheritors))
+        if (TryGetInheritors(typeName, out var directInheritors))
         {
             foreach (var item in directInheritors) results.Add(item);
         }
 
-        if (TryGetShortType(baseTypeName, out var fullNames))
+        if (TryGetShortType(typeName, out var fullNames))
         {
             foreach (var fullName in fullNames)
             {
@@ -313,22 +329,63 @@ public class SourceIndexer
             }
         }
 
-        var shortNameCandidate = baseTypeName.Contains('.') ? baseTypeName.Split('.').Last() : baseTypeName;
-        if (shortNameCandidate != baseTypeName)
+        var shortNameCandidate = typeName.Contains('.') ? typeName.Split('.').Last() : typeName;
+        if (shortNameCandidate != typeName && TryGetInheritors(shortNameCandidate, out var shortInheritors))
         {
-            if (TryGetInheritors(shortNameCandidate, out var shortInheritors))
-            {
-                foreach (var item in shortInheritors) results.Add(item);
-            }
+            foreach (var item in shortInheritors) results.Add(item);
         }
 
-        var candidates = results
-            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
-            .Select(name => new ScoredCandidate<string>(name, 100.0, FirstPathOfType(name) ?? string.Empty));
+        return results;
+    }
+
+    // _inheritorsMap 的值是类型名而非路径，故归属判定要先经 _typeMap 反查定义文件；
+    // 反查不到路径的类型（引用了未索引的基类）按未知源处理，只有全域 scope 才收。
+    //
+    // 逐层 BFS 走到底，不是只取直接子类。RimWorld 的类型层级普遍三四层深
+    // （ThingComp → CompShield → …），只回直接子类而对外称「子类树」时，
+    // 「X 是不是 ThingComp 的子类」这个最常见的问题会被答成「不是」——
+    // 而那正是本 mode 存在的理由。Depth 一并回传，供展示层说清每一条在第几层。
+    public ScopedResult<string> GetInheritors(string baseTypeName, ScopeSelection scope, int limit = 0)
+        => GetInheritors(baseTypeName, scope, limit, out _);
+
+    public ScopedResult<string> GetInheritors(
+        string baseTypeName, ScopeSelection scope, int limit, out IReadOnlyDictionary<string, int> depths)
+    {
+        var depthOf = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var frontier = new List<string> { baseTypeName };
+
+        // 环保护：反编译产物里同名类型跨命名空间互指是可能的，短名归并后就会成环
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { baseTypeName };
+
+        for (int depth = 1; frontier.Count > 0 && depth <= MaxInheritorDepth; depth++)
+        {
+            var next = new List<string>();
+            foreach (var parent in frontier)
+            {
+                foreach (var child in DirectInheritorsOf(parent))
+                {
+                    if (!visited.Add(child)) continue;
+                    depthOf[child] = depth;
+                    next.Add(child);
+                }
+            }
+            frontier = next;
+        }
+
+        depths = depthOf;
+
+        // 浅的排前面：截断时留下的该是直接子类，而不是字母序恰好靠前的某个曾孙
+        var candidates = depthOf
+            .OrderBy(kv => kv.Value)
+            .ThenBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(kv => new ScoredCandidate<string>(kv.Key, 100.0, FirstPathOfType(kv.Key) ?? string.Empty));
 
         // 子类树没有分数梯度（全是精确的继承关系），断层收口在此无意义
         return ScopeFilter.Apply(candidates, scope, limit, scoreGap: null);
     }
+
+    // 继承深度的护栏。RimWorld 里最深的链也就个位数，这个数只是防索引成环时空转。
+    private const int MaxInheritorDepth = 24;
 
     private string? FirstPathOfType(string typeName)
     {
@@ -697,9 +754,15 @@ public class SourceIndexer
     }
 
     // MatchesByFile 是每个文件的真实命中数，与 Results 里的预览条数不是一回事。
+    //
+    // Candidates / Failed / LineCapped 三个诊断量必须回传给展示层：本工具的契约是
+    //「没有尾注就是完整命中集」，而扫描里有三处会静默减少命中——文件读不开、正则在单个文件上
+    // 超时（1s，灾难性回溯）、单文件扫到 MaxLinesScannedPerFile 行就停。这三处原先都被
+    // `catch { }` 和一句 break 吞掉，输出照旧宣称完整。
     public async Task<(List<(string Path, int LineNumber, string Preview)> Results,
                        bool Truncated,
-                       IReadOnlyDictionary<string, int> MatchesByFile)> SearchRegexAsync(
+                       IReadOnlyDictionary<string, int> MatchesByFile,
+                       RegexScanDiagnostics Diagnostics)> SearchRegexAsync(
         string pattern,
         ScopeSelection scope,
         string? fileFilter = null,
@@ -725,6 +788,9 @@ public class SourceIndexer
         int processedCount = 0;
         int totalFiles = allFiles.Count;
         int truncatedFlag = 0;
+        int timedOutFiles = 0;
+        int unreadableFiles = 0;
+        int lineCappedFiles = 0;
 
         await Parallel.ForEachAsync(allFiles, ct, async (filePath, internalCt) =>
         {
@@ -760,12 +826,29 @@ public class SourceIndexer
                                 Interlocked.Exchange(ref truncatedFlag, 1);
                         }
                     }
-                    if (lineNum >= MaxLinesScannedPerFile) break;
+                    if (lineNum >= MaxLinesScannedPerFile)
+                    {
+                        Interlocked.Increment(ref lineCappedFiles);
+                        break;
+                    }
                 }
 
                 if (matchesInThisFile > 0) matchesByFile[filePath] = matchesInThisFile;
             }
-            catch { }
+            // 超时的文件被弃在半路：预览可能已经进了 results，而 matchesByFile 那一行在 try 尾部、
+            // 走不到，于是上层的「+N more in this file」凭空消失。必须计数并让展示层说出来。
+            catch (RegexMatchTimeoutException)
+            {
+                Interlocked.Increment(ref timedOutFiles);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                Interlocked.Increment(ref unreadableFiles);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                Interlocked.Increment(ref unreadableFiles);
+            }
             finally
             {
                 var current = Interlocked.Increment(ref processedCount);
@@ -779,9 +862,17 @@ public class SourceIndexer
 
         var finalCount = Interlocked.CompareExchange(ref globalCount, 0, 0);
         var wasTruncated = Interlocked.CompareExchange(ref truncatedFlag, 0, 0) == 1;
+        var diagnostics = new RegexScanDiagnostics(
+            CandidateFiles: totalFiles,
+            TimedOutFiles: Interlocked.CompareExchange(ref timedOutFiles, 0, 0),
+            UnreadableFiles: Interlocked.CompareExchange(ref unreadableFiles, 0, 0),
+            LineCappedFiles: Interlocked.CompareExchange(ref lineCappedFiles, 0, 0),
+            LineCap: MaxLinesScannedPerFile);
+
         return (results.Take(maxResults).ToList(),
                 wasTruncated || finalCount >= maxResults,
-                matchesByFile);
+                matchesByFile,
+                diagnostics);
     }
 
     // 同名文件在多个源里都存在时（Ratkin 与 vanilla 同名 .cs 之类），优先给 scope 内的；
