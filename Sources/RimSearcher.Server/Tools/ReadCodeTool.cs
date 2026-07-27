@@ -128,6 +128,22 @@ public class ReadCodeTool : ITool
         try
         {
             var extractClass = ToolArgs.GetOptionalString(args, "extractClass", "class");
+            var memberArg = ToolArgs.GetOptionalString(args, "methodName", "method", "member", "memberName");
+
+            // XML 上这两个模式必然落空：Roslyn 把整份 XML 解析成一棵没有任何声明的 C# 语法树，
+            // 于是走到 TargetNotFound，回一句「类/成员不在这个文件里，用 inspect 核对名字」。
+            // 调用方照做会拿到一条 def，回来再传一次仍是同一句——两头都指着对方，而真正的原因
+            // 是模式选错了，跟名字对不对无关。这里在解析之前就把原因说出来。
+            if (IsXml(path) && (!string.IsNullOrEmpty(extractClass) || !string.IsNullOrEmpty(memberArg)))
+            {
+                var wrongMode = !string.IsNullOrEmpty(extractClass) ? "extractClass" : "methodName";
+                var target = ToolArgs.StripLocateFilterPrefix(extractClass ?? memberArg!);
+                return WithUnresolvedScopeNotice(scope, new ToolResult(
+                    $"'{Path.GetFileName(path)}' is XML, and '{wrongMode}' parses C# only — no name resolves in it. "
+                    + $"Read this file with startLine/lineCount, or call inspect with '{target}' as a defName to get "
+                    + "the XML merged down its whole ParentName chain.", true));
+            }
+
             if (!string.IsNullOrEmpty(extractClass))
             {
                 var extractClassName = ToolArgs.StripLocateFilterPrefix(extractClass);
@@ -140,16 +156,29 @@ public class ReadCodeTool : ITool
                     return WithUnresolvedScopeNotice(scope,
                         Failure(classBody, path, $"Class '{extractClassName}'", "Use inspect tool to verify the type name."));
 
+                // 整个类型的实现体没有天然上限：反编译出来的巨型类动辄几千行，一次就能吃掉
+                // 整个上下文预算。裸行模式早有 MaxLineCount 夹着，这里沿用同一个数，超出时
+                // 指回 methodName——按成员精读本就比整类通读更贴这个工具的用法。
+                var classLines = classBody.Content.Split('\n');
+                var classContent = classBody.Content;
+                var classNote = string.Empty;
+                if (classLines.Length > MaxLineCount)
+                {
+                    classContent = string.Join("\n", classLines.Take(MaxLineCount));
+                    classNote =
+                        $"\n[Truncated: '{extractClassName}' is {classLines.Length} lines, showing the first {MaxLineCount}. "
+                        + "Read one member with methodName, or continue with startLine/lineCount.]";
+                }
+
                 // 与 member 模式对称地回显目标名。少了这行，同一个文件里连开几个 extractClass
                 // 的返回长得一模一样，读者只能靠正文首行去认这是哪个类。
                 return WithUnresolvedScopeNotice(scope,
-                    new ToolResult($"```{Fence(path)}\n{scopeNotice}{Comment(path, extractClassName)}\n{classBody.Content}\n```"));
+                    new ToolResult($"```{Fence(path)}\n{scopeNotice}{Comment(path, extractClassName)}\n{classContent}\n```{classNote}"));
             }
 
-            var member = ToolArgs.GetOptionalString(args, "methodName", "method", "member", "memberName");
-            if (!string.IsNullOrEmpty(member))
+            if (!string.IsNullOrEmpty(memberArg))
             {
-                var methodName = ToolArgs.StripLocateFilterPrefix(member);
+                var methodName = ToolArgs.StripLocateFilterPrefix(memberArg);
                 var className = ToolArgs.GetOptionalString(args, "className", "type", "typeName");
                 var body = await RoslynHelper.GetMemberBodyAsync(path, methodName, className);
 

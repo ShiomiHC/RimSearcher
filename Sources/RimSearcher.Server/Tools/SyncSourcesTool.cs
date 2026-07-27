@@ -67,10 +67,12 @@ public class SyncSourcesTool : ITool
                 type = "string",
                 @enum = new[] { "files", "members" },
                 description =
-                    "For action='diff': 'files' (default) lists the changed file paths. 'members' also parses each "
-                    + "listed file and reports which methods/properties/fields changed inside it — one syntax tree per "
-                    + "listed file, so narrow it down with 'sources' or a smaller 'limit'. Combined with 'file' it "
-                    + "lists every changed member of that one file instead of its line-level diff.",
+                    "For action='diff': 'files' (default) lists the changed file paths. 'members' also parses the "
+                    + "listed files marked modified ('~') and reports which methods/properties/fields changed inside "
+                    + "them — an added or removed file has no member-level diff, so a page holding only those reads "
+                    + "identically to 'files' and says so. One syntax tree per expanded file, so narrow it down with "
+                    + "'sources' or a smaller 'limit'. Combined with 'file' it lists every changed member of that one "
+                    + "file instead of its line-level diff.",
                 @default = "files"
             },
             file = new
@@ -162,6 +164,22 @@ public class SyncSourcesTool : ITool
         {
             return new ToolResult(
                 $"Unknown action '{action}'. Use 'check', 'sync' or 'diff'.\n{ArgSpec.BuildUsage()}", true);
+        }
+
+        // granularity 与 action 是同一个坑的另一个入口：schema 声明了 enum，但 client 不一定校验，
+        // 而服务端此前只认 'members'，其余一律当 'files' 走。于是 granularity='typo' 返回的是一份
+        // 逐字正常的文件列表，调用方看不出自己要的成员粒度压根没被识别。
+        var granularity = ToolArgs.GetOptionalString(args, "granularity", "detail", "level");
+        var wantsMembers = granularity is not null
+            && (granularity.Equals("members", StringComparison.OrdinalIgnoreCase)
+                || granularity.Equals("member", StringComparison.OrdinalIgnoreCase));
+        if (granularity is not null && !wantsMembers
+            && !granularity.Equals("files", StringComparison.OrdinalIgnoreCase)
+            && !granularity.Equals("file", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ToolResult(
+                $"Unknown granularity '{granularity}'. Use 'files' (default, lists changed file paths) "
+                + "or 'members' (also lists which members changed inside each modified file).", true);
         }
 
         var followable = _syncService.FollowableSources;
@@ -333,6 +351,7 @@ public class SyncSourcesTool : ITool
 
             // 解析预算就是这一页列出的文件数——没有第二个隐藏的天花板。列多少就解析多少，
             // 代价与输出量始终成正比，调用方用 limit 一个旋钮就能控住。
+            var listedModified = 0;
             foreach (var change in diff.Changes.Skip(request.Offset).Take(request.Limit))
             {
                 var mark = change.Kind switch
@@ -343,12 +362,25 @@ public class SyncSourcesTool : ITool
                 };
                 builder.AppendLine($"  {mark} {change.RelativePath}");
 
+                if (change.Kind == FileChangeKind.Modified) listedModified++;
                 if (wantMembers && change.Kind == FileChangeKind.Modified)
                     AppendMemberChanges(builder, entry, versionId, change.RelativePath);
             }
 
             var shown = Math.Max(0, Math.Min(diff.Changes.Count - request.Offset, request.Limit));
             var remaining = diff.Changes.Count - request.Offset - shown;
+
+            // 成员粒度只对 Modified 展开，故这一页全是新增/删除时它逐字等同于 granularity='files'。
+            // 一句不说的话，这份返回读起来是「这些文件里没有成员变化」——而真相是这些文件整份都是
+            // 新增的，成员级差异对它们不存在。首次 sync 之后的第一次 diff 必然走到这里。
+            if (wantMembers && shown > 0 && listedModified == 0)
+            {
+                builder.AppendLine(diff.Modified > 0
+                    ? $"  (granularity='members' expands modified files only; none on this page — "
+                      + $"{diff.Modified} of the {diff.Changes.Count} changed file(s) are modified, page to them with offset)"
+                    : "  (granularity='members' expands modified files only; this source has none — "
+                      + "every change here is a whole file added or removed)");
+            }
 
             // offset 翻过了整个变更集时一条也列不出来，而上面的表头照常写着「N added」——
             // 不说一句的话，这份返回读起来就是「这一段没有变更」。

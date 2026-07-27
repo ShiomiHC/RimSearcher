@@ -82,6 +82,40 @@ public class InspectDefTypeTests : IDisposable
 
         Assert.Contains("(BodyDef, HediffGiverSetDef, ThingDef)", result.Content);
         Assert.Contains("pass defType to pick another", result.Content);
+
+        // 光说「传 defType」还得再查一次才知道能传什么，而可选的类型这一刻就在手上
+        Assert.Contains("HediffGiverSetDef, ThingDef", result.Content);
+    }
+
+    // 已经传过 defType 的调用方读到「pass defType to pick another」是一句同义反复：
+    // 它照做只会拿回逐字相同的结果。它需要的是「还有哪些别的类型」。
+    [Fact]
+    public async Task WithDefTypeGiven_TheHintNamesTheOtherTypes_NotTheParameterItJustPassed()
+    {
+        var tool = BuildTool(ThreeTypes);
+
+        var result = await Run(tool, """{"name":"Human","defType":"ThingDef"}""");
+
+        // 候选里只列还没看过的那两种，选中的 ThingDef 自己不在其中
+        Assert.Contains("pass defType to pick another (BodyDef, HediffGiverSetDef)", result.Content);
+    }
+
+    // 选中的类型自己就有多条、同时还存在别的类型：两条路都得给，且要说清各自能分开什么。
+    // 只说 "pass defType" 的话，同类型那两条永远分不开——那正是上一轮修掉的死路指令，
+    // 判据当时用的是「类型数 > 1」，遇上这种混合情形又会退回去。
+    [Fact]
+    public async Task SameTypeTwice_PlusAnotherType_OffersBothRoutes()
+    {
+        var tool = BuildTool(
+            ("A.xml", "<Defs>\n  <ThingDef>\n    <defName>Human</defName>\n  </ThingDef>\n</Defs>\n"),
+            ("B.xml", "<Defs>\n  <ThingDef>\n    <defName>Human</defName>\n  </ThingDef>\n</Defs>\n"),
+            ("C.xml", "<Defs>\n  <BodyDef>\n    <defName>Human</defName>\n  </BodyDef>\n</Defs>\n"));
+
+        var result = await Run(tool, """{"name":"Human","defType":"ThingDef"}""");
+
+        Assert.Contains("3 defs share this name", result.Content);
+        Assert.Contains("pass defType for a different type (BodyDef)", result.Content);
+        Assert.Contains("2 ThingDef ones", result.Content);
     }
 
     // 撞名的几条恰好同类型时 defType 分不开它们，照着提示传回来会拿到逐字相同的结果

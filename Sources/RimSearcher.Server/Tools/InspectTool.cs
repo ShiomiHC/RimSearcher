@@ -157,11 +157,23 @@ public class InspectTool : ITool
                 var types = lookup.InScopeDefTypes.Count > 0
                     ? $" ({string.Join(", ", lookup.InScopeDefTypes)})"
                     : string.Empty;
-                // 撞名的几条恰好是同一种类型时（两个 mod 各定义一条同名 ThingDef），
-                // defType 分不开它们，照着提示传回来会拿到逐字相同的结果。
-                var howToPickAnother = lookup.InScopeDefTypes.Count > 1
-                    ? "pass defType to pick another"
-                    : "narrow scope to a single source to pick another";
+                // 下一步得按「是什么把这几条分开的」来给，三种情形的正确动作互不相同：
+                //   - 每种类型各一条          → defType 分得开，且要把可选的类型名列出来，
+                //                               否则调用方还得再查一次才知道能传什么；
+                //   - 选中的类型自己就有多条  → 再传同一个 defType 拿回逐字相同的结果，
+                //                               分开它们只能靠更窄的 scope；
+                //   - scope 内只有这一种类型  → defType 完全无从下手。
+                // 「pass defType to pick another」原先是这三种情形的统一答复，后两种照做都是死路，
+                // 而已经传过 defType 的调用方读到它更是一句同义反复。
+                var otherTypes = lookup.InScopeDefTypes
+                    .Where(type => !string.Equals(type, def.DefType, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                var howToPickAnother = otherTypes.Count == 0
+                    ? "narrow scope to a single source to pick another"
+                    : lookup.SameDefTypeCount > 1
+                        ? $"pass defType for a different type ({string.Join(", ", otherTypes)}), or narrow scope "
+                          + $"to a single source to pick among the {lookup.SameDefTypeCount} {def.DefType} ones"
+                        : $"pass defType to pick another ({string.Join(", ", otherTypes)})";
                 sb.AppendLine(
                     $"_Note: {lookup.InScopeCount} defs share this name within scope '{scope.Expression}'{types}; "
                     + $"showing the {def.DefType} one — {howToPickAnother}._");

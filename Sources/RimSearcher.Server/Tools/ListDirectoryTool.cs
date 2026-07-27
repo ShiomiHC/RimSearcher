@@ -64,8 +64,29 @@ public class ListDirectoryTool : ITool
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (!PathSecurity.IsPathSafe(path)) return Task.FromResult(new ToolResult("Path outside allowed directories.", true));
-        if (!Directory.Exists(path)) return Task.FromResult(new ToolResult("Directory not found.", true));
+        // 三条失败路径都回显收到的 path。不带它时，同一句 "Directory not found." 对应不到是哪次
+        // 调用出的错，而 read_code 的同类返回一直是带路径的。
+        if (!PathSecurity.IsPathSafe(path))
+        {
+            // 相对路径会先被解析成相对于服务进程工作目录的一条路径，再判越界，于是拼错路径与
+            // 「忘了写成绝对路径」都收敛到同一句越界提示上。后者其实是参数格式问题。
+            var hint = Path.IsPathRooted(path)
+                ? "Only the server's indexed source roots and directories below them can be listed."
+                : "This path is not absolute; list_directory takes an absolute directory path.";
+            return Task.FromResult(new ToolResult($"Path outside allowed directories: '{path}'. {hint}", true));
+        }
+
+        if (!Directory.Exists(path))
+        {
+            // 指到一个确实存在的文件时，「目录不存在」会被读成「这个文件也不在」——而它就在那儿，
+            // 只是该换个工具读。
+            if (File.Exists(path))
+                return Task.FromResult(new ToolResult(
+                    $"'{path}' is a file, not a directory. Read it with read_code, "
+                    + "or list the directory that contains it.", true));
+
+            return Task.FromResult(new ToolResult($"Directory not found: '{path}'.", true));
+        }
 
         try
         {

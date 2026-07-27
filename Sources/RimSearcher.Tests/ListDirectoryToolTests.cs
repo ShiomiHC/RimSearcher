@@ -113,5 +113,48 @@ public class ListDirectoryToolTests : IDisposable
         var content = await ListAsync(outside, null);
 
         Assert.Contains("outside allowed directories", content);
+
+        // 路径要回显：并发发出几次调用后，一句不带路径的 "outside allowed directories"
+        // 对应不到是哪一次出的错。read_code 的同类返回一直是带路径的。
+        Assert.Contains(outside, content);
+    }
+
+    // 指到一个确实存在的文件时，「目录不存在」会被读成「这个文件也不在索引里」，
+    // 而它就躺在那儿，只是该换 read_code 读。
+    [Fact]
+    public async Task ExistingFile_SaysItIsAFile_NotThatNothingIsThere()
+    {
+        var root = BuildTree(1);
+        var file = Path.Combine(root, "Thing_00000.xml");
+
+        var content = await ListAsync(file, null);
+
+        Assert.Contains("is a file, not a directory", content);
+        Assert.Contains("read_code", content);
+        Assert.DoesNotContain("Directory not found", content);
+    }
+
+    [Fact]
+    public async Task MissingDirectory_EchoesThePathItLookedFor()
+    {
+        var root = BuildTree(1);
+        var missing = Path.Combine(root, "NoSuchSubdir");
+
+        var content = await ListAsync(missing, null);
+
+        Assert.Contains("Directory not found", content);
+        Assert.Contains(missing, content);
+    }
+
+    // 相对路径会先被解析成相对于服务进程工作目录的一条路径再判越界，于是「路径拼错」与
+    // 「忘了写成绝对路径」收敛到同一句越界提示上——后者其实是参数格式问题，得说出来。
+    [Fact]
+    public async Task RelativePath_SaysItNeedsAnAbsoluteOne()
+    {
+        BuildTree(1);
+
+        var content = await ListAsync("Defs", null);
+
+        Assert.Contains("not absolute", content);
     }
 }

@@ -19,13 +19,15 @@ public sealed class DefLookup
         int inScopeCount,
         IReadOnlyList<string> otherSources,
         IReadOnlyList<string>? inScopeDefTypes = null,
-        bool requestedDefTypeUnavailable = false)
+        bool requestedDefTypeUnavailable = false,
+        int sameDefTypeCount = 0)
     {
         Location = location;
         InScopeCount = inScopeCount;
         OtherSources = otherSources;
         InScopeDefTypes = inScopeDefTypes ?? Array.Empty<string>();
         RequestedDefTypeUnavailable = requestedDefTypeUnavailable;
+        SameDefTypeCount = sameDefTypeCount;
     }
 
     public DefLocation? Location { get; }
@@ -40,6 +42,10 @@ public sealed class DefLookup
     // 调用方点名了一种 defType，而 scope 内这个名字下没有那一种。返回的是别的类型那条，
     // 不说一句的话它会被当成「就是我要的那种」。
     public bool RequestedDefTypeUnavailable { get; }
+
+    // 与选中那条同 DefType 的 scope 内条数（含它自己）。>1 就意味着 defType 分不开这几条，
+    // 此时「pass defType to pick another」是条死路指令：照做拿回来的是逐字相同的结果。
+    public int SameDefTypeCount { get; }
 
     public bool Found => Location != null;
 
@@ -480,7 +486,11 @@ public class DefIndexer
             .OrderBy(type => type, StringComparer.Ordinal)
             .ToList();
 
-        return new DefLookup(best, inScope.Count, outOfScopeSources, inScopeDefTypes, requestedDefTypeUnavailable);
+        var sameDefTypeCount = inScope.Count(x =>
+            string.Equals(x.Loc.DefType, best.DefType, StringComparison.OrdinalIgnoreCase));
+
+        return new DefLookup(
+            best, inScope.Count, outOfScopeSources, inScopeDefTypes, requestedDefTypeUnavailable, sameDefTypeCount);
     }
 
     private static IReadOnlyList<DefLocation> GetLocations(

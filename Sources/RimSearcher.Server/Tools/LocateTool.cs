@@ -27,8 +27,11 @@ public class LocateTool : ITool
 
     public string Description =>
         "Fuzzy name lookup: turns a partial or misspelled name into the exact C# type / member / XML def name that other tools require — the only tool that accepts approximate input. " +
-        "Results are split into C# Types, Members, XML Defs and Def content matches, each section capped by limit and folded independently. " +
-        "Filters: type:, method:, field:, def:.";
+        "Results are split into C# Types, Members, XML Defs and Content Matches (defs matched on a field value rather " +
+        "than on their name), each section capped by limit and folded independently, plus a Files section of indexed " +
+        "paths — fuzzy when the other four come back empty, otherwise just the file whose name matches the query " +
+        "exactly. " +
+        "Filters go inside the query: type:, method:, field:, def:, and scope: as an alias for the scope parameter.";
 
     public object JsonSchema => new
     {
@@ -81,6 +84,10 @@ public class LocateTool : ITool
         // 阈值长，零命中也会被判成有结果——「查不到就提示换 scope」那条路径因此永远走不到。
         var hasResults = false;
 
+        // C# Types 段列过的名字。文件段用它去重：类型 `CompShield` 与文件 CompShield.cs 是
+        // 同一个东西的两种写法，两段各列一次只是把同一条结果说两遍。
+        var shownTypeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         if (query.TypeFilter != null || (string.IsNullOrEmpty(query.MethodFilter) && string.IsNullOrEmpty(query.FieldFilter) && string.IsNullOrEmpty(query.DefFilter)))
         {
             var typeSearchTerm = query.TypeFilter ?? QueryParser.GetCombinedSearchTerm(query);
@@ -98,6 +105,7 @@ public class LocateTool : ITool
                     var paths = _sourceIndexer.GetPathsByType(entry.Item);
                     var firstPath = paths.FirstOrDefault() ?? "unknown";
                     var fileName = Path.GetFileName(firstPath);
+                    shownTypeNames.Add(entry.Item);
                     sb.AppendLine($"- `{entry.Item}` ({entry.Score:F0}%) - {fileName}{ScopeArgs.Label(entry.SourceName)}");
                 }
 
@@ -209,21 +217,48 @@ public class LocateTool : ITool
             }
         }
 
-        if (!hasResults)
+        // 文件名是 locate 的一等查询目标（README 的「支持内容」头一条就列着它），但这一段原先
+        // 只在其余四段全部零命中时才跑。于是查一个确实在索引里的文件名——'Bodies_Humanlike'——
+        // 只要顺带蹭到一条 38 分的无关 def，整段就被吞掉，返回读起来是「索引里没有这个文件」。
+        // 现在分两种触发：零命中时它仍是兜底（模糊列出若干条），有命中时只补名字完全一致的
+        // 那一份，不把每次查询都拖长一段模糊文件名。
+        var wantsFileFallback = !hasResults;
+        var hasFilterPrefix = query.TypeFilter != null || query.MethodFilter != null
+                              || query.FieldFilter != null || query.DefFilter != null;
+
+        if (wantsFileFallback || !hasFilterPrefix)
         {
             var files = _sourceIndexer.Search(rawQuery, scope, limit.Count);
-            report.Add(files);
 
-            if (files.Items.Count > 0)
+            // 精确补充时只留「基名与查询词逐字相同」的那些，并去掉已在 C# Types 段出现过的
+            // 同名项（类型 CompShield 与文件 CompShield.cs 是同一件事的两种写法）。
+            var items = wantsFileFallback
+                ? files.Items.ToList()
+                : files.Items
+                    .Where(entry => string.Equals(
+                        Path.GetFileNameWithoutExtension(entry.Item), rawQuery, StringComparison.OrdinalIgnoreCase))
+                    .Where(entry => !shownTypeNames.Contains(Path.GetFileNameWithoutExtension(entry.Item)))
+                    .ToList();
+
+            if (items.Count > 0)
             {
+                // footer 的落选计数只在真的列出这一段时才计入，否则「补一条精确文件」会顺带
+                // 把几十条模糊文件命中的 out-of-scope 计数灌进去，脚注的数字就不再对应正文。
+                report.Add(files);
+
                 sb.AppendLine("\n**Files:**");
-                foreach (var entry in files.Items)
+                foreach (var entry in items)
                 {
                     sb.AppendLine($"- {Path.GetFileName(entry.Item)} - {entry.Item}{ScopeArgs.Label(entry.SourceName)}");
                 }
 
-                var fold = ScopeArgs.FoldLine(files, limit: limit);
-                if (fold != null) sb.AppendLine(fold);
+                // 折叠行只对兜底那一支有意义：精确补充本来就只列同名的那几条，没有「还有更多」。
+                if (wantsFileFallback)
+                {
+                    var fold = ScopeArgs.FoldLine(files, limit: limit);
+                    if (fold != null) sb.AppendLine(fold);
+                }
+
                 hasResults = true;
             }
         }

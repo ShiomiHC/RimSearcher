@@ -189,6 +189,109 @@ public class LocateToolTests
         Assert.DoesNotContain("Propertys", result.Content);
     }
 
+    // 文件名是 locate 的一等查询目标，但 Files 段原先只在其余四段全部零命中时才跑。
+    // 一条 38 分的无关 def 就足以把它吞掉，于是查一个确实在索引里的 XML 文件名，返回读起来
+    // 是「索引里没有这个文件」——而它就在索引里，别的工具还都要求先从这里拿到准确名字。
+    [Fact]
+    public async Task ExactFileName_IsListed_EvenWhenAnUnrelatedDefAlsoMatched()
+    {
+        using var workspace = new TempWorkspace();
+        var coreDirectory = workspace.Dir("Core");
+        workspace.WriteFile(
+            Path.Combine("Core", "Bodies_Humanlike.xml"),
+            "<Defs><BodyDef><defName>Human</defName></BodyDef></Defs>");
+
+        var sourceIndexer = new SourceIndexer();
+        sourceIndexer.Scan(coreDirectory);
+        sourceIndexer.FreezeIndex();
+
+        var defIndexer = new DefIndexer();
+        defIndexer.Scan(coreDirectory);
+        defIndexer.FreezeIndex();
+
+        var catalog = ScopeCatalog.Build([("vanilla", coreDirectory)], null, null);
+        var tool = new LocateTool(sourceIndexer, defIndexer, catalog);
+
+        using var args = JsonDocument.Parse("""{"query":"Bodies_Humanlike"}""");
+        var result = await tool.ExecuteAsync(args.RootElement, CancellationToken.None);
+
+        Assert.False(result.IsError);
+        Assert.Contains("**Files:**", result.Content);
+        Assert.Contains("Bodies_Humanlike.xml", result.Content);
+    }
+
+    // 精确补充只列名字逐字相同的那一份，且要躲开 C# Types 段已经列过的同名项——
+    // 类型 `CompTestShield` 与文件 CompTestShield.cs 是同一件事的两种写法，两段各列一次
+    // 只是把同一条结果说两遍，而这一段本来是为「其余段找不到」准备的。
+    [Fact]
+    public async Task TypeAlreadyListed_DoesNotComeBackAsAFileLine()
+    {
+        using var workspace = new TempWorkspace();
+        var coreDirectory = workspace.Dir("Core");
+        workspace.WriteFile(
+            Path.Combine("Core", "CompTestShield.cs"),
+            "namespace RimWorld { public class CompTestShield { } }");
+
+        var sourceIndexer = new SourceIndexer();
+        sourceIndexer.Scan(coreDirectory);
+        sourceIndexer.FreezeIndex();
+
+        var catalog = ScopeCatalog.Build([("vanilla", coreDirectory)], null, null);
+        var tool = new LocateTool(sourceIndexer, EmptyDefIndexer(), catalog);
+
+        using var args = JsonDocument.Parse("""{"query":"CompTestShield"}""");
+        var result = await tool.ExecuteAsync(args.RootElement, CancellationToken.None);
+
+        Assert.Contains("**C# Types:**", result.Content);
+        Assert.DoesNotContain("**Files:**", result.Content);
+    }
+
+    // 名字只是沾边的文件不该在有命中时被补进来，否则每次查询都拖长一段模糊文件名
+    [Fact]
+    public async Task PartialFileNameMatch_IsNotAppendedWhenOtherSectionsHit()
+    {
+        using var workspace = new TempWorkspace();
+        var coreDirectory = workspace.Dir("Core");
+        workspace.WriteFile(
+            Path.Combine("Core", "CompShieldExtras.cs"),
+            "namespace RimWorld { public class Holder { public void CompShieldTick() { } } }");
+
+        var sourceIndexer = new SourceIndexer();
+        sourceIndexer.Scan(coreDirectory);
+        sourceIndexer.FreezeIndex();
+
+        var catalog = ScopeCatalog.Build([("vanilla", coreDirectory)], null, null);
+        var tool = new LocateTool(sourceIndexer, EmptyDefIndexer(), catalog);
+
+        using var args = JsonDocument.Parse("""{"query":"CompShieldTick"}""");
+        var result = await tool.ExecuteAsync(args.RootElement, CancellationToken.None);
+
+        Assert.Contains("CompShieldTick", result.Content);
+        Assert.DoesNotContain("**Files:**", result.Content);
+    }
+
+    // 零命中时这一段仍是兜底，模糊命中照旧列出——修「有命中时也补」不能把兜底改窄
+    [Fact]
+    public async Task NoOtherSectionHit_StillFallsBackToFuzzyFileSearch()
+    {
+        using var workspace = new TempWorkspace();
+        var coreDirectory = workspace.Dir("Core");
+        workspace.WriteFile(Path.Combine("Core", "Patches_Zzql.xml"), "<Patch />");
+
+        var sourceIndexer = new SourceIndexer();
+        sourceIndexer.Scan(coreDirectory);
+        sourceIndexer.FreezeIndex();
+
+        var catalog = ScopeCatalog.Build([("vanilla", coreDirectory)], null, null);
+        var tool = new LocateTool(sourceIndexer, EmptyDefIndexer(), catalog);
+
+        using var args = JsonDocument.Parse("""{"query":"Patches_Zzq"}""");
+        var result = await tool.ExecuteAsync(args.RootElement, CancellationToken.None);
+
+        Assert.Contains("**Files:**", result.Content);
+        Assert.Contains("Patches_Zzql.xml", result.Content);
+    }
+
     private static int CountTypeLines(string content) =>
         content.Split('\n').Count(line => line.TrimStart().StartsWith("- `CompFold"));
 

@@ -126,4 +126,48 @@ public class ReadCodePresentationTests : IDisposable
         Assert.Contains("```csharp", result.Content);
         Assert.Contains("// CompShield.cs", result.Content);
     }
+
+    // Roslyn 把整份 XML 解析成一棵没有任何声明的语法树，于是 extractClass 走到 TargetNotFound，
+    // 回一句「类不在这个文件里，用 inspect 核对类型名」。调用方照做拿到一条 def，回来再传一次
+    // 还是同一句——两条提示互相指，而真正的原因是模式选错了，跟名字对不对无关。
+    [Fact]
+    public async Task ExtractClass_OnXml_SaysTheModeIsWrong_NotThatTheNameIsWrong()
+    {
+        var (tool, _, _) = Build();
+
+        var result = await Run(tool, new { path = "Apparel_Belts.xml", extractClass = "Apparel_ShieldBelt" });
+
+        Assert.True(result.IsError);
+        Assert.Contains("is XML", result.Content);
+        Assert.Contains("extractClass", result.Content);
+        // 下一步要给到真正走得通的两条：裸行读，或按 defName 去 inspect
+        Assert.Contains("startLine", result.Content);
+        Assert.Contains("inspect", result.Content);
+        Assert.DoesNotContain("not found in", result.Content);
+    }
+
+    [Fact]
+    public async Task MethodName_OnXml_SaysTheModeIsWrong()
+    {
+        var (tool, _, _) = Build();
+
+        var result = await Run(tool, new { path = "Apparel_Belts.xml", methodName = "Apparel_ShieldBelt" });
+
+        Assert.True(result.IsError);
+        Assert.Contains("is XML", result.Content);
+        Assert.Contains("methodName", result.Content);
+        Assert.DoesNotContain("Use inspect tool to see available members", result.Content);
+    }
+
+    // 反向保险：C# 文件上这两个模式当然照旧工作，别被新分支误伤
+    [Fact]
+    public async Task ExtractClass_OnCsharp_StillWorks()
+    {
+        var (tool, _, _) = Build();
+
+        var result = await Run(tool, new { path = "CompShield.cs", extractClass = "CompShield" });
+
+        Assert.False(result.IsError);
+        Assert.Contains("class CompShield", result.Content);
+    }
 }
