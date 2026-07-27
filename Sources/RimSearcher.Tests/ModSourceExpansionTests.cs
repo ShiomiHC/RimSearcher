@@ -115,6 +115,64 @@ public class ModSourceExpansionTests : IDisposable
         Assert.All(xml, entry => Assert.Equal("pack", entry.Name));
     }
 
+    // active_mods 决定 loadFolders 里的条件目录收不收
+    [Fact]
+    public void ActiveMods_PicksOneOfTwoExclusiveBranches()
+    {
+        _workspace.WriteFile(Path.Combine("Mod", "loadFolders.xml"), """
+            <loadFolders>
+                <v1.6>
+                    <li>/</li>
+                    <li IfModActive="unofficial.mod">unofficial</li>
+                    <li IfModActive="official.mod">official</li>
+                </v1.6>
+            </loadFolders>
+            """);
+        _workspace.WriteFile(Path.Combine("Mod", "Defs", "Base.xml"), "<Defs />");
+        _workspace.WriteFile(Path.Combine("Mod", "official", "Defs", "Genes.xml"), "<Defs />");
+        _workspace.WriteFile(Path.Combine("Mod", "unofficial", "Defs", "Genes.xml"), "<Defs />");
+
+        var config = Parse($"""
+            game_version = "1.6"
+
+            [[sources]]
+            name        = "X"
+            mod         = '{Path.Combine(_workspace.Root, "Mod")}'
+            active_mods = [ "official.mod" ]
+            """);
+
+        var sources = config.ResolveSources();
+
+        Assert.Equal(
+            [
+                Path.Combine(_workspace.Root, "Mod", "official", "Defs"),
+                Path.Combine(_workspace.Root, "Mod", "Defs")
+            ],
+            sources.Xml.Select(entry => entry.Path));
+        Assert.Empty(sources.Shadowed);
+    }
+
+    // 不配 active_mods 时两套全收，并把冲突提示到 Notes
+    [Fact]
+    public void WithoutActiveMods_ExclusiveBranchesAreBothIncludedAndReported()
+    {
+        _workspace.WriteFile(Path.Combine("Mod", "loadFolders.xml"), """
+            <loadFolders>
+                <v1.6>
+                    <li IfModActive="unofficial.mod">unofficial</li>
+                    <li IfModActive="official.mod">official</li>
+                </v1.6>
+            </loadFolders>
+            """);
+        _workspace.WriteFile(Path.Combine("Mod", "official", "Defs", "Genes.xml"), "<Defs />");
+        _workspace.WriteFile(Path.Combine("Mod", "unofficial", "Defs", "Genes.xml"), "<Defs />");
+
+        var sources = Resolve("Mod");
+
+        Assert.Equal(2, sources.Xml.Count);
+        Assert.Contains(sources.Notes, note => note.Contains("mutually exclusive"));
+    }
+
     // 路径没了（退订、移库）时记一条说明，而不是让这个源无声消失
     [Fact]
     public void Mod_ReportsMissingRoot()

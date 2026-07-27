@@ -15,6 +15,10 @@ public sealed class SourceDefinition
     // 与当前游戏版本展开成游戏真正加载的那些目录，旧版本目录一律不进。
     public IReadOnlyList<string> Mods { get; init; } = [];
 
+    // 判定 loadFolders.xml 条件目录用的 packageId 白名单。留空即条件目录全收；
+    // 配了就是「只有这些前置算启用」，其余条件目录一概不收。
+    public IReadOnlyList<string> ActiveMods { get; init; } = [];
+
     // name 是用户写的还是从路径猜的。猜来的那个在 mod 展开时会被 About.xml 里的名字顶掉——
     // workshop 的目录名是纯数字 ID，拿它当源名等于没有名字。
     public bool HasExplicitName { get; init; }
@@ -39,6 +43,8 @@ public sealed class SourceDefinition
             ConfigToml.Find(table, "assemblies", "assembly", "assemblyPath", "assemblyPaths", "dll", "dlls"));
         var mods = ConfigToml.StringList(
             ConfigToml.Find(table, "mod", "mods", "modRoot", "modRoots", "modFolder", "modFolders"));
+        var activeMods = ConfigToml.StringList(
+            ConfigToml.Find(table, "activeMods", "activeMod", "requires", "withMods"));
 
         if (csharp.Count == 0 && xml.Count == 0 && assemblies.Count == 0 && mods.Count == 0) return null;
 
@@ -52,7 +58,8 @@ public sealed class SourceDefinition
             Csharp = csharp,
             Xml = xml,
             Assemblies = assemblies,
-            Mods = mods
+            Mods = mods,
+            ActiveMods = activeMods
         };
     }
 }

@@ -63,22 +63,71 @@ public sealed record ModLayout
 
 // 把一个 mod 根目录翻译成「这个游戏版本下 RimWorld 真正会加载的那些目录和文件」。
 //
-// 规则出自 ModContentPack.foldersToLoadDescendingOrder + DirectXmlLoader.XmlAssetsInModFolder：
-// 游戏按优先级从高到低遍历各内容文件夹，用**相对于文件夹根的路径**做去重，同相对路径只取
-// 优先级最高的那一份。注意这是文件级覆盖，不是 def 级合并——ModRoot/Defs/Traits.xml 只要
-// 在 1.6/Defs/Traits.xml 里有同名文件，整份都不会被解析。
+// 规则逐条核对过 1.6 的 Verse.ModContentPack.InitLoadFolders / Verse.ModLoadFolders /
+// Verse.LoadFolder.ShouldLoad / Verse.ModLister.AnyModActiveNoSuffix：
+//   · loadFolders.xml 优先，节点选择顺序是 当前版本 → ≤当前版本的最高版本 → default
+//   · 列表里越靠后优先级越高（AddFolders 是倒着遍历的）
+//   · 没有 loadFolders.xml 时的默认布局是 [<版本目录>, Common, 根]
+//   · 去重按**相对于 mod 文件夹根**的路径，是文件级覆盖而不是 def 级合并——
+//     ModRoot/Defs/Traits.xml 只要在 1.6/Defs/Traits.xml 有同名文件，整份都不会被解析
 public static class ModLayoutResolver
 {
     // 只收游戏真正解析成 Def / 加载成程序集的目录。Languages、Textures、Sounds 不进索引。
     private static readonly string[] XmlDirNames = ["Defs", "Patches"];
     private const string AssemblyDirName = "Assemblies";
 
+    // ModContentPack.CommonFolderName：默认布局里排在版本目录之后、根目录之前
+    private const string CommonFolderName = "Common";
+
     private const string LoadFoldersFileName = "loadFolders.xml";
+    private const string DefaultVersionKey = "default";
+
+    // ModMetaData.SteamModPostfix：同一个 mod 的 steam 版 packageId 带这个后缀，
+    // 而条件判定走的是 *NoSuffix 系列，两边都要先脱掉它
+    private const string SteamPostfix = "_steam";
 
     private static readonly Regex VersionDirName = new(@"^1\.\d+$", RegexOptions.Compiled);
 
+    // 一个内容文件夹，以及 loadFolders.xml 给它挂的加载条件（无条件则为 null）
+    private sealed record FolderEntry(string Path, LoadCondition? Condition);
+
+    // LoadFolder.ShouldLoad 的三个来源：IfModActive 是「任一启用」，IfModActiveAll 是
+    // 「全部启用」，IfModNotActive 是「任一启用即排除」。三者可以同时挂在一个 li 上，取合取。
+    private sealed record LoadCondition(string[] AnyOf, string[] AllOf, string[] NotAnyOf)
+    {
+        // activeMods 为 null 表示「不知道谁启用着」——一律当满足，宁可多收
+        public bool IsMet(IReadOnlySet<string>? activeMods)
+        {
+            if (activeMods == null) return true;
+
+            if (AnyOf.Length > 0 && !AnyOf.Any(activeMods.Contains)) return false;
+            if (AllOf.Length > 0 && !AllOf.All(activeMods.Contains)) return false;
+            if (NotAnyOf.Length > 0 && NotAnyOf.Any(activeMods.Contains)) return false;
+
+            return true;
+        }
+
+        public string Describe()
+        {
+            var parts = new List<string>();
+            if (AnyOf.Length > 0) parts.Add(string.Join("|", AnyOf));
+            if (AllOf.Length > 0) parts.Add(string.Join("&", AllOf));
+            if (NotAnyOf.Length > 0) parts.Add("!" + string.Join("|", NotAnyOf));
+
+            return string.Join(" ", parts);
+        }
+    }
+
     // gameVersion 为 null（Version.txt 读不到）时按目录里最高的版本走，并在 Notes 里说明。
-    public static ModLayout? Resolve(string modRoot, string? gameVersion)
+    //
+    // activeMods 是「哪些 packageId 处于启用状态」的白名单，用来判定条件目录。传 null（默认）
+    // 即不判定、条件目录全收——那是安全的一侧，但一个 mod 用两组互斥条件挂两套内容时
+    // （RatkinGene 的 1.6 与 1.6_unofficial），全收会让优先级由 loadFolders 的书写顺序决定，
+    // 而不是由哪个前置真的启用着决定。这种情形会记进 Notes 提示显式指定。
+    public static ModLayout? Resolve(
+        string modRoot,
+        string? gameVersion,
+        IReadOnlyCollection<string>? activeMods = null)
     {
         if (string.IsNullOrWhiteSpace(modRoot)) return null;
 
@@ -96,18 +145,22 @@ public static class ModLayoutResolver
 
         var notes = new List<string>();
         var chain = BuildVersionChain(root, gameVersion);
+        var active = activeMods == null
+            ? null
+            : new HashSet<string>(activeMods.Select(NormalizePackageId), StringComparer.OrdinalIgnoreCase);
 
-        List<string>? folders = null;
+        List<FolderEntry>? folders = null;
         List<string> xmlDirs = [];
         List<string> assemblyDirs = [];
         var chosen = chain[0];
         var matched = false;
 
         // 首选是 gameVersion 自身。它一份内容都产不出（mod 尚未适配该版本，或整个 mod 就没有
-        // 版本目录）时才往下走——否则「手动指了这个 mod 却什么都搜不到」会被当成工具的 bug。
+        // 版本目录）时才往下走——游戏此时是什么都不加载，但用户手动指了这个 mod 就是想搜它，
+        // 「配了却什么都搜不到」会被当成工具的 bug。回退了就记进 Notes。
         foreach (var candidate in chain)
         {
-            var candidateFolders = FoldersFor(root, candidate, notes);
+            var candidateFolders = FoldersFor(root, candidate, active, notes);
             var (xml, assemblies) = ContentDirs(candidateFolders);
 
             // 一个候选都没成时（纯汉化包、纯贴图包）报的仍是首选那份布局，
@@ -125,6 +178,24 @@ public static class ModLayoutResolver
             }
         }
 
+        // 白名单把内容全筛没了（该 mod 的前置一个都没启用，且没有无条件内容兜着）
+        // → 与上面同一条思路：宁可多收也不让一个明确配了的 mod 变成空的
+        if (!matched && active != null)
+        {
+            var relaxed = FoldersFor(root, chain[0], null, notes);
+            var (xml, assemblies) = ContentDirs(relaxed);
+
+            if (xml.Count > 0 || assemblies.Count > 0)
+            {
+                notes.Add("active_mods matched no conditional folder, fell back to including all");
+                folders = relaxed;
+                xmlDirs = xml;
+                assemblyDirs = assemblies;
+                chosen = chain[0];
+                matched = true;
+            }
+        }
+
         if (matched && chosen != gameVersion)
         {
             notes.Add(gameVersion == null
@@ -132,15 +203,18 @@ public static class ModLayoutResolver
                 : $"no content for {gameVersion}, fell back to '{chosen ?? "<root>"}'");
         }
 
+        var resolved = folders ?? [];
+        var shadowed = ComputeShadowed(resolved, notes);
+
         return new ModLayout
         {
             Root = root,
             Name = ReadModName(root),
             Version = chosen,
-            Folders = folders ?? [],
+            Folders = resolved.Select(entry => entry.Path).ToList(),
             XmlDirs = xmlDirs,
             AssemblyDirs = assemblyDirs,
-            Shadowed = ComputeShadowed(folders ?? []),
+            Shadowed = shadowed,
             // 版本链上试过几个候选就会走几遍 FoldersFor，同一条降级说明会被记多次
             Notes = notes.Distinct(StringComparer.Ordinal).ToList()
         };
@@ -194,29 +268,40 @@ public static class ModLayoutResolver
     }
 
     // 优先级从高到低的内容文件夹。loadFolders.xml 说了算，没有它才用默认布局。
-    private static List<string> FoldersFor(string root, string? version, List<string> notes)
+    private static List<FolderEntry> FoldersFor(
+        string root,
+        string? version,
+        IReadOnlySet<string>? activeMods,
+        List<string> notes)
     {
-        var declared = ReadLoadFolders(root, version, notes);
+        var declared = ReadLoadFolders(root, version, activeMods, notes);
         if (declared != null) return declared;
 
-        // 默认布局：版本目录（若在）压过根目录
-        var folders = new List<string>();
+        // ModContentPack.InitLoadFolders 的默认布局：<版本目录>、Common、根，优先级依次递减
+        var folders = new List<FolderEntry>();
+
         if (version != null)
         {
             var versionDir = Path.Combine(root, version);
-            if (Directory.Exists(versionDir)) folders.Add(versionDir);
+            if (Directory.Exists(versionDir)) folders.Add(new FolderEntry(versionDir, null));
         }
 
-        folders.Add(root);
+        var commonDir = Path.Combine(root, CommonFolderName);
+        if (Directory.Exists(commonDir)) folders.Add(new FolderEntry(commonDir, null));
+
+        folders.Add(new FolderEntry(root, null));
         return folders;
     }
 
-    // loadFolders.xml 的 <v1.6> 节点。列表里越靠后优先级越高，故读出来要反转。
-    // 返回 null 表示「没有这份声明」，由调用方走默认布局。
-    private static List<string>? ReadLoadFolders(string root, string? version, List<string> notes)
+    // loadFolders.xml 的版本节点。节点选择顺序与 InitLoadFolders 一致：当前版本 →
+    // ≤当前版本的最高版本 → default。列表里越靠后优先级越高，故读出来要反转。
+    // 返回 null 表示「没有可用的声明」，由调用方走默认布局。
+    private static List<FolderEntry>? ReadLoadFolders(
+        string root,
+        string? version,
+        IReadOnlySet<string>? activeMods,
+        List<string> notes)
     {
-        if (version == null) return null;
-
         var path = Path.Combine(root, LoadFoldersFileName);
         if (!File.Exists(path)) return null;
 
@@ -232,43 +317,127 @@ public static class ModLayoutResolver
             return null;
         }
 
-        var node = document.Root?.Elements().FirstOrDefault(element =>
-            string.Equals(element.Name.LocalName.TrimStart('v', 'V'), version, StringComparison.OrdinalIgnoreCase));
+        var nodes = new Dictionary<string, XElement>(StringComparer.OrdinalIgnoreCase);
+        foreach (var element in document.Root?.Elements() ?? [])
+        {
+            var key = NormalizeVersionKey(element.Name.LocalName);
+            if (key.Length > 0) nodes.TryAdd(key, element);
+        }
 
+        var node = SelectVersionNode(nodes, version);
         if (node == null) return null;
 
-        var folders = new List<string>();
-        var conditional = 0;
+        var folders = new List<FolderEntry>();
+        var included = 0;
+        var skipped = 0;
 
         foreach (var item in node.Elements("li"))
         {
             var value = item.Value.Trim();
             if (value.Length == 0) continue;
 
-            // IfModActive / IfModNotActive 指向的补丁目录：手动指 mod 根时无从判断哪些 mod
-            // 处于启用状态，全部收下。索引比游戏宽一点无害，漏索引才难查。
-            if (item.Attributes().Any(attribute =>
-                    attribute.Name.LocalName.StartsWith("IfMod", StringComparison.OrdinalIgnoreCase)))
-                conditional++;
+            var condition = ReadCondition(item);
+            if (condition != null)
+            {
+                if (!condition.IsMet(activeMods))
+                {
+                    skipped++;
+                    continue;
+                }
 
-            var resolved = value is "/" or "."
+                included++;
+            }
+
+            // ModLoadFolders 只把 "/" 和 "\" 当作 mod 根
+            var resolved = value is "/" or "\\"
                 ? root
                 : Path.GetFullPath(Path.Combine(root, value.Replace('/', Path.DirectorySeparatorChar)));
 
-            if (Directory.Exists(resolved) && !folders.Contains(resolved, StringComparer.OrdinalIgnoreCase))
-                folders.Add(resolved);
+            if (Directory.Exists(resolved)
+                && !folders.Any(entry => entry.Path.Equals(resolved, StringComparison.OrdinalIgnoreCase)))
+                folders.Add(new FolderEntry(resolved, condition));
         }
 
         if (folders.Count == 0) return null;
 
-        if (conditional > 0)
-            notes.Add($"{conditional} conditional folder(s) in {LoadFoldersFileName} included unconditionally");
+        // 没给 active_mods 时条件目录一律收下：索引比游戏宽一点无害，漏索引才难查
+        if (included > 0 && activeMods == null)
+            notes.Add($"{included} conditional folder(s) in {LoadFoldersFileName} included unconditionally");
+
+        if (skipped > 0)
+            notes.Add($"{skipped} conditional folder(s) skipped by active_mods");
 
         folders.Reverse();
         return folders;
     }
 
-    private static (List<string> Xml, List<string> Assemblies) ContentDirs(IReadOnlyList<string> folders)
+    // ModLoadFolders.LoadDataFromXmlCustom：节点名转小写后，打头的 v 去掉
+    private static string NormalizeVersionKey(string name)
+    {
+        var key = name.Trim().ToLowerInvariant();
+        return key.StartsWith('v') ? key[1..] : key;
+    }
+
+    private static XElement? SelectVersionNode(Dictionary<string, XElement> nodes, string? version)
+    {
+        if (version != null)
+        {
+            if (nodes.TryGetValue(version, out var exact)) return exact;
+
+            // 声明的版本节点未必有同名目录，故这一步不能靠外层那条按目录名建的版本链
+            var older = nodes.Keys
+                .Where(key => key.Contains('.') && CompareVersions(key, version) <= 0)
+                .OrderByDescending(key => key, Comparer<string>.Create(CompareVersions))
+                .FirstOrDefault();
+
+            if (older != null) return nodes[older];
+        }
+
+        return nodes.GetValueOrDefault(DefaultVersionKey);
+    }
+
+    // li 上的 IfModActive / IfModActiveAll / IfModNotActive，三者可以并存
+    private static LoadCondition? ReadCondition(XElement item)
+    {
+        string[] anyOf = [];
+        string[] allOf = [];
+        string[] notAnyOf = [];
+
+        foreach (var attribute in item.Attributes())
+        {
+            var name = attribute.Name.LocalName;
+
+            if (name.Equals("IfModActive", StringComparison.OrdinalIgnoreCase))
+                anyOf = SplitPackageIds(attribute.Value);
+            else if (name.Equals("IfModActiveAll", StringComparison.OrdinalIgnoreCase))
+                allOf = SplitPackageIds(attribute.Value);
+            else if (name.Equals("IfModNotActive", StringComparison.OrdinalIgnoreCase))
+                notAnyOf = SplitPackageIds(attribute.Value);
+        }
+
+        return anyOf.Length + allOf.Length + notAnyOf.Length == 0
+            ? null
+            : new LoadCondition(anyOf, allOf, notAnyOf);
+    }
+
+    // 脱掉 _steam 后缀后重复是常态：作者写 "CETeam.CombatExtended, CETeam.CombatExtended_steam"
+    // 就是为了同时点到 CE 的两个发行版，而那两个的 NoSuffix 形式本就是同一个
+    private static string[] SplitPackageIds(string value)
+        => value
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(NormalizePackageId)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+    private static string NormalizePackageId(string id)
+    {
+        var normalized = id.Trim().ToLowerInvariant();
+        return normalized.EndsWith(SteamPostfix, StringComparison.Ordinal)
+            ? normalized[..^SteamPostfix.Length]
+            : normalized;
+    }
+
+    private static (List<string> Xml, List<string> Assemblies) ContentDirs(IReadOnlyList<FolderEntry> folders)
     {
         var xml = new List<string>();
         var assemblies = new List<string>();
@@ -277,11 +446,11 @@ public static class ModLayoutResolver
         {
             foreach (var name in XmlDirNames)
             {
-                var directory = Path.Combine(folder, name);
+                var directory = Path.Combine(folder.Path, name);
                 if (Directory.Exists(directory)) xml.Add(directory);
             }
 
-            var assemblyDirectory = Path.Combine(folder, AssemblyDirName);
+            var assemblyDirectory = Path.Combine(folder.Path, AssemblyDirName);
             if (Directory.Exists(assemblyDirectory)) assemblies.Add(assemblyDirectory);
         }
 
@@ -289,18 +458,24 @@ public static class ModLayoutResolver
     }
 
     // folders 已是降序优先级，故先见到的即胜出者，后来的同相对路径文件全是死内容。
-    private static HashSet<string> ComputeShadowed(IReadOnlyList<string> folders)
+    private static HashSet<string> ComputeShadowed(IReadOnlyList<FolderEntry> folders, List<string> notes)
     {
         var shadowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (folders.Count < 2) return shadowed;
 
-        var winners = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var winners = new Dictionary<string, FolderEntry>(StringComparer.OrdinalIgnoreCase);
+
+        // 两个都带条件、条件又不同的文件夹互相遮蔽 = 一个 mod 挂了两套互斥内容（前置 A 装了
+        // 用这套、装了 B 用那套）。此时谁赢由 loadFolders 的书写顺序决定，而不是由哪个前置真的
+        // 启用着决定——正是 active_mods 该介入的地方。带条件的目录遮蔽无条件目录则是常规的
+        // 「DLC 装了就替换基础定义」，不算冲突。
+        var conflicts = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var folder in folders)
         {
             foreach (var name in XmlDirNames.Append(AssemblyDirName))
             {
-                var directory = Path.Combine(folder, name);
+                var directory = Path.Combine(folder.Path, name);
                 if (!Directory.Exists(directory)) continue;
 
                 IEnumerable<string> files;
@@ -318,10 +493,33 @@ public static class ModLayoutResolver
                 foreach (var file in files)
                 {
                     // 相对于 mod 文件夹根，不是相对于 Defs——游戏比的就是这一层
-                    var relative = Path.GetRelativePath(folder, file).Replace('\\', '/');
-                    if (!winners.Add(relative)) shadowed.Add(Path.GetFullPath(file));
+                    var relative = Path.GetRelativePath(folder.Path, file).Replace('\\', '/');
+
+                    if (winners.TryGetValue(relative, out var winner))
+                    {
+                        shadowed.Add(Path.GetFullPath(file));
+
+                        if (winner.Condition != null
+                            && folder.Condition != null
+                            && winner.Condition.Describe() != folder.Condition.Describe())
+                        {
+                            conflicts.Add(
+                                $"{Path.GetFileName(winner.Path)} [{winner.Condition.Describe()}] vs " +
+                                $"{Path.GetFileName(folder.Path)} [{folder.Condition.Describe()}]");
+                        }
+                    }
+                    else
+                    {
+                        winners[relative] = folder;
+                    }
                 }
             }
+        }
+
+        foreach (var conflict in conflicts.Order(StringComparer.Ordinal))
+        {
+            notes.Add($"mutually exclusive conditional folders, both included: {conflict} " +
+                      "— set active_mods to pick one");
         }
 
         return shadowed;

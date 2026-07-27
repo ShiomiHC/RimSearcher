@@ -347,6 +347,7 @@ assemblies = 'C:\SteamLibrary\steamapps\common\RimWorld\RimWorldWin64_Data\Manag
   - `xml`: 该源的 Def 目录，可多个（各 DLC 的 `Defs`、mod 的 `Defs` + `1.6/Defs`）
   - `assemblies`: 该源的程序集目录。**配了才能被 `sync_sources` 跟随**；留空即视为手工维护的源码副本，同步流程跳过
   - `mod`: mod 根目录（可多个）。写了它就不必再手写 `xml` / `assemblies`——见下方「mod 根自动展开」。与手写的 `xml` / `assemblies` 可以并存，展开结果追加在手写项之后
+  - `active_mods`: 判定 `loadFolders.xml` 条件目录用的 packageId 白名单。留空即条件目录全收；配了就是「只有这些前置算启用」，其余条件目录一概不收。只在启动日志报出互斥分支时才需要配
 - `[scope_groups]`: 作用域组，组名 → 源名列表；一个源可同属多组，组内顺序即同分时的排序优先级
 - `default_scope`: 未显式传 `scope` 参数时使用的作用域表达式；留空即全域
 - `verify_source_freshness`: 把源文件的大小/修改时间摘要纳入缓存指纹，让 Steam 更新过的 mod 自动触发索引重建（代价是启动时多几百毫秒的元数据枚举）
@@ -368,13 +369,35 @@ assemblies = 'C:\SteamLibrary\steamapps\common\RimWorld\RimWorldWin64_Data\Manag
 
 **mod 根自动展开**：`mod` 指向 mod 根目录后，工具按 RimWorld 自己的加载规则算出「这个游戏版本下真正生效的目录」，旧版本的 XML 和 dll 一律不进索引。
 
-规则与游戏一致（`ModContentPack.foldersToLoadDescendingOrder` + `DirectXmlLoader.XmlAssetsInModFolder`）：
+规则逐条核对过 1.6 的 `ModContentPack.InitLoadFolders` / `ModLoadFolders` / `LoadFolder.ShouldLoad` / `ModLister.AnyModActiveNoSuffix`：
 
-- 有 `loadFolders.xml` 就以它为准，取 `<v1.6>` 节点下的列表，**越靠后优先级越高**；`IfModActive` 之类的条件目录全部收下（手动指 mod 根时无从判断哪些 mod 处于启用状态，索引宽一点无害）
-- 没有 `loadFolders.xml` 则用默认布局：`1.6/` 压过根目录
+- 有 `loadFolders.xml` 就以它为准。节点选择顺序是 `<v1.6>` → `≤1.6` 的最高版本节点 → `<default>`；节点内的列表**越靠后优先级越高**
+- 没有 `loadFolders.xml` 则用默认布局：`1.6/` → `Common/` → 根目录，优先级依次递减
 - 覆盖是**文件级**的，按相对于 mod 文件夹根的路径比对，不是 def 级合并——`Defs/Traits.xml` 只要在 `1.6/Defs/Traits.xml` 有同名文件，根目录那份整个不解析。同名 dll 同理
 - 只收 `Defs`、`Patches`、`Assemblies`，`Languages` / `Textures` / `Sounds` 不进索引
 - 源名取 `About.xml` 里的 `<name>`（workshop 目录名是纯数字 ID）；显式写了 `name` 则以显式的为准
+
+**条件目录**（`IfModActive` = 任一启用、`IfModActiveAll` = 全部启用、`IfModNotActive` = 任一启用即排除，三者可并存取合取；packageId 比对不分大小写且忽略 `_steam` 后缀）默认**全部收下**——手动指 mod 根时无从判断哪些 mod 处于启用状态，索引宽一点无害。
+
+但有一种情形宽不得：**一个 mod 用两组互斥条件挂了两套内容**（前置 A 装了用这套、装了 B 用那套）。此时两套的文件同名，谁遮蔽谁由 `loadFolders.xml` 的书写顺序决定，而不是由哪个前置真的启用着决定——搜到的可能恰好是运行时不生效的那套。这种情形会在启动日志里报出来：
+
+```text
+[WARN] Mod layout note | detail=RatkinGene: mutually exclusive conditional folders, both included:
+       Common [solaris.ratkinracemod] vs Common [fxz.solaris.ratkinracemod.odyssey] — set active_mods to pick one
+```
+
+照提示给那个源加 `active_mods` 即可选定一支：
+
+```toml
+[[sources]]
+name        = "RatkinGene"
+mod         = 'C:\SteamLibrary\steamapps\workshop\content\294100\3043354134'
+active_mods = [ "Solaris.RatkinRaceMod" ]
+```
+
+`active_mods` 是白名单语义：配了之后该源的条件目录只认列出的这些前置，没列的一概不收（DLC 补丁目录也一样，需要的话把 `Ludeon.RimWorld.Ideology` 这类一并列上）。若白名单把内容全筛没了，会回退到全收并记日志——不让一个明确配了的 mod 变成空的。
+
+实测 257 个已订阅 mod 里只有 4 个存在互斥分支，其余不必管这个字段。
 
 以 HAR（`839005762`）为例，`game_version = "1.6"` 下展开的结果是：
 

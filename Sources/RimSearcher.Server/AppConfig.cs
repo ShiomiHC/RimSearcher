@@ -167,7 +167,8 @@ public record AppConfig
 
         foreach (var modRoot in definition.Mods)
         {
-            var layout = ModLayoutResolver.Resolve(modRoot, gameVersion);
+            var layout = ModLayoutResolver.Resolve(
+                modRoot, gameVersion, definition.ActiveMods.Count > 0 ? definition.ActiveMods : null);
             if (layout == null)
             {
                 // 路径不存在时不静默跳过：mod 退订/移库后目录就没了，而这条源会整个消失
@@ -197,7 +198,8 @@ public record AppConfig
             Csharp = definition.Csharp,
             Xml = xml,
             Assemblies = assemblies,
-            Mods = definition.Mods
+            Mods = definition.Mods,
+            ActiveMods = definition.ActiveMods
         };
     }
 
