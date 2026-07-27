@@ -25,12 +25,21 @@ public class InspectTool : ITool
     };
 
     private readonly ScopeCatalog _scopeCatalog;
+    private readonly LocalizationIndex? _localization;
 
-    public InspectTool(SourceIndexer sourceIndexer, DefIndexer defIndexer, ScopeCatalog scopeCatalog)
+    // 译文描述整段塞进来会把下面的 Resolved XML 挤出视线，而它只是个参考
+    private const int LocalizedDescriptionLimit = 300;
+
+    public InspectTool(
+        SourceIndexer sourceIndexer,
+        DefIndexer defIndexer,
+        ScopeCatalog scopeCatalog,
+        LocalizationIndex? localization = null)
     {
         _sourceIndexer = sourceIndexer;
         _defIndexer = defIndexer;
         _scopeCatalog = scopeCatalog;
+        _localization = localization;
     }
 
     public string Name => "rimworld-searcher__inspect";
@@ -62,6 +71,13 @@ public class InspectTool : ITool
 
     // 大纲取不到时说清是哪一种取不到：文件没了 / 文件太大不解析 / 文件里确实没这个类型
     // （最后一种通常意味着索引落后于磁盘，比如源刚被重新同步过）。
+    // 译文描述里换行是常态（多段落说明），单行摆进头部区域会把格式冲散
+    private static string Truncate(string text, int limit)
+    {
+        var single = text.ReplaceLineEndings(" ").Trim();
+        return single.Length <= limit ? single : single[..limit] + "…";
+    }
+
     private static string DescribeOutlineFailure(SourceLookupStatus status, string typeName) => status switch
     {
         SourceLookupStatus.FileNotFound =>
@@ -90,6 +106,14 @@ public class InspectTool : ITool
         {
             sb.AppendLine($"## Def: {name}");
             sb.AppendLine($"Type: {def.DefType}");
+
+            // 译文只作为附注，下面的 Resolved XML 一个字不动——那是游戏真实数据，
+            // 把译名掺进去会毁掉它「照着它就能改 mod」的用途。
+            var localized = _localization?.Lookup(def.DefType, def.DefName);
+            if (!string.IsNullOrEmpty(localized?.Label))
+                sb.AppendLine($"Localized: {localized.Label}");
+            if (!string.IsNullOrEmpty(localized?.Description))
+                sb.AppendLine($"Localized description: {Truncate(localized.Description, LocalizedDescriptionLimit)}");
 
             var sourceName = scope.SourceNameOf(def.FilePath);
             if (!string.IsNullOrEmpty(sourceName)) sb.AppendLine($"Source: {sourceName}");

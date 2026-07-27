@@ -24,6 +24,14 @@
 - 从 Def 自动提取关联 C# 类型（如 thingClass / compClass / workerClass）
 - 在 `inspect` 中同时展示 Def 信息与关联代码路径
 
+### 本地化译名
+- `locate` / `inspect` 命中 def 时附带当前语言的译名，不必再靠英文 label 反查中文名
+- 语言默认跟随游戏设置（读 `Prefs.xml` 的 `langFolderName`），也可显式指定或关闭
+- 三类来源都收：本体与 DLC 的官方语言包（`.tar`）、mod 自带的 `Languages`、只有 `Languages` 的独立汉化包
+- 按 `<DefType>/<defName>` 精确匹配。跨类型重名的 defName 不会串——`Animals` 在 `SkillDef` 下是「驯兽」，在 `MainButtonDef` 下是「动物」
+- 多个源译同一个 def 时，`[[sources]]` 里靠后的那个赢（近似 RimWorld 的「后加载覆盖先加载」）；同一源内按 mod 的目录优先级
+- 译名只作为附注，`inspect` 的 Resolved XML 保持原样
+
 ### 面向查询性能优化
 - 预建索引 + N-gram 候选筛选
 - 启动后冻结索引（`FrozenDictionary`）优化只读查询吞吐
@@ -58,6 +66,7 @@
 - 过滤语法：`type:` `method:` `field:` `def:` `scope:`
 - CamelCase 缩写与拼写容错（如 `JDW`）
 - `scope` / `limit` 参数（见「配置」一节）
+- def 结果附带译名（`` `Beer` (100%) - ThingDef "beer" / 啤酒 ``）。查询本身仍按英文/defName 匹配
 
 **示例查询**
 ```text
@@ -74,7 +83,7 @@ scope:mods pawn
 深度分析单个 Def 或 C# 类型。
 
 **Def 模式**
-- 展示 Def 类型、来源文件
+- 展示 Def 类型、来源文件、译名（`localization_description` 开启时连译文描述一起）
 - 返回继承合并后的 XML
 - 提取关联 C# 类型并尝试映射到索引文件
 
@@ -290,6 +299,7 @@ Tool Layer
 - 若需要强制重建，删除 `/.cache/index` 后重启该程序即可
 - 当前策略下，配置路径变化或缓存结构版本变化会触发自动重建
 - `verify_source_freshness`（默认开启）会把各源目录下 `.cs`/`.xml` 的**大小与修改时间**摘要一并纳入指纹，于是 Steam 更新过的 mod 也会自动触发重建。只 stat 不读文件内容，成本约百毫秒级；源全是不会变动的手工副本时可以关掉
+- 语言包（选中语言的目录或 `.tar`）同样进指纹：汉化包更新既不改路径集合也不动任何 Def，不纳入的话那份带旧译名的缓存会一直命中
 
 
 ---
@@ -361,6 +371,8 @@ assemblies = 'C:\SteamLibrary\steamapps\common\RimWorld\RimWorldWin64_Data\Manag
 - `verify_source_freshness`: 把源文件的大小/修改时间摘要纳入缓存指纹，让 Steam 更新过的 mod 自动触发索引重建（代价是启动时多几百毫秒的元数据枚举）
 - `skip_path_security`: `true` 时关闭路径白名单检查（仅建议本地可信环境）
 - `check_updates`: 是否启用版本更新提示（指 RimSearcher 自身的版本，与源跟随无关）
+- `localization`: 查 def 时附带哪种语言的译名，默认 `"auto"`——读游戏 `Prefs.xml` 里的 `langFolderName`，读不到就不做本地化。也可以直接写语言名（`"ChineseSimplified"`，带不带 `(简体中文)` 后缀都认），或写 `"off"` 关掉。别名 `language` / `lang`
+- `localization_description`: 是否连译文描述一起显示，默认 `false`。开启后只在 `inspect` 里出现（截断到 300 字），`locate` 永远只给译名
 - `check_source_updates`: 是否在启动时后台探测程序集与 XML 变更。只检测不反编译；发现变更且与当前会话查过的内容相关时，会在工具返回末尾附一条提示。默认 `true`
 - `source_history_depth`: 保留几代反编译历史供 `diff` 使用，`0` 为不保留（默认）。每代只存本次被覆盖的旧文件（反向增量），一次游戏更新通常只动少量文件，占用远小于同等份数的完整副本
 - `game_version`: mod 多版本目录的匹配键（如 `"1.6"`）。留空则从 `assemblies` / `mod` 路径上溯查找 `Version.txt` 自动判定

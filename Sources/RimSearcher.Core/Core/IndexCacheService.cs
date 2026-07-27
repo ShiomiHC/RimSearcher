@@ -8,10 +8,11 @@ namespace RimSearcher.Core;
 
 public static class IndexCacheService
 {
-    // 缓存结构版本号（2 = def 索引一名多值；3 = inheritors 收全部直接超类型，含接口）。
+    // 缓存结构版本号（2 = def 索引一名多值；3 = inheritors 收全部直接超类型，含接口；
+    // 4 = 快照多带一份 DefInjected 译文）。
     // 字段形状没变但内容语义变了：旧缓存里的 InheritorsMap 只有基类型列表第一项，
     // 直接复用会让「按接口查实现」继续返回空，故必须让旧缓存失效重建。
-    public const int SchemaVersion = 3;
+    public const int SchemaVersion = 4;
 
     private const string ManifestFileName = "manifest.json";
     private const string IndexFileName = "index.bin";
@@ -55,14 +56,23 @@ public static class IndexCacheService
     // excludedPaths：mod 展开时被遮蔽、故不进索引的文件。它随 loadFolders.xml 与版本目录的
     // 增删而变，而这两者都不改路径集合——不入指纹的话，换了游戏版本后那份按旧规则建的索引
     // 会继续命中。
+    // localizationPaths：本轮实际选中的语言包（目录或 tar）。必须进内容摘要——汉化包更新既不改
+    // 路径集合也不动 Defs，不纳入的话磁盘上那份带旧译文的索引会一直命中且毫无提示。
+    //
+    // localizationVariant：从同一批语言包里取了哪些字段。它决定快照的内容而不只是显示方式——
+    // 只收 label 的那次建出来的快照里根本没有 description，不区分的话，把
+    // localization_description 从 false 改成 true 会命中那份缓存，于是描述永远不出现。
     public static string ComputeConfigFingerprint(
         IEnumerable<string> csharpPaths,
         IEnumerable<string> xmlPaths,
         bool includeContentDigest = true,
-        IEnumerable<string>? excludedPaths = null)
+        IEnumerable<string>? excludedPaths = null,
+        IEnumerable<string>? localizationPaths = null,
+        string? localizationVariant = null)
     {
         var normalizedCsharp = NormalizePaths(csharpPaths);
         var normalizedXml = NormalizePaths(xmlPaths);
+        var normalizedLocalization = localizationPaths == null ? [] : NormalizePaths(localizationPaths);
 
         var builder = new StringBuilder();
         builder.AppendLine($"schema:{SchemaVersion}");
@@ -91,10 +101,24 @@ public static class IndexCacheService
             }
         }
 
+        if (normalizedLocalization.Count > 0 || !string.IsNullOrEmpty(localizationVariant))
+        {
+            builder.AppendLine("[localization]");
+
+            if (!string.IsNullOrEmpty(localizationVariant))
+                builder.AppendLine($"variant:{localizationVariant}");
+
+            foreach (var path in normalizedLocalization)
+            {
+                builder.AppendLine(path);
+            }
+        }
+
         if (includeContentDigest)
         {
             builder.AppendLine("[content]");
-            builder.AppendLine(ComputeContentDigest(normalizedCsharp.Concat(normalizedXml)));
+            builder.AppendLine(ComputeContentDigest(
+                normalizedCsharp.Concat(normalizedXml).Concat(normalizedLocalization)));
         }
 
         return $"sha256:{ComputeSha256(Encoding.UTF8.GetBytes(builder.ToString()))}";
@@ -110,6 +134,22 @@ public static class IndexCacheService
         // 各根独立摘要后再合并：单个根内部要有序才稳定，根之间的顺序由上游已排序的路径列表定
         foreach (var root in roots)
         {
+            // 语言包可以是单个 tar 文件而不是目录（本体的官方语言就是），故 root 也允许是文件
+            if (File.Exists(root))
+            {
+                try
+                {
+                    var file = new FileInfo(root);
+                    perRoot.Add($"{root}|{file.Length}|{file.LastWriteTimeUtc.Ticks}");
+                }
+                catch
+                {
+                    perRoot.Add($"{root}|unreadable");
+                }
+
+                continue;
+            }
+
             if (!Directory.Exists(root))
             {
                 perRoot.Add($"{root}|missing");

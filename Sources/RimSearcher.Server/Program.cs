@@ -64,21 +64,42 @@ if (election.ShouldExitImmediately) return;
 
 var indexer = new SourceIndexer();
 var defIndexer = new DefIndexer();
+var localization = new LocalizationIndex();
 
 var prepared = await SourceLayout.PrepareAsync(resolvedSources);
+
+// 语言解析放在竞选之后：ForHost 只需要语言名（它自己算），而挑出实际语言包要读磁盘
+var language = appConfig.ResolveLanguage();
+var localizationSources = LocalizationLayout.Resolve(resolvedSources, language);
+
+if (language != null)
+{
+    await ServerLogger.Info("Startup", "Localization resolved",
+        ("language", language),
+        ("langDirs", resolvedSources.Languages.Count),
+        ("packs", localizationSources.Count));
+}
 
 // 缓存指纹放在竞选之后算：它要枚举几万条元数据（约 100~300ms），
 // 而挂上宿主就直接退出的进程根本用不到这份缓存
 await IndexBootstrapper.PopulateAsync(
     indexer,
     defIndexer,
+    localization,
     prepared,
+    localizationSources,
+    appConfig.LocalizationDescription,
     cacheDirectory,
     cacheDirectoryUsable,
-    IndexFingerprints.ForCache(resolvedSources, appConfig.VerifySourceFreshness));
+    IndexFingerprints.ForCache(
+        resolvedSources,
+        appConfig.VerifySourceFreshness,
+        localizationSources,
+        appConfig.LocalizationDescription));
 
 var syncService = new SourceSyncService(appConfig, resolvedSources, cacheDirectory);
-var indexRebuilder = new IndexRebuilder(indexer, defIndexer, resolvedSources);
+var indexRebuilder = new IndexRebuilder(
+    indexer, defIndexer, localization, resolvedSources, localizationSources, appConfig.LocalizationDescription);
 
 // 必须早于任何 RimSearcher 实例化：会话的通知器是在字段初始化时向 SourceChangeProbe 要的，
 // 那时若还没 Configure，拿到的就是 null，本会话此后再也不会提示。
@@ -94,8 +115,8 @@ var server = new RimSearcher.Server.RimSearcher(protocolOut);
 var tools = new ITool[]
 {
     new ListDirectoryTool(),
-    new LocateTool(indexer, defIndexer, scopeCatalog),
-    new InspectTool(indexer, defIndexer, scopeCatalog),
+    new LocateTool(indexer, defIndexer, scopeCatalog, localization),
+    new InspectTool(indexer, defIndexer, scopeCatalog, localization),
     new TraceTool(indexer, scopeCatalog),
     new ReadCodeTool(indexer, scopeCatalog),
     new SearchRegexTool(indexer, scopeCatalog),

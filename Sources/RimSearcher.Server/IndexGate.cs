@@ -235,13 +235,25 @@ public sealed class IndexRebuilder
 {
     private readonly SourceIndexer _sourceIndexer;
     private readonly DefIndexer _defIndexer;
+    private readonly LocalizationIndex _localization;
     private readonly ResolvedSources _sources;
+    private readonly IReadOnlyList<LocalizationSource> _localizationSources;
+    private readonly bool _includeDescription;
 
-    public IndexRebuilder(SourceIndexer sourceIndexer, DefIndexer defIndexer, ResolvedSources sources)
+    public IndexRebuilder(
+        SourceIndexer sourceIndexer,
+        DefIndexer defIndexer,
+        LocalizationIndex localization,
+        ResolvedSources sources,
+        IReadOnlyList<LocalizationSource> localizationSources,
+        bool includeDescription)
     {
         _sourceIndexer = sourceIndexer;
         _defIndexer = defIndexer;
+        _localization = localization;
         _sources = sources;
+        _localizationSources = localizationSources;
+        _includeDescription = includeDescription;
     }
 
     public RebuildResult Rebuild(TimeSpan timeout)
@@ -254,6 +266,7 @@ public sealed class IndexRebuilder
         {
             _sourceIndexer.Clear();
             _defIndexer.Clear();
+            _localization.Clear();
 
             GC.Collect(2, GCCollectionMode.Aggressive, blocking: true);
             GC.WaitForPendingFinalizers();
@@ -273,8 +286,12 @@ public sealed class IndexRebuilder
                 xmlCount++;
             }
 
+            // sync 只动 C# 源码，译文不会因此改变——但索引刚被 Clear 过，不重扫这一份就空了
+            _localization.Scan(_localizationSources, _includeDescription);
+
             _sourceIndexer.FreezeIndex();
             _defIndexer.FreezeIndex();
+            _localization.FreezeIndex();
         }, timeout);
 
         stopwatch.Stop();

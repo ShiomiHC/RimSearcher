@@ -65,6 +65,17 @@ public record AppConfig
     // 未显式传 scope 时使用的表达式（组名 / 源名 / 逗号并列 / '-' 排除）。留空即全域。
     public string? DefaultScope { get; init; }
 
+    // 查 def 时附带哪种语言的译名。"auto"（默认）= 读游戏 Prefs.xml 里的 langFolderName；
+    // "off" = 不做本地化；也可以直接写语言名（"ChineseSimplified"，带不带原生名后缀都认）。
+    public string? Localization { get; init; } = LocalizationAuto;
+
+    // 译文描述只在 inspect 里显示，且默认关：它比 label 长一到两个数量级，
+    // 默认打开会让每次 inspect 都多吐几百字，而多数时候只想知道这个 def 叫什么。
+    public bool LocalizationDescription { get; init; } = false;
+
+    public const string LocalizationAuto = "auto";
+    public const string LocalizationOff = "off";
+
     public bool SkipPathSecurity { get; init; } = false;
     public bool CheckUpdates { get; init; } = true;
 
@@ -104,13 +115,33 @@ public record AppConfig
     {
         var csharp = new List<SourcePathEntry>();
         var xml = new List<SourcePathEntry>();
+        var languages = new List<LanguageDirEntry>();
         var shadowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var notes = new List<string>();
 
         var gameVersion = GameVersion ?? DetectGameVersion();
+        var sourceRank = -1;
 
         foreach (var raw in Sources)
         {
+            sourceRank++;
+
+            // FolderRank 在源内从 0 起算：跨源的先后由 SourceRank 定，同源内才轮到它。
+            var folderRank = 0;
+
+            // 用户手写的 xml 路径（vanilla 那条指的是 Data，各 DLC 平铺在下面）不走 mod 布局解析，
+            // 语言目录只能自己找。mod 展开出来的 xml 目录不在这里探——那些的语言目录由布局给出。
+            if (raw != null)
+            {
+                foreach (var path in raw.Xml)
+                {
+                    foreach (var found in DiscoverLanguageDirs(path))
+                    {
+                        languages.Add(new LanguageDirEntry(raw.Name, found, sourceRank, folderRank++));
+                    }
+                }
+            }
+
             var definition = ExpandMods(raw, gameVersion, shadowed, notes);
 
             // 「什么路径都没写」的条目（config 里多打一个空 [[sources]] 就是这样）在 Parse 里
@@ -141,14 +172,63 @@ public record AppConfig
             {
                 xml.Add(new SourcePathEntry { Name = definition.Name, Path = path });
             }
+
+            // mod 布局给出的语言目录已按优先级降序，直接接在手写路径探出来的那些后面
+            foreach (var path in definition.Languages)
+            {
+                languages.Add(new LanguageDirEntry(definition.Name, path, sourceRank, folderRank++));
+            }
         }
 
         return new ResolvedSources(csharp, xml)
         {
+            Languages = languages,
             Shadowed = shadowed,
             GameVersion = gameVersion,
             Notes = notes
         };
+    }
+
+    // 从一条手写的 xml 路径往下找 Languages 目录。深度 2 覆盖了实际会出现的两种写法：
+    // 直接指到内容根（<root>\Languages），以及指到 Data 这种把各 DLC 平铺在下面的父目录
+    // （Data\Core\Languages）。再深就会扫进 mod 的 Defs 子树，代价与误报都不划算。
+    private static IEnumerable<string> DiscoverLanguageDirs(string path)
+    {
+        const string languageDirName = "Languages";
+
+        if (string.IsNullOrWhiteSpace(path)) yield break;
+
+        string root;
+        try
+        {
+            root = Path.GetFullPath(path.Trim());
+            if (!Directory.Exists(root)) yield break;
+        }
+        catch
+        {
+            yield break;
+        }
+
+        var direct = Path.Combine(root, languageDirName);
+        if (Directory.Exists(direct)) yield return direct;
+
+        string[] children;
+        try
+        {
+            children = Directory.GetDirectories(root);
+        }
+        catch
+        {
+            yield break;
+        }
+
+        foreach (var child in children)
+        {
+            if (Path.GetFileName(child).Equals(languageDirName, StringComparison.OrdinalIgnoreCase)) continue;
+
+            var nested = Path.Combine(child, languageDirName);
+            if (Directory.Exists(nested)) yield return nested;
+        }
     }
 
     // mod 根 → 该游戏版本下真正生效的 Defs/Patches/Assemblies 目录。显式写的 xml/assemblies
@@ -163,6 +243,7 @@ public record AppConfig
 
         var xml = definition.Xml.ToList();
         var assemblies = definition.Assemblies.ToList();
+        var languages = new List<string>();
         string? modName = null;
 
         foreach (var modRoot in definition.Mods)
@@ -176,7 +257,10 @@ public record AppConfig
                 continue;
             }
 
-            if (!layout.HasContent)
+            // 纯汉化包只有 Languages，可索引内容为零。以前这里直接跳过整个 mod，于是它译的那些
+            // def 一个译名都拿不到；现在放它过去收语言目录，而 Csharp/Xml 仍是空——ScopeCatalog
+            // 的词表按那两个列表建，所以它照旧不会在 scope 里冒出一个搜不出东西的源名。
+            if (!layout.HasContent && !layout.HasLocalization)
             {
                 notes.Add($"{definition.Name}: no Defs/Patches/Assemblies under {layout.Root}");
                 continue;
@@ -184,6 +268,7 @@ public record AppConfig
 
             xml.AddRange(layout.XmlDirs);
             assemblies.AddRange(layout.AssemblyDirs);
+            languages.AddRange(layout.LanguageDirs);
             foreach (var file in layout.Shadowed) shadowed.Add(file);
 
             modName ??= layout.Name;
@@ -198,9 +283,75 @@ public record AppConfig
             Csharp = definition.Csharp,
             Xml = xml,
             Assemblies = assemblies,
+            Languages = languages,
             Mods = definition.Mods,
             ActiveMods = definition.ActiveMods
         };
+    }
+
+    // 最终要用的语言名。null = 不做本地化。
+    //
+    // "auto" 读游戏自己的 Prefs.xml——那是唯一权威的「用户在玩哪个语言」，比按目录存在与否
+    // 猜可靠得多。读不到就返回 null 关掉整个特性：猜一个语言出来，用户看到的会是一堆自己
+    // 根本没在用的译名，比不显示更糟。
+    public string? ResolveLanguage()
+    {
+        var configured = Localization?.Trim();
+
+        if (string.IsNullOrEmpty(configured)) return null;
+        if (string.Equals(configured, LocalizationOff, StringComparison.OrdinalIgnoreCase)) return null;
+        if (!string.Equals(configured, LocalizationAuto, StringComparison.OrdinalIgnoreCase)) return configured;
+
+        return ReadGameLanguagePreference();
+    }
+
+    // %USERPROFILE%\AppData\LocalLow\Ludeon Studios\RimWorld by Ludeon Studios\Config\Prefs.xml
+    // 里的 <langFolderName>，形如 "ChineseSimplified (简体中文)"——正是语言目录/tar 的名字。
+    private static string? ReadGameLanguagePreference()
+    {
+        foreach (var path in PrefsCandidates())
+        {
+            try
+            {
+                if (!File.Exists(path)) continue;
+
+                var value = System.Xml.Linq.XDocument.Load(path).Root?
+                    .Elements()
+                    .FirstOrDefault(element =>
+                        element.Name.LocalName.Equals("langFolderName", StringComparison.OrdinalIgnoreCase))?
+                    .Value.Trim();
+
+                if (!string.IsNullOrWhiteSpace(value)) return value;
+            }
+            catch
+            {
+                // 读不动就试下一个候选，全不成即关闭本地化
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<string> PrefsCandidates()
+    {
+        const string relative = @"Ludeon Studios\RimWorld by Ludeon Studios\Config\Prefs.xml";
+
+        if (OperatingSystem.IsWindows())
+        {
+            var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (!string.IsNullOrEmpty(profile))
+                yield return Path.Combine(profile, "AppData", "LocalLow", relative);
+        }
+        else
+        {
+            // Unity 在 Linux/macOS 上把 LocalLow 那套落到 ~/.config 与 ~/Library
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (string.IsNullOrEmpty(home)) yield break;
+
+            var unix = relative.Replace('\\', Path.DirectorySeparatorChar);
+            yield return Path.Combine(home, ".config", "unity3d", unix);
+            yield return Path.Combine(home, "Library", "Application Support", unix);
+        }
     }
 
     // Version.txt 首行形如 "1.6.4871 rev590"，取前两段作为 mod 版本目录的匹配键。
@@ -310,6 +461,10 @@ public record AppConfig
                 .ToList(),
             ScopeGroups = ReadScopeGroups(ConfigToml.Find(table, "scopeGroups", "groups")),
             DefaultScope = ConfigToml.String(ConfigToml.Find(table, "defaultScope")),
+            Localization = ConfigToml.String(ConfigToml.Find(table, "localization", "language", "lang"))
+                ?? LocalizationAuto,
+            LocalizationDescription = ConfigToml.Bool(
+                ConfigToml.Find(table, "localizationDescription", "localizedDescription"), false),
             GameVersion = ConfigToml.String(ConfigToml.Find(table, "gameVersion")),
             DecompileOutputRoot = ConfigToml.String(ConfigToml.Find(table, "decompileOutputRoot")),
             SkipPathSecurity = ConfigToml.Bool(ConfigToml.Find(table, "skipPathSecurity"), false),
