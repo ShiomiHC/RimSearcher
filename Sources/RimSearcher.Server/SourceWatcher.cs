@@ -6,6 +6,13 @@ using RimSearcher.Server.Tools;
 
 namespace RimSearcher.Server;
 
+// 一次已完成同步的精确结果，与 PendingSourceUpdate（尚未同步、只知道哪个源变了）相对
+public sealed record SyncedChanges
+{
+    public DateTime SyncedAtUtc { get; init; }
+    public IReadOnlySet<string> ChangedNames { get; init; } = new HashSet<string>();
+}
+
 public sealed record PendingSourceUpdate
 {
     public DateTime DetectedAtUtc { get; init; }
@@ -235,6 +242,28 @@ public static class SourceWatcher
     }
 
     internal static void ClearPending() => _pending = null;
+
+    // 同步完成后才有文件级 diff，判定精度从「源里的东西」升到「这个类型本身」。
+    // 记在进程级：触发同步的只是某一个会话，别的会话同样需要知道自己看过的东西过时了。
+    internal static void RecordSync(IEnumerable<SourceChangeSet> changeSets)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var changeSet in changeSets)
+        {
+            foreach (var change in changeSet.Changes)
+            {
+                // 反编译产物一类一文件，裸文件名就是类型名
+                var name = Path.GetFileNameWithoutExtension(change.RelativePath);
+                if (!string.IsNullOrWhiteSpace(name)) names.Add(name);
+            }
+        }
+
+        LastSync = new SyncedChanges { SyncedAtUtc = DateTime.UtcNow, ChangedNames = names };
+        _pending = null;
+    }
+
+    public static SyncedChanges? LastSync { get; private set; }
 }
 
 // 每个会话一份（IndexHost 为每条管道连接各建一个 RimSearcher）。记录本会话问过什么，
@@ -246,10 +275,15 @@ public sealed class SessionUpdateNotice
 
     private readonly HashSet<string> _askedAbout = new(StringComparer.OrdinalIgnoreCase);
     private DateTime _notifiedFor = DateTime.MinValue;
+    private DateTime _notifiedSyncAt = DateTime.MinValue;
 
     public string? Consume(string? toolName, JsonElement arguments, string resultContent)
     {
         RecordQuery(arguments);
+
+        // 同步后的精确 diff 优先：此刻能指名道姓说哪个类型变了，而不是笼统说源变了
+        var synced = DescribeSyncedChanges();
+        if (synced != null) return synced;
 
         var pending = SourceWatcher.Pending;
         if (pending == null || !pending.Any) return null;
@@ -274,6 +308,29 @@ public sealed class SessionUpdateNotice
 
         return $"\n\n---\n**Note: the indexed sources changed since this session started.** "
              + $"{pending.Describe()}. Results above may be stale. {action}";
+    }
+
+    // 只报「这个会话确实问过、且这次同步确实改了」的那些名字。
+    // 问过的东西一个都没变时返回 null——沉默才是对的输出。
+    private string? DescribeSyncedChanges()
+    {
+        var lastSync = SourceWatcher.LastSync;
+        if (lastSync == null || _notifiedSyncAt >= lastSync.SyncedAtUtc) return null;
+
+        _notifiedSyncAt = lastSync.SyncedAtUtc;
+        if (_askedAbout.Count == 0) return null;
+
+        var affected = _askedAbout
+            .Where(term => lastSync.ChangedNames.Contains(term))
+            .OrderBy(term => term, StringComparer.OrdinalIgnoreCase)
+            .Take(8)
+            .ToList();
+
+        if (affected.Count == 0) return null;
+
+        return $"\n\n---\n**Note: {string.Join(", ", affected)} changed in the latest sync.** "
+             + "Anything said about them earlier in this conversation is now out of date; "
+             + "use rimworld-searcher__sync_sources with action='diff' and a 'file' to see the line-level changes.";
     }
 
     private void RecordQuery(JsonElement arguments)

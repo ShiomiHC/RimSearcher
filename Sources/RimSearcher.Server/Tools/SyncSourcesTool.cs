@@ -280,7 +280,7 @@ public class SyncSourcesTool : ITool
                       + $"({rebuild.CsharpPaths} C# path(s), {rebuild.XmlPaths} XML path(s)). No restart needed."
                     : "\nIndex rebuild skipped: another rebuild was already running. Retry, or restart the server.");
 
-                SourceWatcher.ClearPending();
+                SourceWatcher.RecordSync(report.FileChanges);
             }
         }
 

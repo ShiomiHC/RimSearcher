@@ -273,7 +273,11 @@ public sealed class RimSearcher
                         result = new ToolResult(argEx.Message, true);
                     }
 
-                    var notice = _updateNotice?.Consume(toolName, arguments, result.Content);
+                    // sync 自己的返回里已经列了变更摘要，再追加一条过期提示纯属重复；
+                    // 那条提示留给之后的查询，那时它才提供新信息。
+                    var notice = tool is Tools.SyncSourcesTool
+                        ? null
+                        : _updateNotice?.Consume(toolName, arguments, result.Content);
 
                     await SendResponseAsync(id, new
                     {
