@@ -11,6 +11,15 @@ public class ParsedQuery
 
     // 'scope:milira' 写在 query 里时的落点；工具层优先用它，其次才用 scope 参数
     public string? ScopeFilter { get; set; }
+
+    // 认不出的过滤前缀（'member:'、'bogus:'）。整个 token 仍按原样进 Keywords——那是有意的、
+    // 也有用例钉着——但调用方必须被告知，否则 'member:CompTick' 会回一句 "No results"，
+    // 而 'method:CompTick' 有 144 条：一个确实存在的符号被报成不存在。
+    public List<string> UnknownPrefixes { get; } = new();
+
+    // 写了前缀却没给值（'type:'，或分词后落单的 'type: X' 里那半个）。恒零命中，
+    // 且此前会连带把该段的搜索词覆盖成空串，使整段静默消失。
+    public bool HadEmptyFilterValue { get; set; }
 }
 
 public static class QueryParser
@@ -24,11 +33,12 @@ public static class QueryParser
         
         var tokens = SplitQuery(rawQuery);
 
-        foreach (var token in tokens)
+        for (int i = 0; i < tokens.Count; i++)
         {
+            var token = tokens[i];
             if (string.IsNullOrWhiteSpace(token))
                 continue;
-            
+
             if (token.Contains(':'))
             {
                 var parts = token.Split(':', 2);
@@ -36,6 +46,26 @@ public static class QueryParser
                 {
                     var prefix = parts[0].ToLowerInvariant();
                     var value = parts[1];
+
+                    // 'type: CompShield'（冒号后带空格）分词后是 ["type:", "CompShield"]，
+                    // 而这是人写查询时极常见的写法。此前空值照样被当成「用户指定了过滤词」，
+                    // 于是该段的搜索词被覆盖成空串、整段消失——C# Types 段直接不见，
+                    // 读起来就是「这个类型不存在」。把值绑到下一个 token 即可与无空格写法等价。
+                    if (value.Length == 0 && IsKnownPrefix(prefix))
+                    {
+                        if (i + 1 < tokens.Count && !string.IsNullOrWhiteSpace(tokens[i + 1])
+                            && !tokens[i + 1].Contains(':'))
+                        {
+                            value = tokens[i + 1];
+                            i++;
+                        }
+                        else
+                        {
+                            // 光杆前缀：不设过滤器（设了等于用空串去搜，恒零命中）
+                            result.HadEmptyFilterValue = true;
+                            continue;
+                        }
+                    }
 
                     switch (prefix)
                     {
@@ -55,18 +85,29 @@ public static class QueryParser
                             result.ScopeFilter = value;
                             break;
                         default:
+                            // 整个 token 连前缀一起当关键词是既定行为（QueryParserTests 钉着），
+                            // 这里只是把「我没认出这个前缀」这件事记下来交给工具层说出去
+                            result.UnknownPrefixes.Add(parts[0]);
                             result.Keywords.Add(token);
                             break;
                     }
                     continue;
                 }
             }
-            
+
             result.Keywords.Add(token);
         }
 
         return result;
     }
+
+    private static bool IsKnownPrefix(string prefix) => prefix switch
+    {
+        "method" or "m" or "type" or "t" or "class" or "c"
+            or "field" or "f" or "property" or "p"
+            or "def" or "d" or "scope" or "s" or "source" or "in" => true,
+        _ => false
+    };
     
     private static List<string> SplitQuery(string query)
     {

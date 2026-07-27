@@ -64,7 +64,11 @@ public class TraceTool : ITool
                     "'usages' one."
             },
             scope = ScopeArgs.ScopeSchemaProperty(_scopeCatalog),
-            limit = ScopeArgs.LimitSchemaProperty(UsagesDefaultLimit)
+            // trace 两种模式都不是模糊搜索：inheritors 的候选分数恒为 100（继承关系是精确的，
+            // ScopeFilter 那里 scoreGap 传的就是 null），usages 是逐行全词文本匹配。
+            // 照抄模糊工具的文案会让调用方以为「剩下的是低相关度、调多大 limit 都拿不回来」，
+            // 从而把一份被 limit 截断的引用清单当成完整结论。
+            limit = ScopeArgs.LimitSchemaProperty(UsagesDefaultLimit, fuzzy: false)
         },
         required = new[] { "symbol", "mode" }
     };

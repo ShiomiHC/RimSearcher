@@ -121,10 +121,17 @@ public class LocateTool : ITool
             if (query.FieldFilter != null) keywords.Add(query.FieldFilter);
             keywords.AddRange(query.Keywords);
 
+            // 前缀承诺的种类必须一路带到取回层。README 写着 field: =「只搜字段/属性」、
+            // method: =「只搜方法」，而这两个前缀此前只起到「关掉 C# Types / XML Defs 两段」
+            // 的作用——取回不分种类，于是 field:Tick 的结果里方法把配额吃光，字段只剩 1 条。
+            var memberKinds = new List<string>();
+            if (query.MethodFilter != null) memberKinds.Add("Method");
+            if (query.FieldFilter != null) { memberKinds.Add("Field"); memberKinds.Add("Property"); }
+
             // 成员按 method/property/field 分组显示，每组各给一份配额，故这里要多取一些；
             // Scale 放大后仍夹在服务端硬上限内
             var members = _sourceIndexer.SearchMembersByKeywords(
-                keywords.ToArray(), scope, limit.Scale(3).Count);
+                keywords.ToArray(), scope, limit.Scale(3).Count, memberKinds);
             report.Add(members);
 
             if (members.Items.Count > 0)
@@ -265,6 +272,24 @@ public class LocateTool : ITool
 
         var footer = report.Render(scope);
 
+        // 查询串里那些没被当成过滤器用的前缀必须说出来。'member:CompTick' 回一句 "No results"
+        // 而 'method:CompTick' 有 144 条——同一个符号，一个说不存在、一个说有一百多处。
+        // 差别全在那个没被识别的前缀上，而调用方在返回里看不到任何线索。
+        var prefixNotice = new StringBuilder();
+        if (query.UnknownPrefixes.Count > 0)
+        {
+            var names = string.Join(", ", query.UnknownPrefixes.Distinct().Select(p => $"'{p}:'"));
+            prefixNotice.Append(
+                $"\n\n_{names} is not a query filter, so it was matched as ordinary search text. "
+                + "Known filters: type:, method:, field:, def:, scope:._");
+        }
+        if (query.HadEmptyFilterValue)
+        {
+            prefixNotice.Append(
+                "\n\n_A filter prefix was given with nothing after it and was ignored. "
+                + "Write the term right after the colon (type:CompShield); a space after the colon is fine too._");
+        }
+
         if (!hasResults)
         {
             var message = new StringBuilder(
@@ -272,6 +297,7 @@ public class LocateTool : ITool
             message.Append(ScopeArgs.RetryWiderNotice(scope));
             if (footer != null) message.Append(footer);
             message.Append(scopeNotice);
+            message.Append(prefixNotice);
             message.Append("\n\nTry: partial names, query filters (type:, method:, field:, def:), or search_regex for patterns.");
 
             // 零命中是一个正常结果，不是调用失败。isError 留给「工具没能执行」，置 true 会让
@@ -282,6 +308,7 @@ public class LocateTool : ITool
 
         if (footer != null) sb.Append(footer);
         sb.Append(scopeNotice);
+        sb.Append(prefixNotice);
 
         return Task.FromResult(new ToolResult(sb.ToString()));
     }

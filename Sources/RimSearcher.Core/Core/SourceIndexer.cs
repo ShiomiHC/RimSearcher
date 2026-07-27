@@ -624,10 +624,15 @@ public class SourceIndexer
             : name;
     }
 
+    // memberKinds 非空时只留这几类成员（取值同索引层的 MemberType：Method / Property / Field）。
+    // 过滤必须发生在**取回**这一层而不是展示层：候选是按分数取 limit 条的，不分种类。
+    // field:Tick 这类查询里方法数量压倒性多于字段，筛在后面等于先让方法把配额吃光——
+    // 实测 field:Tick 只捞回 1 条字段，而 README 承诺 field: 是「只搜字段/属性」。
     public ScopedResult<(string TypeName, string MemberName, string MemberType, string FilePath)> SearchMembersByKeywords(
         string[] keywords,
         ScopeSelection scope,
-        int limit = 30)
+        int limit = 30,
+        IReadOnlyCollection<string>? memberKinds = null)
     {
         if (keywords == null || keywords.Length == 0)
             return ScopedResult<(string, string, string, string)>.Empty;
@@ -706,6 +711,8 @@ public class SourceIndexer
         }
 
         var candidates = matchedMembers
+            .Where(kv => memberKinds == null || memberKinds.Count == 0
+                         || memberKinds.Contains(kv.Key.Item3, StringComparer.OrdinalIgnoreCase))
             .Select(kv =>
             {
                 var (typeName, memberName, memberType, filePath) = kv.Key;
