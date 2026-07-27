@@ -13,7 +13,8 @@ Console.SetOut(Console.Error);
 var (appConfig, configPath, isLoaded) = AppConfig.Load();
 await ServerLogger.Info("Program", "Configuration source", ("path", configPath));
 
-bool hasPaths = appConfig.CsharpSourcePaths.Count > 0 || appConfig.XmlSourcePaths.Count > 0;
+var resolvedSources = appConfig.ResolveSources();
+bool hasPaths = resolvedSources.HasAny;
 var cacheDirectory = IndexCacheService.GetDefaultCacheDirectory();
 var canUseCache = IndexCacheService.EnsureCacheDirectory(cacheDirectory, out var cacheInitError);
 await ServerLogger.Info("Program", "Index cache directory", ("path", cacheDirectory));
@@ -32,7 +33,46 @@ else if (!hasPaths)
     await ServerLogger.Warning("Program", "No source paths defined", ("path", configPath));
 }
 
-PathSecurity.Initialize(appConfig.CsharpSourcePaths.Concat(appConfig.XmlSourcePaths), enabled: !appConfig.SkipPathSecurity);
+PathSecurity.Initialize(resolvedSources.AllPaths, enabled: !appConfig.SkipPathSecurity);
+
+var scopeCatalog = ScopeCatalog.Build(resolvedSources.AllSources, appConfig.ScopeGroups, appConfig.DefaultScope);
+if (scopeCatalog.HasSources)
+{
+    await ServerLogger.Info("Program", "Scope catalog ready",
+        ("sources", scopeCatalog.Sources.Count),
+        ("groups", scopeCatalog.GroupNames.Count),
+        ("default", string.IsNullOrWhiteSpace(appConfig.DefaultScope) ? ScopeCatalog.EverythingKeyword : appConfig.DefaultScope));
+}
+
+// 索引指纹要在建索引前算出来：共享宿主按它分组（不同 config 不共用一份索引）
+var earlyFingerprint = IndexCacheService.ComputeConfigFingerprint(
+    resolvedSources.Csharp.Select(entry => entry.Path),
+    resolvedSources.Xml.Select(entry => entry.Path),
+    appConfig.VerifySourceFreshness);
+
+// 代理路径必须先于建索引：连上已有宿主的进程不该再花 4 秒和 1 GB 建第二份索引
+Mutex? hostMutex = null;
+if (appConfig.ShareIndexHost && hasPaths)
+{
+    if (!IndexHost.IsSupported)
+    {
+        await ServerLogger.Info("Program", "Index host sharing unavailable on this platform, running standalone");
+    }
+    else
+    {
+        ProcessGuard.Start(appConfig.IdleTimeoutMinutes);
+
+        if (await IndexHost.TryRunAsProxyAsync(earlyFingerprint, protocolOut))
+        {
+            await ServerLogger.Info("Program", "Proxy session ended");
+            return;
+        }
+
+        hostMutex = IndexHost.TryBecomeHost(earlyFingerprint);
+        if (hostMutex == null)
+            await ServerLogger.Info("Program", "Could not claim host slot, running standalone");
+    }
+}
 
 var indexer = new SourceIndexer();
 var defIndexer = new DefIndexer();
@@ -41,22 +81,22 @@ var failedPaths = new List<string>();
 var existingCsharpPaths = new List<string>();
 var existingXmlPaths = new List<string>();
 
-foreach (var path in appConfig.CsharpSourcePaths)
+foreach (var entry in resolvedSources.Csharp)
 {
-    if (Directory.Exists(path)) existingCsharpPaths.Add(path);
-    else failedPaths.Add($"C# source: {path}");
+    if (Directory.Exists(entry.Path)) existingCsharpPaths.Add(entry.Path);
+    else failedPaths.Add($"C# source '{entry.Name}': {entry.Path}");
 }
 
-foreach (var path in appConfig.XmlSourcePaths)
+foreach (var entry in resolvedSources.Xml)
 {
-    if (Directory.Exists(path)) existingXmlPaths.Add(path);
-    else failedPaths.Add($"XML source: {path}");
+    if (Directory.Exists(entry.Path)) existingXmlPaths.Add(entry.Path);
+    else failedPaths.Add($"XML source '{entry.Name}': {entry.Path}");
 }
 
 var totalCsharpPaths = 0;
 var totalXmlPaths = 0;
 var cacheLoaded = false;
-var configFingerprint = IndexCacheService.ComputeConfigFingerprint(appConfig.CsharpSourcePaths, appConfig.XmlSourcePaths);
+var configFingerprint = earlyFingerprint;
 
 if (hasPaths && existingCsharpPaths.Count + existingXmlPaths.Count > 0)
 {
@@ -142,18 +182,49 @@ if (failedPaths.Count > 0)
     await ServerLogger.Warning("Program", "Some configured paths are unavailable", ("count", failedPaths.Count), ("paths", string.Join("; ", failedPaths)));
 }
 
+var syncService = new SourceSyncService(appConfig, resolvedSources, cacheDirectory);
+var indexRebuilder = new IndexRebuilder(indexer, defIndexer, resolvedSources);
+
+// 必须早于任何 RimSearcher 实例化：会话的通知器是在字段初始化时向 SourceWatcher 要的，
+// 那时若还没 Configure，拿到的就是 null，本会话此后再也不会提示。
+if (appConfig.CheckSourceUpdates && syncService.FollowableSources.Count > 0)
+{
+    SourceWatcher.Configure(syncService, resolvedSources, cacheDirectory, indexer);
+    _ = Task.Run(SourceWatcher.DetectAsync);
+}
+
 var server = new RimSearcher.Server.RimSearcher(protocolOut);
 
-server.RegisterTool(new ListDirectoryTool());
-server.RegisterTool(new LocateTool(indexer, defIndexer));
-server.RegisterTool(new InspectTool(indexer, defIndexer));
-server.RegisterTool(new TraceTool(indexer));
-server.RegisterTool(new ReadCodeTool(indexer));
-server.RegisterTool(new SearchRegexTool(indexer));
+// tool 实例无会话状态（只持索引引用），故宿主的各管道会话直接共享同一批
+var tools = new ITool[]
+{
+    new ListDirectoryTool(),
+    new LocateTool(indexer, defIndexer, scopeCatalog),
+    new InspectTool(indexer, defIndexer, scopeCatalog),
+    new TraceTool(indexer, scopeCatalog),
+    new ReadCodeTool(indexer, scopeCatalog),
+    new SearchRegexTool(indexer, scopeCatalog),
+    new SyncSourcesTool(syncService, indexRebuilder)
+};
+
+foreach (var tool in tools) server.RegisterTool(tool);
+
+if (hostMutex != null)
+{
+    // 宿主寿命与第一个 client 解绑：只要还有别的连接就不退
+    ProcessGuard.ShouldStayAlive = () => IndexHost.ShouldStayAliveForConnections(TimeSpan.FromSeconds(60));
+    IndexHost.StartAcceptLoop(configFingerprint, tools);
+}
+else if (!appConfig.ShareIndexHost || !IndexHost.IsSupported || !hasPaths)
+{
+    // 共享路径没走到时，watchdog 仍须启动
+    ProcessGuard.Start(appConfig.IdleTimeoutMinutes);
+}
 
 if (isLoaded && hasPaths)
 {
-    await ServerLogger.Info("Program", "RimSearcher MCP server started");
+    await ServerLogger.Info("Program", "RimSearcher MCP server started",
+        ("role", hostMutex != null ? "host" : "standalone"));
 }
 
 if (appConfig.CheckUpdates)
@@ -162,3 +233,14 @@ if (appConfig.CheckUpdates)
 }
 
 await server.RunAsync();
+
+// 本地 stdio 结束（自己的 client 走了）但仍有管道连接时，宿主继续服务到最后一个断开
+if (hostMutex != null)
+{
+    while (IndexHost.ShouldStayAliveForConnections(TimeSpan.FromSeconds(60)))
+        await Task.Delay(TimeSpan.FromSeconds(15));
+
+    await ServerLogger.Info("Program", "Index host shutting down");
+    hostMutex.ReleaseMutex();
+    hostMutex.Dispose();
+}

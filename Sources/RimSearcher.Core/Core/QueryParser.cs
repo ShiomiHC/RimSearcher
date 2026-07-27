@@ -8,6 +8,9 @@ public class ParsedQuery
     public string? MethodFilter { get; set; }
     public string? FieldFilter { get; set; }
     public string? DefFilter { get; set; }
+
+    // 'scope:milira' 写在 query 里时的落点；工具层优先用它，其次才用 scope 参数
+    public string? ScopeFilter { get; set; }
 }
 
 public static class QueryParser
@@ -47,6 +50,9 @@ public static class QueryParser
                             break;
                         case "def" or "d":
                             result.DefFilter = value;
+                            break;
+                        case "scope" or "s" or "source" or "in":
+                            result.ScopeFilter = value;
                             break;
                         default:
                             result.Keywords.Add(token);

@@ -7,14 +7,23 @@ namespace RimSearcher.Server;
 public static class UpdateChecker
 {
     public const string CurrentVersion = "2.7";//版本号
-    private const string GitHubApiUrl = "https://api.github.com/repos/kearril/RimSearcher/releases/latest";
+
+    // fork 时只改这一处：检测源和通知里给出的下载地址都由它推导，
+    // 否则版本号一落后就会把本 fork 的用户导流到上游 releases 页。
+    private const string Repo = "ShiomiHC/RimSearcher";
+
+    private const string GitHubApiUrl = $"https://api.github.com/repos/{Repo}/releases/latest";
+    private const string ReleasesUrl = $"https://github.com/{Repo}/releases/latest";
+
     private static string CacheFilePath
     {
         get
         {
             var indexCacheDir = IndexCacheService.GetDefaultCacheDirectory();
             var parent = Path.GetDirectoryName(indexCacheDir) ?? indexCacheDir;
-            return Path.Combine(parent, ".update-cache");
+            // 带上仓库名：fork 与上游若共用缓存根目录，24h 窗口内会互相读到对方的版本记录
+            var slug = Repo.Replace('/', '-');
+            return Path.Combine(parent, $".update-cache-{slug}");
         }
     }
     
@@ -66,7 +75,8 @@ public static class UpdateChecker
         await ServerLogger.Warning("UpdateChecker", "New version is available",
             ("current", CurrentVersion),
             ("latest", latestVersion),
-            ("url", "https://github.com/kearril/RimSearcher/releases/latest"));
+            ("repo", Repo),
+            ("url", ReleasesUrl));
     }
 
     private static bool IsNewer(string remote, string local)

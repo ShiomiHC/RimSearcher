@@ -7,10 +7,12 @@ namespace RimSearcher.Server.Tools;
 public class TraceTool : ITool
 {
     private readonly SourceIndexer _sourceIndexer;
+    private readonly ScopeCatalog _scopeCatalog;
 
-    public TraceTool(SourceIndexer sourceIndexer)
+    public TraceTool(SourceIndexer sourceIndexer, ScopeCatalog scopeCatalog)
     {
         _sourceIndexer = sourceIndexer;
+        _scopeCatalog = scopeCatalog;
     }
 
     public string Name => "rimworld-searcher__trace";
@@ -35,40 +37,72 @@ public class TraceTool : ITool
                 @enum = new[] { "inheritors", "usages" },
                 description =
                     "Trace mode: 'inheritors' for subclass tree, 'usages' for textual references in C# and XML."
-            }
+            },
+            scope = ScopeArgs.ScopeSchemaProperty(_scopeCatalog),
+            limit = ScopeArgs.LimitSchemaProperty()
         },
-        required = new[] { "symbol", "mode" },
-        additionalProperties = false
+        required = new[] { "symbol", "mode" }
     };
+
+    private static readonly ToolArgSpec ArgSpec = new(
+        "rimworld-searcher__trace",
+        "symbol (a class or member, e.g. 'ThingComp') and mode ('inheritors' or 'usages'). Aliases accepted for symbol: query, name, type.",
+        "symbol (required), mode (required, 'inheritors' | 'usages'), scope, limit.");
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, CancellationToken cancellationToken, IProgress<double>? progress = null)
     {
-        var symbol = args.GetProperty("symbol").GetString();
-        var mode = args.GetProperty("mode").GetString();
+        var symbol = ToolArgs.StripLocateFilterPrefix(
+            ToolArgs.GetRequiredString(args, ArgSpec, "symbol", "query", "name", "type"));
+        var mode = ToolArgs.GetRequiredString(args, ArgSpec, "mode", "traceMode", "direction").ToLowerInvariant();
 
-        if (string.IsNullOrEmpty(symbol)) return new ToolResult("Symbol cannot be empty.", true);
+        if (mode is not ("inheritors" or "usages"))
+            return new ToolResult($"Unknown mode '{mode}'. Use 'inheritors' (subclass tree) or 'usages' (textual references).", true);
+
+        var scope = ScopeArgs.Resolve(_scopeCatalog, args);
+        var limit = ScopeArgs.GetDisplayLimit(args, fallback: 0);
 
         if (mode == "inheritors")
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var inheritors = _sourceIndexer.GetInheritors(symbol);
-            if (inheritors.Count == 0) return new ToolResult($"No subclasses of '{symbol}' found.");
+            var inheritors = _sourceIndexer.GetInheritors(symbol, scope, limit);
 
-            var results = inheritors.Select(name =>
+            if (inheritors.Items.Count == 0)
             {
-                var paths = _sourceIndexer.GetPathsByType(name);
-                return $"- `{name}` ({string.Join(", ", paths.Select(System.IO.Path.GetFileName))})";
+                var report = new ScopeReport();
+                report.Add(inheritors);
+                var footer = report.Render(scope);
+                return new ToolResult($"No subclasses of '{symbol}' found in scope '{scope.Expression}'.{footer ?? string.Empty}");
+            }
+
+            var results = inheritors.Items.Select(entry =>
+            {
+                var paths = _sourceIndexer.GetPathsByType(entry.Item);
+                return $"- `{entry.Item}` ({string.Join(", ", paths.Select(System.IO.Path.GetFileName))}){ScopeArgs.Label(entry.SourceName)}";
             });
 
-            return new ToolResult($"Subclasses of '{symbol}':\n" + string.Join(Environment.NewLine, results));
+            var sbInheritors = new System.Text.StringBuilder();
+            sbInheritors.AppendLine($"Subclasses of '{symbol}' ({inheritors.TotalInScope} in scope '{scope.Expression}'):");
+            sbInheritors.AppendLine(string.Join(Environment.NewLine, results));
+
+            var fold = ScopeArgs.FoldLine(inheritors, indent: "");
+            if (fold != null) sbInheritors.AppendLine(fold);
+
+            var inheritorsReport = new ScopeReport();
+            inheritorsReport.Add(inheritors);
+            var inheritorsFooter = inheritorsReport.Render(scope);
+            if (inheritorsFooter != null) sbInheritors.Append(inheritorsFooter);
+
+            return new ToolResult(sbInheritors.ToString());
         }
         else
         {
             const int maxMatchesPerFile = 3;
-            const int maxTotalResults = 50;
-            
+            var maxTotalResults = limit == 0 ? 50 : Math.Max(limit, 50);
+
             var results = new ConcurrentBag<(string file, int lineNum, string preview)>();
-            var files = _sourceIndexer.GetAllFiles()
+            // 扫盘类工具不额外统计 scope 外的命中——那要把过滤掉的文件再读一遍，
+            // 代价与全域搜索相同，故这里 scope 是硬过滤，只在结果头部标明范围。
+            var files = _sourceIndexer.GetAllFiles(scope)
                 .Where(f => f.EndsWith(".cs") || f.EndsWith(".xml"))
                 .ToList();
 
@@ -131,7 +165,8 @@ public class TraceTool : ITool
                 }
             });
 
-            if (results.Count == 0) return new ToolResult($"No references to '{symbol}' found.");
+            if (results.Count == 0)
+                return new ToolResult($"No references to '{symbol}' found in scope '{scope.Expression}'.");
 
             var grouped = results
                 .GroupBy(r => r.file)
@@ -139,14 +174,14 @@ public class TraceTool : ITool
 
             int totalMatches = results.Count;
             var sb = new System.Text.StringBuilder();
-            sb.AppendLine($"References to '{symbol}' ({totalMatches} found):");
+            sb.AppendLine($"References to '{symbol}' ({totalMatches} found in scope '{scope.Expression}'):");
             sb.AppendLine();
 
             foreach (var group in grouped)
             {
                 var fileTag = group.Key.EndsWith(".xml") ? "[XML]" : "[C#]";
                 var fileName = System.IO.Path.GetFileName(group.Key);
-                sb.AppendLine($"{fileTag} `{fileName}`");
+                sb.AppendLine($"{fileTag} `{fileName}`{ScopeArgs.Label(scope.ShowLabels ? scope.SourceNameOf(group.Key) : null)}");
                 foreach (var match in group.OrderBy(m => m.lineNum))
                 {
                     sb.AppendLine($"  L{match.lineNum}: {match.preview}");
