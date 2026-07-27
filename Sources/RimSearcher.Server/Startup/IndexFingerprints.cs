@@ -40,12 +40,18 @@ public static class IndexFingerprints
     // 换每次启动省下几万次元数据枚举（约 100~300ms）。
     // 遮蔽集合只进缓存键，不进宿主名：它随游戏版本和 loadFolders.xml 而变，而那正是
     // 「同一批路径、不同索引内容」的情形——缓存必须区分，宿主会合点则不该被它挤开。
-    public static string ForCache(ResolvedSources sources, bool verifySourceFreshness)
+    // localizationSources 是本轮真正选中的语言包（目录或 tar）。它们必须进这个键：汉化包更新
+    // 既不改路径集合也不动任何 Def，不纳入的话磁盘上那份带旧译名的索引会一直命中。
+    public static string ForCache(
+        ResolvedSources sources,
+        bool verifySourceFreshness,
+        IReadOnlyList<LocalizationSource>? localizationSources = null)
         => IndexCacheService.ComputeConfigFingerprint(
             sources.Csharp.Select(entry => entry.Path),
             sources.Xml.Select(entry => entry.Path),
             includeContentDigest: verifySourceFreshness,
-            excludedPaths: sources.Shadowed);
+            excludedPaths: sources.Shadowed,
+            localizationPaths: localizationSources?.Select(source => source.Pack.Path));
 
     // 规范化是这里的正事：同义写法必须收敛到同一行，否则本该共享的两个进程各建一份 1 GB
     // 索引，而这种失效是静默的——两边都工作正常，只是内存翻倍。
@@ -89,6 +95,14 @@ public static class IndexFingerprints
         // 历史深度是宿主那份 SourceHistoryStore 的构造参数：深度 0 的宿主让明确要求留历史的
         // client 在 sync 后拿不到 diff，反过来则替不要历史的 client 写下了成倍的旧文件副本。
         builder.AppendLine($"sourceHistoryDepth:{Math.Max(0, config.SourceHistoryDepth)}");
+
+        // 译名直接进 locate / inspect 的输出，故语言不同的两个 client 不能共用宿主。
+        //
+        // 这里取的是解析后的最终语言名，与上面 gameVersion 刻意只取显式配置值的做法相反：
+        // gameVersion 的探测值会随游戏更新在脚下变掉，一次 Steam 更新就换掉管道名；语言不会
+        // ——它跟着用户在游戏里的选择走，改了本就该换一个宿主。
+        builder.AppendLine($"localization:{Fold(config.ResolveLanguage())}");
+        builder.AppendLine($"localizationDescription:{config.LocalizationDescription}");
 
         // 源变更提示由宿主的探针产生、附在每个会话的返回里。关掉它的 client 关不掉别人的探针，
         // 开着它的 client 挂到关掉的宿主上则再也收不到「你的索引已陈旧」。

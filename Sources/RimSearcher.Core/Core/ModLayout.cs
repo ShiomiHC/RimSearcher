@@ -51,6 +51,10 @@ public sealed record ModLayout
     public required IReadOnlyList<string> XmlDirs { get; init; }
     public required IReadOnlyList<string> AssemblyDirs { get; init; }
 
+    // 生效文件夹下的 Languages 目录，优先级同 Folders。不进任何搜索索引——只供译文查表，
+    // 故与 XmlDirs 分开：混进去会让 search_regex 把翻译文件当源码搜出来。
+    public required IReadOnlyList<string> LanguageDirs { get; init; }
+
     // 存在于某个生效文件夹里、但被更高优先级的同相对路径文件顶掉的文件（绝对路径）。
     // 游戏根本不会解析它们，索引也不该收。
     public required IReadOnlySet<string> Shadowed { get; init; }
@@ -59,6 +63,10 @@ public sealed record ModLayout
     public required IReadOnlyList<string> Notes { get; init; }
 
     public bool HasContent => XmlDirs.Count > 0 || AssemblyDirs.Count > 0;
+
+    // 纯汉化包（只有 Languages、没有 Defs/Patches/Assemblies）在 workshop 里是一大类，
+    // 光这台机器的 249 个订阅里就有 65 个。它们对搜索无贡献，但正是别人 def 的译文出处。
+    public bool HasLocalization => LanguageDirs.Count > 0;
 }
 
 // 把一个 mod 根目录翻译成「这个游戏版本下 RimWorld 真正会加载的那些目录和文件」。
@@ -72,9 +80,12 @@ public sealed record ModLayout
 //     ModRoot/Defs/Traits.xml 只要在 1.6/Defs/Traits.xml 有同名文件，整份都不会被解析
 public static class ModLayoutResolver
 {
-    // 只收游戏真正解析成 Def / 加载成程序集的目录。Languages、Textures、Sounds 不进索引。
+    // 只收游戏真正解析成 Def / 加载成程序集的目录。Textures、Sounds 不进索引。
     private static readonly string[] XmlDirNames = ["Defs", "Patches"];
     private const string AssemblyDirName = "Assemblies";
+
+    // 不进搜索索引，只喂 LocalizationIndex（见 ModLayout.LanguageDirs）
+    private const string LanguageDirName = "Languages";
 
     // ModContentPack.CommonFolderName：默认布局里排在版本目录之后、根目录之前
     private const string CommonFolderName = "Common";
@@ -152,6 +163,7 @@ public static class ModLayoutResolver
         List<FolderEntry>? folders = null;
         List<string> xmlDirs = [];
         List<string> assemblyDirs = [];
+        List<string> languageDirs = [];
         var chosen = chain[0];
         var matched = false;
 
@@ -161,9 +173,9 @@ public static class ModLayoutResolver
         foreach (var candidate in chain)
         {
             var candidateFolders = FoldersFor(root, candidate, active, notes);
-            var (xml, assemblies) = ContentDirs(candidateFolders);
+            var (xml, assemblies, languages) = ContentDirs(candidateFolders);
 
-            // 一个候选都没成时（纯汉化包、纯贴图包）报的仍是首选那份布局，
+            // 一个候选都没成时（纯贴图包）报的仍是首选那份布局，
             // 而不是链尾那次尝试的残留——后者会让日志显示一个该 mod 根本没走的版本
             folders ??= candidateFolders;
 
@@ -172,6 +184,7 @@ public static class ModLayoutResolver
                 folders = candidateFolders;
                 xmlDirs = xml;
                 assemblyDirs = assemblies;
+                languageDirs = languages;
                 chosen = candidate;
                 matched = true;
                 break;
@@ -183,7 +196,7 @@ public static class ModLayoutResolver
         if (!matched && active != null)
         {
             var relaxed = FoldersFor(root, chain[0], null, notes);
-            var (xml, assemblies) = ContentDirs(relaxed);
+            var (xml, assemblies, languages) = ContentDirs(relaxed);
 
             if (xml.Count > 0 || assemblies.Count > 0)
             {
@@ -191,8 +204,32 @@ public static class ModLayoutResolver
                 folders = relaxed;
                 xmlDirs = xml;
                 assemblyDirs = assemblies;
+                languageDirs = languages;
                 chosen = chain[0];
                 matched = true;
+            }
+        }
+
+        // 纯汉化包：一个 Defs/Patches/Assemblies 都没有，全部内容就是 Languages。上面两轮都按
+        // 「有没有可索引内容」判定，对它们必然落空，故这里单独再走一次版本链——否则一个只适配到
+        // 1.5 的汉化包会被算成没有内容，连带它译的那些 def 全部显示不出译名。
+        //
+        // 单独一轮而不是并进上面那轮：普通 mod 的版本选择必须继续只看 Defs/Assemblies，
+        // 让 Languages 参与判定会把「某版本目录下只放了翻译」的 mod 选到错的版本上。
+        if (!matched)
+        {
+            foreach (var candidate in chain)
+            {
+                var candidateFolders = FoldersFor(root, candidate, active, notes);
+                var (_, _, languages) = ContentDirs(candidateFolders);
+
+                if (languages.Count == 0) continue;
+
+                folders = candidateFolders;
+                languageDirs = languages;
+                chosen = candidate;
+                matched = true;
+                break;
             }
         }
 
@@ -214,6 +251,7 @@ public static class ModLayoutResolver
             Folders = resolved.Select(entry => entry.Path).ToList(),
             XmlDirs = xmlDirs,
             AssemblyDirs = assemblyDirs,
+            LanguageDirs = languageDirs,
             Shadowed = shadowed,
             // 版本链上试过几个候选就会走几遍 FoldersFor，同一条降级说明会被记多次
             Notes = notes.Distinct(StringComparer.Ordinal).ToList()
@@ -437,10 +475,12 @@ public static class ModLayoutResolver
             : normalized;
     }
 
-    private static (List<string> Xml, List<string> Assemblies) ContentDirs(IReadOnlyList<FolderEntry> folders)
+    private static (List<string> Xml, List<string> Assemblies, List<string> Languages) ContentDirs(
+        IReadOnlyList<FolderEntry> folders)
     {
         var xml = new List<string>();
         var assemblies = new List<string>();
+        var languages = new List<string>();
 
         foreach (var folder in folders)
         {
@@ -452,9 +492,12 @@ public static class ModLayoutResolver
 
             var assemblyDirectory = Path.Combine(folder.Path, AssemblyDirName);
             if (Directory.Exists(assemblyDirectory)) assemblies.Add(assemblyDirectory);
+
+            var languageDirectory = Path.Combine(folder.Path, LanguageDirName);
+            if (Directory.Exists(languageDirectory)) languages.Add(languageDirectory);
         }
 
-        return (xml, assemblies);
+        return (xml, assemblies, languages);
     }
 
     // folders 已是降序优先级，故先见到的即胜出者，后来的同相对路径文件全是死内容。

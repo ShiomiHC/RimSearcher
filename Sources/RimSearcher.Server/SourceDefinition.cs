@@ -11,6 +11,10 @@ public sealed class SourceDefinition
     public IReadOnlyList<string> Xml { get; init; } = [];
     public IReadOnlyList<string> Assemblies { get; init; } = [];
 
+    // mod 展开出来的 Languages 目录，只喂译文查表。用户不直接写它——写了也没用，
+    // 手写 xml 路径下的语言目录由 ResolveSources 自己探（见 DiscoverLanguageDirs）。
+    public IReadOnlyList<string> Languages { get; init; } = [];
+
     // mod 根目录。写了它就不必再手写 xml/assemblies：ResolveSources 会按 loadFolders.xml
     // 与当前游戏版本展开成游戏真正加载的那些目录，旧版本目录一律不进。
     public IReadOnlyList<string> Mods { get; init; } = [];
@@ -64,9 +68,20 @@ public sealed class SourceDefinition
     }
 }
 
+// 一个 Languages 目录，连同它在覆盖顺序里的位置。
+//
+// SourceRank 是该源在 config 里的书写序，FolderRank 是它在该源自己的目录优先级里的位次。
+// RimWorld 真正的规则是「后加载的 mod 覆盖先加载的」，而加载顺序在 ModsConfig.xml 里、不在
+// 我们的配置里，故以 config 的书写顺序代之——这一点要写进 README，否则译文谁覆盖谁没法解释。
+public sealed record LanguageDirEntry(string Name, string Path, int SourceRank, int FolderRank);
+
 // [[sources]] 摊平后的结果，下游只认这个
 public sealed record ResolvedSources(List<SourcePathEntry> Csharp, List<SourcePathEntry> Xml)
 {
+    // 只喂 LocalizationIndex。刻意不进 Csharp/Xml：那两个列表是 ScopeCatalog 的词表来源，
+    // 纯汉化包混进去会在 scope 里多出几十个「搜什么都是空」的源名。
+    public IReadOnlyList<LanguageDirEntry> Languages { get; init; } = [];
+
     // mod 展开时被高优先级同名文件顶掉的文件（绝对路径）。索引侧照此跳过——
     // 游戏不解析它们，搜到了只会把人带去一份运行时根本不生效的旧定义。
     public IReadOnlySet<string> Shadowed { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

@@ -9,12 +9,18 @@ public class LocateTool : ITool
     private readonly SourceIndexer _sourceIndexer;
     private readonly DefIndexer _defIndexer;
     private readonly ScopeCatalog _scopeCatalog;
+    private readonly LocalizationIndex? _localization;
 
-    public LocateTool(SourceIndexer sourceIndexer, DefIndexer defIndexer, ScopeCatalog scopeCatalog)
+    public LocateTool(
+        SourceIndexer sourceIndexer,
+        DefIndexer defIndexer,
+        ScopeCatalog scopeCatalog,
+        LocalizationIndex? localization = null)
     {
         _sourceIndexer = sourceIndexer;
         _defIndexer = defIndexer;
         _scopeCatalog = scopeCatalog;
+        _localization = localization;
     }
 
     public string Name => "rimworld-searcher__locate";
@@ -144,8 +150,14 @@ public class LocateTool : ITool
                     var def = entry.Item;
                     var abstractTag = def.IsAbstract ? " [Abstract]" : "";
                     var label = !string.IsNullOrEmpty(def.Label) ? $" \"{def.Label}\"" : "";
+
+                    // 译名接在英文 label 后面。locate 只给 label——description 长一到两个数量级，
+                    // 一屏几十条结果每条都带上就没法看了，那是 inspect 的事。
+                    var localized = _localization?.Lookup(def.DefType, def.DefName)?.Label;
+                    var localizedTag = !string.IsNullOrEmpty(localized) ? $" / {localized}" : "";
+
                     sb.AppendLine(
-                        $"- `{def.DefName}` ({entry.Score:F0}%) - {def.DefType}{abstractTag}{label}{ScopeArgs.Label(entry.SourceName)}");
+                        $"- `{def.DefName}` ({entry.Score:F0}%) - {def.DefType}{abstractTag}{label}{localizedTag}{ScopeArgs.Label(entry.SourceName)}");
                 }
 
                 var fold = ScopeArgs.FoldLine(defs, indent: "  ", limit: limit);

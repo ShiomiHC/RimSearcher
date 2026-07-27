@@ -11,7 +11,10 @@ public static class IndexBootstrapper
     public static async Task PopulateAsync(
         SourceIndexer indexer,
         DefIndexer defIndexer,
+        LocalizationIndex localization,
         PreparedSources prepared,
+        IReadOnlyList<LocalizationSource> localizationSources,
+        bool includeDescription,
         string cacheDirectory,
         bool cacheDirectoryUsable,
         string cacheFingerprint)
@@ -20,7 +23,7 @@ public static class IndexBootstrapper
 
         var cacheUsable = cacheDirectoryUsable && prepared.CacheIsTrustworthy;
 
-        if (cacheUsable && await TryLoadFromCacheAsync(indexer, defIndexer, cacheDirectory, cacheFingerprint))
+        if (cacheUsable && await TryLoadFromCacheAsync(indexer, defIndexer, localization, cacheDirectory, cacheFingerprint))
             return;
 
         var stopwatch = Stopwatch.StartNew();
@@ -34,21 +37,29 @@ public static class IndexBootstrapper
             indexer.Scan(path, prepared.Shadowed);
         }
 
+        // 译文与上面两份索引没有依赖关系（查表键是 DefType/defName，不碰 DefLocation），
+        // 故顺序无所谓；放在最后是因为它最便宜。
+        localization.Scan(localizationSources, includeDescription);
+
         indexer.FreezeIndex();
         defIndexer.FreezeIndex();
+        localization.FreezeIndex();
 
         await ServerLogger.Info("Index", "Index build completed",
             ("csPaths", prepared.ExistingCsharp.Count),
             ("xmlPaths", prepared.ExistingXml.Count),
+            ("langPacks", localizationSources.Count),
+            ("localizedDefs", localization.Count),
             ("durationMs", stopwatch.ElapsedMilliseconds));
 
         if (cacheUsable)
-            await SaveToCacheAsync(indexer, defIndexer, cacheDirectory, cacheFingerprint, stopwatch.Elapsed);
+            await SaveToCacheAsync(indexer, defIndexer, localization, cacheDirectory, cacheFingerprint, stopwatch.Elapsed);
     }
 
     private static async Task<bool> TryLoadFromCacheAsync(
         SourceIndexer indexer,
         DefIndexer defIndexer,
+        LocalizationIndex localization,
         string cacheDirectory,
         string cacheFingerprint)
     {
@@ -61,16 +72,19 @@ public static class IndexBootstrapper
 
         indexer.ImportSnapshot(result.Snapshot.Source);
         defIndexer.ImportSnapshot(result.Snapshot.Def);
+        localization.ImportSnapshot(result.Snapshot.Localization);
         indexer.FreezeIndex();
         defIndexer.FreezeIndex();
+        localization.FreezeIndex();
 
-        await ServerLogger.Info("Index", "Index loaded from cache");
+        await ServerLogger.Info("Index", "Index loaded from cache", ("localizedDefs", localization.Count));
         return true;
     }
 
     private static async Task SaveToCacheAsync(
         SourceIndexer indexer,
         DefIndexer defIndexer,
+        LocalizationIndex localization,
         string cacheDirectory,
         string cacheFingerprint,
         TimeSpan buildDuration)
@@ -78,7 +92,8 @@ public static class IndexBootstrapper
         var snapshot = new IndexCacheSnapshot
         {
             Source = indexer.ExportSnapshot(),
-            Def = defIndexer.ExportSnapshot()
+            Def = defIndexer.ExportSnapshot(),
+            Localization = localization.ExportSnapshot()
         };
 
         var csharpFileCount = snapshot.Source.ProcessedFiles.Count(path =>

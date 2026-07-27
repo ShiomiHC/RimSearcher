@@ -18,6 +18,15 @@ public sealed class IndexCacheSnapshot
 {
     public SourceIndexerSnapshot Source { get; init; } = new();
     public DefIndexerSnapshot Def { get; init; } = new();
+
+    // 语言无关的两份索引之外，再存一份译文。语言设置本身进缓存指纹，故换了语言不会命中旧缓存。
+    public LocalizationSnapshot Localization { get; init; } = new();
+}
+
+public sealed class LocalizationSnapshot
+{
+    // key "<DefType>/<defName>" → 译文
+    public Dictionary<string, LocalizedDef> Entries { get; init; } = new();
 }
 
 public sealed class SourceIndexerSnapshot
