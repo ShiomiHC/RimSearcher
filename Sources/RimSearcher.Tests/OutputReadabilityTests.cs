@@ -668,6 +668,133 @@ public class OutputReadabilityTests : IDisposable
         Assert.DoesNotContain("[scanning stopped", regex);
     }
 
+    // ---- R24：inspect 大纲逐行的种类前缀 ----
+
+    // 三类成员本就是分块连续印的，每行再挂一次 `Property: ` / `Field: ` / `Method: ` 是把
+    // 表头说过的话在下面每一行重说（与 enum 的 `Value: ` 同型）。locate 的 Members 段一直
+    // 就是「组表头 + 裸行」，两处至此同形。
+    [Fact]
+    public async Task InspectOutline_NamesEachKindOnceAsAGroupHeader()
+    {
+        var (indexer, defs, catalog) = BuildIndex(
+            ("ZzBox.cs", "namespace Zz\n{\n    public class ZzBox\n    {\n"
+                         + "        public int ZzProp { get; set; }\n"
+                         + "        public string zzField;\n"
+                         + "        public void ZzGo() { }\n    }\n}\n"));
+
+        var content = await RunAsync(new InspectTool(indexer, defs, catalog), new { name = "ZzBox" });
+
+        Assert.Contains("\n  Properties:\n    public int ZzProp", content);
+        Assert.Contains("\n  Fields:\n    public string zzField", content);
+        Assert.Contains("\n  Methods:\n    public void ZzGo()", content);
+        Assert.DoesNotContain("  Property: ", content);
+        Assert.DoesNotContain("  Field: ", content);
+        Assert.DoesNotContain("  Method: ", content);
+    }
+
+    // ---- R25：折叠行的名词槽 ----
+
+    // 全服文法是 `... +N more <什么> (<怎么拿到>)`，而 locate 五段一直把 <什么> 留空。
+    // Members 段最要命：它是唯一有种类子组的段，折叠行又与组内条目同缩进，于是
+    // `... +1938 more` 紧跟在 Properties 组末尾时读起来像「还有 1938 个 property」，
+    // 而它数的是 method/property/field 三类之和。
+    [Fact]
+    public async Task Locate_FoldLines_NameWhatTheMoreIs()
+    {
+        var files = Enumerable.Range(0, 40)
+            .Select(i => ($"ZzThing{i}.cs",
+                $"namespace Zz {{ public class ZzThing{i} {{ public int ZzThingField{i}; }} }}"))
+            .ToArray();
+        var (indexer, defs, catalog) = BuildIndex(files);
+
+        var content = await RunAsync(new LocateTool(indexer, defs, catalog), new { query = "ZzThing" });
+
+        foreach (var fold in content.Split('\n').Where(l => l.TrimStart().StartsWith("... +")))
+            Assert.Matches(@"^\s*\.\.\. \+\d+ more [a-zA-Z# ]+ \(", fold);
+        Assert.Contains("more C# types", content);
+        // 三类之和，故是 members 而不是紧邻其上那个子组的种类
+        Assert.Contains("more members", content);
+    }
+
+    // ---- F23：trace usages 的静默削减 ----
+
+    // 同一份命中集，search_regex 附「有文件没扫全」尾注而 trace usages 不附。调用方从
+    // search_regex 学到的是「没有尾注即完整命中集」，套到 trace 上就会把一份漏了内容的
+    // 结果当成穷尽结论。两处的削减是一模一样的两条：单文件行闸、读不开就跳过。
+    [Fact]
+    public async Task TraceUsages_ReportsUnreadableFiles_TheSameWaySearchRegexDoes()
+    {
+        var (indexer, defs, catalog) = BuildIndex(
+            ("ZzOne.cs", "namespace Zz { public class ZzOne { void M() { ZzMark.Go(); } } }"),
+            ("ZzLocked.cs", "namespace Zz { public class ZzLocked { void M() { ZzMark.Go(); } } }"));
+
+        var locked = Directory.GetFiles(_workspace.Root, "ZzLocked.cs", SearchOption.AllDirectories)[0];
+        using (var hold = new FileStream(locked, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            var trace = await RunAsync(
+                new TraceTool(indexer, catalog), new { symbol = "ZzMark", mode = "usages" });
+            var regex = await RunAsync(
+                new SearchRegexTool(indexer, catalog), new { pattern = "ZzMark" });
+
+            const string expected = "... some files were not scanned in full (1 file(s) could not be read "
+                                    + "and were skipped entirely; matches in the unscanned parts would not be listed)";
+            Assert.Contains(expected, trace);
+            Assert.Contains(expected, regex);
+
+            // 表头同时改口：有文件没扫全时那个总数只是下界，不能再说 "N found"
+            Assert.Contains("at least 1 in scope", trace);
+            Assert.DoesNotContain("1 found in scope", trace);
+        }
+    }
+
+    // ---- R26：inspect def 头部的 `C# Class:` 行 ----
+
+    // DefType 就是 def 的 C# 类名，`C# Class:` 行在文件名可推时整行零新增事实——
+    // 同一个词在相邻两行里说了两遍。合并进 Type 行之后三态仍各自可分：可推 → 光名字，
+    // 不可推/多文件 → 带文件注，类没进索引 → 明说（原先靠整行缺席表达，得先知道规则才读得出来）。
+    [Fact]
+    public async Task InspectDef_FoldsTheClassLineIntoTheTypeLine()
+    {
+        var root = _workspace.Dir("Core");
+        _workspace.WriteFile(Path.Combine("Core", "ZzGadgetDef.cs"),
+            "namespace Zz { public class ZzGadgetDef { } }");
+        _workspace.WriteFile(Path.Combine("Core", "Gadgets.xml"),
+            "<Defs>\n  <ZzGadgetDef>\n    <defName>ZzWidget</defName>\n  </ZzGadgetDef>\n</Defs>\n");
+
+        var indexer = new SourceIndexer();
+        indexer.Scan(root);
+        indexer.FreezeIndex();
+        var defs = new DefIndexer();
+        defs.Scan(root);
+        defs.FreezeIndex();
+        var catalog = ScopeCatalog.Build([("vanilla", root)], null, null);
+
+        var content = await RunAsync(new InspectTool(indexer, defs, catalog), new { name = "ZzWidget" });
+
+        Assert.Contains("Type: ZzGadgetDef", content);
+        Assert.DoesNotContain("C# Class:", content);
+    }
+
+    // 类没进索引时不再靠「整行缺席」表达
+    [Fact]
+    public async Task InspectDef_SaysSoWhenTheDefTypeClassIsNotIndexed()
+    {
+        var root = _workspace.Dir("Defs");
+        _workspace.WriteFile(Path.Combine("Defs", "Gadgets.xml"),
+            "<Defs>\n  <ZzUnindexedDef>\n    <defName>ZzWidget</defName>\n  </ZzUnindexedDef>\n</Defs>\n");
+
+        var indexer = new SourceIndexer();
+        indexer.FreezeIndex();
+        var defs = new DefIndexer();
+        defs.Scan(root);
+        defs.FreezeIndex();
+        var catalog = ScopeCatalog.Build([("vanilla", root)], null, null);
+
+        var content = await RunAsync(new InspectTool(indexer, defs, catalog), new { name = "ZzWidget" });
+
+        Assert.Contains("Type: ZzUnindexedDef (C# class not indexed)", content);
+    }
+
     // 组名行与预览行的排布骨架，逐字内容无关
     private static string GroupLayout(string content) =>
         string.Concat(content.Split('\n').SkipWhile(l => !l.StartsWith('`')).Select(l =>

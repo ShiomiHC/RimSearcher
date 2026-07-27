@@ -129,24 +129,32 @@ public class ReadCodeTool : ITool
 
         path = resolution.Path;
 
+        // 三条 note 先按裸文本攒着：成功分支要把它们包成 `// …` / `<!-- … -->` 塞进代码围栏，
+        // 失败分支是纯文本、不能带注释标记，两处只有包装不同。原先只构造了包装后的那一份，
+        // 于是四条错误返回一条 note 都带不上——而「这里没有这个东西」正是最需要说清读的是
+        // 哪个文件的时刻（path 收基名，多源撞名时静默取优先级最高的那一份）。
+        var notes = new List<string>();
+
+        if (resolution.RootedInputRedirected)
+            notes.Add($"note: '{requestedPath}' does not exist; "
+                + $"reading the indexed file of the same name at {path}");
+
         // 按名解析到了 scope 之外的文件时必须说明，否则读者会以为读的是 scope 内那一份
-        var scopeNotice = resolution.OutOfScopeFallback
-            ? Comment(path, $"note: no file by this name inside scope '{scope.Expression}'; reading from {scope.OutOfScopeLabel(path)}") + "\n"
-            : string.Empty;
+        if (resolution.OutOfScopeFallback)
+            notes.Add($"note: no file by this name inside scope '{scope.Expression}'; "
+                + $"reading from {scope.OutOfScopeLabel(path)}");
 
         // scope 内有多份同名文件时 GetPath 静默取排序第一的那份。不说这件事，调用方会
         // 把 mod 的覆盖版当成 vanilla 原版，据此断言原版行为。
         var siblings = resolution.SameNameInScope;
         if (siblings is { Count: > 1 })
-            scopeNotice +=
-                Comment(path, $"note: {siblings.Count} files share this name in scope '{scope.Expression}'; "
-                    + $"reading the highest-priority one. The others: {string.Join(", ", siblings.Skip(1))}")
-                + "\n";
+            notes.Add($"note: {siblings.Count} files share this name in scope '{scope.Expression}'; "
+                + $"reading the highest-priority one. The others: {string.Join(", ", siblings.Skip(1))}");
 
-        if (resolution.RootedInputRedirected)
-            scopeNotice =
-                Comment(path, $"note: '{requestedPath}' does not exist; reading the indexed file of the same name at {path}")
-                + "\n" + scopeNotice;
+        var scopeNotice = notes.Count == 0
+            ? string.Empty
+            : string.Concat(notes.Select(note => Comment(path, note) + "\n"));
+        var plainNotice = notes.Count == 0 ? string.Empty : string.Join("\n", notes) + "\n";
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -179,7 +187,7 @@ public class ReadCodeTool : ITool
                 // 一旦含这段文本就会被误报成「类不存在」，而代码明明就在那里。
                 if (!classBody.IsOk)
                     return WithUnresolvedScopeNotice(scope,
-                        Failure(classBody, path, $"Class '{extractClassName}'", "Use inspect tool to verify the type name."));
+                        Failure(classBody, path, $"Class '{extractClassName}'", "Use inspect tool to verify the type name.", plainNotice));
 
                 // 整个类型的实现体没有天然上限：反编译出来的巨型类动辄几千行，一次就能吃掉
                 // 整个上下文预算。裸行模式早有 MaxLineCount 夹着，这里沿用同一个数，超出时
@@ -227,7 +235,7 @@ public class ReadCodeTool : ITool
 
                 if (!body.IsOk)
                     return WithUnresolvedScopeNotice(scope,
-                        Failure(body, path, $"Member '{methodName}'", "Use inspect tool to see available members."));
+                        Failure(body, path, $"Member '{methodName}'", "Use inspect tool to see available members.", plainNotice));
 
                 return WithUnresolvedScopeNotice(scope,
                     new ToolResult($"```{Fence(path)}\n{scopeNotice}{body.Content}\n```"));
@@ -245,8 +253,12 @@ public class ReadCodeTool : ITool
             var resultLines = allLines.Skip(startLine).Take(lineCount).Select((line, idx) => $"L{startLine + idx + 1}: {line}").ToList();
 
             if (resultLines.Count == 0)
+                // 失败分支同样要说清「这个数是哪个文件的」：path 可以是基名解析来的，
+                // 光一个 `334 lines` 悬在半空，调用方分不出读的是 vanilla 那份还是覆盖版。
                 return WithUnresolvedScopeNotice(scope, new ToolResult(
-                    $"Line range {startLine + 1}-{startLine + lineCount} exceeds file length ({totalLines} lines).", true));
+                    plainNotice
+                    + $"Line range {startLine + 1}-{startLine + lineCount} exceeds "
+                    + $"file length ({totalLines} lines) in {path}.", true));
 
             var sb = new StringBuilder();
             sb.AppendLine($"```{Fence(path)}");
@@ -295,21 +307,22 @@ public class ReadCodeTool : ITool
 
     // 三种失败原因给三种不同的下一步：文件没了要重查、文件过大要改用裸行读、目标不存在才该去 inspect。
     // 原先它们都被折叠成一句「not found」，读者据此断言「类不存在」，而真相可能是文件被重新同步掉了。
-    private static ToolResult Failure(SourceLookupResult result, string path, string target, string notFoundHint)
+    private static ToolResult Failure(
+        SourceLookupResult result, string path, string target, string notFoundHint, string plainNotice = "")
     {
-        var fileName = Path.GetFileName(path);
-
+        // 报解析后的绝对路径而非基名：成功分支的位置行印的就是绝对路径，两边说的必须是同一件事。
+        // 基名在 path 收基名 + 多源撞名时不足以定位，而这正是最需要定位的一刻。
         var message = result.Status switch
         {
             SourceLookupStatus.FileNotFound =>
-                $"File disappeared while reading: '{fileName}'. Sources may have just been re-synced — call locate again.",
+                $"File disappeared while reading: {path}. Sources may have just been re-synced — call locate again.",
             SourceLookupStatus.FileTooLarge =>
-                $"'{fileName}' is larger than {RoslynHelper.MaxParseFileSize / (1024 * 1024)} MB, so it is not parsed. " +
+                $"{path} is larger than {RoslynHelper.MaxParseFileSize / (1024 * 1024)} MB, so it is not parsed. " +
                 "Read it with startLine/lineCount instead, or narrow down with search_regex.",
-            _ => $"{target} not found in {fileName}. {notFoundHint}"
+            _ => $"{target} not found in {path}. {notFoundHint}"
         };
 
-        return new ToolResult(message, true);
+        return new ToolResult(plainNotice + message, true);
     }
 
     // 解析结果的每一路都要能被调用方分辨：读到了哪条绝对路径、是不是几选一、

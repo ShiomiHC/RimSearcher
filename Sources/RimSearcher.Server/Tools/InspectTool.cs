@@ -263,7 +263,17 @@ public class InspectTool : ITool
             // 原样回显等于把调用方的错拼盖章成真实 defName，它会照着这个名字继续往下查。
             // 下面的 Type / File / C# Class 本来就全部取自 def，标题跟着它才是一致的。
             sb.AppendLine($"## Def: {def.DefName}");
-            sb.AppendLine($"Type: {def.DefType}");
+
+            // DefType 就是这个 def 的 C# 类名，故不再单起一行 `C# Class:` 把同一个词说第二遍
+            // （R20 把文件名收进判据之后，那行在可推情形下整行零新增事实）。剩下的唯一事实是
+            // 「这个类在不在索引里、在哪个文件里」，附在 Type 行末尾即可。「不在索引里」原先靠
+            // 整行缺席表达——读者得先知道有这条规则才读得出来，改为明说；措辞点名 C# class，
+            // 免得与紧下方 `File:` 行说的 def 自身文件混起来。
+            var typePaths = _sourceIndexer.GetPathsByType(def.DefType);
+            sb.AppendLine($"Type: {def.DefType}"
+                + (typePaths.Count > 0
+                    ? SymbolRow.FileNote(def.DefType, typePaths)
+                    : " (C# class not indexed)"));
 
             // 译文只作为附注，下面的 Resolved XML 一个字不动——那是游戏真实数据，
             // 把译名掺进去会毁掉它「照着它就能改 mod」的用途。
@@ -275,13 +285,6 @@ public class InspectTool : ITool
 
             var sourceName = scope.SourceNameOf(def.FilePath);
             if (!string.IsNullOrEmpty(sourceName)) sb.AppendLine($"Source: {sourceName}");
-
-            // 文件名走与 locate / trace 同一条判据（SymbolRow.FileNote）：`CompShield.cs` 从
-            // `RimWorld.CompShield` 逐字可推，印它只是把同一个词说两遍。原先这里无条件印，
-            // 于是三个工具里两个按判据、一个照印，同一个概念又长出了两套写法。
-            var typePaths = _sourceIndexer.GetPathsByType(def.DefType);
-            if (typePaths.Count > 0)
-                sb.AppendLine($"C# Class: `{def.DefType}`{SymbolRow.FileNote(def.DefType, typePaths)}");
 
             sb.AppendLine($"File: `{def.FilePath}`");
 

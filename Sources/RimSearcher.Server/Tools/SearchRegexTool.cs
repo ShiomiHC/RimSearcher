@@ -107,7 +107,9 @@ public class SearchRegexTool : ITool
             // 单位改说 "previews"：表头的 N 数的是预览行，与「命中数」是两个量。
             var headline = truncated
                 ? $"first {results.Count} previews in scope '{scope.Expression}'"
-                : $"{totalMatches} found in scope '{scope.Expression}'";
+                // 有文件没扫全时这个总数只是下界，表头与末尾那条尾注要同时改口
+                : $"{ScopeArgs.FoundCount(totalMatches, diagnostics.AnyFileIncomplete)} "
+                  + $"in scope '{scope.Expression}'";
 
             // 列出来的文件全同源时标签只印一次（见 ScopeArgs.SourceLabeling）
             var labels = ScopeArgs.SourceLabeling.Of(
@@ -171,8 +173,7 @@ public class SearchRegexTool : ITool
                 if (diagnostics.LineCappedFiles > 0)
                     incomplete.Add($"{diagnostics.LineCappedFiles} file(s) were only scanned to line {diagnostics.LineCap}");
 
-                output += $"\n\n... some files were not scanned in full ({string.Join("; ", incomplete)}; "
-                          + "matches in the unscanned parts would not be listed)";
+                output += "\n\n" + ScopeArgs.NotScannedInFullLine(incomplete);
             }
 
             output += scopeNotice;

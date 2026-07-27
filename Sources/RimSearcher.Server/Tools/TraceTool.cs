@@ -162,7 +162,7 @@ public class TraceTool : ITool
                 + $"({shownDirect} direct, deepest {shownDeepest} level(s) down{depthLegend}){inheritorLabels.Header}:");
             sbInheritors.AppendLine(string.Join(Environment.NewLine, results));
 
-            var fold = ScopeArgs.FoldLine(inheritors, indent: "", limit: limit);
+            var fold = ScopeArgs.FoldLine(inheritors, "subclasses", indent: "", limit: limit);
             if (fold != null) sbInheritors.AppendLine(fold);
 
             var inheritorsReport = new ScopeReport();
@@ -201,6 +201,13 @@ public class TraceTool : ITool
             int processedCount = 0;
             int totalFiles = files.Count;
             int truncatedFlag = 0;
+
+            // 两处静默削减的计数。search_regex 一直在报它们，trace 此前一声不吭——而
+            // 「没有尾注即完整命中集」这条读法是调用方从 search_regex 那儿学来的，套到这里
+            // 就会把一份漏了六万行的结果当成穷尽结论（本语料里 81022 行的
+            // UnitySourceGeneratedAssemblyMonoScriptTypes_v1.cs 恰好越过行闸）。
+            int lineCappedFiles = 0;
+            int unreadableFiles = 0;
 
             // 结果取舍必须与线程调度无关。原先是整张 files 满盘并发 + 配额一到就从委托头部
             // return：**哪些文件赶在配额前被扫到**取决于线程调度，`limit:1` 同一条查询两次
@@ -268,12 +275,22 @@ public class TraceTool : ITool
                             }
                         }
 
-                        if (lineNum >= MaxLinesScannedPerFile) break;
+                        if (lineNum >= MaxLinesScannedPerFile)
+                        {
+                            Interlocked.Increment(ref lineCappedFiles);
+                            break;
+                        }
                     }
 
                     if (matchesInFile > 0) matchesByFile[file] = matchesInFile;
                 }
-                catch { }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // 原先是裸 catch：读不开的文件既不上报，也会连带跳过上面那行
+                    // `matchesByFile[file] = matchesInFile`，于是该文件的
+                    // `+N more in this file` 也一并静默消失（与 F9(a) 同型）。
+                    Interlocked.Increment(ref unreadableFiles);
+                }
                 finally
                 {
                     var current = Interlocked.Increment(ref processedCount);
@@ -314,9 +331,14 @@ public class TraceTool : ITool
             var usageLabels = ScopeArgs.SourceLabeling.Of(
                 grouped.Select(g => scope.ShowLabels ? scope.SourceNameOf(g.Key) : null));
 
+            var capped = Interlocked.CompareExchange(ref lineCappedFiles, 0, 0);
+            var unreadable = Interlocked.CompareExchange(ref unreadableFiles, 0, 0);
+            var anyFileIncomplete = capped > 0 || unreadable > 0;
+
             sb.AppendLine(wasTruncated
                 ? $"References to '{symbol}' (first {shownResults.Count} previews in scope '{scope.Expression}'){usageLabels.Header}:"
-                : $"References to '{symbol}' ({totalMatches} found in scope '{scope.Expression}'){usageLabels.Header}:");
+                : $"References to '{symbol}' ({ScopeArgs.FoundCount(totalMatches, anyFileIncomplete)} "
+                  + $"in scope '{scope.Expression}'){usageLabels.Header}:");
             sb.AppendLine();
 
             var groupsWritten = 0;
@@ -353,6 +375,19 @@ public class TraceTool : ITool
                 // limit:'all'（原地重试），这条判断在 ScanStoppedLine 内部。
                 sb.AppendLine();
                 sb.AppendLine(ScopeArgs.ScanStoppedLine(maxTotalResults, limit));
+            }
+
+            // 与 search_regex 逐字同句：两个工具有一模一样的两处静默削减，此前只有它说出口
+            if (anyFileIncomplete)
+            {
+                var incomplete = new List<string>();
+                if (unreadable > 0)
+                    incomplete.Add($"{unreadable} file(s) could not be read and were skipped entirely");
+                if (capped > 0)
+                    incomplete.Add($"{capped} file(s) were only scanned to line {MaxLinesScannedPerFile}");
+
+                sb.AppendLine();
+                sb.AppendLine(ScopeArgs.NotScannedInFullLine(incomplete));
             }
 
             // usages 分支是硬 scope 过滤、没有 ScopeReport footer（见上面扫盘的注释），

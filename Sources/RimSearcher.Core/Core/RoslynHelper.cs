@@ -303,28 +303,22 @@ public static class RoslynHelper
             // 行尾空格既碍眼又会让「按行比对上一版大纲」凭空多出差异。
             var typeParams = type.TypeParameterList?.ToString() ?? string.Empty;
             sb.AppendLine($"{kind}: {fullName}{(typeParams.Length > 0 ? " " + typeParams : string.Empty)}");
+            // 三类成员本就是分块连续印的，所以种类由每块的表头说一次即可，行内不再逐行挂
+            // `Property: ` / `Field: ` / `Method: `——那是把表头说过的话在下面每一行再说一遍
+            // （同一条判据见 enum 分支）。locate 的 Members 段一直就是这么排的，两处至此同形。
             var properties = type.Members.OfType<PropertyDeclarationSyntax>().ToList();
-            foreach (var prop in properties.Take(maxMembersPerKind))
-                sb.AppendLine($"  Property: {Modifiers(prop.Modifiers)}{prop.Type} {prop.Identifier.Text}");
-            AppendOutlineFold(sb, properties.Count, maxMembersPerKind, "properties");
+            AppendOutlineGroup(sb, properties, maxMembersPerKind, "Properties", "properties",
+                prop => $"{Modifiers(prop.Modifiers)}{prop.Type} {prop.Identifier.Text}");
 
             var fields = type.Members.OfType<FieldDeclarationSyntax>().ToList();
-            foreach (var field in fields.Take(maxMembersPerKind))
-            {
-                var fieldName = string.Join(", ", field.Declaration.Variables.Select(v => v.Identifier.Text));
-                sb.AppendLine($"  Field: {Modifiers(field.Modifiers)}{field.Declaration.Type} {fieldName}");
-            }
-            AppendOutlineFold(sb, fields.Count, maxMembersPerKind, "fields");
+            AppendOutlineGroup(sb, fields, maxMembersPerKind, "Fields", "fields",
+                field => $"{Modifiers(field.Modifiers)}{field.Declaration.Type} "
+                         + string.Join(", ", field.Declaration.Variables.Select(v => v.Identifier.Text)));
 
             var methods = type.Members.OfType<MethodDeclarationSyntax>().ToList();
-            foreach (var method in methods.Take(maxMembersPerKind))
-            {
-                var parameters = string.Join(", ",
-                    method.ParameterList.Parameters.Select(FormatParameter));
-                sb.AppendLine(
-                    $"  Method: {Modifiers(method.Modifiers)}{method.ReturnType} {method.Identifier.Text}({parameters})");
-            }
-            AppendOutlineFold(sb, methods.Count, maxMembersPerKind, "methods");
+            AppendOutlineGroup(sb, methods, maxMembersPerKind, "Methods", "methods",
+                method => $"{Modifiers(method.Modifiers)}{method.ReturnType} {method.Identifier.Text}"
+                          + $"({string.Join(", ", method.ParameterList.Parameters.Select(FormatParameter))})");
 
             sb.AppendLine();
         }
@@ -347,8 +341,21 @@ public static class RoslynHelper
         // 措辞对齐全服统一的截断脚注文法「... +N more <什么> (<怎么拿到>)」——见 ScopeArgs.FoldLine。
         // "not shown" 是 "more" 已经说过的话。
         sb.AppendLine(
-            $"  ... +{total - shownCap} more {kindPlural} "
+            $"    ... +{total - shownCap} more {kindPlural} "
             + "(pass limit:'all' for the whole list, or read one with read_code methodName)");
+    }
+
+    // 一类成员一块：表头 + 各行签名 + 折叠行。空的那类整块不出现——「没有这个表头」即
+    // 「这个类型没有这类成员」，比印一个空表头少一行且同样说得清。
+    private static void AppendOutlineGroup<T>(
+        StringBuilder sb, List<T> members, int maxMembersPerKind,
+        string headerPlural, string foldPlural, Func<T, string> render)
+    {
+        if (members.Count == 0) return;
+        sb.AppendLine($"  {headerPlural}:");
+        foreach (var member in members.Take(maxMembersPerKind))
+            sb.AppendLine($"    {render(member)}");
+        AppendOutlineFold(sb, members.Count, maxMembersPerKind, foldPlural);
     }
 
     // 与 FormatParameter 同一条判据：大纲是「照着它写调用或写 Harmony patch」的抄写样本，

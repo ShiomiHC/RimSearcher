@@ -116,7 +116,7 @@ public class LocateTool : ITool
                         $"- `{entry.Item}` ({entry.Score:F0}%){FileNote(entry.Item, paths)}{typeLabels.Row(entry.SourceName)}");
                 }
 
-                var fold = ScopeArgs.FoldLine(types, limit: limit);
+                var fold = ScopeArgs.FoldLine(types, "C# types", limit: limit);
                 if (fold != null) sb.AppendLine(fold);
             }
         }
@@ -183,6 +183,8 @@ public class LocateTool : ITool
                     shown,
                     members.TruncatedByScoreGap,
                     truncatedByLimit: true,
+                    // 「members」而非某一类：这行数的是 method/property/field 三类之和
+                    noun: "members",
                     indent: "  ",
                     limit: limit);
                 if (memberFold != null) sb.AppendLine(memberFold);
@@ -216,7 +218,7 @@ public class LocateTool : ITool
                         $"- `{def.DefName}` ({entry.Score:F0}%) - {def.DefType}{abstractTag}{label}{localizedTag}{defLabels.Row(entry.SourceName)}");
                 }
 
-                var fold = ScopeArgs.FoldLine(defs, indent: "  ", limit: limit);
+                var fold = ScopeArgs.FoldLine(defs, "XML defs", indent: "  ", limit: limit);
                 if (fold != null) sb.AppendLine(fold);
             }
 
@@ -241,7 +243,7 @@ public class LocateTool : ITool
                         sb.AppendLine($"- `{location.DefName}` - {fieldSummary}{moreFields}{contentLabels.Row(entry.SourceName)}");
                     }
 
-                    var fold = ScopeArgs.FoldLine(defsByContent, indent: "  ", limit: limit);
+                    var fold = ScopeArgs.FoldLine(defsByContent, "content matches", indent: "  ", limit: limit);
                     if (fold != null) sb.AppendLine(fold);
                 }
             }
@@ -288,7 +290,7 @@ public class LocateTool : ITool
                 // 折叠行只对兜底那一支有意义：精确补充本来就只列同名的那几条，没有「还有更多」。
                 if (wantsFileFallback)
                 {
-                    var fold = ScopeArgs.FoldLine(files, limit: limit);
+                    var fold = ScopeArgs.FoldLine(files, "files", limit: limit);
                     if (fold != null) sb.AppendLine(fold);
                 }
 

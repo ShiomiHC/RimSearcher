@@ -50,9 +50,10 @@ public class OutputVolumeCapTests : IDisposable
 
         Assert.True(outline.IsOk);
         var cap = RoslynHelper.DefaultMaxOutlineMembersPerKind;
-        Assert.Equal(cap, CountLines(outline.Content, "  Property: "));
-        Assert.Equal(cap, CountLines(outline.Content, "  Field: "));
-        Assert.Equal(cap, CountLines(outline.Content, "  Method: "));
+        // 种类由每块表头说一次，行内只剩签名——故按签名形状数，不按种类前缀数
+        Assert.Equal(cap, CountLines(outline.Content, "    public int Prop"));
+        Assert.Equal(cap, CountLines(outline.Content, "    public string field"));
+        Assert.Equal(cap, CountLines(outline.Content, "    public void Method"));
 
         // 三类各自报出自己还剩多少，而不是合并成一条含混的总数
         Assert.Contains($"+{60 - cap} more properties", outline.Content);
@@ -82,7 +83,7 @@ public class OutputVolumeCapTests : IDisposable
 
         var outline = await RoslynHelper.GetClassOutlineAsync(path, "Small");
 
-        Assert.Equal(3, CountLines(outline.Content, "  Method: "));
+        Assert.Equal(3, CountLines(outline.Content, "    public void Method"));
         Assert.DoesNotContain("not shown", outline.Content);
     }
 

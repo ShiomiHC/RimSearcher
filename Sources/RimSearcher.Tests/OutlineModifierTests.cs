@@ -55,8 +55,10 @@ public class OutlineModifierTests : IDisposable
     {
         var content = await Outline();
 
-        Assert.Contains("Property: public float PublicProp", content);
-        Assert.Contains("Property: private float PrivateProp", content);
+        // 种类由 `  Properties:` 表头说一次，行内只剩签名本身
+        Assert.Contains("\n  Properties:\n", content);
+        Assert.Contains("\n    public float PublicProp", content);
+        Assert.Contains("\n    private float PrivateProp", content);
     }
 
     // const 与 static readonly 与普通字段：三者的取用方式完全不同
@@ -65,9 +67,10 @@ public class OutlineModifierTests : IDisposable
     {
         var content = await Outline();
 
-        Assert.Contains("Field: private const float ZzConstField", content);
-        Assert.Contains("Field: private static readonly string ZzStaticField", content);
-        Assert.Contains("Field: public int ZzPlainField", content);
+        Assert.Contains("\n  Fields:\n", content);
+        Assert.Contains("\n    private const float ZzConstField", content);
+        Assert.Contains("\n    private static readonly string ZzStaticField", content);
+        Assert.Contains("\n    public int ZzPlainField", content);
     }
 
     // static 与否决定写 Harmony patch 时要不要 __instance 形参
@@ -76,19 +79,30 @@ public class OutlineModifierTests : IDisposable
     {
         var content = await Outline();
 
-        Assert.Contains("Method: public static ZzShapes ZzFromValue(int v)", content);
-        Assert.Contains("Method: public override string ToString()", content);
-        Assert.Contains("Method: protected virtual void ZzHook()", content);
+        Assert.Contains("\n  Methods:\n", content);
+        Assert.Contains("\n    public static ZzShapes ZzFromValue(int v)", content);
+        Assert.Contains("\n    public override string ToString()", content);
+        Assert.Contains("\n    protected virtual void ZzHook()", content);
     }
 
-    // 修饰符是前缀，不能把类型和名字挤掉
+    // 修饰符是前缀，不能把类型和名字挤掉。种类前缀去掉之后，「没有修饰符」的行会以
+    // 缩进后的第一个字符开头——多一个空格就说明前缀渲染成了空串却仍留着分隔空格。
     [Fact]
     public async Task ModifiersDoNotDisplaceTypeOrName()
     {
         var content = await Outline();
 
-        Assert.DoesNotContain("Field:  ", content);
-        Assert.DoesNotContain("Method:  ", content);
-        Assert.DoesNotContain("Property:  ", content);
+        Assert.DoesNotContain("\n     ", content);
+    }
+
+    // 逐行的 `Property: ` / `Field: ` / `Method: ` 已由每块的表头取代
+    [Fact]
+    public async Task OutlineRows_DoNotRepeatTheKindOnEveryLine()
+    {
+        var content = await Outline();
+
+        Assert.DoesNotContain("  Property: ", content);
+        Assert.DoesNotContain("  Field: ", content);
+        Assert.DoesNotContain("  Method: ", content);
     }
 }

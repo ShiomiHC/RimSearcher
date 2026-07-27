@@ -219,10 +219,11 @@ public static class ScopeArgs
     //   - 只有断层收口砍的              → 那部分调多大的 limit 都拿不回来（见 ScopeFilter.Apply
     //     的 effectiveLimit = Min(limit, cutoff)）。原先这里一律劝 'all'，调用方照做后
     //     一条也没多出来，还会把「+N more」读成服务端在敷衍。
-    public static string? FoldLine<T>(ScopedResult<T> result, string indent = "  ", ResultLimit? limit = null)
+    public static string? FoldLine<T>(
+        ScopedResult<T> result, string noun, string indent = "  ", ResultLimit? limit = null)
         => FoldLine(
             result.HiddenCount, result.Items.Count,
-            result.TruncatedByScoreGap, result.TruncatedByLimit, indent, limit);
+            result.TruncatedByScoreGap, result.TruncatedByLimit, noun, indent, limit);
 
     // 显式计数的重载。分段显示的场景（locate 的 Members 按 method/property/field 分组）里，
     // 真正被藏起来的条数由「ScopeFilter 的 limit」和「每组的显示配额」两层共同决定，
@@ -232,6 +233,7 @@ public static class ScopeArgs
         int shownCount,
         bool truncatedByScoreGap,
         bool truncatedByLimit,
+        string noun,
         string indent = "  ",
         ResultLimit? limit = null)
     {
@@ -252,9 +254,12 @@ public static class ScopeArgs
             // 照做只会把这些结果推得更远。
             : "broaden or reword the query; limit does not expand these";
 
+        // 名词槽不留空。locate 的 Members 段是分种类子组印的，折叠行又与组内条目同缩进，
+        // 于是 `... +1938 more` 紧跟在 Properties 组末尾时读起来像「还有 1938 个 property」，
+        // 而它数的是三类之和。全服文法（README「低 Token 消耗」一节）本就要求这个槽有名词。
         return truncatedByScoreGap
-            ? $"{indent}... +{hiddenCount} more (lower relevance, {hint})"
-            : $"{indent}... +{hiddenCount} more ({hint})";
+            ? $"{indent}... +{hiddenCount} more {noun} (lower relevance, {hint})"
+            : $"{indent}... +{hiddenCount} more {noun} ({hint})";
     }
 
     // 「扫到预览行上限就停了」的尾注。search_regex 与 trace usages 报的是同一件事，原先
@@ -266,6 +271,19 @@ public static class ScopeArgs
     // 与 FoldLine 的差别在于「剩下多少」这里是不知道的：扫描是在上限处停的，后面的候选
     // 文件根本没打开过。所以不写 `+N more`——那个数没人算得出来，编一个就是假的。
     // extraNotes 收本工具独有的补充（如「文件数也超了」），一并挂在同一句里。
+    // 「有文件没扫全」的尾注。search_regex 与 trace usages 有一模一样的两处静默削减——单文件
+    // 行闸（扫到第 20000 行就停）与读不开的文件直接跳过——此前只有前者说出口。调用方从
+    // search_regex 学到的是「没有尾注即完整命中集」（那是写在它 Description 里的契约），
+    // 顺手套到 trace 上，就会把一份可能漏了六万行的结果当成穷尽结论。
+    public static string NotScannedInFullLine(IReadOnlyList<string> reasons)
+        => $"... some files were not scanned in full ({string.Join("; ", reasons)}; "
+           + "matches in the unscanned parts would not be listed)";
+
+    // 有文件没扫全时，命中总数就不再是确定值而是下界。表头与上面那行尾注必须同时改口，
+    // 否则一句说「7 found」、一句说「有文件没扫全」，调用方无从判断该信哪个。
+    public static string FoundCount(int total, bool anyFileIncomplete)
+        => anyFileIncomplete ? $"at least {total}" : $"{total} found";
+
     public static string ScanStoppedLine(
         int previewCap, ResultLimit limit, IReadOnlyList<string>? extraNotes = null)
     {

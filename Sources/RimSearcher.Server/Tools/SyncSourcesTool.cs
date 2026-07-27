@@ -137,15 +137,6 @@ public class SyncSourcesTool : ITool
     private const int DefaultLimit = 100;
     private const int MaxLimit = 2000;
 
-    private static readonly ToolArgSpec ArgSpec = new(
-        "rimworld-searcher__sync_sources",
-        "no required parameters — action defaults to 'check'.",
-        "action ('check' | 'sync' | 'diff'), sources (comma-separated names), "
-        + "and for action='diff': granularity ('files' | 'members'), file (relative path), method (+ optional className), "
-        + $"version (a number counting back, or an id like 'v0002'), limit (default {DefaultLimit}, max {MaxLimit}), "
-        + "offset (page through more changes than limit).",
-        "action='diff' needs source_history_depth > 0 in config.toml; without it there is nothing archived to compare against.");
-
     public async Task<ToolResult> ExecuteAsync(JsonElement args, CancellationToken cancellationToken, IProgress<double>? progress = null)
     {
         var action = (ToolArgs.GetOptionalString(args, "action", "mode", "op") ?? "check").ToLowerInvariant();
@@ -167,8 +158,15 @@ public class SyncSourcesTool : ITool
 
         if (resolved == null)
         {
+            // 逐值括注，不挂参数表。原先这里拼 ArgSpec.BuildUsage()：448 字符里 394 字符与
+            // 这个错无关（六个参数在 action 定下来之前一个都用不上），还把枚举值说了第二遍，
+            // 而三个动作各自的代价与前置条件——真正该说的那块——一句都没有。同工具的
+            // granularity 与 trace 的 mode 一直就是这么写的。
             return new ToolResult(
-                $"Unknown action '{action}'. Use 'check', 'sync' or 'diff'.\n{ArgSpec.BuildUsage()}", true);
+                $"Unknown action '{action}'. Use 'check' (default; report which assemblies changed), "
+                + "'sync' (re-decompile the changed ones and reindex) or "
+                + "'diff' (review what a past sync changed; needs source_history_depth > 0 in config.toml).",
+                true);
         }
 
         // granularity 与 action 是同一个坑的另一个入口：schema 声明了 enum，但 client 不一定校验，
@@ -328,9 +326,15 @@ public class SyncSourcesTool : ITool
     {
         if (!_syncService.History.Enabled)
         {
+            // 时序不能省。depth 是服务构造期一次性读进 SourceHistoryStore 的（无热重载），
+            // 归档又只在 sync 路径里写；只说「改 config」的话，照做后重跑 diff 拿到的是逐字
+            // 相同的这一句，零新信息。同一个 config 项在 sync 侧的指引一直是带时序的
+            // （"before the next sync"），两条路径此前详略不同。
             return new ToolResult(
-                "Source history is disabled. Set source_history_depth to 1 or more in config.toml "
-                + "to keep previous decompiled versions for diffing.", true);
+                "Source history is disabled, so nothing has been archived to diff against. "
+                + "Set source_history_depth to 1 or more in config.toml, restart the server, "
+                + "then run action='sync' — the archive is written by that sync, so diff stays empty until then.",
+                true);
         }
 
         if (!string.IsNullOrWhiteSpace(request.FilePath)) return RunFileDiff(request);
