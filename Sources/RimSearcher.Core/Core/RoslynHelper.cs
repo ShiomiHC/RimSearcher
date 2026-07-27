@@ -207,7 +207,17 @@ public static class RoslynHelper
         => GetFullTypeName(declaration).Equals(name, StringComparison.OrdinalIgnoreCase)
            || IdentifierOf(declaration).Equals(name, StringComparison.OrdinalIgnoreCase);
 
-    public static async Task<SourceLookupResult> GetClassOutlineAsync(string filePath, string? targetTypeName = null)
+    // 大纲的体积上限，按成员类别各给一份配额。Pawn 这类巨型类型的成员数以百计，全量渲染
+    // 一次就是几千 token，而 inspect 是 locate 之后的必经一站，这份开销每次查询都要付。
+    // 配额不做成「总数顺序截断」：一个有两百个字段的类会把 Method 整段挤掉，而方法签名
+    // 恰恰是大纲最常被用到的部分（照着写调用、写 Harmony patch）。三类各 40 条 ≈ 120 行，
+    // 落在 ScopeArgs.HardLimit 那笔体积账之内；超出的由 locate / read_code 按名精取。
+    public const int DefaultMaxOutlineMembersPerKind = 40;
+
+    public static async Task<SourceLookupResult> GetClassOutlineAsync(
+        string filePath,
+        string? targetTypeName = null,
+        int maxMembersPerKind = DefaultMaxOutlineMembersPerKind)
     {
         if (!File.Exists(filePath)) return SourceLookupResult.Failed(SourceLookupStatus.FileNotFound);
         if (new FileInfo(filePath).Length > MaxParseFileSize)
@@ -282,26 +292,44 @@ public static class RoslynHelper
             // 行尾空格既碍眼又会让「按行比对上一版大纲」凭空多出差异。
             var typeParams = type.TypeParameterList?.ToString() ?? string.Empty;
             sb.AppendLine($"{kind}: {fullName}{(typeParams.Length > 0 ? " " + typeParams : string.Empty)}");
-            foreach (var prop in type.Members.OfType<PropertyDeclarationSyntax>())
+            var properties = type.Members.OfType<PropertyDeclarationSyntax>().ToList();
+            foreach (var prop in properties.Take(maxMembersPerKind))
                 sb.AppendLine($"  Property: {prop.Type} {prop.Identifier.Text}");
-            foreach (var field in type.Members.OfType<FieldDeclarationSyntax>())
+            AppendOutlineFold(sb, properties.Count, maxMembersPerKind, "properties");
+
+            var fields = type.Members.OfType<FieldDeclarationSyntax>().ToList();
+            foreach (var field in fields.Take(maxMembersPerKind))
             {
                 var fieldName = string.Join(", ", field.Declaration.Variables.Select(v => v.Identifier.Text));
                 sb.AppendLine($"  Field: {field.Declaration.Type} {fieldName}");
             }
+            AppendOutlineFold(sb, fields.Count, maxMembersPerKind, "fields");
 
-            foreach (var method in type.Members.OfType<MethodDeclarationSyntax>())
+            var methods = type.Members.OfType<MethodDeclarationSyntax>().ToList();
+            foreach (var method in methods.Take(maxMembersPerKind))
             {
                 var parameters = string.Join(", ",
                     method.ParameterList.Parameters.Select(FormatParameter));
                 sb.AppendLine($"  Method: {method.ReturnType} {method.Identifier.Text}({parameters})");
             }
+            AppendOutlineFold(sb, methods.Count, maxMembersPerKind, "methods");
+
             sb.AppendLine();
         }
 
         return sb.Length > 0
             ? SourceLookupResult.Ok(sb.ToString())
             : SourceLookupResult.Failed(SourceLookupStatus.TargetNotFound);
+    }
+
+    // 折叠行要同时说清「还剩多少」和「怎么拿到它们」。只写 +N 的话，调用方唯一想得到的动作
+    // 是把整个文件读出来——那正是大纲想省掉的开销。
+    private static void AppendOutlineFold(StringBuilder sb, int total, int shownCap, string kindPlural)
+    {
+        if (total <= shownCap) return;
+        sb.AppendLine(
+            $"  ... +{total - shownCap} more {kindPlural} not shown "
+            + "(find one by name with locate, or read the full declaration with read_code extractClass)");
     }
 
     // 原先大纲只渲染 `{类型} {形参名}`，把 out/ref/in/params/this 和默认值全丢了：

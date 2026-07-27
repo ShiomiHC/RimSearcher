@@ -664,13 +664,33 @@ public class SourceIndexer
 
     // scope 与扩展名过滤都必须在扫描之前生效：这两个条件若留到结果产出后再筛，
     // 命中上限会被过滤掉的文件吃光，筛完就成了假空（fileFilter 原先正是这个写法）。
-    // 单文件最多留几条预览。只限「留」，不限「数」：原先收满 5 条就 break 掉整个文件，
+    // 单文件最多留几条预览。只限「留」，不限「数」：原先收满就 break 掉整个文件，
     // 于是该文件剩下的命中既不进总数、也不进上层的「+N more in this file」，两个数一起少报，
     // 调用方据此以为这个文件里就那么几处。
-    private const int MaxPreviewsPerFile = 5;
+    //
+    // 这个数必须与展示层每文件显示的条数一致（SearchRegexTool 的 Take(3)）。取 5 时多出来的
+    // 两条照样占掉 maxResults 配额却永远不会被显示，等于把默认档能覆盖的文件数从 33 压到 20——
+    // 而展示层的文件上限是 50，密集命中下那个上限根本摸不到，扫描先停了。
+    private const int MaxPreviewsPerFile = 3;
 
     // 数完整个文件是为了把每文件命中数报准，但不能让一个病态大文件吃光整轮扫描的时间。
     private const int MaxLinesScannedPerFile = 20000;
+
+    // 预览行长度上限，与 trace usages 用的是同一个数。ScopeArgs.HardLimit 那笔体积账
+    // （一条一行、每行按 100 字符算，200 行 ≈ 20KB）正是以此为前提，而本方法此前整条
+    // 链路一次都没截：XML 里一行写完的 <li> 列表、反编译产物里的长泛型签名都能把单行
+    // 拉到几百字符，150 行预览就此涨到那笔账的三倍，且随 pattern 与 scope 不可预测地浮动。
+    private const int MaxPreviewLength = 100;
+
+    // 在收集处截而不是展示处：matchesByFile 数的是命中数、不碰预览文本，因此不受影响，
+    // 而截短的行也不必再在内存里多留一份完整副本。与 TraceTool 的 usages 做法对称。
+    private static string TruncatePreview(string line)
+    {
+        var preview = line.Trim();
+        return preview.Length > MaxPreviewLength
+            ? preview[..(MaxPreviewLength - 3)] + "..."
+            : preview;
+    }
 
     // MatchesByFile 是每个文件的真实命中数，与 Results 里的预览条数不是一回事。
     public async Task<(List<(string Path, int LineNumber, string Preview)> Results,
@@ -731,7 +751,7 @@ public class SourceIndexer
                         {
                             var currentCount = Interlocked.Increment(ref globalCount);
                             if (currentCount <= maxResults)
-                                results.Add((filePath, lineNum, line.Trim()));
+                                results.Add((filePath, lineNum, TruncatePreview(line)));
                             else
                                 Interlocked.Exchange(ref truncatedFlag, 1);
                         }

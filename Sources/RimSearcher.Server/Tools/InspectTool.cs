@@ -30,6 +30,10 @@ public class InspectTool : ITool
     // 译文描述整段塞进来会把下面的 Resolved XML 挤出视线，而它只是个参考
     private const int LocalizedDescriptionLimit = 300;
 
+    // 渲染完整大纲的文件数上限。同名类型分散在多个源里时，第二份起只报路径——
+    // 几份大纲通常高度重合，而体积是实打实地翻倍。
+    private const int MaxOutlinedFiles = 1;
+
     public InspectTool(
         SourceIndexer sourceIndexer,
         DefIndexer defIndexer,
@@ -50,7 +54,9 @@ public class InspectTool : ITool
         "Type mode returns the base-class chain (interfaces are not on it — use trace mode:'inheritors' for those) "
         + "and a member outline of fields, properties and methods; constructors, indexers and operators are not "
         + "outlined but read_code can still read them by name. Enums are outlined as their values, delegates as "
-        + "their signature. Method bodies come from read_code.";
+        + "their signature. The outline lists at most 40 members per kind, and when several sources declare the "
+        + "same type only the highest-priority one is outlined; both cuts are stated inline where they happen. "
+        + "Method bodies come from read_code.";
 
     private static readonly ToolArgSpec ArgSpec = new(
         "rimworld-searcher__inspect",
@@ -284,15 +290,30 @@ public class InspectTool : ITool
                 sb.AppendLine("```\n");
             }
 
+            // 同名类型在 vanilla 与各 mod 里各有一份是常态（HAR 之类的前置尤其如此），
+            // 每份都全量渲染一次大纲，体积就按文件数线性放大。读者要的通常是作用域里
+            // 优先级最高的那一份——Items 已按该顺序排好——其余只报路径，真要看就收窄
+            // scope 或用 read_code extractClass 点名去取。
+            var outlinesShown = 0;
             foreach (var entry in csharpPaths.Items)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+
+                if (outlinesShown >= MaxOutlinedFiles)
+                {
+                    sb.AppendLine(
+                        $"**Also declared in** `{entry.Item}`{ScopeArgs.Label(entry.SourceName)} "
+                        + "— outline omitted; narrow scope to this source, or use read_code extractClass, to see it.");
+                    continue;
+                }
+
                 sb.AppendLine($"**Outline** (`{entry.Item}`){ScopeArgs.Label(entry.SourceName)}:");
 
                 // 按状态判断而不是看正文——正文里出现 "not found" 之类的字面量是常态
                 var outline = await RoslynHelper.GetClassOutlineAsync(entry.Item, name);
                 sb.AppendLine(outline.IsOk ? outline.Content : DescribeOutlineFailure(outline.Status, name));
                 sb.AppendLine("---");
+                outlinesShown++;
             }
 
             var typeFooter = new ScopeReport();

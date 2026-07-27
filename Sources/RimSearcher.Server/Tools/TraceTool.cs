@@ -224,9 +224,11 @@ public class TraceTool : ITool
                     $"No references to '{symbol}' found in scope '{scope.Expression}'."
                     + $"{ScopeArgs.RetryWiderNotice(scope)}{scopeNotice}");
 
+            // 比较器与 search_regex 的分组排序统一：路径在 Windows 上大小写不敏感，
+            // 两个同形态的工具用两套比较器会给出不同的文件顺序。
             var grouped = results
                 .GroupBy(r => r.file)
-                .OrderBy(g => g.Key);
+                .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase);
 
             var wasTruncated = Interlocked.CompareExchange(ref truncatedFlag, 0, 0) == 1;
             int totalMatches = Interlocked.CompareExchange(ref totalMatchCount, 0, 0);

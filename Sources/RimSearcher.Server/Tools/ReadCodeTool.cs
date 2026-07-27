@@ -28,7 +28,8 @@ public class ReadCodeTool : ITool
         "Read C# or XML source out of one specific file — an indexed file name or an absolute path, not a search term. "
         + "Three exclusive modes: extractClass (the whole type), methodName (one member), or startLine/lineCount "
         + "(raw lines). If more than one is passed, extractClass wins over methodName, which wins over the line range. "
-        + "The first two parse C#; on an XML file only the line range applies.";
+        + "The first two parse C#; on an XML file only the line range applies. extractClass output is capped at "
+        + $"{MaxLineCount} lines — the same cap the line range has — and says so when it truncates.";
 
     private static readonly ToolArgSpec ArgSpec = new(
         "rimworld-searcher__read_code",

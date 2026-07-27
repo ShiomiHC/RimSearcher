@@ -91,16 +91,21 @@ scope:mods pawn
 ---
 
 ###  `rimworld-searcher__inspect`
-深度分析单个 Def 或 C# 类型。
+深度分析单个 Def 或 C# 类型。**不做模糊匹配**：名字必须完整，大小写可以不管（返回会回显索引里的准确拼写），拼错与残缺都解析不出来——先用 `locate` 拿准确名。`def:` / `type:` 前缀会被自动剥掉。
 
 **Def 模式**
 - 展示 Def 类型、来源文件、译名（`localization_description` 开启时连译文描述一起）
-- 返回继承合并后的 XML
+- 返回沿整条 `ParentName` 链合并后的 XML，即完整生效定义——任何单个 XML 文件都不含这份内容
 - 提取关联 C# 类型并尝试映射到索引文件
+- `defType` 参数用于同名 def 撞车时指定看哪一个（`Human` 同时是 ThingDef、BodyDef 和 HediffGiverSetDef）。不传时返回会列出所有同名类型，据此再传一次即可。它是 def 类型，不用于收窄 C# 模式
 
 **C# 模式**
-- 返回继承关系图
-- 返回类成员大纲（字段/属性/方法签名）
+- 返回**基类链**。接口不在这条链上，要看实现关系用 `trace mode:"inheritors"`
+- 返回类成员大纲：字段、属性、方法签名。构造器、索引器、运算符不进大纲，但 `read_code` 仍能按名读到它们
+- 枚举列出其值，委托列出其签名
+- 大纲每类成员最多列 40 条（三类各自独立计数），超出的在原处标明还剩多少，按名去 `locate` 或用 `read_code extractClass` 取
+- 同名类型分散在多个源时，只渲染作用域里优先级最高的那一份大纲，其余只报路径——几份大纲通常高度重合，而体积按文件数翻倍
+- 方法体不在这里，归 `read_code`
 
 **示例**
 ```text
@@ -114,8 +119,10 @@ RimWorld.CompShield
 交叉引用追踪工具。
 
 **模式**
-- `inheritors`：列出某基类/接口的子类
-- `usages`：查找符号文本引用（C# + XML），带行号预览
+- `inheritors`：列出某基类/接口的子类与实现类树。默认直接展开到服务端硬上限 200，一次拿全整棵树
+- `usages`：符号的**逐行文本匹配**（不分大小写的全词匹配），C# 与 XML 都扫，带行号预览。默认 50 条，每个文件最多 3 行预览，其余记为 `+N more in this file`
+
+> `usages` 不是调用图：同名成员挂在无关类型上也会混进同一份列表，而经由继承发生的调用则会漏掉。
 
 **示例**
 ```text
@@ -126,12 +133,17 @@ symbol: CompShield, mode: usages
 ---
 
 ###  `rimworld-searcher__read_code`
-精确读取 C# 代码片段。
+从**某一个指定文件**里精确读取源码。`path` 收的是文件（已索引的文件名或绝对路径），不是搜索词——手上只有搜索词时先走 `locate`。
 
-**支持读取方式**
-- 指定成员：`methodName`（支持方法/属性/构造器/索引器/运算符）
-- 指定类型：`extractClass`
-- 指定行区间：`startLine` + `lineCount`
+**三种互斥模式**（同时传多个时，`extractClass` > `methodName` > 行区间）
+
+| 模式 | 参数 | 说明 |
+| --- | --- | --- |
+| 整个类型 | `extractClass` | 类/结构/接口/记录的完整实现体，枚举与委托声明同样可取。上限 2000 行（与行区间模式同一个上限），超出会截断并提示改用 `methodName` |
+| 单个成员 | `methodName`（+ 可选 `className`） | 方法、属性、字段、事件、构造器（类名或 `.ctor`）、索引器（`this`）、运算符（`+`）、枚举值——凡 `locate` 列得出的成员都行。文件里同名成员会**全部**返回，传 `className` 才只取一个 |
+| 裸行区间 | `startLine` + `lineCount` | `startLine` 为 0 基；未指定成员时走这条 |
+
+前两种要解析 C#，**XML 文件只有行区间模式可用**（读 Defs 原文就走这条）。
 
 **路径支持**
 - 绝对路径
@@ -146,12 +158,13 @@ path: CompShield.cs, methodName: CompTick
 ---
 
 ###  `rimworld-searcher__search_regex`
-全局正则检索（C# + XML）。
+在已索引的 C# 与 XML 上跑 .NET 正则。
 
 **特性**
-- 可选 `fileFilter`（如 `.cs` / `.xml`）
-- 结果按文件分组，显示行号预览
-- 内置输出截断提示，避免超大响应
+- 可选 `fileFilter`（如 `.cs` / `.xml`）与 `scope`，两者都在扫描前下推生效，不是拿到结果再筛
+- 结果按文件分组，每个文件最多 3 行预览（其余记为 `+N more in this file`），最多列 50 个文件
+- `limit` 默认 100 条命中
+- 两种截断（扫描停在命中上限、文件数超 50）都会在末尾明说，**因此没有那条提示的输出就是完整命中集**
 
 **示例**
 ```text
@@ -162,12 +175,12 @@ fileFilter: .cs
 ---
 
 ###  `rimworld-searcher__list_directory`
-目录浏览工具。
+列出某个**绝对路径**目录下的文件与子目录（子目录名以 `/` 结尾）。
 
 **特性**
-- 列出目录下文件与子目录（子目录以 `/` 结尾）
-- 支持 `limit` 分页提示
-- 受 `PathSecurity` 白名单约束（除非显式关闭）
+- 路径必须是服务端的已索引源根（`config.toml` 各源解析出的 `csharp` / `xml` 路径，含省略 `csharp` 时拿到的反编译输出目录）或其下级目录。白名单之外一律拒绝，**源根的父目录也在拒绝之列**
+- `limit` 默认 100，服务端上限 1000；传 `0` 或负数表示不额外截断。有条目被略去时输出会说明
+- `skip_path_security = true` 时上述白名单检查整体关闭
 
 ---
 
@@ -476,7 +489,7 @@ mod 没适配当前版本（只有 `1.4/` 目录）时会回退到能用的最�
 
 选中多个源时，结果每行尾部标注来源（如 `[vanilla]`、`[Milira]`）。落在作用域**之外**的命中会在结果末尾汇总计数（`Outside scope 'base': Ratkin 8, Milira 1`），避免把「当前作用域搜不到」误读成「不存在」；`trace usages` 与 `search_regex` 因为要真读文件，不做这项统计，作用域对它们是硬过滤。
 
-`limit` 参数控制每段结果条数（默认 10），传 `"all"`（`0` 与负数同义）展开到服务端硬上限 200。低相关度结果会在出现明显分数断层时另行折叠，折叠行注明 `lower relevance`——**那一部分与 `limit` 无关，调多大都拿不回来**，只能靠更精确的查询词或换个过滤前缀。折叠行会分别说清是哪一种。
+`limit` 参数控制每段结果条数，传 `"all"`（`0` 与负数同义）展开到服务端硬上限 200。默认值按工具而异：`locate` 是 10，`trace usages` 是 50，`search_regex` 是 100，`trace inheritors` 直接就是硬上限 200（子类树默认一次给全）。`list_directory` 的 `limit` 不走这套，见上文该工具一节。低相关度结果会在出现明显分数断层时另行折叠，折叠行注明 `lower relevance`——**那一部分与 `limit` 无关，调多大都拿不回来**，只能靠更精确的查询词或换个过滤前缀。折叠行会分别说清是哪一种。
 
 3. 在 MCP 客户端中把 `RimSearcher.Server.exe` 注册为 **stdio MCP Server**，并设置环境变量 `RIMSEARCHER_CONFIG` 指向上一步的 `config.toml`。
 
@@ -554,7 +567,7 @@ mod 没适配当前版本（只有 `1.4/` 目录）时会回退到能用的最�
 ![启动成功示例](Image/Snipaste_2026-02-27_16-12-43.png)
 
 快速检查是否接入成功：
-- 客户端工具列表中能看到 `rimworld-searcher__locate`、`rimworld-searcher__inspect` 等 7 个工具。
+- 客户端工具列表中能看到 7 个工具。支持 MCP `title` 字段的客户端显示的是短名（`locate`、`inspect`……），不支持的则显示完整名（`rimworld-searcher__locate` 这种形式）——两者是同一批工具，调用时用的始终是完整名。
 - 执行一次 `locate`（例如 `def:Apparel_ShieldBelt`）能返回结果。
 
 ---

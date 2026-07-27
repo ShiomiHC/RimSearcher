@@ -101,7 +101,8 @@ public class SearchRegexTool : ITool
                              var matches = groupItems.Take(3).Select(m => $"  L{m.LineNumber}: {m.Preview}");
 
                              // 减的是实际显示条数，且基数取索引层数出来的真实命中数：预览在索引层
-                             // 每文件封顶 5 条，拿 groupItems.Count 当基数会把第 6 条起的命中吞掉。
+                             // 每文件封顶 3 条（与这里的 Take 对齐），拿 groupItems.Count 当基数
+                             // 会把第 4 条起的命中吞掉。
                              var shown = Math.Min(groupItems.Count, 3);
                              var inFile = matchesByFile.TryGetValue(g.Key, out var c) ? c : groupItems.Count;
                              var moreCount = inFile > shown ? $"\n  ... +{inFile - shown} more in this file" : "";

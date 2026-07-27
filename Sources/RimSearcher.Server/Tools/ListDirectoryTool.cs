@@ -13,7 +13,8 @@ public class ListDirectoryTool : ITool
         "List the files and subdirectories of one absolute directory; subdirectory names are suffixed with '/'. "
         + "The path must be one of the server's indexed source roots (the csharp/xml paths a config.toml source "
         + "resolves to, including the decompile output directory it gets when csharp is omitted) or a directory "
-        + "below one — anything outside that whitelist is refused, the parent of a source root included.";
+        + "below one — anything outside that whitelist is refused, the parent of a source root included, unless "
+        + "skip_path_security is set in config.toml, which turns the check off entirely.";
 
     public object JsonSchema => new
     {

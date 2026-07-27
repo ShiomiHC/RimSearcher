@@ -59,8 +59,10 @@ public class TraceToolTests : IDisposable
             args.RootElement, CancellationToken.None, new Progress<double>(value => reported.Add(value)));
 
         Assert.False(result.IsError);
-        // Progress<double> 是异步投递的，末值可能还在路上——等它落地再断言
-        for (var i = 0; i < 50 && (reported.Count == 0 || reported[^1] < 1.0); i++)
+        // Progress<double> 是异步投递的，末值可能还在路上——等它落地再断言。
+        // 上限给到 2 秒而不是 0.5 秒：投递走的是线程池，整个测试集并行跑起来时
+        // 线程池被占满，末值迟到几百毫秒是常态，卡在 0.5 秒会让这条随机变红。
+        for (var i = 0; i < 200 && (reported.Count == 0 || reported[^1] < 1.0); i++)
             await Task.Delay(10);
 
         Assert.NotEmpty(reported);
