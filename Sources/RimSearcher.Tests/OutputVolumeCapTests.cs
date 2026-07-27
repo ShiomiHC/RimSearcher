@@ -61,7 +61,8 @@ public class OutputVolumeCapTests : IDisposable
     }
 
     // 折叠行必须给出下一步。只写 +N 的话，调用方唯一想得到的动作是把整个文件读出来——
-    // 那正是大纲想省掉的开销。
+    // 那正是大纲想省掉的开销。给的下一步还必须真的走得通：原先指的 locate（要先知道名字）
+    // 与 read_code extractClass（2000 行二次截断）在触发折叠的大类型上都取不到被折叠的成员。
     [Fact]
     public async Task Outline_FoldLineNamesTheWayToGetTheRest()
     {
@@ -69,8 +70,8 @@ public class OutputVolumeCapTests : IDisposable
 
         var outline = await RoslynHelper.GetClassOutlineAsync(path, "Huge");
 
-        Assert.Contains("locate", outline.Content);
-        Assert.Contains("extractClass", outline.Content);
+        Assert.Contains("limit:'all'", outline.Content);
+        Assert.DoesNotContain("extractClass", outline.Content);
     }
 
     // 反向保险：寻常大小的类型一条都不能少，也不该出现任何折叠痕迹

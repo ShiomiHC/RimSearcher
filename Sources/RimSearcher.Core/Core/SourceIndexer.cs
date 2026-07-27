@@ -907,6 +907,23 @@ public class SourceIndexer
         return fallback;
     }
 
+    // GetPath 在 scope 内有多份同名文件时只静默返回排序第一的那份。调用方必须能知道
+    // 自己读的是「几选一」，否则会把某个 mod 的覆盖版当成 vanilla 原版去下结论。
+    public IReadOnlyList<string> GetPathsByName(string name, ScopeSelection scope)
+    {
+        IReadOnlyList<string> paths;
+        if (_frozenIndex != null && _frozenIndex.TryGetValue(name, out var frozen)) paths = frozen;
+        else if (_index.TryGetValue(name, out var bag)) paths = bag.Distinct().ToArray();
+        else return [];
+
+        return paths
+            .Select(path => (Path: path, Rank: scope.RankOf(path)))
+            .Where(x => x.Rank >= 0)
+            .OrderBy(x => x.Rank)
+            .Select(x => x.Path)
+            .ToArray();
+    }
+
     public IEnumerable<string> GetAllFiles(ScopeSelection scope)
     {
         var all = _frozenIndex != null

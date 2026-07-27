@@ -61,7 +61,7 @@ public class InspectTool : ITool
     private static readonly ToolArgSpec ArgSpec = new(
         "rimworld-searcher__inspect",
         "name (an exact DefName or C# type name, e.g. 'Apparel_ShieldBelt' / 'CompShield'). Aliases accepted: query, defName, typeName, symbol.",
-        "name (required), defType (which def type to show when several share the name), xmlStartLine (continue reading a long merged XML), scope.",
+        "name (required), defType (which def type to show when several share the name), xmlStartLine (continue reading a long merged XML), limit (members per kind in the outline; 'all' for every one), scope.",
         "A 'def:'/'type:' prefix is stripped automatically. Matching ignores case but needs the whole name — partial names and typos do not resolve; use rimworld-searcher__locate to get the exact name first.");
 
     public object JsonSchema => new
@@ -96,10 +96,28 @@ public class InspectTool : ITool
                     + "the content of any file — read_code on the `File:` path returns only the def's own "
                     + "un-merged lines, without the inherited ones. Ignored in type mode."
             },
+            limit = new
+            {
+                description =
+                    "Type mode only. How many members of each kind (properties, fields, methods) the outline lists "
+                    + $"before folding the rest away. Default {RoslynHelper.DefaultMaxOutlineMembersPerKind}; pass a "
+                    + "number, or 'all' to list every member. 'all' is the only way to see the folded ones — "
+                    + "read_code extractClass truncates at 2000 lines and will not show them all on a large file. "
+                    + "Ignored in def mode."
+            },
             scope = ScopeArgs.ScopeSchemaProperty(_scopeCatalog)
         },
         required = new[] { "name" }
     };
+
+    // 折叠掉的成员此前在整套 API 里没有任何取全途径：inspect 没有 limit、locate 只能按已知
+    // 名字找、read_code extractClass 到 2000 行就二次截断。'all' 在这里必须是真无限，
+    // 不能沿用 ScopeArgs.HardLimit——单个类型的成员数超过 200 是常态。
+    private static int OutlineLimit(JsonElement args)
+    {
+        var limit = ScopeArgs.GetDisplayLimit(args, RoslynHelper.DefaultMaxOutlineMembersPerKind);
+        return limit.Unlimited ? int.MaxValue : limit.Count;
+    }
 
     // 大纲取不到时说清是哪一种取不到：文件没了 / 文件太大不解析 / 文件里确实没这个类型
     // （最后一种通常意味着索引落后于磁盘，比如源刚被重新同步过）。
@@ -404,7 +422,7 @@ public class InspectTool : ITool
                 sb.AppendLine($"**Outline** (`{entry.Item}`){ScopeArgs.Label(entry.SourceName)}:");
 
                 // 按状态判断而不是看正文——正文里出现 "not found" 之类的字面量是常态
-                var outline = await RoslynHelper.GetClassOutlineAsync(entry.Item, name);
+                var outline = await RoslynHelper.GetClassOutlineAsync(entry.Item, name, OutlineLimit(args));
                 sb.AppendLine(outline.IsOk ? outline.Content : DescribeOutlineFailure(outline.Status, name));
                 sb.AppendLine("---");
                 outlinesShown++;

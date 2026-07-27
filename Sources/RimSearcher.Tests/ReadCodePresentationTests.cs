@@ -111,8 +111,9 @@ public class ReadCodePresentationTests : IDisposable
         Assert.Contains("```xml", result.Content);
         Assert.DoesNotContain("```csharp", result.Content);
         // `// ...` 留在 xml 块里就是一行非法内容，整块复制出去直接解析失败
-        Assert.Contains("<!-- Apparel_Belts.xml", result.Content);
-        Assert.DoesNotContain("// Apparel_Belts.xml", result.Content);
+        Assert.Contains("<!-- ", result.Content);
+        Assert.Contains("Apparel_Belts.xml (lines", result.Content);
+        Assert.DoesNotContain("// ", result.Content);
     }
 
     [Fact]
@@ -124,7 +125,9 @@ public class ReadCodePresentationTests : IDisposable
 
         Assert.False(result.IsError);
         Assert.Contains("```csharp", result.Content);
-        Assert.Contains("// CompShield.cs", result.Content);
+        // 头部印的是解析后的绝对路径，与 methodName / extractClass 两个模式的 `// File:` 对齐
+        Assert.Contains("// ", result.Content);
+        Assert.Contains("CompShield.cs (lines", result.Content);
     }
 
     // Roslyn 把整份 XML 解析成一棵没有任何声明的语法树，于是 extractClass 走到 TargetNotFound，

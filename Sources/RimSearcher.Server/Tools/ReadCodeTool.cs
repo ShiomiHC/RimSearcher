@@ -34,7 +34,10 @@ public class ReadCodeTool : ITool
     private static readonly ToolArgSpec ArgSpec = new(
         "rimworld-searcher__read_code",
         "path (a FILE: 'CompShield', 'CompShield.cs' or an absolute path). Aliases accepted: query, file, filePath, fileName.",
-        "path (required), methodName, className, extractClass, startLine, lineCount.",
+        // scope 必须列进来：path 传基名时，正是 scope 决定读哪个源的同名文件。漏掉它，
+        // 调用方会以为 read_code 不支持 scope，多源撞名时就没有了唯一能锁定来源的手段。
+        "path (required), methodName, className, extractClass, startLine, lineCount, scope "
+        + "(scope decides which source wins when several have a file of this name).",
         "If you only have a search term rather than a file, call rimworld-searcher__locate first.");
 
     public object JsonSchema => new
@@ -97,29 +100,48 @@ public class ReadCodeTool : ITool
         var scope = ScopeArgs.Resolve(_scopeCatalog, args);
 
         var requestedPath = path;
-        var resolvedPath = ResolvePath(
-            path, scope, out var outOfScopeFallback, out var blockedByPathSecurity, out var rootedInputRedirected);
+        var resolution = ResolvePath(path, scope);
 
         // 「越权」与「不存在」必须分开说。文件明明在磁盘上、只是不在白名单里时回一句
         // 「File not found，去 locate 找找」，调用方会照做，而 locate 同样不会返回一个
         // 不在索引根下的文件——它只能反复试。list_directory 对同一情况说的就是越权。
-        if (blockedByPathSecurity)
+        if (resolution.BlockedByPathSecurity)
             return WithUnresolvedScopeNotice(scope, new ToolResult(
                 $"Path outside allowed directories: '{path}'. Only files under the server's indexed source roots "
                 + "can be read; use 'locate' to find the indexed copy of what you are after.", true));
 
-        if (resolvedPath == null)
+        if (resolution.IsDirectory)
             return WithUnresolvedScopeNotice(scope, new ToolResult(
-                $"File not found: '{Path.GetFileName(path)}'. Use 'locate' to find the correct file first.", true));
+                $"'{path}' is a directory, not a file. List what is in it with "
+                + "rimworld-searcher__list_directory, then read_code one of the files it names.", true));
 
-        path = resolvedPath;
+        // 报错必须回显调用方给的**整条** path。只印基名时，'/a/b/Pawn.cs' 和 'Pawn.cs'
+        // 的失败长得一模一样，调用方无从判断该改路径还是该改 scope。
+        if (resolution.Path == null)
+            return WithUnresolvedScopeNotice(scope, new ToolResult(
+                $"File not found: '{path}'"
+                + (Path.IsPathRooted(path)
+                    ? " — that path does not exist on disk, and no indexed file goes by that name either. "
+                    : " — no indexed file goes by that name. ")
+                + "Use 'locate' to find the correct file first.", true));
+
+        path = resolution.Path;
 
         // 按名解析到了 scope 之外的文件时必须说明，否则读者会以为读的是 scope 内那一份
-        var scopeNotice = outOfScopeFallback
+        var scopeNotice = resolution.OutOfScopeFallback
             ? Comment(path, $"note: no file by this name inside scope '{scope.Expression}'; reading from {scope.OutOfScopeLabel(path)}") + "\n"
             : string.Empty;
 
-        if (rootedInputRedirected)
+        // scope 内有多份同名文件时 GetPath 静默取排序第一的那份。不说这件事，调用方会
+        // 把 mod 的覆盖版当成 vanilla 原版，据此断言原版行为。
+        var siblings = resolution.SameNameInScope;
+        if (siblings is { Count: > 1 })
+            scopeNotice +=
+                Comment(path, $"note: {siblings.Count} files share this name in scope '{scope.Expression}'; "
+                    + $"reading the highest-priority one. The others: {string.Join(", ", siblings.Skip(1))}")
+                + "\n";
+
+        if (resolution.RootedInputRedirected)
             scopeNotice =
                 Comment(path, $"note: '{requestedPath}' does not exist; reading the indexed file of the same name at {path}")
                 + "\n" + scopeNotice;
@@ -183,6 +205,21 @@ public class ReadCodeTool : ITool
                 var className = ToolArgs.GetOptionalString(args, "className", "type", "typeName");
                 var body = await RoslynHelper.GetMemberBodyAsync(path, methodName, className);
 
+                // className 只是个过滤器。过滤后候选归零与「文件里根本没有这个成员」原先
+                // 折叠成同一句话，且那句话只点 methodName、完全不提 className——调用方读到
+                // 「Member 'ExposeData' not found in Pawn.cs」会直接断定 Pawn 没有 override
+                // ExposeData（它其实在 4543 行），据此做出错的序列化判断。
+                if (!body.IsOk && body.Status == SourceLookupStatus.TargetNotFound && !string.IsNullOrEmpty(className))
+                {
+                    var owners = await RoslynHelper.FindMemberOwnersAsync(path, methodName);
+                    if (owners.Count > 0)
+                        return WithUnresolvedScopeNotice(scope, new ToolResult(
+                            $"'{methodName}' does exist in {Path.GetFileName(path)}, but not in a type named "
+                            + $"'{className}'. It is declared in: "
+                            + string.Join(", ", owners.Select(o => $"{o.Owner} (line {o.Line})"))
+                            + ". Drop className, or pass one of those.", true));
+                }
+
                 if (!body.IsOk)
                     return WithUnresolvedScopeNotice(scope,
                         Failure(body, path, $"Member '{methodName}'", "Use inspect tool to see available members."));
@@ -209,8 +246,10 @@ public class ReadCodeTool : ITool
             var sb = new StringBuilder();
             sb.AppendLine($"```{Fence(path)}");
             if (scopeNotice.Length > 0) sb.Append(scopeNotice);
+            // 印解析后的**绝对路径**，与 methodName / extractClass 两个模式的 `// File:` 头对齐。
+            // 只印基名时，path 传的是基名、而索引里有多份同名文件的那种情形在返回里不留痕迹。
             sb.AppendLine(Comment(path,
-                $"{Path.GetFileName(path)} (lines {startLine + 1}-{Math.Min(startLine + lineCount, totalLines)} of {totalLines})"));
+                $"{path} (lines {startLine + 1}-{Math.Min(startLine + lineCount, totalLines)} of {totalLines})"));
             foreach (var line in resultLines) sb.AppendLine(line);
             sb.AppendLine("```");
 
@@ -264,24 +303,32 @@ public class ReadCodeTool : ITool
         return new ToolResult(message, true);
     }
 
-    private string? ResolvePath(
-        string input, ScopeSelection scope,
-        out bool outOfScopeFallback, out bool blockedByPathSecurity, out bool rootedInputRedirected)
-    {
-        outOfScopeFallback = false;
-        blockedByPathSecurity = false;
-        rootedInputRedirected = false;
+    // 解析结果的每一路都要能被调用方分辨：读到了哪条绝对路径、是不是几选一、
+    // 传的到底是目录还是不存在的文件。塞进 out 参数会到六个，只能立成一个结果类型。
+    private sealed record PathResolution(
+        string? Path,
+        bool OutOfScopeFallback = false,
+        bool BlockedByPathSecurity = false,
+        bool RootedInputRedirected = false,
+        bool IsDirectory = false,
+        IReadOnlyList<string>? SameNameInScope = null);
 
+    private PathResolution ResolvePath(string input, ScopeSelection scope)
+    {
         // 绝对路径是调用方自己给的，不受 scope 约束——它已经知道要读哪个文件了
         if (Path.IsPathRooted(input) && File.Exists(input))
         {
-            if (PathSecurity.IsPathSafe(input)) return input;
+            if (PathSecurity.IsPathSafe(input)) return new PathResolution(input);
 
             // 文件确实存在、只是不在白名单内。按名再查一遍索引没有意义（调用方给的是
             // 一条完整绝对路径），直接把真实原因回上去。
-            blockedByPathSecurity = true;
-            return null;
+            return new PathResolution(null, BlockedByPathSecurity: true);
         }
+
+        // 目录被当成「文件不存在」回上去时，调用方唯一能照做的下一步是 locate，而它
+        // 返回的是一堆文件名，仍然说不出「你传的是目录」。同一台 server 上的
+        // list_directory 才是正解，判一次 Directory.Exists 就能说清楚。
+        if (Directory.Exists(input)) return new PathResolution(null, IsDirectory: true);
 
         // 绝对路径打错时下面仍会按文件名去索引里另找一份同名文件，读的就不是调用方点名的
         // 那条路径了。这一点必须回上去说：返回里的头部注释打印的是解析后的文件名，
@@ -289,25 +336,20 @@ public class ReadCodeTool : ITool
         var rootedButMissing = Path.IsPathRooted(input);
 
         var nameNoExt = Path.GetFileNameWithoutExtension(input);
-        var indexPath = _sourceIndexer.GetPath(nameNoExt, scope, out outOfScopeFallback);
-        if (indexPath != null && File.Exists(indexPath))
-        {
-            rootedInputRedirected = rootedButMissing;
-            return indexPath;
-        }
-
         var rawName = Path.GetFileName(input);
-        if (rawName != nameNoExt)
+
+        foreach (var key in rawName != nameNoExt ? new[] { nameNoExt, rawName } : [nameNoExt])
         {
-            indexPath = _sourceIndexer.GetPath(rawName, scope, out outOfScopeFallback);
-            if (indexPath != null && File.Exists(indexPath))
-            {
-                rootedInputRedirected = rootedButMissing;
-                return indexPath;
-            }
+            var indexPath = _sourceIndexer.GetPath(key, scope, out var outOfScope);
+            if (indexPath == null || !File.Exists(indexPath)) continue;
+
+            return new PathResolution(
+                indexPath,
+                OutOfScopeFallback: outOfScope,
+                RootedInputRedirected: rootedButMissing,
+                SameNameInScope: outOfScope ? null : _sourceIndexer.GetPathsByName(key, scope));
         }
 
-        outOfScopeFallback = false;
-        return null;
+        return new PathResolution(null);
     }
 }

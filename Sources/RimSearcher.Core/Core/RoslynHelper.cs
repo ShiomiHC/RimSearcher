@@ -325,12 +325,17 @@ public static class RoslynHelper
 
     // 折叠行要同时说清「还剩多少」和「怎么拿到它们」。只写 +N 的话，调用方唯一想得到的动作
     // 是把整个文件读出来——那正是大纲想省掉的开销。
+    //
+    // 两条旧出路对 Pawn 这类巨型类型都不成立，必须给一条真的能走通的：locate 只能按已知
+    // 名字找，而调用方恰恰是不知道剩下那些叫什么才来看大纲的；read_code extractClass 的
+    // 上限是 2000 行，Pawn.cs 有 4740 行，照做只会先烧掉 2000 行源码再收到二次截断。
+    // 现在 inspect 自己带 limit，全量大纲三百来行，比读一遍类体便宜得多。
     private static void AppendOutlineFold(StringBuilder sb, int total, int shownCap, string kindPlural)
     {
         if (total <= shownCap) return;
         sb.AppendLine(
             $"  ... +{total - shownCap} more {kindPlural} not shown "
-            + "(find one by name with locate, or read the full declaration with read_code extractClass)");
+            + "(re-run inspect with limit:'all' for the whole list, or read one with read_code methodName)");
     }
 
     // 与 FormatParameter 同一条判据：大纲是「照着它写调用或写 Harmony patch」的抄写样本，
@@ -434,6 +439,28 @@ public static class RoslynHelper
             sb.AppendLine(node.ToFullString());
         }
         return SourceLookupResult.Ok(sb.ToString());
+    }
+
+    // typeName 过滤掉光时，调用方看到的是「这个成员不在这个文件里」。为了把「过滤没了」
+    // 和「真的没有」分开，需要不带过滤再问一次这个成员到底声明在哪几个类型上。
+    public static async Task<IReadOnlyList<(string Owner, int Line)>> FindMemberOwnersAsync(
+        string filePath, string memberName)
+    {
+        if (!File.Exists(filePath)) return [];
+        if (new FileInfo(filePath).Length > MaxParseFileSize) return [];
+
+        string code;
+        using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        using (var reader = new StreamReader(stream))
+        {
+            code = await reader.ReadToEndAsync();
+        }
+
+        return FindMembers(code, memberName, null)
+            .Select(c => (OwnerTypeName(c.Node), c.Node.GetLocation().GetLineSpan().StartLinePosition.Line + 1))
+            .Distinct()
+            .OrderBy(x => x.Item2)
+            .ToArray();
     }
 
     // 成员的宿主类型要按 BaseTypeDeclarationSyntax 取：enum 取值也是成员，而 enum 声明

@@ -79,6 +79,7 @@ public static class XmlInheritanceHelper
             if (visited.Count > MaxChainDepth) { stoppedAtDepthLimit = true; break; }
 
             chain.Add(currentLoc.DefName);
+            var thisLink = currentLoc;
 
             try
             {
@@ -119,13 +120,13 @@ public static class XmlInheritanceHelper
                 else
                 {
                     // 索引说这个 def 在这个文件里，实际读不到——索引落后于磁盘
-                    unresolvedParent ??= currentLoc.DefName;
+                    unresolvedParent ??= thisLink.DefName;
                     break;
                 }
             }
             catch
             {
-                unresolvedParent ??= currentLoc.DefName;
+                unresolvedParent ??= thisLink.DefName;
                 break;
             }
         }
