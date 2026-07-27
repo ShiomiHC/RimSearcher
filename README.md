@@ -1,5 +1,5 @@
 # RimSearcher
-[![Latest Release](https://img.shields.io/github/v/release/kearril/RimSearcher?style=flat-square&color=333&logo=github)](https://github.com/kearril/RimSearcher/releases/latest)
+[![Latest Release](https://img.shields.io/github/v/release/ShiomiHC/RimSearcher?style=flat-square&color=333&logo=github)](https://github.com/ShiomiHC/RimSearcher/releases/latest)
 
 一个基于 MCP 的 RimWorld 源码检索与分析服务。它把本地 RimWorld C# / XML 数据建立为可查询索引，让 AI 助手能在真实源码上定位、追踪、阅读和解释逻辑，减少“幻觉式回答”。
 
@@ -294,7 +294,7 @@ Tool Layer
 > 若需本地编译源码，则需要安装 .NET 10 SDK。
 
 ### 安装步骤
-1. 从 [Releases](https://github.com/kearril/RimSearcher/releases) 下载 `RimSearcher.Server.exe`。
+1. 从 [Releases](https://github.com/ShiomiHC/RimSearcher/releases) 下载 `RimSearcher.Server.exe`。
 2. 创建 `config.toml`
 
 配置示例：
