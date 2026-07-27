@@ -306,7 +306,12 @@ public static class ModLayoutResolver
                 IEnumerable<string> files;
                 try
                 {
-                    files = Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories);
+                    // 只算会被索引的两类。Defs 目录里的 .gitkeep / 说明文本也会互相遮蔽，
+                    // 但它们进不了索引，收进来只会让这个集合（进缓存指纹）随无关文件变动
+                    files = Directory
+                        .EnumerateFiles(directory, "*", SearchOption.AllDirectories)
+                        .Where(file => file.EndsWith(".xml", StringComparison.OrdinalIgnoreCase)
+                                       || file.EndsWith(".dll", StringComparison.OrdinalIgnoreCase));
                 }
                 catch { continue; }
 
