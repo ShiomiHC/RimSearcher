@@ -28,9 +28,15 @@
          portable 编译，它的调试目录里那条 pdb 绝对路径会随 Core.dll 一起被打进单文件 exe，
          路径照样泄露。规则只写一份，也免得以后新增项目时又漏一个。
 
-         已知副作用：publish 与 build 的编译参数不同，两者会互相触发一次重编译；publish 之后
-         Core 的输出目录里会残留一个与新 dll 不匹配的旧 pdb，下一次 build / test 会重新生成。
-         发布是低频操作，且 dotnet test 总会先构建，可接受。 -->
+         已知局限，别误以为它比实际更强：MSBuild 的增量判定看的是文件时间戳，不看 DebugType 变没变。
+         Server 每次发布都会重编译（它的输出落在 RID 子目录 win-x64\，与普通构建天然分开），
+         但 Core 两种构建共用同一个输出目录，所以「先 dotnet build 再 dotnet publish」时
+         Core.dll 会被判定为最新而直接复用——那一份是带符号编译的，它调试目录里的 pdb 绝对路径
+         于是又被打进了单文件 exe。
+         干净目录下发布（CI、或先删 .build\）则两个程序集都会重编译，产物里一条路径都不留。
+         「发布产物不含 pdb 文件」这条硬约束不受此影响，它由 CopyOutputSymbolsToPublishDirectory
+         和 Server.csproj 里的 StripSymbolsFromPublishDir 保证，与增量与否无关。
+         要让路径清理也变成确定的，得让 publish 用一套独立的中间输出目录，代价是每次发布全量重编译。 -->
     <PropertyGroup Condition="'$(_IsPublishing)' == 'true'">
         <DebugType>none</DebugType>
         <DebugSymbols>false</DebugSymbols>
