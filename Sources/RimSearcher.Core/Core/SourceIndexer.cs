@@ -182,14 +182,15 @@ public class SourceIndexer
             .ToList();
     }
 
-    public void Scan(string rootPath)
+    // excludedFiles：mod 多版本布局里被顶掉的文件，见 ModLayoutResolver
+    public void Scan(string rootPath, IReadOnlySet<string>? excludedFiles = null)
     {
         if (!Directory.Exists(rootPath)) return;
         var blacklistedDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             { "bin", "obj", ".git", ".vs", ".idea", ".build", "temp" };
 
         var allFiles = CollectFilesIterative(rootPath, blacklistedDirs);
-        var newFiles = allFiles.Where(f => _processedFiles.TryAdd(Path.GetFullPath(f), 0)).ToList();
+        var newFiles = ScanFilter.SelectNew(allFiles, excludedFiles, full => _processedFiles.TryAdd(full, 0));
 
         Parallel.ForEach(newFiles, file =>
         {

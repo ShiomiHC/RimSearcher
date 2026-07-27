@@ -24,6 +24,21 @@ if (!isLoaded)
 else if (!hasPaths)
     await ServerLogger.Warning("Program", "No source paths defined", ("path", configPath));
 
+// mod 根展开的结果必须可见：被丢掉的旧版本文件是「搜不到某个 def」最可能的解释，
+// 而它是工具替用户做的决定，不写日志就只能靠猜
+if (appConfig.Sources.Any(definition => definition.Mods.Count > 0))
+{
+    await ServerLogger.Info("Program", "Mod folders resolved",
+        ("gameVersion", resolvedSources.GameVersion ?? "unknown"),
+        ("xmlDirs", resolvedSources.Xml.Count),
+        ("shadowedFiles", resolvedSources.Shadowed.Count));
+}
+
+foreach (var note in resolvedSources.Notes)
+{
+    await ServerLogger.Warning("Program", "Mod layout note", ("detail", note));
+}
+
 var cacheDirectory = IndexCacheService.GetDefaultCacheDirectory();
 var cacheDirectoryUsable = IndexCacheService.EnsureCacheDirectory(cacheDirectory, out var cacheInitError);
 await ServerLogger.Info("Program", "Index cache directory", ("path", cacheDirectory));

@@ -318,14 +318,10 @@ xml        = [
 ]
 assemblies = 'C:\SteamLibrary\steamapps\common\RimWorld\RimWorldWin64_Data\Managed'
 
+# mod 只需指根目录，版本目录由 loadFolders.xml + game_version 自动展开
 [[sources]]
-name       = "HAR"
-csharp     = 'C:\RimWorldSource\1.6\HAR'
-xml        = [
-  'C:\SteamLibrary\steamapps\workshop\content\294100\839005762\Defs',
-  'C:\SteamLibrary\steamapps\workshop\content\294100\839005762\1.6\Defs',
-]
-assemblies = 'C:\SteamLibrary\steamapps\workshop\content\294100\839005762\1.6\Assemblies'
+name = "HAR"
+mod  = 'C:\SteamLibrary\steamapps\workshop\content\294100\839005762'
 
 # 组名 → 源名列表
 [scope_groups]
@@ -350,6 +346,7 @@ assemblies = 'C:\SteamLibrary\steamapps\common\RimWorld\RimWorldWin64_Data\Manag
   - `csharp`: 源码目录。**配了 `assemblies` 时，第一个 `csharp` 路径就是反编译输出目标**，其余视为附加的只读源码目录。整个 `csharp` 省略不写时，输出目标默认为 `<exe目录>/Decompiled/<源名>`
   - `xml`: 该源的 Def 目录，可多个（各 DLC 的 `Defs`、mod 的 `Defs` + `1.6/Defs`）
   - `assemblies`: 该源的程序集目录。**配了才能被 `sync_sources` 跟随**；留空即视为手工维护的源码副本，同步流程跳过
+  - `mod`: mod 根目录（可多个）。写了它就不必再手写 `xml` / `assemblies`——见下方「mod 根自动展开」。与手写的 `xml` / `assemblies` 可以并存，展开结果追加在手写项之后
 - `[scope_groups]`: 作用域组，组名 → 源名列表；一个源可同属多组，组内顺序即同分时的排序优先级
 - `default_scope`: 未显式传 `scope` 参数时使用的作用域表达式；留空即全域
 - `verify_source_freshness`: 把源文件的大小/修改时间摘要纳入缓存指纹，让 Steam 更新过的 mod 自动触发索引重建（代价是启动时多几百毫秒的元数据枚举）
@@ -357,7 +354,7 @@ assemblies = 'C:\SteamLibrary\steamapps\common\RimWorld\RimWorldWin64_Data\Manag
 - `check_updates`: 是否启用版本更新提示（指 RimSearcher 自身的版本，与源跟随无关）
 - `check_source_updates`: 是否在启动时后台探测程序集与 XML 变更。只检测不反编译；发现变更且与当前会话查过的内容相关时，会在工具返回末尾附一条提示。默认 `true`
 - `source_history_depth`: 保留几代反编译历史供 `diff` 使用，`0` 为不保留（默认）。每代只存本次被覆盖的旧文件（反向增量），一次游戏更新通常只动少量文件，占用远小于同等份数的完整副本
-- `game_version`: mod 多版本目录的匹配键（如 `"1.6"`）。留空则从 `assemblies` 路径上溯查找 `Version.txt` 自动判定
+- `game_version`: mod 多版本目录的匹配键（如 `"1.6"`）。留空则从 `assemblies` / `mod` 路径上溯查找 `Version.txt` 自动判定
 - `decompile_output_root`: 省略 `csharp` 时，默认输出目录的根。留空即 `<exe目录>/Decompiled`（与 `.cache/index` 同处一地）；写相对路径按 exe 目录解析。装在 `C:\Program Files` 之类不可写的位置时，改配一个可写目录
 
 **写错了会告诉你在第几行**：配置解析失败时，启动日志带的是 TOML 解析器的诊断，形如
@@ -368,6 +365,40 @@ assemblies = 'C:\SteamLibrary\steamapps\common\RimWorld\RimWorldWin64_Data\Manag
 ```
 
 而不是笼统的一句「解析失败」。同一类笔误重复多处时最多列前三条。「文件还没建」与「文件写错了」在日志里是两条不同的原因。
+
+**mod 根自动展开**：`mod` 指向 mod 根目录后，工具按 RimWorld 自己的加载规则算出「这个游戏版本下真正生效的目录」，旧版本的 XML 和 dll 一律不进索引。
+
+规则与游戏一致（`ModContentPack.foldersToLoadDescendingOrder` + `DirectXmlLoader.XmlAssetsInModFolder`）：
+
+- 有 `loadFolders.xml` 就以它为准，取 `<v1.6>` 节点下的列表，**越靠后优先级越高**；`IfModActive` 之类的条件目录全部收下（手动指 mod 根时无从判断哪些 mod 处于启用状态，索引宽一点无害）
+- 没有 `loadFolders.xml` 则用默认布局：`1.6/` 压过根目录
+- 覆盖是**文件级**的，按相对于 mod 文件夹根的路径比对，不是 def 级合并——`Defs/Traits.xml` 只要在 `1.6/Defs/Traits.xml` 有同名文件，根目录那份整个不解析。同名 dll 同理
+- 只收 `Defs`、`Patches`、`Assemblies`，`Languages` / `Textures` / `Sounds` 不进索引
+- 源名取 `About.xml` 里的 `<name>`（workshop 目录名是纯数字 ID）；显式写了 `name` 则以显式的为准
+
+以 HAR（`839005762`）为例，`game_version = "1.6"` 下展开的结果是：
+
+```text
+生效目录（优先级从高到低）
+  1.6\Mods\Odyssey\Patches
+  1.6\Mods\Ideology\Defs
+  1.6\Defs
+  1.6\Patches
+  Defs                          ← 仍在列，它可能有独有文件
+生效程序集
+  1.6\Assemblies
+  Assemblies
+被顶掉、不进索引的文件
+  Defs\ThingCategories.xml      ← 被 1.6\Defs\ 同名文件覆盖
+  Defs\Thoughts.xml
+  Defs\Traits.xml
+  Assemblies\0Harmony.dll       ← 被 1.6\Assemblies\ 同名 dll 覆盖
+  Assemblies\AlienRace.dll
+```
+
+`1.0`–`1.5` 六个版本目录一份都不进。该 mod 的根 `Defs` 三个文件恰好全被顶掉，正是那种「搜到的是 1.0 时代老定义」的陷阱。
+
+mod 没适配当前版本（只有 `1.4/` 目录）时会回退到能用的最高版本并在日志里说明——按游戏语义它本该什么都不加载，但既然是手动指的，多半就是想搜它。展开结果与所有降级说明都记在启动日志的 `Mod folders resolved` / `Mod layout note` 两行里。
 
 **源命名与作用域**：`name` 相同的多个条目归为**同一个源**，因此一个逻辑源可以跨多个根目录（如 HAR 的 C# 目录 + 两个 Defs 目录）。省略 `name` 时按路径末段推断（会跳过 `Defs`、`1.6` 这类无信息量的段）。
 

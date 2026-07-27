@@ -14,17 +14,20 @@ public static class IndexFingerprints
     // 代价是新进程可能挂上一个索引已陈旧的宿主。那条链路另有人管：SourceChangeProbe
     // 探到变化并提示，sync_sources 原地重建。
     public static string ForHost(ResolvedSources sources)
-        => Compute(sources, includeContentDigest: false);
+        => Compute(sources, includeContentDigest: false, includeShadowed: false);
 
     // 缓存键用。必须对内容敏感：mod 更新不改路径集合，纯路径键会让磁盘上那份陈旧索引
     // 一直命中且毫无提示。verifySourceFreshness=false 是用户明确接受这个风险，
     // 换每次启动省下几万次元数据枚举（约 100~300ms）。
+    // 遮蔽集合只进缓存键，不进宿主名：它随游戏版本和 loadFolders.xml 而变，而那正是
+    // 「同一批路径、不同索引内容」的情形——缓存必须区分，宿主会合点则不该被它挤开。
     public static string ForCache(ResolvedSources sources, bool verifySourceFreshness)
-        => Compute(sources, includeContentDigest: verifySourceFreshness);
+        => Compute(sources, includeContentDigest: verifySourceFreshness, includeShadowed: true);
 
-    private static string Compute(ResolvedSources sources, bool includeContentDigest)
+    private static string Compute(ResolvedSources sources, bool includeContentDigest, bool includeShadowed)
         => IndexCacheService.ComputeConfigFingerprint(
             sources.Csharp.Select(entry => entry.Path),
             sources.Xml.Select(entry => entry.Path),
-            includeContentDigest);
+            includeContentDigest,
+            includeShadowed ? sources.Shadowed : null);
 }

@@ -166,7 +166,9 @@ public class DefIndexer
         }
     }
 
-    public void Scan(string rootPath)
+    // excludedFiles：被 mod 的高优先级同名文件顶掉、游戏根本不解析的那些 xml（绝对路径）。
+    // 见 ModLayoutResolver——收了它们等于把运行时不生效的旧定义摆进搜索结果。
+    public void Scan(string rootPath, IReadOnlySet<string>? excludedFiles = null)
     {
         if (!Directory.Exists(rootPath)) return;
         var blacklistedDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -190,7 +192,7 @@ public class DefIndexer
             catch { }
         }
 
-        var newFiles = allFiles.Where(f => _processedFiles.TryAdd(Path.GetFullPath(f), 0)).ToList();
+        var newFiles = ScanFilter.SelectNew(allFiles, excludedFiles, full => _processedFiles.TryAdd(full, 0));
         int totalParsed = 0;
 
         Parallel.ForEach(newFiles, file =>

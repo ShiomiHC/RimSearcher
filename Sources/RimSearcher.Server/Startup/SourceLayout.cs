@@ -9,6 +9,9 @@ public sealed record PreparedSources
     // 配了但磁盘上没有的，附来源名，直接可读
     public required IReadOnlyList<string> Missing { get; init; }
 
+    // mod 展开时被顶掉的文件，扫描时跳过
+    public IReadOnlySet<string> Shadowed { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
     public bool HasAnyExisting => ExistingCsharp.Count + ExistingXml.Count > 0;
 
     // 有路径缺失时整体不碰缓存：存下来的快照会缺一块，而指纹里看不出这件事，
@@ -48,7 +51,8 @@ public static class SourceLayout
         {
             ExistingCsharp = existingCsharp,
             ExistingXml = existingXml,
-            Missing = missing
+            Missing = missing,
+            Shadowed = sources.Shadowed
         };
     }
 

@@ -49,10 +49,14 @@ public static class IndexCacheService
     // includeContentDigest：把各根目录下源文件的「大小 + 修改时间」也纳入指纹。
     // 源指向 Steam workshop 时，mod 更新不改路径集合，纯路径指纹会让陈旧索引一直命中且毫无提示。
     // 只 stat 不读内容，故成本是几万次元数据枚举（约 100~300ms），远低于内容哈希要读的几百 MB。
+    // excludedPaths：mod 展开时被遮蔽、故不进索引的文件。它随 loadFolders.xml 与版本目录的
+    // 增删而变，而这两者都不改路径集合——不入指纹的话，换了游戏版本后那份按旧规则建的索引
+    // 会继续命中。
     public static string ComputeConfigFingerprint(
         IEnumerable<string> csharpPaths,
         IEnumerable<string> xmlPaths,
-        bool includeContentDigest = true)
+        bool includeContentDigest = true,
+        IEnumerable<string>? excludedPaths = null)
     {
         var normalizedCsharp = NormalizePaths(csharpPaths);
         var normalizedXml = NormalizePaths(xmlPaths);
@@ -69,6 +73,19 @@ public static class IndexCacheService
         foreach (var path in normalizedXml)
         {
             builder.AppendLine(path);
+        }
+
+        if (excludedPaths != null)
+        {
+            var normalizedExcluded = NormalizePaths(excludedPaths);
+            if (normalizedExcluded.Count > 0)
+            {
+                builder.AppendLine("[excluded]");
+                foreach (var path in normalizedExcluded)
+                {
+                    builder.AppendLine(path);
+                }
+            }
         }
 
         if (includeContentDigest)

@@ -200,6 +200,11 @@ public static class SourceChangeProbe
                 try
                 {
                     var info = new FileInfo(file);
+
+                    // 被遮蔽的文件不进索引，它变了也不影响任何查询结果——算进摘要只会误报一次
+                    // 「源已更新」，而用户去看的时候什么都没变
+                    if (_sources?.Shadowed.Contains(info.FullName) == true) continue;
+
                     entries.Add($"{info.FullName}|{info.Length}|{info.LastWriteTimeUtc.Ticks}");
                 }
                 catch { }

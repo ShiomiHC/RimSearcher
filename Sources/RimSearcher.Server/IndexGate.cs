@@ -102,15 +102,15 @@ public sealed class IndexRebuilder
             foreach (var entry in _sources.Csharp)
             {
                 if (!Directory.Exists(entry.Path)) continue;
-                _sourceIndexer.Scan(entry.Path);
+                _sourceIndexer.Scan(entry.Path, _sources.Shadowed);
                 csharpCount++;
             }
 
             foreach (var entry in _sources.Xml)
             {
                 if (!Directory.Exists(entry.Path)) continue;
-                _defIndexer.Scan(entry.Path);
-                _sourceIndexer.Scan(entry.Path);
+                _defIndexer.Scan(entry.Path, _sources.Shadowed);
+                _sourceIndexer.Scan(entry.Path, _sources.Shadowed);
                 xmlCount++;
             }
 

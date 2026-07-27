@@ -1,3 +1,4 @@
+using RimSearcher.Core;
 using Tomlyn;
 using Tomlyn.Model;
 using Tomlyn.Parsing;
@@ -103,9 +104,15 @@ public record AppConfig
     {
         var csharp = new List<SourcePathEntry>();
         var xml = new List<SourcePathEntry>();
+        var shadowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var notes = new List<string>();
 
-        foreach (var definition in Sources)
+        var gameVersion = GameVersion ?? DetectGameVersion();
+
+        foreach (var raw in Sources)
         {
+            var definition = ExpandMods(raw, gameVersion, shadowed, notes);
+
             // 「什么路径都没写」的条目（config 里多打一个空 [[sources]] 就是这样）在 Parse 里
             // 已被丢掉，这里是给直接构造 AppConfig 的调用方兜底：漏进来会在下一行直接 NRE，
             // 而这一步在 TryLoad 的 catch 之外——整个进程会起不来
@@ -136,7 +143,115 @@ public record AppConfig
             }
         }
 
-        return new ResolvedSources(csharp, xml);
+        return new ResolvedSources(csharp, xml)
+        {
+            Shadowed = shadowed,
+            GameVersion = gameVersion,
+            Notes = notes
+        };
+    }
+
+    // mod 根 → 该游戏版本下真正生效的 Defs/Patches/Assemblies 目录。显式写的 xml/assemblies
+    // 保留在前：手写的那几条是用户明确要的，展开结果只做追加。
+    private static SourceDefinition? ExpandMods(
+        SourceDefinition? definition,
+        string? gameVersion,
+        HashSet<string> shadowed,
+        List<string> notes)
+    {
+        if (definition == null || definition.Mods.Count == 0) return definition;
+
+        var xml = definition.Xml.ToList();
+        var assemblies = definition.Assemblies.ToList();
+        string? modName = null;
+
+        foreach (var modRoot in definition.Mods)
+        {
+            var layout = ModLayoutResolver.Resolve(modRoot, gameVersion);
+            if (layout == null)
+            {
+                // 路径不存在时不静默跳过：mod 退订/移库后目录就没了，而这条源会整个消失
+                notes.Add($"{definition.Name}: mod root unavailable: {modRoot}");
+                continue;
+            }
+
+            if (!layout.HasContent)
+            {
+                notes.Add($"{definition.Name}: no Defs/Patches/Assemblies under {layout.Root}");
+                continue;
+            }
+
+            xml.AddRange(layout.XmlDirs);
+            assemblies.AddRange(layout.AssemblyDirs);
+            foreach (var file in layout.Shadowed) shadowed.Add(file);
+
+            modName ??= layout.Name;
+            foreach (var note in layout.Notes) notes.Add($"{definition.Name}: {note}");
+        }
+
+        return new SourceDefinition
+        {
+            // 用户没给 name 时，从数字 ID 目录猜出来的那个还不如 About.xml 里的正式名
+            Name = definition.HasExplicitName || modName == null ? definition.Name : modName,
+            HasExplicitName = definition.HasExplicitName,
+            Csharp = definition.Csharp,
+            Xml = xml,
+            Assemblies = assemblies,
+            Mods = definition.Mods
+        };
+    }
+
+    // Version.txt 首行形如 "1.6.4871 rev590"，取前两段作为 mod 版本目录的匹配键。
+    // 种子取所有已配置的程序集目录与 mod 根：前者在游戏安装目录下（vanilla 那条源必然指到
+    // 那里），后者在 workshop 下探不到，但只要有一条能探到就够了。
+    private string? DetectGameVersion()
+    {
+        var seeds = Sources
+            .Where(definition => definition != null)
+            .SelectMany(definition => definition.Assemblies.Concat(definition.Mods));
+
+        foreach (var seed in seeds)
+        {
+            var version = ReadVersionFileUpwards(seed);
+            if (version != null) return version;
+        }
+
+        return null;
+    }
+
+    private static string? ReadVersionFileUpwards(string startPath)
+    {
+        DirectoryInfo? directory;
+        try
+        {
+            directory = new DirectoryInfo(startPath);
+        }
+        catch
+        {
+            return null;
+        }
+
+        while (directory != null)
+        {
+            var versionFile = Path.Combine(directory.FullName, "Version.txt");
+            if (File.Exists(versionFile))
+            {
+                try
+                {
+                    var first = File.ReadLines(versionFile).FirstOrDefault()?.Trim();
+                    var parts = first?.Split('.', StringSplitOptions.RemoveEmptyEntries);
+                    if (parts is { Length: >= 2 }) return $"{parts[0]}.{parts[1]}";
+                }
+                catch
+                {
+                    // 读不出版本号是降级不是失败：GameVersion 留空，展开时退到 mod 里最高的版本目录
+                }
+            }
+
+            directory = directory.Parent;
+        }
+
+        return null;
     }
 
     // 源名直接进路径，故必须先洗掉分隔符和非法字符：name 可由用户显式给出，

@@ -66,7 +66,9 @@ public sealed class SourceSyncService
     {
         _sources = sources;
         _statePath = Path.Combine(cacheDirectory, "assembly-state.json");
-        _gameVersion = config.GameVersion ?? DetectGameVersion(sources);
+        // 版本判定在 ResolveSources 时就做过了（mod 展开要用它），这里沿用同一个结论：
+        // 两处各探一次的话，「索引按 1.6 展开、同步按别的版本筛 dll」这种错位无从察觉。
+        _gameVersion = sources.GameVersion ?? config.GameVersion ?? DetectGameVersion(sources);
         _history = new SourceHistoryStore(cacheDirectory, config.SourceHistoryDepth);
     }
 
@@ -238,7 +240,8 @@ public sealed class SourceSyncService
 
     private List<AssemblyEntry> ScanSource(SourcePathEntry entry)
     {
-        var scanned = AssemblyScanner.Enumerate(entry.AssemblyPaths, _gameVersion);
+        var scanned = AssemblyScanner.Enumerate(
+            entry.AssemblyPaths, _gameVersion, excludedPaths: _sources.Shadowed);
         return AssemblyScanner.FillHashes(scanned);
     }
 

@@ -25,13 +25,13 @@ public static class IndexBootstrapper
 
         var stopwatch = Stopwatch.StartNew();
 
-        foreach (var path in prepared.ExistingCsharp) indexer.Scan(path);
+        foreach (var path in prepared.ExistingCsharp) indexer.Scan(path, prepared.Shadowed);
 
         // xml 两侧都要喂：DefIndexer 建 Def 索引，SourceIndexer 还要它做全文检索
         foreach (var path in prepared.ExistingXml)
         {
-            defIndexer.Scan(path);
-            indexer.Scan(path);
+            defIndexer.Scan(path, prepared.Shadowed);
+            indexer.Scan(path, prepared.Shadowed);
         }
 
         indexer.FreezeIndex();

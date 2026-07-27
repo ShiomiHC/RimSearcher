@@ -59,11 +59,15 @@ public static class AssemblyScanner
         return false;
     }
 
-    // gameVersion 为 null 时不做版本过滤（全部保留）
+    // gameVersion 为 null 时不做版本过滤（全部保留）。
+    // excludedPaths 是 mod 展开时算出的遮蔽集合：同相对路径的 dll 在高优先级文件夹里已有一份，
+    // 这里的这份游戏不会加载。它比 gameVersion 那条路径正则准——loadFolders.xml 可以把内容
+    // 放在 Common/ 或 1.6/Mods/Odyssey 这种正则匹配不到的地方。
     public static List<AssemblyEntry> Enumerate(
         IEnumerable<string> roots,
         string? gameVersion,
-        bool includeRuntimeAssemblies = false)
+        bool includeRuntimeAssemblies = false,
+        IReadOnlySet<string>? excludedPaths = null)
     {
         var results = new List<AssemblyEntry>();
         var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -83,6 +87,7 @@ public static class AssemblyScanner
             {
                 if (!seenPaths.Add(file)) continue;
                 if (!includeRuntimeAssemblies && IsRuntimeAssembly(file)) continue;
+                if (excludedPaths != null && excludedPaths.Contains(System.IO.Path.GetFullPath(file))) continue;
 
                 var versionDir = ExtractGameVersion(file);
                 if (gameVersion != null
