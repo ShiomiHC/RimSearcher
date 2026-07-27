@@ -70,8 +70,11 @@ public class SearchRegexTool : ITool
             // 拼错的 scope 被静默退回全域，有结果、无结果两条路径都要说
             var scopeNotice = ScopeArgs.UnresolvedNotice(_scopeCatalog, scope) ?? string.Empty;
 
+            // 同 trace usages：scope 对扫盘工具是硬过滤，落选来源不统计，故要显式点一句
             if (results.Count == 0)
-                return new ToolResult($"No matches for pattern '{pattern}' in scope '{scope.Expression}'.{scopeNotice}");
+                return new ToolResult(
+                    $"No matches for pattern '{pattern}' in scope '{scope.Expression}'."
+                    + $"{ScopeArgs.RetryWiderNotice(scope)}{scopeNotice}");
 
             // 索引层是并发扫描后从 ConcurrentBag 收口的，文件之间的先后完全看线程调度；
             // 不排一下，同一次查询重跑两遍文件顺序就能不一样。

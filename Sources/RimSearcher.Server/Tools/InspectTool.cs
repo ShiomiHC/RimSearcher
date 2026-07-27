@@ -47,7 +47,9 @@ public class InspectTool : ITool
     public string Description =>
         "Full detail for one exactly-named def or C# type; no fuzzy matching. " +
         "Def mode returns the XML merged down the whole ParentName chain — the complete effective definition, which no single XML file contains — plus the C# classes referenced from it. " +
-        "Type mode returns the inheritance chain and a member outline; method bodies come from read_code.";
+        "Type mode returns the base-class chain (interfaces are not on it — use trace mode:'inheritors' for those) "
+        + "and a member outline of fields, properties and methods; constructors, indexers and operators are not "
+        + "outlined but read_code can still read them by name. Method bodies come from read_code.";
 
     private static readonly ToolArgSpec ArgSpec = new(
         "rimworld-searcher__inspect",

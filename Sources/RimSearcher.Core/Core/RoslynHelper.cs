@@ -286,16 +286,24 @@ public static class RoslynHelper
                 $"// File: {fileLabel}\n// {kind}, starts at line: {lineSpan.StartLinePosition.Line + 1}\n{node.ToFullString()}");
         }
 
+        // 多个同名成员时也要给出文件名——单命中那条有，缺了它这一支就成了唯一
+        // 不说自己读的是哪个文件的返回。
         var sb = new StringBuilder();
         sb.AppendLine($"/* Found {candidates.Count} matching members */");
-        foreach (var (node, kind) in candidates)
+        sb.AppendLine($"// File: {fileLabel}");
+        for (var i = 0; i < candidates.Count; i++)
         {
+            var (node, kind) = candidates[i];
             var lineSpan = node.GetLocation().GetLineSpan();
             var parentType = node.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault();
+
+            // 分隔符只放在两条之间。原先每条之后都追加一次，末尾那个「还有下一条」的
+            // 标记后面什么也没有，读者只能读成「剩下的被截断了」。
+            if (i > 0) sb.AppendLine("\n// --- NEXT MATCH ---\n");
+
             sb.AppendLine($"// {kind} in {(parentType != null ? GetFullTypeName(parentType) : "Unknown")}");
             sb.AppendLine($"// Starts at line: {lineSpan.StartLinePosition.Line + 1}");
             sb.AppendLine(node.ToFullString());
-            sb.AppendLine("\n// --- NEXT MATCH ---\n");
         }
         return SourceLookupResult.Ok(sb.ToString());
     }

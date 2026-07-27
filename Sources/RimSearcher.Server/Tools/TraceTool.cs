@@ -99,7 +99,9 @@ public class TraceTool : ITool
                 var report = new ScopeReport();
                 report.Add(inheritors);
                 var footer = report.Render(scope);
-                return new ToolResult($"No subclasses of '{symbol}' found in scope '{scope.Expression}'.{footer ?? string.Empty}{scopeNotice}");
+                return new ToolResult(
+                    $"No subclasses of '{symbol}' found in scope '{scope.Expression}'."
+                    + $"{ScopeArgs.RetryWiderNotice(scope)}{footer ?? string.Empty}{scopeNotice}");
             }
 
             var results = inheritors.Items.Select(entry =>
@@ -211,8 +213,11 @@ public class TraceTool : ITool
                 }
             });
 
+            // 扫盘分支是硬 scope 过滤、不统计落选来源，故这条提示是它唯一的「别处也许有」的痕迹
             if (results.Count == 0)
-                return new ToolResult($"No references to '{symbol}' found in scope '{scope.Expression}'.{scopeNotice}");
+                return new ToolResult(
+                    $"No references to '{symbol}' found in scope '{scope.Expression}'."
+                    + $"{ScopeArgs.RetryWiderNotice(scope)}{scopeNotice}");
 
             var grouped = results
                 .GroupBy(r => r.file)

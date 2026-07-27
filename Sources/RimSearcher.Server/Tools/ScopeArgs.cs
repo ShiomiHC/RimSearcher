@@ -77,7 +77,8 @@ public static class ScopeArgs
         type = new[] { "integer", "string" },
         description =
             $"Optional result cap per section (default {defaultLimit}). Pass a number, or 'all' to expand " +
-            $"up to the server cap of {HardLimit}; larger numbers are clamped to it."
+            $"up to the server cap of {HardLimit}; larger numbers, 0 and negatives are all clamped to that cap. " +
+            "Fuzzy sections also fold away results far below the top score, and those do not come back at any limit."
     };
 
     // 拼错的 scope 会被 ScopeCatalog 静默退回全域（空集合会更糟，见那里的注释）。
@@ -94,24 +95,65 @@ public static class ScopeArgs
              + $". Available — {catalog.DescribeAvailable()}._";
     }
 
+    // 零命中 + 窄 scope 是「搜不到」被读成「不存在」的高发点：那一刻返回里通常连一条
+    // out-of-scope 计数都没有（扫盘类工具本就不统计，模糊搜索也可能真的一条落选都没有），
+    // 于是全篇没有任何痕迹提示还有别的地方没找过。默认 scope 来自 config，调用方多半
+    // 根本不知道自己被限定在了哪几个源里。
+    public static string? RetryWiderNotice(ScopeSelection scope)
+        => scope.IncludesEverything
+            ? null
+            : $" Only sources in scope '{scope.Expression}' were searched — "
+              + $"retry with scope:'{ScopeCatalog.EverythingKeyword}' before concluding it does not exist.";
+
     public static string Label(ScopedEntry<object> entry) => Label(entry.SourceName);
 
     public static string Label(string? sourceName)
         => string.IsNullOrEmpty(sourceName) ? string.Empty : $" [{sourceName}]";
 
     // 折叠行。断层收口时说明被折叠的是低匹配度结果，免得读者以为还有同等相关的东西没显示。
-    // limit 已经展开到硬上限时不能再劝 'all'——那是让调用方原地重试一次同样的请求。
+    //
+    // 下一步的建议必须按「是谁砍掉的」分开给，三种情况的正确动作互不相同：
+    //   - limit 砍的，且还没要过 'all'  → 'all' 真的能展开，劝它；
+    //   - limit 砍的，且已经顶到硬上限  → 再要一次 'all' 是原地重试，只能劝收窄查询；
+    //   - 只有断层收口砍的              → 那部分调多大的 limit 都拿不回来（见 ScopeFilter.Apply
+    //     的 effectiveLimit = Min(limit, cutoff)）。原先这里一律劝 'all'，调用方照做后
+    //     一条也没多出来，还会把「+N more」读成服务端在敷衍。
     public static string? FoldLine<T>(ScopedResult<T> result, string indent = "  ", ResultLimit? limit = null)
+        => FoldLine(
+            result.HiddenCount, result.Items.Count,
+            result.TruncatedByScoreGap, result.TruncatedByLimit, indent, limit);
+
+    // 显式计数的重载。分段显示的场景（locate 的 Members 按 method/property/field 分组）里，
+    // 真正被藏起来的条数由「ScopeFilter 的 limit」和「每组的显示配额」两层共同决定，
+    // ScopedResult.HiddenCount 只看得见第一层。
+    public static string? FoldLine(
+        int hiddenCount,
+        int shownCount,
+        bool truncatedByScoreGap,
+        bool truncatedByLimit,
+        string indent = "  ",
+        ResultLimit? limit = null)
     {
-        if (result.HiddenCount <= 0) return null;
+        if (hiddenCount <= 0) return null;
 
-        var hint = limit?.Unlimited == true
-            ? $"server cap {HardLimit} reached, narrow the query"
-            : "pass limit:'all' to expand";
+        // Unlimited 只说明调用方要过 'all'，不等于真的产出了 HardLimit 条——
+        // 五条结果的查询也会走进这里，原先照样宣布「server cap 200 reached」。
+        var capReached = limit?.Unlimited == true && shownCount >= HardLimit;
 
-        return result.TruncatedByScoreGap
-            ? $"{indent}... +{result.HiddenCount} more (lower relevance, {hint})"
-            : $"{indent}... +{result.HiddenCount} more ({hint})";
+        var hint = truncatedByLimit
+            ? capReached
+                ? $"server cap {HardLimit} reached, narrow the query"
+                : limit?.Unlimited == true
+                    ? "narrow the query to see the rest"
+                    : "pass limit:'all' to expand"
+            // 断层收口砍掉的是「相对首条掉了 40 分以上」的结果，要够到它们只能让首条不再那么
+            // 突出——换个更宽泛的词，或改用 search_regex。原先写的是 refine（收窄），方向正好反了：
+            // 照做只会把这些结果推得更远。
+            : "broaden or reword the query; limit does not expand these";
+
+        return truncatedByScoreGap
+            ? $"{indent}... +{hiddenCount} more (lower relevance, {hint})"
+            : $"{indent}... +{hiddenCount} more ({hint})";
     }
 }
 

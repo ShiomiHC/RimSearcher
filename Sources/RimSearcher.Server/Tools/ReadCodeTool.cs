@@ -46,7 +46,9 @@ public class ReadCodeTool : ITool
                 type = "string",
                 minLength = 1,
                 description =
-                    "Member to extract: method ('CompTick'), property ('Label'), constructor (class name or '.ctor'), indexer ('this'), or operator ('+')."
+                    "Member to extract: method ('CompTick'), property ('Label'), constructor (class name or '.ctor'), "
+                    + "indexer ('this'), or operator ('+'). Every member of that name in the file is returned — "
+                    + "pass className to get just one."
             },
             className = new
             {

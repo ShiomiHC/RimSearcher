@@ -98,6 +98,110 @@ public class LocateToolTests
         Assert.Contains("milira", result.Content);
     }
 
+    // 回归：折叠行承诺的条数必须等于 limit:'all' 真能拿到的增量。
+    // 索引里一个类型有短名与全名两条记录，同一查询两条都命中；折叠曾经发生在 limit 截断之后，
+    // 于是「+N more」把重复的那一半也算进去——实测 locate 'shield' 报 +83，展开后总共只有 51 条。
+    [Fact]
+    public async Task TypeFoldCount_MatchesWhatExpandingActuallyReturns()
+    {
+        using var workspace = new TempWorkspace();
+        var coreDirectory = workspace.Dir("Core");
+
+        for (var i = 1; i <= 12; i++)
+        {
+            workspace.WriteFile(
+                Path.Combine("Core", $"CompFold{i:00}.cs"),
+                $"namespace RimWorld {{ public class CompFold{i:00} {{ }} }}");
+        }
+
+        var sourceIndexer = new SourceIndexer();
+        sourceIndexer.Scan(coreDirectory);
+        sourceIndexer.FreezeIndex();
+
+        var catalog = ScopeCatalog.Build([("vanilla", coreDirectory)], null, null);
+        var tool = new LocateTool(sourceIndexer, EmptyDefIndexer(), catalog);
+
+        using var capped = JsonDocument.Parse("""{"query":"type:CompFold","limit":4}""");
+        var cappedResult = await tool.ExecuteAsync(capped.RootElement, CancellationToken.None);
+
+        using var expanded = JsonDocument.Parse("""{"query":"type:CompFold","limit":"all"}""");
+        var expandedResult = await tool.ExecuteAsync(expanded.RootElement, CancellationToken.None);
+
+        var shownWhenCapped = CountTypeLines(cappedResult.Content);
+        var shownWhenExpanded = CountTypeLines(expandedResult.Content);
+        var promised = FoldCount(cappedResult.Content);
+
+        Assert.Equal(shownWhenExpanded, shownWhenCapped + promised);
+    }
+
+    // 回归：Members 段的折叠行曾只数「取回的那批里还剩几条」，而取回本身已被 limit.Scale(3)
+    // 砍过一道——method:CompTick 因此报 +25，limit:'all' 实际能给出 186 条。
+    // 它还漏了「怎么才能拿到更多」，调用方连能展开都不知道。
+    [Fact]
+    public async Task MemberFoldLine_CountsEverythingHiddenAndSaysHowToExpand()
+    {
+        using var workspace = new TempWorkspace();
+        var coreDirectory = workspace.Dir("Core");
+
+        for (var i = 1; i <= 60; i++)
+        {
+            workspace.WriteFile(
+                Path.Combine("Core", $"Holder{i:00}.cs"),
+                $"namespace RimWorld {{ public class Holder{i:00} {{ public void FoldTick() {{ }} }} }}");
+        }
+
+        var sourceIndexer = new SourceIndexer();
+        sourceIndexer.Scan(coreDirectory);
+        sourceIndexer.FreezeIndex();
+
+        var catalog = ScopeCatalog.Build([("vanilla", coreDirectory)], null, null);
+        var tool = new LocateTool(sourceIndexer, EmptyDefIndexer(), catalog);
+
+        using var args = JsonDocument.Parse("""{"query":"method:FoldTick","limit":5}""");
+        var result = await tool.ExecuteAsync(args.RootElement, CancellationToken.None);
+
+        var shown = result.Content.Split('\n').Count(line => line.Contains(".FoldTick`"));
+        Assert.Equal(60, shown + FoldCount(result.Content));
+        Assert.Contains("limit:'all'", result.Content);
+    }
+
+    // Property 的复数是 Properties。分组标题曾是 $"{MemberType}s"，写出 'Propertys'。
+    [Fact]
+    public async Task MemberGroupHeadings_UseCorrectPlurals()
+    {
+        using var workspace = new TempWorkspace();
+        var coreDirectory = workspace.Dir("Core");
+        workspace.WriteFile(
+            Path.Combine("Core", "Holder.cs"),
+            "namespace RimWorld { public class Holder { public int FoldValue { get; set; } } }");
+
+        var sourceIndexer = new SourceIndexer();
+        sourceIndexer.Scan(coreDirectory);
+        sourceIndexer.FreezeIndex();
+
+        var catalog = ScopeCatalog.Build([("vanilla", coreDirectory)], null, null);
+        var tool = new LocateTool(sourceIndexer, EmptyDefIndexer(), catalog);
+
+        using var args = JsonDocument.Parse("""{"query":"FoldValue"}""");
+        var result = await tool.ExecuteAsync(args.RootElement, CancellationToken.None);
+
+        Assert.Contains("Properties:", result.Content);
+        Assert.DoesNotContain("Propertys", result.Content);
+    }
+
+    private static int CountTypeLines(string content) =>
+        content.Split('\n').Count(line => line.TrimStart().StartsWith("- `CompFold"));
+
+    private static int FoldCount(string content)
+    {
+        var line = content.Split('\n').FirstOrDefault(l => l.Contains("... +"));
+        if (line == null) return 0;
+
+        var start = line.IndexOf("... +", StringComparison.Ordinal) + 5;
+        var digits = new string(line[start..].TakeWhile(char.IsDigit).ToArray());
+        return int.Parse(digits);
+    }
+
     // 缺必填参数必须是可自我纠正的工具错误，不能冒泡成 -32603
     [Fact]
     public async Task MissingQuery_ThrowsToolArgumentException()

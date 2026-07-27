@@ -162,4 +162,26 @@ public class SourceIndexerInheritanceTests : IDisposable
         Assert.Contains("RimWorld.Worker", Inheritors(restored, scope, "BaseWorker"));
         Assert.Equal([("RimWorld.Worker", "BaseWorker")], restored.GetInheritanceChain("Worker"));
     }
+
+    // 短名对应多个全名时（跨命名空间/跨源同名类，实测里很常见）原先只试数组第一项，
+    // 而那份数组的次序由索引期的并发写入决定：撞上没有基类的那个同名类，整条链就成了空——
+    // inspect 于是在 Outline 明明列着 `X : Y` 的同一次返回里不画继承图。
+    [Fact]
+    public void InheritanceChain_FindsTheOverloadThatActuallyHasABase()
+    {
+        var (indexer, _) = Index("Ambiguous.cs", """
+            namespace Other
+            {
+                public class CompShield { }
+            }
+
+            namespace RimWorld
+            {
+                public class ThingComp { }
+                public class CompShield : ThingComp { }
+            }
+            """);
+
+        Assert.Equal([("RimWorld.CompShield", "ThingComp")], indexer.GetInheritanceChain("CompShield"));
+    }
 }

@@ -33,13 +33,18 @@ public sealed record SourceChange
     // 两者都必须让调用方看见——失败被吞掉的后果是用户以为同步过了。
     public string? Failure { get; init; }
 
+    // 这一行会原样出现在 sync_sources 的工具返回里，故与其余六个工具一样用英文：
+    // 同一次响应里 description、参数说明、其它工具的正文都是英文，只有这里换语言，
+    // 调用方无从判断它是服务器的话还是被检索内容的一部分。
     public string Describe() => Blocker != null
-        ? $"{SourceName}: 无法同步 — {Blocker}"
+        ? $"{SourceName}: cannot sync — {Blocker}"
         : Failure != null
-            ? $"{SourceName}: 同步失败，已整体回滚（源码目录仍是上一版）— {Failure}"
+            ? $"{SourceName}: sync failed and was rolled back in full (sources are still the previous version) — {Failure}"
             : HasChanges
-                ? $"{SourceName}: +{Added} 修改 {Modified} 移除 {Removed} (共 {TotalAssemblies} 个程序集)"
-                : $"{SourceName}: 无变更 ({TotalAssemblies} 个程序集)";
+                ? $"{SourceName}: {Added} added, {Modified} changed, {Removed} removed (of {Assemblies})"
+                : $"{SourceName}: unchanged ({Assemblies})";
+
+    private string Assemblies => TotalAssemblies == 1 ? "1 assembly" : $"{TotalAssemblies} assemblies";
 }
 
 public sealed record SyncReport
@@ -244,7 +249,7 @@ public sealed class SourceSyncService
             SourceChange change, string? reason, IReadOnlyList<DecompileOutcome>? outcomes = null)
             => new()
             {
-                Change = change with { Failure = reason ?? "未知原因" },
+                Change = change with { Failure = reason ?? "unknown reason" },
                 Outcomes = outcomes ?? []
             };
     }
@@ -344,10 +349,10 @@ public sealed class SourceSyncService
     {
         var names = failures
             .Take(3)
-            .Select(o => $"{Path.GetFileName(o.AssemblyPath)}（{o.Error}）");
+            .Select(o => $"{Path.GetFileName(o.AssemblyPath)} ({o.Error})");
 
-        var suffix = failures.Count > 3 ? $" 等 {failures.Count} 个" : string.Empty;
-        return $"{failures.Count}/{total} 个程序集反编译失败: {string.Join("; ", names)}{suffix}";
+        var suffix = failures.Count > 3 ? $" (+{failures.Count - 3} more)" : string.Empty;
+        return $"{failures.Count}/{total} assemblies failed to decompile: {string.Join("; ", names)}{suffix}";
     }
 
     private SourceChange Inspect(SourcePathEntry entry, SyncState state)
@@ -359,7 +364,7 @@ public sealed class SourceSyncService
             {
                 SourceName = entry.Name,
                 HasChanges = false,
-                Blocker = $"程序集目录均不存在: {string.Join("; ", missing)}"
+                Blocker = $"none of the assembly directories exist: {string.Join("; ", missing)}"
             };
         }
 
@@ -448,12 +453,13 @@ public sealed class SourceSyncService
         }
         catch (Exception ex)
         {
-            reason = $"无法读取输出目录: {ex.Message}";
+            reason = $"cannot read the output directory: {ex.Message}";
             return false;
         }
 
-        reason = $"输出目录 '{path}' 非空且不是 RimSearcher 生成的（缺 {OwnershipMarker} 标记），"
-               + "拒绝覆盖。请改用空目录，或确认无误后手工放置该标记文件。";
+        reason = $"the output directory '{path}' is not empty and was not produced by RimSearcher "
+               + $"(no {OwnershipMarker} marker), so it will not be overwritten. Point the source at an empty "
+               + "directory, or place the marker file there by hand once you are sure.";
         return false;
     }
 
@@ -473,12 +479,12 @@ public sealed class SourceSyncService
         }
         catch (Exception ex)
         {
-            reason = $"无法读取 '{path}': {ex.Message}";
+            reason = $"cannot read '{path}': {ex.Message}";
             return false;
         }
 
-        reason = $"'{path}' 已存在、非空且缺 {OwnershipMarker} 标记，看起来是你自己的目录，"
-               + "拒绝删除。请把它挪走或改名后重试。";
+        reason = $"'{path}' already exists, is not empty and has no {OwnershipMarker} marker — it looks like "
+               + "a directory of your own, so it will not be deleted. Move or rename it and retry.";
         return false;
     }
 
@@ -494,7 +500,7 @@ public sealed class SourceSyncService
         }
         catch (Exception ex)
         {
-            reason = $"清理 '{path}' 失败: {ex.Message}";
+            reason = $"failed to clear '{path}': {ex.Message}";
             return false;
         }
 
@@ -504,7 +510,7 @@ public sealed class SourceSyncService
 
         if (Directory.Exists(path))
         {
-            reason = $"'{path}' 删除后仍然存在（多半是有进程正打开着里面的文件）";
+            reason = $"'{path}' still exists after deletion (most likely a process still holds a file open in it)";
             return false;
         }
 
@@ -515,7 +521,7 @@ public sealed class SourceSyncService
     {
         if (!TryClearScratch(staging, out reason))
         {
-            reason = $"暂存目录不可用: {reason}";
+            reason = $"staging directory unavailable: {reason}";
             return false;
         }
 
@@ -525,7 +531,7 @@ public sealed class SourceSyncService
         }
         catch (Exception ex)
         {
-            reason = $"创建暂存目录 '{staging}' 失败: {ex.Message}";
+            reason = $"failed to create the staging directory '{staging}': {ex.Message}";
             return false;
         }
 
@@ -552,7 +558,7 @@ public sealed class SourceSyncService
         {
             // 标记是「这个目录归我管」的唯一凭据，写不上就不能转正：目录一旦非空又没标记，
             // 下次同步只会拒绝覆盖，用户从此卡在一棵永远不再更新的源码树上。
-            reason = $"写入归属标记 '{OwnershipMarker}' 失败: {ex.Message}";
+            reason = $"failed to write the ownership marker '{OwnershipMarker}': {ex.Message}";
             return false;
         }
     }
@@ -565,7 +571,7 @@ public sealed class SourceSyncService
         try
         {
             File.WriteAllText(Path.Combine(path, ".gitignore"),
-                "# RimSearcher 反编译产物：请勿提交或再分发\n*\n");
+                "# RimSearcher decompiled output: do not commit or redistribute\n*\n");
         }
         catch (Exception ex)
         {
@@ -610,7 +616,7 @@ public sealed class SourceSyncService
             // 留底目录同样可能撞上用户自己的目录，删之前先验归属
             if (!TryClearScratch(backup, out var backupError))
             {
-                return new Promotion(false, null, $"留底目录不可用: {backupError}");
+                return new Promotion(false, null, $"backup directory unavailable: {backupError}");
             }
 
             try
@@ -621,7 +627,8 @@ public sealed class SourceSyncService
             {
                 // 留底失败就什么都不做。宁可这次同步不成，也不能在没有退路的前提下动旧目录。
                 return new Promotion(false, null,
-                    $"旧源码目录改名留底失败（多半是有进程正打开着里面的文件）: {ex.Message}");
+                    "failed to rename the old source directory aside (most likely a process still holds a file "
+                    + $"open in it): {ex.Message}");
             }
         }
 
@@ -638,7 +645,7 @@ public sealed class SourceSyncService
         }
         catch (Exception ex)
         {
-            return Rollback(backup, target, $"暂存区转正失败: {ex.Message}");
+            return Rollback(backup, target, $"failed to promote the staging directory: {ex.Message}");
         }
 
         if (TryCopyTree(staging, target, out var copyError))
@@ -659,7 +666,7 @@ public sealed class SourceSyncService
         try
         {
             MoveDirectory(backup, target);
-            return new Promotion(false, null, $"{error}（旧源码已回滚）");
+            return new Promotion(false, null, $"{error} (the old sources were rolled back)");
         }
         catch (Exception ex)
         {
@@ -670,7 +677,7 @@ public sealed class SourceSyncService
                 ("backup", backup), ("target", target), ("reason", ex.Message));
 
             return new Promotion(false, null,
-                $"{error}；回滚同样失败（{ex.Message}）——旧源码仍在 '{backup}'，请手工改名回 '{target}'");
+                $"{error}; the rollback failed too ({ex.Message}) — the old sources are still at '{backup}', rename them back to '{target}' by hand");
         }
     }
 
@@ -687,7 +694,7 @@ public sealed class SourceSyncService
         }
         catch (Exception ex)
         {
-            reason = $"创建目标目录 '{target}' 失败: {ex.Message}";
+            reason = $"failed to create the target directory '{target}': {ex.Message}";
             return false;
         }
 
@@ -706,14 +713,14 @@ public sealed class SourceSyncService
                 }
                 catch (Exception ex)
                 {
-                    reason = $"复制 '{relative}' 失败: {ex.Message}";
+                    reason = $"failed to copy '{relative}': {ex.Message}";
                     return false;
                 }
             }
         }
         catch (Exception ex)
         {
-            reason = $"遍历暂存目录 '{staging}' 失败: {ex.Message}";
+            reason = $"failed to enumerate the staging directory '{staging}': {ex.Message}";
             return false;
         }
 

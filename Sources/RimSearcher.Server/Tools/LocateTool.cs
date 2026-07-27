@@ -84,7 +84,9 @@ public class LocateTool : ITool
         if (query.TypeFilter != null || (string.IsNullOrEmpty(query.MethodFilter) && string.IsNullOrEmpty(query.FieldFilter) && string.IsNullOrEmpty(query.DefFilter)))
         {
             var typeSearchTerm = query.TypeFilter ?? QueryParser.GetCombinedSearchTerm(query);
-            var types = CollapseTypeAliases(_sourceIndexer.FuzzySearchTypes(typeSearchTerm, scope, limit.Count));
+            // 短名/全名的合并在索引层完成（见 SourceIndexer.CollapseNameAliases）——那里是截断
+            // 之前，计数才对得上；在这里折叠只会把已经被 limit 砍过的一批再去一次重。
+            var types = _sourceIndexer.FuzzySearchTypes(typeSearchTerm, scope, limit.Count);
             report.Add(types);
 
             if (types.Items.Count > 0)
@@ -125,20 +127,32 @@ public class LocateTool : ITool
                 // 'all' 时不再按组折叠（总量已被硬上限约束住），否则每组各给一半配额
                 var perGroup = limit.Unlimited ? limit.Count : Math.Max(3, limit.Count / 2);
                 var groupedMembers = members.Items.GroupBy(m => m.Item.MemberType).ToList();
+                var shown = 0;
 
                 foreach (var group in groupedMembers)
                 {
                     var groupItems = group.ToList();
-                    sb.AppendLine($"  {group.Key}s:");
+                    sb.AppendLine($"  {Plural(group.Key)}:");
                     foreach (var entry in groupItems.Take(perGroup))
                     {
                         var (typeName, memberName, _, filePath) = entry.Item;
                         sb.AppendLine(
                             $"  - `{typeName}.{memberName}` ({entry.Score:F0}%) - {Path.GetFileName(filePath)}{ScopeArgs.Label(entry.SourceName)}");
+                        shown++;
                     }
-                    if (groupItems.Count > perGroup)
-                        sb.AppendLine($"    ... +{groupItems.Count - perGroup} more");
                 }
+
+                // 折叠行放在整段末尾、按 TotalInScope 计数。原先每组各打一行、只数「取回的这批里
+                // 还剩几条」，而取回本身已被 limit.Scale(3) 砍过：method:CompTick 因此报 +25，
+                // 实际有 186 条。组内那行还漏了「怎么拿到更多」，调用方连能展开都不知道。
+                var memberFold = ScopeArgs.FoldLine(
+                    Math.Max(0, members.TotalInScope - shown),
+                    shown,
+                    members.TruncatedByScoreGap,
+                    truncatedByLimit: true,
+                    indent: "  ",
+                    limit: limit);
+                if (memberFold != null) sb.AppendLine(memberFold);
             }
         }
 
@@ -219,6 +233,7 @@ public class LocateTool : ITool
         if (!hasResults)
         {
             var message = new StringBuilder($"No results for '{rawQuery}' in scope '{scope.Expression}'.");
+            message.Append(ScopeArgs.RetryWiderNotice(scope));
             if (footer != null) message.Append(footer);
             message.Append(scopeNotice);
             message.Append("\n\nTry: partial names, query filters (type:, method:, field:, def:), or search_regex for patterns.");
@@ -235,50 +250,8 @@ public class LocateTool : ITool
         return Task.FromResult(new ToolResult(sb.ToString()));
     }
 
-    // 同一类型的短名与全名会各自命中，折叠成全名一条；折叠后仍要保留原来的来源与分数。
-    private static ScopedResult<string> CollapseTypeAliases(ScopedResult<string> types)
-    {
-        var fullNameByShortName = types.Items
-            .Where(t => t.Item.Contains('.'))
-            .GroupBy(
-                t => t.Item[(t.Item.LastIndexOf('.') + 1)..],
-                StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(
-                g => g.Key,
-                g => g
-                    .OrderByDescending(x => x.Score)
-                    .ThenByDescending(x => x.Item.Length)
-                    .First()
-                    .Item,
-                StringComparer.OrdinalIgnoreCase);
+    // MemberType 来自索引层，取值是 Method / Property / Field。直接加 's' 会写出 'Propertys'。
+    private static string Plural(string memberType) =>
+        memberType.EndsWith('y') ? $"{memberType[..^1]}ies" : $"{memberType}s";
 
-        var collapsed = types.Items
-            .Select(entry =>
-            {
-                var canonicalName = entry.Item.Contains('.')
-                    ? entry.Item
-                    : fullNameByShortName.TryGetValue(entry.Item, out var fullName)
-                        ? fullName
-                        : entry.Item;
-
-                return new { CanonicalName = canonicalName, entry.Score, entry.SourceName };
-            })
-            .GroupBy(x => x.CanonicalName, StringComparer.OrdinalIgnoreCase)
-            .Select(g =>
-            {
-                var best = g.OrderByDescending(x => x.Score).First();
-                return new ScopedEntry<string>(g.Key, best.Score, best.SourceName);
-            })
-            .OrderByDescending(x => x.Score)
-            .ThenBy(x => x.Item.Length)
-            .ToList();
-
-        var collapsedAway = types.Items.Count - collapsed.Count;
-
-        return new ScopedResult<string>(
-            collapsed,
-            Math.Max(collapsed.Count, types.TotalInScope - collapsedAway),
-            types.OutOfScope,
-            types.TruncatedByScoreGap);
-    }
 }

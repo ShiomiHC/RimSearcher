@@ -37,12 +37,14 @@ public sealed class ScopedResult<T>
         List<ScopedEntry<T>> items,
         int totalInScope,
         List<(string Source, int Count)> outOfScope,
-        bool truncatedByScoreGap)
+        bool truncatedByScoreGap,
+        bool truncatedByLimit = false)
     {
         Items = items;
         TotalInScope = totalInScope;
         OutOfScope = outOfScope;
         TruncatedByScoreGap = truncatedByScoreGap;
+        TruncatedByLimit = truncatedByLimit;
     }
 
     public List<ScopedEntry<T>> Items { get; }
@@ -53,6 +55,10 @@ public sealed class ScopedResult<T>
     public List<(string Source, int Count)> OutOfScope { get; }
 
     public bool TruncatedByScoreGap { get; }
+
+    // limit 是否真的砍掉了东西。断层收口砍掉的那部分调多大的 limit 都拿不回来（见 ScopeFilter），
+    // 两者不分开的话折叠行只能笼统地劝「pass limit:'all'」——照做了却一条也多不出来。
+    public bool TruncatedByLimit { get; }
 
     public int HiddenCount => Math.Max(0, TotalInScope - Items.Count);
 
@@ -134,6 +140,7 @@ public static class ScopeFilter
                 .Select(kv => (kv.Key, kv.Value))
                 .ToList();
 
-        return new ScopedResult<T>(items, ordered.Count, outOfScopeList, truncatedByScoreGap);
+        return new ScopedResult<T>(
+            items, ordered.Count, outOfScopeList, truncatedByScoreGap, truncatedByLimit: items.Count < cutoff);
     }
 }

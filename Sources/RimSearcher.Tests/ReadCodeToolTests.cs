@@ -122,4 +122,43 @@ public class ReadCodeToolTests : IDisposable
         // 夹住之后还剩内容，必须照常给出续读提示
         Assert.Contains("more lines available", result.Content);
     }
+
+    // 同名成员多命中时的分隔符只能放在两条之间。原先每条之后都追加一次，
+    // 正文以「还有下一条」结尾而后面什么也没有，读者只能读成「剩下的被截断了」。
+    [Fact]
+    public async Task MultipleMatchingMembers_DoNotEndWithADanglingSeparator()
+    {
+        var root = _workspace.Dir("Multi");
+        _workspace.WriteFile(Path.Combine("Multi", "Multi.cs"), """
+            namespace RimWorld
+            {
+                public class A { public void CompTick() { } }
+                public class B { public void CompTick() { } }
+            }
+            """);
+
+        var indexer = new SourceIndexer();
+        indexer.Scan(root);
+        indexer.FreezeIndex();
+
+        var tool = new ReadCodeTool(indexer, ScopeCatalog.Build([("vanilla", root)], null, null));
+        var result = await Run(tool, """{"path":"Multi","methodName":"CompTick"}""");
+
+        Assert.False(result.IsError);
+        Assert.Contains("Found 2 matching members", result.Content);
+        Assert.Equal(1, CountOccurrences(result.Content, "--- NEXT MATCH ---"));
+        // 多命中这一支原先整个不报文件名，只有单命中那支有
+        Assert.Contains("// File:", result.Content);
+    }
+
+    private static int CountOccurrences(string text, string needle)
+    {
+        var count = 0;
+        for (var i = text.IndexOf(needle, StringComparison.Ordinal); i >= 0;
+             i = text.IndexOf(needle, i + needle.Length, StringComparison.Ordinal))
+        {
+            count++;
+        }
+        return count;
+    }
 }

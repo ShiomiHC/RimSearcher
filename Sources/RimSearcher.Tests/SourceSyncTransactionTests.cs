@@ -154,7 +154,7 @@ public class SourceSyncTransactionTests : IDisposable
         var failure = Assert.Single(report.Failures);
         Assert.Contains("Beta.dll", failure.Failure);
         Assert.Contains("ILSpy blew up", failure.Failure);
-        Assert.Contains("回滚", failure.Describe());
+        Assert.Contains("rolled back", failure.Describe());
     }
 
     [Fact]
@@ -240,7 +240,7 @@ public class SourceSyncTransactionTests : IDisposable
         Assert.False(Directory.Exists(Staging));
 
         Assert.Empty(ReadState().Sources);
-        Assert.Contains("已回滚", Assert.Single(report.Failures).Failure);
+        Assert.Contains("rolled back", Assert.Single(report.Failures).Failure);
     }
 
     // 留底改名都没成功时绝不能动旧目录：此刻还没有任何退路
@@ -259,7 +259,7 @@ public class SourceSyncTransactionTests : IDisposable
 
         Assert.Equal("old-alpha", ReadSource(Target, "Alpha"));
         Assert.Empty(ReadState().Sources);
-        Assert.Contains("留底", Assert.Single(report.Failures).Failure);
+        Assert.Contains("rename the old source directory aside", Assert.Single(report.Failures).Failure);
     }
 
     // ---- 缺陷 2 续：逐文件复制的退化路径 ------------------------------------
@@ -314,7 +314,7 @@ public class SourceSyncTransactionTests : IDisposable
 
         var failure = Assert.Single(report.Failures).Failure;
         Assert.Contains("disk full", failure);
-        Assert.Contains("已回滚", failure);
+        Assert.Contains("rolled back", failure);
     }
 
     // ---- 缺陷 3：暂存/留底目录不得无条件删除 --------------------------------
@@ -336,7 +336,7 @@ public class SourceSyncTransactionTests : IDisposable
         Assert.Empty(ReadState().Sources);
 
         var failure = Assert.Single(report.Failures).Failure;
-        Assert.Contains("暂存目录不可用", failure);
+        Assert.Contains("staging directory unavailable", failure);
         Assert.Contains(Marker, failure);
     }
 
@@ -370,7 +370,7 @@ public class SourceSyncTransactionTests : IDisposable
         Assert.Equal("do not delete me", File.ReadAllText(precious));
         Assert.Equal("old-alpha", ReadSource(Target, "Alpha"));
         Assert.Empty(ReadState().Sources);
-        Assert.Contains("留底目录不可用", Assert.Single(report.Failures).Failure);
+        Assert.Contains("backup directory unavailable", Assert.Single(report.Failures).Failure);
     }
 
     // 上一次在「已改名留底、还没搬到位」之间被杀掉：旧源码只剩留底目录里那一份

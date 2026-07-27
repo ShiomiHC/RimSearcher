@@ -341,17 +341,35 @@ public class SourceIndexer
         return null;
     }
 
+    // 短名传进来时可能对应多个全名（不同命名空间的同名类，跨源时尤其常见）。原先只试
+    // fullNames 的第一个，而那份数组的次序由索引期的并发写入决定：碰上一个没有基类的同名类，
+    // 整条链就成了空——inspect 于是在 Outline 明明列着 `X : Y` 的同一次返回里不画继承图。
+    // 逐个试到第一条走得通的为止。
     public List<(string Child, string Parent)> GetInheritanceChain(string typeName)
     {
-        var chain = new List<(string Child, string Parent)>();
-        
-        string? current = ContainsType(typeName) ? typeName : null;
-        if (current == null && TryGetShortType(typeName, out var fullNames))
+        if (ContainsType(typeName))
         {
-            current = fullNames.FirstOrDefault();
+            var direct = WalkInheritanceChain(typeName);
+            if (direct.Count > 0) return direct;
         }
-        
-        if (current == null) return chain;
+
+        if (TryGetShortType(typeName, out var fullNames))
+        {
+            foreach (var fullName in fullNames)
+            {
+                var chain = WalkInheritanceChain(fullName);
+                if (chain.Count > 0) return chain;
+            }
+        }
+
+        return new List<(string Child, string Parent)>();
+    }
+
+    private List<(string Child, string Parent)> WalkInheritanceChain(string startType)
+    {
+        var chain = new List<(string Child, string Parent)>();
+
+        string? current = startType;
 
         while (_inheritanceMap.TryGetValue(current, out var parent))
         {
@@ -478,14 +496,71 @@ public class SourceIndexer
         }
 
         // 打分本来就是全量的，Take 只截断输出——故在过滤之前拿到的总数是真实命中数，零额外开销
-        var candidates = searchSet
+        var scored = searchSet
             .Select(name => new { Name = name, Score = FuzzyMatcher.CalculateFuzzyScore(name, query) })
             .Where(x => x.Score > 0)
+            .ToList();
+
+        // 第三级按名字排：前两级并列的条目之间，次序否则由 searchSet 的枚举顺序决定，
+        // 而它跟着索引期的并发写入走——同一个查询换个进程重跑，前十条就能换一批。
+        var candidates = CollapseNameAliases(scored.Select(x => (x.Name, x.Score)))
             .OrderByDescending(x => x.Score)
             .ThenBy(x => x.Name.Length)
+            .ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
             .Select(x => new ScoredCandidate<string>(x.Name, x.Score, FirstPathOfType(x.Name) ?? string.Empty));
 
         return ScopeFilter.Apply(candidates, scope, limit);
+    }
+
+    // 一个类型在索引里有短名与全名两条记录（见 _cachedAllTypeNames 的拼装），同一个查询会把
+    // 两条都命中。折叠必须发生在这里、而不是调用方那边：截断在 ScopeFilter 里就已经做了，
+    // 留到之后再去重，被 limit 砍掉的那一半重复就再也数不出来——「+N more」于是承诺一个
+    // limit:'all' 兑现不了的数字（实测 locate 'shield' 报 +83，展开后总共只有 51 条）。
+    //
+    // 保留短名而非全名：两种形态喂给 inspect / read_code 都认，短名更短，而且 inspect 靠
+    // 「模糊搜索能回一条与输入同形态的结果」来纠正调用方的错拼，折成全名会让那条路径失效。
+    private List<(string Name, double Score)> CollapseNameAliases(IEnumerable<(string Name, double Score)> scored)
+    {
+        var present = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var items = new List<(string Name, double Score)>();
+
+        foreach (var entry in scored)
+        {
+            present.Add(entry.Name);
+            items.Add(entry);
+        }
+
+        var best = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        var order = new List<string>();
+
+        foreach (var (name, score) in items)
+        {
+            var canonical = CanonicalAlias(name, present);
+            if (!best.TryGetValue(canonical, out var existing))
+            {
+                order.Add(canonical);
+                best[canonical] = score;
+            }
+            else if (score > existing)
+            {
+                best[canonical] = score;
+            }
+        }
+
+        return order.Select(name => (name, best[name])).ToList();
+    }
+
+    private string CanonicalAlias(string name, HashSet<string> present)
+    {
+        var dot = name.LastIndexOf('.');
+        if (dot < 0) return name;
+
+        // 短名指向多个类型时不折叠：那时短名代表的是「这批同名类型」，与其中任何一个都不等价，
+        // 合并会让「有两个不同的 Gizmo」这件事从结果里消失。
+        var shortName = name[(dot + 1)..];
+        return present.Contains(shortName) && TryGetShortType(shortName, out var owners) && owners.Count == 1
+            ? shortName
+            : name;
     }
 
     public ScopedResult<(string TypeName, string MemberName, string MemberType, string FilePath)> SearchMembersByKeywords(

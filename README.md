@@ -174,8 +174,11 @@ fileFilter: .cs
 **参数**
 - `sources`：逗号分隔的源名，限定操作范围；省略即覆盖全部可跟随源
 - `file`：`diff` 专用，取自 diff 列表的相对路径，给出后返回行级 unified diff
+- `method`（+ 可选 `className`）：`diff` 专用，与 `file` 同用，只 diff 该成员而不是整个文件
+- `granularity`：`diff` 专用，`files`（默认）只列变更文件路径，`members` 额外解析每个**列出的**文件，报出其中哪些方法/属性/字段变了
 - `version`：`diff` 专用，指定对比哪一代归档（默认最近一代）
-- `limit`：`diff` 专用，文件列表条数上限，或给了 `file` 时的 diff 行数上限
+- `limit`：`diff` 专用，文件列表条数上限，或给了 `file` 时的 diff 行数上限；`granularity="members"` 下它同时是解析预算
+- `offset`：`diff` 专用（不带 `file` 时），跳过前若干个变更文件，用于翻页；列表末尾会印出下一页该填的 `offset`
 
 **行为要点**
 - 反编译走进程内的 `ICSharpCode.Decompiler`，语言档位锁定 C# 9（Unity 2022.3 的实际水平），不依赖外部 `ilspycmd`
@@ -359,7 +362,7 @@ assemblies = 'C:\SteamLibrary\steamapps\common\RimWorld\RimWorldWin64_Data\Manag
 
 配好后跑一次 `sync_sources(action="sync")` 即可。目录在首次启动时就会建出来（空目录不影响索引缓存），产物写入后目录内会自动带上 `.gitignore` 和 `.rimsearcher-decompiled` 标记。
 
-字段说明（key 的大小写与 `_` / `-` 分隔不敏感，`source_history_depth`、`source_history_depth`、`source_history_depth` 等价）：
+字段说明（key 的大小写与 `_` / `-` 分隔不敏感，`source_history_depth`、`sourceHistoryDepth`、`source-history-depth`、`SourceHistoryDepth` 等价）：
 - `[[sources]]`: 一个块声明一个逻辑源的全部路径。`csharp` / `xml` / `assemblies` 三者都可以写单个字符串或字符串数组
   - `csharp`: 源码目录。**配了 `assemblies` 时，第一个 `csharp` 路径就是反编译输出目标**，其余视为附加的只读源码目录。整个 `csharp` 省略不写时，输出目标默认为 `<exe目录>/Decompiled/<源名>`
   - `xml`: 该源的 Def 目录，可多个（各 DLC 的 `Defs`、mod 的 `Defs` + `1.6/Defs`）
@@ -377,6 +380,8 @@ assemblies = 'C:\SteamLibrary\steamapps\common\RimWorld\RimWorldWin64_Data\Manag
 - `source_history_depth`: 保留几代反编译历史供 `diff` 使用，`0` 为不保留（默认）。每代只存本次被覆盖的旧文件（反向增量），一次游戏更新通常只动少量文件，占用远小于同等份数的完整副本
 - `game_version`: mod 多版本目录的匹配键（如 `"1.6"`）。留空则从 `assemblies` / `mod` 路径上溯查找 `Version.txt` 自动判定
 - `decompile_output_root`: 省略 `csharp` 时，默认输出目录的根。留空即 `<exe目录>/Decompiled`（与 `.cache/index` 同处一地）；写相对路径按 exe 目录解析。装在 `C:\Program Files` 之类不可写的位置时，改配一个可写目录
+- `share_index_host`: 多个 MCP client 各起一个进程时，是否让首个实例成为索引宿主、后续实例只做 stdio↔管道转发。默认 `true`；关掉的话每个进程各建一份索引（每份约 1 GB）。会合点按配置指纹划分，`skip_path_security` / `default_scope` / `scope_groups` 等会改变回答的项不同就不会共享同一个宿主
+- `idle_timeout_minutes`: 空闲这么久后自动退出，`0`（默认）为不启用。父进程守护恒开，故这只是额外的兜底闸
 
 **写错了会告诉你在第几行**：配置解析失败时，启动日志带的是 TOML 解析器的诊断，形如
 
@@ -460,7 +465,7 @@ mod 没适配当前版本（只有 `1.4/` 目录）时会回退到能用的最�
 
 选中多个源时，结果每行尾部标注来源（如 `[vanilla]`、`[Milira]`）。落在作用域**之外**的命中会在结果末尾汇总计数（`Outside scope 'base': Ratkin 8, Milira 1`），避免把「当前作用域搜不到」误读成「不存在」；`trace usages` 与 `search_regex` 因为要真读文件，不做这项统计，作用域对它们是硬过滤。
 
-`limit` 参数控制每段结果条数（默认 10），传 `"all"` 展开全部。低相关度结果会在出现明显分数断层时折叠，折叠行注明 `lower relevance`。
+`limit` 参数控制每段结果条数（默认 10），传 `"all"`（`0` 与负数同义）展开到服务端硬上限 200。低相关度结果会在出现明显分数断层时另行折叠，折叠行注明 `lower relevance`——**那一部分与 `limit` 无关，调多大都拿不回来**，只能靠更精确的查询词或换个过滤前缀。折叠行会分别说清是哪一种。
 
 3. 在 MCP 客户端中把 `RimSearcher.Server.exe` 注册为 **stdio MCP Server**，并设置环境变量 `RIMSEARCHER_CONFIG` 指向上一步的 `config.toml`。
 
@@ -538,7 +543,7 @@ mod 没适配当前版本（只有 `1.4/` 目录）时会回退到能用的最�
 ![启动成功示例](Image/Snipaste_2026-02-27_16-12-43.png)
 
 快速检查是否接入成功：
-- 客户端工具列表中能看到 `rimworld-searcher__locate`、`rimworld-searcher__inspect` 等 6 个工具。
+- 客户端工具列表中能看到 `rimworld-searcher__locate`、`rimworld-searcher__inspect` 等 7 个工具。
 - 执行一次 `locate`（例如 `def:Apparel_ShieldBelt`）能返回结果。
 
 ---

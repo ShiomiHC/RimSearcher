@@ -160,15 +160,46 @@ public class ScopeArgsTests
     [Fact]
     public void FoldLine_DoesNotSuggestAllWhenAlreadyExpanded()
     {
-        var result = new ScopedResult<string>(
-            [new ScopedEntry<string>("a", 100, null)], totalInScope: 5,
-            outOfScope: [], truncatedByScoreGap: false);
-
         var expanded = ScopeArgs.GetDisplayLimit(Args("""{"limit":"all"}"""));
-        var line = ScopeArgs.FoldLine(result, limit: expanded);
 
+        // 真的顶到了硬上限：这时才该说出那个数字
+        var atCap = new ScopedResult<string>(
+            Enumerable.Range(0, ScopeArgs.HardLimit)
+                .Select(i => new ScopedEntry<string>($"a{i}", 100, null)).ToList(),
+            totalInScope: ScopeArgs.HardLimit + 5,
+            outOfScope: [], truncatedByScoreGap: false, truncatedByLimit: true);
+
+        var atCapLine = ScopeArgs.FoldLine(atCap, limit: expanded);
+        Assert.DoesNotContain("limit:'all'", atCapLine);
+        Assert.Contains($"server cap {ScopeArgs.HardLimit}", atCapLine);
+
+        // 要过 'all' 但只回了 1 条：远没到上限，说「server cap 200 reached」是假话
+        var wellUnderCap = new ScopedResult<string>(
+            [new ScopedEntry<string>("a", 100, null)], totalInScope: 5,
+            outOfScope: [], truncatedByScoreGap: false, truncatedByLimit: true);
+
+        var underCapLine = ScopeArgs.FoldLine(wellUnderCap, limit: expanded);
+        Assert.DoesNotContain("limit:'all'", underCapLine);
+        Assert.DoesNotContain("server cap", underCapLine);
+    }
+
+    // 断层收口砍掉的那部分与 limit 无关（ScopeFilter 的 effectiveLimit = Min(limit, cutoff)）。
+    // 劝调用方 'all' 会让它照做一次，然后一条也多不出来。
+    [Fact]
+    public void FoldLine_DoesNotSuggestLimitWhenLimitCannotExpand()
+    {
+        var gapOnly = new ScopedResult<string>(
+            [new ScopedEntry<string>("a", 100, null)], totalInScope: 5,
+            outOfScope: [], truncatedByScoreGap: true, truncatedByLimit: false);
+
+        var line = ScopeArgs.FoldLine(gapOnly);
+
+        Assert.Contains("lower relevance", line);
         Assert.DoesNotContain("limit:'all'", line);
-        Assert.Contains($"server cap {ScopeArgs.HardLimit}", line);
+
+        // 断层收口砍掉的是低相关结果，够到它们要放宽查询而不是收窄——建议方向写反了照做也拿不到
+        Assert.Contains("broaden", line);
+        Assert.DoesNotContain("refine", line);
     }
 
     [Fact]

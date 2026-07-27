@@ -11,8 +11,9 @@ public class ListDirectoryTool : ITool
     // 白名单是什么。把范围写进 description，那一次越界失败就省了。
     public string Description =>
         "List the files and subdirectories of one absolute directory; subdirectory names are suffixed with '/'. "
-        + "The path must be a source path declared in config.toml or a directory below one — anything outside "
-        + "that whitelist is refused.";
+        + "The path must be one of the server's indexed source roots (the csharp/xml paths a config.toml source "
+        + "resolves to, including the decompile output directory it gets when csharp is omitted) or a directory "
+        + "below one — anything outside that whitelist is refused, the parent of a source root included.";
 
     public object JsonSchema => new
     {
