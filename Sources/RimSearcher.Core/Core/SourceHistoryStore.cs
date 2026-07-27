@@ -68,8 +68,11 @@ public sealed class SourceHistoryStore
 
     public bool Enabled => _depth > 0;
 
-    // 反编译产物已备在 stagingPath、尚未替换 sourcePath 时调用。
     // 归档旧文件并轮转，返回本次变更摘要（depth=0 时只算摘要不落盘）。
+    // 两个路径就是「旧的那棵树」和「新的那棵树」，归档的是旧树里被改写/删除的文件。
+    // 调用方可以在转正前传 (源码目录, 暂存区)，也可以在转正后传 (留底目录, 源码目录)；
+    // SourceSyncService 选的是后者——转正失败要回滚，先归档就会在历史里留下一版
+    // 根本没发生过的同步。
     public SourceChangeSet Capture(string sourceName, string sourcePath, string stagingPath)
     {
         var current = HashDirectory(sourcePath);
