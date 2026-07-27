@@ -53,10 +53,14 @@ public class SyncSourcesTool : ITool
             },
             sources = new
             {
-                type = "string",
+                // 数组写法也收（ToolArgs.GetStringList），schema 就得如实声明两种，
+                // 否则又是一处「描述允许、schema 禁止」的自相矛盾
+                type = new[] { "string", "array" },
+                items = new { type = "string" },
                 description =
-                    "Optional comma-separated source names to limit the operation, matching the 'name' of configured "
-                    + "C# sources — for a mod that is its name from About.xml. Omit to cover every followable source."
+                    "Optional source names to limit the operation, matching the 'name' of configured C# sources — "
+                    + "a mod without an explicit name in config.toml takes its name from About.xml. Either a "
+                    + "comma-separated string or an array of names. Omit to cover every followable source."
             },
             granularity = new
             {
@@ -138,11 +142,10 @@ public class SyncSourcesTool : ITool
     public async Task<ToolResult> ExecuteAsync(JsonElement args, CancellationToken cancellationToken, IProgress<double>? progress = null)
     {
         var action = (ToolArgs.GetOptionalString(args, "action", "mode", "op") ?? "check").ToLowerInvariant();
-        var rawSources = ToolArgs.GetOptionalString(args, "sources", "source", "scope", "name");
-
-        var only = string.IsNullOrWhiteSpace(rawSources)
-            ? null
-            : rawSources.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        // 不收 'scope'：这个工具按源名工作，没有 scope 概念，而 ServerInstructions 在教
+        // 别的工具用 scope:'all'。收了它，scope:'all' 会被当成一个不存在的源名而硬报错；
+        // 不收，它就是个被忽略的多余参数，请求照常按全量走。
+        var only = ToolArgs.GetStringList(args, "sources", "source", "name");
 
         // action 的合法性必须先判，再判「有没有可跟随的源」。反过来的话 action='typo' 会被
         // 下面那条早退吃掉：调用方拿到一份 config.toml 配置示例、isError=false，看不出自己
@@ -176,9 +179,36 @@ public class SyncSourcesTool : ITool
                 true);
         }
 
+        // 'sources' 里的名字必须当场核对。三条 action 原先各自静默处理认不出的名字：
+        // check 干脆忽略这个参数报全量，sync 逐个 continue 后报一份空结果，diff 走到
+        // 「一个源都没轮到」那支，回的是「还没有历史，先跑 action='sync'」——那句话会
+        // 把调用方推去做一次几分钟的重反编译，而它真正需要的只是改一个拼错的名字。
+        string? sourcesNotice = null;
+        if (only is { Length: > 0 })
+        {
+            var knownNames = followable.Select(entry => entry.Name).ToArray();
+            var unknown = only
+                .Where(name => !knownNames.Contains(name, StringComparer.OrdinalIgnoreCase))
+                .ToArray();
+
+            if (unknown.Length == only.Length)
+            {
+                return new ToolResult(
+                    $"No followable source matches {Quote(unknown)}. "
+                    + $"Followable sources: {string.Join(", ", knownNames)}.", true);
+            }
+
+            if (unknown.Length > 0)
+            {
+                sourcesNotice =
+                    $"\n\n_Ignored {Quote(unknown)}: no followable source by that name. "
+                    + $"Followable sources: {string.Join(", ", knownNames)}._";
+            }
+        }
+
         try
         {
-            return resolved switch
+            var result = resolved switch
             {
                 "sync" => await RunSyncAsync(only, cancellationToken),
                 "diff" => RunDiff(new DiffRequest(
@@ -191,8 +221,10 @@ public class SyncSourcesTool : ITool
                     ToolArgs.GetOptionalString(args, "className", "class", "type", "typeName"),
                     ToolArgs.GetOptionalString(args, "version", "versionId"),
                     ToolArgs.GetOptionalString(args, "granularity", "detail", "level"))),
-                _ => RunCheck()
+                _ => RunCheck(only)
             };
+
+            return sourcesNotice == null ? result : result with { Content = result.Content + sourcesNotice };
         }
         catch (OperationCanceledException)
         {
@@ -204,17 +236,32 @@ public class SyncSourcesTool : ITool
         }
     }
 
-    private ToolResult RunCheck()
+    private static string Quote(IEnumerable<string> names)
+        => string.Join(", ", names.Select(name => $"'{name}'"));
+
+    private ToolResult RunCheck(string[]? only)
     {
-        var report = _syncService.Check();
+        var report = _syncService.Check(only);
         var builder = new StringBuilder();
 
         builder.AppendLine($"Source check ({report.ElapsedMs} ms, game version {_syncService.GameVersion ?? "unknown"}):");
         foreach (var change in report.Changes) builder.AppendLine($"  {change.Describe()}");
 
+        // 结论的覆盖面必须跟着 only 走。sources 过滤生效之后，「全部可跟随的源都是最新的」
+        // 就成了一句拿 1/10 抽样下的全称断言——没被扫到的那 9 个源变了也不会有人发现。
+        // 有变更那支同理：不回填 sources 的话，照着提示跑 action='sync' 是全量重反编译。
+        var partial = only is { Length: > 0 };
+
+        // 回填的名字取自实际扫过的源，而不是 only 原样：only 允许夹着认不出的名字
+        // （那种情况另有 _Ignored ..._ 提示），照抄回去等于教调用方再传一次错的名字。
+        var checkedNames = string.Join(",", report.Changes.Select(change => change.SourceName));
+        var withSources = partial && checkedNames.Length > 0 ? $" and sources='{checkedNames}'" : string.Empty;
+
         builder.AppendLine(report.AnyChanges
-            ? "\nChanges detected. Run this tool again with action='sync' to re-decompile."
-            : "\nAll followable sources are up to date.");
+            ? $"\nChanges detected. Run this tool again with action='sync'{withSources} to re-decompile."
+            : partial
+                ? $"\nThe {report.Changes.Count} checked source(s) are up to date; the other followable sources were not checked."
+                : "\nAll followable sources are up to date.");
 
         return new ToolResult(builder.ToString().TrimEnd());
     }
@@ -302,6 +349,17 @@ public class SyncSourcesTool : ITool
 
             var shown = Math.Max(0, Math.Min(diff.Changes.Count - request.Offset, request.Limit));
             var remaining = diff.Changes.Count - request.Offset - shown;
+
+            // offset 翻过了整个变更集时一条也列不出来，而上面的表头照常写着「N added」——
+            // 不说一句的话，这份返回读起来就是「这一段没有变更」。
+            if (shown == 0 && diff.Changes.Count > 0)
+            {
+                var lastPage = Math.Max(0, ((diff.Changes.Count - 1) / request.Limit) * request.Limit);
+                builder.AppendLine(
+                    $"  (offset {request.Offset} is past the end of {diff.Changes.Count} changed file(s) — "
+                    + $"the last page starts at offset={lastPage})");
+            }
+
             if (remaining > 0)
             {
                 builder.AppendLine(

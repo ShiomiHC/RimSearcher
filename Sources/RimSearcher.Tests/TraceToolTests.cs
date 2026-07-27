@@ -46,6 +46,27 @@ public class TraceToolTests : IDisposable
         return result.Content;
     }
 
+    // 配额用尽后剩下的文件从 Parallel 委托头部直接 return，不走 finally 里的计数：
+    // 进度于是永远停在半路（实测 limit:5 时停在 1.3%），客户端的进度条挂在原地不动。
+    [Fact]
+    public async Task Usages_ReportsFullProgress_EvenWhenTheQuotaCutsTheScanShort()
+    {
+        var tool = BuildTool(200);
+        var reported = new List<double>();
+
+        using var args = JsonDocument.Parse("""{"symbol":"ZzTracedSymbol","mode":"usages","limit":5}""");
+        var result = await tool.ExecuteAsync(
+            args.RootElement, CancellationToken.None, new Progress<double>(value => reported.Add(value)));
+
+        Assert.False(result.IsError);
+        // Progress<double> 是异步投递的，末值可能还在路上——等它落地再断言
+        for (var i = 0; i < 50 && (reported.Count == 0 || reported[^1] < 1.0); i++)
+            await Task.Delay(10);
+
+        Assert.NotEmpty(reported);
+        Assert.Equal(1.0, reported[^1]);
+    }
+
     // 回归：曾写成 `limit == 0 ? 50 : Math.Max(limit, 50)`，显式的 limit:5 被抬到 50
     [Fact]
     public async Task Usages_HonorsAnExplicitSmallLimit()

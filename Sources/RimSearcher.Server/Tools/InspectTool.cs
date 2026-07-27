@@ -49,12 +49,13 @@ public class InspectTool : ITool
         "Def mode returns the XML merged down the whole ParentName chain — the complete effective definition, which no single XML file contains — plus the C# classes referenced from it. " +
         "Type mode returns the base-class chain (interfaces are not on it — use trace mode:'inheritors' for those) "
         + "and a member outline of fields, properties and methods; constructors, indexers and operators are not "
-        + "outlined but read_code can still read them by name. Method bodies come from read_code.";
+        + "outlined but read_code can still read them by name. Enums are outlined as their values, delegates as "
+        + "their signature. Method bodies come from read_code.";
 
     private static readonly ToolArgSpec ArgSpec = new(
         "rimworld-searcher__inspect",
         "name (an exact DefName or C# type name, e.g. 'Apparel_ShieldBelt' / 'CompShield'). Aliases accepted: query, defName, typeName, symbol.",
-        "name (required), scope.",
+        "name (required), defType (which def type to show when several share the name), scope.",
         "A 'def:'/'type:' prefix is stripped automatically. Matching ignores case but needs the whole name — partial names and typos do not resolve; use rimworld-searcher__locate to get the exact name first.");
 
     public object JsonSchema => new
@@ -67,6 +68,16 @@ public class InspectTool : ITool
                 type = "string",
                 minLength = 1,
                 description = "Complete DefName or C# type name. Examples: 'Apparel_ShieldBelt', 'CompShield'. Matching ignores case — the response echoes the index's canonical spelling — but partial names and typos do not resolve. Aliases 'query'/'defName'/'typeName' are also accepted; a 'def:'/'type:' prefix is stripped."
+            },
+            defType = new
+            {
+                type = "string",
+                minLength = 1,
+                description =
+                    "Optional: which def type to show when several defs share the name — 'Human' is a ThingDef, "
+                    + "a BodyDef and a HediffGiverSetDef at once. The response names every type sharing the name, "
+                    + "so a first call without this parameter tells you what to pass. Alias 'defTypeName' is also "
+                    + "accepted. This is a def type, not a C# type name — it does not narrow type mode."
             },
             scope = ScopeArgs.ScopeSchemaProperty(_scopeCatalog)
         },
@@ -108,7 +119,10 @@ public class InspectTool : ITool
 
         var sb = new StringBuilder();
 
-        var lookup = _defIndexer.Lookup(name, scope);
+        // 不收 'type' 作别名：本服务器里 'type' 到处都是 C# 类型名（read_code 的 className、
+        // inspect 自己 name 支持的 'type:' 前缀），收了它等于把一个常见的误用变成一条假告警。
+        var requestedDefType = ToolArgs.GetOptionalString(args, "defType", "defTypeName");
+        var lookup = _defIndexer.Lookup(name, scope, defType: requestedDefType);
         var def = lookup.Location;
         if (def != null)
         {
@@ -135,13 +149,40 @@ public class InspectTool : ITool
 
             sb.AppendLine($"File: `{def.FilePath}`");
 
-            // 同名 def 散在多处时必须说清取的是哪一个，否则读者会把这份 XML 当成唯一定义
+            // 同名 def 散在多处时必须说清取的是哪一个，否则读者会把这份 XML 当成唯一定义。
+            // 光说「有 3 条」没有可操作性：把类型一并列出来，调用方才看得出自己要的是不是这条
+            // （Human 在 vanilla 里就是 ThingDef / BodyDef / HediffGiverSetDef 各一条）。
             if (lookup.AmbiguousInScope)
-                sb.AppendLine($"_Note: {lookup.InScopeCount} defs share this name within scope '{scope.Expression}'; showing the highest-priority one._");
+            {
+                var types = lookup.InScopeDefTypes.Count > 0
+                    ? $" ({string.Join(", ", lookup.InScopeDefTypes)})"
+                    : string.Empty;
+                // 撞名的几条恰好是同一种类型时（两个 mod 各定义一条同名 ThingDef），
+                // defType 分不开它们，照着提示传回来会拿到逐字相同的结果。
+                var howToPickAnother = lookup.InScopeDefTypes.Count > 1
+                    ? "pass defType to pick another"
+                    : "narrow scope to a single source to pick another";
+                sb.AppendLine(
+                    $"_Note: {lookup.InScopeCount} defs share this name within scope '{scope.Expression}'{types}; "
+                    + $"showing the {def.DefType} one — {howToPickAnother}._");
+            }
+
+            // 点名的类型不存在却照常返回，读者会把手上这条当成自己要的那种
+            if (lookup.RequestedDefTypeUnavailable)
+            {
+                var available = lookup.InScopeDefTypes.Count > 0
+                    ? string.Join(", ", lookup.InScopeDefTypes)
+                    : def.DefType;
+                sb.AppendLine(
+                    $"_Note: no '{requestedDefType}' named '{def.DefName}' in scope '{scope.Expression}'; "
+                    + $"showing the {def.DefType} one instead (available: {available})._");
+            }
             if (lookup.OtherSources.Count > 0)
                 sb.AppendLine($"_Also defined in: {string.Join(", ", lookup.OtherSources)} (outside scope '{scope.Expression}')._");
 
-            var resolvedXml = await XmlInheritanceHelper.ResolveDefXmlElementAsync(name, _defIndexer, scope);
+            // 传 def 而不是 name：上面已经用 defType 消过歧，按名字重查会落回默认胜者，
+            // 表头说的是 ThingDef、正文却给出 BodyDef 的 XML。
+            var resolvedXml = await XmlInheritanceHelper.ResolveDefXmlElementAsync(def, _defIndexer, scope);
             if (resolvedXml == null)
             {
                 sb.AppendLine("\n**Resolved XML:** Failed to load Def XML");
@@ -181,14 +222,14 @@ public class InspectTool : ITool
                         el.Name.LocalName.EndsWith("Worker", StringComparison.OrdinalIgnoreCase))
                     {
                         var val = el.Value.Trim();
-                        if (!string.IsNullOrEmpty(val)) foundTypes.Add(val);
+                        if (LooksLikeTypeName(val)) foundTypes.Add(val);
                     }
 
                     var classAttr = el.Attribute("Class");
                     if (classAttr != null)
                     {
                         var val = classAttr.Value.Trim();
-                        if (!string.IsNullOrEmpty(val)) foundTypes.Add(val);
+                        if (LooksLikeTypeName(val)) foundTypes.Add(val);
                     }
                 }
 
@@ -277,6 +318,26 @@ public class InspectTool : ITool
             $"'{name}' not found. Use locate to find the exact name (matching ignores case, but the whole name is required)." +
             scopeNotice,
             true);
+    }
+
+    // 「以 Class / Worker 结尾的标签，其值是个类型名」是启发式，而 RimWorld 的 XML 里
+    // 一样有以 Worker 结尾却装着数字的标签——技能需求 `<BasicWorker>3</BasicWorker>` 就让
+    // Linked C# Types 里凭空多出一条 `3 (not indexed)`。类型名至少得是个 C# 标识符：
+    // 首字符是字母或下划线，其余只能是标识符字符、命名空间点号或泛型记号。
+    internal static bool LooksLikeTypeNameForTests(string value) => LooksLikeTypeName(value);
+
+    private static bool LooksLikeTypeName(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return false;
+        if (!char.IsLetter(value[0]) && value[0] != '_') return false;
+
+        foreach (var ch in value)
+        {
+            if (char.IsLetterOrDigit(ch) || ch is '_' or '.' or '<' or '>' or ',' or '+' or ' ') continue;
+            return false;
+        }
+
+        return true;
     }
 
     // 索引查找一律 OrdinalIgnoreCase，于是 inspect('compshield') 命中 CompShield 却把标题写成

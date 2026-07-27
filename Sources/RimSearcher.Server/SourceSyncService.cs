@@ -126,7 +126,7 @@ public sealed class SourceSyncService
     // 只读检查：扫描程序集、对比上次状态，不做任何反编译。实测 475 个 dll 约 235 ms。
     // 刻意不参与 _syncLock：它是启动探测的入口，被一次正在跑的同步挡住只会让启动变慢，
     // 而它读到的「旧状态 + 新磁盘」最坏也就是多报一次有变更。
-    public SyncReport Check()
+    public SyncReport Check(IReadOnlyCollection<string>? onlySources = null)
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var state = LoadState();
@@ -134,6 +134,12 @@ public sealed class SourceSyncService
 
         foreach (var entry in FollowableSources)
         {
+            // 过滤与 SyncCore 用同一套判据。原先这里没有参数，check 于是永远报全部源——
+            // 调用方传了 sources 却拿到一份全量报告，看不出自己的筛选根本没生效。
+            if (onlySources != null && onlySources.Count > 0
+                && !onlySources.Contains(entry.Name, StringComparer.OrdinalIgnoreCase))
+                continue;
+
             changes.Add(Inspect(entry, state));
         }
 

@@ -54,17 +54,33 @@ public class ListDirectoryToolTests : IDisposable
 
         Assert.Equal(1000, CountEntries(content));
         Assert.Contains("more entries available", content);
+
+        // 顶到服务端上限时「increase limit」是一条死路：limit 已经无法再高
+        Assert.DoesNotContain("increase limit", content);
+        Assert.Contains("server cap", content);
     }
 
     [Fact]
-    public async Task Limit_BelowOne_StillReturnsSomethingUseful()
+    public async Task UnderTheCap_TheHintStillPointsAtLimit()
+    {
+        var root = BuildTree(50);
+
+        var content = await ListAsync(root, 7);
+
+        Assert.Contains("increase limit", content);
+    }
+
+    [Fact]
+    public async Task Limit_BelowOne_MeansNoCap_LikeEveryOtherTool()
     {
         var root = BuildTree(5);
 
-        // 夹紧下界之前这里会走成 Take(1)：回一条外加「还有更多」，看着像目录几乎是空的
+        // limit<=0 在本服务器其余工具里一律是「别截断」。这里曾夹到 1，于是回一条外加
+        // 「还有更多」，读起来像这个目录几乎是空的——而调用方要的恰恰是全部。
         var content = await ListAsync(root, 0);
 
-        Assert.Equal(1, CountEntries(content));
+        Assert.Equal(5, CountEntries(content));
+        Assert.DoesNotContain("more entries available", content);
     }
 
     [Fact]

@@ -23,9 +23,16 @@ public static class XmlInheritanceHelper
     /// Resolves XML inheritance and returns the merged XElement directly.
     /// Returns null if the def is not found or loading fails.
     /// </summary>
-    public static async Task<XElement?> ResolveDefXmlElementAsync(string defName, DefIndexer indexer, ScopeSelection scope)
+    public static Task<XElement?> ResolveDefXmlElementAsync(string defName, DefIndexer indexer, ScopeSelection scope)
+        => ResolveDefXmlElementAsync(indexer.Lookup(defName, scope).Location, indexer, scope);
+
+    /// <summary>
+    /// 同上，但起点由调用方给定。挑好了 def 的调用方必须走这条：按名字重查一次会落回
+    /// 默认胜者，defType 消歧挑中的那条就被丢掉了，返回里表头与正文来自两条不同的 def。
+    /// </summary>
+    public static async Task<XElement?> ResolveDefXmlElementAsync(DefLocation? target, DefIndexer indexer, ScopeSelection scope)
     {
-        var targetLoc = indexer.Lookup(defName, scope).Location;
+        var targetLoc = target;
         if (targetLoc == null) return null;
 
         var hierarchy = new Stack<XElement>();

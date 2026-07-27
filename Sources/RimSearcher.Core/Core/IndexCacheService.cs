@@ -9,10 +9,11 @@ namespace RimSearcher.Core;
 public static class IndexCacheService
 {
     // 缓存结构版本号（2 = def 索引一名多值；3 = inheritors 收全部直接超类型，含接口；
-    // 4 = 快照多带一份 DefInjected 译文）。
+    // 4 = 快照多带一份 DefInjected 译文；5 = 类型索引收 enum 与 delegate、成员索引收枚举取值）。
     // 字段形状没变但内容语义变了：旧缓存里的 InheritorsMap 只有基类型列表第一项，
     // 直接复用会让「按接口查实现」继续返回空，故必须让旧缓存失效重建。
-    public const int SchemaVersion = 4;
+    // 同理，v4 的缓存里一个 enum 也没有，不改这个数就等于修了解析却仍从旧快照加载。
+    public const int SchemaVersion = 5;
 
     private const string ManifestFileName = "manifest.json";
     private const string IndexFileName = "index.bin";

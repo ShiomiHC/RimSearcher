@@ -78,7 +78,27 @@ public static class RoslynHelper
                     g.SelectMany(x => x.SuperTypes).Distinct(StringComparer.Ordinal).ToArray()))
                 .ToList();
 
+            // enum 与 delegate 同样是「按名字能查到的类型」，但它们不是 TypeDeclarationSyntax，
+            // 原先整类缺席：inspect('ShieldState') 回「不存在」，read_code(extractClass) 回
+            // 「不是类」，两条提示互相指，而 ShieldState.cs 就在索引里躺着。
+            // 继承信息留空——enum 的 `: byte` 是底层类型不是基类，delegate 没有基类型列表。
+            foreach (var declaration in root.DescendantNodes().OfType<EnumDeclarationSyntax>())
+                inheritance.Add(new TypeInheritance(GetFullTypeName(declaration), null, []));
+
+            foreach (var declaration in root.DescendantNodes().OfType<DelegateDeclarationSyntax>())
+                inheritance.Add(new TypeInheritance(GetFullTypeName(declaration), null, []));
+
             var members = new List<(string TypeName, string MemberName, string MemberType)>();
+
+            // enum 的取值就是它唯一的成员，也是调用方查 enum 时真正想要的东西
+            // （「ShieldState 有哪几个值」）。不收的话 locate 只能靠文件名兜底。
+            foreach (var enumDeclaration in root.DescendantNodes().OfType<EnumDeclarationSyntax>())
+            {
+                var enumName = GetFullTypeName(enumDeclaration);
+                foreach (var value in enumDeclaration.Members)
+                    members.Add((enumName, value.Identifier.Text, "EnumMember"));
+            }
+
             foreach (var type in types)
             {
                 var typeName = GetFullTypeName(type);
@@ -153,20 +173,39 @@ public static class RoslynHelper
         return simple.Length >= 2 && simple[0] == 'I' && char.IsUpper(simple[1]);
     }
 
-    private static string GetFullTypeName(TypeDeclarationSyntax typeDeclaration)
+    // 接收 SyntaxNode 而不是 TypeDeclarationSyntax：enum 与 delegate 也要能算出全名，
+    // 而它们不在那条继承线上（EnumDeclarationSyntax 只是 BaseTypeDeclarationSyntax）。
+    private static string GetFullTypeName(SyntaxNode declaration)
     {
         var nameStack = new Stack<string>();
-        nameStack.Push(typeDeclaration.Identifier.Text);
-        var parent = typeDeclaration.Parent;
+        nameStack.Push(IdentifierOf(declaration));
+        var parent = declaration.Parent;
         while (parent != null)
         {
-            if (parent is TypeDeclarationSyntax p) nameStack.Push(p.Identifier.Text);
+            if (parent is BaseTypeDeclarationSyntax p) nameStack.Push(p.Identifier.Text);
             else if (parent is NamespaceDeclarationSyntax ns) nameStack.Push(ns.Name.ToString());
             else if (parent is FileScopedNamespaceDeclarationSyntax fns) nameStack.Push(fns.Name.ToString());
             parent = parent.Parent;
         }
         return string.Join(".", nameStack);
     }
+
+    private static string IdentifierOf(SyntaxNode declaration) => declaration switch
+    {
+        BaseTypeDeclarationSyntax baseType => baseType.Identifier.Text,
+        DelegateDeclarationSyntax del => del.Identifier.Text,
+        _ => string.Empty
+    };
+
+    // 大纲与类体提取共用的「一个文件里全部可按名字查到的类型声明」。
+    // BaseTypeDeclarationSyntax 覆盖 class/struct/interface/record/enum，delegate 单列。
+    private static IEnumerable<SyntaxNode> AllTypeDeclarations(SyntaxNode root)
+        => root.DescendantNodes()
+            .Where(node => node is BaseTypeDeclarationSyntax or DelegateDeclarationSyntax);
+
+    private static bool MatchesTypeName(SyntaxNode declaration, string name)
+        => GetFullTypeName(declaration).Equals(name, StringComparison.OrdinalIgnoreCase)
+           || IdentifierOf(declaration).Equals(name, StringComparison.OrdinalIgnoreCase);
 
     public static async Task<SourceLookupResult> GetClassOutlineAsync(string filePath, string? targetTypeName = null)
     {
@@ -185,17 +224,49 @@ public static class RoslynHelper
         var root = await tree.GetRootAsync();
 
         var sb = new StringBuilder();
-        var types = root.DescendantNodes().OfType<TypeDeclarationSyntax>();
 
-        foreach (var type in types)
+        foreach (var declaration in AllTypeDeclarations(root))
         {
-            var fullName = GetFullTypeName(type);
-            if (!string.IsNullOrEmpty(targetTypeName) &&
-                !fullName.Equals(targetTypeName, StringComparison.OrdinalIgnoreCase) &&
-                !type.Identifier.Text.Equals(targetTypeName, StringComparison.OrdinalIgnoreCase))
+            var fullName = GetFullTypeName(declaration);
+            if (!string.IsNullOrEmpty(targetTypeName) && !MatchesTypeName(declaration, targetTypeName))
             {
                 continue;
             }
+
+            // enum / delegate 没有成员大纲可列：enum 的取值就是它的全部内容，delegate 只有签名。
+            // 两者都在这里就地渲染完，免得下面按 TypeDeclarationSyntax 取成员的代码空转。
+            if (declaration is EnumDeclarationSyntax enumDeclaration)
+            {
+                var underlying = enumDeclaration.BaseList?.Types.FirstOrDefault()?.Type.ToString();
+                sb.AppendLine($"Enum: {fullName}{(underlying != null ? " : " + underlying : string.Empty)}");
+                foreach (var value in enumDeclaration.Members)
+                {
+                    var assigned = value.EqualsValue != null ? $" {value.EqualsValue}" : string.Empty;
+                    sb.AppendLine($"  Value: {value.Identifier.Text}{assigned}");
+                }
+                sb.AppendLine();
+                continue;
+            }
+
+            if (declaration is DelegateDeclarationSyntax delegateDeclaration)
+            {
+                var parameters = string.Join(", ",
+                    delegateDeclaration.ParameterList.Parameters.Select(FormatParameter));
+
+                // 类型参数表必须跟着一起渲染，否则返回类型和形参里的 T/F 在整行里没有声明处，
+                // 照抄编译不过；而且 AccessTools.FieldRef<in T, F> 与 FieldRef<F> 这类
+                // 只有 arity 不同的重载会渲染成一模一样的一行，调用方分不出自己要的是哪个。
+                var delegateTypeParams = delegateDeclaration.TypeParameterList?.ToString() ?? string.Empty;
+                var constraints = string.Concat(
+                    delegateDeclaration.ConstraintClauses.Select(clause => " " + clause.ToString().Trim()));
+
+                sb.AppendLine(
+                    $"Delegate: {delegateDeclaration.ReturnType} {fullName}{delegateTypeParams}({parameters}){constraints}");
+                sb.AppendLine();
+                continue;
+            }
+
+            if (declaration is not TypeDeclarationSyntax type) continue;
 
             string kind = type switch
             {
@@ -295,13 +366,12 @@ public static class RoslynHelper
         {
             var (node, kind) = candidates[i];
             var lineSpan = node.GetLocation().GetLineSpan();
-            var parentType = node.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault();
 
             // 分隔符只放在两条之间。原先每条之后都追加一次，末尾那个「还有下一条」的
             // 标记后面什么也没有，读者只能读成「剩下的被截断了」。
             if (i > 0) sb.AppendLine("\n// --- NEXT MATCH ---\n");
 
-            sb.AppendLine($"// {kind} in {(parentType != null ? GetFullTypeName(parentType) : "Unknown")}");
+            sb.AppendLine($"// {kind} in {OwnerTypeName(node)}");
             sb.AppendLine($"// Starts at line: {lineSpan.StartLinePosition.Line + 1}");
             sb.AppendLine(node.ToFullString());
         }
@@ -322,19 +392,21 @@ public static class RoslynHelper
         var sb = new StringBuilder();
         foreach (var (node, kind) in candidates.OrderBy(c => MemberSortKey(c.Node), StringComparer.Ordinal))
         {
-            var parentType = node.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault();
-            sb.AppendLine($"// {kind} in {(parentType != null ? GetFullTypeName(parentType) : "Unknown")}");
+            sb.AppendLine($"// {kind} in {OwnerTypeName(node)}");
             sb.AppendLine(node.ToFullString());
         }
         return SourceLookupResult.Ok(sb.ToString());
     }
 
-    private static string MemberSortKey(SyntaxNode node)
+    // 成员的宿主类型要按 BaseTypeDeclarationSyntax 取：enum 取值也是成员，而 enum 声明
+    // 不是 TypeDeclarationSyntax，按后者取会把宿主判成 Unknown。
+    private static string OwnerTypeName(SyntaxNode node)
     {
-        var parentType = node.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault();
-        var owner = parentType != null ? GetFullTypeName(parentType) : "Unknown";
-        return owner + ParameterSignature(node);
+        var parentType = node.Ancestors().OfType<BaseTypeDeclarationSyntax>().FirstOrDefault();
+        return parentType != null ? GetFullTypeName(parentType) : "Unknown";
     }
+
+    private static string MemberSortKey(SyntaxNode node) => OwnerTypeName(node) + ParameterSignature(node);
 
     private static string ParameterSignature(SyntaxNode node) => node switch
     {
@@ -355,7 +427,7 @@ public static class RoslynHelper
         bool TypeFilter(SyntaxNode node)
         {
             if (string.IsNullOrEmpty(typeName)) return true;
-            var parentType = node.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault();
+            var parentType = node.Ancestors().OfType<BaseTypeDeclarationSyntax>().FirstOrDefault();
             return parentType != null && (
                 parentType.Identifier.Text.Equals(typeName, StringComparison.OrdinalIgnoreCase) ||
                 GetFullTypeName(parentType).Equals(typeName, StringComparison.OrdinalIgnoreCase));
@@ -384,6 +456,33 @@ public static class RoslynHelper
         foreach (var op in root.DescendantNodes().OfType<OperatorDeclarationSyntax>()
                      .Where(o => o.OperatorToken.Text.Equals(memberName, StringComparison.OrdinalIgnoreCase) && TypeFilter(o)))
             candidates.Add((op, "Operator"));
+
+        // enum 取值现在既进成员索引（locate 会推荐 `EnumMembers: ShieldState.Resetting`）
+        // 又进成员级 diff（列出后明说「pass 'method' with one of these names」），
+        // 这里不认它的话，两处给出的下一步都会回一句「找不到这个成员」。
+        foreach (var value in root.DescendantNodes().OfType<EnumMemberDeclarationSyntax>()
+                     .Where(v => v.Identifier.Text.Equals(memberName, StringComparison.OrdinalIgnoreCase) && TypeFilter(v)))
+            candidates.Add((value, "EnumMember"));
+
+        // 字段与事件同理，而且这条死路一直都在：locate 早就在回 `Fields: CompShield.energy`，
+        // 成员级 diff 也早就在列字段。一条声明可以带多个变量（`public int a, b;`），
+        // 单个变量没有可独立成立的原文，故整条声明一起给。
+        foreach (var field in root.DescendantNodes().OfType<FieldDeclarationSyntax>()
+                     .Where(f => f.Declaration.Variables.Any(
+                                     v => v.Identifier.Text.Equals(memberName, StringComparison.OrdinalIgnoreCase))
+                                 && TypeFilter(f)))
+            candidates.Add((field, "Field"));
+
+        foreach (var evt in root.DescendantNodes().OfType<EventFieldDeclarationSyntax>()
+                     .Where(e => e.Declaration.Variables.Any(
+                                     v => v.Identifier.Text.Equals(memberName, StringComparison.OrdinalIgnoreCase))
+                                 && TypeFilter(e)))
+            candidates.Add((evt, "Event"));
+
+        // add/remove 访问器写法的事件是另一种语法节点
+        foreach (var evt in root.DescendantNodes().OfType<EventDeclarationSyntax>()
+                     .Where(e => e.Identifier.Text.Equals(memberName, StringComparison.OrdinalIgnoreCase) && TypeFilter(e)))
+            candidates.Add((evt, "Event"));
 
         return candidates;
     }
@@ -423,6 +522,15 @@ public static class RoslynHelper
             }
         }
 
+        // enum 的取值同样是成员：不收的话，一个只改了枚举值的文件在成员粒度 diff 里
+        // 会被报成「改在任何成员声明之外」，而它明明有确切的改动位置。
+        foreach (var enumDeclaration in root.DescendantNodes().OfType<EnumDeclarationSyntax>())
+        {
+            var owner = GetFullTypeName(enumDeclaration);
+            foreach (var value in enumDeclaration.Members)
+                results.TryAdd($"{owner}.{value.Identifier.Text}", value.ToFullString());
+        }
+
         return results;
     }
 
@@ -454,10 +562,10 @@ public static class RoslynHelper
         var tree = CSharpSyntaxTree.ParseText(code);
         var root = await tree.GetRootAsync();
 
-        var typeMatch = root.DescendantNodes().OfType<TypeDeclarationSyntax>()
-            .FirstOrDefault(t =>
-                t.Identifier.Text.Equals(className, StringComparison.OrdinalIgnoreCase) ||
-                GetFullTypeName(t).Equals(className, StringComparison.OrdinalIgnoreCase));
+        // enum / delegate 也走这条路：调用方拿着一个正确的类型名过来，回「不是类」
+        // 而不给正文，等于让它去 inspect 再问一遍——而那边原先同样查不到。
+        var typeMatch = AllTypeDeclarations(root)
+            .FirstOrDefault(declaration => MatchesTypeName(declaration, className));
 
         if (typeMatch == null) return SourceLookupResult.Failed(SourceLookupStatus.TargetNotFound);
 

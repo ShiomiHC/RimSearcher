@@ -14,16 +14,32 @@ public sealed class DefLookup
 {
     public static readonly DefLookup NotFound = new(null, 0, Array.Empty<string>());
 
-    public DefLookup(DefLocation? location, int inScopeCount, IReadOnlyList<string> otherSources)
+    public DefLookup(
+        DefLocation? location,
+        int inScopeCount,
+        IReadOnlyList<string> otherSources,
+        IReadOnlyList<string>? inScopeDefTypes = null,
+        bool requestedDefTypeUnavailable = false)
     {
         Location = location;
         InScopeCount = inScopeCount;
         OtherSources = otherSources;
+        InScopeDefTypes = inScopeDefTypes ?? Array.Empty<string>();
+        RequestedDefTypeUnavailable = requestedDefTypeUnavailable;
     }
 
     public DefLocation? Location { get; }
     public int InScopeCount { get; }
     public IReadOnlyList<string> OtherSources { get; }
+
+    // scope 内全部同名 def 的类型（含选中的那个）。「Human 有三条」这句话本身没有可操作性，
+    // 而「ThingDef / BodyDef / HediffGiverSetDef 各一条，现在给的是后者」才让调用方看得出
+    // 自己要的是不是这一条。
+    public IReadOnlyList<string> InScopeDefTypes { get; }
+
+    // 调用方点名了一种 defType，而 scope 内这个名字下没有那一种。返回的是别的类型那条，
+    // 不说一句的话它会被当成「就是我要的那种」。
+    public bool RequestedDefTypeUnavailable { get; }
 
     public bool Found => Location != null;
 
@@ -395,7 +411,10 @@ public class DefIndexer
 
     // preferSameSourceAs：解析父链时传子 def 的文件路径，让 Milira 的 def 优先接上 Milira 自己的
     // 抽象基，而不是撞名的 vanilla 同名 def。
-    public DefLookup Lookup(string name, ScopeSelection scope, string? preferSameSourceAs = null)
+    // defType：调用方指定要哪一种同名 def（'ThingDef'）。指定了却没有那一种时不报空——
+    // 仍给出选中的那条，由 RequestedDefTypeUnavailable 让上层说清「你要的那种没有」。
+    public DefLookup Lookup(
+        string name, ScopeSelection scope, string? preferSameSourceAs = null, string? defType = null)
     {
         var byDefName = GetLocations(_frozenDefNameIndex, _defNameIndex, name);
         var byParentName = GetLocations(_frozenParentNameIndex, _parentNameIndex, name);
@@ -419,10 +438,33 @@ public class DefIndexer
 
         var preferredSource = preferSameSourceAs != null ? scope.SourceNameOf(preferSameSourceAs) : null;
 
-        var best = inScope
+        // 指定了 defType 就只在那一种里挑；一种都没有时保持原样，交给上层解释。
+        // 收窄只影响「挑哪一条」，计数与类型清单仍按 scope 内的全部同名 def 算——
+        // 那两个数回答的是「这个名字在 scope 内有几条、都是些什么」，与本次挑法无关。
+        var candidates = inScope;
+        var requestedDefTypeUnavailable = false;
+        if (!string.IsNullOrWhiteSpace(defType))
+        {
+            var narrowed = inScope
+                .Where(x => string.Equals(x.Loc.DefType, defType, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (narrowed.Count > 0) candidates = narrowed;
+            else requestedDefTypeUnavailable = true;
+        }
+
+        // 同一个源里的同名 def（Human 就是 ThingDef / BodyDef / HediffGiverSetDef 各一条）
+        // 排到这里 Rank 完全相同，而 OrderBy 是稳定排序——胜负于是落在 `all` 的顺序上，
+        // 那份顺序来自并发扫描写入的 ConcurrentBag（或快照里的数组）。结果是重建一次索引
+        // inspect('Human') 就换一条 def 返回，同一个问题在不同时刻给不同答案。
+        // 补一组与索引构建过程无关的确定性键：路径、类型、名字。
+        var best = candidates
             .OrderByDescending(x => preferredSource != null
                 && string.Equals(scope.SourceNameOf(x.Loc.FilePath), preferredSource, StringComparison.OrdinalIgnoreCase))
             .ThenBy(x => x.Rank)
+            .ThenBy(x => x.Loc.FilePath, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(x => x.Loc.DefType, StringComparer.Ordinal)
+            .ThenBy(x => x.Loc.DefName, StringComparer.Ordinal)
             .First().Loc;
 
         var outOfScopeSources = all
@@ -431,7 +473,14 @@ public class DefIndexer
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        return new DefLookup(best, inScope.Count, outOfScopeSources);
+        var inScopeDefTypes = inScope
+            .Select(x => x.Loc.DefType)
+            .Where(type => !string.IsNullOrEmpty(type))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(type => type, StringComparer.Ordinal)
+            .ToList();
+
+        return new DefLookup(best, inScope.Count, outOfScopeSources, inScopeDefTypes, requestedDefTypeUnavailable);
     }
 
     private static IReadOnlyList<DefLocation> GetLocations(

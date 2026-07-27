@@ -96,6 +96,26 @@ public static class ToolArgs
         };
     }
 
+    // 列表语义的参数要按列表收全。单值位的 CoerceToString 对数组只取首元素，用在这里会把
+    // ["vanilla","Milira"] 静默截成 vanilla——而参数说明写着 "comma-separated names"，
+    // 客户端把它序列化成数组是很自然的写法，截断后调用方拿到的是一份少一半的结果且无任何提示。
+    public static string[]? GetStringList(JsonElement args, params string[] names)
+    {
+        if (!TryGetElement(args, out var value, names)) return null;
+
+        IEnumerable<string?> items = value.ValueKind == JsonValueKind.Array
+            ? value.EnumerateArray().Select(CoerceToString)
+            : [CoerceToString(value)];
+
+        // 数组的每个元素自身仍可能是逗号串（["vanilla,Milira"]），两种写法都要认
+        var result = items
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .SelectMany(item => item!.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .ToArray();
+
+        return result.Length > 0 ? result : null;
+    }
+
     // 单值位上收到数组时取首元素——调用方偶发把标量包成数组
     private static string? CoerceToString(JsonElement value)
     {

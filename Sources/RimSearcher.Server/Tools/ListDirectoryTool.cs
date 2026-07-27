@@ -29,9 +29,12 @@ public class ListDirectoryTool : ITool
             limit = new
             {
                 type = "integer",
-                minimum = 1,
+                // 不声明 minimum：服务端认的是 `<= 0`（与 ScopeArgs 的同类参数一致），
+                // 声明 minimum=0 会让照着描述传 -1 的调用在 client 侧就被校验挡下。
                 maximum = 1000,
-                description = "Maximum entries to return. If exceeded, output includes a 'more entries available' hint.",
+                description =
+                    "Maximum entries to return (default 100, server cap 1000). 0 or a negative value means "
+                    + "no cap below that server cap. If entries are left out, the output says so.",
                 @default = 100
             }
         },
@@ -52,9 +55,12 @@ public class ListDirectoryTool : ITool
     public Task<ToolResult> ExecuteAsync(JsonElement args, CancellationToken cancellationToken, IProgress<double>? progress = null)
     {
         var path = ToolArgs.GetRequiredString(args, ArgSpec, "path", "query", "directory", "dir");
-        // 下界一并夹住：limit<=0 原先会走成 Take(1)，回一条目录项外加一句「还有更多」，
-        // 看着像目录几乎是空的。
-        int limit = Math.Clamp(ToolArgs.GetInt(args, 100, "limit", "maxResults", "count"), 1, MaxEntries);
+
+        // limit<=0 与本服务器其余工具同义：不是「要 0 条」，而是「别截断」，故放到上限。
+        // 夹到 1 曾经也算「夹住了下界」，但结果是一条目录项加一句「还有更多」，读起来像
+        // 这个目录几乎是空的——而调用方的本意恰恰是要全部。
+        var requested = ToolArgs.GetInt(args, 100, "limit", "maxResults", "count");
+        int limit = requested <= 0 ? MaxEntries : Math.Min(requested, MaxEntries);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -68,13 +74,19 @@ public class ListDirectoryTool : ITool
                 .ToList();
 
             var hasMore = entries.Count > limit;
+            var atServerCap = limit >= MaxEntries;
             var displayedEntries = entries.Take(limit)
                 .Select(e => Path.GetFileName(e) + (Directory.Exists(e) ? "/" : ""));
 
             var result = $"`{path}`\n" + string.Join("\n", displayedEntries);
+            // 顶到服务端上限时「increase limit」是一条死路——limit 已经无法再高。
+            // 这一支现在很容易走到：limit<=0 直接就把上限用满。
             if (hasMore)
             {
-                result += $"\n... [more entries available, increase limit]";
+                result += atServerCap
+                    ? $"\n... [more entries available; {MaxEntries} is the server cap — list a deeper subdirectory, "
+                      + "or use search_regex to filter this one by name/extension]"
+                    : "\n... [more entries available, increase limit]";
             }
             return Task.FromResult(new ToolResult(result));
         }

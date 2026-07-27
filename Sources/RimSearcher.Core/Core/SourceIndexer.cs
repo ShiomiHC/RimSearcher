@@ -749,6 +749,10 @@ public class SourceIndexer
             }
         });
 
+        // 命中上限后剩下的文件从委托头部直接 return，不经过 finally 的计数，进度于是停在
+        // 半路。扫描到此已经结束，补一次满格，别让调用方的进度条挂着。
+        progress?.Report(1.0);
+
         var finalCount = Interlocked.CompareExchange(ref globalCount, 0, 0);
         var wasTruncated = Interlocked.CompareExchange(ref truncatedFlag, 0, 0) == 1;
         return (results.Take(maxResults).ToList(),

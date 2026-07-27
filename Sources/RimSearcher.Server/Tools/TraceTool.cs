@@ -213,6 +213,11 @@ public class TraceTool : ITool
                 }
             });
 
+            // 配额用尽后剩下的文件是从 Parallel 的委托头部直接 return 的，不走 finally 里的
+            // 计数，进度于是永远停在半路（实测 limit:5 时停在 1.3%）。扫描已经结束了，
+            // 补一次满格，免得调用方那边的进度条挂在原地。
+            progress?.Report(1.0);
+
             // 扫盘分支是硬 scope 过滤、不统计落选来源，故这条提示是它唯一的「别处也许有」的痕迹
             if (results.Count == 0)
                 return new ToolResult(
