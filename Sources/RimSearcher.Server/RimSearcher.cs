@@ -431,11 +431,16 @@ public sealed class RimSearcher
                     // 这类时效提示，而「索引根本是空的」与时效无关，任何工具都得照说
                     var health = _startupNotice.Consume();
 
+                    // 认不出的参数键被静默丢弃时，返回是一份逐字正常的结果，调用方会以为
+                    // 自己加的过滤/分页生效了。参数错误本身已由 ToolArgumentException 兜住，
+                    // 这里补的是「名字对不上、但服务照跑」的那一类。
+                    var unknownKeys = ToolArgs.UnknownKeyNotice(tool, arguments);
+
                     await SendResponseAsync(id, new
                     {
                         content = new[]
                         {
-                            new { type = "text", text = result.Content + health + notice }
+                            new { type = "text", text = result.Content + health + notice + unknownKeys }
                         },
                         isError = result.IsError
                     });

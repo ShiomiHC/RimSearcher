@@ -25,6 +25,8 @@ public class LocateTool : ITool
 
     public string Name => "rimworld-searcher__locate";
 
+    public IEnumerable<string> ExtraAcceptedKeys => ["query", "name", "symbol", "search", "term", "maxResults", "count", "scopes", "source", "sources", "mod", "mods", "in"];
+
     public string Description =>
         "Fuzzy name lookup: turns a partial or misspelled name into the exact C# type / member / XML def name that other tools require — the only tool that accepts approximate input. " +
         "Results are split into C# Types, Members, XML Defs and Content Matches (defs matched on a field value rather " +

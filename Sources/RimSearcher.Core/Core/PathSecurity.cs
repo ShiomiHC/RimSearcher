@@ -39,6 +39,13 @@ public static class PathSecurity
         }
     }
 
+    // 越界拒绝原先只复述规则（「已索引源根及其下级」），一个具体路径都不给，而调用方读不到
+    // config.toml——冷启动时它没有任何合法输入可用，只能改去调别的工具、从结果里的绝对路径
+    // 反推源根。把这份清单暴露出来，好让拒绝消息与工具描述都能报出真实可用的根。
+    public static IReadOnlyList<string> Roots => AllowedRoots;
+
+    public static bool Enabled => _enabled;
+
     public static bool IsPathSafe(string requestedPath)
     {
         if (!_enabled) return true;

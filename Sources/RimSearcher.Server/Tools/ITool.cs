@@ -24,5 +24,11 @@ public interface ITool
     // 'rimworld-searcher__xxx' 只是把同一个前缀重复 7 遍。
     string Title => Name.Contains("__") ? Name[(Name.LastIndexOf("__", StringComparison.Ordinal) + 2)..] : Name;
 
+    // schema 里没声明、但各 getter 实际吸收的别名。声明出来是为了让「未知参数名」的检查
+    // 不把合法别名误报成被忽略——服务端对参数名极宽容（别名 + 大小写/下划线归一），调用方
+    // 由此学到「这台服务器对名字不挑」，于是把别的工具的参数类推过来是必然行为，而那些键
+    // 一律被静默丢弃、返回却逐字正常，调用方会以为自己加的过滤/分页生效了。
+    IEnumerable<string> ExtraAcceptedKeys => [];
+
     Task<ToolResult> ExecuteAsync(JsonElement arguments, CancellationToken cancellationToken, IProgress<double>? progress = null);
 }

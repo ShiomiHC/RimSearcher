@@ -32,6 +32,8 @@ public class TraceTool : ITool
 
     public string Name => "rimworld-searcher__trace";
 
+    public IEnumerable<string> ExtraAcceptedKeys => ["query", "name", "typeName", "symbolName", "traceMode", "direction", "maxResults", "scopes", "source", "sources", "mod", "mods", "in"];
+
     public string Description =>
         "Cross-reference analysis for C# and XML. 'inheritors' lists the transitive subclass/implementor tree — " +
         "every descendant, not just direct ones, each tagged with its depth — and expands to the server cap by " +

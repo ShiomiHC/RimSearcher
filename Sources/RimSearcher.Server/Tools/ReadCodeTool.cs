@@ -22,6 +22,8 @@ public class ReadCodeTool : ITool
 
     public string Name => "rimworld-searcher__read_code";
 
+    public IEnumerable<string> ExtraAcceptedKeys => ["query", "file", "filePath", "fileName", "method", "member", "memberName", "class", "type", "typeName", "start", "offset", "lines", "count", "maxResults", "scopes", "source", "sources", "mod", "mods", "in"];
+
     // 三种模式的优先级此前只写在下面几个 if 的先后顺序里，调用方同时传 extractClass 和
     // methodName 时无从知道哪个生效，只能从返回内容倒推。契约就得写在 description 里。
     public string Description =>

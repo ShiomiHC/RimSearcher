@@ -179,6 +179,37 @@ public static class ToolArgs
         if (args.ValueKind != JsonValueKind.Object) return [];
         return args.EnumerateObject().Select(p => p.Name).ToList();
     }
+
+    // 认不出的参数键必须回上去说一声。错误方向与 sync_sources 已经修过的 granularity 拼错
+    // 完全同型：返回是一份逐字正常、看不出任何异常的结果，而调用方据此得出的结论是
+    // 「我按 X 过滤后就这些」，实际是未过滤的全量前 N 条。提示只在差集非空时出现，
+    // 健康调用零开销。
+    public static string? UnknownKeyNotice(ITool tool, JsonElement args)
+    {
+        var received = ReceivedKeys(args);
+        if (received.Count == 0) return null;
+
+        var accepted = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var name in SchemaPropertyNames(tool.JsonSchema)) accepted.Add(NormalizeKey(name));
+        foreach (var name in tool.ExtraAcceptedKeys) accepted.Add(NormalizeKey(name));
+
+        // schema 读不出属性时不做判断——宁可不提示，也不能把合法参数报成被忽略
+        if (accepted.Count == 0) return null;
+
+        var unknown = received.Where(k => !accepted.Contains(NormalizeKey(k))).ToArray();
+        if (unknown.Length == 0) return null;
+
+        return $"\n\n_Ignored unknown parameter(s): {string.Join(", ", unknown.Select(k => $"'{k}'"))}. "
+            + $"{tool.Name} accepts: {string.Join(", ", SchemaPropertyNames(tool.JsonSchema))}._";
+    }
+
+    private static IReadOnlyList<string> SchemaPropertyNames(object schema)
+    {
+        var element = JsonSerializer.SerializeToElement(schema);
+        if (element.ValueKind != JsonValueKind.Object) return [];
+        if (!element.TryGetProperty("properties", out var props) || props.ValueKind != JsonValueKind.Object) return [];
+        return props.EnumerateObject().Select(p => p.Name).ToList();
+    }
 }
 
 // 每个工具声明一份，用于把「缺参」变成一条可照着改的说明

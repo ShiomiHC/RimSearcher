@@ -53,11 +53,12 @@ public class ListDirectoryToolTests : IDisposable
         var content = await ListAsync(root, 999999);
 
         Assert.Equal(1000, CountEntries(content));
-        Assert.Contains("more entries available", content);
 
-        // 顶到服务端上限时「increase limit」是一条死路：limit 已经无法再高
-        Assert.DoesNotContain("increase limit", content);
+        // 顶到服务端上限时「increase limit」是一条死路：limit 已经无法再高。
+        // 唯一能把这个目录枚举完的是 offset，脚注必须把下一页的值直接算出来。
+        Assert.DoesNotContain("larger limit", content);
         Assert.Contains("server cap", content);
+        Assert.Contains("pass offset=1000", content);
     }
 
     [Fact]
@@ -67,7 +68,8 @@ public class ListDirectoryToolTests : IDisposable
 
         var content = await ListAsync(root, 7);
 
-        Assert.Contains("increase limit", content);
+        Assert.Contains("larger limit", content);
+        Assert.Contains("pass offset=7", content);
     }
 
     [Fact]
@@ -91,7 +93,7 @@ public class ListDirectoryToolTests : IDisposable
         var content = await ListAsync(root, 7);
 
         Assert.Equal(7, CountEntries(content));
-        Assert.Contains("more entries available", content);
+        Assert.Contains("43 more", content);
     }
 
     [Fact]

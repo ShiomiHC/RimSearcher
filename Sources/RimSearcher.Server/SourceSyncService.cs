@@ -123,6 +123,12 @@ public sealed class SourceSyncService
 
     public IReadOnlyList<SourcePathEntry> FollowableSources => _sources.Followable;
 
+    // 「已配置但不可跟随」（没配 assemblies，比如 vanilla）与「源名压根不存在」原先返回逐字
+    // 相同的错误，而两者的修复动作完全不同：前者要往 [[sources]] 补一条 assemblies 路径，
+    // 后者只是把名字打对。要分开说就得能看到**全部**已配置源，不只是可跟随的那些。
+    public IReadOnlyList<string> AllSourceNames =>
+        _sources.AllSources.Select(s => s.Name).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
     // 只读检查：扫描程序集、对比上次状态，不做任何反编译。实测 475 个 dll 约 235 ms。
     // 刻意不参与 _syncLock：它是启动探测的入口，被一次正在跑的同步挡住只会让启动变慢，
     // 而它读到的「旧状态 + 新磁盘」最坏也就是多报一次有变更。

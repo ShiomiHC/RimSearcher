@@ -48,6 +48,8 @@ public class InspectTool : ITool
 
     public string Name => "rimworld-searcher__inspect";
 
+    public IEnumerable<string> ExtraAcceptedKeys => ["query", "defName", "typeName", "symbol", "defTypeName", "xmlStart", "startLine", "maxResults", "count", "scopes", "source", "sources", "mod", "mods", "in"];
+
     public string Description =>
         "Full detail for one exactly-named def or C# type; no fuzzy matching. " +
         "Def mode returns the XML merged down the whole ParentName chain — the complete effective definition, which no single XML file contains — plus the C# classes referenced from it. " +

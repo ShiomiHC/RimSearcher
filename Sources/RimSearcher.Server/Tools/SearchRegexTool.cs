@@ -24,6 +24,8 @@ public class SearchRegexTool : ITool
 
     public string Name => "rimworld-searcher__search_regex";
 
+    public IEnumerable<string> ExtraAcceptedKeys => ["query", "regex", "fileExtension", "extension", "ext", "caseInsensitive", "maxResults", "count", "scopes", "source", "sources", "mod", "mods", "in"];
+
     public string Description =>
         ".NET regex search across indexed C# and XML files, with an optional extension filter (e.g. '.cs') and " +
         "scope. Results are grouped by file, showing at most 3 preview lines per file and at most 50 files; both " +

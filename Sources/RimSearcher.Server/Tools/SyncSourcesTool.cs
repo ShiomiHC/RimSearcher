@@ -19,6 +19,8 @@ public class SyncSourcesTool : ITool
 
     public string Name => "rimworld-searcher__sync_sources";
 
+    public IEnumerable<string> ExtraAcceptedKeys => ["mode", "op", "detail", "level", "versionId", "path", "filePath", "method", "member", "memberName", "class", "type", "typeName", "maxResults", "scopes", "source", "mod", "mods", "in"];
+
     // 本工具会调 IndexRebuilder 拿写锁，被读锁挡住就是自己等自己
     public bool BypassIndexGate => true;
 
@@ -99,7 +101,10 @@ public class SyncSourcesTool : ITool
             },
             version = new
             {
-                type = "string",
+                // 描述第一句就是「A number counts backwards」，照字面传 JSON 数字的调用会被
+                // 会校验 inputSchema 的 client 在发出前挡下——服务端其实两种都收。同文件里
+                // limit / sources 早已按「两种都收就两种都声明」对齐，只有这里漏了。
+                type = new[] { "string", "integer" },
                 description =
                     "For action='diff': which archived version to compare the current sources against. A number counts "
                     + "backwards — 1 (or -1) is the most recent archived version, 2 the one before it; out-of-range "
@@ -209,18 +214,38 @@ public class SyncSourcesTool : ITool
                 .Where(name => !knownNames.Contains(name, StringComparer.OrdinalIgnoreCase))
                 .ToArray();
 
+            // 「已配置但不可跟随」必须与「名字不存在」分开说。vanilla 是 config 里真实存在的
+            // 源（每个查询工具的 scope 描述都写着 sources: vanilla, …），只是没配 assemblies；
+            // 两者报同一句话，会让调用方向用户断言「vanilla 不是已配置的源」——与它刚从 scope
+            // 里读到的清单直接矛盾。两种情形的修复动作也完全不同：一个补 assemblies 路径，
+            // 一个改拼写。
+            var allNames = _syncService.AllSourceNames;
+            var configuredButNotFollowable = unknown
+                .Where(name => allNames.Contains(name, StringComparer.OrdinalIgnoreCase))
+                .ToArray();
+
             if (unknown.Length == only.Length)
             {
                 return new ToolResult(
-                    $"No followable source matches {Quote(unknown)}. "
-                    + $"Followable sources: {string.Join(", ", knownNames)}.", true);
+                    configuredButNotFollowable.Length == unknown.Length
+                        ? $"{Quote(unknown)} {(unknown.Length == 1 ? "is a configured source" : "are configured sources")} "
+                          + "with no 'assemblies' path, so sync_sources cannot follow "
+                          + $"{(unknown.Length == 1 ? "it" : "them")}. Add assemblies = '<path to the Managed folder>' "
+                          + "to the matching [[sources]] block in config.toml. "
+                          + $"Followable right now: {string.Join(", ", knownNames)}."
+                        : $"No configured source matches {Quote(unknown.Except(configuredButNotFollowable, StringComparer.OrdinalIgnoreCase).ToArray())}. "
+                          + $"Configured sources: {string.Join(", ", allNames)} "
+                          + $"(followable: {string.Join(", ", knownNames)}).", true);
             }
 
             if (unknown.Length > 0)
             {
                 sourcesNotice =
-                    $"\n\n_Ignored {Quote(unknown)}: no followable source by that name. "
-                    + $"Followable sources: {string.Join(", ", knownNames)}._";
+                    $"\n\n_Ignored {Quote(unknown)}: "
+                    + (configuredButNotFollowable.Length == unknown.Length
+                        ? "configured, but with no 'assemblies' path to follow."
+                        : "no configured source by that name.")
+                    + $" Followable sources: {string.Join(", ", knownNames)}._";
             }
         }
 
@@ -725,11 +750,19 @@ public class SyncSourcesTool : ITool
             var files = report.Outcomes.Sum(o => o.FileCount);
             builder.AppendLine($"\nDecompiled {succeeded}/{report.Outcomes.Count} assemblies, {files} source files.");
 
+            // 指向 diff 之前先看历史开没开。source_history_depth=0 时这次同步根本没归档，
+            // action='diff' 是**确定性**报错——而正文刚说有几百个文件变更，调用方追查不到
+            // 反过来还会怀疑这次 sync 是不是真的成功了。
+            var diffHint = _syncService.History.Enabled
+                ? " — use action='diff' for the file list."
+                : " — no archive was kept (source_history_depth is 0), so action='diff' cannot list these; "
+                  + "set it to 1 or more in config.toml before the next sync.";
+
             foreach (var changeSet in report.FileChanges.Where(c => c.Any))
             {
                 builder.AppendLine(
                     $"  {changeSet.SourceName}: {changeSet.Added} added, {changeSet.Modified} modified, "
-                    + $"{changeSet.Removed} removed — use action='diff' for the file list.");
+                    + $"{changeSet.Removed} removed{diffHint}");
             }
 
             foreach (var failure in report.Outcomes.Where(o => !o.Success).Take(10))
