@@ -16,6 +16,14 @@
              是 Split('.') 逐段 int.Parse 的，撞上后缀会抛异常并被 catch 吞掉 —— 结果不是报错，
              而是更新提示从此永久静默。运行时那侧已经会切掉后缀，这里再从源头关掉，两道都不留。 -->
         <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+
+        <!-- 依赖锁。直接依赖本来就都是精确版本号，不会漂；会漂的是传递依赖——
+             Roslyn 拉进来的那串 System.* 走的是版本范围，NuGet 取「最低满足」，
+             而这个值随源上有什么包而变。反编译器和 Roslyn 的行为直接决定索引出来的
+             源码长什么样，这类漂移不该是静默的。
+             有了锁文件，restore 的 locked-mode 才真的构成约束：没有锁文件时它什么都不检查。
+             代价：动依赖时要连锁文件一起提交，忘了就构建红，那正是它的作用。 -->
+        <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     </PropertyGroup>
 
     <!-- 发布产物不带符号：单文件 exe 旁边多一个 pdb 很难看，程序集里也不该留下构建机的绝对路径。

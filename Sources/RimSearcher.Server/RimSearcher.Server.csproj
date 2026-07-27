@@ -12,7 +12,15 @@
         <SelfContained>false</SelfContained>
         <PublishReadyToRun>true</PublishReadyToRun>
         <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-        
+
+        <!-- PublishSingleFile 与 PublishReadyToRun 都要求 RID，而这里过去一个都没写——
+             RID 只活在某个人的命令行 `-r win-x64` 里，仓库本身没有任何记录。换台机器、
+             或者忘了带参数，发布就要么直接失败、要么产出个不是单文件的东西，谁也说不清
+             上一版正式产物是怎么构建出来的。写进项目，发布命令就不再需要口口相传。
+             只做 win-x64：IndexHost 的索引共享依赖 Windows 命名信号量，非 Windows 平台
+             本来就走 standalone 降级路径，没有第二个目标平台需要支持。 -->
+        <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+
         <PublishDir>..\Publish\</PublishDir>
 
         <!-- 只拦「往发布目录拷本项目的符号」这一步，不影响构建输出目录里的 pdb，所以留在无条件组里。
