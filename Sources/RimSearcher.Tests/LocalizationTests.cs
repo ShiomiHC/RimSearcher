@@ -453,7 +453,117 @@ public class LocalizationTests : IDisposable
         Assert.Empty(LocalizationLayout.Resolve(sources, null));
     }
 
+    // ── 缓存指纹：什么时候该重建 ──────────────────────────────────────
+
+    // 汉化包更新既不改路径集合也不动任何 Def，只有内容摘要能看出来
+    [Fact]
+    public void ForCache_FollowsLanguagePackContentChanges()
+    {
+        var packPath = Path.Combine(_workspace.Root, "Mod", "Languages", Chinese);
+        var relative = Path.Combine("Mod", "Languages", Chinese, "DefInjected", "ThingDef", "A.xml");
+        _workspace.WriteFile(relative, "<LanguageData><A.label>甲</A.label></LanguageData>");
+
+        var sources = SourcesWithLanguagePack(packPath);
+        var before = IndexFingerprints.ForCache(EmptySources, verifySourceFreshness: true, sources);
+
+        _workspace.WriteFile(relative, "<LanguageData><A.label>乙</A.label></LanguageData>");
+
+        Assert.NotEqual(before, IndexFingerprints.ForCache(EmptySources, verifySourceFreshness: true, sources));
+    }
+
+    // tar 是文件不是目录，内容摘要要能对文件取到 大小|修改时间
+    [Fact]
+    public void ForCache_FollowsArchiveChanges()
+    {
+        var archive = WriteArchivePack("Data", Chinese, new Dictionary<string, string>
+        {
+            ["DefInjected/ThingDef/A.xml"] = "<LanguageData><A.label>甲</A.label></LanguageData>"
+        });
+
+        var sources = SourcesWithLanguagePack(archive.Path, isArchive: true);
+        var before = IndexFingerprints.ForCache(EmptySources, verifySourceFreshness: true, sources);
+
+        WriteArchiveAt(archive.Path, new Dictionary<string, string>
+        {
+            ["DefInjected/ThingDef/A.xml"] = "<LanguageData><A.label>乙</A.label></LanguageData>",
+            ["DefInjected/ThingDef/B.xml"] = "<LanguageData><B.label>丙</B.label></LanguageData>"
+        });
+
+        Assert.NotEqual(before, IndexFingerprints.ForCache(EmptySources, verifySourceFreshness: true, sources));
+    }
+
+    // 换语言 = 换语言包路径，路径段无条件进指纹，故不依赖 freshness 校验
+    [Fact]
+    public void ForCache_FollowsLanguageSwitch_EvenWithoutFreshnessVerification()
+    {
+        var chinese = SourcesWithLanguagePack(Path.Combine(_workspace.Root, "Mod", "Languages", Chinese));
+        var english = SourcesWithLanguagePack(Path.Combine(_workspace.Root, "Mod", "Languages", "English"));
+
+        Assert.NotEqual(
+            IndexFingerprints.ForCache(EmptySources, verifySourceFreshness: false, chinese),
+            IndexFingerprints.ForCache(EmptySources, verifySourceFreshness: false, english));
+    }
+
+    [Fact]
+    public void ForCache_FollowsLocalizationBeingTurnedOff()
+    {
+        var sources = SourcesWithLanguagePack(Path.Combine(_workspace.Root, "Mod", "Languages", Chinese));
+
+        Assert.NotEqual(
+            IndexFingerprints.ForCache(EmptySources, verifySourceFreshness: false, sources),
+            IndexFingerprints.ForCache(EmptySources, verifySourceFreshness: false, []));
+    }
+
+    // description 开关决定的是快照里存了什么，不只是怎么显示：只收 label 那次建出来的快照
+    // 根本没有 description，不区分就会命中它，于是开了开关也永远看不到描述。
+    [Fact]
+    public void ForCache_FollowsDescriptionToggle()
+    {
+        var sources = SourcesWithLanguagePack(Path.Combine(_workspace.Root, "Mod", "Languages", Chinese));
+
+        Assert.NotEqual(
+            IndexFingerprints.ForCache(EmptySources, verifySourceFreshness: false, sources, localizationDescription: false),
+            IndexFingerprints.ForCache(EmptySources, verifySourceFreshness: false, sources, localizationDescription: true));
+    }
+
+    // 没有语言包时这个开关无事可做，不该白白劈开缓存
+    [Fact]
+    public void ForCache_IgnoresDescriptionToggle_WhenLocalizationDisabled()
+    {
+        Assert.Equal(
+            IndexFingerprints.ForCache(EmptySources, verifySourceFreshness: false, [], localizationDescription: false),
+            IndexFingerprints.ForCache(EmptySources, verifySourceFreshness: false, [], localizationDescription: true));
+    }
+
+    // 语言不同的两个 client 不能共用宿主——译名直接进工具输出
+    [Fact]
+    public void ForHost_SeparatesDifferentLanguages()
+    {
+        var sources = new ResolvedSources([], []);
+
+        Assert.NotEqual(
+            IndexFingerprints.ForHost(new AppConfig { Localization = "ChineseSimplified" }, sources),
+            IndexFingerprints.ForHost(new AppConfig { Localization = "English" }, sources));
+
+        Assert.NotEqual(
+            IndexFingerprints.ForHost(new AppConfig { Localization = "ChineseSimplified" }, sources),
+            IndexFingerprints.ForHost(new AppConfig { Localization = AppConfig.LocalizationOff }, sources));
+
+        Assert.NotEqual(
+            IndexFingerprints.ForHost(
+                new AppConfig { Localization = "ChineseSimplified", LocalizationDescription = false }, sources),
+            IndexFingerprints.ForHost(
+                new AppConfig { Localization = "ChineseSimplified", LocalizationDescription = true }, sources));
+    }
+
     // ── 辅助 ─────────────────────────────────────────────────────────
+
+    private static readonly ResolvedSources EmptySources = new([], []);
+
+    private static IReadOnlyList<LocalizationSource> SourcesWithLanguagePack(string path, bool isArchive = false)
+        => [new LocalizationSource(
+            isArchive ? LanguagePack.ForArchive(path) : LanguagePack.ForDirectory(path), 0, 0)];
+
 
     private LanguagePack WriteDirectoryPack(
         string modDir, string language, string defType, string fileName, string content)
@@ -487,6 +597,9 @@ public class LocalizationTests : IDisposable
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
                 File.WriteAllText(path, content);
             }
+
+            // CreateFromDirectory 不覆盖已有文件，而「模拟汉化包更新」正要就地重写同一个 tar
+            if (File.Exists(archivePath)) File.Delete(archivePath);
 
             TarFile.CreateFromDirectory(staging, archivePath, includeBaseDirectory: false);
         }

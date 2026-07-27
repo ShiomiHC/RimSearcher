@@ -42,16 +42,23 @@ public static class IndexFingerprints
     // 「同一批路径、不同索引内容」的情形——缓存必须区分，宿主会合点则不该被它挤开。
     // localizationSources 是本轮真正选中的语言包（目录或 tar）。它们必须进这个键：汉化包更新
     // 既不改路径集合也不动任何 Def，不纳入的话磁盘上那份带旧译名的索引会一直命中。
+    // localizationDescription 也要进：它决定的是快照里存了什么，不只是怎么显示。只收 label 的
+    // 那次建出来的快照根本没有 description 字段，不区分的话把这个开关打开会命中那份缓存，
+    // 于是描述永远不出现——而用户看到的是「配了没用」。
     public static string ForCache(
         ResolvedSources sources,
         bool verifySourceFreshness,
-        IReadOnlyList<LocalizationSource>? localizationSources = null)
+        IReadOnlyList<LocalizationSource>? localizationSources = null,
+        bool localizationDescription = false)
         => IndexCacheService.ComputeConfigFingerprint(
             sources.Csharp.Select(entry => entry.Path),
             sources.Xml.Select(entry => entry.Path),
             includeContentDigest: verifySourceFreshness,
             excludedPaths: sources.Shadowed,
-            localizationPaths: localizationSources?.Select(source => source.Pack.Path));
+            localizationPaths: localizationSources?.Select(source => source.Pack.Path),
+            localizationVariant: localizationSources is { Count: > 0 }
+                ? (localizationDescription ? "label+description" : "label")
+                : null);
 
     // 规范化是这里的正事：同义写法必须收敛到同一行，否则本该共享的两个进程各建一份 1 GB
     // 索引，而这种失效是静默的——两边都工作正常，只是内存翻倍。

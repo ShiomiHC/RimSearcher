@@ -58,12 +58,17 @@ public static class IndexCacheService
     // 会继续命中。
     // localizationPaths：本轮实际选中的语言包（目录或 tar）。必须进内容摘要——汉化包更新既不改
     // 路径集合也不动 Defs，不纳入的话磁盘上那份带旧译文的索引会一直命中且毫无提示。
+    //
+    // localizationVariant：从同一批语言包里取了哪些字段。它决定快照的内容而不只是显示方式——
+    // 只收 label 的那次建出来的快照里根本没有 description，不区分的话，把
+    // localization_description 从 false 改成 true 会命中那份缓存，于是描述永远不出现。
     public static string ComputeConfigFingerprint(
         IEnumerable<string> csharpPaths,
         IEnumerable<string> xmlPaths,
         bool includeContentDigest = true,
         IEnumerable<string>? excludedPaths = null,
-        IEnumerable<string>? localizationPaths = null)
+        IEnumerable<string>? localizationPaths = null,
+        string? localizationVariant = null)
     {
         var normalizedCsharp = NormalizePaths(csharpPaths);
         var normalizedXml = NormalizePaths(xmlPaths);
@@ -96,9 +101,13 @@ public static class IndexCacheService
             }
         }
 
-        if (normalizedLocalization.Count > 0)
+        if (normalizedLocalization.Count > 0 || !string.IsNullOrEmpty(localizationVariant))
         {
             builder.AppendLine("[localization]");
+
+            if (!string.IsNullOrEmpty(localizationVariant))
+                builder.AppendLine($"variant:{localizationVariant}");
+
             foreach (var path in normalizedLocalization)
             {
                 builder.AppendLine(path);

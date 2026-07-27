@@ -91,7 +91,11 @@ await IndexBootstrapper.PopulateAsync(
     appConfig.LocalizationDescription,
     cacheDirectory,
     cacheDirectoryUsable,
-    IndexFingerprints.ForCache(resolvedSources, appConfig.VerifySourceFreshness, localizationSources));
+    IndexFingerprints.ForCache(
+        resolvedSources,
+        appConfig.VerifySourceFreshness,
+        localizationSources,
+        appConfig.LocalizationDescription));
 
 var syncService = new SourceSyncService(appConfig, resolvedSources, cacheDirectory);
 var indexRebuilder = new IndexRebuilder(
