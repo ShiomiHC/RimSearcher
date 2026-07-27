@@ -47,6 +47,12 @@ public sealed class SourceHistoryStore
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
+    // Core 不认识 Server 的 ServerLogger，又不该为了几条降级提示反向依赖它。
+    // 留个钩子由宿主进程接上（见 Program.cs）；没接就等同于原来的静默。
+    public static Action<string, string>? OnDiagnostic;
+
+    private static void Warn(string message) => OnDiagnostic?.Invoke(message, "warning");
+
     private readonly string _root;
     private readonly int _depth;
 
@@ -216,7 +222,11 @@ public sealed class SourceHistoryStore
                 var hash = Convert.ToHexString(SHA256.HashData(stream));
                 results[Path.GetRelativePath(root, file)] = hash;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // 读不到的文件在哈希表里缺席，下次 diff 会把它当成「新增」——是噪音不是丢数据
+                Warn($"SourceHistory: could not hash '{file}' | reason={ex.Message}");
+            }
         }
 
         return results;
@@ -234,7 +244,11 @@ public sealed class SourceHistoryStore
                 var directory = Path.Combine(sourceRoot, oldest.Id);
                 if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // 索引里已经把它移出去了，磁盘上却还在——history 目录会无声地持续膨胀
+                Warn($"SourceHistory: could not delete rotated version '{oldest.Id}' | reason={ex.Message}");
+            }
         }
     }
 
@@ -267,7 +281,11 @@ public sealed class SourceHistoryStore
                 if (loaded != null) return loaded;
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            // 空索引意味着已归档的那几代版本从此不可见，磁盘上却还占着地方
+            Warn($"SourceHistory: could not read history index for '{sourceName}' | reason={ex.Message}");
+        }
 
         return new HistoryIndex();
     }
@@ -280,6 +298,10 @@ public sealed class SourceHistoryStore
             Directory.CreateDirectory(root);
             File.WriteAllText(Path.Combine(root, IndexFileName), JsonSerializer.Serialize(index, JsonOptions));
         }
-        catch { }
+        catch (Exception ex)
+        {
+            // 版本目录写好了但索引没更新，等于这一代白存——diff 拿不到它
+            Warn($"SourceHistory: could not persist history index for '{sourceName}' | reason={ex.Message}");
+        }
     }
 }

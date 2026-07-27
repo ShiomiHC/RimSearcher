@@ -50,21 +50,23 @@ public sealed class SourcePathEntryConverter : JsonConverter<SourcePathEntry>
                 if (!reader.Read()) break;
 
                 // assemblyPath(s) 单数写字符串、复数写数组都要认，故不能在这里一刀切掉非字符串
-                var key = (property ?? string.Empty).Replace("_", string.Empty).ToLowerInvariant();
-                if (key is "assemblypath" or "assemblypaths" or "assemblies")
+                switch (ConfigJson.NormalizeKey(property ?? string.Empty))
                 {
-                    ReadStringOrArray(ref reader, assemblyPaths);
-                    continue;
+                    case "assemblypath" or "assemblypaths" or "assemblies":
+                        ConfigJson.ReadStringOrArray(ref reader, assemblyPaths);
+                        break;
+                    case "name":
+                        if (reader.TokenType == JsonTokenType.String) name = reader.GetString();
+                        else reader.Skip();
+                        break;
+                    case "path":
+                        if (reader.TokenType == JsonTokenType.String) path = reader.GetString();
+                        else reader.Skip();
+                        break;
+                    default:
+                        reader.Skip();
+                        break;
                 }
-
-                if (reader.TokenType != JsonTokenType.String)
-                {
-                    reader.Skip();
-                    continue;
-                }
-
-                if (string.Equals(property, "name", StringComparison.OrdinalIgnoreCase)) name = reader.GetString();
-                else if (string.Equals(property, "path", StringComparison.OrdinalIgnoreCase)) path = reader.GetString();
             }
 
             path ??= string.Empty;
@@ -92,33 +94,6 @@ public sealed class SourcePathEntryConverter : JsonConverter<SourcePathEntry>
             writer.WriteEndArray();
         }
         writer.WriteEndObject();
-    }
-
-    private static void ReadStringOrArray(ref Utf8JsonReader reader, List<string> target)
-    {
-        if (reader.TokenType == JsonTokenType.String)
-        {
-            var value = reader.GetString();
-            if (!string.IsNullOrWhiteSpace(value)) target.Add(value.Trim());
-            return;
-        }
-
-        if (reader.TokenType == JsonTokenType.StartArray)
-        {
-            while (reader.Read())
-            {
-                if (reader.TokenType == JsonTokenType.EndArray) break;
-                if (reader.TokenType == JsonTokenType.String)
-                {
-                    var value = reader.GetString();
-                    if (!string.IsNullOrWhiteSpace(value)) target.Add(value.Trim());
-                }
-                else reader.Skip();
-            }
-            return;
-        }
-
-        reader.Skip();
     }
 
     // SourceDefinition 未显式给 name 时复用同一套推断规则
@@ -193,11 +168,6 @@ public record AppConfig
     // 多个 client 各起一个进程时，索引会被复制 N 份（每份约 1 GB）。开启后首个实例成为
     // 索引宿主，后续实例只做 stdio↔管道转发，全机只保留一份索引。
     public bool ShareIndexHost { get; init; } = true;
-
-    public IEnumerable<string> AllPaths => CsharpSourcePaths.Concat(XmlSourcePaths).Select(entry => entry.Path);
-
-    public IEnumerable<(string Name, string Path)> AllSources =>
-        CsharpSourcePaths.Concat(XmlSourcePaths).Select(entry => (entry.Name, entry.Path));
 
     // 新旧两种格式合并成下游唯一的事实来源。同名条目不去重：ScopeCatalog 本就按 name 把
     // 多个根归到同一个源，重复路径在索引侧也已按文件路径去重。

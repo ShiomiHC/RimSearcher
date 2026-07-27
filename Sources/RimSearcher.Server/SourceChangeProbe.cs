@@ -40,9 +40,14 @@ public sealed record PendingSourceUpdate
     }
 }
 
-// 进程级的源变更观察者。dll 与 xml 两侧并行探测——前者要算 sha256（实测 475 个约 235 ms），
+// 进程级的源变更探测。刻意是一次性的：DetectAsync 只在启动时跑一趟，此后不再复查，
+// 结果一直挂在 Pending 上直到 sync_sources 把它清掉。之所以不做成常驻监视，是因为
+// 唯一的消费路径就是「在工具返回里附一句提示」，而那句提示对一次会话说一遍就够了；
+// 常驻轮询要么反复打扰，要么就得再记一层「哪些提示已经发过」的状态。
+//
+// dll 与 xml 两侧并行探测——前者要算 sha256（实测 475 个约 235 ms），
 // 后者只比大小与修改时间（1672 个约 10 ms），串行跑没有意义。
-public static class SourceWatcher
+public static class SourceChangeProbe
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -106,7 +111,7 @@ public static class SourceWatcher
 
             if (assemblySources.Count == 0 && xmlSources.Count == 0)
             {
-                await ServerLogger.Info("SourceWatcher", "No source changes detected");
+                await ServerLogger.Info("SourceChangeProbe", "No source changes detected");
                 return;
             }
 
@@ -125,14 +130,14 @@ public static class SourceWatcher
                     .ToList()
             };
 
-            await ServerLogger.Warning("SourceWatcher", "Source changes detected",
+            await ServerLogger.Warning("SourceChangeProbe", "Source changes detected",
                 ("assemblies", string.Join(",", assemblySources)),
                 ("xml", string.Join(",", xmlSources)),
                 ("hints", _pending.Hints.Count));
         }
         catch (Exception ex)
         {
-            await ServerLogger.Warning("SourceWatcher", "Detection failed", ("reason", ex.Message));
+            await ServerLogger.Warning("SourceChangeProbe", "Detection failed", ("reason", ex.Message));
         }
     }
 
@@ -298,7 +303,7 @@ public sealed class SessionUpdateNotice
         var synced = DescribeSyncedChanges();
         if (synced != null) return synced;
 
-        var pending = SourceWatcher.Pending;
+        var pending = SourceChangeProbe.Pending;
         if (pending == null || !pending.Any) return null;
 
         // 同一批变更只打断一次。抢不到即别的并发调用已经处理过这批。
@@ -306,7 +311,7 @@ public sealed class SessionUpdateNotice
 
         if (!IsRelevant(pending))
         {
-            _ = ServerLogger.Info("SourceWatcher", "Change not related to this session's queries",
+            _ = ServerLogger.Info("SourceChangeProbe", "Change not related to this session's queries",
                 ("tool", toolName ?? "?"));
             return null;
         }
@@ -324,7 +329,7 @@ public sealed class SessionUpdateNotice
     // 问过的东西一个都没变时返回 null——沉默才是对的输出。
     private string? DescribeSyncedChanges()
     {
-        var lastSync = SourceWatcher.LastSync;
+        var lastSync = SourceChangeProbe.LastSync;
         if (lastSync == null) return null;
 
         // 无论最终报不报，这一版同步都算已消费；抢不到即别的并发调用已经消费过它
@@ -387,7 +392,7 @@ public sealed class SessionUpdateNotice
 
         // 主判据：把会话问过的名字反查回文件，看它们是否落在变更的源里。
         // 变的是某个 mod 而这个会话一直在看 vanilla 时，这一步就把提示挡掉了。
-        var indexer = SourceWatcher.Indexer;
+        var indexer = SourceChangeProbe.Indexer;
         if (indexer != null && pending.ChangedRoots.Count > 0)
         {
             foreach (var term in _askedAbout.Keys)

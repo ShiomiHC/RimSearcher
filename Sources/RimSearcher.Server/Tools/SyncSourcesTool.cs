@@ -19,6 +19,12 @@ public class SyncSourcesTool : ITool
 
     public string Name => "rimworld-searcher__sync_sources";
 
+    // 本工具会调 IndexRebuilder 拿写锁，被读锁挡住就是自己等自己
+    public bool BypassIndexGate => true;
+
+    // 返回里已列了本次同步的逐类型 diff，不需要再追加一条过期提示
+    public bool SuppressStalenessNotice => true;
+
     public string Description =>
         "Check whether the configured RimWorld/mod assemblies changed since the last decompile, and optionally "
         + "re-decompile them into the indexed source directories. action='check' is read-only and fast; "
@@ -257,10 +263,10 @@ public class SyncSourcesTool : ITool
         }
 
         // XML 变了不需要反编译，但索引仍是旧的，同样得重扫一遍
-        var xmlChanged = SourceWatcher.Pending?.ChangedXmlSources.Count > 0;
+        var xmlChanged = SourceChangeProbe.Pending?.ChangedXmlSources.Count > 0;
         if (xmlChanged && !report.Outcomes.Any(o => o.Success))
         {
-            builder.AppendLine($"\nXML defs changed in: {string.Join(", ", SourceWatcher.Pending!.ChangedXmlSources)}"
+            builder.AppendLine($"\nXML defs changed in: {string.Join(", ", SourceChangeProbe.Pending!.ChangedXmlSources)}"
                              + " — no decompile needed, reindexing only.");
         }
 
@@ -280,7 +286,7 @@ public class SyncSourcesTool : ITool
                       + $"({rebuild.CsharpPaths} C# path(s), {rebuild.XmlPaths} XML path(s)). No restart needed."
                     : "\nIndex rebuild skipped: another rebuild was already running. Retry, or restart the server.");
 
-                SourceWatcher.RecordSync(report.FileChanges);
+                SourceChangeProbe.RecordSync(report.FileChanges);
             }
         }
 

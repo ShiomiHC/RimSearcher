@@ -54,19 +54,19 @@ public sealed class SourceDefinitionConverter : JsonConverter<SourceDefinition>
             var property = reader.GetString() ?? string.Empty;
             if (!reader.Read()) break;
 
-            switch (Normalize(property))
+            switch (ConfigJson.NormalizeKey(property))
             {
                 case "name":
                     name = reader.TokenType == JsonTokenType.String ? reader.GetString() : null;
                     break;
                 case "csharp" or "cs" or "csharppath" or "csharppaths" or "source" or "sources":
-                    csharp = ReadPaths(ref reader);
+                    csharp = ConfigJson.ReadStringOrArray(ref reader);
                     break;
                 case "xml" or "xmlpath" or "xmlpaths" or "defs":
-                    xml = ReadPaths(ref reader);
+                    xml = ConfigJson.ReadStringOrArray(ref reader);
                     break;
                 case "assemblies" or "assembly" or "assemblypath" or "assemblypaths" or "dll" or "dlls":
-                    assemblies = ReadPaths(ref reader);
+                    assemblies = ConfigJson.ReadStringOrArray(ref reader);
                     break;
                 default:
                     reader.Skip();
@@ -86,40 +86,6 @@ public sealed class SourceDefinitionConverter : JsonConverter<SourceDefinition>
             Assemblies = assemblies
         };
     }
-
-    // 单路径写成裸字符串是常见手写形态，不该逼用户为一个值套数组
-    private static List<string> ReadPaths(ref Utf8JsonReader reader)
-    {
-        var results = new List<string>();
-
-        if (reader.TokenType == JsonTokenType.String)
-        {
-            var single = reader.GetString();
-            if (!string.IsNullOrWhiteSpace(single)) results.Add(single.Trim());
-            return results;
-        }
-
-        if (reader.TokenType == JsonTokenType.StartArray)
-        {
-            while (reader.Read())
-            {
-                if (reader.TokenType == JsonTokenType.EndArray) break;
-                if (reader.TokenType == JsonTokenType.String)
-                {
-                    var value = reader.GetString();
-                    if (!string.IsNullOrWhiteSpace(value)) results.Add(value.Trim());
-                }
-                else reader.Skip();
-            }
-            return results;
-        }
-
-        reader.Skip();
-        return results;
-    }
-
-    private static string Normalize(string key)
-        => key.Replace("_", string.Empty).Replace("-", string.Empty).ToLowerInvariant();
 
     public override void Write(Utf8JsonWriter writer, SourceDefinition value, JsonSerializerOptions options)
     {

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using RimSearcher.Core;
 
 namespace RimSearcher.Server;
@@ -11,8 +12,11 @@ public static class IndexGate
 {
     private static readonly ReaderWriterLockSlim Lock = new(LockRecursionPolicy.NoRecursion);
 
-    // 重建期间进来的查询等这么久，超时就放行走旧索引，免得客户端直接超时
-    private static readonly TimeSpan ReadTimeout = TimeSpan.FromSeconds(30);
+    // 重建期间进来的查询等这么久。等不到就必须报错，不能放行：重建是原地 Clear + 重扫
+    // （见 IndexRebuilder.Rebuild），此刻根本没有「旧的一份」可读，放进去的查询会拿到
+    // 一个已冻结状态被重置的空壳，也就是一个看起来成功的错误答案。
+    // 非 readonly 仅为让测试能在几十毫秒内走到超时分支，产品代码不应改它。
+    internal static TimeSpan ReadTimeout = TimeSpan.FromSeconds(30);
 
     private static long _generation;
 
@@ -21,10 +25,17 @@ public static class IndexGate
 
     public static bool IsRebuilding { get; private set; }
 
-    public static IDisposable EnterRead()
+    // 返回 false 表示等到超时仍未拿到读锁（重建还没结束），调用方应回一个可重试的错误
+    public static bool TryEnterRead([NotNullWhen(true)] out IDisposable? scope)
     {
-        if (!Lock.TryEnterReadLock(ReadTimeout)) return NoopScope.Instance;
-        return new ReadScope();
+        if (!Lock.TryEnterReadLock(ReadTimeout))
+        {
+            scope = null;
+            return false;
+        }
+
+        scope = new ReadScope();
+        return true;
     }
 
     // 返回 false 表示没抢到写锁（另一次重建正在进行），调用方应跳过本次重建
@@ -56,12 +67,6 @@ public static class IndexGate
             _released = true;
             Lock.ExitReadLock();
         }
-    }
-
-    private sealed class NoopScope : IDisposable
-    {
-        public static readonly NoopScope Instance = new();
-        public void Dispose() { }
     }
 }
 

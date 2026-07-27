@@ -10,6 +10,9 @@ Console.OutputEncoding = Encoding.UTF8;
 var protocolOut = Console.Out;
 Console.SetOut(Console.Error);
 
+// Core 层的降级提示接到 Server 的日志出口上（Core 不依赖 Server，故用钩子）
+SourceHistoryStore.OnDiagnostic = (message, level) => _ = ServerLogger.LogAsync(message, level);
+
 var (appConfig, configPath, isLoaded) = AppConfig.Load();
 await ServerLogger.Info("Program", "Configuration source", ("path", configPath));
 
@@ -44,11 +47,17 @@ if (scopeCatalog.HasSources)
         ("default", string.IsNullOrWhiteSpace(appConfig.DefaultScope) ? ScopeCatalog.EverythingKeyword : appConfig.DefaultScope));
 }
 
-// 索引指纹要在建索引前算出来：共享宿主按它分组（不同 config 不共用一份索引）
-var earlyFingerprint = IndexCacheService.ComputeConfigFingerprint(
+// 宿主指纹要在建索引前算出来：共享宿主按它分组（不同 config 不共用一份索引）。
+//
+// 它只能认路径，绝不能掺内容摘要。管道名是进程间的会合点，而宿主的名字在启动时
+// 算一次就冻住了；掺进内容之后，源一变（Steam 更新、编辑器保存一下、乃至
+// sync_sources 自己重写反编译产物）新进程就会算出另一个名字，找不到正在跑的宿主，
+// 转头再建一份 1 GB 索引——共享机制恰好在最该生效的时候失效。
+// 索引是否陈旧由另一条链路负责：SourceChangeProbe 探到变化并提示，sync_sources 原地重建。
+var hostFingerprint = IndexCacheService.ComputeConfigFingerprint(
     resolvedSources.Csharp.Select(entry => entry.Path),
     resolvedSources.Xml.Select(entry => entry.Path),
-    appConfig.VerifySourceFreshness);
+    includeContentDigest: false);
 
 // 代理路径必须先于建索引：连上已有宿主的进程不该再花 4 秒和 1 GB 建第二份索引
 HostSlot? hostSlot = null;
@@ -62,13 +71,13 @@ if (appConfig.ShareIndexHost && hasPaths)
     {
         ProcessGuard.Start(appConfig.IdleTimeoutMinutes);
 
-        if (await IndexHost.TryRunAsProxyAsync(earlyFingerprint, protocolOut))
+        if (await IndexHost.TryRunAsProxyAsync(hostFingerprint, protocolOut))
         {
             await ServerLogger.Info("Program", "Proxy session ended");
             return;
         }
 
-        hostSlot = IndexHost.TryBecomeHost(earlyFingerprint);
+        hostSlot = IndexHost.TryBecomeHost(hostFingerprint);
         if (hostSlot == null)
             await ServerLogger.Info("Program", "Could not claim host slot, running standalone");
     }
@@ -117,13 +126,20 @@ foreach (var entry in resolvedSources.Xml)
 var totalCsharpPaths = 0;
 var totalXmlPaths = 0;
 var cacheLoaded = false;
-var configFingerprint = earlyFingerprint;
+
+// 缓存键则相反，必须对内容敏感：mod 更新不改路径集合，纯路径键会让磁盘上那份
+// 陈旧索引一直命中且毫无提示。这一步要枚举几万条元数据（约 100~300ms），放在
+// 代理路径之后算——挂上宿主就直接退出的进程不该为一份自己不会用的缓存买单。
+var cacheFingerprint = IndexCacheService.ComputeConfigFingerprint(
+    resolvedSources.Csharp.Select(entry => entry.Path),
+    resolvedSources.Xml.Select(entry => entry.Path),
+    appConfig.VerifySourceFreshness);
 
 if (hasPaths && existingCsharpPaths.Count + existingXmlPaths.Count > 0)
 {
     if (canUseCache && failedPaths.Count == 0)
     {
-        var loadResult = IndexCacheService.TryLoad(cacheDirectory, configFingerprint);
+        var loadResult = IndexCacheService.TryLoad(cacheDirectory, cacheFingerprint);
         if (loadResult.Success && loadResult.Snapshot != null)
         {
             indexer.ImportSnapshot(loadResult.Snapshot.Source);
@@ -179,7 +195,7 @@ if (hasPaths && existingCsharpPaths.Count + existingXmlPaths.Count > 0)
 
                 var saveResult = IndexCacheService.Save(
                     cacheDirectory,
-                    configFingerprint,
+                    cacheFingerprint,
                     snapshot,
                     buildStopwatch.Elapsed,
                     indexedCsharpFileCount,
@@ -206,12 +222,12 @@ if (failedPaths.Count > 0)
 var syncService = new SourceSyncService(appConfig, resolvedSources, cacheDirectory);
 var indexRebuilder = new IndexRebuilder(indexer, defIndexer, resolvedSources);
 
-// 必须早于任何 RimSearcher 实例化：会话的通知器是在字段初始化时向 SourceWatcher 要的，
+// 必须早于任何 RimSearcher 实例化：会话的通知器是在字段初始化时向 SourceChangeProbe 要的，
 // 那时若还没 Configure，拿到的就是 null，本会话此后再也不会提示。
 if (appConfig.CheckSourceUpdates && syncService.FollowableSources.Count > 0)
 {
-    SourceWatcher.Configure(syncService, resolvedSources, cacheDirectory, indexer);
-    _ = Task.Run(SourceWatcher.DetectAsync);
+    SourceChangeProbe.Configure(syncService, resolvedSources, cacheDirectory, indexer);
+    _ = Task.Run(SourceChangeProbe.DetectAsync);
 }
 
 var server = new RimSearcher.Server.RimSearcher(protocolOut);
@@ -234,7 +250,9 @@ if (hostSlot != null)
 {
     // 宿主寿命与第一个 client 解绑：只要还有别的连接就不退
     ProcessGuard.ShouldStayAlive = () => IndexHost.ShouldStayAliveForConnections(TimeSpan.FromSeconds(60));
-    IndexHost.StartAcceptLoop(configFingerprint, tools);
+    // 必须与 TryBecomeHost 用同一个指纹：在一个名字上占席位、却在另一个名字上开管道，
+    // 等于谁也连不上，且席位还被占着
+    IndexHost.StartAcceptLoop(hostFingerprint, tools);
 }
 else if (!appConfig.ShareIndexHost || !IndexHost.IsSupported || !hasPaths)
 {

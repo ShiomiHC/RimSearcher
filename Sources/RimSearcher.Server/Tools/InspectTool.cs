@@ -197,11 +197,11 @@ public class InspectTool : ITool
             return new ToolResult(sb.ToString());
         }
 
-        // 「scope 内找不到」和「根本不存在」是两件事，混为一谈会让调用方断言符号不存在
+        // 「scope 内找不到」和「根本不存在」是两件事，混为一谈会让调用方断言符号不存在。
+        // 上面那次 GetPathsByType(name, scope) 的 OutOfScope 已经是按 OutOfScopeLabel 归好类的
+        // 落选来源，不必再查一遍索引——原先另外两次查询给出的是同一份数据。
         var elsewhere = new List<string>(lookup.OtherSources);
-        elsewhere.AddRange(_sourceIndexer.GetPathsByType(name, scope).OutOfScope.Select(x => x.Source));
-        elsewhere.AddRange(_sourceIndexer.GetPathsByType(name)
-            .Select(path => scope.OutOfScopeLabel(path)));
+        elsewhere.AddRange(csharpPaths.OutOfScope.Select(x => x.Source));
 
         var distinctElsewhere = elsewhere
             .Where(source => !string.IsNullOrEmpty(source))

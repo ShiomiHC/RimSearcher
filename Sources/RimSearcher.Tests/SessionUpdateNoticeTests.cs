@@ -3,7 +3,7 @@ using RimSearcher.Server;
 
 namespace RimSearcher.Tests;
 
-// SourceWatcher 未 Configure 时 Pending / LastSync 恒为 null，Consume 只剩「记录问过什么」
+// SourceChangeProbe 未 Configure 时 Pending / LastSync 恒为 null，Consume 只剩「记录问过什么」
 // 这条路径——正好是并发出问题的地方，无需搭出整套同步服务即可覆盖。
 public class SessionUpdateNoticeTests
 {
@@ -76,7 +76,7 @@ public class SessionUpdateNoticeTests
         Assert.Equal(0, notice.TrackedTermCount);
     }
 
-    // 未配置 SourceWatcher 时不该凭空产生提示
+    // 未配置 SourceChangeProbe 时不该凭空产生提示
     [Fact]
     public void Consume_WithoutPendingChanges_ReturnsNull()
     {

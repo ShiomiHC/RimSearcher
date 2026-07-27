@@ -110,8 +110,7 @@ public static class ToolArgs
         };
     }
 
-    private static string NormalizeKey(string key)
-        => key.Replace("_", string.Empty).Replace("-", string.Empty).ToLowerInvariant();
+    private static string NormalizeKey(string key) => ConfigJson.NormalizeKey(key);
 
     private static readonly string[] LocateFilterPrefixes =
         ["type:", "def:", "method:", "field:", "class:", "member:", "property:"];

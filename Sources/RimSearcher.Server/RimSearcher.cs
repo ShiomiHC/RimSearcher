@@ -14,7 +14,7 @@ public sealed class RimSearcher
     private readonly SemaphoreSlim _concurrencyLimit = new(10, 10);
 
     // 每个会话独立：宿主下多个 client 共享同一批 tool，但「我问过什么」不能串味
-    private readonly SessionUpdateNotice? _updateNotice = SourceWatcher.CreateSessionNotice();
+    private readonly SessionUpdateNotice? _updateNotice = SourceChangeProbe.CreateSessionNotice();
 
     // registerGlobalLogger：宿主为每个管道连接各开一个会话，只有直连 stdio 的那个会话
     // 才接管静态日志钩子，否则后建的会话会把日志抢到别人的连接上。
@@ -102,19 +102,26 @@ public sealed class RimSearcher
                     {
                         var idToCancel = ScalarIdToString(cancelId);
                         if (idToCancel != null && _activeRequests.TryRemove(idToCancel, out var targetCts))
-                            targetCts.Cancel();
+                        {
+                            // 目标请求可能刚好跑完并在 finally 里把 cts 释放掉了
+                            try { targetCts.Cancel(); }
+                            catch (ObjectDisposedException) { }
+                        }
                     }
                     return;
                 }
 
-                await _concurrencyLimit.WaitAsync();
-                limitAcquired = true;
-
+                // 注册必须早于排队。并发闸只放 10 个进去，第 11 个在这里等着；若此时收到
+                // 针对它的取消通知，_activeRequests 里还没有它的条目，那条通知会被直接丢掉，
+                // 客户端只能干等它排到队并整个跑完。
                 if (requestKey != null)
                 {
                     cts = new CancellationTokenSource();
                     _activeRequests[requestKey] = cts;
                 }
+
+                await _concurrencyLimit.WaitAsync(cts?.Token ?? CancellationToken.None);
+                limitAcquired = true;
 
                 await HandleRequestAsync(method, requestId, root, cts?.Token ?? CancellationToken.None);
             }
@@ -218,8 +225,20 @@ public sealed class RimSearcher
             else if (method == "call_tool" || method == "tools/call")
             {
                 if (id == null) return;
-                var paramsElem = root.GetProperty("params");
-                var toolName = paramsElem.GetProperty("name").GetString();
+
+                // 缺 params / name 是调用方把请求写错了，属于 -32602 Invalid params。
+                // 直接 GetProperty 会抛 KeyNotFoundException 落进外层 catch 变成 -32603，
+                // 而那个码的意思是「服务器坏了」，会误导 client 去重试或整体弃用本服务器。
+                if (!root.TryGetProperty("params", out var paramsElem)
+                    || paramsElem.ValueKind != JsonValueKind.Object
+                    || !paramsElem.TryGetProperty("name", out var nameElem)
+                    || nameElem.ValueKind != JsonValueKind.String)
+                {
+                    await SendResponseAsync(id, error: new { code = -32602, message = "Invalid params: 'params.name' is required and must be a string" });
+                    return;
+                }
+
+                var toolName = nameElem.GetString();
 
                 if (toolName != null && _tools.TryGetValue(toolName, out var tool))
                 {
@@ -252,18 +271,25 @@ public sealed class RimSearcher
                     ToolResult result;
                     try
                     {
-                        // 索引重建期间挂起：读锁保证不会查到清空到一半的索引。
-                        // sync_sources 自己要触发重建，不能被这把锁挡住。
-                        if (tool is Tools.SyncSourcesTool)
+                        // 索引重建期间挂起：读锁保证不会查到清空到一半的索引
+                        if (tool.BypassIndexGate)
                         {
                             result = await tool.ExecuteAsync(arguments, ct, progressReporter);
                         }
-                        else
+                        else if (IndexGate.TryEnterRead(out var indexScope))
                         {
-                            using (IndexGate.EnterRead())
+                            using (indexScope)
                             {
                                 result = await tool.ExecuteAsync(arguments, ct, progressReporter);
                             }
+                        }
+                        else
+                        {
+                            // 重建是原地进行的，等不到锁时索引里没有可退而求其次的旧数据。
+                            // 报错让调用方重试，好过回一份看起来成功的空结果。
+                            result = new ToolResult(
+                                "The index is being rebuilt and the request timed out waiting for it. Retry in a few seconds.",
+                                true);
                         }
                     }
                     // 参数契约错误是调用方可自行修正的，必须作为工具结果回去（带纠正提示），
@@ -273,9 +299,7 @@ public sealed class RimSearcher
                         result = new ToolResult(argEx.Message, true);
                     }
 
-                    // sync 自己的返回里已经列了变更摘要，再追加一条过期提示纯属重复；
-                    // 那条提示留给之后的查询，那时它才提供新信息。
-                    var notice = tool is Tools.SyncSourcesTool
+                    var notice = tool.SuppressStalenessNotice
                         ? null
                         : _updateNotice?.Consume(toolName, arguments, result.Content);
 

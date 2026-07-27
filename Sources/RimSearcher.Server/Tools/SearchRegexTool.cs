@@ -5,6 +5,10 @@ namespace RimSearcher.Server.Tools;
 
 public class SearchRegexTool : ITool
 {
+    // 命中可能集中在少数文件，也可能散落在几千个文件里。后者全列出来对调用方无用，
+    // 但截掉了就必须说，见下面的 notes。
+    private const int MaxFilesShown = 50;
+
     private readonly SourceIndexer _indexer;
     private readonly ScopeCatalog _scopeCatalog;
 
@@ -60,10 +64,11 @@ public class SearchRegexTool : ITool
             if (results.Count == 0)
                 return new ToolResult($"No matches for pattern '{pattern}' in scope '{scope.Expression}'.");
 
-            var grouped = results.GroupBy(r => r.Path).Take(50);
+            var allFiles = results.GroupBy(r => r.Path).ToList();
+            var shownFiles = allFiles.Take(MaxFilesShown);
 
             var output = $"Regex matches for '{pattern}' ({results.Count} found in scope '{scope.Expression}'):\n\n" +
-                         string.Join("\n\n", grouped.Select(g =>
+                         string.Join("\n\n", shownFiles.Select(g =>
                          {
                              var fileName = System.IO.Path.GetFileName(g.Key);
                              var groupItems = g.ToList();
@@ -73,10 +78,15 @@ public class SearchRegexTool : ITool
                              return $"`{fileName}`{label}\n{string.Join("\n", matches)}{moreCount}";
                          }));
 
-            if (truncated)
-            {
-                output += "\n\n[Results limited to 50 files, use more specific pattern to narrow down]";
-            }
+            // 两处截断互相独立：truncated 说的是扫描在命中上限处停了，文件数上限则是
+            // 这里静默 Take 掉的。原先只有一条提示且挂在前者上，于是「命中没超限但文件超了」
+            // 的情况完全不吭声，调用方会把不完整的列表当成全部。
+            var notes = new List<string>();
+            if (truncated) notes.Add($"scanning stopped at the {results.Count}-match cap");
+            if (allFiles.Count > MaxFilesShown) notes.Add($"only the first {MaxFilesShown} of {allFiles.Count} matching files are listed");
+
+            if (notes.Count > 0)
+                output += $"\n\n[{string.Join("; ", notes)} — narrow the pattern or the scope to see the rest]";
 
             return new ToolResult(output);
         }
