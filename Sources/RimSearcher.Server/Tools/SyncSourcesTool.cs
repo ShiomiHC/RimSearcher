@@ -196,10 +196,12 @@ public class SyncSourcesTool : ITool
     }
 
     // 归档里的旧内容 vs 磁盘上的当前内容。文件在某一侧缺失即为纯新增/纯删除。
+    //
+    // file 与 version 都是调用方给的裸串，且直接参与路径拼接：不校验的话
+    // 「归档 里没有 / 当前有」这一支就是一个任意绝对路径的存在性探针，配上存在的 version
+    // 更能把源根与历史根之外的文本读出来。两个根各自独立校验，不共用结论。
     private ToolResult RunFileDiff(string[]? only, string file, string? version, int limit)
     {
-        var relative = file.Replace('/', Path.DirectorySeparatorChar).TrimStart(Path.DirectorySeparatorChar);
-
         foreach (var entry in _syncService.FollowableSources)
         {
             if (only is { Length: > 0 }
@@ -208,10 +210,60 @@ public class SyncSourcesTool : ITool
             var versions = _syncService.History.ListVersions(entry.Name);
             if (versions.Count == 0) continue;
 
-            var versionId = version ?? versions[^1].Id;
-            var archived = _syncService.History.ReadArchived(entry.Name, versionId, relative);
+            // 只认索引里真实存在的 Id。放任任意串进去等于让调用方指定历史根下的任意子目录，
+            // 而 files/ 那一层的相对路径校验只保证「不出这个子目录」，管不了子目录选在哪
+            string versionId;
+            if (string.IsNullOrWhiteSpace(version))
+            {
+                versionId = versions[^1].Id;
+            }
+            else
+            {
+                var matched = versions.FirstOrDefault(
+                    v => string.Equals(v.Id, version, StringComparison.OrdinalIgnoreCase));
 
-            var currentPath = Path.Combine(entry.Path, relative);
+                if (matched == null)
+                {
+                    return new ToolResult(
+                        $"Unknown version '{version}' for source '{entry.Name}'. "
+                        + $"Kept versions: {string.Join(", ", versions.Select(v => v.Id))}. "
+                        + "Omit 'version' to compare against the most recent one.", true);
+                }
+
+                versionId = matched.Id;
+            }
+
+            var currentPath = PathSecurity.ResolveInsideRoot(entry.Path, file);
+            var archivedPath = _syncService.History.ResolveArchivedPath(entry.Name, versionId, file);
+
+            if (currentPath == null || archivedPath == null)
+            {
+                return new ToolResult(
+                    $"'{file}' is not a relative path inside a source directory — absolute paths and '..' are refused. "
+                    + "Pass the path exactly as printed by action='diff' without 'file' "
+                    + @"(e.g. 'RimWorld\CompShield.cs').", true);
+            }
+
+            // 当前文件此前完全不过白名单，是全仓唯一一条这样的读路径。源根被配成指向别处的
+            // 链接时，只靠上面的「不出源根」校验并不能保证读到的东西在允许的目录内
+            if (!PathSecurity.IsPathSafe(currentPath))
+            {
+                return new ToolResult(
+                    $"'{file}' resolves outside the allowed directories. "
+                    + "Only files under the configured source paths can be diffed.", true);
+            }
+
+            var relative = Path.GetRelativePath(entry.Path, currentPath);
+
+            if (TooLarge(archivedPath) || TooLarge(currentPath))
+            {
+                return new ToolResult(
+                    $"'{relative}' is larger than the {SourceHistoryStore.MaxComparableFileSize / (1024 * 1024)} MB "
+                    + "diff limit. Read the archived and current copies separately instead of diffing them.", true);
+            }
+
+            var archived = _syncService.History.ReadArchived(entry.Name, versionId, file);
+
             string? current = null;
             try
             {
@@ -237,6 +289,19 @@ public class SyncSourcesTool : ITool
         return new ToolResult(
             $"'{file}' not found in any source's history. Run action='diff' without 'file' to see the changed file list.",
             true);
+    }
+
+    private static bool TooLarge(string path)
+    {
+        try
+        {
+            return File.Exists(path) && new FileInfo(path).Length > SourceHistoryStore.MaxComparableFileSize;
+        }
+        catch
+        {
+            // 拿不到大小就当它超限：读不出大小的文件更没理由硬读
+            return true;
+        }
     }
 
     private ToolResult RunSync(string[]? only, CancellationToken cancellationToken)

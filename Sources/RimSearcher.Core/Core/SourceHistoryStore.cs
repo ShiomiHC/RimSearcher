@@ -37,6 +37,10 @@ public sealed record HistoryIndex
 // 一次 RimWorld 更新通常只动 5–20% 的文件，故稳态占用远低于留整份副本。
 public sealed class SourceHistoryStore
 {
+    // 单侧文件的读取上限，量级取自 RoslynHelper 对源文件的同类限制。diff 要把新旧两份
+    // 内容整份读进内存再逐行比，没有上限时一个被指向的巨大文件就能把进程拖死。
+    public const long MaxComparableFileSize = 10 * 1024 * 1024;
+
     private const string IndexFileName = "index.json";
     private const string HashesFileName = "hashes.json";
     private const string FilesDirectoryName = "files";
@@ -161,13 +165,29 @@ public sealed class SourceHistoryStore
         }
     }
 
+    // 归档文件应当所在的绝对路径；versionId 或 relativePath 会穿出历史根时返回 null。
+    // 单独暴露是为了让调用方在读之前能自己判存在性和大小——ReadArchived 把这些都吞成 null，
+    // 分不清「没这个文件」和「路径非法」，而这两者该给出完全不同的提示。
+    public string? ResolveArchivedPath(string sourceName, string versionId, string relativePath)
+    {
+        // versionId 同样是外部输入且参与拼接，不校验的话它自己就是一条穿越通道
+        var versionDirectory = PathSecurity.ResolveInsideRoot(GetSourceRoot(sourceName), versionId);
+        if (versionDirectory == null) return null;
+
+        return PathSecurity.ResolveInsideRoot(Path.Combine(versionDirectory, FilesDirectoryName), relativePath);
+    }
+
     // 归档里那一版的文件内容，供调用方与当前文件做行级比较
     public string? ReadArchived(string sourceName, string versionId, string relativePath)
     {
         try
         {
-            var path = Path.Combine(GetSourceRoot(sourceName), versionId, FilesDirectoryName, relativePath);
-            return File.Exists(path) ? File.ReadAllText(path) : null;
+            var path = ResolveArchivedPath(sourceName, versionId, relativePath);
+            if (path == null || !File.Exists(path)) return null;
+
+            // 整份内容要进内存再送进 diff，异常大的文件足以把进程顶爆。
+            // 调用方应先用 ResolveArchivedPath 自查大小并给出明确错误，这里只是最后一道闸。
+            return new FileInfo(path).Length > MaxComparableFileSize ? null : File.ReadAllText(path);
         }
         catch
         {

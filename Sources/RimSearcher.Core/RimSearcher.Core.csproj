@@ -9,6 +9,11 @@
     </PropertyGroup>
 
     <ItemGroup>
+      <!-- PathSecurity 的白名单是静态且只追加的，测试之间必须能重置它 -->
+      <InternalsVisibleTo Include="RimSearcher.Tests" />
+    </ItemGroup>
+
+    <ItemGroup>
       <PackageReference Include="DiffPlex" Version="1.9.0" />
       <PackageReference Include="ICSharpCode.Decompiler" Version="8.2.0.7535" />
       <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
