@@ -79,8 +79,12 @@ public class LocateTool : ITool
         var scopeNotice = ScopeArgs.UnresolvedNotice(_scopeCatalog, scope) ?? string.Empty;
 
         var report = new ScopeReport();
+
+        // 表头要报出「各段各几条」，而那要等各段都跑完才知道，所以正文先攒在 sb 里、
+        // 表头最后再拼到前面。trace / search_regex / list_directory 的头一行都是
+        // 「什么 + 多少条 + 什么 scope」，locate 此前只有「什么」，读者得自己数行。
         var sb = new StringBuilder();
-        sb.AppendLine($"## '{rawQuery}'" + (scope.IncludesEverything ? "" : $" _(scope: {scope.Expression})_"));
+        var tally = new List<string>();
 
         // 各段落自己置位。曾用 sb.Length 与表头长度比大小来推断，窄 scope 下表头恰好比
         // 阈值长，零命中也会被判成有结果——「查不到就提示换 scope」那条路径因此永远走不到。
@@ -101,14 +105,14 @@ public class LocateTool : ITool
             if (types.Items.Count > 0)
             {
                 hasResults = true;
+                tally.Add(Count(types.Items.Count, "C# type"));
                 sb.AppendLine("\n**C# Types:**");
                 foreach (var entry in types.Items)
                 {
                     var paths = _sourceIndexer.GetPathsByType(entry.Item);
-                    var firstPath = paths.FirstOrDefault() ?? "unknown";
-                    var fileName = Path.GetFileName(firstPath);
                     shownTypeNames.Add(entry.Item);
-                    sb.AppendLine($"- `{entry.Item}` ({entry.Score:F0}%) - {fileName}{ScopeArgs.Label(entry.SourceName)}");
+                    sb.AppendLine(
+                        $"- `{entry.Item}` ({entry.Score:F0}%){FileNote(entry.Item, paths)}{ScopeArgs.Label(entry.SourceName)}");
                 }
 
                 var fold = ScopeArgs.FoldLine(types, limit: limit);
@@ -140,6 +144,8 @@ public class LocateTool : ITool
             {
                 hasResults = true;
                 sb.AppendLine("\n**Members:**");
+                var tallySlot = tally.Count;
+                tally.Add("");
 
                 // 'all' 时不再按组折叠（总量已被硬上限约束住），否则每组各给一半配额
                 var perGroup = limit.Unlimited ? limit.Count : Math.Max(3, limit.Count / 2);
@@ -154,10 +160,13 @@ public class LocateTool : ITool
                     {
                         var (typeName, memberName, _, filePath) = entry.Item;
                         sb.AppendLine(
-                            $"  - `{typeName}.{memberName}` ({entry.Score:F0}%) - {Path.GetFileName(filePath)}{ScopeArgs.Label(entry.SourceName)}");
+                            $"  - `{typeName}.{memberName}` ({entry.Score:F0}%)"
+                            + $"{FileNote(typeName, [filePath])}{ScopeArgs.Label(entry.SourceName)}");
                         shown++;
                     }
                 }
+
+                tally[tallySlot] = Count(shown, "member");
 
                 // 折叠行放在整段末尾、按 TotalInScope 计数。原先每组各打一行、只数「取回的这批里
                 // 还剩几条」，而取回本身已被 limit.Scale(3) 砍过：method:CompTick 因此报 +25，
@@ -182,6 +191,7 @@ public class LocateTool : ITool
             if (defs.Items.Count > 0)
             {
                 hasResults = true;
+                tally.Add(Count(defs.Items.Count, "XML def"));
                 sb.AppendLine("\n**XML Defs:**");
                 foreach (var entry in defs.Items)
                 {
@@ -210,6 +220,7 @@ public class LocateTool : ITool
                 if (defsByContent.Items.Count > 0)
                 {
                     hasResults = true;
+                    tally.Add(Count(defsByContent.Items.Count, "content match", "content matches"));
                     sb.AppendLine("\n**Content Matches:**");
 
                     foreach (var entry in defsByContent.Items)
@@ -255,10 +266,12 @@ public class LocateTool : ITool
                 // 把几十条模糊文件命中的 out-of-scope 计数灌进去，脚注的数字就不再对应正文。
                 report.Add(files);
 
+                tally.Add(Count(items.Count, "file"));
                 sb.AppendLine("\n**Files:**");
                 foreach (var entry in items)
                 {
-                    sb.AppendLine($"- {Path.GetFileName(entry.Item)} - {entry.Item}{ScopeArgs.Label(entry.SourceName)}");
+                    // 原先是「基名 - 全路径」，而基名逐字包含在全路径的末尾，说的是同一件事。
+                    sb.AppendLine($"- {entry.Item}{ScopeArgs.Label(entry.SourceName)}");
                 }
 
                 // 折叠行只对兜底那一支有意义：精确补充本来就只列同名的那几条，没有「还有更多」。
@@ -312,7 +325,34 @@ public class LocateTool : ITool
         sb.Append(scopeNotice);
         sb.Append(prefixNotice);
 
-        return Task.FromResult(new ToolResult(sb.ToString()));
+        var header = new StringBuilder($"## '{rawQuery}'");
+        if (tally.Count > 0) header.Append($" — {string.Join(", ", tally)}");
+        if (!scope.IncludesEverything) header.Append($" _(scope: {scope.Expression})_");
+
+        return Task.FromResult(new ToolResult(header.AppendLine().Append(sb).ToString()));
+    }
+
+    private static string Count(int n, string singular, string? plural = null) =>
+        $"{n} {(n == 1 ? singular : plural ?? singular + "s")}";
+
+    // 结果行末尾的文件名有 95% 是从符号名逐字推导出来的（`CompShield` → CompShield.cs），
+    // 不承载信息，只把每行撑长、并把真正有信息的那 5%（`PawnCount` 在 ThingCountTracker.cs
+    // 里、`PawnFilter` 在 Dialog_BeginRitual.cs 里）淹进噪声。故只在文件名**推不出来**时才印：
+    // 这样印出来的每一个都是意外，值得读者看一眼。同一类型分散在多个文件（partial / 多 mod
+    // 各有一份）也算意外，照印。
+    private static string FileNote(string typeName, IReadOnlyList<string> paths)
+    {
+        if (paths.Count == 0) return " - (file not indexed)";
+
+        var fileName = Path.GetFileName(paths[0]);
+        var dot = typeName.LastIndexOf('.');
+        var shortName = dot >= 0 && dot < typeName.Length - 1 ? typeName[(dot + 1)..] : typeName;
+
+        if (paths.Count == 1 && string.Equals(fileName, shortName + ".cs", StringComparison.OrdinalIgnoreCase))
+            return string.Empty;
+
+        var more = paths.Count > 1 ? $" +{paths.Count - 1} more file{(paths.Count == 2 ? "" : "s")}" : "";
+        return $" - {fileName}{more}";
     }
 
     // MemberType 来自索引层，取值是 Method / Property / Field。直接加 's' 会写出 'Propertys'。

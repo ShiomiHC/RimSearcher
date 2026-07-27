@@ -744,6 +744,10 @@ public class SourceIndexer
     // 数完整个文件是为了把每文件命中数报准，但不能让一个病态大文件吃光整轮扫描的时间。
     private const int MaxLinesScannedPerFile = 20000;
 
+    // 正则扫描按 allFiles 顺序分块推进的块大小。它同时是「结果可复现」与「命中上限后少扫点」
+    // 两者的折中：块越大越接近全量扫描，块越小越容易在块边界上把并发槽喂不满。
+    private const int RegexScanChunkFiles = 256;
+
     // 预览行长度上限，与 trace usages 用的是同一个数。ScopeArgs.HardLimit 那笔体积账
     // （一条一行、每行按 100 字符算，200 行 ≈ 20KB）正是以此为前提，而本方法此前整条
     // 链路一次都没截：XML 里一行写完的 <li> 列表、反编译产物里的长泛型签名都能把单行
@@ -778,10 +782,14 @@ public class SourceIndexer
         CancellationToken ct = default,
         IProgress<double>? progress = null)
     {
-        var results = new ConcurrentBag<(string Path, int LineNumber, string Preview)>();
+        // 每条命中带上它所属文件在 allFiles 里的序号：截断与排序都靠它，才与线程调度无关。
+        var results = new ConcurrentBag<(int FileOrdinal, string Path, int LineNumber, string Preview)>();
         var matchesByFile = new ConcurrentDictionary<string, int>();
         var regex = new Regex(pattern, (ignoreCase ? RegexOptions.IgnoreCase : RegexOptions.None) | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
 
+        // allFiles 的顺序是下面「分块推进 + 按序号排序」的基准，故它必须是稳定的：
+        // _index 以文件基名为键、每个路径只落在一个键下，FrozenDictionary 的枚举序又固定，
+        // 因此同一份索引恒给同一张表。未冻结分支的 Distinct 防的是重扫时同一路径进同一个 bag 两次。
         var allFiles = (_frozenIndex != null
                 ? _frozenIndex.Values.SelectMany(x => x)
                 : _index.Values.SelectMany(x => x).Distinct())
@@ -799,13 +807,33 @@ public class SourceIndexer
         int unreadableFiles = 0;
         int lineCappedFiles = 0;
 
-        await Parallel.ForEachAsync(allFiles, ct, async (filePath, internalCt) =>
+        // 结果取舍必须与线程调度无关。原先是整张 allFiles 满盘并发 + 命中上限一到就从委托头部
+        // return：**哪些文件赶在上限前被扫到**取决于线程调度，同一条查询连跑 6 次实测出 3 种不同
+        // 的文件集；ConcurrentBag 的枚举序又是另一层不确定。于是「showing the first N」里的 first
+        // 没有定义——调用方复查一遍会拿到另一批文件，进而怀疑索引变了或自己上次读错了。
+        // 改成按 allFiles 顺序分块推进：每块**整块**扫完再判上限，扫过的恒是 allFiles 的一个前缀，
+        // 块内命中按 (文件序号, 行号) 排序后才截。代价是命中上限那一刻最多多扫一块。
+        var stoppedEarly = false;
+        for (var chunkStart = 0; chunkStart < allFiles.Count; chunkStart += RegexScanChunkFiles)
         {
+            var chunk = new List<(int Ordinal, string Path)>();
+            for (var i = chunkStart; i < Math.Min(chunkStart + RegexScanChunkFiles, allFiles.Count); i++)
+                chunk.Add((i, allFiles[i]));
+
+            await ScanChunkAsync(chunk);
+
             if (Interlocked.CompareExchange(ref globalCount, 0, 0) >= maxResults)
             {
-                Interlocked.Exchange(ref truncatedFlag, 1);
-                return;
+                stoppedEarly = chunkStart + RegexScanChunkFiles < allFiles.Count;
+                if (stoppedEarly) Interlocked.Exchange(ref truncatedFlag, 1);
+                break;
             }
+        }
+
+        async Task ScanChunkAsync(List<(int Ordinal, string Path)> chunk) =>
+            await Parallel.ForEachAsync(chunk, ct, async (item, internalCt) =>
+        {
+            var (fileOrdinal, filePath) = item;
 
             try
             {
@@ -824,13 +852,12 @@ public class SourceIndexer
 
                         // 已经打开的文件一律读到底：句柄和缓冲的钱都付过了，读完才换得
                         // 一个准确的每文件命中数，而不是一个恰好等于上限的假数。
+                        // 块内一律收下（每文件封顶 MaxPreviewsPerFile，故一块最多几百条），
+                        // 由块外统一排序后再截。这里按上限丢弃就等于让线程调度决定丢哪条。
                         if (matchesInThisFile <= MaxPreviewsPerFile)
                         {
-                            var currentCount = Interlocked.Increment(ref globalCount);
-                            if (currentCount <= maxResults)
-                                results.Add((filePath, lineNum, TruncatePreview(line)));
-                            else
-                                Interlocked.Exchange(ref truncatedFlag, 1);
+                            Interlocked.Increment(ref globalCount);
+                            results.Add((fileOrdinal, filePath, lineNum, TruncatePreview(line)));
                         }
                     }
                     if (lineNum >= MaxLinesScannedPerFile)
@@ -867,8 +894,15 @@ public class SourceIndexer
         // 半路。扫描到此已经结束，补一次满格，别让调用方的进度条挂着。
         progress?.Report(1.0);
 
-        var finalCount = Interlocked.CompareExchange(ref globalCount, 0, 0);
-        var wasTruncated = Interlocked.CompareExchange(ref truncatedFlag, 0, 0) == 1;
+        // (文件序号, 行号) 是全序，故同一份语料 + 同一条查询恒给同一批、同一序的结果。
+        var ordered = results
+            .OrderBy(r => r.FileOrdinal)
+            .ThenBy(r => r.LineNumber)
+            .ToList();
+
+        var wasTruncated = Interlocked.CompareExchange(ref truncatedFlag, 0, 0) == 1
+                           || stoppedEarly
+                           || ordered.Count > maxResults;
         var diagnostics = new RegexScanDiagnostics(
             CandidateFiles: totalFiles,
             TimedOutFiles: Interlocked.CompareExchange(ref timedOutFiles, 0, 0),
@@ -876,8 +910,8 @@ public class SourceIndexer
             LineCappedFiles: Interlocked.CompareExchange(ref lineCappedFiles, 0, 0),
             LineCap: MaxLinesScannedPerFile);
 
-        return (results.Take(maxResults).ToList(),
-                wasTruncated || finalCount >= maxResults,
+        return (ordered.Take(maxResults).Select(r => (r.Path, r.LineNumber, r.Preview)).ToList(),
+                wasTruncated,
                 matchesByFile,
                 diagnostics);
     }

@@ -191,8 +191,9 @@ public class ReadCodeTool : ITool
                 {
                     classContent = string.Join("\n", classLines.Take(MaxLineCount));
                     classNote =
-                        $"\n[Truncated: '{extractClassName}' is {classLines.Length} lines, showing the first {MaxLineCount}. "
-                        + "Read one member with methodName, or continue with startLine/lineCount.]";
+                        $"\n... +{classLines.Length - MaxLineCount} more lines "
+                        + $"('{extractClassName}' is {classLines.Length} lines and the cap is {MaxLineCount}; "
+                        + "pass methodName for one member, or startLine to continue)";
                 }
 
                 // 与 member 模式对称地回显目标名。少了这行，同一个文件里连开几个 extractClass
@@ -257,7 +258,10 @@ public class ReadCodeTool : ITool
 
             if (startLine + lineCount < totalLines)
             {
-                sb.AppendLine($"\n[{totalLines - (startLine + lineCount)} more lines available, use startLine={startLine + lineCount}]");
+                // 文法与全服统一的截断脚注一致：`... +N more <什么> (<怎么拿到>)`，见 ScopeArgs.FoldLine。
+                sb.AppendLine(
+                    $"\n... +{totalLines - (startLine + lineCount)} more lines "
+                    + $"(pass startLine={startLine + lineCount})");
             }
 
             return WithUnresolvedScopeNotice(scope, new ToolResult(sb.ToString()));

@@ -120,7 +120,7 @@ public class ReadCodeToolTests : IDisposable
         Assert.False(result.IsError);
         Assert.Equal(2000, result.Content.Split('\n').Count(line => line.StartsWith("L")));
         // 夹住之后还剩内容，必须照常给出续读提示
-        Assert.Contains("more lines available", result.Content);
+        Assert.Contains("more lines (pass startLine=2000)", result.Content);
     }
 
     // 同名成员多命中时的分隔符只能放在两条之间。原先每条之后都追加一次，

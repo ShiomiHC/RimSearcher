@@ -150,11 +150,13 @@ public class OutputVolumeCapTests : IDisposable
         var result = await tool.ExecuteAsync(args.RootElement, CancellationToken.None);
 
         Assert.False(result.IsError);
-        Assert.Contains("Truncated", result.Content);
+        // 文法与其余各工具的截断脚注一致：`... +N more <什么> (<怎么拿到>)`
+        Assert.Contains("... +", result.Content);
+        Assert.Contains("more lines", result.Content);
         Assert.Contains("methodName", result.Content);
 
         // 截断说明必须落在围栏之外：混进 ``` 块里就成了源码的一部分，整块复制出去编译不过
-        Assert.EndsWith("]", result.Content.TrimEnd());
+        Assert.EndsWith(")", result.Content.TrimEnd());
     }
 
     private async Task<ToolResult> SearchRegex(string fileName, string content, string pattern)

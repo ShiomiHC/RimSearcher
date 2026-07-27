@@ -440,7 +440,9 @@ public sealed class RimSearcher
                     {
                         content = new[]
                         {
-                            new { type = "text", text = result.Content + health + notice + unknownKeys }
+                            // 与 ToolResult 同一条口径：拼完再收一次尾。四段里任何一段带着
+                            // 结尾空行进来，都会让整份返回读起来像被截断。
+                            new { type = "text", text = (result.Content + health + notice + unknownKeys).TrimEnd() }
                         },
                         isError = result.IsError
                     });

@@ -395,14 +395,13 @@ public class InspectTool : ITool
         {
             sb.AppendLine($"## C# Type: {CanonicalTypeName(name)}");
 
+            // C# 的基类链恒为线性，用 mermaid `graph TD` 画它是把一维信息塞进二维格式：
+            // 三层链要 7 行 ~150 字符，而 `A <- B <- C` 一行 ~45 字符说的是同一件事，
+            // 读者还得从箭头对里自己重建先后顺序。同一个工具的 def 模式早就在用一行式
+            // （`Inheritance chain: X <- Y`），两处渲染同一个概念不该有两套写法。
             var chain = _sourceIndexer.GetInheritanceChain(name);
             if (chain.Count > 0)
-            {
-                sb.AppendLine("\n**Inheritance:**");
-                sb.AppendLine("```mermaid\ngraph TD");
-                foreach (var (child, parent) in chain) sb.AppendLine($"    {child} --> {parent}");
-                sb.AppendLine("```\n");
-            }
+                sb.AppendLine($"Inheritance chain: {string.Join(" <- ", LinearChain(chain))}");
 
             // 同名类型在 vanilla 与各 mod 里各有一份是常态（HAR 之类的前置尤其如此），
             // 每份都全量渲染一次大纲，体积就按文件数线性放大。读者要的通常是作用域里
@@ -416,17 +415,19 @@ public class InspectTool : ITool
                 if (outlinesShown >= MaxOutlinedFiles)
                 {
                     sb.AppendLine(
-                        $"**Also declared in** `{entry.Item}`{ScopeArgs.Label(entry.SourceName)} "
+                        $"\n**Also declared in** `{entry.Item}`{ScopeArgs.Label(entry.SourceName)} "
                         + "— outline omitted; narrow scope to this source, or use read_code extractClass, to see it.");
                     continue;
                 }
 
+                // 分隔线画在两份大纲**之间**而不是每份之后：只有一份时（绝大多数调用）结尾那道
+                // 横线分隔的是空气，读者却会把它读成「后面还有内容、被截断了」。
+                sb.AppendLine(outlinesShown == 0 ? "" : "\n---\n");
                 sb.AppendLine($"**Outline** (`{entry.Item}`){ScopeArgs.Label(entry.SourceName)}:");
 
                 // 按状态判断而不是看正文——正文里出现 "not found" 之类的字面量是常态
                 var outline = await RoslynHelper.GetClassOutlineAsync(entry.Item, name, OutlineLimit(args));
                 sb.AppendLine(outline.IsOk ? outline.Content : DescribeOutlineFailure(outline.Status, name));
-                sb.AppendLine("---");
                 outlinesShown++;
             }
 
@@ -492,6 +493,30 @@ public class InspectTool : ITool
     // 取规范拼写」的入口，只能借模糊搜索：完全一致（忽略大小写）恒为满分，必在最前几条。
     // 这里只是纠正拼写、不换名字形态，与 scope 无关，故用全域查，免得类型在别的源里
     // 也有定义时被 scope 过滤掉、白白退回原样。取不到就原样返回，宁可不改也不改错。
+    // GetInheritanceChain 给的是自下而上的 (child, parent) 对，且 child 全限定、parent 短名，
+    // 直接 join 会把每个中间类型印两遍。取首个 child 再顺次取各 parent 即还原成一条线。
+    // 命名空间在标题行已经给过，链上一律用短名——链读的是形状，短名也正是调用方转手
+    // 喂回 locate/read_code 的那个写法。相邻两对接不上时（索引里同名类型解析歧义）
+    // 把断点处的 child 也印出来，而不是悄悄接成一条假链。
+    private static List<string> LinearChain(IReadOnlyList<(string Child, string Parent)> chain)
+    {
+        var names = new List<string> { ShortTypeName(chain[0].Child) };
+        for (var i = 0; i < chain.Count; i++)
+        {
+            var child = ShortTypeName(chain[i].Child);
+            if (i > 0 && !string.Equals(child, names[^1], StringComparison.OrdinalIgnoreCase))
+                names.Add(child);
+            names.Add(ShortTypeName(chain[i].Parent));
+        }
+        return names;
+    }
+
+    private static string ShortTypeName(string name)
+    {
+        var dot = name.LastIndexOf('.');
+        return dot >= 0 && dot < name.Length - 1 ? name[(dot + 1)..] : name;
+    }
+
     private string CanonicalTypeName(string name)
     {
         var matches = _sourceIndexer.FuzzySearchTypes(name, _scopeCatalog.Everything, limit: 5);

@@ -333,9 +333,11 @@ public static class RoslynHelper
     private static void AppendOutlineFold(StringBuilder sb, int total, int shownCap, string kindPlural)
     {
         if (total <= shownCap) return;
+        // 措辞对齐全服统一的截断脚注文法「... +N more <什么> (<怎么拿到>)」——见 ScopeArgs.FoldLine。
+        // "not shown" 是 "more" 已经说过的话。
         sb.AppendLine(
-            $"  ... +{total - shownCap} more {kindPlural} not shown "
-            + "(re-run inspect with limit:'all' for the whole list, or read one with read_code methodName)");
+            $"  ... +{total - shownCap} more {kindPlural} "
+            + "(pass limit:'all' for the whole list, or read one with read_code methodName)");
     }
 
     // 与 FormatParameter 同一条判据：大纲是「照着它写调用或写 Harmony patch」的抄写样本，
