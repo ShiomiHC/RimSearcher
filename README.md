@@ -34,13 +34,19 @@
 - `locate` / `trace` / `search_regex` 工具采用结果上限与预览截断，控制上下文体积并保持关键信息密度
 - `read_code` 支持按 `methodName`/`extractClass` 精确读取代码，未指定成员时再按小范围行号读取，避免一次返回整个文件
 
+### 跟随游戏与 mod 更新
+- 按 sha256 检测已配置源的程序集变化，可一键重新反编译（进程内完成，不依赖外部工具）
+- 保留数代源码历史，支持文件级与行级 diff，游戏更新后能直接看出改了什么
+- 重新同步后索引就地重建，不需要重启服务
+
 ### 运行模型与边界
 - 本地运行，核心检索不依赖网络
 - 网络请求仅用于版本更新提示（可关闭）
+- 反编译仅针对使用者自己配置的本地程序集，且由 `sync_sources` 显式触发，不会自动进行
 
 ---
 
-## 2. 六大工具
+## 2. 七大工具
 
 以下为实际注册的 MCP 工具名与能力说明。
 
@@ -145,6 +151,33 @@ fileFilter: .cs
 
 ---
 
+###  `rimworld-searcher__sync_sources`
+程序集跟随与源码同步。仅对在配置里声明了 `assemblies` 的源生效，未声明的源视为手工副本，同步流程会跳过。
+
+**三种动作**
+
+| `action` | 行为 |
+| --- | --- |
+| `check`（默认） | 只比对程序集 sha256，报告哪些源变了。只读，通常几十到几百毫秒 |
+| `sync` | 对变更的源重新反编译，并就地重建索引（**不需要重启**） |
+| `diff` | 列出上次同步的源码增删改；带 `file` 参数则返回该文件的行级 diff |
+
+**参数**
+- `sources`：逗号分隔的源名，限定操作范围；省略即覆盖全部可跟随源
+- `file`：`diff` 专用，取自 diff 列表的相对路径，给出后返回行级 unified diff
+- `version`：`diff` 专用，指定对比哪一代归档（默认最近一代）
+- `limit`：`diff` 专用，文件列表条数上限，或给了 `file` 时的 diff 行数上限
+
+**行为要点**
+- 反编译走进程内的 `ICSharpCode.Decompiler`，语言档位锁定 C# 9（Unity 2022.3 的实际水平），不依赖外部 `ilspycmd`
+- 引用集从程序集元数据的 `AssemblyRef` 推导，mod 引用 `Assembly-CSharp`、Harmony 或其它前置 mod 都能自动解析
+- mod 的多版本目录（`1.4/`、`1.5/`、`1.6/`…）只取当前游戏版本那一份，其余是历史死代码
+- 内容相同的程序集按 sha256 去重，只反编译一次
+- 先写暂存目录、成功后才替换，中途失败不会留下半份源码
+- 输出目录若非空且缺少 `.rimsearcher-decompiled` 标记，会拒绝写入，避免配置笔误抹掉手工源码副本
+
+---
+
 ## 2.5 系统架构
 
 ```text
@@ -170,25 +203,36 @@ Program.cs (bootstrap)
         `- .cache/.update-cache (latest version + check time)
 
 Tool Layer
-  |- locate | inspect | trace | read_code | search_regex | list_directory
+  |- locate | inspect | trace | read_code | search_regex | list_directory | sync_sources
   |
   +-- SourceIndexer
   |     |- RoslynHelper / FuzzyMatcher / QueryParser
-  |     `- Local C# source (Assembly-CSharp)
+  |     `- Local C# source (decompiled or hand-copied)
   |
-  `-- DefIndexer
-        |- XmlInheritanceHelper / FuzzyMatcher / QueryParser
-        `- Local RimWorld XML (Data/Defs...)
+  +-- DefIndexer
+  |     |- XmlInheritanceHelper / FuzzyMatcher / QueryParser
+  |     `- Local RimWorld XML (Data/Defs...)
+  |
+  `-- SourceSyncService (assembly following)
+        |- AssemblyScanner       sha256 + AssemblyRef -> reference set
+        |- DecompileService      ICSharpCode.Decompiler, C# 9
+        |- SourceHistoryStore    reverse-delta history -> .cache/index/history
+        `- IndexGate / IndexRebuilder
+              `- suspend queries, clear + rescan in place (no hot swap)
 ```
 
 **启动流程**
 1. 读取配置（优先 `RIMSEARCHER_CONFIG`，未设置时回退到同目录 `config.json`）
-2. 初始化路径安全策略
-3. 自动准备缓存目录（`<exe目录>/.cache/index`）
-4. 尝试加载索引缓存（`manifest.json` + `index.bin`）
-5. 缓存未命中时扫描 C# / XML 并建索引，然后回写缓存
-6. 冻结索引（读优化）
-7. 注册工具并启动 MCP 服务
+2. 合并 `Sources` 与旧的 `CsharpSourcePaths` / `XmlSourcePaths` 为统一视图
+3. 初始化路径安全策略
+4. 自动准备缓存目录（`<exe目录>/.cache/index`）
+5. 尝试加载索引缓存（`manifest.json` + `index.bin`）
+6. 缓存未命中时扫描 C# / XML 并建索引，然后回写缓存
+7. 冻结索引（读优化）
+8. 若启用 `CheckSourceUpdates`，后台并行探测程序集与 XML 变更（只记录，不反编译）
+9. 注册工具并启动 MCP 服务
+
+**索引重建**：`sync` 之后索引会就地清空重扫，而非新建一份再切换——热替换会让新旧两份索引同时驻留、内存翻倍。代价是重建期间（vanilla 单源实测约 3 秒）到达的查询会挂起等待，完成后统一放行，因此不会读到半成品索引。
 
 ---
 
@@ -200,6 +244,18 @@ Tool Layer
 3. `inspect(RimWorld.CompShield)`：看继承链和类大纲
 4. `read_code(path=CompShield.cs, methodName=CompTick)`：读取核心逻辑
 5. `trace(symbol=CompShield, mode=usages)`：追踪相关引用
+
+### 场景：游戏或 mod 更新后跟进变更
+前提：相关源在配置里声明了 `assemblies`，且 `SourceHistoryDepth >= 1`。
+
+1. 启动时后台已自动探测过。若变更涉及你正在查的内容，工具返回末尾会出现提示
+2. `sync_sources(action="check")`：确认哪些源的程序集变了
+3. `sync_sources(action="sync")`：重新反编译并就地重建索引，不需要重启
+4. `sync_sources(action="diff")`：看这次同步改了哪些源码文件
+5. `sync_sources(action="diff", file="RimWorld/CompShield.cs")`：看该文件的行级改动
+6. 此后再查询时，若你先前问过的类型确实在这次同步中变了，返回里会点名提示
+
+**关于提示的克制**：一条提示只在「这个会话确实问过该内容」且「它确实受影响」时才发出。同步前只判得到源级（哪个源变了），同步后有了文件级 diff 才能精确到具体类型；问过的东西一个都没变时不会打扰你。同一批变更在一个会话内也只提示一次。
 
 ---
 
@@ -213,6 +269,9 @@ Tool Layer
 | 并发控制 | MCP 请求并发上限 10 |
 | 正则搜索保护 | 全局/单文件命中上限 + 行数上限 + regex 超时 |
 | 路径安全 | 白名单根目录校验（`SkipPathSecurity=false` 时生效） |
+| 反编译隔离 | 先写暂存目录、成功后才替换；输出目录缺 `.rimsearcher-decompiled` 标记且非空时拒绝写入 |
+| 索引重建 | 就地清空重扫而非热替换（避免内存翻倍），重建期间查询挂起等待 |
+| 源码历史 | 反向增量，仅存被覆盖的旧文件，按 `SourceHistoryDepth` 轮转 |
 
 ### 索引缓存说明
 
@@ -240,14 +299,26 @@ Tool Layer
 配置示例：
 ```json
 {
-  "CsharpSourcePaths": [
-    { "name": "vanilla", "path": "C:/Path/To/Your/RimWorld/Source" },
-    { "name": "HAR", "path": "C:/Path/To/Decompiled/AlienRace" }
-  ],
-  "XmlSourcePaths": [
-    { "name": "vanilla", "path": "C:/SteamLibrary/steamapps/common/RimWorld/Data" },
-    { "name": "HAR", "path": "C:/SteamLibrary/steamapps/workshop/content/294100/839005762/Defs" },
-    { "name": "HAR", "path": "C:/SteamLibrary/steamapps/workshop/content/294100/839005762/1.6/Defs" }
+  "Sources": [
+    {
+      "name": "vanilla",
+      "csharp": "C:/RimWorldSource/1.6/Core",
+      "xml": [
+        "C:/SteamLibrary/steamapps/common/RimWorld/Data/Core/Defs",
+        "C:/SteamLibrary/steamapps/common/RimWorld/Data/Royalty/Defs",
+        "C:/SteamLibrary/steamapps/common/RimWorld/Data/Biotech/Defs"
+      ],
+      "assemblies": [ "C:/SteamLibrary/steamapps/common/RimWorld/RimWorldWin64_Data/Managed" ]
+    },
+    {
+      "name": "HAR",
+      "csharp": "C:/RimWorldSource/1.6/HAR",
+      "xml": [
+        "C:/SteamLibrary/steamapps/workshop/content/294100/839005762/Defs",
+        "C:/SteamLibrary/steamapps/workshop/content/294100/839005762/1.6/Defs"
+      ],
+      "assemblies": [ "C:/SteamLibrary/steamapps/workshop/content/294100/839005762/1.6/Assemblies" ]
+    }
   ],
   "ScopeGroups": {
     "base": [ "vanilla", "HAR" ]
@@ -255,20 +326,29 @@ Tool Layer
   "DefaultScope": "base",
   "VerifySourceFreshness": true,
   "SkipPathSecurity": false,
-  "CheckUpdates": true
+  "CheckUpdates": true,
+  "CheckSourceUpdates": true,
+  "SourceHistoryDepth": 2
 }
 ```
 
 字段说明：
-- `CsharpSourcePaths`: C# 源码目录（反编译源码目录，需要自己反编译导出游戏源码文件，这里不提供）
-- `XmlSourcePaths`: RimWorld `Data` 目录及各 mod 的 `Defs` 目录
+- `Sources`: 一行声明一个逻辑源的全部路径。`csharp` / `xml` / `assemblies` 三者都可以写单个字符串或字符串数组
+  - `csharp`: 源码目录。**配了 `assemblies` 时，第一个 `csharp` 路径就是反编译输出目标**，其余视为附加的只读源码目录
+  - `xml`: 该源的 Def 目录，可多个（各 DLC 的 `Defs`、mod 的 `Defs` + `1.6/Defs`）
+  - `assemblies`: 该源的程序集目录。**配了才能被 `sync_sources` 跟随**；留空即视为手工维护的源码副本，同步流程跳过
 - `ScopeGroups`: 作用域组，组名 → 源名列表；一个源可同属多组，组内顺序即同分时的排序优先级
 - `DefaultScope`: 未显式传 `scope` 参数时使用的作用域表达式；留空即全域
 - `VerifySourceFreshness`: 把源文件的大小/修改时间摘要纳入缓存指纹，让 Steam 更新过的 mod 自动触发索引重建（代价是启动时多几百毫秒的元数据枚举）
 - `SkipPathSecurity`: `true` 时关闭路径白名单检查（仅建议本地可信环境）
-- `CheckUpdates`: 是否启用版本更新提示
+- `CheckUpdates`: 是否启用版本更新提示（指 RimSearcher 自身的版本，与源跟随无关）
+- `CheckSourceUpdates`: 是否在启动时后台探测程序集与 XML 变更。只检测不反编译；发现变更且与当前会话查过的内容相关时，会在工具返回末尾附一条提示。默认 `true`
+- `SourceHistoryDepth`: 保留几代反编译历史供 `diff` 使用，`0` 为不保留（默认）。每代只存本次被覆盖的旧文件（反向增量），一次游戏更新通常只动少量文件，占用远小于同等份数的完整副本
+- `GameVersion`: mod 多版本目录的匹配键（如 `"1.6"`）。留空则从 `assemblies` 路径上溯查找 `Version.txt` 自动判定
 
-**源命名与作用域**：`name` 相同的多个条目归为**同一个源**，因此一个逻辑源可以跨多个根目录（如 HAR 的 C# 目录 + 两个 Defs 目录），也可以跨 `CsharpSourcePaths` / `XmlSourcePaths` 两侧。省略 `name` 时按路径末段推断（会跳过 `Defs`、`1.6` 这类无信息量的段），旧版的裸字符串数组仍可直接使用。
+**旧格式仍然可用**：`CsharpSourcePaths` / `XmlSourcePaths` 两个列表（含裸字符串写法）继续支持，可与 `Sources` 混用。区别只是旧格式靠 `name` 相同来隐式关联同一个源，而 `Sources` 把它们收拢在一处。
+
+**源命名与作用域**：`name` 相同的多个条目归为**同一个源**，因此一个逻辑源可以跨多个根目录（如 HAR 的 C# 目录 + 两个 Defs 目录）。省略 `name` 时按路径末段推断（会跳过 `Defs`、`1.6` 这类无信息量的段）。
 
 所有查询工具都接受 `scope` 参数：
 
@@ -382,6 +462,7 @@ Tool Layer
 
 - 本项目为第三方开源工具，与 Ludeon Studios 及 RimWorld 官方无隶属、赞助或背书关系。
 - 本工具仅对用户本地提供的源码/XML进行索引与检索，不内置或分发任何游戏原始资源。
+- 本工具可对使用者**自行配置的本地程序集**执行反编译（`sync_sources`，需显式触发），反编译产物仅写入使用者指定的本地目录，不上传、不分发。
 - 检索与分析结果仅供学习、调试与研究参考。
 - 使用者应自行确保其数据来源、反编译行为与使用方式符合当地法律法规、RimWorld 相关协议及各 Mod 许可证要求。
 - 因使用本工具造成的任何直接或间接损失，项目作者与贡献者不承担责任。
