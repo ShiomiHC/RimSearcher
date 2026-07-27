@@ -270,6 +270,7 @@ Tool Layer
 | 正则搜索保护 | 全局/单文件命中上限 + 行数上限 + regex 超时 |
 | 路径安全 | 白名单根目录校验（`SkipPathSecurity=false` 时生效） |
 | 反编译隔离 | 先写暂存目录、成功后才替换；输出目录缺 `.rimsearcher-decompiled` 标记且非空时拒绝写入 |
+| 产物不外流 | 输出目录内自动写入 `.gitignore`（内容 `*`），避免反编译产物被误提交进版本库 |
 | 索引重建 | 就地清空重扫而非热替换（避免内存翻倍），重建期间查询挂起等待 |
 | 源码历史 | 反向增量，仅存被覆盖的旧文件，按 `SourceHistoryDepth` 轮转 |
 
@@ -332,9 +333,24 @@ Tool Layer
 }
 ```
 
+**最简写法**：省略 `csharp`，只指程序集目录，产物落到 `<exe目录>/Decompiled/<源名>`，无需自己规划源码目录：
+
+```json
+{
+  "Sources": [
+    {
+      "name": "vanilla",
+      "assemblies": "C:/SteamLibrary/steamapps/common/RimWorld/RimWorldWin64_Data/Managed"
+    }
+  ]
+}
+```
+
+配好后跑一次 `sync_sources(action="sync")` 即可。目录在首次启动时就会建出来（空目录不影响索引缓存），产物写入后目录内会自动带上 `.gitignore` 和 `.rimsearcher-decompiled` 标记。
+
 字段说明：
 - `Sources`: 一行声明一个逻辑源的全部路径。`csharp` / `xml` / `assemblies` 三者都可以写单个字符串或字符串数组
-  - `csharp`: 源码目录。**配了 `assemblies` 时，第一个 `csharp` 路径就是反编译输出目标**，其余视为附加的只读源码目录
+  - `csharp`: 源码目录。**配了 `assemblies` 时，第一个 `csharp` 路径就是反编译输出目标**，其余视为附加的只读源码目录。整个 `csharp` 省略不写时，输出目标默认为 `<exe目录>/Decompiled/<源名>`
   - `xml`: 该源的 Def 目录，可多个（各 DLC 的 `Defs`、mod 的 `Defs` + `1.6/Defs`）
   - `assemblies`: 该源的程序集目录。**配了才能被 `sync_sources` 跟随**；留空即视为手工维护的源码副本，同步流程跳过
 - `ScopeGroups`: 作用域组，组名 → 源名列表；一个源可同属多组，组内顺序即同分时的排序优先级
@@ -345,6 +361,7 @@ Tool Layer
 - `CheckSourceUpdates`: 是否在启动时后台探测程序集与 XML 变更。只检测不反编译；发现变更且与当前会话查过的内容相关时，会在工具返回末尾附一条提示。默认 `true`
 - `SourceHistoryDepth`: 保留几代反编译历史供 `diff` 使用，`0` 为不保留（默认）。每代只存本次被覆盖的旧文件（反向增量），一次游戏更新通常只动少量文件，占用远小于同等份数的完整副本
 - `GameVersion`: mod 多版本目录的匹配键（如 `"1.6"`）。留空则从 `assemblies` 路径上溯查找 `Version.txt` 自动判定
+- `DecompileOutputRoot`: 省略 `csharp` 时，默认输出目录的根。留空即 `<exe目录>/Decompiled`（与 `.cache/index` 同处一地）；写相对路径按 exe 目录解析。装在 `C:\Program Files` 之类不可写的位置时，改配一个可写目录
 
 **旧格式仍然可用**：`CsharpSourcePaths` / `XmlSourcePaths` 两个列表（含裸字符串写法）继续支持，可与 `Sources` 混用。区别只是旧格式靠 `name` 相同来隐式关联同一个源，而 `Sources` 把它们收拢在一处。
 
@@ -462,7 +479,9 @@ Tool Layer
 
 - 本项目为第三方开源工具，与 Ludeon Studios 及 RimWorld 官方无隶属、赞助或背书关系。
 - 本工具仅对用户本地提供的源码/XML进行索引与检索，不内置或分发任何游戏原始资源。
-- 本工具可对使用者**自行配置的本地程序集**执行反编译（`sync_sources`，需显式触发），反编译产物仅写入使用者指定的本地目录，不上传、不分发。
+- 本工具可对使用者**自行配置的本地程序集**执行反编译（`sync_sources`，需显式触发），反编译产物仅写入本地目录，不上传、不分发。
+- **反编译产物请勿提交至版本库或再分发**。它是游戏/Mod 代码的衍生物：留在本地供自己调试、查接口、做兼容属于常规的 modding 用途，公开分发则另当别论。工具已在输出目录内写入 `.gitignore` 以降低误提交风险，但这只是机制兜底，不替代使用者的判断。
+- 第三方 Mod 的程序集各有其许可条款（不少为保留所有权利）。参考其实现以实现兼容是一回事，把反编译得到的代码搬进自己的项目是另一回事。
 - 检索与分析结果仅供学习、调试与研究参考。
 - 使用者应自行确保其数据来源、反编译行为与使用方式符合当地法律法规、RimWorld 相关协议及各 Mod 许可证要求。
 - 因使用本工具造成的任何直接或间接损失，项目作者与贡献者不承担责任。

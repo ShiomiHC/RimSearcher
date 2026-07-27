@@ -149,6 +149,8 @@ public record AppConfig
 {
     public const string ConfigPathEnvVar = "RIMSEARCHER_CONFIG";
 
+    public const string DefaultDecompileFolder = "Decompiled";
+
     public List<SourcePathEntry> CsharpSourcePaths { get; init; } = new();
     public List<SourcePathEntry> XmlSourcePaths { get; init; } = new();
 
@@ -176,6 +178,11 @@ public record AppConfig
     // 一次游戏更新通常只动 5–20% 的文件，故占用远小于同等份数的完整副本。
     public int SourceHistoryDepth { get; init; } = 0;
 
+    // 只配了 assemblies、没配 csharp 的源，产物落到 <这个根>/<源名>。
+    // 留空则用 <exe目录>/Decompiled——与 .cache/index 同处一地，可写性假定一致，
+    // 且与目标同卷，暂存区转正走的是原子 rename 而非跨盘复制。
+    public string? DecompileOutputRoot { get; init; }
+
     // 启动时把源文件的大小/修改时间摘要纳入缓存指纹，让 Steam 更新过的 mod 自动触发重建。
     // 代价是每次启动多几百毫秒的元数据枚举；源全是手工副本、从不变动时可关掉。
     public bool VerifySourceFreshness { get; init; } = true;
@@ -194,7 +201,9 @@ public record AppConfig
 
     // 新旧两种格式合并成下游唯一的事实来源。同名条目不去重：ScopeCatalog 本就按 name 把
     // 多个根归到同一个源，重复路径在索引侧也已按文件路径去重。
-    public ResolvedSources ResolveSources()
+    //
+    // baseDirectory 仅供测试注入，让这里不依赖 AppDomain 就能验证默认目录的推导。
+    public ResolvedSources ResolveSources(string? baseDirectory = null)
     {
         var csharp = new List<SourcePathEntry>(CsharpSourcePaths);
         var xml = new List<SourcePathEntry>(XmlSourcePaths);
@@ -205,12 +214,20 @@ public record AppConfig
             // 不滤掉会在下一行直接 NRE，而这里在 TryLoad 的 catch 之外——整个进程会起不来
             if (definition == null) continue;
 
-            for (var i = 0; i < definition.Csharp.Count; i++)
+            // 只写 assemblies、没写 csharp 时补一个默认输出目录。不补的话这个源在下面的
+            // 循环里一条路径都不产出，既不会被索引也不会被反编译——静默消失，最难查的那种。
+            var paths = definition.Csharp.Count > 0
+                ? definition.Csharp
+                : definition.Assemblies.Count > 0
+                    ? [DefaultDecompileTarget(definition.Name, baseDirectory)]
+                    : definition.Csharp;
+
+            for (var i = 0; i < paths.Count; i++)
             {
                 csharp.Add(new SourcePathEntry
                 {
                     Name = definition.Name,
-                    Path = definition.Csharp[i],
+                    Path = paths[i],
                     // 只有反编译目标那条挂 assemblies，否则同一批程序集会被多条源码路径重复扫描
                     AssemblyPaths = i == 0 ? definition.Assemblies : []
                 });
@@ -223,6 +240,25 @@ public record AppConfig
         }
 
         return new ResolvedSources(csharp, xml);
+    }
+
+    // 源名直接进路径，故必须先洗掉分隔符和非法字符：name 可由用户显式给出，
+    // 也可能是从路径末段推断来的，两者都不保证是合法的单层目录名。
+    private string DefaultDecompileTarget(string sourceName, string? baseDirectory)
+    {
+        var root = string.IsNullOrWhiteSpace(DecompileOutputRoot)
+            ? Path.Combine(baseDirectory ?? AppDomain.CurrentDomain.BaseDirectory, DefaultDecompileFolder)
+            : ResolvePath(DecompileOutputRoot, baseDirectory);
+
+        return Path.Combine(root, SanitizeFolderName(sourceName));
+    }
+
+    private static string SanitizeFolderName(string name)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var cleaned = new string(name.Select(c => invalid.Contains(c) ? '_' : c).ToArray()).Trim(' ', '.');
+
+        return cleaned.Length == 0 ? "unnamed" : cleaned;
     }
 
     public static (AppConfig Config, string Path, bool IsLoaded) Load()
@@ -266,13 +302,13 @@ public record AppConfig
         return false;
     }
 
-    private static string ResolvePath(string rawPath)
+    private static string ResolvePath(string rawPath, string? baseDirectory = null)
     {
         var expanded = Environment.ExpandEnvironmentVariables(rawPath.Trim().Trim('"'));
         if (Path.IsPathRooted(expanded))
             return Path.GetFullPath(expanded);
 
-        var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+        var baseDir = baseDirectory ?? AppDomain.CurrentDomain.BaseDirectory;
         return Path.GetFullPath(Path.Combine(baseDir, expanded));
     }
 }

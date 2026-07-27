@@ -104,6 +104,81 @@ public class ConfigParsingTests
         Assert.False(csharp[1].CanFollow);
     }
 
+    // 回归：只写 assemblies 不写 csharp 的源，以前在 ResolveSources 里一条路径都不产出，
+    // 既不索引也不反编译——静默消失。现在补默认输出目录 <base>/Decompiled/<源名>。
+    [Fact]
+    public void AssembliesWithoutCsharp_FallsBackToDefaultOutputDirectory()
+    {
+        var config = Parse("""{"Sources":[{"name":"Core","assemblies":"C:/game/Managed"}]}""");
+
+        var source = Assert.Single(config.ResolveSources(@"C:/app").Csharp);
+
+        Assert.Equal(Path.Combine(@"C:/app", "Decompiled", "Core"), source.Path);
+        Assert.True(source.CanFollow);
+    }
+
+    [Fact]
+    public void ExplicitCsharpPath_WinsOverDefaultOutputDirectory()
+    {
+        var config = Parse("""
+            {"Sources":[{"name":"Core","csharp":"D:/src/Core","assemblies":"C:/game/Managed"}]}
+            """);
+
+        Assert.Equal("D:/src/Core", Assert.Single(config.ResolveSources(@"C:/app").Csharp).Path);
+    }
+
+    [Fact]
+    public void DecompileOutputRoot_OverridesTheDefaultFolder()
+    {
+        var config = Parse("""
+            {"DecompileOutputRoot":"D:/decompiled",
+             "Sources":[{"name":"Core","assemblies":"C:/game/Managed"}]}
+            """);
+
+        // DecompileOutputRoot 走 ResolvePath，故期望值也要按同一套规则规范化（D:/ → D:\）
+        Assert.Equal(Path.Combine(Path.GetFullPath(@"D:/decompiled"), "Core"),
+            Assert.Single(config.ResolveSources(@"C:/app").Csharp).Path);
+    }
+
+    // 相对路径按 exe 目录解析，与 config.json / RIMSEARCHER_CONFIG 的既有规则一致
+    [Fact]
+    public void RelativeDecompileOutputRoot_ResolvesAgainstBaseDirectory()
+    {
+        var config = Parse("""
+            {"DecompileOutputRoot":"../shared",
+             "Sources":[{"name":"Core","assemblies":"C:/game/Managed"}]}
+            """);
+
+        var path = Assert.Single(config.ResolveSources(@"C:/app/bin").Csharp).Path;
+
+        Assert.Equal(Path.GetFullPath(Path.Combine(@"C:/app", "shared", "Core")), path);
+    }
+
+    // 源名会直接进路径。它可能是用户显式给的，也可能是从路径末段推断的，都不保证是合法目录名
+    [Theory]
+    [InlineData("Vanilla Expanded", "Vanilla Expanded")]
+    [InlineData("Core/Sub", "Core_Sub")]
+    [InlineData(@"a:b*c", "a_b_c")]
+    public void DefaultOutputDirectory_SanitizesSourceName(string name, string expected)
+    {
+        var config = Parse($$"""{"Sources":[{"name":"{{name}}","assemblies":"C:/game/Managed"}]}""");
+
+        Assert.Equal(Path.Combine(@"C:/app", "Decompiled", expected),
+            Assert.Single(config.ResolveSources(@"C:/app").Csharp).Path);
+    }
+
+    // 没有 assemblies 就没有反编译，也就不该凭空造出一个输出目录
+    [Fact]
+    public void SourceWithNeitherCsharpNorAssemblies_ProducesNoCsharpPath()
+    {
+        var config = Parse("""{"Sources":[{"name":"Core","xml":"C:/game/Defs"}]}""");
+
+        var sources = config.ResolveSources(@"C:/app");
+
+        Assert.Empty(sources.Csharp);
+        Assert.Single(sources.Xml);
+    }
+
     [Theory]
     [InlineData("cs")]
     [InlineData("csharp_paths")]
@@ -183,6 +258,7 @@ public class ConfigParsingTests
         Assert.False(config.SkipPathSecurity);
         Assert.Equal(0, config.SourceHistoryDepth);
         Assert.Equal(0, config.IdleTimeoutMinutes);
+        Assert.Null(config.DecompileOutputRoot);
         Assert.False(config.ResolveSources().HasAny);
     }
 

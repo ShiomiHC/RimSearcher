@@ -81,6 +81,27 @@ var failedPaths = new List<string>();
 var existingCsharpPaths = new List<string>();
 var existingXmlPaths = new List<string>();
 
+// 可跟随源的 csharp[0] 就是反编译输出目标，首次 sync 前它本来就不存在——那是待办状态，
+// 不是配置错误。不先建出来的话它会落进 failedPaths，而 failedPaths 非空会整体禁掉索引缓存，
+// 于是「配好了但还没 sync」的用户每次启动都要重建一份 1 GB 索引。
+foreach (var entry in resolvedSources.Followable)
+{
+    if (Directory.Exists(entry.Path)) continue;
+
+    try
+    {
+        Directory.CreateDirectory(entry.Path);
+        await ServerLogger.Info("Program", "Created decompile output directory",
+            ("source", entry.Name), ("path", entry.Path));
+    }
+    catch (Exception ex)
+    {
+        // 建不出来（多见于装在 Program Files 下）就照常走下面的 failedPaths 分支
+        await ServerLogger.Warning("Program", "Could not create decompile output directory",
+            ("source", entry.Name), ("path", entry.Path), ("reason", ex.Message));
+    }
+}
+
 foreach (var entry in resolvedSources.Csharp)
 {
     if (Directory.Exists(entry.Path)) existingCsharpPaths.Add(entry.Path);
