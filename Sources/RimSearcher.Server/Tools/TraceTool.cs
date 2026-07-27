@@ -129,9 +129,12 @@ public class TraceTool : ITool
                 var paths = _sourceIndexer.GetPathsByType(entry.Item);
                 // 深度必须逐条标出来：树是拍平成一列返回的，不标就分不出「直接子类」
                 // 和「曾孙」，而这两者在判断「要覆写哪个方法」时含义完全不同。
+                // 但**只标非直接的**：直接子类占绝大多数（本转储 601 行全是），
+                // 每行挂一个 `[direct]` 是把表头已经说过的话再说 601 遍。
+                // 表头在有深层项时会点明「无标记 = 直接子类」。
                 var depth = depths.TryGetValue(entry.Item, out var d) ? d : 1;
-                var depthLabel = depth == 1 ? "direct" : $"depth {depth}";
-                return $"- `{entry.Item}` [{depthLabel}] ({string.Join(", ", paths.Select(System.IO.Path.GetFileName))}){ScopeArgs.Label(entry.SourceName)}";
+                var depthLabel = depth == 1 ? "" : $" [depth {depth}]";
+                return $"- `{entry.Item}`{depthLabel}{SymbolRow.FileNote(entry.Item, paths)}{ScopeArgs.Label(entry.SourceName)}";
             });
 
             // 这两个数只描述**列出来的这些条目**，不描述整棵树：Items 是截断后的展示切片，
@@ -143,10 +146,13 @@ public class TraceTool : ITool
                 .DefaultIfEmpty(1).Max();
 
             var sbInheritors = new System.Text.StringBuilder();
+            // 深度标记的约定只在真的出现深层项时才需要说明；全是直接子类时一个标记都不印，
+            // 表头的 "deepest 1 level(s) down" 已经把这件事说完了。
+            var depthLegend = shownDeepest > 1 ? ", untagged = direct" : "";
             sbInheritors.AppendLine(
                 $"Subclasses of '{symbol}' ({inheritors.TotalInScope} in scope '{scope.Expression}', transitive — "
                 + $"indirect descendants included). Listed below: {inheritors.Items.Count} "
-                + $"({shownDirect} direct, deepest {shownDeepest} level(s) down):");
+                + $"({shownDirect} direct, deepest {shownDeepest} level(s) down{depthLegend}):");
             sbInheritors.AppendLine(string.Join(Environment.NewLine, results));
 
             var fold = ScopeArgs.FoldLine(inheritors, indent: "", limit: limit);
@@ -280,9 +286,10 @@ public class TraceTool : ITool
 
             foreach (var group in grouped)
             {
-                var fileTag = group.Key.EndsWith(".xml") ? "[XML]" : "[C#]";
+                // 原先每组挂一个 `[C#]` / `[XML]` 前缀，而紧跟其后的文件名带着 .cs / .xml
+                // 后缀，说的是同一件事。search_regex 同样按文件分组、从来没有这个前缀。
                 var fileName = System.IO.Path.GetFileName(group.Key);
-                sb.AppendLine($"{fileTag} `{fileName}`{ScopeArgs.Label(scope.ShowLabels ? scope.SourceNameOf(group.Key) : null)}");
+                sb.AppendLine($"`{fileName}`{ScopeArgs.Label(scope.ShowLabels ? scope.SourceNameOf(group.Key) : null)}");
 
                 var shown = 0;
                 foreach (var match in group.OrderBy(m => m.lineNum))

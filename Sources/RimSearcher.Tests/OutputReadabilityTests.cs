@@ -97,6 +97,54 @@ public class OutputReadabilityTests : IDisposable
             Assert.Equal(1, row.Split("ZzLoose.xml").Length - 1);
     }
 
+    // R8：trace inheritors 的行末文件名走的是与 locate 同一条判据（SymbolRow.FileNote）。
+    // 真实语料实测 601 行里 589 行（98%）可推；剩下的 12 行全是嵌套类型，按外层段同样可推。
+    [Fact]
+    public async Task TraceInheritors_OmitsTheDerivableFileName()
+    {
+        var (indexer, _, catalog) = BuildIndex(
+            ("ZzBase.cs", "namespace Zz { public class ZzBase { } }"),
+            ("ZzKid.cs", "namespace Zz { public class ZzKid : ZzBase { } }"));
+
+        var content = await RunAsync(new TraceTool(indexer, catalog),
+            new { symbol = "ZzBase", mode = "inheritors" });
+
+        Assert.Contains("`Zz.ZzKid`", content);
+        Assert.DoesNotContain("ZzKid.cs", content);
+    }
+
+    // 嵌套类型声明在外层类型的文件里，同样推得出来
+    [Fact]
+    public async Task TraceInheritors_TreatsANestedTypesOuterFileAsDerivable()
+    {
+        var (indexer, _, catalog) = BuildIndex(
+            ("ZzBase.cs", "namespace Zz { public class ZzBase { } }"),
+            ("ZzOuter.cs", "namespace Zz { public class ZzOuter { public class ZzInner : ZzBase { } } }"));
+
+        var content = await RunAsync(new TraceTool(indexer, catalog),
+            new { symbol = "ZzBase", mode = "inheritors" });
+
+        Assert.Contains("ZzInner", content);
+        Assert.DoesNotContain("ZzOuter.cs", content);
+    }
+
+    // R10：`[C#]` / `[XML]` 前缀与紧跟其后的 .cs / .xml 后缀说的是同一件事；
+    // search_regex 同样按文件分组，从来没有这个前缀。
+    [Fact]
+    public async Task TraceUsages_DoesNotTagFilesWithALanguageTheExtensionAlreadyGives()
+    {
+        var (indexer, _, catalog) = BuildIndex(
+            ("ZzUser.cs", "namespace Zz { public class ZzUser { void Go() { ZzTarget.Run(); } } }"),
+            ("ZzTarget.cs", "namespace Zz { public static class ZzTarget { public static void Run() { } } }"));
+
+        var content = await RunAsync(new TraceTool(indexer, catalog),
+            new { symbol = "ZzTarget", mode = "usages" });
+
+        Assert.Contains("`ZzUser.cs`", content);
+        Assert.DoesNotContain("[C#]", content);
+        Assert.DoesNotContain("[XML]", content);
+    }
+
     // ---- R5：表头要说「什么 + 多少条」，与 trace / search_regex / list_directory 一致 ----
 
     [Fact]

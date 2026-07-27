@@ -335,24 +335,12 @@ public class LocateTool : ITool
     private static string Count(int n, string singular, string? plural = null) =>
         $"{n} {(n == 1 ? singular : plural ?? singular + "s")}";
 
-    // 结果行末尾的文件名有 95% 是从符号名逐字推导出来的（`CompShield` → CompShield.cs），
-    // 不承载信息，只把每行撑长、并把真正有信息的那 5%（`PawnCount` 在 ThingCountTracker.cs
-    // 里、`PawnFilter` 在 Dialog_BeginRitual.cs 里）淹进噪声。故只在文件名**推不出来**时才印：
-    // 这样印出来的每一个都是意外，值得读者看一眼。同一类型分散在多个文件（partial / 多 mod
-    // 各有一份）也算意外，照印。
+    // 判据与 trace 共用（见 SymbolRow）：文件名推得出来就不印。locate 用 ` - 名字` 的破折号写法，
+    // trace 用括号写法，共享的是「什么时候印」而不是「怎么排版」。
     private static string FileNote(string typeName, IReadOnlyList<string> paths)
     {
-        if (paths.Count == 0) return " - (file not indexed)";
-
-        var fileName = Path.GetFileName(paths[0]);
-        var dot = typeName.LastIndexOf('.');
-        var shortName = dot >= 0 && dot < typeName.Length - 1 ? typeName[(dot + 1)..] : typeName;
-
-        if (paths.Count == 1 && string.Equals(fileName, shortName + ".cs", StringComparison.OrdinalIgnoreCase))
-            return string.Empty;
-
-        var more = paths.Count > 1 ? $" +{paths.Count - 1} more file{(paths.Count == 2 ? "" : "s")}" : "";
-        return $" - {fileName}{more}";
+        var note = SymbolRow.FileNote(typeName, paths);
+        return note.Length == 0 ? string.Empty : $" - {note.Trim().Trim('(', ')')}";
     }
 
     // MemberType 来自索引层，取值是 Method / Property / Field。直接加 's' 会写出 'Propertys'。

@@ -58,15 +58,35 @@ public class TraceInheritorsDepthTests : IDisposable
     }
 
     // 拍平成一列返回时，「直接子类」与「曾孙」在决定覆写哪一层方法时含义完全不同，
-    // 不逐条标深度就分不出来
+    // 不标深度就分不出来。只标非直接的：直接子类占绝大多数（真实语料 601 行全是），
+    // 每行挂一个 `[direct]` 是把表头已经说过的话再说 601 遍。
     [Fact]
-    public async Task EachInheritor_IsTaggedWithItsDepth()
+    public async Task NonDirectInheritors_AreTaggedWithTheirDepth()
     {
         var content = await Run(BuildTool(), """{"symbol":"ZzBase","mode":"inheritors"}""");
 
-        Assert.Matches(@"ZzChild`\s*\[direct\]", content);
         Assert.Matches(@"ZzGrandchild`\s*\[depth 2\]", content);
         Assert.Matches(@"ZzGreatGrandchild`\s*\[depth 3\]", content);
+    }
+
+    // 直接子类不挂标记，而「无标记 = 直接」这条约定必须在有深层项时由表头说出来
+    [Fact]
+    public async Task DirectInheritors_CarryNoTag_AndTheHeaderSaysSo()
+    {
+        var content = await Run(BuildTool(), """{"symbol":"ZzBase","mode":"inheritors"}""");
+
+        Assert.DoesNotContain("[direct]", content);
+        Assert.Contains("untagged = direct", content);
+    }
+
+    // 全是直接子类时连那句约定都不印——表头的 "deepest 1 level(s) down" 已经说完了
+    [Fact]
+    public async Task AllDirect_NeedsNoLegend()
+    {
+        var content = await Run(BuildTool(), """{"symbol":"ZzBase","mode":"inheritors","limit":2}""");
+
+        Assert.DoesNotContain("[direct]", content);
+        Assert.DoesNotContain("untagged = direct", content);
     }
 
     // 截断时留下的必须是直接子类：调用方要的先是「谁直接继承了它」
