@@ -33,6 +33,12 @@ public class ListDirectoryTool : ITool
         required = new[] { "path" }
     };
 
+    // schema 里的 maximum 只是给 client 的提示、不是约束——client 照样能传 999999，
+    // 真正的夹紧必须发生在服务端。这里执行的是 schema 自己声明的那个 1000，而不是
+    // ScopeArgs.HardLimit（200）：那个数是按「一行一条结果、预览行截 100 字符」算出来的
+    // 体积天花板，而目录项一行只有一个文件名，1000 条与之同量级。
+    private const int MaxEntries = 1000;
+
     private static readonly ToolArgSpec ArgSpec = new(
         "rimworld-searcher__list_directory",
         "path (an absolute directory path). Aliases accepted: query, directory, dir.",
@@ -41,7 +47,9 @@ public class ListDirectoryTool : ITool
     public Task<ToolResult> ExecuteAsync(JsonElement args, CancellationToken cancellationToken, IProgress<double>? progress = null)
     {
         var path = ToolArgs.GetRequiredString(args, ArgSpec, "path", "query", "directory", "dir");
-        int limit = ToolArgs.GetInt(args, 100, "limit", "maxResults", "count");
+        // 下界一并夹住：limit<=0 原先会走成 Take(1)，回一条目录项外加一句「还有更多」，
+        // 看着像目录几乎是空的。
+        int limit = Math.Clamp(ToolArgs.GetInt(args, 100, "limit", "maxResults", "count"), 1, MaxEntries);
 
         cancellationToken.ThrowIfCancellationRequested();
 

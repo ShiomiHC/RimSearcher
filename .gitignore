@@ -6,8 +6,7 @@ Publish/
 bin/
 obj/
 
-# 子代理隔离用的临时 worktree，落在仓库内但不属于仓库
-.claude/worktrees/
+/.claude/
 
 # IDE settings
 .idea/
