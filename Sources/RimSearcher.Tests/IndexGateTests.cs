@@ -1,4 +1,7 @@
+using System.Diagnostics;
+using System.Text.Json;
 using RimSearcher.Server;
+using RimSearcher.Server.Tools;
 
 namespace RimSearcher.Tests;
 
@@ -7,36 +10,55 @@ namespace RimSearcher.Tests;
 public class IndexGateTests
 {
     [Fact]
-    public void TryEnterRead_WithoutRebuild_Succeeds()
+    public async Task TryEnterReadAsync_WithoutRebuild_Succeeds()
     {
-        Assert.True(IndexGate.TryEnterRead(out var scope));
+        var scope = await IndexGate.TryEnterReadAsync();
         Assert.NotNull(scope);
-        scope!.Dispose();
+        scope.Dispose();
     }
 
     [Fact]
-    public void TryEnterRead_IsReentrantAcrossThreads()
+    public async Task TryEnterReadAsync_DoesNotBlockOtherReaders()
     {
-        // 读锁之间不互斥：并发查询不该互相排队
-        Assert.True(IndexGate.TryEnterRead(out var first));
+        // 读权之间不互斥：并发查询不该互相排队
+        var first = await IndexGate.TryEnterReadAsync();
+        Assert.NotNull(first);
 
-        var secondAcquired = false;
-        var other = new Thread(() =>
+        var second = await Task.Run(() => IndexGate.TryEnterReadAsync());
+        Assert.NotNull(second);
+
+        second.Dispose();
+        first.Dispose();
+    }
+
+    // 这是「异步工具跨 await 持有线程绑定读锁」的回归：读权曾用 ReaderWriterLockSlim，
+    // 它要求获取与释放在同一线程，而调用方是 `await tool.ExecuteAsync(...)` 之后的续体。
+    // 换线程释放会抛 SynchronizationLockException，且原线程那份计数永久泄漏。
+    [Fact]
+    public async Task ReadScope_CanBeReleasedOnAnotherThread()
+    {
+        var scope = await IndexGate.TryEnterReadAsync();
+        Assert.NotNull(scope);
+
+        Exception? failure = null;
+        var releaser = new Thread(() =>
         {
-            secondAcquired = IndexGate.TryEnterRead(out var second);
-            second?.Dispose();
-        });
-        other.Start();
-        other.Join();
+            try { scope.Dispose(); }
+            catch (Exception ex) { failure = ex; }
+        }) { IsBackground = true };
 
-        first!.Dispose();
-        Assert.True(secondAcquired);
+        releaser.Start();
+        Assert.True(releaser.Join(TimeSpan.FromSeconds(5)));
+        Assert.Null(failure);
+
+        // 计数真的还回去了才拿得到写锁；泄漏的话这里只能等到超时
+        Assert.True(IndexGate.Rebuild(() => { }, TimeSpan.FromSeconds(1)));
     }
 
     // 这是 #6 的回归：旧实现超时返回 NoopScope，调用方分不出「拿到了」和「没拿到」，
     // 于是在索引被清空的窗口里照常查询，拿到空结果却报成功。
     [Fact]
-    public async Task TryEnterRead_WhileRebuilding_TimesOutInsteadOfLettingTheQueryThrough()
+    public async Task TryEnterReadAsync_WhileRebuilding_TimesOutInsteadOfLettingTheQueryThrough()
     {
         var original = IndexGate.ReadTimeout;
         IndexGate.ReadTimeout = TimeSpan.FromMilliseconds(50);
@@ -54,8 +76,7 @@ public class IndexGateTests
 
             Assert.True(rebuildStarted.Wait(TimeSpan.FromSeconds(5)));
 
-            Assert.False(IndexGate.TryEnterRead(out var scope));
-            Assert.Null(scope);
+            Assert.Null(await IndexGate.TryEnterReadAsync());
             Assert.True(IndexGate.IsRebuilding);
 
             releaseRebuild.Set();
@@ -67,8 +88,53 @@ public class IndexGateTests
         }
 
         // 重建结束后立刻恢复放行
-        Assert.True(IndexGate.TryEnterRead(out var after));
-        after!.Dispose();
+        var after = await IndexGate.TryEnterReadAsync();
+        Assert.NotNull(after);
+        after.Dispose();
+    }
+
+    // 排队等读权期间必须观察 ct：重建窗口可能长达数秒，客户端撤单了还干等满 ReadTimeout
+    // 就等于占着并发闸的一个名额空转。
+    [Fact]
+    public async Task TryEnterReadAsync_WhileRebuilding_ObservesCancellationWithoutWaitingOutTheTimeout()
+    {
+        var original = IndexGate.ReadTimeout;
+        IndexGate.ReadTimeout = TimeSpan.FromSeconds(30);
+
+        try
+        {
+            using var rebuildStarted = new ManualResetEventSlim(false);
+            using var releaseRebuild = new ManualResetEventSlim(false);
+
+            var rebuild = Task.Run(() => IndexGate.Rebuild(() =>
+            {
+                rebuildStarted.Set();
+                releaseRebuild.Wait();
+            }, TimeSpan.FromSeconds(10)));
+
+            Assert.True(rebuildStarted.Wait(TimeSpan.FromSeconds(5)));
+
+            using var cts = new CancellationTokenSource();
+            var pending = IndexGate.TryEnterReadAsync(cts.Token);
+            cts.CancelAfter(TimeSpan.FromMilliseconds(50));
+
+            var elapsed = Stopwatch.StartNew();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+            elapsed.Stop();
+
+            Assert.True(elapsed.Elapsed < TimeSpan.FromSeconds(5),
+                $"取消后等了 {elapsed.ElapsedMilliseconds} ms，说明是靠 ReadTimeout 兜底而非观察 ct");
+
+            releaseRebuild.Set();
+            Assert.True(await rebuild.WaitAsync(TimeSpan.FromSeconds(10)));
+        }
+        finally
+        {
+            IndexGate.ReadTimeout = original;
+        }
+
+        // 取消掉的那个等待者不能把读者计数留在门里
+        Assert.True(IndexGate.Rebuild(() => { }, TimeSpan.FromSeconds(1)));
     }
 
     [Fact]
@@ -102,5 +168,100 @@ public class IndexGateTests
 
         releaseFirst.Set();
         Assert.True(await first.WaitAsync(TimeSpan.FromSeconds(5)));
+    }
+
+    // 重建必须等到读者全散。中途拿到写锁就意味着有查询正在读被 Clear 掉一半的索引。
+    [Fact]
+    public async Task Rebuild_WaitsForAllReadersToDrain_ThenBumpsGenerationOnce()
+    {
+        var before = IndexGate.Generation;
+
+        var scopes = new List<IDisposable>();
+        for (var i = 0; i < 4; i++)
+        {
+            var scope = await IndexGate.TryEnterReadAsync();
+            Assert.NotNull(scope);
+            scopes.Add(scope);
+        }
+
+        var rebuild = Task.Run(() => IndexGate.Rebuild(() => { }, TimeSpan.FromSeconds(10)));
+
+        // 让重建先真的排到等读者清零那一步，否则下面的交错断言测不到东西
+        await Task.Delay(100);
+
+        foreach (var scope in scopes)
+        {
+            Assert.False(rebuild.IsCompleted, "还有读者在场，重建就已经拿到写锁了");
+            scope.Dispose();
+        }
+
+        Assert.True(await rebuild.WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.Equal(before + 1, IndexGate.Generation);
+    }
+
+    // 真的会在 await 之后换线程的工具。线上的挂起点是 Parallel.ForEachAsync / ReadToEndAsync，
+    // 这里用专用线程完成 TaskCompletionSource 把换线程做成确定的：TCS 默认就地跑续体，
+    // 于是 SetResult 那个线程接着往下执行。Sleep 是为了保证 await 先注册上。
+    private sealed class ThreadHoppingTool : ITool
+    {
+        public int EnterThread;
+        public int ExitThread;
+
+        public string Name => "hop";
+        public string Description => "test tool";
+        public object JsonSchema => new { type = "object" };
+
+        public async Task<ToolResult> ExecuteAsync(JsonElement arguments, CancellationToken cancellationToken, IProgress<double>? progress = null)
+        {
+            EnterThread = Environment.CurrentManagedThreadId;
+
+            var hop = new TaskCompletionSource();
+            new Thread(() =>
+            {
+                Thread.Sleep(50);
+                hop.SetResult();
+            }) { IsBackground = true }.Start();
+
+            await hop.Task.ConfigureAwait(false);
+
+            ExitThread = Environment.CurrentManagedThreadId;
+            return new ToolResult("hopped");
+        }
+    }
+
+    // 关键回归，走完整协议路径（参 ProtocolTests）：工具在 await 之后换了线程，
+    // 读权的释放不能因此失败。旧实现在这里 ExitReadLock 抛 SynchronizationLockException，
+    // 被 DispatchLineAsync 吞成 -32603，同时把一份读者计数永久留在门里。
+    [Fact]
+    public async Task ToolsCall_WithToolThatSuspendsAcrossThreads_SucceedsAndLeaksNoReader()
+    {
+        var tool = new ThreadHoppingTool();
+        var output = new StringWriter();
+        var server = new RimSearcher.Server.RimSearcher(output, registerGlobalLogger: false);
+        server.RegisterTool(tool);
+
+        await server.RunAsync(new StringReader(
+            """{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"hop","arguments":{}}}"""));
+
+        var responses = output.ToString()
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => JsonDocument.Parse(line.Trim()).RootElement.Clone())
+            .Where(element => element.TryGetProperty("id", out _))
+            .ToList();
+
+        var response = Assert.Single(responses);
+
+        Assert.False(response.TryGetProperty("error", out _),
+            "工具换线程后释放读权失败，被吞成了 -32603");
+
+        var result = response.GetProperty("result");
+        Assert.False(result.GetProperty("isError").GetBoolean());
+        Assert.Equal("hopped", result.GetProperty("content")[0].GetProperty("text").GetString());
+
+        // 用例本身有效的前提：续体确实换了线程
+        Assert.NotEqual(tool.EnterThread, tool.ExitThread);
+
+        // 计数没泄漏才拿得到写锁
+        Assert.True(IndexGate.Rebuild(() => { }, TimeSpan.FromSeconds(1)));
     }
 }

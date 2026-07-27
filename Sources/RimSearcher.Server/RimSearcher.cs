@@ -271,25 +271,30 @@ public sealed class RimSearcher
                     ToolResult result;
                     try
                     {
-                        // 索引重建期间挂起：读锁保证不会查到清空到一半的索引
+                        // 索引重建期间挂起：读权保证不会查到清空到一半的索引。
+                        // 必须走异步门——工具体内有真实挂起点，线程绑定的锁在这里解不掉（见 IndexGate）。
                         if (tool.BypassIndexGate)
                         {
                             result = await tool.ExecuteAsync(arguments, ct, progressReporter);
                         }
-                        else if (IndexGate.TryEnterRead(out var indexScope))
-                        {
-                            using (indexScope)
-                            {
-                                result = await tool.ExecuteAsync(arguments, ct, progressReporter);
-                            }
-                        }
                         else
                         {
-                            // 重建是原地进行的，等不到锁时索引里没有可退而求其次的旧数据。
-                            // 报错让调用方重试，好过回一份看起来成功的空结果。
-                            result = new ToolResult(
-                                "The index is being rebuilt and the request timed out waiting for it. Retry in a few seconds.",
-                                true);
+                            var indexScope = await IndexGate.TryEnterReadAsync(ct);
+                            if (indexScope != null)
+                            {
+                                using (indexScope)
+                                {
+                                    result = await tool.ExecuteAsync(arguments, ct, progressReporter);
+                                }
+                            }
+                            else
+                            {
+                                // 重建是原地进行的，等不到读权时索引里没有可退而求其次的旧数据。
+                                // 报错让调用方重试，好过回一份看起来成功的空结果。
+                                result = new ToolResult(
+                                    "The index is being rebuilt and the request timed out waiting for it. Retry in a few seconds.",
+                                    true);
+                            }
                         }
                     }
                     // 参数契约错误是调用方可自行修正的，必须作为工具结果回去（带纠正提示），
