@@ -24,10 +24,13 @@ public class InspectTool : ITool
         "eventClass", "worldDrawLayer", "designatorType", "scenPartClass", "stateClass"
     };
 
-    public InspectTool(SourceIndexer sourceIndexer, DefIndexer defIndexer)
+    private readonly ScopeCatalog _scopeCatalog;
+
+    public InspectTool(SourceIndexer sourceIndexer, DefIndexer defIndexer, ScopeCatalog scopeCatalog)
     {
         _sourceIndexer = sourceIndexer;
         _defIndexer = defIndexer;
+        _scopeCatalog = scopeCatalog;
     }
 
     public string Name => "rimworld-searcher__inspect";
@@ -38,7 +41,7 @@ public class InspectTool : ITool
     private static readonly ToolArgSpec ArgSpec = new(
         "rimworld-searcher__inspect",
         "name (an exact DefName or C# type name, e.g. 'Apparel_ShieldBelt' / 'CompShield'). Aliases accepted: query, defName, typeName, symbol.",
-        "name (required).",
+        "name (required), scope.",
         "A 'def:'/'type:' prefix is stripped automatically. Names are case-sensitive — use rimworld-searcher__locate if unsure of the exact spelling.");
 
     public object JsonSchema => new
@@ -51,7 +54,8 @@ public class InspectTool : ITool
                 type = "string",
                 minLength = 1,
                 description = "Exact DefName or C# type name. Examples: 'Apparel_ShieldBelt', 'CompShield'. Aliases 'query'/'defName'/'typeName' are also accepted; a 'def:'/'type:' prefix is stripped."
-            }
+            },
+            scope = ScopeArgs.ScopeSchemaProperty(_scopeCatalog)
         },
         required = new[] { "name" }
     };
@@ -61,15 +65,21 @@ public class InspectTool : ITool
         var name = ToolArgs.StripLocateFilterPrefix(
             ToolArgs.GetRequiredString(args, ArgSpec, "name", "query", "defName", "typeName", "symbol"));
 
+        var scope = ScopeArgs.Resolve(_scopeCatalog, args);
+
         cancellationToken.ThrowIfCancellationRequested();
 
         var sb = new StringBuilder();
 
-        var def = _defIndexer.GetDef(name);
+        var lookup = _defIndexer.Lookup(name, scope);
+        var def = lookup.Location;
         if (def != null)
         {
             sb.AppendLine($"## Def: {name}");
             sb.AppendLine($"Type: {def.DefType}");
+
+            var sourceName = scope.SourceNameOf(def.FilePath);
+            if (!string.IsNullOrEmpty(sourceName)) sb.AppendLine($"Source: {sourceName}");
 
             var typePaths = _sourceIndexer.GetPathsByType(def.DefType);
             if (typePaths.Count > 0)
@@ -77,7 +87,13 @@ public class InspectTool : ITool
 
             sb.AppendLine($"File: `{def.FilePath}`");
 
-            var resolvedXml = await XmlInheritanceHelper.ResolveDefXmlElementAsync(name, _defIndexer);
+            // 同名 def 散在多处时必须说清取的是哪一个，否则读者会把这份 XML 当成唯一定义
+            if (lookup.AmbiguousInScope)
+                sb.AppendLine($"_Note: {lookup.InScopeCount} defs share this name within scope '{scope.Expression}'; showing the highest-priority one._");
+            if (lookup.OtherSources.Count > 0)
+                sb.AppendLine($"_Also defined in: {string.Join(", ", lookup.OtherSources)} (outside scope '{scope.Expression}')._");
+
+            var resolvedXml = await XmlInheritanceHelper.ResolveDefXmlElementAsync(name, _defIndexer, scope);
             if (resolvedXml == null)
             {
                 sb.AppendLine("\n**Resolved XML:** Failed to load Def XML");
@@ -151,8 +167,8 @@ public class InspectTool : ITool
             return new ToolResult(sb.ToString());
         }
 
-        var csharpPaths = _sourceIndexer.GetPathsByType(name);
-        if (csharpPaths.Count > 0)
+        var csharpPaths = _sourceIndexer.GetPathsByType(name, scope);
+        if (csharpPaths.Items.Count > 0)
         {
             sb.AppendLine($"## C# Type: {name}");
 
@@ -165,15 +181,39 @@ public class InspectTool : ITool
                 sb.AppendLine("```\n");
             }
 
-            foreach (var path in csharpPaths)
+            foreach (var entry in csharpPaths.Items)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                sb.AppendLine($"**Outline** (`{path}`):");
-                sb.AppendLine(await RoslynHelper.GetClassOutlineAsync(path, name));
+                sb.AppendLine($"**Outline** (`{entry.Item}`){ScopeArgs.Label(entry.SourceName)}:");
+                sb.AppendLine(await RoslynHelper.GetClassOutlineAsync(entry.Item, name));
                 sb.AppendLine("---");
             }
 
+            var typeFooter = new ScopeReport();
+            typeFooter.Add(csharpPaths);
+            var rendered = typeFooter.Render(scope);
+            if (rendered != null) sb.Append(rendered);
+
             return new ToolResult(sb.ToString());
+        }
+
+        // 「scope 内找不到」和「根本不存在」是两件事，混为一谈会让调用方断言符号不存在
+        var elsewhere = new List<string>(lookup.OtherSources);
+        elsewhere.AddRange(_sourceIndexer.GetPathsByType(name, scope).OutOfScope.Select(x => x.Source));
+        elsewhere.AddRange(_sourceIndexer.GetPathsByType(name)
+            .Select(path => scope.OutOfScopeLabel(path)));
+
+        var distinctElsewhere = elsewhere
+            .Where(source => !string.IsNullOrEmpty(source))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (distinctElsewhere.Count > 0)
+        {
+            return new ToolResult(
+                $"'{name}' not found in scope '{scope.Expression}', but it exists in: {string.Join(", ", distinctElsewhere)}.\n" +
+                $"Retry with scope:'{distinctElsewhere[0]}' or scope:'{ScopeCatalog.EverythingKeyword}'.",
+                true);
         }
 
         return new ToolResult(

@@ -32,10 +32,22 @@ else if (!hasPaths)
     await ServerLogger.Warning("Program", "No source paths defined", ("path", configPath));
 }
 
-PathSecurity.Initialize(appConfig.CsharpSourcePaths.Concat(appConfig.XmlSourcePaths), enabled: !appConfig.SkipPathSecurity);
+PathSecurity.Initialize(appConfig.AllPaths, enabled: !appConfig.SkipPathSecurity);
+
+var scopeCatalog = ScopeCatalog.Build(appConfig.AllSources, appConfig.ScopeGroups, appConfig.DefaultScope);
+if (scopeCatalog.HasSources)
+{
+    await ServerLogger.Info("Program", "Scope catalog ready",
+        ("sources", scopeCatalog.Sources.Count),
+        ("groups", scopeCatalog.GroupNames.Count),
+        ("default", string.IsNullOrWhiteSpace(appConfig.DefaultScope) ? ScopeCatalog.EverythingKeyword : appConfig.DefaultScope));
+}
 
 // 索引指纹要在建索引前算出来：共享宿主按它分组（不同 config 不共用一份索引）
-var earlyFingerprint = IndexCacheService.ComputeConfigFingerprint(appConfig.CsharpSourcePaths, appConfig.XmlSourcePaths);
+var earlyFingerprint = IndexCacheService.ComputeConfigFingerprint(
+    appConfig.CsharpSourcePaths.Select(entry => entry.Path),
+    appConfig.XmlSourcePaths.Select(entry => entry.Path),
+    appConfig.VerifySourceFreshness);
 
 // 代理路径必须先于建索引：连上已有宿主的进程不该再花 4 秒和 1 GB 建第二份索引
 Mutex? hostMutex = null;
@@ -68,16 +80,16 @@ var failedPaths = new List<string>();
 var existingCsharpPaths = new List<string>();
 var existingXmlPaths = new List<string>();
 
-foreach (var path in appConfig.CsharpSourcePaths)
+foreach (var entry in appConfig.CsharpSourcePaths)
 {
-    if (Directory.Exists(path)) existingCsharpPaths.Add(path);
-    else failedPaths.Add($"C# source: {path}");
+    if (Directory.Exists(entry.Path)) existingCsharpPaths.Add(entry.Path);
+    else failedPaths.Add($"C# source '{entry.Name}': {entry.Path}");
 }
 
-foreach (var path in appConfig.XmlSourcePaths)
+foreach (var entry in appConfig.XmlSourcePaths)
 {
-    if (Directory.Exists(path)) existingXmlPaths.Add(path);
-    else failedPaths.Add($"XML source: {path}");
+    if (Directory.Exists(entry.Path)) existingXmlPaths.Add(entry.Path);
+    else failedPaths.Add($"XML source '{entry.Name}': {entry.Path}");
 }
 
 var totalCsharpPaths = 0;
@@ -175,11 +187,11 @@ var server = new RimSearcher.Server.RimSearcher(protocolOut);
 var tools = new ITool[]
 {
     new ListDirectoryTool(),
-    new LocateTool(indexer, defIndexer),
-    new InspectTool(indexer, defIndexer),
-    new TraceTool(indexer),
-    new ReadCodeTool(indexer),
-    new SearchRegexTool(indexer)
+    new LocateTool(indexer, defIndexer, scopeCatalog),
+    new InspectTool(indexer, defIndexer, scopeCatalog),
+    new TraceTool(indexer, scopeCatalog),
+    new ReadCodeTool(indexer, scopeCatalog),
+    new SearchRegexTool(indexer, scopeCatalog)
 };
 
 foreach (var tool in tools) server.RegisterTool(tool);

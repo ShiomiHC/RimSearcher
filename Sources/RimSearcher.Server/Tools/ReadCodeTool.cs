@@ -7,10 +7,12 @@ namespace RimSearcher.Server.Tools;
 public class ReadCodeTool : ITool
 {
     private readonly SourceIndexer _sourceIndexer;
+    private readonly ScopeCatalog _scopeCatalog;
 
-    public ReadCodeTool(SourceIndexer sourceIndexer)
+    public ReadCodeTool(SourceIndexer sourceIndexer, ScopeCatalog scopeCatalog)
     {
         _sourceIndexer = sourceIndexer;
+        _scopeCatalog = scopeCatalog;
     }
 
     public string Name => "rimworld-searcher__read_code";
@@ -63,7 +65,8 @@ public class ReadCodeTool : ITool
                 maximum = 2000,
                 @default = 150,
                 description = "Optional number of lines for raw read mode. Default is 150."
-            }
+            },
+            scope = ScopeArgs.ScopeSchemaProperty(_scopeCatalog)
         },
         required = new[] { "path" }
     };
@@ -73,11 +76,19 @@ public class ReadCodeTool : ITool
         var path = ToolArgs.GetRequiredString(args, ArgSpec, "path", "query", "file", "filePath", "fileName");
         path = ToolArgs.StripLocateFilterPrefix(path);
 
-        var resolvedPath = ResolvePath(path);
+        var scope = ScopeArgs.Resolve(_scopeCatalog, args);
+
+        var resolvedPath = ResolvePath(path, scope, out var outOfScopeFallback);
         if (resolvedPath == null)
             return new ToolResult($"File not found: '{Path.GetFileName(path)}'. Use 'locate' to find the correct file first.", true);
 
         path = resolvedPath;
+
+        // 按名解析到了 scope 之外的文件时必须说明，否则读者会以为读的是 scope 内那一份
+        var scopeNotice = outOfScopeFallback
+            ? $"// note: no file by this name inside scope '{scope.Expression}'; reading from {scope.OutOfScopeLabel(path)}\n"
+            : string.Empty;
+
         cancellationToken.ThrowIfCancellationRequested();
 
         try
@@ -89,7 +100,7 @@ public class ReadCodeTool : ITool
                 var classBody = await RoslynHelper.GetClassBodyAsync(path, extractClassName);
                 if (string.IsNullOrEmpty(classBody) || classBody.Contains("not found"))
                     return new ToolResult($"Class '{extractClassName}' not found in {Path.GetFileName(path)}. Use inspect tool to verify.", true);
-                return new ToolResult($"```csharp\n{classBody}\n```");
+                return new ToolResult($"```csharp\n{scopeNotice}{classBody}\n```");
             }
 
             var member = ToolArgs.GetOptionalString(args, "methodName", "method", "member", "memberName");
@@ -105,7 +116,7 @@ public class ReadCodeTool : ITool
                         true);
                 }
 
-                return new ToolResult($"```csharp\n// {methodName}\n{body}\n```");
+                return new ToolResult($"```csharp\n{scopeNotice}// {methodName}\n{body}\n```");
             }
 
             int startLine = Math.Max(0, ToolArgs.GetInt(args, 0, "startLine", "start", "offset"));
@@ -123,6 +134,7 @@ public class ReadCodeTool : ITool
 
             var sb = new StringBuilder();
             sb.AppendLine($"```csharp");
+            if (scopeNotice.Length > 0) sb.Append(scopeNotice);
             sb.AppendLine($"// {Path.GetFileName(path)} (lines {startLine + 1}-{Math.Min(startLine + lineCount, totalLines)} of {totalLines})");
             foreach (var line in resultLines) sb.AppendLine(line);
             sb.AppendLine("```");
@@ -140,24 +152,28 @@ public class ReadCodeTool : ITool
         }
     }
 
-    private string? ResolvePath(string input)
+    private string? ResolvePath(string input, ScopeSelection scope, out bool outOfScopeFallback)
     {
+        outOfScopeFallback = false;
+
+        // 绝对路径是调用方自己给的，不受 scope 约束——它已经知道要读哪个文件了
         if (Path.IsPathRooted(input) && File.Exists(input) && PathSecurity.IsPathSafe(input))
             return input;
 
         var nameNoExt = Path.GetFileNameWithoutExtension(input);
-        var indexPath = _sourceIndexer.GetPath(nameNoExt);
+        var indexPath = _sourceIndexer.GetPath(nameNoExt, scope, out outOfScopeFallback);
         if (indexPath != null && File.Exists(indexPath))
             return indexPath;
 
         var rawName = Path.GetFileName(input);
         if (rawName != nameNoExt)
         {
-            indexPath = _sourceIndexer.GetPath(rawName);
+            indexPath = _sourceIndexer.GetPath(rawName, scope, out outOfScopeFallback);
             if (indexPath != null && File.Exists(indexPath))
                 return indexPath;
         }
 
+        outOfScopeFallback = false;
         return null;
     }
 }

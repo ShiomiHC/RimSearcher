@@ -42,8 +42,8 @@ public sealed class SourceMemberSnapshot
 
 public sealed class DefIndexerSnapshot
 {
-    public Dictionary<string, DefLocation> DefNameIndex { get; init; } = new();
-    public Dictionary<string, DefLocation> ParentNameIndex { get; init; } = new();
+    public Dictionary<string, DefLocation[]> DefNameIndex { get; init; } = new();
+    public Dictionary<string, DefLocation[]> ParentNameIndex { get; init; } = new();
     public Dictionary<string, DefLocation[]> LabelIndex { get; init; } = new();
     public Dictionary<string, DefFieldContentSnapshot[]> FieldContentIndex { get; init; } = new();
     public string[] ProcessedFiles { get; init; } = Array.Empty<string>();

@@ -270,7 +270,9 @@ public class SourceIndexer
         return Array.Empty<string>();
     }
 
-    public List<string> GetInheritors(string baseTypeName)
+    // _inheritorsMap 的值是类型名而非路径，故归属判定要先经 _typeMap 反查定义文件；
+    // 反查不到路径的类型（引用了未索引的基类）按未知源处理，只有全域 scope 才收。
+    public ScopedResult<string> GetInheritors(string baseTypeName, ScopeSelection scope, int limit = 0)
     {
         var results = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -299,7 +301,27 @@ public class SourceIndexer
             }
         }
 
-        return results.ToList();
+        var candidates = results
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .Select(name => new ScoredCandidate<string>(name, 100.0, FirstPathOfType(name) ?? string.Empty));
+
+        // 子类树没有分数梯度（全是精确的继承关系），断层收口在此无意义
+        return ScopeFilter.Apply(candidates, scope, limit, scoreGap: null);
+    }
+
+    private string? FirstPathOfType(string typeName)
+    {
+        var files = GetTypeFiles(typeName);
+        if (files.Count > 0) return files[0];
+        if (TryGetShortType(typeName, out var fullNames))
+        {
+            foreach (var fullName in fullNames)
+            {
+                var byFullName = GetTypeFiles(fullName);
+                if (byFullName.Count > 0) return byFullName[0];
+            }
+        }
+        return null;
     }
 
     public List<(string Child, string Parent)> GetInheritanceChain(string typeName)
@@ -342,30 +364,31 @@ public class SourceIndexer
         return new List<string>();
     }
 
-    public List<string> Search(string query)
+    // scope 内的定义文件；调用方据 OutOfScope 判断「换个 scope 才看得到」
+    public ScopedResult<string> GetPathsByType(string typeName, ScopeSelection scope, int limit = 0)
     {
-        var source = _frozenIndex ?? (IReadOnlyDictionary<string, string[]>?)null;
-        if (source != null)
-        {
-            return source
-                .Select(kv => new { Key = kv.Key, Value = kv.Value, Score = FuzzyMatcher.CalculateFuzzyScore(kv.Key, query) })
-                .Where(x => x.Score > 0)
-                .OrderByDescending(x => x.Score)
-                .ThenBy(x => x.Key.Length)
-                .SelectMany(x => x.Value)
-                .Distinct()
-                .Take(30)
-                .ToList();
-        }
-        return _index
-            .Select(kv => new { Key = kv.Key, Value = kv.Value, Score = FuzzyMatcher.CalculateFuzzyScore(kv.Key, query) })
+        var candidates = GetPathsByType(typeName)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(path => new ScoredCandidate<string>(path, 100.0, path));
+
+        return ScopeFilter.Apply(candidates, scope, limit, scoreGap: null);
+    }
+
+    public ScopedResult<string> Search(string query, ScopeSelection scope, int limit = 30)
+    {
+        var source = _frozenIndex != null
+            ? (IEnumerable<KeyValuePair<string, string[]>>)_frozenIndex
+            : _index.Select(kv => new KeyValuePair<string, string[]>(kv.Key, kv.Value.Distinct().ToArray()));
+
+        var candidates = source
+            .Select(kv => new { kv.Key, kv.Value, Score = FuzzyMatcher.CalculateFuzzyScore(kv.Key, query) })
             .Where(x => x.Score > 0)
             .OrderByDescending(x => x.Score)
             .ThenBy(x => x.Key.Length)
-            .SelectMany(x => x.Value)
-            .Distinct()
-            .Take(30)
-            .ToList();
+            .SelectMany(x => x.Value.Select(path => new ScoredCandidate<string>(path, x.Score, path)))
+            .DistinctBy(x => x.Item, StringComparer.OrdinalIgnoreCase);
+
+        return ScopeFilter.Apply(candidates, scope, limit);
     }
 
     private void IndexMembersFromList(List<(string TypeName, string MemberName, string MemberType)> members, string filePath)
@@ -396,7 +419,7 @@ public class SourceIndexer
         }
     }
 
-    public List<(string Name, double Score)> FuzzySearchTypes(string query)
+    public ScopedResult<string> FuzzySearchTypes(string query, ScopeSelection scope, int limit = 20)
     {
         HashSet<string> searchSet;
 
@@ -437,19 +460,24 @@ public class SourceIndexer
             }
         }
 
-        return searchSet
+        // 打分本来就是全量的，Take 只截断输出——故在过滤之前拿到的总数是真实命中数，零额外开销
+        var candidates = searchSet
             .Select(name => new { Name = name, Score = FuzzyMatcher.CalculateFuzzyScore(name, query) })
             .Where(x => x.Score > 0)
             .OrderByDescending(x => x.Score)
             .ThenBy(x => x.Name.Length)
-            .Take(20)
-            .Select(x => (x.Name, x.Score))
-            .ToList();
+            .Select(x => new ScoredCandidate<string>(x.Name, x.Score, FirstPathOfType(x.Name) ?? string.Empty));
+
+        return ScopeFilter.Apply(candidates, scope, limit);
     }
 
-    public List<(string TypeName, string MemberName, string MemberType, string FilePath, double Score)> SearchMembersByKeywords(string[] keywords)
+    public ScopedResult<(string TypeName, string MemberName, string MemberType, string FilePath)> SearchMembersByKeywords(
+        string[] keywords,
+        ScopeSelection scope,
+        int limit = 30)
     {
-        if (keywords == null || keywords.Length == 0) return new List<(string, string, string, string, double)>();
+        if (keywords == null || keywords.Length == 0)
+            return ScopedResult<(string, string, string, string)>.Empty;
         var matchedMembers = new Dictionary<(string, string, string, string), int>();
         
         var memberKeys = _frozenMemberIndex != null 
@@ -524,7 +552,7 @@ public class SourceIndexer
             }
         }
 
-        return matchedMembers
+        var candidates = matchedMembers
             .Select(kv =>
             {
                 var (typeName, memberName, memberType, filePath) = kv.Key;
@@ -536,21 +564,34 @@ public class SourceIndexer
             })
             .OrderByDescending(x => x.score)
             .ThenBy(x => x.memberName.Length)
-            .Take(30)
-            .ToList();
+            .Select(x => new ScoredCandidate<(string, string, string, string)>(
+                (x.typeName, x.memberName, x.memberType, x.filePath), x.score, x.filePath));
+
+        return ScopeFilter.Apply(candidates, scope, limit);
     }
 
+    // scope 与扩展名过滤都必须在扫描之前生效：这两个条件若留到结果产出后再筛，
+    // 命中上限会被过滤掉的文件吃光，筛完就成了假空（fileFilter 原先正是这个写法）。
     public async Task<(List<(string Path, string Preview)> Results, bool Truncated)> SearchRegexAsync(
         string pattern,
+        ScopeSelection scope,
+        string? fileFilter = null,
         bool ignoreCase = true,
+        int maxResults = 100,
         CancellationToken ct = default,
         IProgress<double>? progress = null)
     {
         var results = new ConcurrentBag<(string Path, string Preview)>();
         var regex = new Regex(pattern, (ignoreCase ? RegexOptions.IgnoreCase : RegexOptions.None) | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
-        var allFiles = _frozenIndex != null 
-            ? _frozenIndex.Values.SelectMany(x => x).ToList()
-            : _index.Values.SelectMany(x => x).Distinct().ToList();
+
+        var allFiles = (_frozenIndex != null
+                ? _frozenIndex.Values.SelectMany(x => x)
+                : _index.Values.SelectMany(x => x).Distinct())
+            .Where(path => scope.Contains(path))
+            .Where(path => string.IsNullOrEmpty(fileFilter) || path.EndsWith(fileFilter, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (maxResults <= 0) maxResults = 100;
 
         int globalCount = 0;
         int processedCount = 0;
@@ -559,7 +600,7 @@ public class SourceIndexer
 
         await Parallel.ForEachAsync(allFiles, ct, async (filePath, internalCt) =>
         {
-            if (Interlocked.CompareExchange(ref globalCount, 0, 0) >= 100)
+            if (Interlocked.CompareExchange(ref globalCount, 0, 0) >= maxResults)
             {
                 Interlocked.Exchange(ref truncatedFlag, 1);
                 return;
@@ -579,15 +620,15 @@ public class SourceIndexer
                     if (regex.IsMatch(line))
                     {
                         var currentCount = Interlocked.Increment(ref globalCount);
-                        if (currentCount <= 100)
+                        if (currentCount <= maxResults)
                         {
                             results.Add((filePath, $"L{lineNum}: {line.Trim()}"));
                             matchesInThisFile++;
                         }
 
-                        if (matchesInThisFile >= 5 || currentCount >= 100)
+                        if (matchesInThisFile >= 5 || currentCount >= maxResults)
                         {
-                            if (currentCount >= 100) Interlocked.Exchange(ref truncatedFlag, 1);
+                            if (currentCount >= maxResults) Interlocked.Exchange(ref truncatedFlag, 1);
                             break;
                         }
                     }
@@ -604,19 +645,41 @@ public class SourceIndexer
 
         var finalCount = Interlocked.CompareExchange(ref globalCount, 0, 0);
         var wasTruncated = Interlocked.CompareExchange(ref truncatedFlag, 0, 0) == 1;
-        return (results.Take(100).ToList(), wasTruncated || finalCount >= 100);
+        return (results.Take(maxResults).ToList(), wasTruncated || finalCount >= maxResults);
     }
 
-    public string? GetPath(string name)
+    // 同名文件在多个源里都存在时（Ratkin 与 vanilla 同名 .cs 之类），优先给 scope 内的；
+    // scope 内没有才回退到全域，并由 outOfScopeFallback 告知调用方它读的是别处的文件。
+    public string? GetPath(string name, ScopeSelection scope, out bool outOfScopeFallback)
     {
-        if (_frozenIndex != null && _frozenIndex.TryGetValue(name, out var frozen)) return frozen.FirstOrDefault();
-        return _index.TryGetValue(name, out var paths) ? paths.FirstOrDefault() : null;
+        outOfScopeFallback = false;
+
+        IReadOnlyList<string> paths;
+        if (_frozenIndex != null && _frozenIndex.TryGetValue(name, out var frozen)) paths = frozen;
+        else if (_index.TryGetValue(name, out var bag)) paths = bag.Distinct().ToArray();
+        else return null;
+
+        var best = paths
+            .Select(path => (Path: path, Rank: scope.RankOf(path)))
+            .Where(x => x.Rank >= 0)
+            .OrderBy(x => x.Rank)
+            .Select(x => x.Path)
+            .FirstOrDefault();
+
+        if (best != null) return best;
+
+        var fallback = paths.FirstOrDefault();
+        if (fallback != null) outOfScopeFallback = true;
+        return fallback;
     }
-    
-    public IEnumerable<string> GetAllFiles()
+
+    public IEnumerable<string> GetAllFiles(ScopeSelection scope)
     {
-        if (_frozenIndex != null) return _frozenIndex.Values.SelectMany(x => x);
-        return _index.Values.SelectMany(x => x).Distinct();
+        var all = _frozenIndex != null
+            ? _frozenIndex.Values.SelectMany(x => x)
+            : _index.Values.SelectMany(x => x).Distinct();
+
+        return all.Where(path => scope.Contains(path));
     }
 
     private void ResetFrozenState()

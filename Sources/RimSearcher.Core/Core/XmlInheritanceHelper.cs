@@ -23,9 +23,9 @@ public static class XmlInheritanceHelper
     /// Resolves XML inheritance and returns the merged XElement directly.
     /// Returns null if the def is not found or loading fails.
     /// </summary>
-    public static async Task<XElement?> ResolveDefXmlElementAsync(string defName, DefIndexer indexer)
+    public static async Task<XElement?> ResolveDefXmlElementAsync(string defName, DefIndexer indexer, ScopeSelection scope)
     {
-        var targetLoc = indexer.GetDef(defName);
+        var targetLoc = indexer.Lookup(defName, scope).Location;
         if (targetLoc == null) return null;
 
         var hierarchy = new Stack<XElement>();
@@ -56,8 +56,9 @@ public static class XmlInheritanceHelper
                 {
                     hierarchy.Push(new XElement(node));
                     var parentName = currentLoc.ParentName;
+                    // 父优先在子所在的源里找：撞名时 Milira 的 def 该接 Milira 自己的抽象基
                     currentLoc = !string.IsNullOrEmpty(parentName)
-                        ? (indexer.GetParent(parentName) ?? indexer.GetDef(parentName))
+                        ? indexer.Lookup(parentName, scope, preferSameSourceAs: currentLoc.FilePath).Location
                         : null;
                 }
                 else break;

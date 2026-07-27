@@ -8,12 +8,41 @@ namespace RimSearcher.Core;
 
 public record DefLocation(string FilePath, string DefType, string DefName, string? ParentName, string? Label, bool IsAbstract = false);
 
+// 一次按名查 def 的结果。同名 def 可能散在多个源里，故除了选中项还要带上
+// 「scope 内还有几条同名」与「scope 外哪些源也有同名」，供调用方提示换 scope。
+public sealed class DefLookup
+{
+    public static readonly DefLookup NotFound = new(null, 0, Array.Empty<string>());
+
+    public DefLookup(DefLocation? location, int inScopeCount, IReadOnlyList<string> otherSources)
+    {
+        Location = location;
+        InScopeCount = inScopeCount;
+        OtherSources = otherSources;
+    }
+
+    public DefLocation? Location { get; }
+    public int InScopeCount { get; }
+    public IReadOnlyList<string> OtherSources { get; }
+
+    public bool Found => Location != null;
+
+    // scope 内就有重名：选了一个，另几个只能靠更窄的 scope 才看得到
+    public bool AmbiguousInScope => InScopeCount > 1;
+
+    // 只在别的源里存在——这正是「按 scope 查报找不到但东西其实在」的场景
+    public bool ExistsOnlyElsewhere => Location == null && OtherSources.Count > 0;
+}
+
 public class DefIndexer
 {
     private static readonly Regex WordSplitRegex = new(@"\W+", RegexOptions.Compiled);
 
-    private readonly ConcurrentDictionary<string, DefLocation> _defNameIndex = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, DefLocation> _parentNameIndex = new(StringComparer.OrdinalIgnoreCase);
+    // 单值字典会让同名 def 后写覆盖先写（实测参考 mod 与 vanilla 有 40+ 处 defName 重名，
+    // 多为 TraitDef）。覆盖之后按 scope 查就会「vanilla 里明明有却报找不到」，且父链解析
+    // 会顺着别的 mod 的同名 def 往上走。故一名多值，由 scope 决定取哪个。
+    private readonly ConcurrentDictionary<string, ConcurrentBag<DefLocation>> _defNameIndex = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, ConcurrentBag<DefLocation>> _parentNameIndex = new(StringComparer.OrdinalIgnoreCase);
 
     private readonly ConcurrentDictionary<string, ConcurrentBag<DefLocation>> _labelIndex =
         new(StringComparer.OrdinalIgnoreCase);
@@ -24,15 +53,17 @@ public class DefIndexer
     private readonly ConcurrentDictionary<string, byte> _processedFiles = new(StringComparer.OrdinalIgnoreCase);
     private static readonly XmlReaderSettings XmlReadSettings = new() { DtdProcessing = DtdProcessing.Parse };
     
-    private FrozenDictionary<string, DefLocation>? _frozenDefNameIndex;
-    private FrozenDictionary<string, DefLocation>? _frozenParentNameIndex;
+    private FrozenDictionary<string, DefLocation[]>? _frozenDefNameIndex;
+    private FrozenDictionary<string, DefLocation[]>? _frozenParentNameIndex;
     private FrozenDictionary<string, DefLocation[]>? _frozenLabelIndex;
     private FrozenDictionary<string, (DefLocation Location, string FieldPath)[]>? _frozenFieldContentIndex;
 
     public void FreezeIndex()
     {
-        _frozenDefNameIndex = _defNameIndex.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
-        _frozenParentNameIndex = _parentNameIndex.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
+        _frozenDefNameIndex = _defNameIndex.ToFrozenDictionary(
+            kv => kv.Key, kv => kv.Value.Distinct().ToArray(), StringComparer.OrdinalIgnoreCase);
+        _frozenParentNameIndex = _parentNameIndex.ToFrozenDictionary(
+            kv => kv.Key, kv => kv.Value.Distinct().ToArray(), StringComparer.OrdinalIgnoreCase);
         _frozenLabelIndex = _labelIndex.ToFrozenDictionary(
             kv => kv.Key, kv => kv.Value.Distinct().ToArray(), StringComparer.OrdinalIgnoreCase);
         _frozenFieldContentIndex = _fieldContentIndex.ToFrozenDictionary(
@@ -71,11 +102,11 @@ public class DefIndexer
 
         var defNameIndex = _frozenDefNameIndex != null
             ? _frozenDefNameIndex.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase)
-            : new Dictionary<string, DefLocation>(_defNameIndex, StringComparer.OrdinalIgnoreCase);
+            : _defNameIndex.ToDictionary(kv => kv.Key, kv => kv.Value.Distinct().ToArray(), StringComparer.OrdinalIgnoreCase);
 
         var parentNameIndex = _frozenParentNameIndex != null
             ? _frozenParentNameIndex.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase)
-            : new Dictionary<string, DefLocation>(_parentNameIndex, StringComparer.OrdinalIgnoreCase);
+            : _parentNameIndex.ToDictionary(kv => kv.Key, kv => kv.Value.Distinct().ToArray(), StringComparer.OrdinalIgnoreCase);
 
         return new DefIndexerSnapshot
         {
@@ -98,14 +129,14 @@ public class DefIndexer
         _processedFiles.Clear();
         ResetFrozenState();
 
-        foreach (var (key, value) in snapshot.DefNameIndex)
+        foreach (var (key, values) in snapshot.DefNameIndex)
         {
-            _defNameIndex[key] = value;
+            _defNameIndex[key] = new ConcurrentBag<DefLocation>(values.Distinct());
         }
 
-        foreach (var (key, value) in snapshot.ParentNameIndex)
+        foreach (var (key, values) in snapshot.ParentNameIndex)
         {
-            _parentNameIndex[key] = value;
+            _parentNameIndex[key] = new ConcurrentBag<DefLocation>(values.Distinct());
         }
 
         foreach (var (key, values) in snapshot.LabelIndex)
@@ -181,8 +212,10 @@ public class DefIndexer
                     string identifier = defName ?? nameAttr ?? $"[Unnamed_{defType}_{nodeIdx}]";
                     var loc = new DefLocation(internedFile, defType, identifier, parentNameAttr, label, isAbstract);
 
-                    if (!string.IsNullOrEmpty(defName)) _defNameIndex[defName] = loc;
-                    if (!string.IsNullOrEmpty(nameAttr)) _parentNameIndex[nameAttr] = loc;
+                    if (!string.IsNullOrEmpty(defName))
+                        _defNameIndex.GetOrAdd(defName, _ => new ConcurrentBag<DefLocation>()).Add(loc);
+                    if (!string.IsNullOrEmpty(nameAttr))
+                        _parentNameIndex.GetOrAdd(nameAttr, _ => new ConcurrentBag<DefLocation>()).Add(loc);
                     if (!string.IsNullOrEmpty(label))
                     {
                         _labelIndex.GetOrAdd(label, _ => new ConcurrentBag<DefLocation>()).Add(loc);
@@ -241,46 +274,58 @@ public class DefIndexer
         }
     }
 
-    public List<(DefLocation Location, double Score)> FuzzySearch(string query)
+    public ScopedResult<DefLocation> FuzzySearch(string query, ScopeSelection scope, int limit = 50)
     {
-        var defNameSource = (IEnumerable<KeyValuePair<string, DefLocation>>?)_frozenDefNameIndex ?? _defNameIndex;
-        var parentNameSource = (IEnumerable<KeyValuePair<string, DefLocation>>?)_frozenParentNameIndex ?? _parentNameIndex;
+        var defNameSource = ExpandLocations(_frozenDefNameIndex, _defNameIndex);
+        var parentNameSource = ExpandLocations(_frozenParentNameIndex, _parentNameIndex);
         var labelSource = _frozenLabelIndex != null
-            ? _frozenLabelIndex.SelectMany(kv => kv.Value.Select(loc => (Label: kv.Key, Location: loc)))
-            : _labelIndex.SelectMany(kv => kv.Value.Select(loc => (Label: kv.Key, Location: loc)));
-        
-        var scoredResults = defNameSource
-            .Select(kv => new
+            ? _frozenLabelIndex.SelectMany(kv => kv.Value.Select(loc => (Key: kv.Key, Location: loc)))
+            : _labelIndex.SelectMany(kv => kv.Value.Select(loc => (Key: kv.Key, Location: loc)));
+
+        var candidates = defNameSource
+            .Select(entry => new
             {
-                Loc = kv.Value,
-                Score = FuzzyMatcher.CalculateFuzzyScore(kv.Key, query) * 1.2 * (kv.Value.IsAbstract ? 0.5 : 1.0)
+                Loc = entry.Location,
+                Score = FuzzyMatcher.CalculateFuzzyScore(entry.Key, query) * 1.2 * (entry.Location.IsAbstract ? 0.5 : 1.0)
             })
-            .Concat(parentNameSource.Select(kv => new
+            .Concat(parentNameSource.Select(entry => new
             {
-                Loc = kv.Value,
-                Score = FuzzyMatcher.CalculateFuzzyScore(kv.Key, query) * 1.0 * (kv.Value.IsAbstract ? 0.5 : 1.0)
+                Loc = entry.Location,
+                Score = FuzzyMatcher.CalculateFuzzyScore(entry.Key, query) * 1.0 * (entry.Location.IsAbstract ? 0.5 : 1.0)
             }))
             .Concat(labelSource.Select(entry => new
             {
                 Loc = entry.Location,
-                Score = FuzzyMatcher.CalculateFuzzyScore(entry.Label, query) * 0.8 * (entry.Location.IsAbstract ? 0.5 : 1.0)
+                Score = FuzzyMatcher.CalculateFuzzyScore(entry.Key, query) * 0.8 * (entry.Location.IsAbstract ? 0.5 : 1.0)
             }))
             .Where(x => x.Score > 0)
-            .GroupBy(x => $"{x.Loc.DefType}/{x.Loc.DefName}")
+            // 同名 def 现在可能来自多个源，分组键要带文件路径，否则跨源的同名条目会被合成一条
+            .GroupBy(x => $"{x.Loc.DefType}/{x.Loc.DefName}@{x.Loc.FilePath}")
             .Select(g => g.OrderByDescending(x => x.Score).First())
             .OrderByDescending(x => x.Score)
             .ThenBy(x => x.Loc.DefName.Length)
-            .Take(50)
-            .Select(x => (x.Loc, x.Score))
-            .ToList();
+            .Select(x => new ScoredCandidate<DefLocation>(x.Loc, x.Score, x.Loc.FilePath));
 
-        return scoredResults;
+        return ScopeFilter.Apply(candidates, scope, limit);
     }
 
-    public List<(DefLocation Location, List<string> MatchedFields)> SearchByContent(string[] keywords)
+    private static IEnumerable<(string Key, DefLocation Location)> ExpandLocations(
+        FrozenDictionary<string, DefLocation[]>? frozen,
+        ConcurrentDictionary<string, ConcurrentBag<DefLocation>> live)
+    {
+        if (frozen != null)
+            return frozen.SelectMany(kv => kv.Value.Select(loc => (kv.Key, loc)));
+
+        return live.SelectMany(kv => kv.Value.Distinct().Select(loc => (kv.Key, loc)));
+    }
+
+    public ScopedResult<(DefLocation Location, List<string> MatchedFields)> SearchByContent(
+        string[] keywords,
+        ScopeSelection scope,
+        int limit = 30)
     {
         if (keywords == null || keywords.Length == 0)
-            return new List<(DefLocation, List<string>)>();
+            return ScopedResult<(DefLocation, List<string>)>.Empty;
 
         var matchedDefs = new Dictionary<string, (DefLocation Location, HashSet<string> FieldPaths, int MatchCount)>();
 
@@ -301,7 +346,7 @@ public class DefIndexer
             {
                 foreach (var (location, fieldPath) in matches)
                 {
-                    var defKey = $"{location.DefType}/{location.DefName}";
+                    var defKey = $"{location.DefType}/{location.DefName}@{location.FilePath}";
 
                     if (!matchedDefs.TryGetValue(defKey, out var existing))
                     {
@@ -316,31 +361,66 @@ public class DefIndexer
             }
         }
 
-        return matchedDefs.Values
+        var candidates = matchedDefs.Values
             .OrderByDescending(x => x.MatchCount)
             .ThenBy(x => x.Location.DefName.Length)
-            .Take(30)
-            .Select(x => (x.Location, x.FieldPaths.ToList()))
+            .Select(x => new ScoredCandidate<(DefLocation, List<string>)>(
+                (x.Location, x.FieldPaths.ToList()), x.MatchCount, x.Location.FilePath));
+
+        // 排序键是关键词命中计数而非 0~100 的相似度，断层阈值在这个量纲上没有意义
+        return ScopeFilter.Apply(candidates, scope, limit, scoreGap: null);
+    }
+
+    // preferSameSourceAs：解析父链时传子 def 的文件路径，让 Milira 的 def 优先接上 Milira 自己的
+    // 抽象基，而不是撞名的 vanilla 同名 def。
+    public DefLookup Lookup(string name, ScopeSelection scope, string? preferSameSourceAs = null)
+    {
+        var byDefName = GetLocations(_frozenDefNameIndex, _defNameIndex, name);
+        var byParentName = GetLocations(_frozenParentNameIndex, _parentNameIndex, name);
+
+        var all = byDefName.Concat(byParentName).Distinct().ToList();
+        if (all.Count == 0) return DefLookup.NotFound;
+
+        var inScope = all
+            .Select(loc => (Loc: loc, Rank: scope.RankOf(loc.FilePath)))
+            .Where(x => x.Rank >= 0)
             .ToList();
-    }
 
-    public DefLocation? GetDef(string name)
-    {
-        if (_frozenDefNameIndex != null)
+        if (inScope.Count == 0)
         {
-            if (_frozenDefNameIndex.TryGetValue(name, out var loc)) return loc;
-            if (_frozenParentNameIndex != null && _frozenParentNameIndex.TryGetValue(name, out var locP)) return locP;
-            return null;
+            var otherSources = all
+                .Select(loc => scope.OutOfScopeLabel(loc.FilePath))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            return new DefLookup(null, 0, otherSources);
         }
-        return _defNameIndex.TryGetValue(name, out var loc2)
-            ? loc2
-            : (_parentNameIndex.TryGetValue(name, out var locP2) ? locP2 : null);
+
+        var preferredSource = preferSameSourceAs != null ? scope.SourceNameOf(preferSameSourceAs) : null;
+
+        var best = inScope
+            .OrderByDescending(x => preferredSource != null
+                && string.Equals(scope.SourceNameOf(x.Loc.FilePath), preferredSource, StringComparison.OrdinalIgnoreCase))
+            .ThenBy(x => x.Rank)
+            .First().Loc;
+
+        var outOfScopeSources = all
+            .Where(loc => scope.RankOf(loc.FilePath) < 0)
+            .Select(loc => scope.OutOfScopeLabel(loc.FilePath))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return new DefLookup(best, inScope.Count, outOfScopeSources);
     }
 
-    public DefLocation? GetParent(string parentName)
+    private static IReadOnlyList<DefLocation> GetLocations(
+        FrozenDictionary<string, DefLocation[]>? frozen,
+        ConcurrentDictionary<string, ConcurrentBag<DefLocation>> live,
+        string name)
     {
-        if (_frozenParentNameIndex != null && _frozenParentNameIndex.TryGetValue(parentName, out var loc)) return loc;
-        return _parentNameIndex.TryGetValue(parentName, out var loc2) ? loc2 : null;
+        if (frozen != null)
+            return frozen.TryGetValue(name, out var frozenValues) ? frozenValues : Array.Empty<DefLocation>();
+
+        return live.TryGetValue(name, out var bag) ? bag.Distinct().ToArray() : Array.Empty<DefLocation>();
     }
 
     private void ResetFrozenState()

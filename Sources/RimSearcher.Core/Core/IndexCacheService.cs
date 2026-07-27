@@ -8,7 +8,7 @@ namespace RimSearcher.Core;
 
 public static class IndexCacheService
 {
-    public const int SchemaVersion = 1;//缓存结构版本号
+    public const int SchemaVersion = 2;//缓存结构版本号（2 = def 索引一名多值）
 
     private const string ManifestFileName = "manifest.json";
     private const string IndexFileName = "index.bin";
@@ -46,7 +46,13 @@ public static class IndexCacheService
         }
     }
 
-    public static string ComputeConfigFingerprint(IEnumerable<string> csharpPaths, IEnumerable<string> xmlPaths)
+    // includeContentDigest：把各根目录下源文件的「大小 + 修改时间」也纳入指纹。
+    // 源指向 Steam workshop 时，mod 更新不改路径集合，纯路径指纹会让陈旧索引一直命中且毫无提示。
+    // 只 stat 不读内容，故成本是几万次元数据枚举（约 100~300ms），远低于内容哈希要读的几百 MB。
+    public static string ComputeConfigFingerprint(
+        IEnumerable<string> csharpPaths,
+        IEnumerable<string> xmlPaths,
+        bool includeContentDigest = true)
     {
         var normalizedCsharp = NormalizePaths(csharpPaths);
         var normalizedXml = NormalizePaths(xmlPaths);
@@ -65,7 +71,64 @@ public static class IndexCacheService
             builder.AppendLine(path);
         }
 
+        if (includeContentDigest)
+        {
+            builder.AppendLine("[content]");
+            builder.AppendLine(ComputeContentDigest(normalizedCsharp.Concat(normalizedXml)));
+        }
+
         return $"sha256:{ComputeSha256(Encoding.UTF8.GetBytes(builder.ToString()))}";
+    }
+
+    private static readonly HashSet<string> DigestBlacklistedDirs = new(StringComparer.OrdinalIgnoreCase)
+        { "bin", "obj", ".git", ".vs", ".idea", ".build", "temp" };
+
+    private static string ComputeContentDigest(IEnumerable<string> roots)
+    {
+        var perRoot = new List<string>();
+
+        // 各根独立摘要后再合并：单个根内部要有序才稳定，根之间的顺序由上游已排序的路径列表定
+        foreach (var root in roots)
+        {
+            if (!Directory.Exists(root))
+            {
+                perRoot.Add($"{root}|missing");
+                continue;
+            }
+
+            var entries = new List<string>();
+            var stack = new Stack<string>();
+            stack.Push(root);
+
+            while (stack.Count > 0)
+            {
+                var current = stack.Pop();
+                try
+                {
+                    var directory = new DirectoryInfo(current);
+                    foreach (var file in directory.EnumerateFiles())
+                    {
+                        if (!file.Name.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+                            && !file.Name.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        entries.Add($"{file.FullName}|{file.Length}|{file.LastWriteTimeUtc.Ticks}");
+                    }
+
+                    foreach (var sub in directory.EnumerateDirectories())
+                    {
+                        if (!DigestBlacklistedDirs.Contains(sub.Name)) stack.Push(sub.FullName);
+                    }
+                }
+                catch { }
+            }
+
+            entries.Sort(StringComparer.OrdinalIgnoreCase);
+            var rootDigest = ComputeSha256(Encoding.UTF8.GetBytes(string.Join("\n", entries)));
+            perRoot.Add($"{root}|{entries.Count}|{rootDigest}");
+        }
+
+        return ComputeSha256(Encoding.UTF8.GetBytes(string.Join("\n", perRoot)));
     }
 
     public static (bool Success, string Reason, IndexCacheSnapshot? Snapshot, IndexCacheManifest? Manifest) TryLoad(

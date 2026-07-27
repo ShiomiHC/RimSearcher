@@ -49,8 +49,9 @@
 
 **支持内容**
 - C# 类型、成员（方法/属性/字段）、XML Def、文件名
-- 过滤语法：`type:` `method:` `field:` `def:`
+- 过滤语法：`type:` `method:` `field:` `def:` `scope:`
 - CamelCase 缩写与拼写容错（如 `JDW`）
+- `scope` / `limit` 参数（见「配置」一节）
 
 **示例查询**
 ```text
@@ -58,6 +59,7 @@ def:Apparel_ShieldBelt
 type:CompShield
 method:CompTick
 field:energy
+scope:mods pawn
 ```
 
 ---
@@ -219,6 +221,7 @@ Tool Layer
 - 首次启动通常会全量建索引并写缓存；二次启动通常会直接命中缓存，这能显著提升二次启动速度
 - 若需要强制重建，删除 `/.cache/index` 后重启该程序即可
 - 当前策略下，配置路径变化或缓存结构版本变化会触发自动重建
+- `VerifySourceFreshness`（默认开启）会把各源目录下 `.cs`/`.xml` 的**大小与修改时间**摘要一并纳入指纹，于是 Steam 更新过的 mod 也会自动触发重建。只 stat 不读文件内容，成本约百毫秒级；源全是不会变动的手工副本时可以关掉
 
 
 ---
@@ -238,11 +241,19 @@ Tool Layer
 ```json
 {
   "CsharpSourcePaths": [
-    "C:/Path/To/Your/RimWorld/Source"
+    { "name": "vanilla", "path": "C:/Path/To/Your/RimWorld/Source" },
+    { "name": "HAR", "path": "C:/Path/To/Decompiled/AlienRace" }
   ],
   "XmlSourcePaths": [
-    "C:/SteamLibrary/steamapps/common/RimWorld/Data"
+    { "name": "vanilla", "path": "C:/SteamLibrary/steamapps/common/RimWorld/Data" },
+    { "name": "HAR", "path": "C:/SteamLibrary/steamapps/workshop/content/294100/839005762/Defs" },
+    { "name": "HAR", "path": "C:/SteamLibrary/steamapps/workshop/content/294100/839005762/1.6/Defs" }
   ],
+  "ScopeGroups": {
+    "base": [ "vanilla", "HAR" ]
+  },
+  "DefaultScope": "base",
+  "VerifySourceFreshness": true,
   "SkipPathSecurity": false,
   "CheckUpdates": true
 }
@@ -250,9 +261,31 @@ Tool Layer
 
 字段说明：
 - `CsharpSourcePaths`: C# 源码目录（反编译源码目录，需要自己反编译导出游戏源码文件，这里不提供）
-- `XmlSourcePaths`: RimWorld `Data` 目录
+- `XmlSourcePaths`: RimWorld `Data` 目录及各 mod 的 `Defs` 目录
+- `ScopeGroups`: 作用域组，组名 → 源名列表；一个源可同属多组，组内顺序即同分时的排序优先级
+- `DefaultScope`: 未显式传 `scope` 参数时使用的作用域表达式；留空即全域
+- `VerifySourceFreshness`: 把源文件的大小/修改时间摘要纳入缓存指纹，让 Steam 更新过的 mod 自动触发索引重建（代价是启动时多几百毫秒的元数据枚举）
 - `SkipPathSecurity`: `true` 时关闭路径白名单检查（仅建议本地可信环境）
 - `CheckUpdates`: 是否启用版本更新提示
+
+**源命名与作用域**：`name` 相同的多个条目归为**同一个源**，因此一个逻辑源可以跨多个根目录（如 HAR 的 C# 目录 + 两个 Defs 目录），也可以跨 `CsharpSourcePaths` / `XmlSourcePaths` 两侧。省略 `name` 时按路径末段推断（会跳过 `Defs`、`1.6` 这类无信息量的段），旧版的裸字符串数组仍可直接使用。
+
+所有查询工具都接受 `scope` 参数：
+
+| 写法 | 含义 |
+| --- | --- |
+| `scope: "vanilla"` | 单个源 |
+| `scope: "base"` | 一个作用域组 |
+| `scope: "vanilla,Milira"` | 并选多个（书写顺序 = 同分时的优先级） |
+| `scope: "all"` | 全部源 |
+| `scope: "all,-vanilla"` | 排除（`-` 或 `!` 前缀） |
+| 不传 | 落到 `DefaultScope` |
+
+`locate` 还接受写在查询串里的 `scope:` 前缀（如 `"scope:mods pawn"`），与 `type:` / `def:` 等前缀同一套写法。
+
+选中多个源时，结果每行尾部标注来源（如 `[vanilla]`、`[Milira]`）。落在作用域**之外**的命中会在结果末尾汇总计数（`Outside scope 'base': Ratkin 8, Milira 1`），避免把「当前作用域搜不到」误读成「不存在」；`trace usages` 与 `search_regex` 因为要真读文件，不做这项统计，作用域对它们是硬过滤。
+
+`limit` 参数控制每段结果条数（默认 10），传 `"all"` 展开全部。低相关度结果会在出现明显分数断层时折叠，折叠行注明 `lower relevance`。
 
 3. 在 MCP 客户端中把 `RimSearcher.Server.exe` 注册为 **stdio MCP Server**，并设置环境变量 `RIMSEARCHER_CONFIG` 指向上一步的 `config.json`。
 
