@@ -38,7 +38,9 @@ public static class ScanOutputRenderer
 
     private static string Matches(ScanOutput output)
     {
-        var listed = output.Blocks.Take(output.FileListCap).ToList();
+        var listed = output.FileListCap is { } cap
+            ? output.Blocks.Take(cap).ToList()
+            : output.Blocks.ToList();
 
         // 消歧只看**列出来的**那些文件：没印出来的文件不参与重名判断，否则会为一个读者看不见的
         // 冲突把名字加长。判据与 R1/R8/R20 同源——推得出来就不印。
@@ -94,7 +96,8 @@ public static class ScanOutputRenderer
     private static SourceLabeling Labels(ScanOutput output, IReadOnlyList<ScanFileBlock> listed)
     {
         var scopeTotals = !output.ScanStopped
-                          && output.Blocks.Count > output.FileListCap
+                          && output.FileListCap is { } cap
+                          && output.Blocks.Count > cap
                           && output.Scope.ShowLabels
             ? output.Blocks
                 .Select(b => output.Scope.SourceNameOf(b.Path))
@@ -142,7 +145,9 @@ public static class ScanOutputRenderer
     // listed`，另一形不写，读者只能做 97−47 的减法——第九轮盲测里那个减法结出了错误推理。
     private static string FileListOverflow(ScanOutput output)
     {
-        var hidden = output.Blocks.Count - output.FileListCap;
+        // 没有文件数上限时这一格恒为 0：藏起来的文件一个也没有，正文里的文件块就是全部
+        // 扫到的文件（trace usages 走的是这一支，它的配额是全局预览行数）。
+        var hidden = output.FileListCap is { } cap ? output.Blocks.Count - cap : 0;
 
         if (output.ScanStopped)
         {

@@ -1,0 +1,9 @@
+Regex matches for 'ZzNeedle' (2 matching lines in scope 'all', case-insensitive):
+
+`ZzGated.cs` [conditional: 1.6/CE]
+  L1: // ZzNeedle
+
+`ZzPlain.cs`
+  L1: // ZzNeedle
+
+_`[conditional: …]` marks a mod folder that loadFolders.xml loads only under a condition: `1.6/CE` [vanilla] needs CETeam.CombatExtended active. This index reads those folders whatever is installed and never evaluates the condition, so a result from inside one is not evidence that it takes effect at runtime; when the condition does not hold the folder is not loaded at all and its contents are absent from the game. The tag names the folder-level condition only: a patch or def inside may carry its own gate (PatchOperationFindMod, MayRequire) that this index does not report. Rows without that tag were checked and are not inside such a folder._

@@ -41,9 +41,15 @@ public sealed record ScanOutput
     // 脚注联动）。空列表 = 零命中形。
     public required IReadOnlyList<ScanFileBlock> Blocks { get; init; }
 
-    // 一次最多列几个文件块。措辞里要印这个常数本身（`only the first 50 files are listed`），
-    // 而不是实际列出的块数——「本次列了几个」与「上限是多少」是两个数。
-    public required int FileListCap { get; init; }
+    // 一次最多列几个文件块，null = 不封顶。措辞里要印这个常数本身（`only the first 50 files
+    // are listed`），而不是实际列出的块数——「本次列了几个」与「上限是多少」是两个数。
+    //
+    // 两个扫盘工具在这一格上真的不同，不是漏配：search_regex 每文件最多 3 行、故 50 个文件
+    // 才封得住版面；trace usages 的配额是全局的预览行数（limit），文件数封第二道闸只会让
+    // 「列了几个」和「limit 是多少」两个上限在同一份返回里互相解释不清。写 null 而不是
+    // int.MaxValue，是因为后者会让 `Blocks.Count - cap` 这类算术在别处静默溢出成负数，
+    // 而「没有这道闸」本来就该是个能判断的状态。
+    public int? FileListCap { get; init; }
 
     public required int PreviewCapPerFile { get; init; }
 

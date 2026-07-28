@@ -124,153 +124,29 @@ public class TraceTool : ITool
             var limit = ScopeArgs.GetDisplayLimit(args, fallback: InheritorsDefaultLimit);
 
             cancellationToken.ThrowIfCancellationRequested();
-            var inheritors = _sourceIndexer.GetInheritors(symbol, scope, limit.Count, out var depths, out var shape);
+            var inheritors = _sourceIndexer.GetInheritors(
+                symbol, scope, limit.Count, out var depths, out var shape);
 
-            if (inheritors.Items.Count == 0)
+            return new ToolResult(InheritorsRenderer.Render(new InheritorsOutput
             {
-                var report = new ScopeReport();
-                report.Add(inheritors);
-                var footer = report.Render(scope, "subclasses");
-
-                // 「索引里没有这个类型」和「有，但没人继承它」是两件事，下一步也完全不同：
-                // 前者要去确认名字（多半拼错了或不在配置的源里），后者已经是答案。
-                // 原先两者同一句话，调用方读到的都是「没有子类」，于是拿着一个根本不存在的
-                // 名字继续往下查。
-                // 「这是答案」这句背书只在**真的是完整答案**时给。scope 外还有派生类时，
-                // 它下面跟的是一行小字斜体的 out-of-scope 计数——盲测里调用方把整份返回压缩成
-                // 了「没有子类」，而那个被丢掉的 1 足以让「可以安全改签名」这类结论翻车：
-                // 语气最重的那句和唯一的反证放在一起，读者只会记住前者。
-                var known = _sourceIndexer.IsKnownType(symbol);
-                var message = known
-                    ? footer != null
-                        ? $"'{symbol}' is indexed, and nothing in scope '{scope.Expression}' derives from it — "
-                          + "but it does have subclasses outside that scope, so this is not the whole answer."
-                        : $"'{symbol}' is indexed, and nothing in scope '{scope.Expression}' derives from it "
-                          + "(this is an answer, not a lookup failure)."
-                    : $"No type named '{symbol}' is in the index, so this is not evidence that it has no "
-                      + "subclasses. Check the spelling with rimworld-searcher__locate, and note that "
-                      + "inheritors resolves C# type names only.";
-
-                // 这里**不挂** RetryWiderNotice。那句「retry with scope:'all' before concluding it does
-                // not exist」在本分支的三种情形下全是错的或白跑的：
-                //   - 已知类型 + 有越界子类  → footer 已经逐源报了数，且上一句刚说过「这不是完整答案」；
-                //   - 已知类型 + 无越界子类  → 继承闭包是全域算的，scope:'all' 一条也加不出来；
-                //   - 索引里没这个名字      → IsKnownType 本就与 scope 无关，换 scope 返回逐字相同。
-                // 实测第三种给出的是 "…Check the spelling… Only sources in scope 'base' were searched —
-                // retry with scope:'all'"：两句语气相反，而后一句保证白跑一轮。
-                return new ToolResult($"{message}{footer ?? string.Empty}{scopeNotice}");
-            }
-
-            // 列出来的类型全同源时标签只印一次；被 200 上限截断时表头改印全树的来源构成
-            // （见 SourceLabeling）。这里的截断是结构性偏置：候选按 depth 再按字母序
-            // 排，vanilla 的直接子类挤满前 200 条，于是「切片全是 vanilla、全树横跨五个源」
-            // 是常态而非巧合。
-            var inheritorLabels = SourceLabeling.Of(inheritors);
-            var inheritorConditional = new ConditionalReport(_conditional);
-
-            var results = inheritors.Items.Select(entry =>
-            {
-                var paths = _sourceIndexer.GetPathsByType(entry.Item);
-                // 深度必须逐条标出来：树是拍平成一列返回的，不标就分不出「直接子类」
-                // 和「曾孙」，而这两者在判断「要覆写哪个方法」时含义完全不同。
-                // 但**只标非直接的**：直接子类占绝大多数（本转储 601 行全是），
-                // 每行挂一个 `[direct]` 是把表头已经说过的话再说 601 遍。
-                // 表头在有深层项时会点明「无标记 = 直接子类」。
-                var depth = depths.TryGetValue(entry.Item, out var d) ? d : 1;
-                var depthLabel = depth == 1 ? "" : $" [depth {depth}]";
-                // 声明散在多份文件里时只有全部落在条件目录里才打标——有一份无条件的，
-                // 这个类型在任何实机上都在（见 ConditionalFolders.OfAll）。
-                return $"- `{entry.Item}`{depthLabel}{SymbolRow.FileNote(entry.Item, paths)}"
-                       + $"{inheritorConditional.TagAll(paths)}{inheritorLabels.Row(entry.SourceName)}";
-            });
-
-            // 表头里所有数都描述**同一批东西**：scope 内的整棵树。direct 与 deepest 原先取自
-            // inheritors.Items（截断后的展示切片），而总数取自 TotalInScope（全树）——两组数
-            // 句法对称地并排，读者只会当成一件事。实测 ThingComp 因此写出
-            // 「381 … Listed below: 200 (200 direct, deepest 1 level down)」，而那棵树真有四层。
-            // 现在两个数由 GetInheritors 在 scope 过滤时一并数出来，只剩「Listed below」描述切片。
-            var shownDeepest = inheritors.Items
-                .Select(e => depths.TryGetValue(e.Item, out var d) ? d : 1)
-                .DefaultIfEmpty(1).Max();
-
-            var sbInheritors = new System.Text.StringBuilder();
-            // 深度标记的约定只在**这次真的印出了标记**时才需要说明；一个标记都没有时讲解一套
-            // 不存在的记法，反而会让读者去找它（同 R9：表头说过的话不逐行重复，没发生的事不说）。
-            //
-            // 「direct = depth 1」必须点破：整份返回里 depth 的原点从没写过，于是表头的
-            // `deepest 6 levels down` 该对应 `[depth 6]` 还是 `[depth 5]` 无从判断，而这两种
-            // 读法在「要覆写哪一层」上给出不同答案。
-            var depthLegend = shownDeepest > 1 ? ", untagged = direct (depth 1)" : "";
-            // 没被截断就不写「Listed below」——那时它逐字等于前面那个总数。沿用 R33 的读法：
-            // 出现「列了多少」这一格本身就是「被截了」的信号。
-            //
-            // 截断留下的**恒是最浅的那一批**（GetInheritors 按 depth 升序排候选，见那里的注释），
-            // 而返回里一个字都没说这件事。默认读法是「列表是这棵树的一个样本」，于是「样本里
-            // 最深的一层」被当成「树最深的一层」——R42 治好的是表头报错深度，这里复发成
-            // **把 depth 4 的那批名字报成 depth 6 的成员**。尾行只说「被截了」，没说截的是哪一批。
-            //
-            // 「第 5、6 层有谁」这套工具确实给不出（没有 offset、也没有参数抬得动 200 这个顶）。
-            // 答不了不是缺陷，不说自己答不了才是。
-            //
-            // 「below depth N」的方向此前要靠读者自己定：depth 数值越大越深，而「below」在
-            // 版面上指的是「下面那些行」。第十三轮盲测里被测方当场读反了一次。改用 deeper than。
-            var depthCoverage = shownDeepest < shape.Deepest
-                ? $", shallowest first — nothing deeper than depth {shownDeepest} is listed"
-                : ", shallowest first";
-            var listed = inheritors.Items.Count < inheritors.TotalInScope
-                ? $". Listed below: {inheritors.Items.Count}{depthCoverage}"
-                : string.Empty;
-            sbInheritors.AppendLine(
-                $"Subclasses of '{symbol}' ({inheritors.TotalInScope} in scope '{scope.Expression}', transitive — "
-                + $"indirect descendants included; {shape.Direct} direct, deepest "
-                + $"{OutputText.Quantity(shape.Deepest, "levels")} down{depthLegend})"
-                + $"{listed}{inheritorLabels.Header}:");
-            sbInheritors.AppendLine(string.Join(Environment.NewLine, results));
-
-            // 顶到 200 时「narrow the query」在继承树上不是个可执行动作：查询词就是那个类名，
-            // 没得再窄，而这个模式既没有 offset 也没有任何参数抬得动上限。唯一的出路是从列表里
-            // 挑一个子树根重跑——这个动作在 schema、Description、返回里此前一处都没写。
-            var fold = Fold.Line(
-                inheritors, "subclasses", indent: "", limit: limit,
-                // 只给这一条出路时它的语气太足：第十三轮盲测里被测方据此断定「要拼出全树得对
-                // 306 个直接子类逐个盲试」，转而去跑正则补料，多花四次调用，产出一份自己都标注
-                // 为「非完整」的名单。而按源切片一次就能把某个源的整棵子树完整列出来（实测
-                // scope:'Milira' 回 41 条，含全部 depth 2/3/4，无折叠）。越界脚注只在窄 scope
-                // 时出现且只劝人放宽，方向恰好相反，故这条得写在这里。
-                capAction: "re-trace a listed type as its own root (depths then restart from it), "
-                           + "or narrow scope to one source — a per-source subtree is listed in full "
-                           + "whenever it fits under the cap");
-            if (fold != null) sbInheritors.AppendLine(fold);
-
-            // 这里**不要**加「limit 在本模式无效」那类注文。第十三轮我照盲测的结论加过一条，
-            // 实测当场自打嘴巴：`limit:20` 明明就列了 20 条。盲测证到的只是「limit:'all' 拿不到
-            // 更多」——那是抬不高（缺省已经顶在 200），不是不起作用。两个方向别混为一谈。
-            // 天花板本身由 FoldLine 的 `server cap 200 reached` 分支说，那条是对的。
-
-            // 行内标记是上面那个 Select 打的，而它是惰性的——AppendLine(string.Join(...)) 已经
-            // 把它跑完了，故这里读得到。位置按全服惯例：本段自己的脚注在前，scope 相关的在后。
-            var inheritorsConditionalFooter = inheritorConditional.Render();
-            if (inheritorsConditionalFooter != null) sbInheritors.Append(inheritorsConditionalFooter);
-
-            var inheritorsReport = new ScopeReport();
-            inheritorsReport.Add(inheritors);
-            // 越界脚注原先只报「外面还有 91 个」，而表头那句 `23 direct, deepest 6 levels down`
-            // 是 scope 内的形状——「换个 scope 会不会改变深度」在返回里完全不可判定，调用方只能猜。
-            // 盲测里它猜错并写进了答案正文（实测 scope:'all' 仍是 deepest 6）。与 R42 同形，
-            // 轴从「整树 vs 截断切片」换成「域内树 vs 全域树」。
-            //
-            // 这两个数不必重算：depths 是 GetInheritors 在**全域**上跑完 BFS 的产物，
-            // scope 过滤发生在它之后。
-            var directEverywhere = depths.Values.Count(d => d == 1);
-            var deepestEverywhere = depths.Values.DefaultIfEmpty(1).Max();
-            var inheritorsFooter = inheritorsReport.Render(
-                scope, "subclasses",
-                extra: $"including them the tree is {directEverywhere} direct, deepest "
-                       + $"{OutputText.Quantity(deepestEverywhere, "levels")} down");
-            if (inheritorsFooter != null) sbInheritors.Append(inheritorsFooter);
-            sbInheritors.Append(scopeNotice);
-
-            return new ToolResult(sbInheritors.ToString());
+                Symbol = symbol,
+                Scope = scope,
+                Inheritors = inheritors,
+                // 全域 BFS 的产物，scope 过滤发生在它之后。逐行的 `[depth N]` 与越界脚注里
+                // 「把落选那批算进来整棵树是什么形状」都从这一份读，故两处对不上不了。
+                Depths = depths,
+                Paths = inheritors.Items.ToDictionary(
+                    e => e.Item,
+                    e => (IReadOnlyList<string>)_sourceIndexer.GetPathsByType(e.Item)),
+                Shape = shape,
+                Limit = limit,
+                Conditional = new ConditionalReport(_conditional),
+                // 「索引里没这个名字」与「有，但没人继承它」是两件事，下一步完全不同。
+                // 与 scope 无关，故它是事实；那句「这是答案」的背书该不该给由 renderer 判
+                // （还要看越界脚注在不在场）。
+                TypeIsIndexed = _sourceIndexer.IsKnownType(symbol),
+                ScopeNotice = scopeNotice,
+            }));
         }
         else
         {
@@ -424,148 +300,89 @@ public class TraceTool : ITool
             // 补一次满格，免得调用方那边的进度条挂在原地。
             progress?.Report(1.0);
 
-            // 扫盘分支是硬 scope 过滤、不统计落选来源，故这条提示是它唯一的「别处也许有」的痕迹
-            if (results.Count == 0)
-                return new ToolResult(
-                    $"No text matches for '{symbol}' in scope '{scope.Expression}' "
-                    + "(whole word, case-insensitive)."
-                    + $"{ScopeNotices.RetryWider(scope)}{scopeNotice}");
-
             // 按 (文件序号, 行号) 排完再截：序号来自 files，files 就是展示顺序，故留下的恒是
             // 读者看到的那一段的前缀。拿 ConcurrentBag 的枚举序去截则每次都可能不同。
             var ordered = results.OrderBy(r => r.ordinal).ThenBy(r => r.lineNum).ToList();
             var wasTruncated = Interlocked.CompareExchange(ref truncatedFlag, 0, 0) == 1
                                || stoppedEarly
                                || ordered.Count > maxTotalResults;
-            var shownResults = ordered.Take(maxTotalResults).ToList();
-            var grouped = shownResults.GroupBy(r => r.file).ToList();
+
             int totalMatches = Interlocked.CompareExchange(ref totalMatchCount, 0, 0);
-
-            // 未截断时这个数才是真实命中总数——那正是本次修复的目的（原先它是显示条数）。
-            // 截断时不能报它：配额一满就不再打开新文件，totalMatches 只反映「恰好扫到了哪些
-            // 文件」，随线程调度浮动，同一次查询重跑两遍会给出两个数。与其报一个不稳定的下界，
-            // 不如只说确定的量（显示了多少条、扫描在何处停下），把总数留给末尾的提示。
-            var sb = new System.Text.StringBuilder();
-            // 列出来的文件全同源时标签只印一次（见 SourceLabeling）
-            var usageLabels = SourceLabeling.Of(
-                grouped.Select(g => scope.ShowLabels ? scope.SourceNameOf(g.Key) : null));
-
-            var capped = Interlocked.CompareExchange(ref lineCappedFiles, 0, 0);
-            var unreadable = Interlocked.CompareExchange(ref unreadableFiles, 0, 0);
-            var anyFileIncomplete = capped > 0 || unreadable > 0;
-
-            // 表头动词从 "References to" 改成 "Text matches for"。原先的写法配上「文件 + 行号 +
-            // 代码」的正文排版，读起来就是一份引用清单，于是那个数被直接当成「这个符号被引用了
-            // 多少处」写进结论——而它既含大小写不同的同名标识符，也含注释掉的行，还会把无关类型
-            // 上的同名成员算进来（Description 里那句 "not a call graph" 说的正是这件事，但它在
-            // 返回文本里一个字都没有）。inheritors 那种语义结果的措辞与它就此分开。
             int exactCaseMatches = Interlocked.CompareExchange(ref exactCaseMatchCount, 0, 0);
+
             // 匹配口径就地声明。截断时不报精确大小写数——那时 totalMatches 本身就只反映
             // 「恰好扫到了哪些文件」，再派生一个数只是把不确定量翻倍。
-            var casing = wasTruncated
-                ? string.Empty
-                : exactCaseMatches == totalMatches
-                    ? ", whole word and case-insensitive — all match the query's own casing"
-                    : $", whole word and case-insensitive — {exactCaseMatches} of them match the query's own casing";
-
-            sb.AppendLine(wasTruncated
-                ? $"Text matches for '{symbol}' (first {shownResults.Count} preview lines in scope "
-                  + $"'{scope.Expression}', whole word and case-insensitive){usageLabels.Header}:"
-                // 下界记号必须就地指出成因，否则读者会拿 limit 去解释它（见 ScanReport.LowerBoundReason）
-                : $"Text matches for '{symbol}' ({ScanReport.FoundCount(totalMatches, anyFileIncomplete)} "
-                  + $"in scope '{scope.Expression}'{casing}"
-                  + $"{ScanReport.LowerBoundReason(anyFileIncomplete)}){usageLabels.Header}:");
-            sb.AppendLine();
-
-            // 本次要列出的文件里有重名时补目录（见 FileNames.Disambiguate）。
-            // 两处都叫调用方 `use read_code on a file`，而 read_code 收基名——重名不消歧，
-            // 那句下一步就是错的。
-            var usageDisplayNames = FileNames.Disambiguate(grouped.Select(g => g.Key));
-
-            var groupsWritten = 0;
-            var anyFileFolded = false;
-            var usageConditional = new ConditionalReport(_conditional);
-            foreach (var group in grouped)
+            //
+            // 匹配是不分大小写的全词匹配，而 C# 的命名习惯保证「类型 CompRefuelable → 局部变量
+            // compRefuelable」——实测 CompRefuelable 的 108 行里有 26 行是纯变量名。调用方拿这个
+            // 108 当「这个类被引用了多少处」写进结论就直接错了 32%，而返回里没有任何一处能让它
+            // 察觉。
+            var echoes = new List<string>
             {
-                // 组与组之间空一行。search_regex 输出的是同一个结构（文件名 + 缩进的预览行）
-                // 却一直空着行，两处一密一疏，读者每换一个工具就得重新找组的边界在哪。
-                if (groupsWritten++ > 0) sb.AppendLine();
+                wasTruncated
+                    ? "whole word and case-insensitive"
+                    : exactCaseMatches == totalMatches
+                        ? "whole word and case-insensitive — all match the query's own casing"
+                        : $"whole word and case-insensitive — {exactCaseMatches} of them match "
+                          + "the query's own casing"
+            };
 
-                // 原先每组挂一个 `[C#]` / `[XML]` 前缀，而紧跟其后的文件名带着 .cs / .xml
-                // 后缀，说的是同一件事。search_regex 同样按文件分组、从来没有这个前缀。
-                // 条件标记排在来源标签之前（同 search_regex）：行尾的 `[x]` 是来源标签位
-                var fileName = usageDisplayNames[group.Key];
-                sb.AppendLine($"`{fileName}`{usageConditional.Tag(group.Key)}"
-                              + $"{usageLabels.Row(scope.ShowLabels ? scope.SourceNameOf(group.Key) : null)}");
+            // 名单排序后再交出去：并发桶的枚举序看线程调度，不排的话同一条查询两次会给出
+            // 两种点名顺序，与「同一条查询恒给同一份答案」的契约相冲（同 search_regex）。
+            var sorted = (ConcurrentBag<string> bag) => (IReadOnlyList<string>)bag
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
 
-                var shown = 0;
-                foreach (var match in group.OrderBy(m => m.lineNum))
-                {
-                    sb.AppendLine($"  L{match.lineNum}: {match.preview}");
-                    shown++;
-                }
+            var blocks = ordered
+                .Take(maxTotalResults)
+                // 已按 (文件序号, 行号) 排好，GroupBy 保序，故文件块的次序就是展示顺序、
+                // 块内预览行的次序就是行号升序。两者都不必再排一遍。
+                .GroupBy(r => r.file)
+                .Select(g => new ScanFileBlock(
+                    g.Key,
+                    g.Select(m => (m.lineNum, m.preview)).ToList(),
+                    // 基数取扫盘时数出来的真实命中数：预览每文件封顶 3 条，拿到手的条数当基数
+                    // 会少报。配额在这个文件中途耗尽时 g 会不足 3 条，那时按常数减同样少报，
+                    // 故减的是实际条数（renderer 里的 shown）。
+                    matchesByFile.TryGetValue(g.Key, out var inFile) ? inFile : g.Count()))
+                .ToList();
 
-                // 减的是实际显示条数而不是 MaxMatchesPerFile：配额在这个文件中途耗尽时
-                // shown 会不足 3，按常数减会少报。文案与 search_regex 保持一致。
-                var inFile = matchesByFile.TryGetValue(group.Key, out var c) ? c : shown;
-                if (inFile > shown)
-                {
-                    sb.AppendLine(Fold.PerFile(inFile - shown, inFile));
-                    // 只有真撞上每文件上限的折叠才让脚注出现——配额在这个文件中途耗尽时 shown
-                    // 不足 3，那条折叠的成因是扫描停了，不是每文件上限。同 search_regex。
-                    if (shown >= MaxMatchesPerFile) anyFileFolded = true;
-                }
-            }
-
-            // 判据只看 truncatedFlag。原先还或上 `totalMatches >= maxTotalResults`，
-            // 而 totalMatches 现在是真实命中数——单文件折叠出来的命中会误触发这条提示。
-            if (wasTruncated)
+            return new ToolResult(ScanOutputRenderer.Render(new ScanOutput
             {
-                // 与 search_regex 同一句话：两个工具在同一个事件（预览行扫到上限就停）上原先
-                // 各写各的措辞，而它们的输出结构本来就一样。已顶到硬上限时那句里不会再劝
-                // limit:'all'（原地重试），这条判断在 ScanStoppedLine 内部。
-                sb.AppendLine();
-                sb.AppendLine(ScanReport.ScanStopped(maxTotalResults, limit));
-            }
-
-            if (anyFileFolded)
-            {
-                sb.AppendLine();
-                sb.AppendLine(Fold.PerFilePreviewCap(MaxMatchesPerFile));
-            }
-
-            // 与 search_regex 逐字同句：两个工具有一模一样的两处静默削减，此前只有它说出口
-            if (anyFileIncomplete)
-            {
-                var incomplete = new List<string>();
-                // 名单排序后再交出去：并发桶的枚举序看线程调度，不排的话同一条查询两次会给出
-                // 两种点名顺序，与「同一条查询恒给同一份答案」的契约相冲（同 search_regex）。
-                var sorted = (ConcurrentBag<string> bag) => (IReadOnlyList<string>)bag
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
-
-                if (unreadable > 0)
-                    incomplete.Add($"{OutputText.Quantity(unreadable, "files")} could not be read "
-                                   + $"and {(unreadable == 1 ? "was" : "were")} skipped entirely"
-                                   + ScanReport.NameSample(sorted(unreadableNames)));
-                if (capped > 0)
-                    incomplete.Add($"{OutputText.Quantity(capped, "files")} {(capped == 1 ? "was" : "were")} "
-                                   + $"only scanned to line {MaxLinesScannedPerFile}"
-                                   + ScanReport.NameSample(sorted(lineCappedNames)));
-
-                sb.AppendLine();
-                sb.AppendLine(ScanReport.NotScannedInFull(incomplete));
-            }
-
-            // 条件目录的成因整份说一次（行内只放键，见 ConditionalReport）
-            sb.Append(usageConditional.Render() ?? string.Empty);
-
-            // usages 分支是硬 scope 过滤、没有 ScopeReport footer（见上面扫盘的注释）。
-            // 那条 footer 的缺席本身会被读成「scope 外没有」，故把缺席的含义明说一次。
-            sb.Append(ScopeNotices.HardScopeFilter(scope));
-            sb.Append(scopeNotice);
-
-            return new ToolResult(sb.ToString());
+                // 表头动词是 "Text matches for" 而不是 "References to"。原先的写法配上「文件 +
+                // 行号 + 代码」的正文排版，读起来就是一份引用清单，于是那个数被直接当成「这个符号
+                // 被引用了多少处」写进结论——而它既含大小写不同的同名标识符，也含注释掉的行，还会
+                // 把无关类型上的同名成员算进来（Description 里那句 "not a call graph" 说的正是这件
+                // 事，但它在返回文本里一个字都没有）。inheritors 那种语义结果的措辞与它就此分开。
+                Subject = $"Text matches for '{symbol}'",
+                // 扫盘分支是硬 scope 过滤、不统计落选来源，故 RetryWider 是零命中形唯一的
+                // 「别处也许有」的痕迹——它由 renderer 挂，见 ScanOutputRenderer.Empty。
+                EmptyLine = $"No text matches for '{symbol}' in scope '{scope.Expression}' "
+                            + "(whole word, case-insensitive).",
+                Scope = scope,
+                ParameterEchoes = echoes,
+                Blocks = blocks,
+                // 文件数不封第二道闸，见 ScanOutput.FileListCap
+                FileListCap = null,
+                PreviewCapPerFile = MaxMatchesPerFile,
+                // 未截断时这个数才是真实命中总数。截断时不能报它：配额一满就不再打开新文件，
+                // 它只反映「恰好扫到了哪些文件」，随线程调度浮动——renderer 在那一形下不报它。
+                TotalMatchingLines = totalMatches,
+                ScanStopped = wasTruncated,
+                Limit = limit,
+                // 两处静默削减。search_regex 一直在报它们，trace 此前一声不吭——而「没有尾注即
+                // 完整命中集」这条读法是调用方从 search_regex 那儿学来的，套到这里就会把一份漏了
+                // 六万行的结果当成穷尽结论。这里没有超时那一档：本模式的 pattern 是转义后的全词
+                // 匹配，回溯不起来。
+                Completeness = new ScanCompleteness(
+                    UnreadableFiles: Interlocked.CompareExchange(ref unreadableFiles, 0, 0),
+                    UnreadableNames: sorted(unreadableNames),
+                    LineCappedFiles: Interlocked.CompareExchange(ref lineCappedFiles, 0, 0),
+                    LineCappedNames: sorted(lineCappedNames),
+                    LineCap: MaxLinesScannedPerFile),
+                Conditional = new ConditionalReport(_conditional),
+                ScopeNotice = scopeNotice,
+            }));
         }
     }
 }

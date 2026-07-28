@@ -1,4 +1,4 @@
-namespace RimSearcher.Server.Tools;
+namespace RimSearcher.Server.Tools.Output;
 
 // 结果行的共享渲染判据。locate 与 trace 各自列「符号 + 它在哪个文件」，两处都曾无条件印文件名——
 // 而全量转储实测：locate 2610 行里 2489 行（95%）、trace inheritors 601 行里 589 行（98%）的

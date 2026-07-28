@@ -398,6 +398,91 @@ public class OutputSnapshotTests : IDisposable
         Verify("trace/inheritors-known-but-childless", content);
     }
 
+    // 切片浅于整树：截断留下的恒是最浅的那一批，故必须说清「更深的没列出来」。
+    // 这一形与 inheritors-truncated 的差别只在 shape.Deepest > 切片最深层，而它换的是表头
+    // 那半句覆盖说明——两句共用同一个「切片最深层」，任何一处算错都在这里显形。
+    [Fact]
+    public async Task TraceInheritors_SliceShallowerThanTheTree()
+    {
+        var (indexer, _, catalog) = BuildIndex(
+            ("ZzBase.cs", "namespace Zz { public class ZzBase { } }"),
+            ("ZzA.cs", "namespace Zz { public class ZzA : ZzBase { } }"),
+            ("ZzB.cs", "namespace Zz { public class ZzB : ZzBase { } }"),
+            ("ZzC.cs", "namespace Zz { public class ZzC : ZzBase { } }"),
+            ("ZzDeep.cs", "namespace Zz { public class ZzDeep : ZzA { } }"));
+
+        var content = await Run(
+            new TraceTool(indexer, catalog), new { symbol = "ZzBase", mode = "inheritors", limit = 2 });
+
+        Verify("trace/inheritors-slice-shallower", content);
+    }
+
+    // 混源：来源标签逐行印（未截断，故段头不印构成）
+    [Fact]
+    public async Task TraceInheritors_MixedSources()
+    {
+        var (indexer, _, catalog) = BuildTwoSourceIndex(
+            [("ZzBase.cs", "namespace Zz { public class ZzBase { } }"),
+             ("ZzHome.cs", "namespace Zz { public class ZzHome : ZzBase { } }")],
+            [("ZzGuest.cs", "namespace Zz { public class ZzGuest : ZzBase { } }")]);
+
+        var content = await Run(
+            new TraceTool(indexer, catalog), new { symbol = "ZzBase", mode = "inheritors" });
+
+        Verify("trace/inheritors-mixed-sources", content);
+    }
+
+    // 截断 + 总数跨源：段头改印全树的来源构成（切片全是 vanilla，正是那个结构性偏置）
+    [Fact]
+    public async Task TraceInheritors_TruncatedSpanningSources()
+    {
+        var vanilla = new List<(string, string)> { ("ZzBase.cs", "namespace Zz { public class ZzBase { } }") };
+        for (var i = 0; i < 6; i++)
+            vanilla.Add(($"ZzHome{i}.cs", $"namespace Zz {{ public class ZzHome{i} : ZzBase {{ }} }}"));
+
+        var (indexer, _, catalog) = BuildTwoSourceIndex(
+            vanilla.ToArray(),
+            [("ZzGuest.cs", "namespace Zz { public class ZzGuest : ZzBase { } }")]);
+
+        var content = await Run(
+            new TraceTool(indexer, catalog), new { symbol = "ZzBase", mode = "inheritors", limit = 3 });
+
+        Verify("trace/inheritors-truncated-spanning-sources", content);
+    }
+
+    // 越界脚注 + 「把落选那批算进来整棵树是什么形状」。后者用的 depths 是全域 BFS 的产物，
+    // 与逐行的 [depth N] 同源，故这份基线同时钉住「两处对不对得上」。
+    [Fact]
+    public async Task TraceInheritors_OutOfScopeFooter()
+    {
+        var (indexer, _, catalog) = BuildTwoSourceIndex(
+            [("ZzBase.cs", "namespace Zz { public class ZzBase { } }"),
+             ("ZzHome.cs", "namespace Zz { public class ZzHome : ZzBase { } }")],
+            [("ZzGuest.cs", "namespace Zz { public class ZzGuest : ZzBase { } }"),
+             ("ZzGuestDeep.cs", "namespace Zz { public class ZzGuestDeep : ZzGuest { } }")]);
+
+        var content = await Run(
+            new TraceTool(indexer, catalog),
+            new { symbol = "ZzBase", mode = "inheritors", scope = "vanilla" });
+
+        Verify("trace/inheritors-out-of-scope", content);
+    }
+
+    // 零命中 + scope 外有派生类：那句「这是答案」的背书必须换成「这不是完整答案」
+    [Fact]
+    public async Task TraceInheritors_ZeroHitsWithSubclassesOutOfScope()
+    {
+        var (indexer, _, catalog) = BuildTwoSourceIndex(
+            [("ZzBase.cs", "namespace Zz { public class ZzBase { } }")],
+            [("ZzGuest.cs", "namespace Zz { public class ZzGuest : ZzBase { } }")]);
+
+        var content = await Run(
+            new TraceTool(indexer, catalog),
+            new { symbol = "ZzBase", mode = "inheritors", scope = "vanilla" });
+
+        Verify("trace/inheritors-zero-hits-out-of-scope", content);
+    }
+
     [Fact]
     public async Task TraceInheritors_UnknownType()
     {
@@ -446,6 +531,58 @@ public class OutputSnapshotTests : IDisposable
             new TraceTool(indexer, catalog), new { symbol = "ZzAbsent", mode = "usages", scope = "vanilla" });
 
         Verify("trace/usages-zero-hits", content);
+    }
+
+    // ---- 条件目录：行内的键与整份的成因脚注 ----
+    //
+    // 这两形此前一份基线都没有，而行内标记与尾注是**同一个持有者**（ConditionalReport）在正文
+    // 两端各印一半：标记在每一行上打，成因隔着几十行正文在末尾兑换。两端之间那条「指认得上」
+    // 的线是 F33 规则甲，没有字节级基线时它只被 Contains 断言拦着半边。
+    private (SourceIndexer Indexer, ScopeCatalog Catalog, ConditionalFolders Folders) BuildGatedIndex(
+        params (string RelPath, string Body)[] files)
+    {
+        var conditionalDir = _workspace.Dir("Core", "1.6", "CE");
+        foreach (var (relPath, body) in files)
+            _workspace.WriteFile(Path.Combine("Core", relPath), body);
+
+        var root = _workspace.Dir("Core");
+        var indexer = new SourceIndexer();
+        indexer.Scan(root);
+        indexer.FreezeIndex();
+
+        return (indexer,
+            ScopeCatalog.Build([("vanilla", root)], null, null),
+            ConditionalFolders.Build([
+                new ConditionalArea(conditionalDir, "1.6/CE", "CETeam.CombatExtended active", "vanilla")
+            ]));
+    }
+
+    [Fact]
+    public async Task SearchRegex_ConditionalFolderTagAndFootnote()
+    {
+        var (indexer, catalog, folders) = BuildGatedIndex(
+            ("ZzPlain.cs", "// ZzNeedle\n"),
+            (Path.Combine("1.6", "CE", "ZzGated.cs"), "// ZzNeedle\n"));
+
+        var content = await Run(
+            new SearchRegexTool(indexer, catalog, folders), new { pattern = "ZzNeedle" });
+
+        Verify("search_regex/conditional-folder", content);
+    }
+
+    [Fact]
+    public async Task TraceInheritors_ConditionalFolderTagAndFootnote()
+    {
+        var (indexer, catalog, folders) = BuildGatedIndex(
+            ("ZzBase.cs", "namespace Zz { public class ZzBase { } }"),
+            ("ZzPlain.cs", "namespace Zz { public class ZzPlain : ZzBase { } }"),
+            (Path.Combine("1.6", "CE", "ZzGated.cs"),
+                "namespace Zz { public class ZzGated : ZzBase { } }"));
+
+        var content = await Run(
+            new TraceTool(indexer, catalog, folders), new { symbol = "ZzBase", mode = "inheritors" });
+
+        Verify("trace/inheritors-conditional", content);
     }
 
     // ================= locate =================
