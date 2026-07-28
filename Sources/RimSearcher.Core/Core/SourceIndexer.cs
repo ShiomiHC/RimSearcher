@@ -66,21 +66,42 @@ public class SourceIndexer
     // 「没找到」都是不可信的，调用方必须被告知，否则会把它读成「这东西不存在」。
     public int IndexedFileCount => _processedFiles.Count;
 
+    // 六份倒排表的值都装在 ConcurrentBag 里，而 bag 的枚举序**由并发写入顺序决定**——
+    // 同一份语料换个进程重扫就可能给出不同的次序。于是每一份都在这里定序，一次排完；
+    // 定序不是排版讲究，下面这些地方拿它当结论：
+    //   - FirstPathOfType 取 files[0] 判**归属**（继承树与类型搜索的 scope 归属都走它），
+    //     一个类型有多份文件时，它属于哪个源本来会随索引重建翻面；
+    //   - GetPath 取 OrderBy(Rank) 的第一条当「读哪份文件」，同源多份时 Rank 并列、
+    //     兜底完全落在这个次序上；
+    //   - GetPathsByType 的候选分数恒为 100，同源之间同样只剩这个次序（同 F47 的形状）。
+    // README 承诺「换个进程、换个索引重建轮次都给同一批结果」——那句话此前只对打分路径成立。
+    // 代价是一次排序，与本方法已在做的 FrozenDictionary 构建同量级。
+    //
+    // 去重语义原样不动（普通 Distinct）：这些值里有类型名，而 C# 的类型名大小写敏感，
+    // 按 OrdinalIgnoreCase 去重会把 `foo` 与 `Foo` 并成一个。排序则必须用 **Ordinal**——
+    // OrdinalIgnoreCase 在只差大小写的两项上判等，那两项的次序会退回输入序，也就不是全序，
+    // 而全序正是这里唯一要的东西。
+    private static string[] Ordered(IEnumerable<string> values) =>
+        values.Distinct().OrderBy(v => v, StringComparer.Ordinal).ToArray();
+
     public void FreezeIndex()
     {
         _frozenIndex = _index.ToFrozenDictionary(
-            kv => kv.Key, kv => kv.Value.Distinct().ToArray(), StringComparer.OrdinalIgnoreCase);
+            kv => kv.Key, kv => Ordered(kv.Value), StringComparer.OrdinalIgnoreCase);
         _frozenTypeMap = _typeMap.ToFrozenDictionary(
-            kv => kv.Key, kv => kv.Value.Distinct().ToArray(), StringComparer.OrdinalIgnoreCase);
+            kv => kv.Key, kv => Ordered(kv.Value), StringComparer.OrdinalIgnoreCase);
         _frozenInheritorsMap = _inheritorsMap.ToFrozenDictionary(
-            kv => kv.Key, kv => kv.Value.Distinct().ToArray(), StringComparer.OrdinalIgnoreCase);
+            kv => kv.Key, kv => Ordered(kv.Value), StringComparer.OrdinalIgnoreCase);
         _frozenShortTypeMap = _shortTypeMap.ToFrozenDictionary(
-            kv => kv.Key, kv => kv.Value.Distinct().ToArray(), StringComparer.OrdinalIgnoreCase);
+            kv => kv.Key, kv => Ordered(kv.Value), StringComparer.OrdinalIgnoreCase);
         _frozenNgramIndex = _ngramIndex.ToFrozenDictionary(
-            kv => kv.Key, kv => kv.Value.Distinct().ToArray(), StringComparer.OrdinalIgnoreCase);
+            kv => kv.Key, kv => Ordered(kv.Value), StringComparer.OrdinalIgnoreCase);
         _frozenMemberIndex = _memberIndex.ToFrozenDictionary(
             kv => kv.Key,
-            kv => kv.Value.Distinct().ToArray(),
+            kv => kv.Value.Distinct().OrderBy(m => m.TypeName, StringComparer.Ordinal)
+                    .ThenBy(m => m.MemberName, StringComparer.Ordinal)
+                    .ThenBy(m => m.MemberType, StringComparer.Ordinal)
+                    .ThenBy(m => m.FilePath, StringComparer.Ordinal).ToArray(),
             StringComparer.OrdinalIgnoreCase);
 
         BuildMemberKeyLookups(_frozenMemberIndex.Keys);
@@ -355,8 +376,9 @@ public class SourceIndexer
     {
         if (_frozenInheritorsMap != null && _frozenInheritorsMap.TryGetValue(key, out var frozen))
         { values = frozen; return true; }
+        // 冻结前也走同一个定序：冻结前后行为逐字相同是这个类的既有约定（见 BuildMemberKeyLookups）
         if (_inheritorsMap.TryGetValue(key, out var bag))
-        { values = bag.ToArray(); return true; }
+        { values = Ordered(bag); return true; }
         values = Array.Empty<string>(); return false;
     }
     
@@ -365,7 +387,7 @@ public class SourceIndexer
         if (_frozenShortTypeMap != null && _frozenShortTypeMap.TryGetValue(key, out var frozen))
         { values = frozen; return true; }
         if (_shortTypeMap.TryGetValue(key, out var bag))
-        { values = bag.ToArray(); return true; }
+        { values = Ordered(bag); return true; }
         values = Array.Empty<string>(); return false;
     }
     
@@ -380,7 +402,7 @@ public class SourceIndexer
     private IReadOnlyList<string> GetTypeFiles(string key)
     {
         if (_frozenTypeMap != null && _frozenTypeMap.TryGetValue(key, out var frozen)) return frozen;
-        if (_typeMap.TryGetValue(key, out var bag)) return bag.ToArray();
+        if (_typeMap.TryGetValue(key, out var bag)) return Ordered(bag);
         return Array.Empty<string>();
     }
 
@@ -1226,9 +1248,12 @@ public class SourceIndexer
 
         IReadOnlyList<string> paths;
         if (_frozenIndex != null && _frozenIndex.TryGetValue(name, out var frozen)) paths = frozen;
-        else if (_index.TryGetValue(name, out var bag)) paths = bag.Distinct().ToArray();
+        else if (_index.TryGetValue(name, out var bag)) paths = Ordered(bag);
         else return null;
 
+        // Rank 之下没有第二排序键，故「同源多份同名文件时读哪一份」完全落在 paths 的次序上
+        // ——OrderBy 是稳定排序，而 paths 已由 Ordered 定过序（见 FreezeIndex 上方那段）。
+        // 谁要是把上面那两行的定序拿掉，这里会**静默**变回随索引重建翻面。
         var best = paths
             .Select(path => (Path: path, Rank: scope.RankOf(path)))
             .Where(x => x.Rank >= 0)
@@ -1249,7 +1274,7 @@ public class SourceIndexer
     {
         IReadOnlyList<string> paths;
         if (_frozenIndex != null && _frozenIndex.TryGetValue(name, out var frozen)) paths = frozen;
-        else if (_index.TryGetValue(name, out var bag)) paths = bag.Distinct().ToArray();
+        else if (_index.TryGetValue(name, out var bag)) paths = Ordered(bag);
         else return [];
 
         return paths
