@@ -134,8 +134,13 @@ public static class ScopeArgs
             + $"Pass a number, or 'all' to expand up to the server cap of {HardLimit}; larger numbers, 0 and "
             + "negatives are all clamped to that cap. Anything else — 'many', true, an object — is rejected "
             + "rather than silently replaced by the default."
+            // 断层收口只作用于**真正模糊的那一批**。无条件写「fuzzy sections also fold away…」时，
+            // method:/def: 这类精确名查询也被扣上「可能还有你永远拿不到的结果」——那是个不可证伪
+            // 的疑虑：返回里没有任何一处能判断它有没有发生。实测精确名过滤走的是全等匹配，
+            // 分数恒为 100，断层收口对它不可能触发。
             + (fuzzy
-                ? " Fuzzy sections also fold away results far below the top score, and those do not come back at any limit."
+                ? " Score-gap folding drops results far below the top score and no limit brings them back; it "
+                  + "only applies to fuzzy matching, so exact-name filters (method:, field:) are never folded that way."
                 : string.Empty)
     };
 
@@ -178,10 +183,12 @@ public static class ScopeArgs
     public static string? HardScopeFilterNotice(ScopeSelection scope)
         => scope.IncludesEverything
             ? null
+            // 括号里那半句原先是「the absence of such a line is not evidence of absence」——双重否定
+            // 套 absence，而它要说的事第一句已经正面说过了（"cannot tell you whether there are matches
+            // there"）。同一件事说两遍，第二遍还更难读。收成一句陈述。
             : $"\n\n_Files outside scope '{scope.Expression}' were never opened, so this tool cannot tell you "
               + $"whether there are matches there; pass scope:'{ScopeCatalog.EverythingKeyword}' to include them. "
-              + "(locate and trace inheritors do count out-of-scope hits — here the absence of such a line "
-              + "is not evidence of absence.)_";
+              + "(locate and trace inheritors do count out-of-scope hits; this tool never prints such a line.)_";
 
     // 同一份返回里出现重名文件时，基名不再是一个能定位的标识。实测 search_regex 一次返回里
     // `RangedIndustrial.xml` / `Buildings_Security_Turrets.xml` / `Items_Resource_Manufactured.xml`
@@ -348,6 +355,23 @@ public static class ScopeArgs
         => $"... some files were not scanned in full ({string.Join("; ", reasons)}; "
            + "matches in the unscanned parts would not be listed)";
 
+    // 上面那句里每条成因都要点名涉及哪个文件。只给个数时调用方无从判断它与本次查询有没有
+    // 关系，只能把整份结果一律当成下界——第八轮盲测三条任务链各自独立踩到这一处（一条把精确的
+    // 108 写成 `at least 108` 并把置信度降了一档），而三次的元凶都是同一个文件。
+    //
+    // 注意这**不影响**表头的 `at least N` 判据：行闸是在第 20000 行停的，那之后有没有命中
+    // 谁也不知道，即便已扫部分零命中，总数仍然只是下界。点名解决的是「该不该在意」，
+    // 不是「这个数准不准」。
+    //
+    // 名字多了没有额外信息，列前 max 个，其余记数。
+    public static string NameSample(IReadOnlyList<string>? names, int max = 3)
+    {
+        if (names == null || names.Count == 0) return string.Empty;
+        var head = string.Join(", ", names.Take(max));
+        var rest = names.Count - Math.Min(max, names.Count);
+        return rest > 0 ? $" ({head} and {rest} more)" : $" ({head})";
+    }
+
     // 有文件没扫全时，命中总数就不再是确定值而是下界。表头与上面那行尾注必须同时改口，
     // 否则一句说「7 found」、一句说「有文件没扫全」，调用方无从判断该信哪个。
     //
@@ -364,8 +388,14 @@ public static class ScopeArgs
     // 每文件预览的折叠行。search_regex 与 trace usages 共用，且它是全语料里出现最频的一条
     // 折叠行（92/181），此前却是唯一两个槽都空着的一条：`... +77 more in this file`。
     // 名词按 FoundCount 同一条判据补成 matching lines。
-    public static string PerFileFold(int hiddenCount, string indent = "  ")
-        => $"{indent}... +{hiddenCount} more {OutputText.NounFor(hiddenCount, "matching lines")} in this file";
+    //
+    // 增量之外还要给总数。只印 `+19 more` 时，读者要拿它和上面印出来的行数相加才得到 22，
+    // 而「上面印了几行」是常数 3 这条规则**并不总成立**：扫描停在预览配额上时，最后一个文件
+    // 只印了 1–2 行也带这条折叠（本语料的 Alert_Exhaustion.cs 印 2 行、折叠 2 条）。于是那条
+    // 被诱导出来的「加 3」心算在一部分文件上给出错数，而这一行自己看不出落在哪种情况。
+    // 沿用 R33 的 `N of M` 读法：出现 `of` 就是没给全。
+    public static string PerFileFold(int hiddenCount, int totalInFile, string indent = "  ")
+        => $"{indent}... +{hiddenCount} more of {OutputText.Quantity(totalInFile, "matching lines")} in this file";
 
     // 「怎么才能拿到更多」这半句不逐文件印，整份返回里说一次（同 §R19：逐行一模一样的东西
     // 上提到表头/脚注）。且只在这次真有文件被折叠时才印——没有折叠就没有这条。
@@ -417,7 +447,9 @@ public sealed class ScopeReport
 
     public bool HasOutOfScope => _outOfScope.Count > 0;
 
-    public string? Render(ScopeSelection scope)
+    // noun：合计的名词槽。locate 的这份脚注跨四段累加（类型 / 成员 / def / 内容命中），
+    // 只有 "matches" 说得准；trace inheritors 那边全是子类，故由调用方点名。
+    public string? Render(ScopeSelection scope, string noun = "matches")
     {
         if (_outOfScope.Count == 0) return null;
 
@@ -426,8 +458,16 @@ public sealed class ScopeReport
             .ThenBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
             .Select(kv => $"{kv.Key} {kv.Value}");
 
+        // 多源时先给合计。同一份返回里 scope **内**的量在表头是加总好的（`144 members`），
+        // 这一行句式并列却只给分项，读者得临时切换成心算——整份输出里唯一一处要做算术的地方，
+        // 且紧挨着一个不必做算术的同型数字。盲测里 7 个分项被加成 41（真值 47）。
+        // 单源时不加：那时合计逐字等于那一个数（同「推得出来就不印」）。
+        var total = _outOfScope.Count > 1
+            ? $"{OutputText.Quantity(_outOfScope.Values.Sum(), noun)} — "
+            : string.Empty;
+
         var sb = new StringBuilder();
-        sb.Append($"\n_Outside scope '{scope.Expression}': ");
+        sb.Append($"\n_Outside scope '{scope.Expression}': {total}");
         sb.Append(string.Join(", ", parts));
         sb.Append(". Pass scope to include them (e.g. scope:'all')._");
         return sb.ToString();

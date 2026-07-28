@@ -28,11 +28,17 @@ public class LocateTool : ITool
     public IEnumerable<string> ExtraAcceptedKeys => ["query", "name", "symbol", "search", "term", "maxResults", "count", "scopes", "source", "sources", "mod", "mods", "in"];
 
     public string Description =>
-        "Fuzzy name lookup: turns a partial or misspelled name into the exact C# type / member / XML def name that other tools require — the only tool that accepts approximate input. " +
+        "Fuzzy name lookup: turns a partial or misspelled name into the exact C# type / XML def / file name that " +
+        "other tools require — the only tool that accepts approximate input. " +
+        "Members are the weakest of the four: on an index this size a misspelled or truncated member name " +
+        "usually returns nothing at all rather than a near miss, so an empty Members section is not evidence " +
+        "that the member does not exist — retry with the exact spelling, or use search_regex. " +
         "Results are split into C# Types, Members, XML Defs and Content Matches (defs matched on a field value rather " +
         "than on their name), each section capped by limit and folded independently, plus a Files section of indexed " +
         "paths — fuzzy when the other four come back empty, otherwise just the file whose name matches the query " +
         "exactly. " +
+        "A section header reading 'N of M' means the listing was cut and M is the scope's total; a bare 'N' means " +
+        "the listing is that section's complete set. " +
         "Filters go inside the query: type:, method:, field:, def:, and scope: as an alias for the scope parameter.";
 
     public object JsonSchema => new

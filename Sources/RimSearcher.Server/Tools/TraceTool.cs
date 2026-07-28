@@ -40,11 +40,14 @@ public class TraceTool : ITool
 
     public string Description =>
         "Cross-reference analysis for C# and XML. 'inheritors' lists the transitive subclass/implementor tree — " +
-        "every descendant, not just direct ones, each tagged with its depth — and expands to the server cap by " +
-        "default; 'usages' is a line-by-line regex text match (default 50, at most 3 preview lines per file plus " +
-        "a '+N more matching lines in this file' count — counts are matching lines, not match sites, so a line " +
-        "hit twice counts once). Usages is not a call graph: same-named members on unrelated types land in one " +
-        "list and inherited calls are missed.";
+        "every descendant, not just direct ones, indirect ones tagged '[depth N]' and direct ones left untagged " +
+        "— up to the server cap of 200; a tree larger than that comes back truncated, and the header states the " +
+        "true total plus how many of the whole tree are direct and how deep it goes. " +
+        "'usages' is a line-by-line whole-word text match, case-insensitive (default 50, at most 3 preview lines " +
+        "per file plus a '+N more of M matching lines in this file' count — counts are matching lines, not match " +
+        "sites, so a line hit twice counts once). Usages is not a call graph: it is raw text, so same-named " +
+        "members on unrelated types, differently-cased identifiers and commented-out code all land in the same " +
+        "list, while inherited calls are missed.";
 
     public object JsonSchema => new
     {
@@ -65,10 +68,11 @@ public class TraceTool : ITool
                 @enum = new[] { "inheritors", "usages" },
                 description =
                     "Trace mode: 'inheritors' for the transitive subclass/implementor tree (interfaces included; " +
-                    "indirect descendants are listed too, each tagged 'direct' or 'depth N'), which " +
-                    "defaults to the server cap so the whole tree comes back; 'usages' for textual references " +
-                    "in C# and XML, which defaults to 50 matches. The 'limit' default noted below is the " +
-                    "'usages' one."
+                    "indirect descendants are listed too and tagged '[depth N]', direct ones are untagged), " +
+                    $"which defaults to the server cap of {ScopeArgs.HardLimit} — trees bigger than that come " +
+                    "back truncated and no limit lifts the cap, so read the header's total before treating the " +
+                    "listing as the whole tree; 'usages' for textual references in C# and XML, which defaults " +
+                    "to 50 matches. The 'limit' default noted below is the 'usages' one."
             },
             scope = ScopeArgs.ScopeSchemaProperty(_scopeCatalog),
             // trace 两种模式都不是模糊搜索：inheritors 的候选分数恒为 100（继承关系是精确的，
@@ -105,13 +109,13 @@ public class TraceTool : ITool
             var limit = ScopeArgs.GetDisplayLimit(args, fallback: InheritorsDefaultLimit);
 
             cancellationToken.ThrowIfCancellationRequested();
-            var inheritors = _sourceIndexer.GetInheritors(symbol, scope, limit.Count, out var depths);
+            var inheritors = _sourceIndexer.GetInheritors(symbol, scope, limit.Count, out var depths, out var shape);
 
             if (inheritors.Items.Count == 0)
             {
                 var report = new ScopeReport();
                 report.Add(inheritors);
-                var footer = report.Render(scope);
+                var footer = report.Render(scope, "subclasses");
 
                 // 「索引里没有这个类型」和「有，但没人继承它」是两件事，下一步也完全不同：
                 // 前者要去确认名字（多半拼错了或不在配置的源里），后者已经是答案。
@@ -132,8 +136,14 @@ public class TraceTool : ITool
                       + "subclasses. Check the spelling with rimworld-searcher__locate, and note that "
                       + "inheritors resolves C# type names only.";
 
-                return new ToolResult(
-                    $"{message}{ScopeArgs.RetryWiderNotice(scope, footer != null)}{footer ?? string.Empty}{scopeNotice}");
+                // 这里**不挂** RetryWiderNotice。那句「retry with scope:'all' before concluding it does
+                // not exist」在本分支的三种情形下全是错的或白跑的：
+                //   - 已知类型 + 有越界子类  → footer 已经逐源报了数，且上一句刚说过「这不是完整答案」；
+                //   - 已知类型 + 无越界子类  → 继承闭包是全域算的，scope:'all' 一条也加不出来；
+                //   - 索引里没这个名字      → IsKnownType 本就与 scope 无关，换 scope 返回逐字相同。
+                // 实测第三种给出的是 "…Check the spelling… Only sources in scope 'base' were searched —
+                // retry with scope:'all'"：两句语气相反，而后一句保证白跑一轮。
+                return new ToolResult($"{message}{footer ?? string.Empty}{scopeNotice}");
             }
 
             // 列出来的类型全同源时标签只印一次（见 ScopeArgs.SourceLabeling）
@@ -152,23 +162,29 @@ public class TraceTool : ITool
                 return $"- `{entry.Item}`{depthLabel}{SymbolRow.FileNote(entry.Item, paths)}{inheritorLabels.Row(entry.SourceName)}";
             });
 
-            // 这两个数只描述**列出来的这些条目**，不描述整棵树：Items 是截断后的展示切片，
-            // 而 depths 覆盖的是 scope 过滤之前的全集。拿任何一边去当另一边的统计量，
-            // 都会造出一个「看起来像结论」的假数字——正是本轮要清除的那类输出。
-            var shownDirect = inheritors.Items.Count(e => !depths.TryGetValue(e.Item, out var d) || d == 1);
+            // 表头里所有数都描述**同一批东西**：scope 内的整棵树。direct 与 deepest 原先取自
+            // inheritors.Items（截断后的展示切片），而总数取自 TotalInScope（全树）——两组数
+            // 句法对称地并排，读者只会当成一件事。实测 ThingComp 因此写出
+            // 「381 … Listed below: 200 (200 direct, deepest 1 level down)」，而那棵树真有四层。
+            // 现在两个数由 GetInheritors 在 scope 过滤时一并数出来，只剩「Listed below」描述切片。
             var shownDeepest = inheritors.Items
                 .Select(e => depths.TryGetValue(e.Item, out var d) ? d : 1)
                 .DefaultIfEmpty(1).Max();
 
             var sbInheritors = new System.Text.StringBuilder();
-            // 深度标记的约定只在真的出现深层项时才需要说明；全是直接子类时一个标记都不印，
-            // 表头的 "deepest 1 level down" 已经把这件事说完了。
+            // 深度标记的约定只在**这次真的印出了标记**时才需要说明；一个标记都没有时讲解一套
+            // 不存在的记法，反而会让读者去找它（同 R9：表头说过的话不逐行重复，没发生的事不说）。
             var depthLegend = shownDeepest > 1 ? ", untagged = direct" : "";
+            // 没被截断就不写「Listed below」——那时它逐字等于前面那个总数。沿用 R33 的读法：
+            // 出现「列了多少」这一格本身就是「被截了」的信号。
+            var listed = inheritors.Items.Count < inheritors.TotalInScope
+                ? $". Listed below: {inheritors.Items.Count}"
+                : string.Empty;
             sbInheritors.AppendLine(
                 $"Subclasses of '{symbol}' ({inheritors.TotalInScope} in scope '{scope.Expression}', transitive — "
-                + $"indirect descendants included). Listed below: {inheritors.Items.Count} "
-                + $"({shownDirect} direct, deepest {OutputText.Quantity(shownDeepest, "levels")} "
-                + $"down{depthLegend}){inheritorLabels.Header}:");
+                + $"indirect descendants included; {shape.Direct} direct, deepest "
+                + $"{OutputText.Quantity(shape.Deepest, "levels")} down{depthLegend})"
+                + $"{listed}{inheritorLabels.Header}:");
             sbInheritors.AppendLine(string.Join(Environment.NewLine, results));
 
             var fold = ScopeArgs.FoldLine(inheritors, "subclasses", indent: "", limit: limit);
@@ -176,7 +192,7 @@ public class TraceTool : ITool
 
             var inheritorsReport = new ScopeReport();
             inheritorsReport.Add(inheritors);
-            var inheritorsFooter = inheritorsReport.Render(scope);
+            var inheritorsFooter = inheritorsReport.Render(scope, "subclasses");
             if (inheritorsFooter != null) sbInheritors.Append(inheritorsFooter);
             sbInheritors.Append(scopeNotice);
 
@@ -203,10 +219,21 @@ public class TraceTool : ITool
                 System.Text.RegularExpressions.RegexOptions.IgnoreCase |
                 System.Text.RegularExpressions.RegexOptions.Compiled);
 
+            // 同一条 pattern 的大小写敏感版本，只用来数「有多少行是按查询原样拼写的」。
+            //
+            // 匹配是不分大小写的全词匹配，而 C# 的命名习惯保证「类型 CompRefuelable → 局部变量
+            // compRefuelable」——实测 CompRefuelable 的 108 行里有 26 行是纯变量名。调用方拿这个
+            // 108 当「这个类被引用了多少处」写进结论就直接错了 32%，而返回里没有任何一处能让它
+            // 察觉。这个数只在命中行上多跑一次正则，代价可忽略。
+            var exactCaseRegex = new System.Text.RegularExpressions.Regex(
+                $@"\b{System.Text.RegularExpressions.Regex.Escape(symbol)}\b",
+                System.Text.RegularExpressions.RegexOptions.Compiled);
+
             // collectedCount 是「已占用的预览配额」，totalMatchCount 是「真实命中总数」。
             // 原先只有一个 globalCount 同时充当这两者，表头才会把显示条数当成命中数报出去。
             int collectedCount = 0;
             int totalMatchCount = 0;
+            int exactCaseMatchCount = 0;
             int processedCount = 0;
             int totalFiles = files.Count;
             int truncatedFlag = 0;
@@ -217,6 +244,11 @@ public class TraceTool : ITool
             // UnitySourceGeneratedAssemblyMonoScriptTypes_v1.cs 恰好越过行闸）。
             int lineCappedFiles = 0;
             int unreadableFiles = 0;
+
+            // 与两个计数并行的名单（基名）。见 ScopeArgs.NameSample：只报个数时调用方
+            // 无从判断那个文件与本次查询有没有关系，只能把整份结果一律当成下界。
+            var lineCappedNames = new ConcurrentBag<string>();
+            var unreadableNames = new ConcurrentBag<string>();
 
             // 结果取舍必须与线程调度无关。原先是整张 files 满盘并发 + 配额一到就从委托头部
             // return：**哪些文件赶在配额前被扫到**取决于线程调度，`limit:1` 同一条查询两次
@@ -267,6 +299,7 @@ public class TraceTool : ITool
                         {
                             matchesInFile++;
                             Interlocked.Increment(ref totalMatchCount);
+                            if (exactCaseRegex.IsMatch(line)) Interlocked.Increment(ref exactCaseMatchCount);
 
                             // 已开始读的文件一律读到底再收工：文件句柄和缓冲都已经付过钱了，
                             // 读完才换得「+N more in this file」是准数而不是猜的。
@@ -287,6 +320,7 @@ public class TraceTool : ITool
                         if (lineNum >= MaxLinesScannedPerFile)
                         {
                             Interlocked.Increment(ref lineCappedFiles);
+                            lineCappedNames.Add(Path.GetFileName(file));
                             break;
                         }
                     }
@@ -299,6 +333,7 @@ public class TraceTool : ITool
                     // `matchesByFile[file] = matchesInFile`，于是该文件的
                     // `+N more in this file` 也一并静默消失（与 F9(a) 同型）。
                     Interlocked.Increment(ref unreadableFiles);
+                    unreadableNames.Add(Path.GetFileName(file));
                 }
                 finally
                 {
@@ -318,7 +353,8 @@ public class TraceTool : ITool
             // 扫盘分支是硬 scope 过滤、不统计落选来源，故这条提示是它唯一的「别处也许有」的痕迹
             if (results.Count == 0)
                 return new ToolResult(
-                    $"No references to '{symbol}' found in scope '{scope.Expression}'."
+                    $"No text matches for '{symbol}' in scope '{scope.Expression}' "
+                    + "(whole word, case-insensitive)."
                     + $"{ScopeArgs.RetryWiderNotice(scope)}{scopeNotice}");
 
             // 按 (文件序号, 行号) 排完再截：序号来自 files，files 就是展示顺序，故留下的恒是
@@ -344,10 +380,25 @@ public class TraceTool : ITool
             var unreadable = Interlocked.CompareExchange(ref unreadableFiles, 0, 0);
             var anyFileIncomplete = capped > 0 || unreadable > 0;
 
+            // 表头动词从 "References to" 改成 "Text matches for"。原先的写法配上「文件 + 行号 +
+            // 代码」的正文排版，读起来就是一份引用清单，于是那个数被直接当成「这个符号被引用了
+            // 多少处」写进结论——而它既含大小写不同的同名标识符，也含注释掉的行，还会把无关类型
+            // 上的同名成员算进来（Description 里那句 "not a call graph" 说的正是这件事，但它在
+            // 返回文本里一个字都没有）。inheritors 那种语义结果的措辞与它就此分开。
+            int exactCaseMatches = Interlocked.CompareExchange(ref exactCaseMatchCount, 0, 0);
+            // 匹配口径就地声明。截断时不报精确大小写数——那时 totalMatches 本身就只反映
+            // 「恰好扫到了哪些文件」，再派生一个数只是把不确定量翻倍。
+            var casing = wasTruncated
+                ? string.Empty
+                : exactCaseMatches == totalMatches
+                    ? ", whole word and case-insensitive — all match the query's own casing"
+                    : $", whole word and case-insensitive — {exactCaseMatches} of them match the query's own casing";
+
             sb.AppendLine(wasTruncated
-                ? $"References to '{symbol}' (first {shownResults.Count} preview lines in scope '{scope.Expression}'){usageLabels.Header}:"
-                : $"References to '{symbol}' ({ScopeArgs.FoundCount(totalMatches, anyFileIncomplete)} "
-                  + $"in scope '{scope.Expression}'){usageLabels.Header}:");
+                ? $"Text matches for '{symbol}' (first {shownResults.Count} preview lines in scope "
+                  + $"'{scope.Expression}', whole word and case-insensitive){usageLabels.Header}:"
+                : $"Text matches for '{symbol}' ({ScopeArgs.FoundCount(totalMatches, anyFileIncomplete)} "
+                  + $"in scope '{scope.Expression}'{casing}){usageLabels.Header}:");
             sb.AppendLine();
 
             // 本次要列出的文件里有重名时补目录（见 ScopeArgs.DisambiguateFileNames）。
@@ -380,7 +431,7 @@ public class TraceTool : ITool
                 var inFile = matchesByFile.TryGetValue(group.Key, out var c) ? c : shown;
                 if (inFile > shown)
                 {
-                    sb.AppendLine(ScopeArgs.PerFileFold(inFile - shown));
+                    sb.AppendLine(ScopeArgs.PerFileFold(inFile - shown, inFile));
                     // 只有真撞上每文件上限的折叠才让脚注出现——配额在这个文件中途耗尽时 shown
                     // 不足 3，那条折叠的成因是扫描停了，不是每文件上限。同 search_regex。
                     if (shown >= MaxMatchesPerFile) anyFileFolded = true;
@@ -408,12 +459,20 @@ public class TraceTool : ITool
             if (anyFileIncomplete)
             {
                 var incomplete = new List<string>();
+                // 名单排序后再交出去：并发桶的枚举序看线程调度，不排的话同一条查询两次会给出
+                // 两种点名顺序，与「同一条查询恒给同一份答案」的契约相冲（同 search_regex）。
+                var sorted = (ConcurrentBag<string> bag) => (IReadOnlyList<string>)bag
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
+
                 if (unreadable > 0)
                     incomplete.Add($"{OutputText.Quantity(unreadable, "files")} could not be read "
-                                   + $"and {(unreadable == 1 ? "was" : "were")} skipped entirely");
+                                   + $"and {(unreadable == 1 ? "was" : "were")} skipped entirely"
+                                   + ScopeArgs.NameSample(sorted(unreadableNames)));
                 if (capped > 0)
                     incomplete.Add($"{OutputText.Quantity(capped, "files")} {(capped == 1 ? "was" : "were")} "
-                                   + $"only scanned to line {MaxLinesScannedPerFile}");
+                                   + $"only scanned to line {MaxLinesScannedPerFile}"
+                                   + ScopeArgs.NameSample(sorted(lineCappedNames)));
 
                 sb.AppendLine();
                 sb.AppendLine(ScopeArgs.NotScannedInFullLine(incomplete));

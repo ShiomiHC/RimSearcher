@@ -30,7 +30,10 @@ public class SearchRegexTool : ITool
         ".NET regex search across indexed C# and XML files, with an optional extension filter (e.g. '.cs') and " +
         "scope. Results are grouped by file, showing at most 3 preview lines per file and at most 50 files; both " +
         "cuts are always stated in a trailing note, so output without that note is the complete match set. " +
-        "Counts are matching lines, not match sites — a line the pattern hits twice counts once.";
+        "Counts are matching lines, not match sites — a line the pattern hits twice counts once. " +
+        "Matches are raw text: commented-out code, disabled XML and prose inside comments all count, so a match " +
+        "count is not a count of things that exist — confirm with locate or inspect before treating it as one. " +
+        "The header echoes whether the scan ran case-insensitively (the default).";
 
     private static readonly ToolArgSpec ArgSpec = new(
         "rimworld-searcher__search_regex",
@@ -79,13 +82,17 @@ public class SearchRegexTool : ITool
                 // fileFilter 必须出现在零命中消息里：'.txt' 这种把候选集筛成 0 的过滤，
                 // 原先的措辞会说成「scope 'all' 里没有」——而 scope 里有的是命中，
                 // 只是没有一个 .txt 文件。同时报出过滤后的候选文件数，让「筛空了」一眼可见。
+                // 「matched」在这句里出现两次而指两件事：pattern 的命中、以及过滤器留下的候选。
+                // 第一眼读成「1496 个文件命中了这个 pattern」，与紧邻的「No matches」直接打架。
                 var filterNote = string.IsNullOrEmpty(fileFilter)
                     ? string.Empty
                     : $" with fileFilter '{fileFilter}' "
-                      + $"({OutputText.Quantity(diagnostics.CandidateFiles, "files")} matched that filter)";
+                      + $"(that filter left {OutputText.Quantity(diagnostics.CandidateFiles, "files")} to search)";
 
+                // 零命中时最该回显的就是这个开关：case-sensitive 恰恰是「明明有却查不到」的常见成因
                 return new ToolResult(
-                    $"No matches for pattern '{pattern}' in scope '{scope.Expression}'{filterNote}."
+                    $"No matches for pattern '{pattern}' in scope '{scope.Expression}'{filterNote}, "
+                    + $"{(ignoreCase ? "case-insensitive" : "case-sensitive")}."
                     + $"{ScopeArgs.RetryWiderNotice(scope)}{scopeNotice}");
             }
 
@@ -107,11 +114,16 @@ public class SearchRegexTool : ITool
             // 「扫描在上限处停了」只说一次，说在末尾那行——那里同时给得出下一步。表头
             // 原先也说一遍（", scan stopped at the limit"），而 "first N" 本就含着这个意思。
             // 单位改说 "previews"：表头的 N 数的是预览行，与「命中数」是两个量。
+            // 生效的 ignoreCase 必须回显。它默认 true 而只写在参数表里，于是同一个 pattern 的
+            // 命中数会因为一个没人传过的开关而浮动，返回里却没有任何字段能事后判断跑的是哪一档
+            // ——盲测里调用方拿本工具去「交叉验证」trace usages 的数，两边跑的其实是同一个默认
+            // 开关，于是把一个偏大的数当成「已独立复现」。
+            var casing = ignoreCase ? "case-insensitive" : "case-sensitive";
             var headline = truncated
-                ? $"first {results.Count} preview lines in scope '{scope.Expression}'"
+                ? $"first {results.Count} preview lines in scope '{scope.Expression}', {casing}"
                 // 有文件没扫全时这个总数只是下界，表头与末尾那条尾注要同时改口
                 : $"{ScopeArgs.FoundCount(totalMatches, diagnostics.AnyFileIncomplete)} "
-                  + $"in scope '{scope.Expression}'";
+                  + $"in scope '{scope.Expression}', {casing}";
 
             // 本次要列出的文件里有重名时补目录（见 ScopeArgs.DisambiguateFileNames）
             var displayNames = ScopeArgs.DisambiguateFileNames(shownFiles.Select(g => g.Key));
@@ -143,7 +155,7 @@ public class SearchRegexTool : ITool
                              // 只能看到 3 行」，而其实放宽 limit 就能多印一行。
                              if (inFile > shown && shown >= SourceIndexer.MaxPreviewsPerFile) anyFileFolded = true;
                              var moreCount = inFile > shown
-                                 ? "\n" + ScopeArgs.PerFileFold(inFile - shown)
+                                 ? "\n" + ScopeArgs.PerFileFold(inFile - shown, inFile)
                                  : "";
 
                              var label = labels.Row(scope.ShowLabels ? scope.SourceNameOf(g.Key) : null);
@@ -172,7 +184,12 @@ public class SearchRegexTool : ITool
             }
             else if (allFiles.Count > MaxFilesShown)
             {
-                output += $"\n\n... +{allFiles.Count - MaxFilesShown} more matching files "
+                // 同 PerFileFold：这一份返回里，表头数的是**行**、正文分的是**文件**、这一行数的是
+                // **没列出来的文件**——三个口径三个名词，唯独「本次列了几个文件」从头到尾没出现，
+                // 而它是常数 50 这件事也没写在任何地方。扫描没被截断时 allFiles.Count 就是命中文件
+                // 总数（是确定值），直接给出来，读者不必去数正文里的文件块。
+                output += $"\n\n... +{allFiles.Count - MaxFilesShown} more of "
+                          + $"{OutputText.Quantity(allFiles.Count, "matching files")} "
                           + "(narrow the pattern or the scope)";
             }
 
@@ -186,18 +203,21 @@ public class SearchRegexTool : ITool
                 // 这句里跟着 N 变的不止名词：动词、代词、和后半句的主谓都要跟着换，
                 // 拼字符串拼到第四个三目就没人读得懂了，故整句两写。
                 if (diagnostics.TimedOutFiles > 0)
-                    incomplete.Add(diagnostics.TimedOutFiles == 1
+                    incomplete.Add((diagnostics.TimedOutFiles == 1
                         ? "1 file was abandoned mid-scan because the pattern timed out on it "
                           + "(catastrophic backtracking) — its per-file match count is missing"
                         : $"{diagnostics.TimedOutFiles} files were abandoned mid-scan because the pattern "
-                          + "timed out on them (catastrophic backtracking) — their per-file match counts are missing");
+                          + "timed out on them (catastrophic backtracking) — their per-file match counts are missing")
+                        + ScopeArgs.NameSample(diagnostics.TimedOutNames));
                 if (diagnostics.UnreadableFiles > 0)
                     incomplete.Add($"{OutputText.Quantity(diagnostics.UnreadableFiles, "files")} could not be read "
-                                   + $"and {(diagnostics.UnreadableFiles == 1 ? "was" : "were")} skipped entirely");
+                                   + $"and {(diagnostics.UnreadableFiles == 1 ? "was" : "were")} skipped entirely"
+                                   + ScopeArgs.NameSample(diagnostics.UnreadableNames));
                 if (diagnostics.LineCappedFiles > 0)
                     incomplete.Add($"{OutputText.Quantity(diagnostics.LineCappedFiles, "files")} "
                                    + $"{(diagnostics.LineCappedFiles == 1 ? "was" : "were")} "
-                                   + $"only scanned to line {diagnostics.LineCap}");
+                                   + $"only scanned to line {diagnostics.LineCap}"
+                                   + ScopeArgs.NameSample(diagnostics.LineCappedNames));
 
                 output += "\n\n" + ScopeArgs.NotScannedInFullLine(incomplete);
             }

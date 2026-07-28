@@ -6,12 +6,19 @@ namespace RimSearcher.Core;
 
 // 一次正则扫描里「命中集为什么可能不完整」的全部成因。展示层据此决定尾注怎么写：
 // 本工具对调用方的契约是「没有尾注即完整」，所以任何一项非零都必须说出来。
+// 三份名单与上面三个计数一一对应。只报个数时，调用方无从判断那个文件与本次查询有没有关系，
+// 只能把整份结果一律降级成「下界」——第八轮盲测里三条任务链各自独立踩到这一处，而元凶都是
+// 同一个文件（vanilla 那份 8 万行的 UnitySourceGeneratedAssemblyMonoScriptTypes_v1.cs）。
+// 点名之后一眼就能排除。装的是基名，不是全路径。
 public readonly record struct RegexScanDiagnostics(
     int CandidateFiles,
     int TimedOutFiles,
     int UnreadableFiles,
     int LineCappedFiles,
-    int LineCap)
+    int LineCap,
+    IReadOnlyList<string>? TimedOutNames = null,
+    IReadOnlyList<string>? UnreadableNames = null,
+    IReadOnlyList<string>? LineCappedNames = null)
 {
     public bool AnyFileIncomplete => TimedOutFiles > 0 || UnreadableFiles > 0 || LineCappedFiles > 0;
 }
@@ -350,6 +357,14 @@ public class SourceIndexer
 
     public ScopedResult<string> GetInheritors(
         string baseTypeName, ScopeSelection scope, int limit, out IReadOnlyDictionary<string, int> depths)
+        => GetInheritors(baseTypeName, scope, limit, out depths, out _);
+
+    public ScopedResult<string> GetInheritors(
+        string baseTypeName,
+        ScopeSelection scope,
+        int limit,
+        out IReadOnlyDictionary<string, int> depths,
+        out InheritorTreeShape shape)
     {
         var depthOf = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var frontier = new List<string> { baseTypeName };
@@ -374,11 +389,32 @@ public class SourceIndexer
 
         depths = depthOf;
 
+        // 路径只反查一次：下面的 shape 与 candidates 必须按**逐字相同**的表达式判归属，
+        // 否则表头报的「scope 内有几个直接子类」与实际被 ScopeFilter 收下的那批会分叉。
+        var withPaths = depthOf
+            .Select(kv => (Name: kv.Key, Depth: kv.Value, Path: FirstPathOfType(kv.Key) ?? string.Empty))
+            .ToList();
+
+        // 整棵树在 scope 内的形状。展示层原先拿**截断后的那批**去数 direct 与 deepest，
+        // 于是 381 个子类里恰好前 200 条都是直接子类时，表头写成「200 direct, deepest 1
+        // level down」——读者据此断定这棵树只有一层，而真值是四层。两个数各自都没算错，
+        // 错在它们描述的是切片、却排在描述全树的那个总数（381）后面、句法完全对称。
+        var directInScope = 0;
+        var deepestInScope = 0;
+        foreach (var (_, depth, path) in withPaths)
+        {
+            if (scope.RankOf(path) < 0) continue;
+            if (depth == 1) directInScope++;
+            if (depth > deepestInScope) deepestInScope = depth;
+        }
+
+        shape = new InheritorTreeShape(directInScope, deepestInScope);
+
         // 浅的排前面：截断时留下的该是直接子类，而不是字母序恰好靠前的某个曾孙
-        var candidates = depthOf
-            .OrderBy(kv => kv.Value)
-            .ThenBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
-            .Select(kv => new ScoredCandidate<string>(kv.Key, 100.0, FirstPathOfType(kv.Key) ?? string.Empty));
+        var candidates = withPaths
+            .OrderBy(x => x.Depth)
+            .ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(x => new ScoredCandidate<string>(x.Name, 100.0, x.Path));
 
         // 子类树没有分数梯度（全是精确的继承关系），断层收口在此无意义
         return ScopeFilter.Apply(candidates, scope, limit, scoreGap: null);
@@ -820,6 +856,12 @@ public class SourceIndexer
         int unreadableFiles = 0;
         int lineCappedFiles = 0;
 
+        // 与上面三个计数并行的名单（基名）。展示层只列前几个，但收集不设限——设限就得在
+        // 并发路径上加锁判断，而这三桶在正常语料下各只有个位数条目。
+        var timedOutNames = new ConcurrentBag<string>();
+        var unreadableNames = new ConcurrentBag<string>();
+        var lineCappedNames = new ConcurrentBag<string>();
+
         // 结果取舍必须与线程调度无关。原先是整张 allFiles 满盘并发 + 命中上限一到就从委托头部
         // return：**哪些文件赶在上限前被扫到**取决于线程调度，同一条查询连跑 6 次实测出 3 种不同
         // 的文件集；ConcurrentBag 的枚举序又是另一层不确定。于是「showing the first N」里的 first
@@ -876,6 +918,7 @@ public class SourceIndexer
                     if (lineNum >= MaxLinesScannedPerFile)
                     {
                         Interlocked.Increment(ref lineCappedFiles);
+                        lineCappedNames.Add(Path.GetFileName(filePath));
                         break;
                     }
                 }
@@ -887,14 +930,17 @@ public class SourceIndexer
             catch (RegexMatchTimeoutException)
             {
                 Interlocked.Increment(ref timedOutFiles);
+                timedOutNames.Add(Path.GetFileName(filePath));
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
                 Interlocked.Increment(ref unreadableFiles);
+                unreadableNames.Add(Path.GetFileName(filePath));
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
             {
                 Interlocked.Increment(ref unreadableFiles);
+                unreadableNames.Add(Path.GetFileName(filePath));
             }
             finally
             {
@@ -921,7 +967,15 @@ public class SourceIndexer
             TimedOutFiles: Interlocked.CompareExchange(ref timedOutFiles, 0, 0),
             UnreadableFiles: Interlocked.CompareExchange(ref unreadableFiles, 0, 0),
             LineCappedFiles: Interlocked.CompareExchange(ref lineCappedFiles, 0, 0),
-            LineCap: MaxLinesScannedPerFile);
+            LineCap: MaxLinesScannedPerFile,
+            // 名单排序后再交出去：并发桶的枚举序看线程调度，不排的话同一条查询两次会给出
+            // 两种点名顺序，与本工具「同一条查询恒给同一份答案」的契约相冲。
+            TimedOutNames: timedOutNames.Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList(),
+            UnreadableNames: unreadableNames.Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList(),
+            LineCappedNames: lineCappedNames.Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList());
 
         return (ordered.Take(maxResults).Select(r => (r.Path, r.LineNumber, r.Preview)).ToList(),
                 wasTruncated,

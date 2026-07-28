@@ -331,6 +331,24 @@ public sealed class ScopeCatalog
     public string DescribeAvailable()
     {
         var parts = new List<string>();
+
+        // 默认值放**首句**，并就地把它展开成源名 + 后果。原先它排在整段最末，前面隔着组名表、
+        // 源名表和 'all' 的说明，于是第一次调用几乎必然按「默认应该是全部」去理解——第八轮盲测
+        // 三条任务链独立踩到这一处：一条把 mod 里的冠军文件整个漏掉、一条问「有没有 mod 继承
+        // 它」而默认 scope 恰好保证查不出来。`base` 这个词本身还自带「基准全集」的暗示。
+        if (!string.IsNullOrWhiteSpace(_defaultExpression))
+        {
+            var expanded = _groups.TryGetValue(_defaultExpression, out var members)
+                ? string.Join(" + ", members.Select(i => Sources[i].Name))
+                : _defaultExpression;
+            // 写成 `default: X = …` 而不是整句，是因为这份说明还会被 UnresolvedNotice 塞进
+            // 每次「scope 拼错了」的返回里，跟在 "Available — " 后面；那里一个完整句子读着别扭，
+            // 且这条路径上的每一个字都是逐次付费的。
+            parts.Add(
+                $"default: '{_defaultExpression}' = {expanded} only, not everything installed "
+                + $"— pass '{EverythingKeyword}' for that");
+        }
+
         // 组名要连成员一起给。光给组名时，`scope: base` 与结果行上的 `[vanilla]` 标签并排
         // 出现而两者并不等价（base = vanilla + HAR），调用方第一次用只能把它们当同义词——
         // 盲测里那位是靠比对 sync_sources 的 11 个源与越界行的 9 个源，自己反推出差集才发现的。
@@ -340,7 +358,6 @@ public sealed class ScopeCatalog
                 $"{g.Key} ({string.Join(" + ", g.Value.Select(i => Sources[i].Name))})")));
         if (Sources.Count > 0) parts.Add($"sources: {string.Join(", ", Sources.Select(s => s.Name))}");
         parts.Add($"'{EverythingKeyword}' selects everything; prefix '-' excludes (e.g. 'all,-vanilla')");
-        if (!string.IsNullOrWhiteSpace(_defaultExpression)) parts.Add($"default: {_defaultExpression}");
         return string.Join(". ", parts);
     }
 }

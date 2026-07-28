@@ -44,9 +44,14 @@ public class SearchRegexHonestyTests : IDisposable
         var content = await Run(BuildTool(3), """{"pattern":"ZzNeedle","fileFilter":".txt"}""");
 
         Assert.Contains("fileFilter '.txt'", content);
-        // 「0 个文件通过了过滤」自己就把责任说完了；原先还要再用一句话把这个结论复述一遍
-        Assert.Contains("0 files matched that filter", content);
+        // 「0 个文件通过了过滤」自己就把责任说完了；原先还要再用一句话把这个结论复述一遍。
+        // 措辞不再用 "matched"：这句里它出现两次而指两件事（pattern 的命中 / 过滤留下的候选），
+        // 紧挨着 "No matches" 时第一眼会读成「1496 个文件命中了这个 pattern」。
+        Assert.Contains("that filter left 0 files to search", content);
+        Assert.DoesNotContain("matched that filter", content);
         Assert.DoesNotContain("the filter, not the pattern", content);
+        // 零命中最常见的成因之一就是大小写档位，故这里也要回显生效的开关
+        Assert.Contains("case-insensitive", content);
     }
 
     // 过滤留下了文件、只是没命中，就不该把锅推给过滤器
@@ -78,9 +83,14 @@ public class SearchRegexHonestyTests : IDisposable
         var content = await Run(BuildTool(60), """{"pattern":"ZzNeedle","limit":"all"}""");
 
         // 扫描没停，剩下多少文件是数得出来的，故走全服统一的 `... +N more` 文法
-        Assert.Contains("more matching files", content);
+        Assert.Contains("matching files", content);
         Assert.Contains("... +", content);
         Assert.DoesNotContain("not the total number of matching files", content);
+
+        // 增量之外还要给总数。表头数的是**行**、正文分的是**文件**、这一行数的是**没列出来的
+        // 文件**——三个口径三个名词，而「本次列了 50 个文件」这个常数在返回里从不出现，
+        // 读者只能去数正文的文件块。扫描没被截断时总数是确定值，直接给。
+        Assert.Contains($"... +10 more of 60 matching files", content);
     }
 
     // 命中上限是这轮唯一能立刻放开的旋钮，原先的出路（「narrow the pattern or the scope」）

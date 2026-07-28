@@ -736,8 +736,11 @@ public class OutputReadabilityTests : IDisposable
             var regex = await RunAsync(
                 new SearchRegexTool(indexer, catalog), new { pattern = "ZzMark" });
 
+            // 成因后面点名涉及哪个文件。只给个数时调用方无从判断它与本次查询有没有关系，
+            // 只能把整份结果一律当成下界——第八轮盲测三条任务链各自独立踩到这一处。
             const string expected = "... some files were not scanned in full (1 file could not be read "
-                                    + "and was skipped entirely; matches in the unscanned parts would not be listed)";
+                                    + "and was skipped entirely (ZzLocked.cs); "
+                                    + "matches in the unscanned parts would not be listed)";
             Assert.Contains(expected, trace);
             Assert.Contains(expected, regex);
 
@@ -814,8 +817,14 @@ public class OutputReadabilityTests : IDisposable
 
         foreach (var content in new[] { regex, trace })
         {
-            Assert.Contains("more matching lines in this file", content);
+            Assert.Contains("matching lines in this file", content);
             Assert.DoesNotContain("more in this file", content);
+
+            // 增量之外还要给总数。只印 `+6 more` 时读者要拿它和印出来的行数相加才得到 9，
+            // 而「上面印了 3 行」这条规则并不总成立——扫描停在预览配额上时最后一个文件
+            // 只印 1–2 行也带这条折叠。那条被诱导出来的「加 3」心算于是在一部分文件上给出
+            // 错数，而这一行自己看不出落在哪种情况。
+            Assert.Contains("... +6 more of 9 matching lines in this file", content);
         }
     }
 
@@ -1047,7 +1056,10 @@ public class OutputReadabilityTests : IDisposable
         foreach (var content in new[] { regex, usages })
         {
             Assert.Contains("were never opened", content);
-            Assert.Contains("not evidence of absence", content);
+            // 括号里那半句原先是「the absence of such a line is not evidence of absence」——
+            // 双重否定套 absence，而它要说的事第一句已经正面说过了。收成一句陈述。
+            Assert.Contains("this tool never prints such a line", content);
+            Assert.DoesNotContain("not evidence of absence", content);
         }
     }
 
@@ -1078,8 +1090,12 @@ public class OutputReadabilityTests : IDisposable
         // 顺带守住脚注的归因：这里 limit=2 让配额在这个文件中途耗尽（只印了 2 行），
         // 折叠的成因是扫描停了、不是「每文件 3 行上限」。把这种折叠也算进去，脚注就会对
         // 这个文件给出错误归因——读者会以为放宽 limit 也只能看到 3 行。
-        Assert.Contains("more matching lines in this file", content);
+        Assert.Contains("matching lines in this file", content);
         Assert.DoesNotContain("previews are capped at", content);
+
+        // 而这正是「加 3」心算会算错的那种文件：印了 2 行、折叠 38 条、总数 40。
+        // 折叠行自带总数之后，读者不必知道「上面印了几行」也不会算错。
+        Assert.Contains("... +38 more of 40 matching lines in this file", content);
     }
 
     // 正面：真撞上每文件上限时脚注必须出现，否则这条判据就成了「永远不印」
@@ -1178,6 +1194,209 @@ public class OutputReadabilityTests : IDisposable
             "base");
 
         Assert.Contains("base (vanilla + HAR)", catalog.DescribeAvailable());
+    }
+
+    // ---- 第八轮（多轮任务链盲测）----
+
+    // 表头动词 `References to` 配上「文件 + 行号 + 代码」的正文排版，读起来就是一份引用清单，
+    // 于是那个数被当成「这个符号被引用了多少处」写进结论。而它是纯文本命中：含大小写不同的
+    // 同名标识符、含注释掉的行、含无关类型上的同名成员。改成中性动词，并就地声明匹配口径。
+    [Fact]
+    public async Task TraceUsagesHeader_SaysItIsTextMatching_NotAReferenceGraph()
+    {
+        var (indexer, _, catalog) = BuildIndex(
+            ("ZzHost.cs", "namespace Zz { public class ZzHost {\n    // ZzMark here\n} }"));
+
+        var content = await RunAsync(new TraceTool(indexer, catalog), new { symbol = "ZzMark", mode = "usages" });
+
+        Assert.Contains("Text matches for 'ZzMark'", content);
+        Assert.DoesNotContain("References to", content);
+        Assert.Contains("whole word and case-insensitive", content);
+    }
+
+    // 匹配是不分大小写的全词匹配，而 C# 的命名习惯保证「类型 CompRefuelable → 局部变量
+    // compRefuelable」。实测 CompRefuelable 的 108 行里 26 行是纯变量名——调用方拿 108 当
+    // 「这个类被引用了多少处」就直接错了 32%，而返回里没有任何一处能让它察觉。
+    [Fact]
+    public async Task TraceUsagesHeader_ReportsHowManyMatchTheQuerysOwnCasing()
+    {
+        var (indexer, _, catalog) = BuildIndex(
+            ("ZzCase.cs", "namespace Zz { public class ZzCase {\n    // ZzMark one\n    // zzmark two\n    // ZZMARK three\n} }"));
+
+        var content = await RunAsync(new TraceTool(indexer, catalog), new { symbol = "ZzMark", mode = "usages" });
+
+        Assert.Contains("3 matching lines", content);
+        Assert.Contains("1 of them match the query's own casing", content);
+    }
+
+    // 反面：一条都没有大小写差异时说「all」，而不是省略——省略会让「没有这半句」既可能是
+    // 「全都精确」也可能是「这个工具不报这件事」（R37 的判据：缺席不该不留痕迹）。
+    [Fact]
+    public async Task TraceUsagesHeader_SaysAllWhenNothingDiffersInCase()
+    {
+        var (indexer, _, catalog) = BuildIndex(
+            ("ZzExact.cs", "namespace Zz { public class ZzExact {\n    // ZzMark one\n    // ZzMark two\n} }"));
+
+        var content = await RunAsync(new TraceTool(indexer, catalog), new { symbol = "ZzMark", mode = "usages" });
+
+        Assert.Contains("all match the query's own casing", content);
+    }
+
+    // search_regex 的 ignoreCase 默认 true 而只写在参数表里：同一个 pattern 的命中数会因为
+    // 一个没人传过的开关而浮动，返回里却没有任何字段能事后判断跑的是哪一档。盲测里调用方
+    // 拿它去「交叉验证」trace usages 的数，两边其实跑的是同一个默认开关。
+    [Theory]
+    [InlineData(true, "case-insensitive")]
+    [InlineData(false, "case-sensitive")]
+    public async Task SearchRegexHeader_EchoesTheCaseSwitchItActuallyRan(bool ignoreCase, string expected)
+    {
+        var (indexer, _, catalog) = BuildIndex(
+            ("ZzSwitch.cs", "namespace Zz { public class ZzSwitch {\n    // ZzMark\n} }"));
+
+        var content = await RunAsync(
+            new SearchRegexTool(indexer, catalog), new { pattern = "ZzMark", ignoreCase });
+
+        Assert.Contains(expected, content);
+    }
+
+    // 越界脚注在多源时先给合计。同一份返回里 scope **内**的量在表头是加总好的，这一行句式
+    // 并列却只给分项——整份输出唯一一处要做算术的地方，且紧挨着一个不必做算术的同型数字。
+    // 盲测里 7 个分项被加成 41，真值 47。
+    [Fact]
+    public async Task OutOfScopeFooter_GivesTheTotal_WhenSeveralSourcesContribute()
+    {
+        var root = _workspace.Dir("Core");
+        _workspace.WriteFile(Path.Combine("Core", "ZzIn.cs"), "namespace Zz { public class ZzThing { } }");
+        var a = _workspace.Dir("ModA");
+        _workspace.WriteFile(Path.Combine("ModA", "ZzA.cs"), "namespace Zz { public class ZzThingA { } }");
+        var b = _workspace.Dir("ModB");
+        _workspace.WriteFile(Path.Combine("ModB", "ZzB.cs"), "namespace Zz { public class ZzThingB { } }");
+
+        var indexer = new SourceIndexer();
+        indexer.Scan(root);
+        indexer.Scan(a);
+        indexer.Scan(b);
+        indexer.FreezeIndex();
+        var catalog = ScopeCatalog.Build([("vanilla", root), ("modA", a), ("modB", b)], null, null);
+        var defs = new DefIndexer();
+        defs.FreezeIndex();
+
+        var content = await RunAsync(
+            new LocateTool(indexer, defs, catalog), new { query = "type:ZzThing", scope = "vanilla" });
+
+        Assert.Contains("Outside scope 'vanilla': 2 matches — ", content);
+    }
+
+    // 反面：只有一个源落在外面时不加合计——那时它逐字等于那一个数
+    [Fact]
+    public async Task OutOfScopeFooter_OmitsTheTotal_WhenOnlyOneSourceContributes()
+    {
+        var root = _workspace.Dir("Core");
+        _workspace.WriteFile(Path.Combine("Core", "ZzIn.cs"), "namespace Zz { public class ZzThing { } }");
+        var a = _workspace.Dir("ModA");
+        _workspace.WriteFile(Path.Combine("ModA", "ZzA.cs"), "namespace Zz { public class ZzThingA { } }");
+
+        var indexer = new SourceIndexer();
+        indexer.Scan(root);
+        indexer.Scan(a);
+        indexer.FreezeIndex();
+        var catalog = ScopeCatalog.Build([("vanilla", root), ("modA", a)], null, null);
+        var defs = new DefIndexer();
+        defs.FreezeIndex();
+
+        var content = await RunAsync(
+            new LocateTool(indexer, defs, catalog), new { query = "type:ZzThing", scope = "vanilla" });
+
+        Assert.Contains("Outside scope 'vanilla': modA 1.", content);
+        Assert.DoesNotContain("matches — ", content);
+    }
+
+    // 「1 file was only scanned to line 20000」不点名，调用方就无从判断它与本次查询有没有关系，
+    // 只能把整份结果一律当成下界。第八轮三条任务链各自独立踩到这一处，元凶还都是同一个文件。
+    //
+    // 注意这**不**改表头的 `at least N` 判据：行闸停在第 20000 行，之后有没有命中谁也不知道，
+    // 即便已扫部分零命中，总数仍然只是下界。点名解决的是「该不该在意」，不是「这个数准不准」。
+    [Fact]
+    public async Task LineCappedFile_IsNamed_AndTheCountStaysALowerBound()
+    {
+        var huge = string.Join("\n", Enumerable.Range(0, 20005).Select(i => $"// filler {i}"));
+        var (indexer, _, catalog) = BuildIndex(
+            ("ZzHuge.cs", $"namespace Zz {{ public class ZzHuge {{\n// ZzNeedle\n{huge}\n}} }}"),
+            ("ZzSmall.cs", "namespace Zz { public class ZzSmall {\n// ZzNeedle\n} }"));
+
+        var content = await RunAsync(new SearchRegexTool(indexer, catalog), new { pattern = "ZzNeedle" });
+
+        Assert.Contains($"only scanned to line 20000 (ZzHuge.cs)", content);
+        Assert.Contains("at least", content);
+    }
+
+    // scope 的默认值原先排在整段最末，前面隔着组名表、源名表和 'all' 的说明，于是第一次调用
+    // 几乎必然按「默认应该是全部」去理解。三条任务链独立踩到：一条把 mod 里的冠军文件整个
+    // 漏掉，一条问「有没有 mod 继承它」而默认 scope 恰好保证查不出来。
+    [Fact]
+    public async Task ScopeSchema_LeadsWithTheDefault_AndSaysItIsNotEverything()
+    {
+        var root = _workspace.Dir("Core");
+        var other = _workspace.Dir("Other");
+        var catalog = ScopeCatalog.Build(
+            [("vanilla", root), ("HAR", other)],
+            new Dictionary<string, List<string>> { ["base"] = ["vanilla", "HAR"] },
+            "base");
+
+        var described = catalog.DescribeAvailable();
+
+        Assert.StartsWith("default: 'base' = vanilla + HAR only, not everything installed", described);
+        // 组名表仍在，且仍带成员（R40）
+        Assert.Contains("base (vanilla + HAR)", described);
+    }
+
+    // 表头 `N` 与 `N of M` 的区别此前只写在源码的中文注释里，Description 和返回文本都没有。
+    // 孤零零一个 144 分不出「总数且列全了」和「总数但只列了一部分」——两种解读在同一批工具里
+    // 都真实存在过。盲测里 agent 只能逐条数出 144 行来自证。
+    [Fact]
+    public void LocateDescription_StatesTheNofMContract()
+    {
+        var (indexer, defs, catalog) = BuildIndex(("ZzAny.cs", "namespace Zz { public class ZzAny { } }"));
+        var description = new LocateTool(indexer, defs, catalog).Description;
+
+        Assert.Contains("'N of M'", description);
+        Assert.Contains("complete set", description);
+    }
+
+    // locate 自称「把残缺或拼错的名字换成准确名」，而这条承诺对**成员**在真实规模的索引上
+    // 站不住：`method:CompTickRar` 在有 CompTickRare 的语料里一条都不回（成员模糊匹配的候选池
+    // 按索引枚举序硬截 200 条，几十万个 key 下真值几乎必然落选，见台账「七、待办」）。
+    // 描述因此不能笼统地承诺模糊，而要把「空的 Members 段 ≠ 这个成员不存在」说出来。
+    //
+    // 这里只断言措辞，不断言匹配行为：小 fixture 上候选池装得下，模糊是**生效**的——
+    // 断言「差一个字符就没有」会把一个只在大索引上成立的现象写成契约。
+    [Fact]
+    public void LocateDescription_DoesNotPromiseFuzzyMemberLookup()
+    {
+        var (indexer, defs, catalog) = BuildIndex(
+            ("ZzOwner.cs", "namespace Zz { public class ZzOwner { public void ZzMemberTick() { } } }"));
+        var description = new LocateTool(indexer, defs, catalog).Description;
+
+        Assert.Contains("not evidence", description);
+        Assert.Contains("search_regex", description);
+        // 模糊那句承诺不再把 member 列进去
+        Assert.DoesNotContain("exact C# type / member / XML def name", description);
+    }
+
+    // 「the complete effective definition」在 RimWorld 语境里会被读成运行时最终值，而实现只做
+    // ParentName 继承合并——不解析 mod 的 PatchOperation，也不越过当前 scope。被 patch 改过的
+    // def 会给出一个看起来权威、实则过期的数字，返回里零提示。
+    [Fact]
+    public void InspectDescription_SaysWhatTheMergedXmlDoesNotInclude()
+    {
+        var (indexer, defs, catalog) = BuildIndex(("ZzAny.cs", "namespace Zz { public class ZzAny { } }"));
+        var description = new InspectTool(indexer, defs, catalog).Description;
+
+        Assert.Contains("PatchOperations are never applied", description);
+        Assert.Contains("within the current scope", description);
+        Assert.DoesNotContain("the complete effective definition", description);
+        // 「怎么区分自身字段与继承字段」原先只埋在 xmlStartLine 这个分页参数的说明里
+        Assert.Contains("tell a def's own fields from inherited ones", description);
     }
 
     private static string GroupLayout(string content) =>

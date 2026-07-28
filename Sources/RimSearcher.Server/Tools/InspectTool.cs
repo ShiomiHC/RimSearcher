@@ -52,7 +52,12 @@ public class InspectTool : ITool
 
     public string Description =>
         "Full detail for one exactly-named def or C# type; no fuzzy matching. " +
-        "Def mode returns the XML merged down the whole ParentName chain — the complete effective definition, which no single XML file contains — plus the C# classes referenced from it. " +
+        "Def mode returns the XML merged down the whole ParentName chain within the current scope — inheritance " +
+        "only, which no single XML file contains — plus the C# classes referenced from it. Mod PatchOperations " +
+        "are never applied, so this is the merged definition, not the one the running game would see; a def also " +
+        "overridden by an out-of-scope mod resolves to the in-scope copy. Fields are not marked by origin — to " +
+        "tell a def's own fields from inherited ones, read_code the `File:` path, which holds only its own " +
+        "un-merged lines. " +
         "Type mode returns the base-class chain (interfaces are not on it — use trace mode:'inheritors' for those) "
         + "and a member outline of fields, properties and methods; constructors, indexers and operators are not "
         + "outlined but read_code can still read them by name. Enums are outlined as their values, delegates as "

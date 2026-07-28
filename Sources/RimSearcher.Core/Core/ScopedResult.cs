@@ -65,6 +65,12 @@ public sealed class ScopedResult<T>
     public int OutOfScopeTotal => OutOfScope.Sum(x => x.Count);
 }
 
+// 子类树在 scope 内的形状：整棵树里有几个直接子类、最深几层。
+// 与 ScopedResult.Items 是两个量——后者是被 limit 截断后的展示切片。表头同时要印这两组数，
+// 而它们**必须各自说明自己数的是哪一批**，否则「200 direct, deepest 1 level down」会被读成
+// 对整棵 381 条的树的描述（见 SourceIndexer.GetInheritors 里的注释）。
+public readonly record struct InheritorTreeShape(int Direct, int Deepest);
+
 public static class ScopeFilter
 {
     // 相对首条掉这么多分即视为断层：低于它的多是纯子串噪音（子串匹配封顶 50 分）
