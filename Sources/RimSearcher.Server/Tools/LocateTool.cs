@@ -105,7 +105,7 @@ public class LocateTool : ITool
             if (types.Items.Count > 0)
             {
                 hasResults = true;
-                tally.Add(Count(types.Items.Count, "C# type"));
+                tally.Add(Count(types.Items.Count, types.TotalInScope, "C# types"));
                 var typeLabels = ScopeArgs.SourceLabeling.Of(types.Items.Select(e => e.SourceName));
                 sb.AppendLine($"\n**C# Types**{typeLabels.Header}:");
                 foreach (var entry in types.Items)
@@ -173,7 +173,7 @@ public class LocateTool : ITool
                     }
                 }
 
-                tally[tallySlot] = Count(shown, "member");
+                tally[tallySlot] = Count(shown, members.TotalInScope, "members");
 
                 // 折叠行放在整段末尾、按 TotalInScope 计数。原先每组各打一行、只数「取回的这批里
                 // 还剩几条」，而取回本身已被 limit.Scale(3) 砍过：method:CompTick 因此报 +25，
@@ -200,7 +200,7 @@ public class LocateTool : ITool
             if (defs.Items.Count > 0)
             {
                 hasResults = true;
-                tally.Add(Count(defs.Items.Count, "XML def"));
+                tally.Add(Count(defs.Items.Count, defs.TotalInScope, "XML defs"));
                 var defLabels = ScopeArgs.SourceLabeling.Of(defs.Items.Select(e => e.SourceName));
                 sb.AppendLine($"\n**XML Defs**{defLabels.Header}:");
                 foreach (var entry in defs.Items)
@@ -230,7 +230,7 @@ public class LocateTool : ITool
                 if (defsByContent.Items.Count > 0)
                 {
                     hasResults = true;
-                    tally.Add(Count(defsByContent.Items.Count, "content match", "content matches"));
+                    tally.Add(Count(defsByContent.Items.Count, defsByContent.TotalInScope, "content matches"));
                     var contentLabels = ScopeArgs.SourceLabeling.Of(
                         defsByContent.Items.Select(e => e.SourceName));
                     sb.AppendLine($"\n**Content Matches**{contentLabels.Header}:");
@@ -278,7 +278,7 @@ public class LocateTool : ITool
                 // 把几十条模糊文件命中的 out-of-scope 计数灌进去，脚注的数字就不再对应正文。
                 report.Add(files);
 
-                tally.Add(Count(items.Count, "file"));
+                tally.Add(Count(items.Count, items.Count, "files"));
                 var fileLabels = ScopeArgs.SourceLabeling.Of(items.Select(e => e.SourceName));
                 sb.AppendLine($"\n**Files**{fileLabels.Header}:");
                 foreach (var entry in items)
@@ -350,8 +350,21 @@ public class LocateTool : ITool
         return Task.FromResult(new ToolResult(header.AppendLine().Append(sb).ToString()));
     }
 
-    private static string Count(int n, string singular, string? plural = null) =>
-        $"{n} {(n == 1 ? singular : plural ?? singular + "s")}";
+    // 表头的每一格：**列出了几条，以及这个 scope 里一共有几条**。
+    //
+    // 原先只有前一个数（`— 5 members`），而 `method:CompTick` 的真实命中是 144——总数在整份
+    // 返回里一次都没出现过，要靠折叠行的 `+139 more` 自己做加法。表头是最显眼的位置，
+    // 盲测里两个调用方都差点把它当结论直接报出去，其中一个原话是「会把 144 报成 5，错 28 倍」。
+    //
+    // 同一批工具里 trace 的表头给的是**总数**（`(381 in scope 'base' …) Listed below: 200`），
+    // locate 给的是**显示数**，句式却一样——两个口径撞在同一个位置上，这才是要害。故这里改成
+    // 两个数都给，且沿用「看到 of 就是被截了」这条读法：没被截时不写 `of N`，那时显示即全部。
+    //
+    // 名词跟总数走（"1 of 768 C# types" 是属格复数，"5 C# types" 跟 5），与 R30 判据一致。
+    private static string Count(int shown, int total, string plural) =>
+        total > shown
+            ? $"{shown} of {OutputText.Quantity(total, plural)}"
+            : OutputText.Quantity(shown, plural);
 
     // 判据与 trace 共用（见 SymbolRow）：文件名推得出来就不印。locate 用 ` - 名字` 的破折号写法，
     // trace 用括号写法，共享的是「什么时候印」而不是「怎么排版」。

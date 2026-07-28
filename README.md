@@ -46,12 +46,17 @@
 - **截断提示全服一套文法**：`... +N more <什么> (<怎么拿到>)`。看到 `... +` 开头的行就是被截断了，`<什么>` 恒有名词（它数的到底是哪一类），括号里那句就是下一步该怎么传参，各工具不必分别认。例：
   `... +71 more methods (pass limit:'all' for the whole list, or read one with read_code methodName)` ·
   `... +367 more lines (pass startLine=20)` · `... +43 more entries (pass offset=7 for the next page, or a larger limit)`
-  - 名词与 N **单复数一致**（`... +1 more C# type` / `... +18 more C# types`），故这个槽可以直接当句子读
+  - 名词与 N **单复数一致**（`... +1 more C# type` / `... +18 more C# types`），故这个槽可以直接当句子读。表头、尾注、启动提示里的计数同此判据，全服不写 `N thing(s)`
   - 唯一不带括号的一形是 `trace usages` / `search_regex` 的**每文件**折叠行 `... +N more matching lines in this file`：它的下一步整份返回里只说一次（见下条），不逐文件重复
+  - 括号里那句**会说清 `limit:'all'` 够不够**：藏起来的比服务端上限（200）还多时写的是 `pass limit:'all' for the first 200; the rest needs a narrower query`，只有真能一次拿全时才写 `pass limit:'all' to expand`。`'all'` 从来不是「无限」，它只把上限抬到 200
 - 扫描类工具（`trace usages` / `search_regex`）停在预览上限时另有一句共用的 `... more matches exist (…)`——与 `... +N more` 的区别是**它数不出还剩多少**（后面的文件根本没打开过），故不给数字。括号里同样给下一步；`limit` 已经是 `'all'` 时不会再劝你提 `limit`
 - 这两个工具还共用一句 `... some files were not scanned in full (…)`：有文件读不开、或大到只扫了前 20000 行时才出现。**它一出现，表头的命中数就改口成 `at least N matching lines`**（那时那个数只是下界）——反过来说，表头直接写 `N matching lines` 就是确定值
 - **两个扫描类工具报的数都是「命中行」，不是「命中次数」**：判据是逐行 `IsMatch`，同一行被 pattern 命中两次仍只算一行。表头与每文件折叠行用的是同一个量纲
-- 有文件的预览被折叠时，末尾补一句 `... previews are capped at 3 lines per file and no parameter widens that; use read_code on a file to see the rest`。**它整份返回只出现一次，且只在真有折叠时出现**——没有这句，就是每个文件的命中都印全了。这条单列的原因是其余折叠行都以 `(pass …)` 收尾，留空会被读成「这里漏印了参数名」，而这个上限确实没有参数放得宽
+- 但**表头的数在截断与未截断两种情形下量纲不同**，措辞会说清是哪一个：截断时写 `first N preview lines`（数的是**印出来的**行，每文件封顶 3 条），未截断时写 `N matching lines`（数的是命中行，含没印出来的）。两个数不可横向比较——`first 100 preview lines` 背后的命中量可以远大于另一次查询的 `49 matching lines`
+- 这两个工具的 scope 是**硬过滤**：落选的文件根本没被打开，故它们给不出 `locate` / `trace inheritors` 那条逐源的 `Outside scope 'X': …` 计数。缺席会被读成「scope 外没有」，所以它们改为明说一句 `Files outside scope 'X' were never opened, …not evidence of absence`
+- 同一份返回里出现**重名文件**时，文件名补上刚好能把它们分开的那几级目录（`Core/Defs/…/RangedIndustrial.xml` 与 `Biotech/Defs/…/RangedIndustrial.xml`）——判据与结果行文件名同源：唯一就只印基名，重名才补。两个工具都叫调用方 `use read_code on a file`，而 `read_code` 收基名，不消歧那句下一步就是错的
+- 有文件的预览被折叠时，末尾补一句 `... previews are capped at 3 lines per file and no parameter widens that; use read_code on a file to see the rest`。**它整份返回只出现一次，且只在真有文件撞上那个上限时出现**——没有这句，就是没有任何文件因为「每文件 3 行」被折叠。这条单列的原因是其余折叠行都以 `(pass …)` 收尾，留空会被读成「这里漏印了参数名」，而这个上限确实没有参数放得宽
+  - 注意扫描停在预览配额上时，**最后一个文件**的折叠行成因是配额耗尽而非每文件上限（它可能只印了 1–2 行就折叠）。那种折叠不触发这句脚注，它的成因由 `... more matches exist (scan stopped at the N-preview cap…)` 解释
 - 返回不以空行结尾——结尾空行会被读成「后面还有、被截断了」
 
 ### 跟随游戏与 mod 更新
@@ -92,7 +97,7 @@
 - 冒号后**带不带空格都行**（`type:CompShield` 与 `type: CompShield` 等价）。光杆前缀（`type:`）视同没写，返回会说明它被忽略了
 - **不在上表里的前缀不是过滤器**，整个 token 会当成普通搜索词去匹配（于是 `member:CompTick` 零命中，而 `method:CompTick` 有一百多条）。这种情况返回会明确点出来，不再让调用方把「前缀写错了」读成「这个符号不存在」
 
-**结果分段**：`C# Types` / `Members` / `XML Defs` / `Content Matches`（按 Def 的字段值命中，而非按名），每段各自受 `limit` 约束并独立折叠。表头一行给出**各段各几条**（`## 'Pawn' — 5 C# types, 5 members`），不必自己数行就能判断要不要调 `limit`。另有 `Files` 段（已索引的文件路径）：四段全部零命中时它是兜底，按名模糊列出若干条；四段有命中时它只补上**基名与查询词逐字相同**的那一份，且不重复已经出现在 `C# Types` 里的同名项——文件名是一等查询目标，不该因为顺带蹭到一条低分 def 就整段消失。
+**结果分段**：`C# Types` / `Members` / `XML Defs` / `Content Matches`（按 Def 的字段值命中，而非按名），每段各自受 `limit` 约束并独立折叠。表头一行给出**各段列出了几条、这个 scope 里一共有几条**（`## 'Pawn' — 1 of 768 C# types, 3 of 1931 members`），不必自己数行、也不必拿折叠行去做加法就能判断要不要调 `limit`。没被截断的段不写 `of N`——**看到 `of` 就是被截了**，与折叠行是同一条读法。（这里与 `trace inheritors` 的 `(381 …) Listed below: 200` 是同一个口径，只是排版不同：两个工具的表头都同时给总数与显示数。）另有 `Files` 段（已索引的文件路径）：四段全部零命中时它是兜底，按名模糊列出若干条；四段有命中时它只补上**基名与查询词逐字相同**的那一份，且不重复已经出现在 `C# Types` 里的同名项——文件名是一等查询目标，不该因为顺带蹭到一条低分 def 就整段消失。
 
 **同分并列的结果次序是定的**。分数与名字长度都并列时，末级按符号全名（再按文件路径）排序，故同一条查询换个进程、换个索引重建轮次都给同一批结果——`method:CompTick` 这类几百条同分同长的查询尤其依赖这一条。与 `search_regex` / `trace usages` 是同一条可复现保证。
 
@@ -144,6 +149,7 @@ RimWorld.CompShield
 - `inheritors`：列出某基类/接口的**传递闭包**子类与实现类树——间接后代（子类的子类）同样列出。默认直接展开到服务端硬上限 200，一次拿全整棵树。截断时保留的是浅层：调用方先要的是「谁直接继承了它」
   - **只有间接后代带标记**（`[depth 2]` 起）；直接子类不标，表头会在真有深层项时补一句 `untagged = direct`。整棵树全是直接子类时一个标记都不印，那本身就是答案
   - 零结果分两种，措辞不同：**索引里没有这个类型名**（拼写待核，去 `locate`）与**类型在索引里、只是没人继承它**（这已经是答案）
+    - 后者还再分两种：scope 外也确实没有时才写 `(this is an answer, not a lookup failure)`；scope 外有派生类时改写成 `…but it does have subclasses outside that scope, so this is not the whole answer`。「这是答案」这句背书只在真的是完整答案时给——否则它会盖过下面那行小字的越界计数，整份返回被读成「没有子类」
 - `usages`：符号的**逐行文本匹配**（不分大小写的全词匹配），C# 与 XML 都扫，带行号预览。默认 50 条，每个文件最多 3 行预览，其余记为 `+N more matching lines in this file`
   - 与 `search_regex` 同款保证：**同一条查询恒给同一份答案**，截断时拿到的是文件表的**前缀**（按文件名排序，扫描与展示同一个顺序），把 `limit` 调大只会往后接上更多文件，不会把先前给过的换掉
   - 同款的还有完整性契约：读不开的文件与只扫到 20000 行的大文件会在末尾计数上报，同时表头改口 `at least N matching lines`。没有那句尾注、表头直接写 `N matching lines`，这 N 就是该 scope 下的确定总数
@@ -435,7 +441,7 @@ assemblies = 'C:\SteamLibrary\steamapps\common\RimWorld\RimWorldWin64_Data\Manag
   - `assemblies`: 该源的程序集目录。**配了才能被 `sync_sources` 跟随**；留空即视为手工维护的源码副本，同步流程跳过
   - `mod`: mod 根目录（可多个）。写了它就不必再手写 `xml` / `assemblies`——见下方「mod 根自动展开」。与手写的 `xml` / `assemblies` 可以并存，展开结果追加在手写项之后
   - `active_mods`: 判定 `loadFolders.xml` 条件目录用的 packageId 白名单。留空即条件目录全收；配了就是「只有这些前置算启用」，其余条件目录一概不收。只在启动日志报出互斥分支时才需要配
-- `[scope_groups]`: 作用域组，组名 → 源名列表；一个源可同属多组，组内顺序即同分时的排序优先级
+- `[scope_groups]`: 作用域组，组名 → 源名列表；一个源可同属多组，组内顺序即同分时的排序优先级。组名会连同它的成员一起写进每个工具的 `scope` 参数说明（`groups: base (vanilla + HAR), …`）——否则返回里的 `scope: base` 与结果行的 `[vanilla]` 标签并排出现，而两者并不等价，调用方只能把它们当同义词
 - `default_scope`: 未显式传 `scope` 参数时使用的作用域表达式；留空即全域
 - `verify_source_freshness`: 把源文件的大小/修改时间摘要纳入缓存指纹，让 Steam 更新过的 mod 自动触发索引重建（代价是启动时多几百毫秒的元数据枚举）
 - `skip_path_security`: `true` 时关闭路径白名单检查（仅建议本地可信环境）

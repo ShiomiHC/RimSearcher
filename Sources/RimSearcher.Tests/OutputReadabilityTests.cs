@@ -975,6 +975,211 @@ public class OutputReadabilityTests : IDisposable
         Assert.Equal(names.OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList(), names);
     }
 
+    // ---- 第七轮：跨工具口径一贯性（盲测带出） ----
+
+    // locate 表头此前只报「列出了几条」，总数在整份返回里一次都不出现——盲测里两个调用方
+    // 都差点把它当结论直接报出去（`method:CompTick` 表头 5，真实 144）。同一批工具里 trace
+    // 的表头给的是总数，句式还一样，两个口径撞在同一个位置上。
+    [Fact]
+    public async Task LocateHeader_GivesShownAndTotal_WhenTheSectionIsTruncated()
+    {
+        var files = Enumerable.Range(0, 30)
+            .Select(i => ($"ZzHead_{i:D2}.cs", $"namespace Zz {{ public class ZzHead_{i:D2} {{ }} }}"))
+            .ToArray();
+        var (indexer, defs, catalog) = BuildIndex(files);
+
+        var content = await RunAsync(new LocateTool(indexer, defs, catalog), new { query = "ZzHead", limit = 3 });
+
+        // 「3 of 30 C# types」：名词跟总数走，属格复数
+        Assert.Contains("3 of 30 C# types", content);
+    }
+
+    // 反面：没被截时不写 of N——「看到 of 就是被截了」这条读法要成立
+    [Fact]
+    public async Task LocateHeader_OmitsTheTotal_WhenNothingWasCutOff()
+    {
+        var (indexer, defs, catalog) = BuildIndex(
+            ("ZzSolo.cs", "namespace Zz { public class ZzSolo { } }"));
+
+        var content = await RunAsync(new LocateTool(indexer, defs, catalog), new { query = "ZzSolo" });
+
+        Assert.Contains("1 C# type", content);
+        Assert.DoesNotContain(" of ", content.Split('\n')[0]);
+    }
+
+    // 藏起来的比服务端硬上限还多时，`pass limit:'all' to expand` 会被读成「照做就拿全了」。
+    // 实测 `... +767 more C# types (pass limit:'all' to expand)` 照做仍差 567 条。
+    [Fact]
+    public async Task FoldLine_SaysAllIsStillCapped_WhenMoreIsHiddenThanTheCapCanReturn()
+    {
+        var beyondCap = ScopeArgs.HardLimit + 50;
+        var files = Enumerable.Range(0, beyondCap)
+            .Select(i => ($"ZzCap_{i:D4}.cs", $"namespace Zz {{ public class ZzCap_{i:D4} {{ }} }}"))
+            .ToArray();
+        var (indexer, defs, catalog) = BuildIndex(files);
+
+        var content = await RunAsync(new LocateTool(indexer, defs, catalog), new { query = "ZzCap", limit = 5 });
+
+        var fold = content.Split('\n').First(l => l.TrimStart().StartsWith("... +", StringComparison.Ordinal));
+        Assert.Contains($"for the first {ScopeArgs.HardLimit}", fold);
+        Assert.Contains("narrower query", fold);
+    }
+
+    // 扫盘类工具是硬 scope 过滤，给不出 locate/inheritors 那条逐源越界计数。缺席本身会被
+    // 读成「scope 外没有」，故要把缺席的含义明说一次。
+    [Fact]
+    public async Task ScanningTools_SayTheyCannotSeeOutsideTheScope()
+    {
+        var root = _workspace.Dir("Core");
+        _workspace.WriteFile(Path.Combine("Core", "ZzHit.cs"), "namespace Zz { public class ZzHit { } }");
+        var other = _workspace.Dir("Other");
+        _workspace.WriteFile(Path.Combine("Other", "ZzOther.cs"), "namespace Zz { public class ZzHit2 { } }");
+
+        var indexer = new SourceIndexer();
+        indexer.Scan(root);
+        indexer.Scan(other);
+        indexer.FreezeIndex();
+        var catalog = ScopeCatalog.Build([("vanilla", root), ("mod", other)], null, null);
+
+        var regex = await RunAsync(new SearchRegexTool(indexer, catalog), new { pattern = "ZzHit", scope = "vanilla" });
+        var usages = await RunAsync(new TraceTool(indexer, catalog), new { symbol = "ZzHit", mode = "usages", scope = "vanilla" });
+
+        foreach (var content in new[] { regex, usages })
+        {
+            Assert.Contains("were never opened", content);
+            Assert.Contains("not evidence of absence", content);
+        }
+    }
+
+    // 全域时没有「外面」，那句话就该整句消失
+    [Fact]
+    public async Task ScanningTools_SayNothingAboutOutsideWhenTheScopeIsEverything()
+    {
+        var (indexer, _, catalog) = BuildIndex(("ZzWide.cs", "namespace Zz { public class ZzWide { } }"));
+
+        var content = await RunAsync(new SearchRegexTool(indexer, catalog), new { pattern = "ZzWide", scope = "all" });
+
+        Assert.DoesNotContain("were never opened", content);
+    }
+
+    // 截断表头的 previews 数的是预览**行**。盲测里调用方是硬数了 100 条 L 行才敢确定这件事
+    // ——一个文件块视觉上也像一个 preview。加一个词就消歧，且与折叠行/脚注的量纲对齐。
+    [Fact]
+    public async Task TruncatedScanHeader_NamesTheUnitOfItsCount()
+    {
+        var body = string.Join("\n", Enumerable.Range(0, 40).Select(i => $"// ZzUnit {i}"));
+        var (indexer, _, catalog) = BuildIndex(("ZzUnit.cs", body));
+
+        var content = await RunAsync(new SearchRegexTool(indexer, catalog), new { pattern = "ZzUnit", limit = 2 });
+
+        Assert.Contains("preview lines", content);
+        Assert.DoesNotContain("previews in scope", content);
+
+        // 顺带守住脚注的归因：这里 limit=2 让配额在这个文件中途耗尽（只印了 2 行），
+        // 折叠的成因是扫描停了、不是「每文件 3 行上限」。把这种折叠也算进去，脚注就会对
+        // 这个文件给出错误归因——读者会以为放宽 limit 也只能看到 3 行。
+        Assert.Contains("more matching lines in this file", content);
+        Assert.DoesNotContain("previews are capped at", content);
+    }
+
+    // 正面：真撞上每文件上限时脚注必须出现，否则这条判据就成了「永远不印」
+    [Fact]
+    public async Task PerFilePreviewCapLine_StillAppears_WhenAFileGenuinelyHitsTheThreeLineCap()
+    {
+        var body = string.Join("\n", Enumerable.Range(0, 10).Select(i => $"// ZzCapped {i}"));
+        var (indexer, _, catalog) = BuildIndex(("ZzCapped.cs", body));
+
+        var content = await RunAsync(new SearchRegexTool(indexer, catalog), new { pattern = "ZzCapped", limit = 50 });
+
+        Assert.Contains("previews are capped at", content);
+    }
+
+    // 同一份返回里出现重名文件时，基名不再能定位——而两个工具都叫调用方 use read_code on a file
+    [Fact]
+    public async Task ScanningTools_DisambiguateSameNamedFiles()
+    {
+        var root = _workspace.Dir("Core");
+        _workspace.WriteFile(Path.Combine("Core", "AA", "ZzDup.cs"), "namespace Zz { public class ZzDupA { } }");
+        _workspace.WriteFile(Path.Combine("Core", "BB", "ZzDup.cs"), "namespace Zz { public class ZzDupB { } }");
+
+        var indexer = new SourceIndexer();
+        indexer.Scan(root);
+        indexer.FreezeIndex();
+        var catalog = ScopeCatalog.Build([("vanilla", root)], null, null);
+
+        var content = await RunAsync(new SearchRegexTool(indexer, catalog), new { pattern = "ZzDup" });
+
+        Assert.Contains("`AA/ZzDup.cs`", content);
+        Assert.Contains("`BB/ZzDup.cs`", content);
+    }
+
+    // 反面：不重名就只印基名，这条判据与 R1/R8/R20 同源
+    [Fact]
+    public async Task ScanningTools_KeepTheBareFileNameWhenItIsUnique()
+    {
+        var (indexer, _, catalog) = BuildIndex(("ZzUniq.cs", "namespace Zz { public class ZzUniq { } }"));
+
+        var content = await RunAsync(new SearchRegexTool(indexer, catalog), new { pattern = "ZzUniq" });
+
+        Assert.Contains("`ZzUniq.cs`", content);
+        Assert.DoesNotContain("/ZzUniq.cs", content);
+    }
+
+    // 「这是答案」这句背书只在真的是完整答案时给。scope 外还有派生类时，它下面跟的是一行
+    // 小字斜体的越界计数，盲测里整份返回被压缩成了「没有子类」。
+    [Fact]
+    public async Task TraceZeroInheritors_DropsTheAnswerBadge_WhenTheScopeHidSubclasses()
+    {
+        var root = _workspace.Dir("Core");
+        _workspace.WriteFile(Path.Combine("Core", "ZzBase.cs"), "namespace Zz { public class ZzBase { } }");
+        var other = _workspace.Dir("Other");
+        _workspace.WriteFile(Path.Combine("Other", "ZzDerived.cs"), "namespace Zz { public class ZzDerived : ZzBase { } }");
+
+        var indexer = new SourceIndexer();
+        indexer.Scan(root);
+        indexer.Scan(other);
+        indexer.FreezeIndex();
+        var catalog = ScopeCatalog.Build([("vanilla", root), ("mod", other)], null, null);
+
+        using var args = JsonDocument.Parse(
+            JsonSerializer.Serialize(new { symbol = "ZzBase", mode = "inheritors", scope = "vanilla" }));
+        var content = (await new TraceTool(indexer, catalog)
+            .ExecuteAsync(args.RootElement, CancellationToken.None)).Content;
+
+        Assert.Contains("not the whole answer", content);
+        Assert.DoesNotContain("this is an answer, not a lookup failure", content);
+        Assert.Contains("Outside scope", content);
+    }
+
+    // 反面：scope 外也确实没有时，那句背书要留着——它是整套输出里唯一主动消歧的句子
+    [Fact]
+    public async Task TraceZeroInheritors_KeepsTheAnswerBadge_WhenNothingIsHidden()
+    {
+        var (indexer, _, catalog) = BuildIndex(("ZzLone.cs", "namespace Zz { public class ZzLone { } }"));
+
+        using var args = JsonDocument.Parse(
+            JsonSerializer.Serialize(new { symbol = "ZzLone", mode = "inheritors" }));
+        var content = (await new TraceTool(indexer, catalog)
+            .ExecuteAsync(args.RootElement, CancellationToken.None)).Content;
+
+        Assert.Contains("this is an answer, not a lookup failure", content);
+        Assert.DoesNotContain("not the whole answer", content);
+    }
+
+    // scope 的组名要连成员一起给：`scope: base` 与结果行的 `[vanilla]` 并排出现而两者不等价
+    [Fact]
+    public void ScopeSchema_SpellsOutWhatEachGroupContains()
+    {
+        var root = _workspace.Dir("Core");
+        var other = _workspace.Dir("Other");
+        var catalog = ScopeCatalog.Build(
+            [("vanilla", root), ("HAR", other)],
+            new Dictionary<string, List<string>> { ["base"] = ["vanilla", "HAR"] },
+            "base");
+
+        Assert.Contains("base (vanilla + HAR)", catalog.DescribeAvailable());
+    }
+
     private static string GroupLayout(string content) =>
         string.Concat(content.Split('\n').SkipWhile(l => !l.StartsWith('`')).Select(l =>
             l.Length == 0 ? "_" : l.StartsWith('`') ? "G" : l.StartsWith("  ") ? "p" : "?"));

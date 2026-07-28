@@ -40,8 +40,13 @@ public sealed record SourceChange
         ? $"{SourceName}: cannot sync — {Blocker}"
         : Failure != null
             ? $"{SourceName}: sync failed and was rolled back in full (sources are still the previous version) — {Failure}"
+            // 这一行两处都用（check 与 sync 完成后），报的都是**程序集自身的差异**，不是
+            // 「本工具做了什么」。原先写 `N added`，读起来像「已经加进索引了」——盲测里的
+            // 调用方据此判断索引健康、直接开查，而实际那是一份待办清单（首次跑时 6 of 6
+            // 全是 added，意思恰恰是这个源一次都没同步过）。改用形容词，不带完成态；
+            // 「有没有被处理」由两处各自的表头说。
             : HasChanges
-                ? $"{SourceName}: {Added} added, {Modified} changed, {Removed} removed (of {Assemblies})"
+                ? $"{SourceName}: {Added} new, {Modified} changed, {Removed} gone (of {Assemblies})"
                 : $"{SourceName}: unchanged ({Assemblies})";
 
     private string Assemblies => TotalAssemblies == 1 ? "1 assembly" : $"{TotalAssemblies} assemblies";

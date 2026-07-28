@@ -285,7 +285,11 @@ public class SyncSourcesTool : ITool
         var report = _syncService.Check(only);
         var builder = new StringBuilder();
 
-        builder.AppendLine($"Source check ({report.ElapsedMs} ms, game version {_syncService.GameVersion ?? "unknown"}):");
+        // 表头说清下面那批数字是**待办**而不是战果：check 只读 sha256，一个字节都不写。
+        // 不说的话，`6 new, 0 changed, 0 gone` 会被读成「已经同步好了 6 个」。
+        builder.AppendLine(
+            $"Source check ({report.ElapsedMs} ms, game version {_syncService.GameVersion ?? "unknown"}) — "
+            + "differences against the decompiled copies on disk; nothing has been decompiled yet:");
         foreach (var change in report.Changes) builder.AppendLine($"  {change.Describe()}");
 
         // 结论的覆盖面必须跟着 only 走。sources 过滤生效之后，「全部可跟随的源都是最新的」

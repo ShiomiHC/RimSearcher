@@ -108,10 +108,13 @@ public class SearchRegexTool : ITool
             // 原先也说一遍（", scan stopped at the limit"），而 "first N" 本就含着这个意思。
             // 单位改说 "previews"：表头的 N 数的是预览行，与「命中数」是两个量。
             var headline = truncated
-                ? $"first {results.Count} previews in scope '{scope.Expression}'"
+                ? $"first {results.Count} preview lines in scope '{scope.Expression}'"
                 // 有文件没扫全时这个总数只是下界，表头与末尾那条尾注要同时改口
                 : $"{ScopeArgs.FoundCount(totalMatches, diagnostics.AnyFileIncomplete)} "
                   + $"in scope '{scope.Expression}'";
+
+            // 本次要列出的文件里有重名时补目录（见 ScopeArgs.DisambiguateFileNames）
+            var displayNames = ScopeArgs.DisambiguateFileNames(shownFiles.Select(g => g.Key));
 
             // 列出来的文件全同源时标签只印一次（见 ScopeArgs.SourceLabeling）
             var labels = ScopeArgs.SourceLabeling.Of(
@@ -122,7 +125,7 @@ public class SearchRegexTool : ITool
             var output = $"Regex matches for '{pattern}' ({headline}){labels.Header}:\n\n" +
                          string.Join("\n\n", shownFiles.Select(g =>
                          {
-                             var fileName = System.IO.Path.GetFileName(g.Key);
+                             var fileName = displayNames[g.Key];
                              // 同理，同一文件内的命中也是乱序到达的。不排序时 Take(3) 拿到的是任意
                              // 三条，读起来像 L17、L15 这样倒着走，且靠前的命中可能根本没被选中。
                              var groupItems = g.OrderBy(m => m.LineNumber).ToList();
@@ -133,7 +136,12 @@ public class SearchRegexTool : ITool
                              // 会把第 4 条起的命中吞掉。
                              var shown = Math.Min(groupItems.Count, SourceIndexer.MaxPreviewsPerFile);
                              var inFile = matchesByFile.TryGetValue(g.Key, out var c) ? c : groupItems.Count;
-                             if (inFile > shown) anyFileFolded = true;
+                             // 脚注说的是「每文件 3 行上限」，故只有真撞上那个上限的折叠才算数。
+                             // 扫描停在预览配额上时，最后一个文件的 shown 会不足 3——它的折叠成因
+                             // 是配额耗尽（末尾那句 `scan stopped at the N-preview cap` 已经说了），
+                             // 把它也算进来会让脚注对这个文件给出错误归因：读者会以为「这个文件最多
+                             // 只能看到 3 行」，而其实放宽 limit 就能多印一行。
+                             if (inFile > shown && shown >= SourceIndexer.MaxPreviewsPerFile) anyFileFolded = true;
                              var moreCount = inFile > shown
                                  ? "\n" + ScopeArgs.PerFileFold(inFile - shown)
                                  : "";
@@ -194,6 +202,8 @@ public class SearchRegexTool : ITool
                 output += "\n\n" + ScopeArgs.NotScannedInFullLine(incomplete);
             }
 
+            // 同 trace usages：这里没有 out-of-scope 逐源计数，而缺席会被读成「scope 外没有」
+            output += ScopeArgs.HardScopeFilterNotice(scope);
             output += scopeNotice;
 
             return new ToolResult(output);

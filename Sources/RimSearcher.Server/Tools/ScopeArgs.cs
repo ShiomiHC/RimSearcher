@@ -166,6 +166,69 @@ public static class ScopeArgs
             : $" Only sources in scope '{scope.Expression}' were searched — "
               + $"retry with scope:'{ScopeCatalog.EverythingKeyword}' before concluding it does not exist.";
 
+    // 有结果时的对应件：说清「这里为什么没有 out-of-scope 那一行」。
+    //
+    // 同一批工具里 locate 与 trace inheritors 会逐源报出 scope 外还有多少命中，而两个扫盘类
+    // 工具（trace usages / search_regex）不报——它们是硬 scope 过滤，落选文件根本没被打开，
+    // 要统计就得再读一遍，代价与全域搜索相同（见 TraceTool 扫盘处的注释）。问题在于返回里
+    // 同样写着 `in scope 'X'`，于是「没有那一行」会被读成「scope 外没有」。盲测里这一条被
+    // 单列为「最容易造成静默漏检的缺口」：缺席不等于没有，而缺席本身不留痕迹。
+    //
+    // 全域时不印——那时本来就没有「外面」。
+    public static string? HardScopeFilterNotice(ScopeSelection scope)
+        => scope.IncludesEverything
+            ? null
+            : $"\n\n_Files outside scope '{scope.Expression}' were never opened, so this tool cannot tell you "
+              + $"whether there are matches there; pass scope:'{ScopeCatalog.EverythingKeyword}' to include them. "
+              + "(locate and trace inheritors do count out-of-scope hits — here the absence of such a line "
+              + "is not evidence of absence.)_";
+
+    // 同一份返回里出现重名文件时，基名不再是一个能定位的标识。实测 search_regex 一次返回里
+    // `RangedIndustrial.xml` / `Buildings_Security_Turrets.xml` / `Items_Resource_Manufactured.xml`
+    // 各出现两次（行号不单调，是不同目录下的两份），而两处都叫调用方 `use read_code on a file`
+    // ——按名去读必然只命中其中一份，另一份的命中就此消失；把两组行号合起来读则会数出一个
+    // 根本不存在的文件。
+    //
+    // 判据与 R1/R8/R20 同源（推得出来就不印）：基名在本次返回里唯一就只印基名，重名时补上
+    // **刚好能把它们分开**的那几级目录，不是无条件印全路径。
+    public static IReadOnlyDictionary<string, string> DisambiguateFileNames(IEnumerable<string> paths)
+    {
+        var all = paths.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var sameName in all.GroupBy(p => Path.GetFileName(p), StringComparer.OrdinalIgnoreCase))
+        {
+            var group = sameName.ToList();
+            if (group.Count == 1)
+            {
+                result[group[0]] = sameName.Key;
+                continue;
+            }
+
+            // 逐级向上加目录，直到组内互不相同。加到 4 级还分不开就给全路径——那时再省
+            // 已经不是省 token，是省掉了唯一能定位的信息。
+            for (int depth = 1; depth <= 4; depth++)
+            {
+                var candidates = group.ToDictionary(p => p, p => TailSegments(p, depth + 1));
+                if (candidates.Values.Distinct(StringComparer.OrdinalIgnoreCase).Count() == group.Count)
+                {
+                    foreach (var (path, tail) in candidates) result[path] = tail;
+                    break;
+                }
+
+                if (depth == 4) foreach (var path in group) result[path] = path;
+            }
+        }
+
+        return result;
+    }
+
+    private static string TailSegments(string path, int count)
+    {
+        var segments = path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return string.Join("/", segments.Skip(Math.Max(0, segments.Length - count)));
+    }
+
     public static string Label(ScopedEntry<object> entry) => Label(entry.SourceName);
 
     public static string Label(string? sourceName)
@@ -248,7 +311,13 @@ public static class ScopeArgs
                 ? $"server cap {HardLimit} reached, narrow the query"
                 : limit?.Unlimited == true
                     ? "narrow the query to see the rest"
-                    : "pass limit:'all' to expand"
+                    // 'all' 也只到硬上限。藏起来的比上限还多时，`to expand` 会被读成「照做就拿全了」
+                    // ——`... +767 more C# types (pass limit:'all' to expand)` 照做仍差 567 条，
+                    // 而调用方没有任何线索能察觉。同一件事 trace usages 那边是说清了的
+                    // （`raise the cap to 200`），这里跟上。
+                    : shownCount + hiddenCount > HardLimit
+                        ? $"pass limit:'all' for the first {HardLimit}; the rest needs a narrower query"
+                        : "pass limit:'all' to expand"
             // 断层收口砍掉的是「相对首条掉了 40 分以上」的结果，要够到它们只能让首条不再那么
             // 突出——换个更宽泛的词，或改用 search_regex。原先写的是 refine（收窄），方向正好反了：
             // 照做只会把这些结果推得更远。

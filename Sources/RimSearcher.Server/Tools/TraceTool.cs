@@ -117,10 +117,17 @@ public class TraceTool : ITool
                 // 前者要去确认名字（多半拼错了或不在配置的源里），后者已经是答案。
                 // 原先两者同一句话，调用方读到的都是「没有子类」，于是拿着一个根本不存在的
                 // 名字继续往下查。
+                // 「这是答案」这句背书只在**真的是完整答案**时给。scope 外还有派生类时，
+                // 它下面跟的是一行小字斜体的 out-of-scope 计数——盲测里调用方把整份返回压缩成
+                // 了「没有子类」，而那个被丢掉的 1 足以让「可以安全改签名」这类结论翻车：
+                // 语气最重的那句和唯一的反证放在一起，读者只会记住前者。
                 var known = _sourceIndexer.IsKnownType(symbol);
                 var message = known
-                    ? $"'{symbol}' is indexed, and nothing in scope '{scope.Expression}' derives from it "
-                      + "(this is an answer, not a lookup failure)."
+                    ? footer != null
+                        ? $"'{symbol}' is indexed, and nothing in scope '{scope.Expression}' derives from it — "
+                          + "but it does have subclasses outside that scope, so this is not the whole answer."
+                        : $"'{symbol}' is indexed, and nothing in scope '{scope.Expression}' derives from it "
+                          + "(this is an answer, not a lookup failure)."
                     : $"No type named '{symbol}' is in the index, so this is not evidence that it has no "
                       + "subclasses. Check the spelling with rimworld-searcher__locate, and note that "
                       + "inheritors resolves C# type names only.";
@@ -338,10 +345,15 @@ public class TraceTool : ITool
             var anyFileIncomplete = capped > 0 || unreadable > 0;
 
             sb.AppendLine(wasTruncated
-                ? $"References to '{symbol}' (first {shownResults.Count} previews in scope '{scope.Expression}'){usageLabels.Header}:"
+                ? $"References to '{symbol}' (first {shownResults.Count} preview lines in scope '{scope.Expression}'){usageLabels.Header}:"
                 : $"References to '{symbol}' ({ScopeArgs.FoundCount(totalMatches, anyFileIncomplete)} "
                   + $"in scope '{scope.Expression}'){usageLabels.Header}:");
             sb.AppendLine();
+
+            // 本次要列出的文件里有重名时补目录（见 ScopeArgs.DisambiguateFileNames）。
+            // 两处都叫调用方 `use read_code on a file`，而 read_code 收基名——重名不消歧，
+            // 那句下一步就是错的。
+            var usageDisplayNames = ScopeArgs.DisambiguateFileNames(grouped.Select(g => g.Key));
 
             var groupsWritten = 0;
             var anyFileFolded = false;
@@ -353,7 +365,7 @@ public class TraceTool : ITool
 
                 // 原先每组挂一个 `[C#]` / `[XML]` 前缀，而紧跟其后的文件名带着 .cs / .xml
                 // 后缀，说的是同一件事。search_regex 同样按文件分组、从来没有这个前缀。
-                var fileName = System.IO.Path.GetFileName(group.Key);
+                var fileName = usageDisplayNames[group.Key];
                 sb.AppendLine($"`{fileName}`{usageLabels.Row(scope.ShowLabels ? scope.SourceNameOf(group.Key) : null)}");
 
                 var shown = 0;
@@ -369,7 +381,9 @@ public class TraceTool : ITool
                 if (inFile > shown)
                 {
                     sb.AppendLine(ScopeArgs.PerFileFold(inFile - shown));
-                    anyFileFolded = true;
+                    // 只有真撞上每文件上限的折叠才让脚注出现——配额在这个文件中途耗尽时 shown
+                    // 不足 3，那条折叠的成因是扫描停了，不是每文件上限。同 search_regex。
+                    if (shown >= MaxMatchesPerFile) anyFileFolded = true;
                 }
             }
 
@@ -405,8 +419,9 @@ public class TraceTool : ITool
                 sb.AppendLine(ScopeArgs.NotScannedInFullLine(incomplete));
             }
 
-            // usages 分支是硬 scope 过滤、没有 ScopeReport footer（见上面扫盘的注释），
-            // 这行就是它唯一的 scope 级脚注。
+            // usages 分支是硬 scope 过滤、没有 ScopeReport footer（见上面扫盘的注释）。
+            // 那条 footer 的缺席本身会被读成「scope 外没有」，故把缺席的含义明说一次。
+            sb.Append(ScopeArgs.HardScopeFilterNotice(scope));
             sb.Append(scopeNotice);
 
             return new ToolResult(sb.ToString());

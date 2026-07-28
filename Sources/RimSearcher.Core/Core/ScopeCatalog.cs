@@ -331,7 +331,13 @@ public sealed class ScopeCatalog
     public string DescribeAvailable()
     {
         var parts = new List<string>();
-        if (_groups.Count > 0) parts.Add($"groups: {string.Join(", ", _groups.Keys)}");
+        // 组名要连成员一起给。光给组名时，`scope: base` 与结果行上的 `[vanilla]` 标签并排
+        // 出现而两者并不等价（base = vanilla + HAR），调用方第一次用只能把它们当同义词——
+        // 盲测里那位是靠比对 sync_sources 的 11 个源与越界行的 9 个源，自己反推出差集才发现的。
+        // 这份说明每次工具列表带一次，不进每次返回的体积。
+        if (_groups.Count > 0)
+            parts.Add("groups: " + string.Join(", ", _groups.Select(g =>
+                $"{g.Key} ({string.Join(" + ", g.Value.Select(i => Sources[i].Name))})")));
         if (Sources.Count > 0) parts.Add($"sources: {string.Join(", ", Sources.Select(s => s.Name))}");
         parts.Add($"'{EverythingKeyword}' selects everything; prefix '-' excludes (e.g. 'all,-vanilla')");
         if (!string.IsNullOrWhiteSpace(_defaultExpression)) parts.Add($"default: {_defaultExpression}");
