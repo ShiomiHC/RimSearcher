@@ -79,7 +79,7 @@ public class TraceInheritorsDepthTests : IDisposable
         Assert.Contains("untagged = direct", content);
     }
 
-    // 全是直接子类时连那句约定都不印——表头的 "deepest 1 level(s) down" 已经说完了
+    // 全是直接子类时连那句约定都不印——表头的 "deepest 1 level down" 已经说完了
     [Fact]
     public async Task AllDirect_NeedsNoLegend()
     {
@@ -110,7 +110,7 @@ public class TraceInheritorsDepthTests : IDisposable
         Assert.Contains("4 in scope", content);          // 树的总量
         Assert.Contains("Listed below: 2", content);     // 切片的量
         Assert.Contains("2 direct", content);
-        Assert.Contains("deepest 1 level(s) down", content);
+        Assert.Contains("deepest 1 level down", content);
     }
 
     // 「索引里没有这个名字」与「有，但没人继承它」下一步完全不同：前者要去核对拼写，

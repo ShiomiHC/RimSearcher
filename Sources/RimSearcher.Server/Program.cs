@@ -114,8 +114,10 @@ var layoutAdvisories = new List<string>(resolvedSources.Notes);
 if (resolvedSources.Shadowed.Count > 0)
 {
     layoutAdvisories.Add(
-        $"{resolvedSources.Shadowed.Count} file(s) are shadowed by a higher-priority copy in the same mod "
-        + "and are not indexed (RimWorld's own file-level override rule).");
+        $"{OutputText.Quantity(resolvedSources.Shadowed.Count, "files")} "
+        + $"{(resolvedSources.Shadowed.Count == 1 ? "is" : "are")} shadowed by a higher-priority copy "
+        + $"in the same mod and {(resolvedSources.Shadowed.Count == 1 ? "is" : "are")} not indexed "
+        + "(RimWorld's own file-level override rule).");
 }
 
 StartupHealth.Record(blockingReason, layoutAdvisories);

@@ -147,6 +147,42 @@ public class ReadCodeHonestyTests : IDisposable
         Assert.DoesNotContain("files share this name", result.Content);
     }
 
+    // extractClass 这个名字本身就像个开关，而它要的是类名。传 true 时原先走 CoerceToString
+    // 变成一次「找不到名叫 true 的类」的查找失败——返回读起来是「这个文件里没有这个类，
+    // 去 inspect 核对名字」，方向完全相反，照做只会再确认一遍那个类确实存在。
+    [Theory]
+    [InlineData("extractClass")]
+    [InlineData("methodName")]
+    [InlineData("className")]
+    public void BooleanInANameSlot_IsRejectedAsAWrongType_NotReportedAsANotFoundName(string parameter)
+    {
+        var (tool, _) = Build();
+
+        // className 要配 methodName 才走得到，一并传上不影响本条断言
+        using var args = JsonDocument.Parse($$"""{"path":"ZzTwo.cs","methodName":"ZzShared","{{parameter}}":true}""");
+        var ex = Assert.Throws<ToolArgumentException>(
+            () => tool.ExecuteAsync(args.RootElement, CancellationToken.None).GetAwaiter().GetResult());
+
+        Assert.Contains(parameter, ex.Message);
+        Assert.Contains("not a boolean", ex.Message);
+        Assert.Contains("not a switch", ex.Message);
+        // 「没找到」是下一步完全不同的一类结论，这里一个字都不该出现
+        Assert.DoesNotContain("not found", ex.Message);
+    }
+
+    // 名字位收严之后，"true" 作为**字符串**仍是一个合法（虽然找不到）的类名——
+    // 拒绝的是类型不对，不是这个字面量
+    [Fact]
+    public async Task StringNamedTrue_IsStillTreatedAsAName()
+    {
+        var (tool, _) = Build();
+
+        var result = await Run(tool, """{"path":"ZzTwo.cs","extractClass":"true"}""");
+
+        Assert.True(result.IsError);
+        Assert.Contains("not found", result.Content);
+    }
+
     // 出错当场给出的参数清单是调用方唯一看得到的一份，漏 scope 会让它以为不支持
     [Fact]
     public void UsageLine_ListsScope()

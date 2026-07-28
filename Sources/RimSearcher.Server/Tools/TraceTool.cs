@@ -155,12 +155,13 @@ public class TraceTool : ITool
 
             var sbInheritors = new System.Text.StringBuilder();
             // 深度标记的约定只在真的出现深层项时才需要说明；全是直接子类时一个标记都不印，
-            // 表头的 "deepest 1 level(s) down" 已经把这件事说完了。
+            // 表头的 "deepest 1 level down" 已经把这件事说完了。
             var depthLegend = shownDeepest > 1 ? ", untagged = direct" : "";
             sbInheritors.AppendLine(
                 $"Subclasses of '{symbol}' ({inheritors.TotalInScope} in scope '{scope.Expression}', transitive — "
                 + $"indirect descendants included). Listed below: {inheritors.Items.Count} "
-                + $"({shownDirect} direct, deepest {shownDeepest} level(s) down{depthLegend}){inheritorLabels.Header}:");
+                + $"({shownDirect} direct, deepest {OutputText.Quantity(shownDeepest, "levels")} "
+                + $"down{depthLegend}){inheritorLabels.Header}:");
             sbInheritors.AppendLine(string.Join(Environment.NewLine, results));
 
             var fold = ScopeArgs.FoldLine(inheritors, "subclasses", indent: "", limit: limit);
@@ -394,9 +395,11 @@ public class TraceTool : ITool
             {
                 var incomplete = new List<string>();
                 if (unreadable > 0)
-                    incomplete.Add($"{unreadable} file(s) could not be read and were skipped entirely");
+                    incomplete.Add($"{OutputText.Quantity(unreadable, "files")} could not be read "
+                                   + $"and {(unreadable == 1 ? "was" : "were")} skipped entirely");
                 if (capped > 0)
-                    incomplete.Add($"{capped} file(s) were only scanned to line {MaxLinesScannedPerFile}");
+                    incomplete.Add($"{OutputText.Quantity(capped, "files")} {(capped == 1 ? "was" : "were")} "
+                                   + $"only scanned to line {MaxLinesScannedPerFile}");
 
                 sb.AppendLine();
                 sb.AppendLine(ScopeArgs.NotScannedInFullLine(incomplete));

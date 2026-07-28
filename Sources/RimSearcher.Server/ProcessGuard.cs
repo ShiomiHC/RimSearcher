@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using RimSearcher.Core;
 
 namespace RimSearcher.Server;
 
@@ -72,7 +73,7 @@ public static class ProcessGuard
             await Task.Delay(TimeSpan.FromMinutes(1));
             if (DateTime.UtcNow - _lastActivityUtc >= timeout)
             {
-                await ExitAsync($"idle for {idleTimeoutMinutes} minute(s)", null);
+                await ExitAsync($"idle for {OutputText.Quantity(idleTimeoutMinutes, "minutes")}", null);
                 return;
             }
         }

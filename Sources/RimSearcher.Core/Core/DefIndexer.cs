@@ -73,7 +73,21 @@ public class DefIndexer
         new(StringComparer.OrdinalIgnoreCase);
 
     private readonly ConcurrentDictionary<string, byte> _processedFiles = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly XmlReaderSettings XmlReadSettings = new() { DtdProcessing = DtdProcessing.Parse };
+    // IgnoreWhitespace 不是性能开关，是 inspect def 模式的排版前提。留着纯空白文本节点，
+    // XElement.ToString() 就不再重排缩进，于是**同一份**合并 XML 里两种坏形态并存：
+    // 从文件里搬来的分支带着原文缩进与空行（vanilla 的 BodyDef Human 合并后 609 行里近半是
+    // 空行），而合并时新插入的节点没有空白节点、被整排挤进一行（ThingDef Human 有一行 968
+    // 字符）。要害不在体积——空行只值一个换行符——而在 inspect 的截断与 xmlStartLine 续读
+    // **以行为单位**：一行可能是一个字段也可能是三十个，「首屏 200 行」到底给了多少内容
+    // 随源文件的排版浮动，调用方无从判断。丢掉纯空白节点后整棵树由 XLinq 统一缩进，
+    // 行重新成为一个稳定的量。
+    //
+    // 只有 whitespace-only 的文本节点会被丢弃，<description> 那种真文本一个字不动。
+    private static readonly XmlReaderSettings XmlReadSettings = new()
+    {
+        DtdProcessing = DtdProcessing.Parse,
+        IgnoreWhitespace = true
+    };
     
     private FrozenDictionary<string, DefLocation[]>? _frozenDefNameIndex;
     private FrozenDictionary<string, DefLocation[]>? _frozenParentNameIndex;

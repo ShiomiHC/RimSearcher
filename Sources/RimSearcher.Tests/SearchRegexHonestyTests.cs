@@ -45,7 +45,7 @@ public class SearchRegexHonestyTests : IDisposable
 
         Assert.Contains("fileFilter '.txt'", content);
         // 「0 个文件通过了过滤」自己就把责任说完了；原先还要再用一句话把这个结论复述一遍
-        Assert.Contains("0 file(s) matched that filter", content);
+        Assert.Contains("0 files matched that filter", content);
         Assert.DoesNotContain("the filter, not the pattern", content);
     }
 

@@ -103,4 +103,148 @@ public class InspectXmlPagingTests : IDisposable
 
         Assert.Contains("End of the merged XML", content);
     }
+
+    // 源文件按真实 vanilla Defs 的样子写：行距宽、缩进深、嵌套 li。此前保留了纯空白文本
+    // 节点，于是 XElement.ToString() 不再重排缩进，同一份合并结果里两种坏形态并存——
+    // 搬自文件的分支带着原文空行，合并时新插入的节点被整排挤进一行。
+    private InspectTool BuildNestedTool()
+    {
+        var root = _workspace.Dir("Defs");
+
+        _workspace.WriteFile(Path.Combine("Defs", "Base.xml"),
+            """
+            <Defs>
+
+              <ThingDef Name="ZzBase" Abstract="True">
+
+                <statBases>
+
+                    <Mass>60</Mass>
+
+                    <Flammability>0.7</Flammability>
+
+                  </statBases>
+
+                <race>
+
+                    <litterSizeCurve>
+
+                      <points>
+
+                        <li>(0.5, 0)</li>
+
+                        <li>(1, 1)</li>
+
+                      </points>
+
+                    </litterSizeCurve>
+
+                  </race>
+
+              </ThingDef>
+
+            </Defs>
+            """);
+
+        // 子 def 在父的 statBases 上追加兄弟节点：合并时新插入的那些正是被挤成一行的那批
+        _workspace.WriteFile(Path.Combine("Defs", "Child.xml"),
+            """
+            <Defs>
+              <ThingDef ParentName="ZzBase">
+                <defName>ZzChild</defName>
+                <statBases>
+                  <MarketValue>1750</MarketValue>
+                  <MoveSpeed>4.6</MoveSpeed>
+                  <LeatherAmount>75</LeatherAmount>
+                </statBases>
+              </ThingDef>
+            </Defs>
+            """);
+
+        var defIndexer = new DefIndexer();
+        defIndexer.Scan(root);
+        defIndexer.FreezeIndex();
+
+        var sourceIndexer = new SourceIndexer();
+        sourceIndexer.FreezeIndex();
+
+        return new InspectTool(sourceIndexer, defIndexer, ScopeCatalog.Build([("vanilla", root)], null, null));
+    }
+
+    private static string[] MergedXmlLines(string content)
+    {
+        // 不在这里 TrimEnd('\r')：尾随 CR 正是下面一条用例要断言不存在的东西
+        var lines = content.Split('\n');
+        var open = Array.FindIndex(lines, l => l.StartsWith("```xml", StringComparison.Ordinal));
+        Assert.True(open >= 0, "返回里没有合并 XML 块");
+        var close = Array.FindIndex(lines, open + 1, l => l.StartsWith("```", StringComparison.Ordinal));
+        Assert.True(close > open, "合并 XML 块没有闭合");
+        return lines[(open + 1)..close];
+    }
+
+    // 空行本身只值一个换行符，真正的代价是 inspect 的截断与 xmlStartLine 续读**以行计**：
+    // 源文件的行距一变，「首屏 200 行」给出的内容就跟着变，而调用方看不出这件事。
+    [Fact]
+    public async Task MergedXml_CarriesNoBlankLinesFromTheSourceFiles()
+    {
+        var xml = MergedXmlLines(await Run(BuildNestedTool(), """{"name":"ZzChild"}"""));
+
+        Assert.NotEmpty(xml);
+        Assert.DoesNotContain(xml, line => line.Trim().Length == 0);
+    }
+
+    // 同一件事的另一头：合并时新插入的兄弟节点此前没有空白节点隔开，被整排挤进一行
+    // （实测 vanilla 的 ThingDef Human 有一行 968 字符）。一行一个元素，行才是个稳定的量。
+    [Fact]
+    public async Task MergedXml_PutsOneElementPerLine_NoMatterWhichSideItCameFrom()
+    {
+        var xml = MergedXmlLines(await Run(BuildNestedTool(), """{"name":"ZzChild"}"""));
+
+        // 父来的 Mass 与子来的 MarketValue 都要各占一行，且都在 statBases 里
+        Assert.Contains(xml, line => line.Trim() == "<Mass>60</Mass>");
+        Assert.Contains(xml, line => line.Trim() == "<MarketValue>1750</MarketValue>");
+
+        foreach (var line in xml)
+        {
+            // 一行里出现第二个闭合标签就说明兄弟节点被挤在一起了
+            var closings = System.Text.RegularExpressions.Regex.Matches(line, "</").Count;
+            Assert.True(closings <= 1, $"一行挤了多个元素: {line}");
+        }
+    }
+
+    // 上面两条走的是「短 XML 整块印」那条路径。截断与续读是**逐行 AppendLine** 重新拼的，
+    // 而 XElement.ToString() 的行尾是 CRLF：裸按 '\n' 切会给每行留一个尾随 '\r'，
+    // AppendLine 再补一个换行，ToolResult 收口时那个孤立的 '\r' 又被换成 '\n'——每行后面
+    // 多一个空行，行数翻倍。偏偏截断窗口与 xmlStartLine 都是按行数算的。
+    [Theory]
+    [InlineData("""{"name":"ZzChild"}""")]              // 截断：头 200 + 尾 50 两段
+    [InlineData("""{"name":"ZzChild","xmlStartLine":201}""")]  // 续读：连续窗口一段
+    public async Task PagedMergedXml_DoesNotDoubleUpItsLineCount(string request)
+    {
+        var xml = MergedXmlLines(await Run(BuildTool(400), request));
+
+        Assert.NotEmpty(xml);
+        // 截断分隔行前后各有一个有意为之的空行，其余一个都不该有
+        Assert.True(xml.Count(l => l.Trim().Length == 0) <= 2,
+            "合并 XML 的行数翻倍了：" + string.Join("|", xml.Take(6)));
+        Assert.DoesNotContain(xml, l => l.EndsWith('\r'));
+    }
+
+    // 缩进由 XLinq 统一给，故层级深度可以从行首空白读出来——这正是原样保留源文件空白时
+    // 拿不到的性质（父来的分支保留原缩进，子来的分支一个空格都没有）。
+    [Fact]
+    public async Task MergedXml_IndentsByDepth_SoNestingIsReadable()
+    {
+        var xml = MergedXmlLines(await Run(BuildNestedTool(), """{"name":"ZzChild"}"""));
+
+        int IndentOf(string needle)
+        {
+            var line = Assert.Single(xml, l => l.Contains(needle, StringComparison.Ordinal));
+            return line.Length - line.TrimStart().Length;
+        }
+
+        Assert.True(IndentOf("<race>") < IndentOf("<litterSizeCurve>"));
+        Assert.True(IndentOf("<litterSizeCurve>") < IndentOf("<points>"));
+        Assert.True(IndentOf("<points>") < IndentOf("(0.5, 0)"));
+    }
 }

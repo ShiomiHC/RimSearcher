@@ -400,10 +400,11 @@ public static class ModLayoutResolver
 
         // 没给 active_mods 时条件目录一律收下：索引比游戏宽一点无害，漏索引才难查
         if (included > 0 && activeMods == null)
-            notes.Add($"{included} conditional folder(s) in {LoadFoldersFileName} included unconditionally");
+            notes.Add($"{OutputText.Quantity(included, "conditional folders")} in {LoadFoldersFileName} "
+                      + "included unconditionally");
 
         if (skipped > 0)
-            notes.Add($"{skipped} conditional folder(s) skipped by active_mods");
+            notes.Add($"{OutputText.Quantity(skipped, "conditional folders")} skipped by active_mods");
 
         folders.Reverse();
         return folders;

@@ -736,8 +736,8 @@ public class OutputReadabilityTests : IDisposable
             var regex = await RunAsync(
                 new SearchRegexTool(indexer, catalog), new { pattern = "ZzMark" });
 
-            const string expected = "... some files were not scanned in full (1 file(s) could not be read "
-                                    + "and were skipped entirely; matches in the unscanned parts would not be listed)";
+            const string expected = "... some files were not scanned in full (1 file could not be read "
+                                    + "and was skipped entirely; matches in the unscanned parts would not be listed)";
             Assert.Contains(expected, trace);
             Assert.Contains(expected, regex);
 
@@ -865,6 +865,45 @@ public class OutputReadabilityTests : IDisposable
     [InlineData("matching files", "matching file")]
     public void Singular_IsBuiltBackFromEachPluralActuallyInUse(string plural, string singular)
         => Assert.Equal($"1 {singular}", OutputText.Quantity(1, plural));
+
+    // R30 的第二半：`(s)` 那类偷懒写法。它比 `1 C# types` 更难看出来，因为读者会自动补全，
+    // 但补全不了动词——`1 file(s) were only scanned` 展开成单数就是病句。故 N=1 的两条尾注
+    // 各钉一遍：名词收单数，跟着它的那个动词也得收。
+    [Fact]
+    public async Task ScanTailNote_TakesASingularVerbForOneFile()
+    {
+        var root = _workspace.Dir("Big");
+        var lines = Enumerable.Range(0, 25_000).Select(i => i == 0 ? "// ZzNeedle" : "// filler");
+        _workspace.WriteFile(Path.Combine("Big", "ZzHuge.cs"), string.Join("\n", lines));
+
+        var indexer = new SourceIndexer();
+        indexer.Scan(root);
+        indexer.FreezeIndex();
+        var tool = new SearchRegexTool(indexer, ScopeCatalog.Build([("vanilla", root)], null, null));
+
+        var content = await RunAsync(tool, new { pattern = "ZzNeedle" });
+
+        Assert.Contains("1 file was only scanned to line", content);
+        Assert.DoesNotContain("1 files", content);
+        Assert.DoesNotContain("file(s)", content);
+    }
+
+    // trace inheritors 表头的 `deepest N level(s) down`：N=1 是最常见的一档
+    // （被查的类只有直接子类时恒是 1），却恰好是 `(s)` 读起来最别扭的那一档。
+    [Fact]
+    public async Task TraceInheritorsHeader_SaysOneLevelNotOneLevels()
+    {
+        var (indexer, _, catalog) = BuildIndex(
+            ("ZzRoot.cs", "namespace Zz { public class ZzRoot { } }"),
+            ("ZzOnlyChild.cs", "namespace Zz { public class ZzOnlyChild : ZzRoot { } }"));
+
+        var content = await RunAsync(
+            new TraceTool(indexer, catalog), new { symbol = "ZzRoot", mode = "inheritors" });
+
+        Assert.Contains("deepest 1 level down", content);
+        Assert.DoesNotContain("1 levels", content);
+        Assert.DoesNotContain("level(s)", content);
+    }
 
     private static int CountOccurrences(string haystack, string needle)
     {

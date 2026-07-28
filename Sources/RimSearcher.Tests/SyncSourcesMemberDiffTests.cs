@@ -248,7 +248,7 @@ public class SyncSourcesMemberDiffTests : IDisposable
         var result = await Run(new { action = "diff", file = RelativeFile, granularity = "members" });
 
         Assert.False(result.IsError);
-        Assert.Contains("3 member(s) changed", result.Content);
+        Assert.Contains("3 members changed", result.Content);
         Assert.Contains("~ RimWorld.CompShield.CompTick()", result.Content);
         Assert.Contains("+ RimWorld.CompShield.AbsorbDamage()", result.Content);
         Assert.Contains("- RimWorld.CompShield.PostDraw()", result.Content);

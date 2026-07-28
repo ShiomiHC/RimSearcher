@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using RimSearcher.Core;
 
 namespace RimSearcher.Server.Tools;
 
@@ -83,6 +84,28 @@ public static class ToolArgs
 
     public static string? GetOptionalString(JsonElement args, params string[] names)
         => TryGetElement(args, out var value, names) ? CoerceToString(value)?.Trim() : null;
+
+    // 名字位（read_code 的 extractClass / methodName / className）收到布尔值时不能走
+    // CoerceToString：那会把 extractClass:true 变成一次「找不到名叫 true 的类」的查找失败，
+    // 返回读起来是「这个文件里没有这个类，去 inspect 核对名字」——方向完全相反，照做只会
+    // 再确认一遍那个类确实存在，而真因是参数传错了型。
+    //
+    // 误传的概率不低：extractClass 这个名字本身就像个开关（「要不要提取整个类」），而它
+    // 要的是类名。limit 那一侧早就是严格的（'many' / true / object 一律拒绝而不是静默换
+    // 默认值，schema 里也这么写着），名字位一直宽着——同一个工具箱里两套松紧本身就是误导。
+    public static string? GetOptionalName(JsonElement args, ToolArgSpec spec, string whatItNames, params string[] names)
+    {
+        if (!TryGetElement(args, out var value, names)) return null;
+
+        if (value.ValueKind is JsonValueKind.True or JsonValueKind.False)
+            throw new ToolArgumentException(
+                $"Parameter '{names[0]}' for {spec.ToolName} takes {whatItNames}, not a boolean; "
+                + $"received {(value.ValueKind == JsonValueKind.True ? "true" : "false")}. "
+                + $"It is not a switch — pass the name itself (e.g. {names[0]}: 'CompShield').\n"
+                + spec.BuildUsage());
+
+        return CoerceToString(value)?.Trim();
+    }
 
     // 数字参数常被传成字符串（实测 "max_results":"5"）；宽容解析，不可解析才报错
     public static int GetInt(JsonElement args, int fallback, params string[] names)
@@ -199,7 +222,8 @@ public static class ToolArgs
         var unknown = received.Where(k => !accepted.Contains(NormalizeKey(k))).ToArray();
         if (unknown.Length == 0) return null;
 
-        return $"\n\n_Ignored unknown parameter(s): {string.Join(", ", unknown.Select(k => $"'{k}'"))}. "
+        return $"\n\n_Ignored unknown {OutputText.NounFor(unknown.Length, "parameters")}: "
+            + $"{string.Join(", ", unknown.Select(k => $"'{k}'"))}. "
             + $"{tool.Name} accepts: {string.Join(", ", SchemaPropertyNames(tool.JsonSchema))}._";
     }
 

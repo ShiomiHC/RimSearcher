@@ -99,6 +99,13 @@ public class ReadCodeTool : ITool
         var path = ToolArgs.GetRequiredString(args, ArgSpec, "path", "query", "file", "filePath", "fileName");
         path = ToolArgs.StripLocateFilterPrefix(path);
 
+        // 三个名字位在这里读，而不是在下面那个 try 里：参数契约错误要走 ToolArgumentException
+        // 那条统一通道（RimSearcher.cs 有专门的渲染），落进下面的 catch(Exception) 就被包成
+        // 一句 "Read failed: …" 了。顺带也不必为一次必然失败的调用先把路径解析和 IO 做完。
+        var extractClass = ToolArgs.GetOptionalName(args, ArgSpec, "a type name", "extractClass", "class");
+        var memberArg = ToolArgs.GetOptionalName(args, ArgSpec, "a member name", "methodName", "method", "member", "memberName");
+        var className = ToolArgs.GetOptionalName(args, ArgSpec, "a type name", "className", "type", "typeName");
+
         var scope = ScopeArgs.Resolve(_scopeCatalog, args);
 
         var requestedPath = path;
@@ -160,9 +167,6 @@ public class ReadCodeTool : ITool
 
         try
         {
-            var extractClass = ToolArgs.GetOptionalString(args, "extractClass", "class");
-            var memberArg = ToolArgs.GetOptionalString(args, "methodName", "method", "member", "memberName");
-
             // XML 上这两个模式必然落空：Roslyn 把整份 XML 解析成一棵没有任何声明的 C# 语法树，
             // 于是走到 TargetNotFound，回一句「类/成员不在这个文件里，用 inspect 核对名字」。
             // 调用方照做会拿到一条 def，回来再传一次仍是同一句——两头都指着对方，而真正的原因
@@ -215,7 +219,6 @@ public class ReadCodeTool : ITool
             if (!string.IsNullOrEmpty(memberArg))
             {
                 var methodName = ToolArgs.StripLocateFilterPrefix(memberArg);
-                var className = ToolArgs.GetOptionalString(args, "className", "type", "typeName");
                 var body = await RoslynHelper.GetMemberBodyAsync(path, methodName, className);
 
                 // className 只是个过滤器。过滤后候选归零与「文件里根本没有这个成员」原先

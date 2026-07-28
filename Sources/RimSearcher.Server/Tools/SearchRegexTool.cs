@@ -81,7 +81,8 @@ public class SearchRegexTool : ITool
                 // 只是没有一个 .txt 文件。同时报出过滤后的候选文件数，让「筛空了」一眼可见。
                 var filterNote = string.IsNullOrEmpty(fileFilter)
                     ? string.Empty
-                    : $" with fileFilter '{fileFilter}' ({diagnostics.CandidateFiles} file(s) matched that filter)";
+                    : $" with fileFilter '{fileFilter}' "
+                      + $"({OutputText.Quantity(diagnostics.CandidateFiles, "files")} matched that filter)";
 
                 return new ToolResult(
                     $"No matches for pattern '{pattern}' in scope '{scope.Expression}'{filterNote}."
@@ -174,13 +175,21 @@ public class SearchRegexTool : ITool
             if (diagnostics.AnyFileIncomplete)
             {
                 var incomplete = new List<string>();
+                // 这句里跟着 N 变的不止名词：动词、代词、和后半句的主谓都要跟着换，
+                // 拼字符串拼到第四个三目就没人读得懂了，故整句两写。
                 if (diagnostics.TimedOutFiles > 0)
-                    incomplete.Add($"{diagnostics.TimedOutFiles} file(s) were abandoned mid-scan because the pattern "
-                                   + "timed out on them (catastrophic backtracking) — their per-file match counts are missing");
+                    incomplete.Add(diagnostics.TimedOutFiles == 1
+                        ? "1 file was abandoned mid-scan because the pattern timed out on it "
+                          + "(catastrophic backtracking) — its per-file match count is missing"
+                        : $"{diagnostics.TimedOutFiles} files were abandoned mid-scan because the pattern "
+                          + "timed out on them (catastrophic backtracking) — their per-file match counts are missing");
                 if (diagnostics.UnreadableFiles > 0)
-                    incomplete.Add($"{diagnostics.UnreadableFiles} file(s) could not be read and were skipped entirely");
+                    incomplete.Add($"{OutputText.Quantity(diagnostics.UnreadableFiles, "files")} could not be read "
+                                   + $"and {(diagnostics.UnreadableFiles == 1 ? "was" : "were")} skipped entirely");
                 if (diagnostics.LineCappedFiles > 0)
-                    incomplete.Add($"{diagnostics.LineCappedFiles} file(s) were only scanned to line {diagnostics.LineCap}");
+                    incomplete.Add($"{OutputText.Quantity(diagnostics.LineCappedFiles, "files")} "
+                                   + $"{(diagnostics.LineCappedFiles == 1 ? "was" : "were")} "
+                                   + $"only scanned to line {diagnostics.LineCap}");
 
                 output += "\n\n" + ScopeArgs.NotScannedInFullLine(incomplete);
             }

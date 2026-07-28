@@ -301,7 +301,9 @@ public class SyncSourcesTool : ITool
         builder.AppendLine(report.AnyChanges
             ? $"\nChanges detected. Run this tool again with action='sync'{withSources} to re-decompile."
             : partial
-                ? $"\nThe {report.Changes.Count} checked source(s) are up to date; the other followable sources were not checked."
+                ? $"\nThe {OutputText.Quantity(report.Changes.Count, "checked sources")} "
+                  + $"{(report.Changes.Count == 1 ? "is" : "are")} up to date; "
+                  + "the other followable sources were not checked."
                 : "\nAll followable sources are up to date.");
 
         return new ToolResult(builder.ToString().TrimEnd());
@@ -376,7 +378,8 @@ public class SyncSourcesTool : ITool
             if (notice != null) builder.AppendLine(notice);
             builder.AppendLine(
                 $"{diff.Added} added, {diff.Modified} modified, {diff.Removed} removed "
-                + $"({versions.Count} version(s) kept, {target.ArchivedBytes / 1024} KB archived)");
+                + $"({OutputText.Quantity(versions.Count, "versions")} kept, "
+                + $"{target.ArchivedBytes / 1024} KB archived)");
 
             // 解析预算就是这一页列出的文件数——没有第二个隐藏的天花板。列多少就解析多少，
             // 代价与输出量始终成正比，调用方用 limit 一个旋钮就能控住。
@@ -406,7 +409,8 @@ public class SyncSourcesTool : ITool
             {
                 builder.AppendLine(diff.Modified > 0
                     ? $"  (granularity='members' expands modified files only; none on this page — "
-                      + $"{diff.Modified} of the {diff.Changes.Count} changed file(s) are modified, page to them with offset)"
+                      + $"{diff.Modified} of the {OutputText.Quantity(diff.Changes.Count, "changed files")} "
+                      + $"{(diff.Modified == 1 ? "is" : "are")} modified, page to them with offset)"
                     : "  (granularity='members' expands modified files only; this source has none — "
                       + "every change here is a whole file added or removed)");
             }
@@ -417,7 +421,8 @@ public class SyncSourcesTool : ITool
             {
                 var lastPage = Math.Max(0, ((diff.Changes.Count - 1) / request.Limit) * request.Limit);
                 builder.AppendLine(
-                    $"  (offset {request.Offset} is past the end of {diff.Changes.Count} changed file(s) — "
+                    $"  (offset {request.Offset} is past the end of "
+                    + $"{OutputText.Quantity(diff.Changes.Count, "changed files")} — "
                     + $"the last page starts at offset={lastPage})");
             }
 
@@ -483,7 +488,8 @@ public class SyncSourcesTool : ITool
         if (lines.Count > MaxMembersPerFileInListing)
         {
             builder.AppendLine(
-                $"    ... {lines.Count - MaxMembersPerFileInListing} more member(s) — "
+                $"    ... {lines.Count - MaxMembersPerFileInListing} more "
+                + $"{OutputText.NounFor(lines.Count - MaxMembersPerFileInListing, "members")} — "
                 + $"pass file='{relativePath}' with granularity='members' to list them all");
         }
     }
@@ -542,7 +548,8 @@ public class SyncSourcesTool : ITool
             {
                 versionId = versions[0].Id;
                 notice =
-                    $"(requested {steps} version(s) back, only {versions.Count} kept — using the oldest, {versionId})";
+                    $"(requested {OutputText.Quantity(steps, "versions")} back, "
+                    + $"only {versions.Count} kept — using the oldest, {versionId})";
             }
             else
             {
@@ -674,7 +681,7 @@ public class SyncSourcesTool : ITool
 
                 var listing = new StringBuilder();
                 listing.AppendLine($"{header}--- {label}");
-                listing.AppendLine($"{members.Count} member(s) changed:");
+                listing.AppendLine($"{OutputText.Quantity(members.Count, "members")} changed:");
                 foreach (var line in members) listing.AppendLine($"  {line}");
                 listing.Append("\nPass 'method' with one of these names for its line-level diff.");
                 return new ToolResult(listing.ToString());
@@ -797,7 +804,8 @@ public class SyncSourcesTool : ITool
                 var rebuild = _rebuilder.Rebuild(TimeSpan.FromMinutes(2));
                 builder.AppendLine(rebuild.Succeeded
                     ? $"\nIndex rebuilt in {rebuild.ElapsedMs} ms "
-                      + $"({rebuild.CsharpPaths} C# path(s), {rebuild.XmlPaths} XML path(s)). No restart needed."
+                      + $"({OutputText.Quantity(rebuild.CsharpPaths, "C# paths")}, "
+                      + $"{OutputText.Quantity(rebuild.XmlPaths, "XML paths")}). No restart needed."
                     : "\nIndex rebuild skipped: another rebuild was already running. Retry, or restart the server.");
 
                 SourceChangeProbe.RecordSync(report.FileChanges);

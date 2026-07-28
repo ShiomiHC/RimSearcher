@@ -254,7 +254,7 @@ public class InspectTool : ITool
 
         // 不收 'type' 作别名：本服务器里 'type' 到处都是 C# 类型名（read_code 的 className、
         // inspect 自己 name 支持的 'type:' 前缀），收了它等于把一个常见的误用变成一条假告警。
-        var requestedDefType = ToolArgs.GetOptionalString(args, "defType", "defTypeName");
+        var requestedDefType = ToolArgs.GetOptionalName(args, ArgSpec, "a def type name", "defType", "defTypeName");
         var lookup = _defIndexer.Lookup(name, scope, defType: requestedDefType);
         var def = lookup.Location;
         if (def != null)
@@ -344,7 +344,11 @@ public class InspectTool : ITool
 
             AppendInheritanceChain(sb, chainTrace, scope);
 
-            var resolvedXmlStr = resolvedXml.ToString();
+            // 先归一化再切：XElement.ToString() 走 XmlWriter，行尾是 CRLF，裸按 '\n' 切会给
+            // 每行留一个尾随 '\r'，而下面是逐行 AppendLine 重新拼的——ToolResult 收口时那个
+            // 孤立的 '\r' 被换成 '\n'，于是整份合并 XML 每行后面多一个空行（行数直接翻倍，
+            // 而截断窗口与 xmlStartLine 都是按行数算的）。
+            var resolvedXmlStr = resolvedXml.ToString().ReplaceLineEndings("\n");
             var xmlLines = resolvedXmlStr.Split('\n');
             AppendResolvedXml(sb, xmlLines, def.DefName, ResolveXmlStartLine(args, xmlLines.Length));
 
