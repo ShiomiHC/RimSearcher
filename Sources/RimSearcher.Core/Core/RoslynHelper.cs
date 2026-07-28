@@ -448,7 +448,14 @@ public static class RoslynHelper
     private static string LocationLine(
         SyntaxNode node, string kind, string requestedName, string fileLabel, (int Index, int Total)? position)
     {
-        var line = node.GetLocation().GetLineSpan().StartLinePosition.Line + 1;
+        // 起止行都在同一个 LineSpan 上，此前只取了起始行。而「这段代码在文件的第几行到第几行」
+        // 是 read_code 最常被追问的一件事，唯一直接回答它的模式（methodName）恰好是唯一不报
+        // 区间的那个——第十三轮盲测里被测方为了补出这半个区间，额外跑了两次裸行读取。
+        // 两个数都在手边，零成本。
+        var span = node.GetLocation().GetLineSpan();
+        var line = span.StartLinePosition.Line + 1;
+        var endLine = span.EndLinePosition.Line + 1;
+        var extent = endLine > line ? $"-{endLine}" : string.Empty;
         var name = MemberDisplayName(node, requestedName);
         var prefix = position is { } p ? $"[{p.Index}/{p.Total}] " : string.Empty;
 
@@ -459,7 +466,7 @@ public static class RoslynHelper
             ? $" in {owner}"
             : string.Empty;
 
-        return $"// {prefix}{kind} {name}{ownerNote} — {fileLabel}:{line}";
+        return $"// {prefix}{kind} {name}{ownerNote} — {fileLabel}:{line}{extent}";
     }
 
     // 位置行里印的名字。取语法节点自己的标识符而不是调用方传进来的字符串：`.ctor` /

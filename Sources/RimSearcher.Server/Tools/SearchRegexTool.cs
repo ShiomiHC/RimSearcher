@@ -141,12 +141,21 @@ public class SearchRegexTool : ITool
             // ——盲测里调用方拿本工具去「交叉验证」trace usages 的数，两边跑的其实是同一个默认
             // 开关，于是把一个偏大的数当成「已独立复现」。
             var casing = ignoreCase ? "case-insensitive" : "case-sensitive";
+
+            // fileFilter 此前只出现在**零命中**那条消息里，成功分支的表头只回显 scope 与 casing。
+            // 服务端确实照做了（下推给索引层），问题是调用方没有观察点：`ext:'xml'` 少写个点、
+            // 或传了个筛不掉任何东西的值，都无从察觉。而另外两个参数被回显这件事反过来教出
+            // 「没回显 = 没生效」——第十三轮两条链的被测方各自写下同一句自评「我无从判断它生效没有」。
+            // 补齐比留着更省字：三个参数要么都回显，要么都不回显，不该只差这一个。
+            var filtered = string.IsNullOrEmpty(fileFilter)
+                ? string.Empty
+                : $", files filtered to '{fileFilter}'";
             var headline = truncated
-                ? $"first {results.Count} preview lines in scope '{scope.Expression}', {casing}"
+                ? $"first {results.Count} preview lines in scope '{scope.Expression}', {casing}{filtered}"
                 // 有文件没扫全时这个总数只是下界，表头与末尾那条尾注要同时改口。
                 // 改口时还要就地指出成因在哪——见 ScopeArgs.LowerBoundReason。
                 : $"{ScopeArgs.FoundCount(totalMatches, diagnostics.AnyFileIncomplete)} "
-                  + $"in scope '{scope.Expression}', {casing}"
+                  + $"in scope '{scope.Expression}', {casing}{filtered}"
                   + ScopeArgs.LowerBoundReason(diagnostics.AnyFileIncomplete);
 
             // 本次要列出的文件里有重名时补目录（见 ScopeArgs.DisambiguateFileNames）

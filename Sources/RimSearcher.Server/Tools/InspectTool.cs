@@ -161,8 +161,17 @@ public class InspectTool : ITool
     // 没有 hediffClass、不关联任何 C# 类，然后去补一个根本不缺的字段。
     private static void AppendInheritanceChain(StringBuilder sb, DefInheritanceTrace trace, ScopeSelection scope)
     {
+        // F39 给类型模式的同名行补了辖域（`inherited members are not in the outline below at
+        // any limit`），而 def 模式的同名行语义**正好相反**——下面那份 XML 恰恰是合并过的、
+        // 含继承字段的。两处同形而义反，只修了一半。第十三轮盲测里被测方因此把 def 模式的
+        // 沉默读成了「无可声明」（判官记作 M4：F39 教会了读者「inspect 会就地声明取值域」，
+        // 于是没声明的地方被读成「没有可说的」）。
+        // 「这份 XML 是合并出来的、不是 File: 那个文件的内容」此前只写在 ContinueHint 里，
+        // 而 ContinueHint **只在截断时**渲染——绝大多数 def 走的是整块分支，从头到尾没人说过。
         if (trace.Chain.Count > 1)
-            sb.AppendLine($"Inheritance chain: {string.Join(" <- ", trace.Chain)}");
+            sb.AppendLine($"Inheritance chain: {string.Join(" <- ", trace.Chain)}"
+                          + " — the XML below is these merged together, so it is not the content of the"
+                          + " `File:` path above, which holds only this def's own un-merged lines.");
         else if (trace.IsComplete)
             sb.AppendLine("Inheritance chain: none (this def declares no ParentName)");
 
@@ -216,9 +225,19 @@ public class InspectTool : ITool
         // 能力边界不是缺陷，不说自己答不了才是——把那半句复制到它作用的那个块的标题上。
         const string PatchNote = "mod PatchOperations are not applied, so a mod patch against this def "
                                  + "is not reflected below";
-        sb.AppendLine(startLine > 0
-            ? $"\n**Resolved XML** (lines {startLine}-{Math.Min(startLine + XmlWindowLines - 1, xmlLines.Length)} of {xmlLines.Length}; {PatchNote}):"
-            : $"\n**Resolved XML** ({PatchNote}):");
+        // 首次调用的表头此前不带任何行数，**截不截断都一样**。于是版面上只有两种表头：
+        // 裸的（首次）与带 `lines X-Y of Z` 的（自己传了 xmlStartLine 才出现），
+        // 唯一能归纳出来的规则就是「裸 = 完整」——而它是假的。第十三轮盲测里被测方
+        // 一字不差地归纳出了这条，还把它当判别方法写进了交付给用户的答案。
+        // 改用 F30 已经立起来的三态文法：裸 N = 完整集，N of M = 被截了，M 是范围总数。
+        // 不新造记号，只是把这一处补进那套文法里。
+        var firstCallTruncated = startLine <= 0 && xmlLines.Length > XmlWindowLines + XmlTailLines;
+        var extent = startLine > 0
+            ? $"lines {startLine}-{Math.Min(startLine + XmlWindowLines - 1, xmlLines.Length)} of {xmlLines.Length}"
+            : firstCallTruncated
+                ? $"{XmlWindowLines} of {xmlLines.Length} lines"
+                : OutputText.Quantity(xmlLines.Length, "lines");
+        sb.AppendLine($"\n**Resolved XML** ({extent}; {PatchNote}):");
 
         // 明确点名续读要回到 inspect，且说清 File: 那一行不是这份 XML 的来源
         string ContinueHint(int nextStart) =>
@@ -356,6 +375,41 @@ public class InspectTool : ITool
             }
             if (lookup.OtherSources.Count > 0)
                 sb.AppendLine($"_Also defined in: {string.Join(", ", lookup.OtherSources)} (outside scope '{scope.Expression}')._");
+
+            // def 与 C# 类型撞名时，`if (def != null)` 这一支无条件胜出并 return，类型索引
+            // **从来没被查过**。而整份返回里唯一的同名披露是上面那句 AmbiguousInScope，
+            // 它枚举的范围只有 def。第十三轮盲测里被测方据此把这份沉默当成了「不存在同名
+            // C# 类型」的独立证据——`Fire` 就是现成反例（ThingDef 与 Verse.Fire 同时存在，
+            // 两次调用都只回 ThingDef，连那句 Note 都不出现，因为 def 侧并不歧义）。
+            //
+            // **只在同名类型确实存在时印**。查不到就一个字不印——那时的沉默才真正代表「没有」，
+            // 无条件挂一句「本次按 def 解析」是 R19 判掉的那种常亮。
+            var sameNamedType = _sourceIndexer.GetPathsByType(def.DefName, scope);
+            if (sameNamedType.Items.Count > 0)
+            {
+                var twinPaths = sameNamedType.Items.Select(e => e.Item).ToList();
+                // 出路必须自带参数值。原先写的是「read_code extractClass on that path」，指望前面
+                // 那个 FileNote 提供 path——可 FileNote 恰恰在**文件名推得出来**时返回空串
+                // （Fire → Fire.cs），于是最常见的那一支里 "that path" 指向了不存在的东西（实测）。
+                var typeFile = Path.GetFileName(twinPaths[0]);
+                sb.AppendLine(
+                    $"_Note: a C# type named '{def.DefName}' also exists"
+                    + $"{SymbolRow.FileNote(def.DefName, twinPaths)}; inspect resolves def before "
+                    + "type and no parameter overrides that (defType picks among defs, not between the two). "
+                    + $"Reach the type with read_code path:'{typeFile}' extractClass:'{def.DefName}'._");
+            }
+
+            // limit 在 def 模式**从不被读**（OutlineLimit 只在类型模式调用）。schema 里写着
+            // `Ignored in def mode.`，返回里此前零字——而调用方传它时指望的正是「别截断」，
+            // 且 def 模式**确实会截断**，只是换了个参数（xmlStartLine）。指望的那件事恰好是
+            // 本次任务的成败关键，故值得加字；只在真传了 limit 时印。
+            if (ToolArgs.TryGetElement(args, out _, "limit", "maxResults"))
+            {
+                sb.AppendLine(
+                    "_Note: 'limit' applies to the C# type outline only and was ignored here; "
+                    // 这条印在 XML **之前**（紧跟 File: 行），故不能写 above——实测就是这么错的
+                    + "the merged XML below is paged with 'xmlStartLine'._");
+            }
 
             // 传 def 而不是 name：上面已经用 defType 消过歧，按名字重查会落回默认胜者，
             // 表头说的是 ThingDef、正文却给出 BodyDef 的 XML。

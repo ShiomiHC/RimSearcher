@@ -273,7 +273,15 @@ public static class ScopeArgs
         + "whose total spans several sources carries the breakdown instead, as `[vanilla 34, Cinders 2]`. "
         + "That breakdown covers the section's whole total, near-name rows included, so it does not tell "
         + "you which sources the '(K at 100%)' subset comes from. "
-        + "Rows carry their own `[source]` tag only when the listed rows span more than one source.";
+        + "Rows carry their own `[source]` tag only when the listed rows span more than one source. "
+        // 十一个源里九个的来源名与命名空间恰好相同，这个巧合把「方括号 = 命名空间」教成了规则，
+        // 而 trace 的行是「全名 + [来源]」，方括号正落在命名空间之后那个位置。两个例外是
+        // Cinders → Embergarden、kiiroEvent → Kiiro_Event。第十三轮盲测里被测方据此拼出了
+        // `Cinders.CompVehicleWeapon` 与 `kiiroEvent.CompFishCatcher` 两个**不存在的标识符**并
+        // 写进了交给用户的答案——拿去 inspect / read_code 一律解析不到，而返回里没有任何一处
+        // 能让它察觉。这是本轮唯一一处「输出直接导致伪造标识符流向用户」。
+        + "A `[source]` tag is a configured source name, never a namespace — the two coincide for most "
+        + "sources on this server but not all, so never build a qualified name out of one.";
 
     public readonly struct SourceLabeling
     {

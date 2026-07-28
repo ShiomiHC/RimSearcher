@@ -210,8 +210,11 @@ public class TraceTool : ITool
             //
             // 「第 5、6 层有谁」这套工具确实给不出（没有 offset、也没有参数抬得动 200 这个顶）。
             // 答不了不是缺陷，不说自己答不了才是。
+            //
+            // 「below depth N」的方向此前要靠读者自己定：depth 数值越大越深，而「below」在
+            // 版面上指的是「下面那些行」。第十三轮盲测里被测方当场读反了一次。改用 deeper than。
             var depthCoverage = shownDeepest < shape.Deepest
-                ? $", shallowest first — nothing below depth {shownDeepest} is listed"
+                ? $", shallowest first — nothing deeper than depth {shownDeepest} is listed"
                 : ", shallowest first";
             var listed = inheritors.Items.Count < inheritors.TotalInScope
                 ? $". Listed below: {inheritors.Items.Count}{depthCoverage}"
@@ -228,8 +231,20 @@ public class TraceTool : ITool
             // 挑一个子树根重跑——这个动作在 schema、Description、返回里此前一处都没写。
             var fold = ScopeArgs.FoldLine(
                 inheritors, "subclasses", indent: "", limit: limit,
-                capAction: "re-trace a listed type as its own root; depths then restart from it");
+                // 只给这一条出路时它的语气太足：第十三轮盲测里被测方据此断定「要拼出全树得对
+                // 306 个直接子类逐个盲试」，转而去跑正则补料，多花四次调用，产出一份自己都标注
+                // 为「非完整」的名单。而按源切片一次就能把某个源的整棵子树完整列出来（实测
+                // scope:'Milira' 回 41 条，含全部 depth 2/3/4，无折叠）。越界脚注只在窄 scope
+                // 时出现且只劝人放宽，方向恰好相反，故这条得写在这里。
+                capAction: "re-trace a listed type as its own root (depths then restart from it), "
+                           + "or narrow scope to one source — a per-source subtree is listed in full "
+                           + "whenever it fits under the cap");
             if (fold != null) sbInheritors.AppendLine(fold);
+
+            // 这里**不要**加「limit 在本模式无效」那类注文。第十三轮我照盲测的结论加过一条，
+            // 实测当场自打嘴巴：`limit:20` 明明就列了 20 条。盲测证到的只是「limit:'all' 拿不到
+            // 更多」——那是抬不高（缺省已经顶在 200），不是不起作用。两个方向别混为一谈。
+            // 天花板本身由 FoldLine 的 `server cap 200 reached` 分支说，那条是对的。
 
             // 行内标记是上面那个 Select 打的，而它是惰性的——AppendLine(string.Join(...)) 已经
             // 把它跑完了，故这里读得到。位置按全服惯例：本段自己的脚注在前，scope 相关的在后。

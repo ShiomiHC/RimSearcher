@@ -28,7 +28,15 @@ public class ListDirectoryTool : ITool
         + "Entries come back sorted — subdirectories first, then files, each by name — so a truncated listing is "
         + "the alphabetical head of the directory, and `offset` pages through the rest. "
         + "The path must be one of the server's indexed source roots or a directory below one; anything outside "
-        + "that whitelist is refused, the parent of a source root included. "
+        // `refused, the parent of a source root included` 的 `included` 是个悬挂修饰：
+        // 第十三轮盲测里被测方第一遍读成了「白名单**包括**源根的父目录」，正好反了。
+        + "that whitelist is refused — including the parent directory of a source root. "
+        // 整台服务器的自我叙述通篇是「indexed source roots」「不在索引里就看不到」，而白名单
+        // 又按已索引源根定义，于是「能列出来的 = 已索引的」是最自然的读法。它是错的：
+        // 这里是一次裸的目录枚举，一次索引都不查。第十三轮盲测里被测方为证伪它烧了三次调用
+        // （Core 只回三条，恰好落进那个假说）。
+        + "The listing is the directory's actual contents on disk — entries are not filtered by what the "
+        + "index holds, so files the index never took in, and non-source assets, appear here too. "
         // 白名单恰好就是那些被索引的内容目录，故一个条件目录要么整个可列、要么整个不可列
         // ——标记打在回显的路径上，不必逐项重复（见 ExecuteAsync 里的注释）。
         + ConditionalReport.Contract + " " + RootsSentence(_scopeCatalog);

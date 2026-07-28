@@ -101,6 +101,66 @@ public class CrossReferenceTests : IDisposable
         return new TraceTool(indexer, ScopeCatalog.Build([("vanilla", root)], null, null));
     }
 
+    // 跨源的继承树：低优先级源里有直接子类，高优先级源里有深层后代。
+    // `shallowest first` 与「截断留下的恒是最浅的那一批」两条保证都在这个形状上受力。
+    private TraceTool BuildTwoSourceTree()
+    {
+        var first = _workspace.Dir("First");
+        var second = _workspace.Dir("Second");
+
+        // 高优先级源（Rank 小）：一条深链，最深到 depth 4
+        _workspace.WriteFile(Path.Combine("First", "Deep.cs"),
+            "namespace Zz {\n"
+            + "public class ZzBase { }\n"
+            + "public class ZzFirstD1 : ZzBase { }\n"
+            + "public class ZzFirstD2 : ZzFirstD1 { }\n"
+            + "public class ZzFirstD3 : ZzFirstD2 { }\n"
+            + "public class ZzFirstD4 : ZzFirstD3 { }\n"
+            + "}\n");
+
+        // 低优先级源（Rank 大）：只有直接子类。名字刻意排在字母序更后，
+        // 免得「按名字排」与「按深度排」在这个 fixture 上恰好同解。
+        _workspace.WriteFile(Path.Combine("Second", "Shallow.cs"),
+            "namespace Zz {\npublic class ZzSecondD1 : ZzBase { }\n}\n");
+
+        var indexer = new SourceIndexer();
+        indexer.Scan(first);
+        indexer.Scan(second);
+        indexer.FreezeIndex();
+
+        return new TraceTool(indexer,
+            ScopeCatalog.Build([("vanilla", first), ("Milira", second)], null, null));
+    }
+
+    // 缺陷回归：继承树的候选在 SourceIndexer 里已经按 depth 升序排好，但 ScopeFilter.Apply
+    // 会再按「分数降序、同分按来源 Rank 升序」重排一遍——而继承树里每个候选的分数恒为 100，
+    // 于是 **Rank 成了首要排序键**。两处后果：表头那句 `shallowest first` 在跨源结果上是
+    // 假陈述；以及 GetInheritors 特意写下的「截断留下的该是直接子类」被当场推翻——
+    // 200 条配额会先被高优先级源全部吃掉，被截掉的恰恰是别的源的直接子类。
+    [Fact]
+    public async Task Inheritors_AreOrderedByDepth_NotBySourcePriority()
+    {
+        var content = await Run(BuildTwoSourceTree(), new { symbol = "ZzBase", mode = "inheritors", scope = "all" });
+
+        var shallowFromLowPriority = content.IndexOf("ZzSecondD1", StringComparison.Ordinal);
+        var deepFromHighPriority = content.IndexOf("ZzFirstD4", StringComparison.Ordinal);
+
+        Assert.True(shallowFromLowPriority >= 0 && deepFromHighPriority >= 0);
+        // depth 1 必须排在 depth 4 前面，哪怕后者来自优先级更高的源
+        Assert.True(shallowFromLowPriority < deepFromHighPriority,
+            "表头承诺 shallowest first，来源优先级不该顶掉深度");
+    }
+
+    // 同深度之间仍按名字排，且来源不参与——这是上一条的另一半，写死免得改排序时又倒回去
+    [Fact]
+    public async Task SameDepth_StillOrdersByName_AcrossSources()
+    {
+        var content = await Run(BuildTwoSourceTree(), new { symbol = "ZzBase", mode = "inheritors", scope = "all" });
+
+        Assert.True(content.IndexOf("ZzFirstD1", StringComparison.Ordinal)
+                    < content.IndexOf("ZzSecondD1", StringComparison.Ordinal));
+    }
+
     // R42 让表头描述整棵树（真值），而列表按深度升序截断。两者并排、句法对称，于是
     // 「样本里最深的一层」被当成「树最深的一层」——盲测里 depth 4 的那批名字被报成了
     // depth 6 的成员。截断先吃掉最深层这件事，返回里此前一个字都没有。
@@ -111,7 +171,10 @@ public class CrossReferenceTests : IDisposable
 
         Assert.Contains("Listed below: 200", content);
         Assert.Contains("shallowest first", content);
-        Assert.Contains("nothing below depth 1 is listed", content);
+        // `below depth N` 的方向要靠读者自己定（数值越大越深，而版面上「below」指下面那些行），
+        // 第十三轮盲测里被测方当场读反了一次。
+        Assert.Contains("nothing deeper than depth 1 is listed", content);
+        Assert.DoesNotContain("nothing below depth", content);
         // 表头仍报整棵树的真深度——这一条是 R42 的产物，不许回退
         Assert.Contains("deepest 4 levels down", content);
     }
@@ -316,8 +379,9 @@ public class CrossReferenceTests : IDisposable
 
         var content = await Run(tool, new { name = "ZzThing" });
 
-        Assert.Contains("**Resolved XML** (mod PatchOperations are not applied, so a mod patch against "
-                        + "this def is not reflected below):", content);
+        // 表头同时承载完整性（F30 三态里的裸 N = 完整集）与那句 PatchOperation 边界
+        Assert.Contains("**Resolved XML** (4 lines; mod PatchOperations are not applied, so a mod patch "
+                        + "against this def is not reflected below):", content);
     }
 
     // 露出来的前几个根形如 `<反编译根>\<源名>`，逐一对应 scope 里的源名——于是「根 ≈ 源」被

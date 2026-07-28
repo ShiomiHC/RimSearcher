@@ -109,12 +109,23 @@ public static class ScopeFilter
     // 故 Score 降序、同分 Rank 升序之后，调用方的次序仍作为第三级保留。
     // scoreGap 传 null 关闭断层收口（用于按命中计数排序、分值不可比的场景）。
     // totalIsLowerBound 由调用方传：候选是不是已经被它自己的内部上限截过，这里无从判断。
+    //
+    // rankIsASortKey=false：来源优先级只用来判归属，不参与排序，候选序列的原次序原样保留。
+    // 继承树必须这么走——那里每个候选的分数恒为 100，于是 Rank 成了**首要**键，
+    // 「vanilla 的 depth 4」会排在「Milira 的 depth 1」前面。两处后果：
+    //   ① 表头那句 `shallowest first` 在跨源结果上是**假陈述**；
+    //   ② GetInheritors 特意按 depth 排候选（见那里 "浅的排前面：截断时留下的该是直接子类"），
+    //      这条保证被本函数的 Rank 排序当场推翻——200 条配额会先被 vanilla 全部吃掉，
+    //      被截掉的恰恰是别的源的直接子类。
+    // 第十三轮盲测实测到 `RimWorld.CompTargetable_AllAnimalsOnTheMap [depth 3]` 排在
+    // `Embergarden.CompUseEffect_ActivateHediffs [depth 1]` 之前。
     public static ScopedResult<T> Apply<T>(
         IEnumerable<ScoredCandidate<T>> candidates,
         ScopeSelection scope,
         int limit,
         double? scoreGap = DefaultScoreGap,
-        bool totalIsLowerBound = false)
+        bool totalIsLowerBound = false,
+        bool rankIsASortKey = true)
     {
         var inScope = new List<(ScoredCandidate<T> Candidate, int Rank)>();
         Dictionary<string, int>? outOfScope = null;
@@ -134,10 +145,14 @@ public static class ScopeFilter
             }
         }
 
-        var ordered = inScope
-            .OrderByDescending(x => x.Candidate.Score)
-            .ThenBy(x => x.Rank)
-            .ToList();
+        var ordered = rankIsASortKey
+            ? inScope
+                .OrderByDescending(x => x.Candidate.Score)
+                .ThenBy(x => x.Rank)
+                .ToList()
+            : inScope
+                .OrderByDescending(x => x.Candidate.Score)
+                .ToList();
 
         var cutoff = ordered.Count;
         var truncatedByScoreGap = false;

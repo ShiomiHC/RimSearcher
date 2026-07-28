@@ -485,8 +485,10 @@ public class SourceIndexer
             .ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
             .Select(x => new ScoredCandidate<string>(x.Name, 100.0, x.Path));
 
-        // 子类树没有分数梯度（全是精确的继承关系），断层收口在此无意义
-        return ScopeFilter.Apply(candidates, scope, limit, scoreGap: null);
+        // 子类树没有分数梯度（全是精确的继承关系），断层收口在此无意义。
+        // rankIsASortKey: false —— 分数恒 100 时来源优先级会顶成首要排序键，把上面那行
+        // depth 升序整个作废（详见 ScopeFilter.Apply 的注释）。这里要的是 depth 优先。
+        return ScopeFilter.Apply(candidates, scope, limit, scoreGap: null, rankIsASortKey: false);
     }
 
     // 继承深度的护栏。RimWorld 里最深的链也就个位数，这个数只是防索引成环时空转。

@@ -92,7 +92,11 @@ public class LocateTool : ITool
                 type = "string",
                 minLength = 1,
                 description =
-                    "Search text or filtered query. Examples: 'Apparel_ShieldBelt', 'RimWorld.Pawn', 'def:Apparel_ShieldBelt', 'method:CompTick'."
+                    // 四个过滤前缀在参数说明里各出一次。原先只举了 def: 与 method:，于是 type:
+                    // 只活在长描述靠后的一句里——第十三轮盲测里被测方写下「'type:' 是我照猫画虎
+                    // 试的」，并为此多跑了一次对照调用。举例本身就是接口（R77 那条的同一判据）。
+                    "Search text or filtered query. Examples: 'Apparel_ShieldBelt', 'RimWorld.Pawn', "
+                    + "'def:Apparel_ShieldBelt', 'type:CompShield', 'method:CompTick', 'field:energy'."
             },
             scope = ScopeArgs.ScopeSchemaProperty(_scopeCatalog),
             limit = ScopeArgs.LimitSchemaProperty()

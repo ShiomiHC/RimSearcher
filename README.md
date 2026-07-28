@@ -42,7 +42,7 @@
 - `locate` / `trace` / `search_regex` 工具采用结果上限与预览截断，控制上下文体积并保持关键信息密度
 - `read_code` 支持按 `methodName`/`extractClass` 精确读取代码，未指定成员时再按小范围行号读取，避免一次返回整个文件
 - 结果行不重复印能从符号名逐字推出来的文件名（`locate` / `trace` / `inspect` 共用同一条判据，见 `locate` 一节）——留下的每一个文件名都是「它不在同名文件里」的信号
-- **同源标签只印一次**：一段结果全部来自同一个源时，`[vanilla]` 这类来源标记提到表头（`**C# Types** [vanilla]:`），逐行不再重复；真的混源时才逐行印。于是**行末出现来源标记，本身就是「这段结果跨了多个源」的信号**。`scope` 已经把源钉死时一个标记都不印。**段头的方括号描述的是这一段的总数，不是它底下列出来的那几行**——这两者在被截断时不是一回事：`10 of 36 members` 的 36 条里可能有 2 条来自 mod，而印出来的 10 行恰好全是 vanilla（同分按源优先级排序，截断留下的前缀系统性地偏向 vanilla，这是结构性偏置而非巧合）。故被截断的一段若总数跨了多个源，段头改印构成：`**Members** [vanilla 34, Cinders 2]`、`Subclasses of 'ThingComp' (511 …) … [vanilla 378, Milira 41, RatkinAnomaly 21, …]`。**各源之和恒等于表头那个总数**，这是它自证的全部本事。总数本来就单源时照旧只印一个源名，一个字不多；没被截断时也不印构成——那时行本身就是构成
+- **同源标签只印一次**：一段结果全部来自同一个源时，`[vanilla]` 这类来源标记提到表头（`**C# Types** [vanilla]:`），逐行不再重复；真的混源时才逐行印。于是**行末出现来源标记，本身就是「这段结果跨了多个源」的信号**。`scope` 已经把源钉死时一个标记都不印。**段头的方括号描述的是这一段的总数，不是它底下列出来的那几行**——这两者在被截断时不是一回事：`10 of 36 members` 的 36 条里可能有 2 条来自 mod，而印出来的 10 行恰好全是 vanilla（同分按源优先级排序，截断留下的前缀系统性地偏向 vanilla，这是结构性偏置而非巧合）。故被截断的一段若总数跨了多个源，段头改印构成：`**Members** [vanilla 34, Cinders 2]`、`Subclasses of 'ThingComp' (511 …) … [vanilla 378, Milira 41, RatkinAnomaly 21, …]`。**各源之和恒等于表头那个总数**，这是它自证的全部本事。总数本来就单源时照旧只印一个源名，一个字不多；没被截断时也不印构成——那时行本身就是构成。**`[source]` 里装的是配置里的源名，不是命名空间**：本机上大多数源两者恰好同形（`Milira` 的类型都在 `Milira.` 下），于是它会被当成命名空间拿去拼全限定名——而 `vanilla` 的类型分散在 `Verse` / `RimWorld` 等好几个命名空间下，`Cinders` 的类型全在 `Embergarden.` 下，拼出来的名字一个都不存在。这句写在 `scope` 参数的常驻契约里
 - **条件加载目录逐条打标**：`loadFolders.xml` 里带 `IfModActive` 之类条件的目录，索引侧一律收下而不判条件（见「mod 展开规则」），故命中落在里头时行末挂一个键 `[conditional: 1.6/CE]`，整份返回末尾一条脚注把键兑换成成因（`` `1.6/CE` [Cinders] needs CETeam.CombatExtended active ``）。行内只放键、成因整份说一次，与来源标记同一套判据；`loadFolders.xml` 的一条 `li` 展开成 `Defs` / `Patches` / `Assemblies` 好几个目录时，脚注仍只算一条——那几个目录说给调用方听的是同一句话。**没打标就是不在这类目录里**，这句反面读法写在脚注最后一句里（`Rows without that tag were checked and are not inside such a folder`——「checked」不可省，它堵的是把「没标记」读成「没查过」）：不说的话这个记号只能单向使用（看见了才有意义），而调用方要判的恰恰是「我手上这条到底受不受影响」。脚注同时说清另外两件推不出来的事：**条件不成立时那个目录整个不加载、里头的内容在游戏里不存在**（只说「命中不等于生效」的话，「这条到底在不在我游戏里」这个正面问题一句话都答不了，调用方只能把它记成悬案）；以及**这个记号只管目录这一层**，目录里的补丁或 def 可能另带自己的门（`PatchOperationFindMod`、`MayRequire`），那些不在这里报——记号在场时最容易被读成「门就这一道」。整份返回只落在一个目标上时（`read_code` 一个文件、`inspect` 一条 def）键与成因合成一句、不再另起脚注，上面三句边界在那一形里同样都有。反面那句还落在 `tools/list` 的常驻契约里，故只调 `inspect`、返回里一个条件记号都没出现时，「没标记」照样是可用的结论。配了 `active_mods` 的源一个字都不打：那里的条件已经判过了，再打标是把有答案的问题重新说成悬案。条件里的 packageId 保留 `loadFolders.xml` 的原样拼写（`CETeam.CombatExtended`），拿它能直接去 mod 列表里对号
 - **截断提示全服一套文法**：`... +N more <什么> (<怎么拿到>)`。看到 `... +` 开头的行就是被截断了，`<什么>` 恒有名词（它数的到底是哪一类），括号里那句就是下一步该怎么传参，各工具不必分别认。例：
   `... +71 more methods (pass limit:'all' for the whole list, or read one with read_code methodName)` ·
@@ -134,10 +134,12 @@ scope:mods pawn
 - 展示 Def 类型、来源文件、译名（`localization_description` 开启时连译文描述一起）。`Type:` 行同时回答「这个 DefType 的 C# 类在不在索引里」：光名字 = 在，且在同名文件里；带文件注 = 在别的文件里或有多份；`(C# class not indexed)` = 不在索引里
 - 返回沿整条 `ParentName` 链合并后的 XML——任何单个 XML 文件都不含这份内容。但**「合并」只指继承**：服务端不解析 mod 的 `PatchOperation`，也不越过当前 `scope`，所以这不是运行中的游戏看到的那份定义。被 patch 改过、或被 scope 外的 mod 覆盖过的 def，这里给出的数字看着权威却是过期的。**这句边界就写在 `**Resolved XML**` 那行标题里**（`(mod PatchOperations are not applied, so a mod patch against this def is not reflected below)`），不是只写在正文前的散段里：调用方是照着 XML 正文抄数值的，而正文可以长到几百行、`xmlStartLine` 续读时更是连开头都看不见
 - **字段不标来源**。要区分「这个字段是它自己写的」还是「继承来的」，去 `read_code` 读 `File:` 那个路径——那份文件里只有它自己未合并的几行，继承来的字段恰恰不在其中。此前这件事只写在 `xmlStartLine` 这个分页参数的说明里，而那个参数只在合并 XML 过长时才需要读
-- 头部固定给一行**父链状态**：合并成功印 `Inheritance chain: A <- B`，没有父则明说，某一环查不到则给**警告**并指出「下面这份不是完整生效定义、继承来的字段全缺」。三种情形此前渲染得逐字同形，调用方无从分辨自己拿到的是不是半成品
+- 头部固定给一行**父链状态**：合并成功印 `Inheritance chain: A <- B`，没有父则明说，某一环查不到则给**警告**并指出「下面这份不是完整生效定义、继承来的字段全缺」。三种情形此前渲染得逐字同形，调用方无从分辨自己拿到的是不是半成品。链真的多于一环时，这一行还就地说清下面那份 XML 是谁：`— the XML below is these merged together, so it is not the content of the 'File:' path above`。「字段不标来源」那条（下一条）说的是同一件事，但它写在别处，而 `File:` 行就在这一行的正上方——两行相邻却互不指认时，读者会把 `File:` 当成这份 XML 的出处
 - 合并 XML 过长会被截断（首屏给头 200 行 + 尾 50 行）。**续读用 `xmlStartLine`，不要去 `read_code` 读 `File:` 那个路径**：那份文件里只有该 def 自己未合并的几行，继承来的字段恰恰不在其中。截断提示会直接给出下一次该填的 `xmlStartLine`
 - 提取关联 C# 类型（`thingClass` / `compClass` / `workerClass` 等）并尝试映射到索引文件，列在 `Linked C# Types` 段；文件名同样只在推不出来时才印（与 `locate` / `trace` 同一条判据）
 - `defType` 参数用于同名 def 撞车时指定看哪一个（`Human` 同时是 ThingDef、BodyDef 和 HediffGiverSetDef）。不传时返回会列出所有同名类型，据此再传一次即可。它是 def 类型，不用于收窄 C# 模式
+- **def 无条件压过同名 C# 类型**，而类型索引在这一支里从来没被查过。整份返回里唯一的同名披露只枚举 def，于是那份沉默会被读成「不存在同名 C# 类型」的独立证据——`Fire` 就是现成反例（`ThingDef Fire` 与 `Verse.Fire` 同时存在，两次调用都只回 def，连歧义提示都不出现，因为 def 侧本来就不歧义）。同名类型**确实存在**时补一句注文，并把出路连参数值一起给出：`Reach the type with read_code path:'Fire.cs' extractClass:'Fire'`。查不到就一个字不印——那时的沉默才真正代表「没有」
+- **`limit` 在 def 模式从不被读**（它只作用于 C# 大纲），而调用方传它时指望的恰恰是「别截断」，且 def 模式确实会截断、只是换了个参数。真传了才补一句 `'limit' applies to the C# type outline only and was ignored here; the merged XML below is paged with 'xmlStartLine'`
 
 **C# 模式**
 - 返回**基类链**，与 def 模式同一种写法的一行式：`Inheritance chain: Pawn <- ThingWithComps <- Thing <- Entity`（链上用短名，全限定名在大纲的 `Class:` 行）。接口不在这条链上，要看实现关系用 `trace mode:"inheritors"`
@@ -161,9 +163,10 @@ RimWorld.CompShield
 交叉引用追踪工具。
 
 **模式**
-- `inheritors`：列出某基类/接口的**传递闭包**子类与实现类树——间接后代（子类的子类）同样列出。默认展开到服务端硬上限 200，**树比 200 大时照样是截断的**，`limit` 抬不动这个上限。截断时保留的是浅层：调用方先要的是「谁直接继承了它」。撞上这个上限时折叠行给的下一步是 `re-trace a listed type as its own root; depths then restart from it`——这是**唯一真能拿到剩下那些**的走法（`limit` 抬不动、收窄 scope 只会连带砍掉本来在内的），而通用的「narrow the query」在这里根本不成立：`trace` 的查询就是一个类型名，没有可收窄的余地
-  - 表头括号里的每个数都描述 **scope 内的整棵树**：`(381 in scope 'base', transitive — indirect descendants included; 221 direct, deepest 4 levels down)`。只有后面单列的 `Listed below: 200, shallowest first — nothing below depth 1 is listed` 描述这次列出来的那一段，**且没被截断时整格不印**（同「看到 `of` 就是被截了」那条读法）。此前 `direct` 与 `deepest` 数的是截断后的切片，而它俩紧跟在描述全树的总数后面、句法完全对称——`ThingComp` 因此写出「381 … 200 direct, deepest 1 level down」，读者据此断定这棵树只有一层，实际有四层
-  - **`Listed below` 那一格还要说清缺的是哪几层**：截断保留浅层，`ThingComp` 那 200 条**全部停在第 1 层**，于是整份列表一个 `[depth N]` 标记都没有，而表头写着 `deepest 4 levels down`。版面上这两处分列两地、都不说彼此的关系——盲测里的读法是「第 2–4 层要么不存在、要么零零星星」，实际那三层被整层砍掉了。深度确实列全了（没截断、或截断恰好停在最深一层）时写的是 `, shallowest first`，不提缺层
+- `inheritors`：列出某基类/接口的**传递闭包**子类与实现类树——间接后代（子类的子类）同样列出。默认展开到服务端硬上限 200，**树比 200 大时照样是截断的**，`limit` 抬不动这个上限。截断时保留的是浅层：调用方先要的是「谁直接继承了它」。撞上这个上限时折叠行给的下一步有两条：`re-trace a listed type as its own root (depths then restart from it)`，或 `narrow scope to one source — a per-source subtree is listed in full whenever it fits under the cap`。通用的「narrow the query」在这里根本不成立（`trace` 的查询就是一个类型名，没有可收窄的余地），而只给「换根重跑」那一条时语气太足：盲测里调用方据此断定「要拼出全树得对 306 个直接子类逐个盲试」，转而去跑正则补料，多花四次调用、产出一份自己都标注为「非完整」的名单——而 `scope:'Milira'` 一次就回了 41 条、含全部 depth 2/3/4、无折叠
+  - **列表按深度排序，来源优先级不参与**。继承关系是精确的，每个候选的分数恒为 100，于是通用的「同分按来源 Rank 排」会把 Rank 顶成首要键——跨源查询里 `vanilla` 的 depth 4 因此排在 `Milira` 的 depth 1 前面，表头那句 `shallowest first` 成了假陈述，而「截断留下的恒是最浅的那一批」这条保证也被当场推翻（200 的配额先被 vanilla 吃光，被砍掉的恰恰是别的源的**直接**子类）。现在候选按深度升序原样保留，来源只用来判归属
+  - 表头括号里的每个数都描述 **scope 内的整棵树**：`(381 in scope 'base', transitive — indirect descendants included; 221 direct, deepest 4 levels down)`。只有后面单列的 `Listed below: 200, shallowest first — nothing deeper than depth 1 is listed` 描述这次列出来的那一段，**且没被截断时整格不印**（同「看到 `of` 就是被截了」那条读法）。此前 `direct` 与 `deepest` 数的是截断后的切片，而它俩紧跟在描述全树的总数后面、句法完全对称——`ThingComp` 因此写出「381 … 200 direct, deepest 1 level down」，读者据此断定这棵树只有一层，实际有四层
+  - **`Listed below` 那一格还要说清缺的是哪几层**：截断保留浅层，`ThingComp` 那 200 条**全部停在第 1 层**，于是整份列表一个 `[depth N]` 标记都没有，而表头写着 `deepest 4 levels down`。版面上这两处分列两地、都不说彼此的关系——盲测里的读法是「第 2–4 层要么不存在、要么零零星星」，实际那三层被整层砍掉了。深度确实列全了（没截断、或截断恰好停在最深一层）时写的是 `, shallowest first`，不提缺层。措辞是 `nothing **deeper than** depth 1 is listed` 而不是 `nothing below depth 1`：在一棵树上 below 既可读成「比 1 更深」也可读成「排在这一行下方」，而后一种读法把整句变成「1 层以下什么都没列」——恰好与真值相反
   - **只有间接后代带标记**（`[depth 2]` 起）；直接子类不标，表头会在**这次真印了标记**时补一句 `untagged = direct`。一个标记都没印时不讲解这套记法——讲了反而会让读者去找它。补的那句是 `untagged = direct (depth 1)`：不写出那个 `1`，读者只知道无标记行「是直接子类」，却没有依据把它接到 `[depth 2]` 这套编号上去，也就无从判断「无标记」在深度轴上占的是哪一格
   - 零结果分两种，措辞不同：**索引里没有这个类型名**（拼写待核，去 `locate`）与**类型在索引里、只是没人继承它**（这已经是答案）
     - 后者还再分两种：scope 外也确实没有时才写 `(this is an answer, not a lookup failure)`；scope 外有派生类时改写成 `…but it does have subclasses outside that scope, so this is not the whole answer`。「这是答案」这句背书只在真的是完整答案时给——否则它会盖过下面那行小字的越界计数，整份返回被读成「没有子类」
@@ -187,11 +190,11 @@ symbol: CompShield, mode: usages
 ###  `rimworld-searcher__read_code`
 从**某一个指定文件**里精确读取源码。`path` 收的是文件（已索引的文件名或绝对路径），不是搜索词——手上只有搜索词时先走 `locate`。
 
-**三种互斥模式**（同时传多个时，`extractClass` > `methodName` > 行区间）
+**三种互斥模式**（同时传多个时，`extractClass` > `methodName` > 行区间）。真的传多了时，返回**第一行就说清是谁赢了、谁被丢掉**：`// note: 'extractClass' takes precedence — methodName:'CompTick' and startLine/lineCount were not applied`。择一规则此前只写在 schema 里，返回里零字，于是一份「只按 `extractClass` 出的整类」会被当成「按我给的三个条件共同筛出来的」。只在真的多传了才印
 
 | 模式 | 参数 | 说明 |
 | --- | --- | --- |
-| 整个类型 | `extractClass` | 类/结构/接口/记录的完整实现体，枚举与委托声明同样可取。上限 2000 行（与行区间模式同一个上限），超出会截断并报出**这个类自己有多少行**，据此选下一步：`methodName` 单取一个成员，或 `startLine` 接着往下读 |
+| 整个类型 | `extractClass` | 类/结构/接口/记录的完整实现体，枚举与委托声明同样可取。上限 2000 行（与行区间模式同一个上限），超出会截断并报出**这个类自己有多少行、以及它所在文件有多少行**（`'X' is 3200 lines of a 5100-line file and the cap is 2000`）——只报前一个数时读者无从判断这个类是不是整份文件。下一步的建议按本次实际传了什么给：传了 `methodName` 就劝 `drop extractClass to get just 'CompTick'`（那个参数本来就在手上，只是被择一规则丢掉了），没传才劝 `pass methodName for one member` |
 | 单个成员 | `methodName`（+ 可选 `className`） | 方法、属性、字段、事件、构造器（类名或 `.ctor`）、索引器（`this`）、运算符（`+`）、枚举值——凡 `locate` 列得出的成员都行。文件里同名成员会**全部**返回，传 `className` 才只取一个 |
 | 裸行区间 | `startLine` + `lineCount` | `startLine` 为 0 基；未指定成员时走这条 |
 
@@ -203,7 +206,7 @@ symbol: CompShield, mode: usages
 - 文件基名（如 `CompShield`）
 
 **返回里必须读到的四件事**
-- 三种模式的头部都印**解析后的绝对路径**，成员与整类模式统一为一行 `// <种类> <名字>[ in <所属类型>] — <路径>:<行号>`（如 `// Method CompTick in RimWorld.CompShield — …/CompShield.cs:118`）。`in <所属类型>` 只在它与成员名不同名时出现。文件里有多个同名成员时，每条正文之前各一行并带 `[i/N]` 编号——**看到 `[3/3]` 就是拿全了**，不必猜后面还有没有
+- 三种模式的头部都印**解析后的绝对路径**，成员与整类模式统一为一行 `// <种类> <名字>[ in <所属类型>] — <路径>:<行号>`（如 `// Method CompTick in RimWorld.CompShield — …/CompShield.cs:118-137`）。`in <所属类型>` 只在它与成员名不同名时出现。行号给的是**整段的范围**而不只是起点：只印起点时，读者拿它当 `startLine` 续读会从成员的第一行重新开始；成员本身只占一行时不印范围（那时 `118-118` 只是噪音）。文件里有多个同名成员时，每条正文之前各一行并带 `[i/N]` 编号——**看到 `[3/3]` 就是拿全了**，不必猜后面还有没有
 - 传基名时，`scope` 决定哪个源胜出；作用域内有多份同名文件时会追加一行 `note: N files share this name in scope …` 并列出其余候选——不看这行就可能把某个 mod 的覆盖版当成 vanilla 原版。读的是哪一份也说清：**`scope` 表达式里排在前面的那个源**，判据就在同一句话里的那个表达式上
 - `className` 只是**过滤器**。过滤后没有候选时，返回会说清「这个成员确实在这个文件里，只是不在你点的那个类里」并列出它实际声明在哪几个类型、第几行；只有整个文件里都没有才报 not found
 - 传了目录会明说「这是目录，不是文件」并指向 `list_directory`；文件找不到时**回显你给的整条路径**，并区分「这条路径在磁盘上不存在」与「没有同名文件进过索引」
@@ -220,7 +223,7 @@ path: CompShield.cs, methodName: CompTick
 在已索引的 C# 与 XML 上跑 .NET 正则。
 
 **特性**
-- 可选 `fileFilter`（如 `.cs` / `.xml`）与 `scope`，两者都在扫描前下推生效，不是拿到结果再筛
+- 可选 `fileFilter`（如 `.cs` / `.xml`）与 `scope`，两者都在扫描前下推生效，不是拿到结果再筛。**有命中时表头也回显这个过滤器**（`(1 matching line in scope 'base', case-insensitive, files filtered to '.xml')`）：`scope` 与 `ignoreCase` 本来就一直回显，唯独 `fileFilter` 只在零命中那一支才提——于是「这个数是全语料的还是只算了 `.xml` 的」在有命中时反而看不出来，而这正是把命中数当结论用时最要紧的一格
 - 结果按文件分组，每个文件最多 3 行预览（其余记为 `+N more matching lines in this file`），最多列 50 个文件
 - `limit` 默认 100 条命中。**小到咬人的 `limit` 不是「少列几行」，它把总数整个换掉**：表头退化成 `first N preview lines`、扫描当场停在那里，`N matching lines` 那个总数不再出现。想要总数就传 `limit:'all'`；够不到上限时 `limit` 才只影响列出的条数、不影响报出来的总数
 - 零命中且传了 `fileFilter` 时，消息会回显该过滤器与它留下的候选文件数——`.txt` 这类把候选集筛成 0 的过滤，不该被说成「scope 里没有这个模式」
@@ -245,6 +248,7 @@ fileFilter: .cs
 **特性**
 - 路径必须是服务端的已索引源根（`config.toml` 各源解析出的 `csharp` / `xml` 路径，含省略 `csharp` 时拿到的反编译输出目录）或其下级目录。白名单之外一律拒绝，**源根的父目录也在拒绝之列**。拒绝消息与工具描述都会**列出本机上真实可用的根路径**，不必先撞一次再猜。举例是**按「盘符 + 第一级目录」分族轮流取**的，不是按配置序取头几条：反编译产物在配置里排在前面，按序取只会取到 `Decompiled\*` 那一族，装着 XML 的游戏与创意工坊目录一条都露不出来，读的人会以为它们不在白名单里。那句话同时说清这个数是什么：`These 87 roots are the indexed folders of the 11 configured sources listed under 'scope' — one source usually spans several roots, so this count is not a source count.`——一个源通常摊成 `csharp` / `xml` 两条以上的根，`87` 与 `scope` 那 11 个源名不是一个量纲，并排出现时会被当成同一件事的两种说法
 - 条目**先排序再截断**：子目录在前、文件在后，各自按名序。所以截断后拿到的是「按名序的前 N 个」，缺席是可推理的
+- 列的是**目录在磁盘上的实际内容**，不按「索引收没收」过滤：索引从没收进来的文件、以及贴图音效这类非源码资产，一样会出现在这里。工具描述里明说了这一条——白名单是按索引源根定的，很容易被读成「列出来的都是索引里的」，据此把某个文件的存在当成它已被索引的证据
 - 输出头部固定给**总条目数**。`limit` 默认 100，服务端上限 1000；传 `0` 或负数表示用满上限
 - `offset` 翻页。目录条目数超过 1000 时，这是唯一能把它枚举完的途径——脚注会直接算出下一页该填的值。`search_regex` 顶不上这个用：它匹配的是**文件正文行**不是文件名，`fileFilter` 也只是路径后缀，写不出「限定在这个目录下」
 - `skip_path_security = true` 时上述白名单检查整体关闭

@@ -202,6 +202,24 @@ public class ReadCodeTool : ITool
                     + "the XML merged down its whole ParentName chain.", true));
             }
 
+            // 三条模式互斥，择一在此前是**静默**的：同时传 extractClass + methodName +
+            // startLine，返回的是整个类，而另外两组参数一个字都不提。唯一的线索是首行注释
+            // `// Class X — path:N`——它在陈述**交付物**，不是在报告**丢弃**。
+            // 后果不是「少了点什么」而是「拿回了完全另一块代码」：第十三轮复采 Pawn +
+            // methodName:'Kill' 拿到的是类体前 2000 行，而 Kill 在 2088 行，根本不在里面。
+            // 只在确实发生择一时印——没多传参数的调用一个字都不该多出来。
+            static string Overridden(string winner, params (string Name, bool Passed)[] losers)
+            {
+                var dropped = losers.Where(l => l.Passed).Select(l => l.Name).ToList();
+                return dropped.Count == 0
+                    ? string.Empty
+                    : $"// note: '{winner}' takes precedence — {string.Join(" and ", dropped)} "
+                      + $"{(dropped.Count == 1 ? "was" : "were")} not applied" + "\n";
+            }
+
+            var linesPassed = ToolArgs.TryGetElement(args, out _, "startLine", "start", "offset")
+                              || ToolArgs.TryGetElement(args, out _, "lineCount", "lines", "count");
+
             if (!string.IsNullOrEmpty(extractClass))
             {
                 var extractClassName = ToolArgs.StripLocateFilterPrefix(extractClass);
@@ -225,16 +243,35 @@ public class ReadCodeTool : ITool
                 if (classLines.Length > MaxLineCount)
                 {
                     classContent = classBody.LocationLine + "\n" + string.Join("\n", classLines.Take(MaxLineCount));
+                    // 这个数量的是**类体自己的行**，而同一个工具的裸行模式对同一个文件报的是
+                    // 文件行数（`of 4759`）。两个脚注同源不同数，且都不说自己量的是什么——
+                    // 第十三轮里连出题的主会话都把 4746 当成了文件长度写进判据。加个限定词。
+                    var fileLines = TotalLinesOrZero(path);
+                    var span = fileLines > 0
+                        ? $"'{extractClassName}' is {classLines.Length} lines of a {fileLines}-line file"
+                        : $"'{extractClassName}' is {classLines.Length} lines";
+
+                    // 调用方**已经传了** methodName、被 extractClass 静默压掉时，这句原先照样劝他
+                    // 「pass methodName」——照做得到逐字相同的返回。一条会把人绕回原地的建议。
+                    var next = !string.IsNullOrEmpty(memberArg)
+                        ? $"drop extractClass to get just '{ToolArgs.StripLocateFilterPrefix(memberArg)}', "
+                          + "or pass startLine to continue"
+                        : "pass methodName for one member, or startLine to continue";
+
                     classNote =
                         $"\n... +{classLines.Length - MaxLineCount} more lines "
-                        + $"('{extractClassName}' is {classLines.Length} lines and the cap is {MaxLineCount}; "
-                        + "pass methodName for one member, or startLine to continue)";
+                        + $"({span} and the cap is {MaxLineCount}; {next})";
                 }
 
                 // 目标名不在这里回显：classContent 的首行已经是 `// Class <全名> — <路径>:<行>`，
                 // 再补一行只是把同一个名字说第二遍。
+                var classOverride = Overridden("extractClass",
+                    ($"methodName:'{ToolArgs.StripLocateFilterPrefix(memberArg ?? string.Empty)}'",
+                        !string.IsNullOrEmpty(memberArg)),
+                    ("startLine/lineCount", linesPassed));
+
                 return WithUnresolvedScopeNotice(scope,
-                    new ToolResult($"```{Fence(path)}\n{scopeNotice}{classContent}\n```{classNote}"));
+                    new ToolResult($"```{Fence(path)}\n{scopeNotice}{classOverride}{classContent}\n```{classNote}"));
             }
 
             if (!string.IsNullOrEmpty(memberArg))
@@ -261,8 +298,10 @@ public class ReadCodeTool : ITool
                     return WithUnresolvedScopeNotice(scope,
                         Failure(body, path, $"Member '{methodName}'", "Use inspect tool to see available members.", plainNotice));
 
+                var memberOverride = Overridden("methodName", ("startLine/lineCount", linesPassed));
+
                 return WithUnresolvedScopeNotice(scope,
-                    new ToolResult($"```{Fence(path)}\n{scopeNotice}{body.Content}\n```"));
+                    new ToolResult($"```{Fence(path)}\n{scopeNotice}{memberOverride}{body.Content}\n```"));
             }
 
             int startLine = Math.Max(0, ToolArgs.GetInt(args, 0, "startLine", "start", "offset"));
@@ -322,6 +361,14 @@ public class ReadCodeTool : ITool
         => Path.GetExtension(path).Equals(".xml", StringComparison.OrdinalIgnoreCase);
 
     private static string Fence(string path) => IsXml(path) ? "xml" : "csharp";
+
+    // 只用于给 extractClass 的截断脚注补一个「类体行数 / 文件行数」的对照。读不到就退回不印
+    // 那半句——一个数量不出来不该让整条能用的返回失败。
+    private static int TotalLinesOrZero(string path)
+    {
+        try { return File.ReadAllLines(path).Length; }
+        catch { return 0; }
+    }
 
     private static string Comment(string path, string text) => IsXml(path) ? $"<!-- {text} -->" : $"// {text}";
 
