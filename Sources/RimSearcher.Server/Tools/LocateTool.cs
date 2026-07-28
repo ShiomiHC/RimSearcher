@@ -125,29 +125,15 @@ public class LocateTool : ITool
             : ScopeArgs.Resolve(_scopeCatalog, args);
         var limit = ScopeArgs.GetDisplayLimit(args);
 
-        // 拼错的 scope 被静默退回全域，每条返回路径都要带上这行，
-        // 否则调用方拿着全域结果却以为自己限定过范围。表头在全域时不打 scope 标注，
-        // 正是这种情况下最没痕迹的地方。
-        var scopeNotice = ScopeNotices.Unresolved(_scopeCatalog, scope) ?? string.Empty;
-
         var report = new ScopeReport();
 
-        // 表头要报出「各段各几条」，而那要等各段都跑完才知道，所以正文先攒在 sb 里、
-        // 表头最后再拼到前面。trace / search_regex / list_directory 的头一行都是
-        // 「什么 + 多少条 + 什么 scope」，locate 此前只有「什么」，读者得自己数行。
-        var sb = new StringBuilder();
-        var tally = new List<string>();
-
-        // 各段落自己置位。曾用 sb.Length 与表头长度比大小来推断，窄 scope 下表头恰好比
-        // 阈值长，零命中也会被判成有结果——「查不到就提示换 scope」那条路径因此永远走不到。
-        var hasResults = false;
+        // 一段就是一个 LocateSection。Tally 那一格、段头的来源构成、段末的折叠行、以及
+        // 「走不走零命中路径」全从这张表派生——此前它们是四件在每段里各写一遍的事。
+        var sections = new List<LocateSection>();
 
         // C# Types 段列过的名字。文件段用它去重：类型 `CompShield` 与文件 CompShield.cs 是
         // 同一个东西的两种写法，两段各列一次只是把同一条结果说两遍。
         var shownTypeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        // 表头是否把成员总数改口成了 `at least`。改口时必须同时给出成因——见末尾那条脚注。
-        var memberTotalIsFloor = false;
 
         // 条件加载目录：五段共用一份，成因在末尾统一说（见 ConditionalReport）
         var conditional = new ConditionalReport(_conditional);
@@ -162,22 +148,18 @@ public class LocateTool : ITool
 
             if (types.Items.Count > 0)
             {
-                hasResults = true;
-                tally.Add(Count(types.Items.Count, types.TotalInScope, "C# types",
-                    fullScore: types.FullScoreCount));
-                var typeLabels = SourceLabeling.Of(types);
-                sb.AppendLine($"\n**C# Types**{typeLabels.Header}:");
+                var rows = new List<LocateRow>();
                 foreach (var entry in types.Items)
                 {
                     var paths = _sourceIndexer.GetPathsByType(entry.Item);
                     shownTypeNames.Add(entry.Item);
-                    sb.AppendLine(
+                    rows.Add(new LocateRow(
                         $"- `{entry.Item}` ({entry.Score:F0}%){FileNote(entry.Item, paths)}"
-                        + $"{conditional.TagAll(paths)}{typeLabels.Row(entry.SourceName)}");
+                        + conditional.TagAll(paths),
+                        entry.SourceName));
                 }
 
-                var fold = Fold.Line(types, "C# types", limit: limit);
-                if (fold != null) sb.AppendLine(fold);
+                sections.Add(Section(types, "C# Types", "C# types", rows));
             }
         }
 
@@ -204,42 +186,27 @@ public class LocateTool : ITool
 
             if (members.Items.Count > 0)
             {
-                hasResults = true;
-                var tallySlot = tally.Count;
-                tally.Add("");
-
                 // limit 是**这一段的上限**（schema 写的 result cap per section），故按总量切。
                 // 原先是 perGroup = max(3, limit/2)、每个种类各切一份，于是同一个 limit 既不是
                 // 上限也不是下限：`energy` limit:10 列出 13 条（Properties 5 + Fields 5 +
                 // Methods 3），而 `method:CompTick` limit:10 只列 5 条——单一种类只拿得到一份配额。
                 var groupedMembers = members.Items.GroupBy(m => m.Item.MemberType).ToList();
-
-                // 行级标签按**实际列出的那些行**判，故先把分组配额切出来再写表头
                 var shownGroups = TakeRoundRobin(groupedMembers, limit.Unlimited ? int.MaxValue : limit.Count);
-                var shown = shownGroups.Sum(g => g.Items.Count);
 
-                // 段头的方括号则必须按全集判：这一段的截断是两层的（ScopeFilter 的 limit 加每组
-                // 配额），shown < TotalInScope 才是「有东西没列出来」的完整判据，ScopedResult
-                // 自己只看得见第一层，故这里显式传。
-                var memberLabels = SourceLabeling.Of(
-                    shownGroups.SelectMany(g => g.Items).Select(e => e.SourceName),
-                    shown < members.TotalInScope ? members.SourcesInScope : null);
-                sb.AppendLine($"\n**Members**{memberLabels.Header}:");
-
+                var rows = new List<LocateRow>();
                 foreach (var (kind, groupItems) in shownGroups)
                 {
-                    sb.AppendLine($"  {Plural(kind)}:");
+                    // 子组标题不是结果行：它不挂来源标签，也不参与「这批行是不是同源」的判定
+                    rows.Add(new LocateRow($"  {Plural(kind)}:", IsGroupHeader: true));
                     foreach (var entry in groupItems)
                     {
                         var (typeName, memberName, _, filePath) = entry.Item;
-                        sb.AppendLine(
+                        rows.Add(new LocateRow(
                             $"  - `{typeName}.{memberName}` ({entry.Score:F0}%)"
-                            + $"{FileNote(typeName, [filePath])}{conditional.Tag(filePath)}"
-                            + $"{memberLabels.Row(entry.SourceName)}");
+                            + $"{FileNote(typeName, [filePath])}{conditional.Tag(filePath)}",
+                            entry.SourceName));
                     }
                 }
-
-                memberTotalIsFloor = members.TotalIsLowerBound;
 
                 // 成员分是 baseScore + keywordBonus 封顶 100（SourceIndexer 里那个
                 // `Math.Min(matchCount - 1, 5) * 10`），故**多关键词**查询里一条 90 分的前缀
@@ -248,22 +215,28 @@ public class LocateTool : ITool
                 // bonus 恒为 0，100 分就真的是逐字相同，这个数才敢印。
                 // 描述里那句「两个以上关键词时 100% 只是最高分」说的是同一件事，两处判据同源。
                 var memberFullScore = keywords.Count == 1 ? members.FullScoreCount : -1;
-                tally[tallySlot] = Count(
-                    shown, members.TotalInScope, "members", memberTotalIsFloor, memberFullScore);
 
-                // 折叠行放在整段末尾、按 TotalInScope 计数。原先每组各打一行、只数「取回的这批里
-                // 还剩几条」，而取回本身已被 limit.Scale(3) 砍过：method:CompTick 因此报 +25，
-                // 实际有 186 条。组内那行还漏了「怎么拿到更多」，调用方连能展开都不知道。
-                var memberFold = Fold.Line(
-                    Math.Max(0, members.TotalInScope - shown),
-                    shown,
-                    members.TruncatedByScoreGap,
-                    truncatedByLimit: true,
-                    // 「members」而非某一类：这行数的是 method/property/field 三类之和
-                    noun: "members",
-                    indent: "  ",
-                    limit: limit);
-                if (memberFold != null) sb.AppendLine(memberFold);
+                sections.Add(new LocateSection
+                {
+                    Name = "Members",
+                    Noun = "members",
+                    Rows = rows,
+                    // 这一段的截断是两层的（ScopeFilter 的 limit 加每组配额），故显示数要另数：
+                    // Rows 里还混着子组标题，ScopedResult 也只看得见第一层。
+                    Shown = shownGroups.Sum(g => g.Items.Count),
+                    Total = members.TotalInScope,
+                    TotalIsLowerBound = members.TotalIsLowerBound,
+                    LowerBoundNotice =
+                        $"\n\n_The member search matched more than {SourceIndexer.MemberQualifiedKeyCap} name keys and "
+                        + "expanded only that many, so the member total above is a floor rather than the total "
+                        + "(server expansion cap; no parameter widens it). Narrow the query for an exact count._",
+                    FullScoreCount = memberFullScore,
+                    SourcesInScope = members.SourcesInScope,
+                    TruncatedByScoreGap = members.TruncatedByScoreGap,
+                    // 折叠行按 TotalInScope 计数。原先每组各打一行、只数「取回的这批里还剩几条」，
+                    // 而取回本身已被 limit.Scale(3) 砍过：method:CompTick 因此报 +25，实际有 186 条。
+                    TruncatedByLimit = true,
+                });
             }
         }
 
@@ -275,11 +248,7 @@ public class LocateTool : ITool
 
             if (defs.Items.Count > 0)
             {
-                hasResults = true;
-                tally.Add(Count(defs.Items.Count, defs.TotalInScope, "XML defs",
-                    fullScore: defs.FullScoreCount));
-                var defLabels = SourceLabeling.Of(defs);
-                sb.AppendLine($"\n**XML Defs**{defLabels.Header}:");
+                var rows = new List<LocateRow>();
                 foreach (var entry in defs.Items)
                 {
                     var def = entry.Item;
@@ -294,13 +263,13 @@ public class LocateTool : ITool
                     // def 行不印文件路径（R20），故这个标记是整段里唯一能看出「这条 def 来自
                     // 一个条件目录」的地方——而 vanilla 的 def 与条件补丁包里的 def 在这一行上
                     // 逐字同形（HAR 的 1.6/Mods/Ideology 就落在默认 scope 'base' 里）。
-                    sb.AppendLine(
+                    rows.Add(new LocateRow(
                         $"- `{def.DefName}` ({entry.Score:F0}%) - {def.DefType}{abstractTag}{label}{localizedTag}"
-                        + $"{conditional.Tag(def.FilePath)}{defLabels.Row(entry.SourceName)}");
+                        + conditional.Tag(def.FilePath),
+                        entry.SourceName));
                 }
 
-                var fold = Fold.Line(defs, "XML defs", indent: "  ", limit: limit);
-                if (fold != null) sb.AppendLine(fold);
+                sections.Add(Section(defs, "XML Defs", "XML defs", rows));
             }
 
             if (query.Keywords.Count > 0)
@@ -310,11 +279,7 @@ public class LocateTool : ITool
 
                 if (defsByContent.Items.Count > 0)
                 {
-                    hasResults = true;
-                    tally.Add(Count(defsByContent.Items.Count, defsByContent.TotalInScope, "content matches"));
-                    var contentLabels = SourceLabeling.Of(defsByContent);
-                    sb.AppendLine($"\n**Content Matches**{contentLabels.Header}:");
-
+                    var rows = new List<LocateRow>();
                     foreach (var entry in defsByContent.Items)
                     {
                         var (location, matchedFields) = entry.Item;
@@ -328,12 +293,13 @@ public class LocateTool : ITool
                         // 只盯返回的调用方拿不到这条，最自然的读法就是「一个名字近似命中的 def」。
                         // 改成 `字段路径 in \`名字\``，让语序自己说清谁装着谁，净增一个字符，
                         // 名字仍是行内唯一的反引号项，复制给 inspect 照样能取。
-                        sb.AppendLine($"- {fieldSummary}{moreFields} in `{location.DefName}`"
-                                      + $"{conditional.Tag(location.FilePath)}{contentLabels.Row(entry.SourceName)}");
+                        rows.Add(new LocateRow(
+                            $"- {fieldSummary}{moreFields} in `{location.DefName}`"
+                            + conditional.Tag(location.FilePath),
+                            entry.SourceName));
                     }
 
-                    var fold = Fold.Line(defsByContent, "content matches", indent: "  ", limit: limit);
-                    if (fold != null) sb.AppendLine(fold);
+                    sections.Add(Section(defsByContent, "Content Matches", "content matches", rows));
                 }
             }
         }
@@ -343,7 +309,9 @@ public class LocateTool : ITool
         // 只要顺带蹭到一条 38 分的无关 def，整段就被吞掉，返回读起来是「索引里没有这个文件」。
         // 现在分两种触发：零命中时它仍是兜底（模糊列出若干条），有命中时只补名字完全一致的
         // 那一份，不把每次查询都拖长一段模糊文件名。
-        var wantsFileFallback = !hasResults;
+        //
+        // 「其余四段全空」判据只有一处：sections 是不是还空着。
+        var wantsFileFallback = sections.Count == 0;
         var hasFilterPrefix = query.TypeFilter != null || query.MethodFilter != null
                               || query.FieldFilter != null || query.DefFilter != null;
 
@@ -414,81 +382,40 @@ public class LocateTool : ITool
                 // 不这么算的话 `RangedIndustrial.xml` 的表头是干净的 `4 files`——按 F30 的契约
                 // 读作「完整集」，而它确实是完整集，只是其中一半根本不叫这个名字。
                 var fileFullScore = queryIsFileName ? exactFiles.TotalInScope : files.FullScoreCount;
-                tally.Add(Count(items.Count, fileTotal, "files", fullScore: fileFullScore));
-                // 段头的方括号按全集判（见 SourceLabeling）。只有兜底那一支会被截断，
-                // 且构成数的是 files.TotalInScope——WithExactFilesFirst 往 items 里补进过模糊结果
-                // 之外的精确命中时，构成会比表头的 fileTotal 少那几条。加起来对不上的构成不如
-                // 不印：它自证的本事全在「各源之和恰好等于表头那个总数」上。
-                var fileScopeTotals =
-                    wantsFileFallback && items.Count == files.Items.Count && items.Count < fileTotal
-                        ? files.SourcesInScope
-                        : null;
-                var fileLabels = SourceLabeling.Of(items.Select(e => e.SourceName), fileScopeTotals);
-                sb.AppendLine($"\n**Files**{fileLabels.Header}:");
-                foreach (var entry in items)
-                {
+
+                var rows = items.Select(entry => new LocateRow(
                     // 原先是「基名 - 全路径」，而基名逐字包含在全路径的末尾，说的是同一件事。
                     // 分数不能省：描述里立着「每一行都带 (N%)」这条契约，而这一段此前整段没有，
                     // 于是调用方按契约去找判别器、找不到，最省事的反推就是「这段都是 100%」——
                     // 一条 40 分的近名文件与一条精确命中在版面上逐字同形，正好推向那个错数。
-                    sb.AppendLine($"- {entry.Item} ({entry.Score:F0}%)"
-                                  + $"{conditional.Tag(entry.Item)}{fileLabels.Row(entry.SourceName)}");
-                }
+                    $"- {entry.Item} ({entry.Score:F0}%)" + conditional.Tag(entry.Item),
+                    entry.SourceName)).ToList();
 
-                // 折叠行只对兜底那一支有意义：精确补充本来就只列同名的那几条，没有「还有更多」。
-                if (wantsFileFallback)
+                sections.Add(new LocateSection
                 {
-                    var fold = Fold.Line(files, "files", limit: limit);
-                    if (fold != null) sb.AppendLine(fold);
-                }
-
-                hasResults = true;
+                    Name = "Files",
+                    Noun = "files",
+                    Rows = rows,
+                    Shown = items.Count,
+                    Total = fileTotal,
+                    FullScoreCount = fileFullScore,
+                    // 段头的构成数的是 files.TotalInScope——WithExactFilesFirst 往 items 里补进过
+                    // 模糊结果之外的精确命中时，构成会比 fileTotal 少那几条。加起来对不上的构成
+                    // 不如不印：它自证的本事全在「各源之和恰好等于表头那个总数」上。
+                    SourcesInScope = wantsFileFallback && items.Count == files.Items.Count
+                        ? files.SourcesInScope
+                        : [],
+                    TruncatedByScoreGap = files.TruncatedByScoreGap,
+                    TruncatedByLimit = files.TruncatedByLimit,
+                    // 折叠行只对兜底那一支有意义：精确补充本来就只列同名的那几条，没有「还有更多」。
+                    Foldable = wantsFileFallback,
+                });
             }
         }
-
-        var footer = report.Render(scope);
 
         // 查询串里那些没被当成过滤器用的前缀必须说出来。'member:CompTick' 回一句 "No results"
         // 而 'method:CompTick' 有 144 条——同一个符号，一个说不存在、一个说有一百多处。
         // 差别全在那个没被识别的前缀上，而调用方在返回里看不到任何线索。
-        // 表头改口成 `at least` 时必须同时说清成因。两个扫描类工具的 `at least` 恒与
-        // 「有文件没扫全」那条尾注同现，调用方从那里学到的读法就是「看到 at least 去找成因」；
-        // locate 此前只改表头、一句成因都不给，于是同一个记号在两个工具上要各学一遍，
-        // 而这边那一次还无从判断「narrow the query」到底要窄到什么程度。
-        // 见上面 exactFileMissing 处的判据。措辞点明「上面那些是按查询串比名字比出来的」，
-        // 因为这一句唯一要防的误读就是把近名结果当成那个文件本身。
-        var missingFileNotice = exactFileMissing
-            ? $"\n\n_No indexed file is named '{ToolArgs.ForEcho(rawQuery)}' in scope '{scope.Expression}'; "
-              + "anything listed above matched the query as a name, not as that file._"
-            : string.Empty;
-
-        var floorNotice = memberTotalIsFloor
-            ? $"\n\n_The member search matched more than {SourceIndexer.MemberQualifiedKeyCap} name keys and "
-              + "expanded only that many, so the member total above is a floor rather than the total "
-              + "(server expansion cap; no parameter widens it). Narrow the query for an exact count._"
-            : string.Empty;
-
-        // 字段内容索引有一条建键下限，低于它的词从没进过索引，故用它查内容命中恒为空——
-        // 而 Content Matches 段是**整段不出现**，与「查过了、零命中」在版面上逐字同形。
-        // 第十二轮盲测：`Plants_Wild.xml` 里实打实有六处 `<li>20</li>`，`locate('20')` 的
-        // 返回里连那个段头都没有；被测方是自费跑了一整套对照实验（查 '22'、'14'、'200'、
-        // '1200'，再 inspect 一个 def 拿真值回查）才判出这是盲区而不是空集。
-        // 这一句只声明「没查」，不声明「有没有」——后者要 search_regex，返回给出出路即可。
-        // 不能改成让 Content Matches 恒印 `0 content matches`：那恰好把这个错误结论固化成契约，
-        // 而且是真正的常亮。只在调用方真传了短词时印。
-        var shortKeywords = query.Keywords
-            .Where(k => k.Length < DefIndexer.MinContentTokenLength)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        var shortTokenNotice = shortKeywords.Count > 0
-            ? $"\n\n_{string.Join(", ", shortKeywords.Select(k => $"'{ToolArgs.ForEcho(k)}'"))} "
-              + $"{(shortKeywords.Count == 1 ? "is" : "are")} shorter than "
-              + $"{DefIndexer.MinContentTokenLength} characters, and the field-value index only holds tokens "
-              + "of that length or more — no def field was searched for "
-              + $"{(shortKeywords.Count == 1 ? "it" : "them")}. A missing Content Matches section here means "
-              + "'not searched', not 'not present'; search_regex matches short literals._"
-            : string.Empty;
-
         var prefixNotice = new StringBuilder();
         if (query.UnknownPrefixes.Count > 0)
         {
@@ -504,58 +431,71 @@ public class LocateTool : ITool
                 + "Write the term right after the colon (type:CompShield); a space after the colon is fine too._");
         }
 
-        if (!hasResults)
+        // 字段内容索引有一条建键下限，低于它的词从没进过索引，故用它查内容命中恒为空——
+        // 而 Content Matches 段是**整段不出现**，与「查过了、零命中」在版面上逐字同形。
+        // 第十二轮盲测：`Plants_Wild.xml` 里实打实有六处 `<li>20</li>`，`locate('20')` 的
+        // 返回里连那个段头都没有；被测方是自费跑了一整套对照实验（查 '22'、'14'、'200'、
+        // '1200'，再 inspect 一个 def 拿真值回查）才判出这是盲区而不是空集。
+        // 这一句只声明「没查」，不声明「有没有」——后者要 search_regex，返回给出出路即可。
+        // 不能改成让 Content Matches 恒印 `0 content matches`：那恰好把这个错误结论固化成契约，
+        // 而且是真正的常亮。只在调用方真传了短词时印。
+        var shortKeywords = query.Keywords
+            .Where(k => k.Length < DefIndexer.MinContentTokenLength)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        // 零命中是一个正常结果，不是调用失败。isError 留给「工具没能执行」，置 true 会让 client
+        // 把这次搜索当成故障去重试或上报；同一个服务器里 trace 查不到子类、search_regex 零命中
+        // 都是 false，locate 独自为 true 只会让调用方两套判据。
+        return Task.FromResult(new ToolResult(LocateRenderer.Render(new LocateOutput
         {
-            var message = new StringBuilder(
-                $"No results for '{ToolArgs.ForEcho(rawQuery)}' in scope '{scope.Expression}'.");
-            message.Append(ScopeNotices.RetryWider(scope, footer != null));
-            if (footer != null) message.Append(footer);
-            message.Append(scopeNotice);
-            message.Append(prefixNotice);
-
-            // 过滤器清单只列一次。上面的 prefixNotice 在「前缀没被识别」时已经列过一遍
-            // （那正是最该看到它的场合），这里再列就是同一行字紧挨着说两遍。
-            message.Append(query.UnknownPrefixes.Count > 0
-                ? "\n\nTry: partial names, or search_regex for patterns."
-                : "\n\nTry: partial names, query filters (type:, method:, field:, def:), or search_regex for patterns.");
-
-            // 零命中是一个正常结果，不是调用失败。isError 留给「工具没能执行」，置 true 会让
-            // client 把这次搜索当成故障去重试或上报；同一个服务器里 trace 查不到子类、
-            // search_regex 零命中都是 false，locate 独自为 true 只会让调用方两套判据。
-            return Task.FromResult(new ToolResult(message.ToString()));
-        }
-
-        // 条件目录的成因整份说一次。放在 scope 脚注之前：五段的行内标记都在它上面，
-        // 中间隔着别的脚注就又成了「记号与成因之间没有可指认的连接」那一形。
-        sb.Append(conditional.Render() ?? string.Empty);
-
-        if (footer != null) sb.Append(footer);
-        // 零命中那条路径不挂：那时整份返回的第一句就是 "No results for 'X'"，
-        // 再说一遍「没有叫 X 的文件」是同一件事说两遍。
-        sb.Append(missingFileNotice);
-        sb.Append(floorNotice);
-        sb.Append(shortTokenNotice);
-        sb.Append(scopeNotice);
-        sb.Append(prefixNotice);
-
-        var header = new StringBuilder($"## '{rawQuery}'");
-        if (tally.Count > 0) header.Append($" — {string.Join(", ", tally)}");
-        if (!scope.IncludesEverything) header.Append($" _(scope: {scope.Expression})_");
-
-        return Task.FromResult(new ToolResult(header.AppendLine().Append(sb).ToString()));
+            Query = rawQuery,
+            Scope = scope,
+            Sections = sections,
+            EmptyLine = $"No results for '{ToolArgs.ForEcho(rawQuery)}' in scope '{scope.Expression}'.",
+            Limit = limit,
+            OutOfScope = report,
+            Conditional = conditional,
+            // 措辞点明「上面那些是按查询串比名字比出来的」，因为这一句唯一要防的误读就是
+            // 把近名结果当成那个文件本身。
+            MissingFile = exactFileMissing
+                ? $"\n\n_No indexed file is named '{ToolArgs.ForEcho(rawQuery)}' in scope '{scope.Expression}'; "
+                  + "anything listed above matched the query as a name, not as that file._"
+                : null,
+            ShortTokens = shortKeywords.Count > 0
+                ? $"\n\n_{string.Join(", ", shortKeywords.Select(k => $"'{ToolArgs.ForEcho(k)}'"))} "
+                  + $"{(shortKeywords.Count == 1 ? "is" : "are")} shorter than "
+                  + $"{DefIndexer.MinContentTokenLength} characters, and the field-value index only holds tokens "
+                  + "of that length or more — no def field was searched for "
+                  + $"{(shortKeywords.Count == 1 ? "it" : "them")}. A missing Content Matches section here means "
+                  + "'not searched', not 'not present'; search_regex matches short literals._"
+                : null,
+            PrefixNotice = prefixNotice.Length > 0 ? prefixNotice.ToString() : null,
+            FilterListAlreadyShown = query.UnknownPrefixes.Count > 0,
+            // 拼错的 scope 被静默退回全域，每条返回路径都要带上这行，否则调用方拿着全域结果
+            // 却以为自己限定过范围。表头在全域时不打 scope 标注，正是这种情况下最没痕迹的地方。
+            ScopeNotice = ScopeNotices.Unresolved(_scopeCatalog, scope),
+        })));
     }
 
-    // 表头的每一格：**列出了几条，以及这个 scope 里一共有几条**。
-    //
-    // 原先只有前一个数（`— 5 members`），而 `method:CompTick` 的真实命中是 144——总数在整份
-    // 返回里一次都没出现过，要靠折叠行的 `+139 more` 自己做加法。表头是最显眼的位置，
-    // 盲测里两个调用方都差点把它当结论直接报出去，其中一个原话是「会把 144 报成 5，错 28 倍」。
-    //
-    // 同一批工具里 trace 的表头给的是**总数**（`(381 in scope 'base' …) Listed below: 200`），
-    // locate 给的是**显示数**，句式却一样——两个口径撞在同一个位置上，这才是要害。故这里改成
-    // 两个数都给，且沿用「看到 of 就是被截了」这条读法：没被截时不写 `of N`，那时显示即全部。
-    //
-    // 名词跟总数走（"1 of 768 C# types" 是属格复数，"5 C# types" 跟 5），与 R30 判据一致。
+    // 五段里有四段的形状是一样的：显示数、总数、满分数、来源构成、两种截断标记全取自
+    // 同一份 ScopedResult。只有 Members（两层截断）与 Files（两支不同的总数算法）要自己拼。
+    private static LocateSection Section<T>(
+        ScopedResult<T> result, string name, string noun, IReadOnlyList<LocateRow> rows)
+        => new()
+        {
+            Name = name,
+            Noun = noun,
+            Rows = rows,
+            Shown = result.Items.Count,
+            Total = result.TotalInScope,
+            TotalIsLowerBound = result.TotalIsLowerBound,
+            FullScoreCount = result.FullScoreCount,
+            SourcesInScope = result.SourcesInScope,
+            TruncatedByScoreGap = result.TruncatedByScoreGap,
+            TruncatedByLimit = result.TruncatedByLimit,
+        };
+
     // 各组轮流取一条，直到取满 budget 或全部取完。组的先后与组内次序都保持传入时的样子——
     // 那是取回层排好的（分数 → 名字长度 → 宿主类型 → 成员名 → 文件），这里只负责切配额。
     //
@@ -585,36 +525,6 @@ public class LocateTool : ITool
         }
 
         return taken.Where(group => group.Items.Count > 0).ToList();
-    }
-
-    // totalIsLowerBound 时改口成 `at least N`。文法与 search_regex / trace 的表头共用
-    // （见 ScanReport.FoundCount），那边是「有文件没扫全所以总数只是下界」，这边是「候选池
-    // 装不下所以总数只是下界」——两处成因不同，而调用方要学的读法是同一条：出现 at least
-    // 就说明这个数只是地板。
-    //
-    // 折叠行的 `+N more` 不再加一次限定词：它数的是 `总数 − 已列出`，两个数都来自表头，
-    // 表头已经把这批数标成下界了。同一段里限定两次会被读成两处独立的不确定性——
-    // search_regex 的每文件折叠行（PerFileFold）在同样的情形下也是只在表头限定一次。
-    //
-    // fullScore：这个总数里名字逐字相同的有几条（ScopedResult.FullScoreCount），-1 = 不适用。
-    // 表头的 `N of M` / bare `N` 说的是**完整性**（这一段有没有被截断），而调用方拿它当
-    // **精确性**读：`method:Draw` 的 `10 of 1591 members` 印出来的 10 条全是 100%，
-    // 真正叫 Draw 的只有 35——第十轮盲测两条链各自差点把 1591 与 4 当成答案交出去，两次都
-    // 是自费多跑一轮才刹住。这里补的就是那个推不出来的数，且只在它与总数不等时才印：
-    // 相等时（全集本来就都是精确命中）一个字都不多，不会退化成常亮。
-    private static string Count(
-        int shown, int total, string plural, bool totalIsLowerBound = false, int fullScore = -1)
-    {
-        var floor = totalIsLowerBound ? "at least " : string.Empty;
-        var head = total > shown
-            ? $"{shown} of {floor}{OutputText.Quantity(total, plural)}"
-            : $"{floor}{OutputText.Quantity(shown, plural)}";
-
-        // 下界形不带这个限定：那时总数自己都不准，再挂一个「其中几条精确」会被读成两处
-        // 独立的不确定性（同折叠行只在表头限定一次那条判据）。
-        return fullScore >= 0 && fullScore < total && !totalIsLowerBound
-            ? $"{head} ({fullScore} at 100%)"
-            : head;
     }
 
     // 索引只收 .cs / .xml（SourceIndexer.CollectFilesIterative 扫描时的判据），故只认这两种扩展名。
