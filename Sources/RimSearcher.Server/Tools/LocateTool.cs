@@ -53,7 +53,19 @@ public class LocateTool : ITool
         // 限定条件（两个以上关键词）藏在从句里——读者已经先把规则收下了。
         // 「怎么判」也要就地给：只说 method:/field: 不保证名字精确、不说拿什么判，等于把一个
         // 已经答得出的问题留成悬案，第十轮盲测据此多绕了一轮。
-        "Every listed row carries its match score as (N%). For a single-keyword query 100% does mean an " +
+        // 「每一行都带 (N%)」是个全称承诺，而 Content Matches 是它唯一的反例：那一段的排序键是
+        // 关键词命中计数（DefIndexer 传 scoreGap: null），不是 0~100 的相似度，故整段无分数、
+        // 表头也永远没有 (K at 100%)。第十一轮盲测里调用方据此答不出「几条是逐字精确的」——
+        // 而这个问题服务端本来就答得出：内容索引按整词建键（WordSplitRegex `\W+`，下划线属 \w，
+        // 故 Apparel_ShieldBelt 保持为一个 token），查询走全等查表，**每一条内容命中按构造就是
+        // 整词、不区分大小写的逐字命中**。不是答不了，是从没写出来过。
+        // 这句恒真，故只能进描述——印进返回就是常亮。
+        "Every row in the C# Types, Members, XML Defs and Files sections carries its match score as (N%); " +
+        "Content Matches rows carry none and that section never reports '(K at 100%)' — a content match is " +
+        "a whole-word, case-insensitive hit on a field name or on one word of a field value, so every one " +
+        "listed is already literal, and the section is ranked by how many of the query's keywords a def " +
+        "matched rather than by name similarity. " +
+        "For a single-keyword query 100% does mean an " +
         "identical name; only a query of two or more keywords can push a near-name up to 100% in the member " +
         "sections, where 100% is then the top score rather than a guarantee of identical spelling. " +
         "Anything below 100% is a near-name match and not the name that was asked for, so a section total " +
@@ -66,6 +78,7 @@ public class LocateTool : ITool
         "Member rows are deduplicated by declaring type + member name + kind + file, so same-named overloads " +
         "collapse into one row: the count is of member names, not of declarations — inspect the type to see " +
         "how many overloads a row stands for. " +
+        ScopeArgs.LabelContract + " " +
         ConditionalReport.Contract + " " +
         "Filters go inside the query: type:, method:, field:, def:, and scope: as an alias for the scope parameter.";
 
@@ -147,7 +160,7 @@ public class LocateTool : ITool
                 hasResults = true;
                 tally.Add(Count(types.Items.Count, types.TotalInScope, "C# types",
                     fullScore: types.FullScoreCount));
-                var typeLabels = ScopeArgs.SourceLabeling.Of(types.Items.Select(e => e.SourceName));
+                var typeLabels = ScopeArgs.SourceLabeling.Of(types);
                 sb.AppendLine($"\n**C# Types**{typeLabels.Header}:");
                 foreach (var entry in types.Items)
                 {
@@ -196,12 +209,16 @@ public class LocateTool : ITool
                 // Methods 3），而 `method:CompTick` limit:10 只列 5 条——单一种类只拿得到一份配额。
                 var groupedMembers = members.Items.GroupBy(m => m.Item.MemberType).ToList();
 
-                // 来源标签按**实际列出的那些行**判，故先把分组配额切出来再写表头
+                // 行级标签按**实际列出的那些行**判，故先把分组配额切出来再写表头
                 var shownGroups = TakeRoundRobin(groupedMembers, limit.Unlimited ? int.MaxValue : limit.Count);
                 var shown = shownGroups.Sum(g => g.Items.Count);
 
+                // 段头的方括号则必须按全集判：这一段的截断是两层的（ScopeFilter 的 limit 加每组
+                // 配额），shown < TotalInScope 才是「有东西没列出来」的完整判据，ScopedResult
+                // 自己只看得见第一层，故这里显式传。
                 var memberLabels = ScopeArgs.SourceLabeling.Of(
-                    shownGroups.SelectMany(g => g.Items).Select(e => e.SourceName));
+                    shownGroups.SelectMany(g => g.Items).Select(e => e.SourceName),
+                    shown < members.TotalInScope ? members.SourcesInScope : null);
                 sb.AppendLine($"\n**Members**{memberLabels.Header}:");
 
                 foreach (var (kind, groupItems) in shownGroups)
@@ -256,7 +273,7 @@ public class LocateTool : ITool
                 hasResults = true;
                 tally.Add(Count(defs.Items.Count, defs.TotalInScope, "XML defs",
                     fullScore: defs.FullScoreCount));
-                var defLabels = ScopeArgs.SourceLabeling.Of(defs.Items.Select(e => e.SourceName));
+                var defLabels = ScopeArgs.SourceLabeling.Of(defs);
                 sb.AppendLine($"\n**XML Defs**{defLabels.Header}:");
                 foreach (var entry in defs.Items)
                 {
@@ -290,8 +307,7 @@ public class LocateTool : ITool
                 {
                     hasResults = true;
                     tally.Add(Count(defsByContent.Items.Count, defsByContent.TotalInScope, "content matches"));
-                    var contentLabels = ScopeArgs.SourceLabeling.Of(
-                        defsByContent.Items.Select(e => e.SourceName));
+                    var contentLabels = ScopeArgs.SourceLabeling.Of(defsByContent);
                     sb.AppendLine($"\n**Content Matches**{contentLabels.Header}:");
 
                     foreach (var entry in defsByContent.Items)
@@ -299,7 +315,15 @@ public class LocateTool : ITool
                         var (location, matchedFields) = entry.Item;
                         var fieldSummary = string.Join(", ", matchedFields.Take(3));
                         var moreFields = matchedFields.Count > 3 ? $" +{matchedFields.Count - 3}" : "";
-                        sb.AppendLine($"- `{location.DefName}` - {fieldSummary}{moreFields}"
+                        // 语序而非记号：原先是 `- \`名字\` - 字段路径`，与其余四段的
+                        // `- \`命中项\` (N%) - 附注` 逐字同形。但那四段行首是**被查中的东西**，
+                        // 这一段行首是**装着那个字段值的宿主 def**——同一处版面位置在同一份返回里
+                        // 表示两种关系，返回里没有任何记号区分。第十一轮盲测里被测方是靠
+                        // tools/list 的描述补出这层语义的，它甚至把出处记成了「返回开头」；
+                        // 只盯返回的调用方拿不到这条，最自然的读法就是「一个名字近似命中的 def」。
+                        // 改成 `字段路径 in \`名字\``，让语序自己说清谁装着谁，净增一个字符，
+                        // 名字仍是行内唯一的反引号项，复制给 inspect 照样能取。
+                        sb.AppendLine($"- {fieldSummary}{moreFields} in `{location.DefName}`"
                                       + $"{conditional.Tag(location.FilePath)}{contentLabels.Row(entry.SourceName)}");
                     }
 
@@ -386,7 +410,15 @@ public class LocateTool : ITool
                 // 读作「完整集」，而它确实是完整集，只是其中一半根本不叫这个名字。
                 var fileFullScore = queryIsFileName ? exactFiles.TotalInScope : files.FullScoreCount;
                 tally.Add(Count(items.Count, fileTotal, "files", fullScore: fileFullScore));
-                var fileLabels = ScopeArgs.SourceLabeling.Of(items.Select(e => e.SourceName));
+                // 段头的方括号按全集判（见 ScopeArgs.SourceLabeling）。只有兜底那一支会被截断，
+                // 且构成数的是 files.TotalInScope——WithExactFilesFirst 往 items 里补进过模糊结果
+                // 之外的精确命中时，构成会比表头的 fileTotal 少那几条。加起来对不上的构成不如
+                // 不印：它自证的本事全在「各源之和恰好等于表头那个总数」上。
+                var fileScopeTotals =
+                    wantsFileFallback && items.Count == files.Items.Count && items.Count < fileTotal
+                        ? files.SourcesInScope
+                        : null;
+                var fileLabels = ScopeArgs.SourceLabeling.Of(items.Select(e => e.SourceName), fileScopeTotals);
                 sb.AppendLine($"\n**Files**{fileLabels.Header}:");
                 foreach (var entry in items)
                 {

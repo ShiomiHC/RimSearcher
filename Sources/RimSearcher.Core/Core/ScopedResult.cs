@@ -40,7 +40,8 @@ public sealed class ScopedResult<T>
         bool truncatedByScoreGap,
         bool truncatedByLimit = false,
         bool totalIsLowerBound = false,
-        int fullScoreCount = -1)
+        int fullScoreCount = -1,
+        List<(string Source, int Count)>? sourcesInScope = null)
     {
         Items = items;
         TotalInScope = totalInScope;
@@ -49,6 +50,7 @@ public sealed class ScopedResult<T>
         TruncatedByLimit = truncatedByLimit;
         TotalIsLowerBound = totalIsLowerBound;
         FullScoreCount = fullScoreCount;
+        SourcesInScope = sourcesInScope ?? new List<(string, int)>();
     }
 
     public List<ScopedEntry<T>> Items { get; }
@@ -76,6 +78,13 @@ public sealed class ScopedResult<T>
     // 展示切片自己数不出这个量（被 limit 砍掉的尾巴不在手上），故在这里随 TotalInScope 一起数。
     // -1 = 这份结果没算过（按命中计数排序等分值不可比的场景），展示层据此不印。
     public int FullScoreCount { get; }
+
+    // TotalInScope 那一批的来源构成，按条数降序。与 FullScoreCount 同一个道理：展示切片自己
+    // 数不出它。三处排序都把 vanilla 排在前面（locate 同分按 Rank 升序、vanilla 的 rank 最小；
+    // 继承树按 depth 再按字母序），所以「切片同源、全集混源」不是巧合而是**结构性偏置**——
+    // 截断留下的前缀系统性地偏向 vanilla，正好是让段头那个来源标签变假的那种切法。
+    // ShowLabels=false（scope 已把源钉死）时为空，展示层据此退回原行为。
+    public List<(string Source, int Count)> SourcesInScope { get; }
 
     public int HiddenCount => Math.Max(0, TotalInScope - Items.Count);
 
@@ -172,9 +181,23 @@ public static class ScopeFilter
             ? ordered.Count(x => x.Candidate.Score >= 99.5)
             : -1;
 
+        // 来源构成同样按 ordered（全集）数，含被断层收口折掉的那些——它们也计入 TotalInScope，
+        // 而展示层拿这个构成去限定的正是那个总数。源的个数由配置决定（本机 11 个），有界，
+        // 故这里不设上限：一个被截断的构成会重新造出它要修的那个问题。
+        var sourcesInScope = scope.ShowLabels
+            ? ordered
+                .Select(x => scope.SourceNameOf(x.Candidate.Path))
+                .Where(name => !string.IsNullOrEmpty(name))
+                .GroupBy(name => name!, StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(g => g.Count())
+                .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(g => (g.Key, g.Count()))
+                .ToList()
+            : new List<(string, int)>();
+
         return new ScopedResult<T>(
             items, ordered.Count, outOfScopeList, truncatedByScoreGap,
             truncatedByLimit: items.Count < cutoff, totalIsLowerBound: totalIsLowerBound,
-            fullScoreCount: fullScoreCount);
+            fullScoreCount: fullScoreCount, sourcesInScope: sourcesInScope);
     }
 }

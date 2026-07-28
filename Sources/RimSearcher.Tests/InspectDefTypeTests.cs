@@ -60,6 +60,52 @@ public class InspectDefTypeTests : IDisposable
         Assert.DoesNotContain("<HediffGiverSetDef>", result.Content);
     }
 
+    // 上面那条三条 def 分在三个文件里，故 Lookup 选中哪一条、就打开哪个文件，正文自然跟着对。
+    // 同一个文件里撞名时这条掩护就没了：XmlInheritanceHelper 在文件内**只按 defName 找节点**、
+    // 完全不看 DefType，于是恒命中文件里排在最前的那一个。真语料上
+    // `inspect('Wolfein_PrototypeShieldBelt', defType:'JobDef')` 回的是 `Type: JobDef` 加一句
+    // 「showing the JobDef one」，正文却是 `<ThingDef>`——调用方已经明确说了要哪一个，
+    // 返回里三处互相打架、其中两处在骗人。第十一轮判官在方向外捞出这条。
+    [Fact]
+    public async Task DefType_PicksTheRightNode_WhenTheClashIsInsideOneFile()
+    {
+        var tool = BuildTool(
+            ("Sundry.xml",
+             "<Defs>\n"
+             + "  <ThingDef>\n    <defName>Belt</defName>\n    <thingClass>Apparel</thingClass>\n  </ThingDef>\n"
+             + "  <HediffDef>\n    <defName>Belt</defName>\n    <hediffClass>HediffWithComps</hediffClass>\n  </HediffDef>\n"
+             + "  <JobDef>\n    <defName>Belt</defName>\n    <driverClass>JobDriver_Wear</driverClass>\n  </JobDef>\n"
+             + "</Defs>\n"));
+
+        var result = await Run(tool, """{"name":"Belt","defType":"JobDef"}""");
+
+        Assert.False(result.IsError);
+        Assert.Contains("Type: JobDef", result.Content);
+        Assert.Contains("<JobDef>", result.Content);
+        Assert.Contains("JobDriver_Wear", result.Content);
+
+        // 文件里排在最前的那一条不许冒名顶替
+        Assert.DoesNotContain("<ThingDef>", result.Content);
+        Assert.DoesNotContain("Apparel", result.Content);
+    }
+
+    // 反面：退回分支必须保证不劣于原行为。父链上的抽象节点用 Name 属性挂接，元素名未必等于
+    // 子 def 的 DefType——按同型找不到时要退回按名字找，而不是把这一条判成解析失败。
+    [Fact]
+    public async Task ParentNodeStillResolves_WhenItsElementNameDiffersFromTheChildDefType()
+    {
+        var tool = BuildTool(
+            ("Base.xml",
+             "<Defs>\n  <ThingDef Name=\"BeltBase\" Abstract=\"True\">\n    <tickerType>Normal</tickerType>\n  </ThingDef>\n</Defs>\n"),
+            ("Child.xml",
+             "<Defs>\n  <ThingDef ParentName=\"BeltBase\">\n    <defName>Belt</defName>\n  </ThingDef>\n</Defs>\n"));
+
+        var result = await Run(tool, """{"name":"Belt"}""");
+
+        Assert.False(result.IsError);
+        Assert.Contains("<tickerType>Normal</tickerType>", result.Content);
+    }
+
     [Fact]
     public async Task WithoutDefType_HeaderAndBodyStillAgree()
     {

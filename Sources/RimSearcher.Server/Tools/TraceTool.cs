@@ -60,6 +60,7 @@ public class TraceTool : ITool
         // 这个工具此前一句都没有，理由是不想把 R59 那段常驻边界贴第三遍。收敛成契约之后
         // 它只有一句，而 inheritors 恰恰是最需要它的地方：一个只在 CE 启用时才存在的子类，
         // 与 vanilla 的子类在返回里逐字同形。
+        ScopeArgs.LabelContract + " " +
         ConditionalReport.Contract;
 
     public object JsonSchema => new
@@ -159,8 +160,11 @@ public class TraceTool : ITool
                 return new ToolResult($"{message}{footer ?? string.Empty}{scopeNotice}");
             }
 
-            // 列出来的类型全同源时标签只印一次（见 ScopeArgs.SourceLabeling）
-            var inheritorLabels = ScopeArgs.SourceLabeling.Of(inheritors.Items.Select(e => e.SourceName));
+            // 列出来的类型全同源时标签只印一次；被 200 上限截断时表头改印全树的来源构成
+            // （见 ScopeArgs.SourceLabeling）。这里的截断是结构性偏置：候选按 depth 再按字母序
+            // 排，vanilla 的直接子类挤满前 200 条，于是「切片全是 vanilla、全树横跨五个源」
+            // 是常态而非巧合。
+            var inheritorLabels = ScopeArgs.SourceLabeling.Of(inheritors);
             var inheritorConditional = new ConditionalReport(_conditional);
 
             var results = inheritors.Items.Select(entry =>

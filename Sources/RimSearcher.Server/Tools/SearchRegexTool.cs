@@ -53,6 +53,7 @@ public class SearchRegexTool : ITool
         "count is not a count of things that exist — confirm with locate or inspect before treating it as one. " +
         // R59 那三句常驻能力边界（「条件目录一律收下、条件不判定」）对每一次调用都成立，因而
         // 对**手上这一条命中**什么也没说。F34 把它收敛成契约，条件由命中自己带（见 ConditionalReport）。
+        ScopeArgs.LabelContract + " " +
         ConditionalReport.Contract + " " +
         "The header echoes whether the scan ran case-insensitively (the default).";
 
@@ -151,9 +152,26 @@ public class SearchRegexTool : ITool
             // 本次要列出的文件里有重名时补目录（见 ScopeArgs.DisambiguateFileNames）
             var displayNames = ScopeArgs.DisambiguateFileNames(shownFiles.Select(g => g.Key));
 
-            // 列出来的文件全同源时标签只印一次（见 ScopeArgs.SourceLabeling）
+            // 列出来的文件全同源时标签只印一次（见 ScopeArgs.SourceLabeling）。
+            //
+            // 但只印一次的前提是它对表头那个数为真。第九轮的事故记在下面 `allFiles.Count >
+            // MaxFilesShown` 那一支的注释里：调用方据 50 个文件的来源标签断言「97 个文件清一色
+            // 落在那 11 个源内」。当时补的是文件总数，标签本身没动，缺陷原地未动。这里补上——
+            // **但只在扫描没停时补**：truncated 时 allFiles 只是「恰好扫到的那批」，剩下的候选
+            // 文件根本没打开过，它们的来源服务端确实不知道，任何构成陈述都会是编的。
+            var fileScopeTotals = !truncated && allFiles.Count > MaxFilesShown && scope.ShowLabels
+                ? allFiles
+                    .Select(g => scope.SourceNameOf(g.Key))
+                    .Where(name => !string.IsNullOrEmpty(name))
+                    .GroupBy(name => name!, StringComparer.OrdinalIgnoreCase)
+                    .OrderByDescending(g => g.Count())
+                    .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+                    .Select(g => (g.Key, g.Count()))
+                    .ToList()
+                : null;
             var labels = ScopeArgs.SourceLabeling.Of(
-                shownFiles.Select(g => scope.ShowLabels ? scope.SourceNameOf(g.Key) : null));
+                shownFiles.Select(g => scope.ShowLabels ? scope.SourceNameOf(g.Key) : null),
+                fileScopeTotals);
 
             // string.Join 立即枚举，故读这两个旗时它们已经攒完了
             var anyFileFolded = false;

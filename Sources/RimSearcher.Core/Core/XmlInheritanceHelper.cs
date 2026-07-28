@@ -86,15 +86,31 @@ public static class XmlInheritanceHelper
                 var doc = indexer.GetOrLoadDocument(currentLoc.FilePath);
                 XElement? node = null;
                 var nodes = doc.Root?.Elements() ?? Enumerable.Empty<XElement>();
+
+                // 同名不同型必须靠 DefType 分开。原先只比 defName，于是同一个文件里三个都叫
+                // `Wolfein_PrototypeShieldBelt` 的 def（HediffDef / ThingDef / JobDef）永远命中
+                // 文件里排在最前的那一个——而表头印的是 Lookup 选中的那一个：
+                // `inspect(name, defType:'JobDef')` 回的是 `Type: JobDef` 加一句
+                // 「showing the JobDef one」，正文却是 `<ThingDef>`。调用方已经明确说了要哪一个，
+                // 这是返回里三处互相打架、且两处在骗人。
+                // 退回分支保证不劣于原行为：找不到同型节点时结果与此前逐字相同（父链上的
+                // 抽象节点用 Name 属性挂接，元素名未必等于子 def 的 DefType）。
+                XElement? byNameOnly = null;
                 foreach (var n in nodes)
                 {
-                    if (n.Element("defName")?.Value == currentLoc.DefName ||
-                        n.Attribute("Name")?.Value == currentLoc.DefName)
+                    if (n.Element("defName")?.Value != currentLoc.DefName &&
+                        n.Attribute("Name")?.Value != currentLoc.DefName)
+                        continue;
+
+                    byNameOnly ??= n;
+                    if (n.Name.LocalName == currentLoc.DefType)
                     {
                         node = n;
                         break;
                     }
                 }
+
+                node ??= byNameOnly;
 
                 if (node != null)
                 {
