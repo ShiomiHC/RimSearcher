@@ -287,10 +287,32 @@ public class SyncSourcesTool : ITool
 
         // 表头说清下面那批数字是**待办**而不是战果：check 只读 sha256，一个字节都不写。
         // 不说的话，`6 new, 0 changed, 0 gone` 会被读成「已经同步好了 6 个」。
+        // 原句两半都不准，且互相矛盾（第十二轮盲测里唯一一条被整条答错的链）：
+        //   「differences against the decompiled copies on disk」——check 比的是**游戏程序集的
+        //     sha256 与上次 sync 留下的记录**（Inspect 里 previousMap 取自 state.Sources），
+        //     跟反编译产物没有关系；
+        //   「nothing has been decompiled yet」——本意是「本次调用一个字节都没写」（恒真），
+        //     写出来是「这台机器从来没反编译过」，而这是本次调用**根本没验证过**的量。
+        // 本机恰好两者相反：产物在磁盘上、带着 RimSearcher 自己的归属标记，只是 sync 记录空了。
+        // 被测方照这句判「C# 侧是空的、索引不能用、先跑一次全量 sync」——整条结论反了。
+        //
+        // 拆法：关于磁盘的那半句删掉，换成本次真正比过的东西；关于「本次没写盘」的那半句
+        // 只在**有变更**时留——它要防的误读（把待办数读成战果）只在那时才可能发生，
+        // 无变更时结论行是「All followable sources are up to date」，那里没有可被误读的数。
+        // 「有变更」与「该重反编译」不是一回事，判据先算出来：整批变更是不是清一色
+        // 「记录没了、产物还在」。清一色时那半句归结论行说一次，逐行不再重复（R19）。
+        var onlyLostRecords = report.AnyChanges && report.Changes
+            .Where(c => c.HasChanges)
+            .All(c => c.IsLostRecordOnly);
+
         builder.AppendLine(
             $"Source check ({report.ElapsedMs} ms, game version {_syncService.GameVersion ?? "unknown"}) — "
-            + "differences against the decompiled copies on disk; nothing has been decompiled yet:");
-        foreach (var change in report.Changes) builder.AppendLine($"  {change.Describe()}");
+            + "assembly hashes compared against the record left by the last sync"
+            + (report.AnyChanges
+                ? "; the counts below are pending work — this call decompiled nothing:"
+                : ":"));
+        foreach (var change in report.Changes)
+            builder.AppendLine($"  {change.Describe(withOutputNote: !onlyLostRecords)}");
 
         // 结论的覆盖面必须跟着 only 走。sources 过滤生效之后，「全部可跟随的源都是最新的」
         // 就成了一句拿 1/10 抽样下的全称断言——没被扫到的那 9 个源变了也不会有人发现。
@@ -302,7 +324,15 @@ public class SyncSourcesTool : ITool
         var checkedNames = string.Join(",", report.Changes.Select(change => change.SourceName));
         var withSources = partial && checkedNames.Length > 0 ? $" and sources='{checkedNames}'" : string.Empty;
 
-        builder.AppendLine(report.AnyChanges
+        // 「有变更」与「该重反编译」不是一回事。整批变更都只是「记录没了、产物还在」时，
+        // 照这句跑一次 action='sync' 是把十一个源全量重反编译一遍换来零内容变化——第十二轮
+        // 盲测里被测方正是这么劝的。结论行要跟着分岔走，否则上面刚说清的那半句在这里被推翻。
+        builder.AppendLine(onlyLostRecords
+            ? $"\nNo assembly content differs — every count above is a missing record next to decompiled "
+              + $"output that is still on disk, so the index is usable as it stands. Run action='sync'"
+              + $"{withSources} only to rebuild the record; it re-decompiles everything listed and changes "
+              + "no query result."
+            : report.AnyChanges
             ? $"\nChanges detected. Run this tool again with action='sync'{withSources} to re-decompile."
             : partial
                 ? $"\nThe {OutputText.Quantity(report.Changes.Count, "checked sources")} "

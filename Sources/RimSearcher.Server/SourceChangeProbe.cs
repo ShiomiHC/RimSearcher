@@ -20,6 +20,12 @@ public sealed record PendingSourceUpdate
     public IReadOnlyList<string> ChangedAssemblySources { get; init; } = [];
     public IReadOnlyList<string> ChangedXmlSources { get; init; } = [];
 
+    // 记录丢了、产物还在的那些源（SourceChange.IsLostRecordOnly）。刻意与 Changed 分开存：
+    // 这批源没有任何内容差异被观察到，把它们并进 ChangedAssemblySources 就等于让这条挂在
+    // 每次查询末尾的提示宣布「源变了、结果可能过时」——两句都是假的，而它给出的补救
+    // （全量重反编译）代价是分钟级且换不来一处变化。
+    public IReadOnlyList<string> UnverifiedAssemblySources { get; init; } = [];
+
     // 变更涉及的文件名/类型名，用于判断某个会话查过的东西是否受影响
     public IReadOnlyList<string> Hints { get; init; } = [];
 
@@ -27,7 +33,11 @@ public sealed record PendingSourceUpdate
     public IReadOnlyList<string> ChangedRoots { get; init; } = [];
 
     public bool RequiresDecompile => ChangedAssemblySources.Count > 0;
-    public bool Any => ChangedAssemblySources.Count > 0 || ChangedXmlSources.Count > 0;
+
+    // 观察到的**差异**。只有无记录可比的源不算——那是「没验证」，见 UnverifiedAssemblySources。
+    public bool AnyChanged => ChangedAssemblySources.Count > 0 || ChangedXmlSources.Count > 0;
+
+    public bool Any => AnyChanged || UnverifiedAssemblySources.Count > 0;
 
     public string Describe()
     {
@@ -36,6 +46,8 @@ public sealed record PendingSourceUpdate
             parts.Add($"assemblies changed in: {string.Join(", ", ChangedAssemblySources)}");
         if (ChangedXmlSources.Count > 0)
             parts.Add($"XML defs changed in: {string.Join(", ", ChangedXmlSources)}");
+        if (UnverifiedAssemblySources.Count > 0)
+            parts.Add($"no sync record to compare against in: {string.Join(", ", UnverifiedAssemblySources)}");
         return string.Join("; ", parts);
     }
 }
@@ -106,22 +118,23 @@ public static class SourceChangeProbe
 
             await Task.WhenAll(assemblyTask, xmlTask);
 
-            var (assemblySources, assemblyHints) = assemblyTask.Result;
+            var (assemblySources, unverifiedSources, assemblyHints) = assemblyTask.Result;
             var (xmlSources, xmlHints) = xmlTask.Result;
 
-            if (assemblySources.Count == 0 && xmlSources.Count == 0)
+            if (assemblySources.Count == 0 && unverifiedSources.Count == 0 && xmlSources.Count == 0)
             {
                 await ServerLogger.Info("SourceChangeProbe", "No source changes detected");
                 return;
             }
 
             var changedNames = new HashSet<string>(
-                assemblySources.Concat(xmlSources), StringComparer.OrdinalIgnoreCase);
+                assemblySources.Concat(unverifiedSources).Concat(xmlSources), StringComparer.OrdinalIgnoreCase);
 
             _pending = new PendingSourceUpdate
             {
                 DetectedAtUtc = DateTime.UtcNow,
                 ChangedAssemblySources = assemblySources,
+                UnverifiedAssemblySources = unverifiedSources,
                 ChangedXmlSources = xmlSources,
                 Hints = assemblyHints.Concat(xmlHints).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
                 ChangedRoots = RootsOf(_sources!.Csharp, changedNames)
@@ -132,6 +145,7 @@ public static class SourceChangeProbe
 
             await ServerLogger.Warning("SourceChangeProbe", "Source changes detected",
                 ("assemblies", string.Join(",", assemblySources)),
+                ("unverified", string.Join(",", unverifiedSources)),
                 ("xml", string.Join(",", xmlSources)),
                 ("hints", _pending.Hints.Count));
         }
@@ -141,21 +155,27 @@ public static class SourceChangeProbe
         }
     }
 
-    private static (List<string> Sources, List<string> Hints) DetectAssemblyChanges()
+    private static (List<string> Sources, List<string> Unverified, List<string> Hints) DetectAssemblyChanges()
     {
         var sources = new List<string>();
+        var unverified = new List<string>();
         var hints = new List<string>();
 
         var report = _syncService!.Check();
         foreach (var change in report.Changes)
         {
             if (!change.HasChanges || change.Blocker != null) continue;
-            sources.Add(change.SourceName);
+            // 记录丢了、产物还在的源分到另一桶：这条提示会宣布「结果可能过时」，
+            // 而那批源一处差异都没被观察到，说成变更就是把「验不了」印成「变了」。
+            if (change.IsLostRecordOnly) unverified.Add(change.SourceName);
+            else sources.Add(change.SourceName);
         }
 
-        // 程序集级变更给不出类型名，退而用源名做提示词
+        // 程序集级变更给不出类型名，退而用源名做提示词。两桶都要——相关性判定问的是
+        // 「这个会话查过的东西落在这些源里吗」，与该源是变了还是验不了无关。
         hints.AddRange(sources);
-        return (sources, hints);
+        hints.AddRange(unverified);
+        return (sources, unverified, hints);
     }
 
     private static (List<string> Sources, List<string> Hints) DetectXmlChanges()
@@ -254,6 +274,10 @@ public static class SourceChangeProbe
 
     internal static void ClearPending() => _pending = null;
 
+    // 探测本身要跑一遍真实反编译目录才有 Pending，而需要回归的是「同一份 Pending 渲染成
+    // 哪句话」。测试直接放一份进来，避免为一句措辞搭出整套同步服务。
+    internal static void SetPendingForTests(PendingSourceUpdate? pending) => _pending = pending;
+
     // 同步完成后才有文件级 diff，判定精度从「源里的东西」升到「这个类型本身」。
     // 记在进程级：触发同步的只是某一个会话，别的会话同样需要知道自己看过的东西过时了。
     internal static void RecordSync(IEnumerable<SourceChangeSet> changeSets)
@@ -320,6 +344,16 @@ public sealed class SessionUpdateNotice
                 ("tool", toolName ?? "?"));
             return null;
         }
+
+        // 一处差异都没观察到、只是无记录可比时，这条提示原先照样说「源变了、结果可能过时、
+        // 去跑一次 sync」。三句全是假的：sync 记录空了而反编译产物还在磁盘上，本次比对
+        // 根本没有可比的旧哈希。它挂在**每一次**查询返回的末尾，比 sync_sources 自己那条
+        // 更容易把调用方推向那次白跑的全量重反编译（第十二轮盲测里正是这么发生的）。
+        if (!pending.AnyChanged)
+            return $"\n\n---\n**Note: this session cannot confirm the indexed C# is current.** "
+                 + $"{pending.Describe()} — the decompiled output those results came from is on disk, "
+                 + "there is just no record of what it was built from, so nothing here is known to have "
+                 + "changed. Run rimworld-searcher__sync_sources with action='check' for details.";
 
         var action = pending.RequiresDecompile
             ? "Run rimworld-searcher__sync_sources with action='sync' to re-decompile and rebuild the index "

@@ -271,6 +271,8 @@ public static class ScopeArgs
         "A `[source]` tag on a section header describes that section's total, not just the rows listed "
         + "under it: a bare name means the whole total comes from that source, and a truncated listing "
         + "whose total spans several sources carries the breakdown instead, as `[vanilla 34, Cinders 2]`. "
+        + "That breakdown covers the section's whole total, near-name rows included, so it does not tell "
+        + "you which sources the '(K at 100%)' subset comes from. "
         + "Rows carry their own `[source]` tag only when the listed rows span more than one source.";
 
     public readonly struct SourceLabeling

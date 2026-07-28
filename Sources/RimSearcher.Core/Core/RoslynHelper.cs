@@ -342,7 +342,12 @@ public static class RoslynHelper
         // "not shown" 是 "more" 已经说过的话。
         sb.AppendLine(
             $"    ... +{total - shownCap} more {OutputText.NounFor(total - shownCap, kindPlural)} "
-            + "(pass limit:'all' for the whole list, or read one with read_code methodName)");
+            // `the whole list` 是个没有辖域的全称承诺，而服务端担保得了的只有「这一类里**本类型
+            // 自己声明**的那些」。第十二轮盲测：调用方要在 `Pawn` 上找取地图的成员，照这句展开
+            // 全部 118 条属性也拿不到 `Map`——它声明在基类 `Verse.Thing` 上。答对那位是靠 C# 常识
+            // 绕开了这句话，而不是照它做。辖域那半句由 Inheritance chain 那行承担（见 InspectTool），
+            // 这里只把担保不了的话删掉，与 ScopeArgs.FoldLine 的同位措辞对齐。
+            + "(pass limit:'all' to expand, or read one with read_code methodName)");
     }
 
     // 一类成员一块：表头 + 各行签名 + 折叠行。空的那类整块不出现——「没有这个表头」即

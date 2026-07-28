@@ -432,9 +432,17 @@ public class InspectTool : ITool
             // 三层链要 7 行 ~150 字符，而 `A <- B <- C` 一行 ~45 字符说的是同一件事，
             // 读者还得从箭头对里自己重建先后顺序。同一个工具的 def 模式早就在用一行式
             // （`Inheritance chain: X <- Y`），两处渲染同一个概念不该有两套写法。
+            // 这一行必须自己说清底下那张表的**取值域**。def 模式的同名行下面是沿 ParentName
+            // 合并过的结果，type 模式的下面不是——两处同形而语义相反，而返回里此前没有一处
+            // 区分。第十二轮盲测：调用方在 `Pawn` 上找取地图的成员，`Map` 与 `MapHeld` 声明在
+            // 基类 `Verse.Thing` 上，展开全部 118 条属性也看不到，而「不列」与「没有」在版面上
+            // 逐字同形。这不是第三道截断（那两道是 40 条上限与多源同名），限定词也就不能挂到
+            // 折叠行上——折叠行数的是这一类里已声明的那些，说的是另一件事。
             var chain = _sourceIndexer.GetInheritanceChain(name);
             if (chain.Count > 0)
-                sb.AppendLine($"Inheritance chain: {string.Join(" <- ", LinearChain(chain))}");
+                sb.AppendLine(
+                    $"Inheritance chain: {string.Join(" <- ", LinearChain(chain))}"
+                    + " — inherited members are not in the outline below at any limit; inspect a base name for its own.");
 
             // 同名类型在 vanilla 与各 mod 里各有一份是常态（HAR 之类的前置尤其如此），
             // 每份都全量渲染一次大纲，体积就按文件数线性放大。读者要的通常是作用域里
@@ -454,7 +462,13 @@ public class InspectTool : ITool
                     sb.AppendLine(
                         $"\n**Also declared in** `{entry.Item}`{typeConditional.Tag(entry.Item)}"
                         + $"{ScopeArgs.Label(entry.SourceName)} "
-                        + "— outline omitted; narrow scope to this source, or use read_code extractClass, to see it.");
+                        // 两支出路必须各自带全自己的限定。原先是「narrow scope to this source,
+                        // or use read_code extractClass」——第一支自带限定（narrow **scope**），
+                        // 第二支没有，而不锁源的 read_code 按 scope 里排在前面的源取，拿回的正是
+                        // 上面刚完整列过的那一份。第十二轮盲测里被测方是把第一支的限定顺延到第二支
+                        // 才没走错。路径就在同一行的反引号里，指过去比让读者自己想起来便宜。
+                        + "— outline omitted; narrow scope to this source, or pass this path to read_code "
+                        + "with extractClass, to see it.");
                     continue;
                 }
 

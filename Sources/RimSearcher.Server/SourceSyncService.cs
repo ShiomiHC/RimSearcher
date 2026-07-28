@@ -28,6 +28,19 @@ public sealed record SourceChange
     public int TotalAssemblies { get; init; }
     public string? Blocker { get; init; }
 
+    // 输出目录里有没有 RimSearcher 自己的归属标记，即「这批产物是我们反编译出来的、还在」。
+    // 与 Added 是**两件事**：Added 数的是 sync 记录里没有哈希的程序集，记录丢了但产物还在时
+    // 两者恰好相反。第十二轮盲测整条答错就错在这个分岔上——调用方把「全部 unrecorded」读成
+    // 冷启动，据此劝了一次十一个源的全量重反编译。判据在 IsWritableOutput 里已经算过一次。
+    public bool OutputPresent { get; init; }
+
+    // 「记录丢了、产物还在」：这个源的每个程序集都没有可比的记录，而反编译产物带着归属标记
+    // 还在磁盘上。此时**一处内容差异都没有被观察到**——它是「验不了」，不是「变了」。
+    // 三处判它：check 的结论行、逐行后缀的抑制、以及挂在每次查询末尾的过期提示。
+    public bool IsLostRecordOnly =>
+        HasChanges && Blocker == null && OutputPresent
+        && Added == TotalAssemblies && Modified == 0 && Removed == 0;
+
     // 本源开始同步之后整体失败并回滚了。与 Blocker 的区别是时机：Blocker 是「压根没能开始」
     // （目录不存在、输出目录不归我们管），这个是「跑起来了但没能完整落地」。
     // 两者都必须让调用方看见——失败被吞掉的后果是用户以为同步过了。
@@ -36,7 +49,9 @@ public sealed record SourceChange
     // 这一行会原样出现在 sync_sources 的工具返回里，故与其余六个工具一样用英文：
     // 同一次响应里 description、参数说明、其它工具的正文都是英文，只有这里换语言，
     // 调用方无从判断它是服务器的话还是被检索内容的一部分。
-    public string Describe() => Blocker != null
+    // withOutputNote：整批变更**不**是清一色「记录丢了、产物还在」时才逐行印那半句。
+    // 清一色时它每行都一样，是 R19 判掉的那种噪音——结论行已经整份说过一次了。
+    public string Describe(bool withOutputNote = true) => Blocker != null
         ? $"{SourceName}: cannot sync — {Blocker}"
         : Failure != null
             ? $"{SourceName}: sync failed and was rolled back in full (sources are still the previous version) — {Failure}"
@@ -45,8 +60,21 @@ public sealed record SourceChange
             // 调用方据此判断索引健康、直接开查，而实际那是一份待办清单（首次跑时 6 of 6
             // 全是 added，意思恰恰是这个源一次都没同步过）。改用形容词，不带完成态；
             // 「有没有被处理」由两处各自的表头说。
+            // `new` 说不出自己数的是什么（新出现的程序集？没反编译过的程序集？），而它的判据
+            // 只有一条：这个路径在上次 sync 的记录里没有哈希。`unrecorded` 自带判据，与表头的
+            // "the record left by the last sync" 在同一屏里互指——第十一轮那条判据的直接应用：
+            // **记号自带限定词就不会一词两义**。
+            //
+            // 整源全部 unrecorded 时另挂一句产物在不在。那正是「冷启动」与「记录丢了」的分岔，
+            // 而这两种情形该做的事完全相反（前者必须 sync，后者直接开工即可）。只在这一条件下
+            // 出现，正常增量 check 永不出现，故不会退化成常亮。
             : HasChanges
-                ? $"{SourceName}: {Added} new, {Modified} changed, {Removed} gone (of {Assemblies})"
+                ? $"{SourceName}: {Added} unrecorded, {Modified} changed, {Removed} gone (of {Assemblies}"
+                  + (withOutputNote && Added == TotalAssemblies && Modified == 0 && Removed == 0
+                      ? OutputPresent
+                          ? "; decompiled output already present)"
+                          : "; no decompiled output yet)"
+                      : ")")
                 : $"{SourceName}: unchanged ({Assemblies})";
 
     private string Assemblies => TotalAssemblies == 1 ? "1 assembly" : $"{TotalAssemblies} assemblies";
@@ -409,7 +437,10 @@ public sealed class SourceSyncService
             Added = added,
             Modified = modified,
             Removed = removed,
-            TotalAssemblies = entries.Count
+            TotalAssemblies = entries.Count,
+            // 与 IsWritableOutput 的第二道判据同源：带标记 = 这批产物是 RimSearcher 反编译出来的。
+            // 目录不存在或为空同样能通过那道闸（那时允许写入），但那两种情形下产物确实不在。
+            OutputPresent = File.Exists(Path.Combine(entry.Path, OwnershipMarker))
         };
     }
 

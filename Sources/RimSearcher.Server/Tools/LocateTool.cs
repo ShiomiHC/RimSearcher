@@ -463,6 +463,27 @@ public class LocateTool : ITool
               + "(server expansion cap; no parameter widens it). Narrow the query for an exact count._"
             : string.Empty;
 
+        // 字段内容索引有一条建键下限，低于它的词从没进过索引，故用它查内容命中恒为空——
+        // 而 Content Matches 段是**整段不出现**，与「查过了、零命中」在版面上逐字同形。
+        // 第十二轮盲测：`Plants_Wild.xml` 里实打实有六处 `<li>20</li>`，`locate('20')` 的
+        // 返回里连那个段头都没有；被测方是自费跑了一整套对照实验（查 '22'、'14'、'200'、
+        // '1200'，再 inspect 一个 def 拿真值回查）才判出这是盲区而不是空集。
+        // 这一句只声明「没查」，不声明「有没有」——后者要 search_regex，返回给出出路即可。
+        // 不能改成让 Content Matches 恒印 `0 content matches`：那恰好把这个错误结论固化成契约，
+        // 而且是真正的常亮。只在调用方真传了短词时印。
+        var shortKeywords = query.Keywords
+            .Where(k => k.Length < DefIndexer.MinContentTokenLength)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var shortTokenNotice = shortKeywords.Count > 0
+            ? $"\n\n_{string.Join(", ", shortKeywords.Select(k => $"'{ToolArgs.ForEcho(k)}'"))} "
+              + $"{(shortKeywords.Count == 1 ? "is" : "are")} shorter than "
+              + $"{DefIndexer.MinContentTokenLength} characters, and the field-value index only holds tokens "
+              + "of that length or more — no def field was searched for "
+              + $"{(shortKeywords.Count == 1 ? "it" : "them")}. A missing Content Matches section here means "
+              + "'not searched', not 'not present'; search_regex matches short literals._"
+            : string.Empty;
+
         var prefixNotice = new StringBuilder();
         if (query.UnknownPrefixes.Count > 0)
         {
@@ -508,6 +529,7 @@ public class LocateTool : ITool
         // 再说一遍「没有叫 X 的文件」是同一件事说两遍。
         sb.Append(missingFileNotice);
         sb.Append(floorNotice);
+        sb.Append(shortTokenNotice);
         sb.Append(scopeNotice);
         sb.Append(prefixNotice);
 

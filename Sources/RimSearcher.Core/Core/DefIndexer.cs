@@ -60,6 +60,12 @@ public class DefIndexer
 {
     private static readonly Regex WordSplitRegex = new(@"\W+", RegexOptions.Compiled);
 
+    // 字段内容索引的建键下限。低于它的词从不进索引，故用它查内容命中恒为空——而「没查」与
+    // 「没有」在返回里此前逐字同形（第十二轮盲测：`Plants_Wild.xml` 里实打实有六处
+    // `<li>20</li>`，`locate('20')` 却连 Content Matches 这个段头都不出现）。展示层要据此
+    // 自报盲区，故这个数必须是公开常量而不是散落三处的字面 3。
+    public const int MinContentTokenLength = 3;
+
     // 单值字典会让同名 def 后写覆盖先写（实测参考 mod 与 vanilla 有 40+ 处 defName 重名，
     // 多为 TraitDef）。覆盖之后按 scope 查就会「vanilla 里明明有却报找不到」，且父链解析
     // 会顺着别的 mod 的同名 def 往上走。故一名多值，由 scope 决定取哪个。
@@ -295,7 +301,7 @@ public class DefIndexer
             : $"{pathPrefix}.{element.Name.LocalName}";
 
         var elementName = element.Name.LocalName;
-        if (elementName.Length >= 3)
+        if (elementName.Length >= MinContentTokenLength)
         {
             _fieldContentIndex.GetOrAdd(elementName.ToLowerInvariant(), _ => new ConcurrentBag<(DefLocation, string)>())
                 .Add((location, currentPath));
@@ -305,7 +311,7 @@ public class DefIndexer
         {
             var value = element.Value.Trim();
             var words = WordSplitRegex.Split(value)
-                .Where(w => w.Length >= 3)
+                .Where(w => w.Length >= MinContentTokenLength)
                 .Select(w => w.ToLowerInvariant())
                 .Distinct();
 
@@ -397,7 +403,7 @@ public class DefIndexer
 
         foreach (var keyword in keywords)
         {
-            if (string.IsNullOrWhiteSpace(keyword) || keyword.Length < 3)
+            if (string.IsNullOrWhiteSpace(keyword) || keyword.Length < MinContentTokenLength)
                 continue;
 
             var keyLower = keyword.ToLowerInvariant();
