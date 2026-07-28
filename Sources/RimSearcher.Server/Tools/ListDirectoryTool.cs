@@ -43,7 +43,11 @@ public class ListDirectoryTool : ITool
         var roots = PathSecurity.Roots;
         if (roots.Count == 0) return "No source root is configured, so every path is refused.";
 
-        var shown = string.Join(", ", roots.Take(8));
+        // 按配置序取头 8 条，结构上只会取到 `Decompiled\<源名>` 那一族——反编译产物在配置里
+        // 排在前面，而真正装着 XML 的游戏/创意工坊目录一条都露不出来。第十轮盲测里一条链
+        // 据此以为 Data 下的 XML 目录可能不在白名单里，一度打算改用别的工具绕。
+        // 改按父目录分族轮流取：每一族先出一条，凑不满 8 条再回头补第二条。
+        var shown = string.Join(", ", SampleAcrossFamilies(roots, 8));
 
         // 露出来的前 8 个根形如 `Decompiled\<源名>`，逐一对应 scope 里的前 8 个源名——于是
         // 「根 ≈ 源」被坐实，87 个根读成 87 个源，而 scope 只枚举 11 个。第九轮盲测里两条链
@@ -59,6 +63,44 @@ public class ListDirectoryTool : ITool
         return $"The roots on this server: {shown}"
             + (roots.Count > 8 ? $", and {roots.Count - 8} more." : ".")
             + attribution;
+    }
+
+    // 分族轮流取样。族 = 盘符 + 第一级目录（`S:\works` / `D:\SteamLibrary`），粗到能把
+    // 「反编译产物」与「游戏和创意工坊的数据目录」分开，又不至于让每个 mod 的每个子目录
+    // 各成一族——按父目录分的话 workshop 下八条深路径就是八个族，样本全被它们占满，
+    // 反倒比原来更难读。族内与族间都保持配置序，故同一份配置每次取到的样本一致。
+    private static List<string> SampleAcrossFamilies(IReadOnlyList<string> roots, int max)
+    {
+        var families = roots
+            .GroupBy(FamilyOf, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.ToList())
+            .ToList();
+
+        var sample = new List<string>();
+        for (var round = 0; sample.Count < max; round++)
+        {
+            var progressed = false;
+            foreach (var family in families)
+            {
+                if (round >= family.Count) continue;
+                sample.Add(family[round]);
+                progressed = true;
+                if (sample.Count == max) break;
+            }
+
+            if (!progressed) break;
+        }
+
+        return sample;
+    }
+
+    private static string FamilyOf(string root)
+    {
+        var pathRoot = Path.GetPathRoot(root) ?? string.Empty;
+        var rest = root[pathRoot.Length..].Split(
+            [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+            StringSplitOptions.RemoveEmptyEntries);
+        return rest.Length == 0 ? pathRoot : pathRoot + rest[0];
     }
 
     public object JsonSchema => new

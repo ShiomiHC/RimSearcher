@@ -39,8 +39,14 @@ public class SearchRegexTool : ITool
         "scope. Results are grouped by file, showing at most 3 preview lines per file and at most 50 files. " +
         "Three things can cut the output: those two caps, and files the scan could not read in full; all three " +
         "are stated in a trailing note, and the third additionally degrades the header count to 'at least N'. " +
-        "limit never changes that count — when the result cap bites instead, the header switches to " +
-        "'first N preview lines' and a trailing line says the scan stopped there. " +
+        // 「limit never changes that count」读起来是个无条件承诺：随便传多小的 limit，总数照报。
+        // 例外虽然就写在后半句，却以 'instead' 起头附在承诺之后，读者已经先把承诺收下了——
+        // 第十轮盲测里一条链据此传了 limit:1 想省一轮拿总数，结果扫描直接停、计数整个消失，
+        // 白烧一轮。真实语义是「limit 不会把总数改**小**，但咬人时它会把总数**删掉**」，
+        // 两件事此前被措辞混成了一件。先说会发生什么，再说不会发生什么。
+        "A limit small enough to bite replaces that count with 'first N preview lines' and stops the scan " +
+        "there — pass limit:'all' when the total is what is wanted. Short of that, limit only shortens the " +
+        "listing and never lowers the reported count. " +
         "Counts are matching lines, not match sites — a line the pattern hits twice counts once — and this tool " +
         "never reports how many lines or files matched across the whole corpus when the scan stopped early. " +
         "Matches are raw text: commented-out code, disabled XML and prose inside comments all count, so a match " +

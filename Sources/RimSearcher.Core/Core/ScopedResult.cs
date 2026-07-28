@@ -39,7 +39,8 @@ public sealed class ScopedResult<T>
         List<(string Source, int Count)> outOfScope,
         bool truncatedByScoreGap,
         bool truncatedByLimit = false,
-        bool totalIsLowerBound = false)
+        bool totalIsLowerBound = false,
+        int fullScoreCount = -1)
     {
         Items = items;
         TotalInScope = totalInScope;
@@ -47,6 +48,7 @@ public sealed class ScopedResult<T>
         TruncatedByScoreGap = truncatedByScoreGap;
         TruncatedByLimit = truncatedByLimit;
         TotalIsLowerBound = totalIsLowerBound;
+        FullScoreCount = fullScoreCount;
     }
 
     public List<ScopedEntry<T>> Items { get; }
@@ -67,6 +69,13 @@ public sealed class ScopedResult<T>
     // 有多少没列出来」（总数本身是准的），这个说的是**总数自己不准**，展示层要据此改口
     // （`N of M` → `N of at least M`），否则调用方会把一个下界当成穷尽结论。
     public bool TotalIsLowerBound { get; }
+
+    // TotalInScope 里满分（名字逐字相同）的那几条。TotalInScope 保证的是「这一段没被截断」，
+    // 保证不了「这些都是问的那个名字」——两件事被同一个数承载，而展示层此前只印得出前者：
+    // `method:Draw` 的 `10 of 1591 members` 里印出来的 10 条全是 100%，真正叫 Draw 的只有 35。
+    // 展示切片自己数不出这个量（被 limit 砍掉的尾巴不在手上），故在这里随 TotalInScope 一起数。
+    // -1 = 这份结果没算过（按命中计数排序等分值不可比的场景），展示层据此不印。
+    public int FullScoreCount { get; }
 
     public int HiddenCount => Math.Max(0, TotalInScope - Items.Count);
 
@@ -156,8 +165,16 @@ public static class ScopeFilter
                 .Select(kv => (kv.Key, kv.Value))
                 .ToList();
 
+        // 满分数按 ordered（全集）数，不是按 items（展示切片）：切片里全是 100% 而全集里
+        // 混着近名，正是这个量唯一要防的那种情形。scoreGap 关掉时分值不可比，返回 -1。
+        // 判据取 >= 99.5：分数是 double 且印出来的是 F0，99.6 会被印成 100%。
+        var fullScoreCount = scoreGap.HasValue
+            ? ordered.Count(x => x.Candidate.Score >= 99.5)
+            : -1;
+
         return new ScopedResult<T>(
             items, ordered.Count, outOfScopeList, truncatedByScoreGap,
-            truncatedByLimit: items.Count < cutoff, totalIsLowerBound: totalIsLowerBound);
+            truncatedByLimit: items.Count < cutoff, totalIsLowerBound: totalIsLowerBound,
+            fullScoreCount: fullScoreCount);
     }
 }

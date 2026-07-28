@@ -49,11 +49,23 @@ public class LocateTool : ITool
         // score==100 算，而成员分是 baseScore + keywordBonus 封顶 100（SourceIndexer 的
         // `Math.Min(matchCount - 1, 5) * 10`），两个以上关键词时一个 90 分的前缀命中也能被推到
         // 100——拆出来的「exact-name」于是是个假数。写进返回里的读法只能取恒真的那一半方向。
-        "Every listed row carries its match score as (N%). Anything below 100% is a near-name match and not " +
-        "the name that was asked for, so a section total counts those too. This holds for method: and field: " +
-        "as well — they restrict the search to members, they do not make the name match exact. In the member " +
-        "sections a query of two or more keywords can also carry a near-name up to 100%, so there 100% is the " +
-        "top score rather than a guarantee of identical spelling. " +
+        // 限定必须前置。原先是「100% 以下都是近名」立完规则、下一句才用从句把它推翻，而那个
+        // 限定条件（两个以上关键词）藏在从句里——读者已经先把规则收下了。
+        // 「怎么判」也要就地给：只说 method:/field: 不保证名字精确、不说拿什么判，等于把一个
+        // 已经答得出的问题留成悬案，第十轮盲测据此多绕了一轮。
+        "Every listed row carries its match score as (N%). For a single-keyword query 100% does mean an " +
+        "identical name; only a query of two or more keywords can push a near-name up to 100% in the member " +
+        "sections, where 100% is then the top score rather than a guarantee of identical spelling. " +
+        "Anything below 100% is a near-name match and not the name that was asked for, so a section total " +
+        "counts those too — when it does, the header says how many of that total are exact, as '(K at 100%)'. " +
+        "This holds for method: and field: as well — they restrict the search to members, they do not make " +
+        "the name match exact; read the (N%) on each row to tell an exact name from a near one. " +
+        // 「有几个方法叫 X」是这一段最典型的用途，而行数答的不是那个问题：第十轮盲测里
+        // FleckStatic 的两个 Draw 重载在返回里是一行，调用方多跑一次 inspect 才发现，并因此
+        // 对自己已经闭合的证据失去信心。这件事在 schema、README、返回三处都没有写过。
+        "Member rows are deduplicated by declaring type + member name + kind + file, so same-named overloads " +
+        "collapse into one row: the count is of member names, not of declarations — inspect the type to see " +
+        "how many overloads a row stands for. " +
         ConditionalReport.Contract + " " +
         "Filters go inside the query: type:, method:, field:, def:, and scope: as an alias for the scope parameter.";
 
@@ -133,7 +145,8 @@ public class LocateTool : ITool
             if (types.Items.Count > 0)
             {
                 hasResults = true;
-                tally.Add(Count(types.Items.Count, types.TotalInScope, "C# types"));
+                tally.Add(Count(types.Items.Count, types.TotalInScope, "C# types",
+                    fullScore: types.FullScoreCount));
                 var typeLabels = ScopeArgs.SourceLabeling.Of(types.Items.Select(e => e.SourceName));
                 sb.AppendLine($"\n**C# Types**{typeLabels.Header}:");
                 foreach (var entry in types.Items)
@@ -205,7 +218,16 @@ public class LocateTool : ITool
                 }
 
                 memberTotalIsFloor = members.TotalIsLowerBound;
-                tally[tallySlot] = Count(shown, members.TotalInScope, "members", memberTotalIsFloor);
+
+                // 成员分是 baseScore + keywordBonus 封顶 100（SourceIndexer 里那个
+                // `Math.Min(matchCount - 1, 5) * 10`），故**多关键词**查询里一条 90 分的前缀
+                // 命中也能被推到 100——那时「100% 的有几条」是个假数，第九轮正是据此驳回了
+                // 「把表头拆成 exact-name / approximate」的提议。单关键词时 matchCount 恒为 1、
+                // bonus 恒为 0，100 分就真的是逐字相同，这个数才敢印。
+                // 描述里那句「两个以上关键词时 100% 只是最高分」说的是同一件事，两处判据同源。
+                var memberFullScore = keywords.Count == 1 ? members.FullScoreCount : -1;
+                tally[tallySlot] = Count(
+                    shown, members.TotalInScope, "members", memberTotalIsFloor, memberFullScore);
 
                 // 折叠行放在整段末尾、按 TotalInScope 计数。原先每组各打一行、只数「取回的这批里
                 // 还剩几条」，而取回本身已被 limit.Scale(3) 砍过：method:CompTick 因此报 +25，
@@ -232,7 +254,8 @@ public class LocateTool : ITool
             if (defs.Items.Count > 0)
             {
                 hasResults = true;
-                tally.Add(Count(defs.Items.Count, defs.TotalInScope, "XML defs"));
+                tally.Add(Count(defs.Items.Count, defs.TotalInScope, "XML defs",
+                    fullScore: defs.FullScoreCount));
                 var defLabels = ScopeArgs.SourceLabeling.Of(defs.Items.Select(e => e.SourceName));
                 sb.AppendLine($"\n**XML Defs**{defLabels.Header}:");
                 foreach (var entry in defs.Items)
@@ -355,13 +378,24 @@ public class LocateTool : ITool
                 // （「看到 of 就是被截了」），调用方读到的却是「5 files」加一行「还有 43 条」，
                 // 两句在同一屏里互相否定。
                 var fileTotal = wantsFileFallback ? items.Count + files.HiddenCount : items.Count;
-                tally.Add(Count(items.Count, fileTotal, "files"));
+
+                // 这一段里名字逐字相同的有几条。带扩展名的查询走精确查表，那份结果**整份**都是
+                // 逐字同名（GetPathsByFileName 用 Path.GetFileName 比较、分数恒 100），故直接取
+                // 它的在域总数；模糊那支的 100 分同样只在基名与查询串逐字相同时给出。
+                // 不这么算的话 `RangedIndustrial.xml` 的表头是干净的 `4 files`——按 F30 的契约
+                // 读作「完整集」，而它确实是完整集，只是其中一半根本不叫这个名字。
+                var fileFullScore = queryIsFileName ? exactFiles.TotalInScope : files.FullScoreCount;
+                tally.Add(Count(items.Count, fileTotal, "files", fullScore: fileFullScore));
                 var fileLabels = ScopeArgs.SourceLabeling.Of(items.Select(e => e.SourceName));
                 sb.AppendLine($"\n**Files**{fileLabels.Header}:");
                 foreach (var entry in items)
                 {
                     // 原先是「基名 - 全路径」，而基名逐字包含在全路径的末尾，说的是同一件事。
-                    sb.AppendLine($"- {entry.Item}{conditional.Tag(entry.Item)}{fileLabels.Row(entry.SourceName)}");
+                    // 分数不能省：描述里立着「每一行都带 (N%)」这条契约，而这一段此前整段没有，
+                    // 于是调用方按契约去找判别器、找不到，最省事的反推就是「这段都是 100%」——
+                    // 一条 40 分的近名文件与一条精确命中在版面上逐字同形，正好推向那个错数。
+                    sb.AppendLine($"- {entry.Item} ({entry.Score:F0}%)"
+                                  + $"{conditional.Tag(entry.Item)}{fileLabels.Row(entry.SourceName)}");
                 }
 
                 // 折叠行只对兜底那一支有意义：精确补充本来就只列同名的那几条，没有「还有更多」。
@@ -502,12 +536,26 @@ public class LocateTool : ITool
     // 折叠行的 `+N more` 不再加一次限定词：它数的是 `总数 − 已列出`，两个数都来自表头，
     // 表头已经把这批数标成下界了。同一段里限定两次会被读成两处独立的不确定性——
     // search_regex 的每文件折叠行（PerFileFold）在同样的情形下也是只在表头限定一次。
-    private static string Count(int shown, int total, string plural, bool totalIsLowerBound = false)
+    //
+    // fullScore：这个总数里名字逐字相同的有几条（ScopedResult.FullScoreCount），-1 = 不适用。
+    // 表头的 `N of M` / bare `N` 说的是**完整性**（这一段有没有被截断），而调用方拿它当
+    // **精确性**读：`method:Draw` 的 `10 of 1591 members` 印出来的 10 条全是 100%，
+    // 真正叫 Draw 的只有 35——第十轮盲测两条链各自差点把 1591 与 4 当成答案交出去，两次都
+    // 是自费多跑一轮才刹住。这里补的就是那个推不出来的数，且只在它与总数不等时才印：
+    // 相等时（全集本来就都是精确命中）一个字都不多，不会退化成常亮。
+    private static string Count(
+        int shown, int total, string plural, bool totalIsLowerBound = false, int fullScore = -1)
     {
         var floor = totalIsLowerBound ? "at least " : string.Empty;
-        return total > shown
+        var head = total > shown
             ? $"{shown} of {floor}{OutputText.Quantity(total, plural)}"
             : $"{floor}{OutputText.Quantity(shown, plural)}";
+
+        // 下界形不带这个限定：那时总数自己都不准，再挂一个「其中几条精确」会被读成两处
+        // 独立的不确定性（同折叠行只在表头限定一次那条判据）。
+        return fullScore >= 0 && fullScore < total && !totalIsLowerBound
+            ? $"{head} ({fullScore} at 100%)"
+            : head;
     }
 
     // 索引只收 .cs / .xml（SourceIndexer.CollectFilesIterative 扫描时的判据），故只认这两种扩展名。
@@ -522,14 +570,19 @@ public class LocateTool : ITool
     // 根本没进模糊结果，而「索引里到底有没有这个文件」是这一段唯一必须答对的事。
     // 折叠行仍按模糊那份的 HiddenCount 算：补进来的是模糊结果**之外**的条目，总数与已列出数
     // 同增，差值不变。
+    //
+    // 去重保留的必须是**精确**那一份。原先反过来（在模糊结果里出现过就跳过精确那条），于是
+    // 一条真正逐字同名的文件在列表里带的是模糊分——`RangedIndustrial.xml` 的两条精确命中都在
+    // 模糊结果里，两条都会印成 40% 上下，而表头写着「2 at 100%」，同一份返回里两处互相否定。
+    // 行不带分数时这道错误看不出来（两支的行文本逐字相同），补上 (N%) 之后它就成了硬伤。
     private static List<ScopedEntry<string>> WithExactFilesFirst(
         IReadOnlyList<ScopedEntry<string>> fuzzy, IReadOnlyList<ScopedEntry<string>> exact)
     {
         if (exact.Count == 0) return fuzzy.ToList();
 
-        var present = new HashSet<string>(fuzzy.Select(e => e.Item), StringComparer.OrdinalIgnoreCase);
-        var items = exact.Where(e => !present.Contains(e.Item)).ToList();
-        items.AddRange(fuzzy);
+        var exactPaths = new HashSet<string>(exact.Select(e => e.Item), StringComparer.OrdinalIgnoreCase);
+        var items = exact.ToList();
+        items.AddRange(fuzzy.Where(e => !exactPaths.Contains(e.Item)));
         return items;
     }
 

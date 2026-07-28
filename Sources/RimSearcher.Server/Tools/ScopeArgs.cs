@@ -507,8 +507,12 @@ public sealed class ScopeReport
         // 这一行句式并列却只给分项，读者得临时切换成心算——整份输出里唯一一处要做算术的地方，
         // 且紧挨着一个不必做算术的同型数字。盲测里 7 个分项被加成 41（真值 47）。
         // 单源时不加：那时合计逐字等于那一个数（同「推得出来就不印」）。
+        // 只有一段参与时就用那一段自己的名词。泛称 "matches" 是为跨段累加准备的，而单段时
+        // 它凭空造出第二个计数词：正文写着 `4 files`、脚注紧跟着写 `3 matches`，同一屏两个
+        // 名词指的是同一类东西，读者得先确认它们不是两个量。
+        var summaryNoun = _byNoun.Count == 1 ? _byNoun.Keys.First() : noun;
         var total = _outOfScope.Count > 1
-            ? $"{OutputText.Quantity(_outOfScope.Values.Sum(), noun)}{Composition()} — "
+            ? $"{OutputText.Quantity(_outOfScope.Values.Sum(), summaryNoun)}{Composition()} — "
             : string.Empty;
 
         var sb = new StringBuilder();

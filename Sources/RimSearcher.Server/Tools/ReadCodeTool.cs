@@ -166,9 +166,12 @@ public class ReadCodeTool : ITool
         // scope 内有多份同名文件时 GetPath 静默取排序第一的那份。不说这件事，调用方会
         // 把 mod 的覆盖版当成 vanilla 原版，据此断言原版行为。
         var siblings = resolution.SameNameInScope;
+        // 「优先级最高的那一份」说的是哪一份，判据就在同一句里的 scope 表达式上
+        // （GetPathsByName 按 scope.RankOf 排序），不点明的话这个词只能靠猜。
         if (siblings is { Count: > 1 })
             notes.Add($"note: {siblings.Count} files share this name in scope '{scope.Expression}'; "
-                + $"reading the highest-priority one. The others: {string.Join(", ", siblings.Skip(1))}");
+                + "reading the one from whichever source comes first in that scope. "
+                + $"The others: {string.Join(", ", siblings.Skip(1))}");
 
         // 条件目录里的文件与无条件的那份在返回里逐字同形，而守卫在 loadFolders.xml 那一层。
         // 与上面三条同处：它们说的都是「你读到的这一份到底是什么」，都必须跟着失败分支一起走
@@ -295,8 +298,12 @@ public class ReadCodeTool : ITool
             if (startLine + lineCount < totalLines)
             {
                 // 文法与全服统一的截断脚注一致：`... +N more <什么> (<怎么拿到>)`，见 ScopeArgs.FoldLine。
+                // 总数要在这一行里给出，判据同 R47 的每文件折叠行（`+4 more of 7 matching lines`）：
+                // 文件总行数只在顶部那行位置注释里出现过一次，而作答时它早已滚出视野——第十轮
+                // 盲测里一条链差点在没读完的情况下下结论，同一轮里另一条链正是靠 search_regex
+                // 那个 `of 7` 拦住了一次误算。有总数的那处救了一次，没总数的这处险些误一次。
                 sb.AppendLine(
-                    $"\n... +{totalLines - (startLine + lineCount)} more lines "
+                    $"\n... +{totalLines - (startLine + lineCount)} more of {totalLines} lines "
                     + $"(pass startLine={startLine + lineCount})");
             }
 

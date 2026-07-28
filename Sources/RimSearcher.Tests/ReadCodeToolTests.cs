@@ -120,7 +120,9 @@ public class ReadCodeToolTests : IDisposable
         Assert.False(result.IsError);
         Assert.Equal(2000, result.Content.Split('\n').Count(line => line.StartsWith("L")));
         // 夹住之后还剩内容，必须照常给出续读提示
-        Assert.Contains("more lines (pass startLine=2000)", result.Content);
+        // 折叠行自带总数，文法同 R47 的每文件折叠行：文件总行数只在顶部那行位置注释里出现过
+        // 一次，作答时早已滚出视野，而「还剩多少」单独一个数推不出「一共多少」。
+        Assert.Contains("+1000 more of 3000 lines (pass startLine=2000)", result.Content);
     }
 
     // 同名成员多命中时，每条正文之前恰好一行位置注释，且这行自带 `[i/n]`——

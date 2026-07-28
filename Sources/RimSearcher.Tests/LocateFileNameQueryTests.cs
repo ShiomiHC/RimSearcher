@@ -91,7 +91,8 @@ public class LocateFileNameQueryTests : IDisposable
 
         var rows = FileRows(content);
         Assert.Single(rows);
-        Assert.EndsWith("ZzShield.cs", rows[0], StringComparison.OrdinalIgnoreCase);
+        // 行尾的 (100%) 是 R57 那条契约在这一段的兑现处，一并钉住
+        Assert.EndsWith("ZzShield.cs (100%)", rows[0], StringComparison.OrdinalIgnoreCase);
         Assert.True(Path.IsPathRooted(rows[0]), $"Files 段给的必须是能直接喂 read_code 的全路径：{rows[0]}");
 
         // 两段并存不算把同一条结果说两遍：调用方指名了要文件，类型段回答的是另一个问题
@@ -140,7 +141,7 @@ public class LocateFileNameQueryTests : IDisposable
 
         var rows = FileRows(content);
         Assert.Single(rows);
-        Assert.EndsWith("Zqa.cs", rows[0], StringComparison.OrdinalIgnoreCase);
+        Assert.EndsWith("Zqa.cs (100%)", rows[0], StringComparison.OrdinalIgnoreCase);
     }
 
     // 同一条判据对 .xml 同样成立，且 XML 那边没有「同名类型」可去重——钉住的是打分层那一道
@@ -169,9 +170,16 @@ public class LocateFileNameQueryTests : IDisposable
 
         var rows = FileRows(content);
         Assert.Equal(2, rows.Count);
-        Assert.Contains(rows, r => r.EndsWith("ZzAlpha.xml", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(rows, r => r.EndsWith("ZzAlphaBeta.xml", StringComparison.OrdinalIgnoreCase));
+        // 精确那条必须带 100%——它同时在模糊结果里出现过，而去重若保留模糊那一份，这条真正
+        // 逐字同名的文件会印成四十来分，跟表头的 `(1 at 100%)` 当场打架
+        Assert.Contains(rows, r => r.EndsWith("ZzAlpha.xml (100%)", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(rows, r => r.Contains("ZzAlphaBeta.xml (", StringComparison.OrdinalIgnoreCase));
         Assert.Equal(rows.Count, rows.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+
+        // 表头就地说清「4 条里有几条是你问的那个文件」。混合情形（精确 + 近名）在版面上
+        // 逐字同形，而 bare N 按 F30 的契约读作完整集——完整不等于精确，第十轮盲测差点
+        // 把这里的 2 读成 4。
+        Assert.Contains("2 files (1 at 100%)", content);
     }
 
     // ── 准入条件不动（F26 立的判据） ──────────────────────────────────

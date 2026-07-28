@@ -192,7 +192,14 @@ public class ConditionalFolderTests : IDisposable
         Assert.Contains("`1.6/CE` [Cinders] needs CETeam.CombatExtended active", content);
         Assert.Contains("never evaluates the condition", content);
         // 反面读法：没标记的就不在条件目录里。不说这句，这个记号只能单向使用。
-        Assert.Contains("Untagged results are not inside such a folder", content);
+        // 「checked」不可省——这句唯一要防的误读是把「没标记」读成「没查过」。
+        Assert.Contains("Rows without that tag were checked and are not inside such a folder", content);
+        // 条件不成立时会怎样，同样要说：只否定「命中即生效」的话，「这条到底在不在我游戏里」
+        // 这个正面问题在整份返回里没有一句话答得了，调用方只能把它记成悬案。
+        Assert.Contains("the folder is not loaded at all and its contents are absent from the game", content);
+        // 记号只管目录这一层。第十轮盲测里那条链差点把目录条件当成唯一的门，而真正的门是
+        // 同一份补丁里一条 PatchOperationFindMod。
+        Assert.Contains("The tag names the folder-level condition only", content);
     }
 
     // loadFolders.xml 里的一条 li 展开成好几个内容目录（Defs / Patches / Assemblies），
@@ -282,7 +289,11 @@ public class ConditionalFolderTests : IDisposable
 
         Assert.Contains("<!-- note: [conditional: 1.6/CE] loadFolders.xml loads this folder only with "
                         + "CETeam.CombatExtended active;", content);
-        Assert.Contains("not evidence that it takes effect at runtime -->", content);
+        // 单目标形是唯一一处脚注不在场的地方，双向与边界两句在这里同样要有——缺了它们，
+        // read_code 读一份条件目录里的补丁就只剩「不算生效证据」这半句可用。
+        Assert.Contains("when it does not hold this folder is not loaded at all", content);
+        Assert.Contains("That is the folder-level condition only", content);
+        Assert.Contains("which is not reported here -->", content);
     }
 
     // def 行不印文件路径（R20），故这个标记是 locate 那一段里唯一能看出「这条 def 来自

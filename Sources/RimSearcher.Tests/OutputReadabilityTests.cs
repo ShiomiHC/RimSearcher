@@ -1284,7 +1284,9 @@ public class OutputReadabilityTests : IDisposable
         var content = await RunAsync(
             new LocateTool(indexer, defs, catalog), new { query = "type:ZzThing", scope = "vanilla" });
 
-        Assert.Contains("Outside scope 'vanilla': 2 matches — ", content);
+        // 名词跟着构成走：只有一段参与时用那一段自己的名词，泛称 "matches" 只留给跨段累加。
+        // 正文写 `1 C# type`、脚注紧跟着写 `2 matches`，同一屏两个计数词指的是同一类东西。
+        Assert.Contains("Outside scope 'vanilla': 2 C# types — ", content);
     }
 
     // 反面：只有一个源落在外面时不加合计——那时它逐字等于那一个数
