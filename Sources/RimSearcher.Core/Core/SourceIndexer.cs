@@ -665,11 +665,17 @@ public class SourceIndexer
             : name;
     }
 
-    // 成员模糊候选池的容量。与 FuzzySearchTypes 那边的 Take(500) 同一个量级：池子只是喂给
-    // CalculateFuzzyScore 的输入，真正决定输出的是后面按分数取的前 10 条。
+    // 成员模糊候选池的容量。与 FuzzySearchTypes 那边的 Take(500) 同一个量级：池子是喂给
+    // CalculateFuzzyScore 的输入，而 F29 之后分够 60 的 key **全部**展开、不再二次截断——
+    // 于是这条上限是这条链上剩下的唯一一道限额，也是表头那个总数可能只是下界的唯一成因，
+    // 判据见 SearchMembersByKeywords 末尾的 totalIsLowerBound。
     private const int MemberFuzzyPoolSize = 500;
 
+    // 两字符关键词那条路的池子容量。那条路按前缀匹配取，不按 2-gram 重合度排（见下面的分支）。
+    private const int MemberPrefixPoolSize = 50;
+
     // 按 2-gram 重合度给**全部** member key 排名，取前 poolSize 条当模糊候选池。
+    // Truncated 报「有 key 因为这道上限被丢掉了」——重合度为 0 的不算，那些本来就不是候选。
     //
     // 这一步必须扫全量，不能「凑够 poolSize 条就停」。memberKeys 的枚举序跟着索引期的并发写入
     // 走，与查询毫无关系：真实语料里几十万个 key，光 `comptickrar` 的头一个 2-gram `co` 就能
@@ -684,7 +690,7 @@ public class SourceIndexer
     // 代价是一次 O(全部 key) 扫描。每个 key 只按自身长度走一遍、每个 2-gram 查一次哈希，
     // 比旧代码「每个 query 2-gram 各扫一遍全表、每次 Contains 走子串搜索」的最坏情形还便宜；
     // 旧代码之所以快，靠的正是那个让它出错的 break。
-    private static List<string> TopKeysByNgramOverlap(
+    private static (List<string> Keys, bool Truncated) TopKeysByNgramOverlap(
         IEnumerable<string> keys,
         IReadOnlyList<string> queryNgrams,
         int poolSize)
@@ -699,13 +705,17 @@ public class SourceIndexer
             bitOfNgram.TryAdd(PackNgram(ngram[0], ngram[1]), bitOfNgram.Count);
         }
 
-        if (bitOfNgram.Count == 0) return [];
+        if (bitOfNgram.Count == 0) return ([], false);
 
         var pool = new List<(int Overlap, string Key)>();
 
         // 池子满过一次之后，重合度低于这条线的 key 再也挤不进前 poolSize，直接跳过
         var cutoff = 0;
         var capacity = poolSize * 4;
+
+        // 只由裁剪那一步置位就够：cutoff 只在裁过之后才 > 0，故「因低于 cutoff 被跳过」
+        // 蕴含「已经裁过一次」。
+        var truncated = false;
 
         foreach (var key in keys)
         {
@@ -722,12 +732,12 @@ public class SourceIndexer
             pool.Add((overlap, key));
             if (pool.Count < capacity) continue;
 
-            TrimToTopByOverlap(pool, poolSize);
+            truncated |= TrimToTopByOverlap(pool, poolSize);
             cutoff = pool[^1].Overlap;
         }
 
-        TrimToTopByOverlap(pool, poolSize);
-        return pool.Select(entry => entry.Key).ToList();
+        truncated |= TrimToTopByOverlap(pool, poolSize);
+        return (pool.Select(entry => entry.Key).ToList(), truncated);
     }
 
     private static int PackNgram(char first, char second)
@@ -736,7 +746,8 @@ public class SourceIndexer
     // 边扫边裁，结果仍是全局前 poolSize：在一个全序下，「属于全局前 N」蕴含「属于任何含它的
     // 子集的前 N」，故真值不可能被中途裁掉；而侥幸留到最后的非前 N 项会被最后这一次裁掉。
     // 于是内存有上界，而选出来的那一批与扫描次序无关。
-    private static void TrimToTopByOverlap(List<(int Overlap, string Key)> pool, int poolSize)
+    // 返回「这一次是否真丢了东西」，调用方拿它判断池子有没有把候选截掉。
+    private static bool TrimToTopByOverlap(List<(int Overlap, string Key)> pool, int poolSize)
     {
         pool.Sort(static (left, right) =>
         {
@@ -749,7 +760,10 @@ public class SourceIndexer
                 : StringComparer.OrdinalIgnoreCase.Compare(left.Key, right.Key);
         });
 
-        if (pool.Count > poolSize) pool.RemoveRange(poolSize, pool.Count - poolSize);
+        if (pool.Count <= poolSize) return false;
+
+        pool.RemoveRange(poolSize, pool.Count - poolSize);
+        return true;
     }
 
     // 一个 member key 下挂的成员全部计入 into，值是「命中了几个关键词」（keywordBonus 用它）。
@@ -806,6 +820,9 @@ public class SourceIndexer
             ? (IEnumerable<string>)_frozenMemberIndex.Keys
             : _memberIndex.Keys;
 
+        // 候选池装不下时，总数就不再是确定值而是下界，见循环末尾的判据。
+        var totalIsLowerBound = false;
+
         foreach (var keyword in keywords)
         {
             if (string.IsNullOrWhiteSpace(keyword) || keyword.Length < 2) continue;
@@ -818,25 +835,32 @@ public class SourceIndexer
 
             CollectMembersUnderKey(keyLower, matchedMembers, seenForThisKeyword, memberKinds);
 
-            IEnumerable<string> fuzzyCandidates;
+            List<string> fuzzyCandidates;
+            bool poolTruncated;
             if (keyLower.Length >= 3)
             {
                 var ngrams = FuzzyMatcher.GenerateNgrams(keyLower, 2).Distinct().ToList();
-                fuzzyCandidates = TopKeysByNgramOverlap(memberKeys, ngrams, MemberFuzzyPoolSize);
+                (fuzzyCandidates, poolTruncated) = TopKeysByNgramOverlap(memberKeys, ngrams, MemberFuzzyPoolSize);
             }
             else
             {
                 // 两字符关键词走前缀匹配，同样不能按枚举序截断：几十万个 key 下前缀命中动辄
                 // 上千条，取到哪 50 条纯看索引写入次序。前缀命中在 CalculateFuzzyScore 下全部
                 // 同分（90），故按「短的优先、同长按名字」定序——短名才是调用方要的那一个。
-                fuzzyCandidates = memberKeys
+                var prefixMatches = memberKeys
                     .Where(k => k.StartsWith(keyLower, StringComparison.OrdinalIgnoreCase))
                     .OrderBy(k => k.Length)
                     .ThenBy(k => k, StringComparer.OrdinalIgnoreCase)
-                    .Take(50)
                     .ToList();
+
+                // 这一路的截断判定不必看分数：前缀命中一律 90 分，全部合格，故「有没有第 51 条」
+                // 就是「总数准不准」。上面那句 OrderBy 本来就要把它们全部物化，不多一次扫描。
+                poolTruncated = prefixMatches.Count > MemberPrefixPoolSize;
+                fuzzyCandidates = prefixMatches.Take(MemberPrefixPoolSize).ToList();
             }
-            
+
+            var qualified = 0;
+
             // 分够 60 的 key 全部展开，不再二次截断。取舍已经在候选池那一层做完了——
             // 那里按 2-gram 重合度排了全序、取前 MemberFuzzyPoolSize 条（见 TopKeysByNgramOverlap）。
             //
@@ -850,8 +874,22 @@ public class SourceIndexer
             foreach (var fuzzyKey in fuzzyCandidates)
             {
                 if (FuzzyMatcher.CalculateFuzzyScore(fuzzyKey, keyLower) < 60.0) continue;
+                qualified++;
                 CollectMembersUnderKey(fuzzyKey, matchedMembers, seenForThisKeyword, memberKinds);
             }
+
+            // 池子截掉了东西、而进池的 key **全部**分够 60——说明 60 分这条线在池子边界处还没
+            // 切完，第 501 个多半也合格，于是它连同它挂着的成员都没被数进总数：总数是下界。
+            //
+            // 判据不能换成「池子满了」：几十万个 key 里含任一 2-gram 的太多，池子几乎总是满的，
+            // 那个信号会退化成常亮，而常亮的警告等于没有警告。分够 60 的只有少数（`CompTickRar`
+            // 那种池里只有 1 个够分）时，线是在池子内部切完的，池外那些更不可能够分，总数是准的。
+            //
+            // 两头都是启发式而非证明：重合度低的 key 偶尔也能拿高分（短 key 编辑距离小），
+            // 故理论上存在「没报下界但其实是下界」的角落。方向是安全的一侧——宁可少标，
+            // 不可把下界说成确数，那正是 F29 要治的病。
+            if (poolTruncated && qualified > 0 && qualified == fuzzyCandidates.Count)
+                totalIsLowerBound = true;
         }
 
         var candidates = matchedMembers
@@ -876,7 +914,7 @@ public class SourceIndexer
             .Select(x => new ScoredCandidate<(string, string, string, string)>(
                 (x.typeName, x.memberName, x.memberType, x.filePath), x.score, x.filePath));
 
-        return ScopeFilter.Apply(candidates, scope, limit);
+        return ScopeFilter.Apply(candidates, scope, limit, totalIsLowerBound: totalIsLowerBound);
     }
 
     // scope 与扩展名过滤都必须在扫描之前生效：这两个条件若留到结果产出后再筛，

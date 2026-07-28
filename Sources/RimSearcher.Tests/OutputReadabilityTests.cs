@@ -1361,6 +1361,12 @@ public class OutputReadabilityTests : IDisposable
 
         Assert.Contains("'N of M'", description);
         Assert.Contains("complete set", description);
+
+        // 第三形态：M 只是地板。成员段的候选池装不下同等好的匹配时表头改口 `at least M`
+        // （回归见 MemberFuzzyPoolTests），而调用方读到的只有这段 Description——
+        // 前两形写在这里、第三形不写，等于让 `at least` 变成一个没人认得的记号。
+        Assert.Contains("at least M", description);
+        Assert.Contains("floor", description);
     }
 
     // R52 当初把 member 从这句模糊承诺里摘掉，并补了一句「空的 Members 段 ≠ 这个成员不存在」，

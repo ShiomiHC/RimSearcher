@@ -35,7 +35,8 @@ public class LocateTool : ITool
         "paths — fuzzy when the other four come back empty, otherwise just the file whose name matches the query " +
         "exactly. " +
         "A section header reading 'N of M' means the listing was cut and M is the scope's total; a bare 'N' means " +
-        "the listing is that section's complete set. " +
+        "the listing is that section's complete set; 'at least M' means M is a floor rather than the total — the " +
+        "member search filled its candidate pool with equally good name matches, so narrow the query for an exact count. " +
         "Filters go inside the query: type:, method:, field:, def:, and scope: as an alias for the scope parameter.";
 
     public object JsonSchema => new
@@ -177,7 +178,7 @@ public class LocateTool : ITool
                     }
                 }
 
-                tally[tallySlot] = Count(shown, members.TotalInScope, "members");
+                tally[tallySlot] = Count(shown, members.TotalInScope, "members", members.TotalIsLowerBound);
 
                 // 折叠行放在整段末尾、按 TotalInScope 计数。原先每组各打一行、只数「取回的这批里
                 // 还剩几条」，而取回本身已被 limit.Scale(3) 砍过：method:CompTick 因此报 +25，
@@ -396,10 +397,21 @@ public class LocateTool : ITool
         return taken.Where(group => group.Items.Count > 0).ToList();
     }
 
-    private static string Count(int shown, int total, string plural) =>
-        total > shown
-            ? $"{shown} of {OutputText.Quantity(total, plural)}"
-            : OutputText.Quantity(shown, plural);
+    // totalIsLowerBound 时改口成 `at least N`。文法与 search_regex / trace 的表头共用
+    // （见 ScopeArgs.FoundCount），那边是「有文件没扫全所以总数只是下界」，这边是「候选池
+    // 装不下所以总数只是下界」——两处成因不同，而调用方要学的读法是同一条：出现 at least
+    // 就说明这个数只是地板。
+    //
+    // 折叠行的 `+N more` 不再加一次限定词：它数的是 `总数 − 已列出`，两个数都来自表头，
+    // 表头已经把这批数标成下界了。同一段里限定两次会被读成两处独立的不确定性——
+    // search_regex 的每文件折叠行（PerFileFold）在同样的情形下也是只在表头限定一次。
+    private static string Count(int shown, int total, string plural, bool totalIsLowerBound = false)
+    {
+        var floor = totalIsLowerBound ? "at least " : string.Empty;
+        return total > shown
+            ? $"{shown} of {floor}{OutputText.Quantity(total, plural)}"
+            : $"{floor}{OutputText.Quantity(shown, plural)}";
+    }
 
     // 判据与 trace 共用（见 SymbolRow）：文件名推得出来就不印。locate 用 ` - 名字` 的破折号写法，
     // trace 用括号写法，共享的是「什么时候印」而不是「怎么排版」。

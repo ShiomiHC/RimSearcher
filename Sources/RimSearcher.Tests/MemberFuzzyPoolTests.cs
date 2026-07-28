@@ -16,6 +16,12 @@ namespace RimSearcher.Tests;
 //
 // F29（key 展开）：候选池之后还有一道 `Take(10)`，分够 60 的 key 只展开前 10 个。这道更糟，
 // 因为 `TotalInScope` 数的是截断之后那一批，于是表头把切片印成「完整集」。
+//
+// F30（表头口径）：F29 之后候选池是这条链上仅剩的一道限额，而它同样在总数之前生效——总数
+// 数的是**进了池的**键挂着的成员。这一道不打算取消（它是成本上界），故改由表头说出来：
+// 装不下同等好的匹配时写 `N of at least M`。本文件因此有两组相反的断言，缺一不可——
+// 装不下时必须改口（PoolOverflow 那两条），而池子被噪声填满、只有少数够分时**不许**改口
+// （NearMiss 那三条）：一个常亮的下界警告与没有警告等价。
 public class MemberFuzzyPoolTests : IDisposable
 {
     private readonly TempWorkspace _workspace = new();
@@ -69,6 +75,11 @@ public class MemberFuzzyPoolTests : IDisposable
         Assert.Contains(hits.Items, entry =>
             entry.Item.TypeName == "Zz.ZzThing" && entry.Item.MemberName == "CompTickRare");
         Assert.DoesNotContain(hits.Items, entry => entry.Item.MemberName.StartsWith("CompTickNode"));
+
+        // 池子确实被截了（1200 个噪声键远超 500），但只有一个键分够 60——60 分这条线是在池子
+        // **内部**切完的，池外那些重合度更低的更不可能够分，故总数是确数、不该改口。
+        // 「池子满了就报下界」会在这里误报，而真实语料上池子几乎恒满，那种判据等于常亮。
+        Assert.False(hits.TotalIsLowerBound);
     }
 
     // 候选池的取舍是全序的（重合度 → key 长度 → key），三项都与扫描次序无关，故同一条查询
@@ -92,6 +103,10 @@ public class MemberFuzzyPoolTests : IDisposable
         Assert.Contains("Members", result.Content);
         Assert.Contains("CompTickRare", result.Content);
         Assert.DoesNotContain("CompTickNode", result.Content);
+
+        // 表头不该无端改口。`at least` 是给「总数只是地板」用的，用在这里会把一个准确的
+        // 总数说成不确定，调用方无从分辨哪一次的 at least 是真的。
+        Assert.DoesNotContain("at least", result.Content);
     }
 
     // ── F29：候选池之后那道 key 展开限额 ────────────────────────────────
@@ -167,6 +182,69 @@ public class MemberFuzzyPoolTests : IDisposable
 
         Assert.Contains($"{SamePrefixCount} members", result.Content);
         Assert.Contains("Zqxooo", result.Content);
+
+        // 15 个键装得进 500 的池子，一个都没被丢掉，故这个总数是确数
+        Assert.DoesNotContain("at least", result.Content);
+    }
+
+    // ── 候选池装不下时的表头口径 ────────────────────────────────────────
+
+    // 同前缀成员数要压过候选池容量（MemberFuzzyPoolSize = 500）。上面那批 15 个是用来验
+    // 「装得下时全部可达」，这批是用来验「装不下时表头怎么说」。
+    private const int PoolOverflowCount = 600;
+
+    // 名字构造同 BuildSamePrefixIndex：无大写边界无下划线，故一个方法恰好一个 member key，
+    // 600 个成员就是 600 个键，池子只装得下 500。查询 `Zqp` 对每个键都是 StartsWith（90 分），
+    // 于是进池的 500 个**全部**够分——这正是「线还没切完」的形状。
+    private (SourceIndexer Indexer, ScopeCatalog Catalog) BuildPoolOverflowIndex()
+    {
+        var root = _workspace.Dir("Overflow");
+
+        var source = new StringBuilder();
+        source.AppendLine("namespace Zq");
+        source.AppendLine("{");
+        source.AppendLine("    public class ZqOverflowHolder");
+        source.AppendLine("    {");
+        for (var i = 0; i < PoolOverflowCount; i++)
+            source.AppendLine($"        public void Zqp{i:D4}() {{ }}");
+        source.AppendLine("    }");
+        source.AppendLine("}");
+
+        _workspace.WriteFile(Path.Combine("Overflow", "ZqOverflowHolder.cs"), source.ToString());
+
+        var indexer = new SourceIndexer();
+        indexer.Scan(root);
+        indexer.FreezeIndex();
+
+        return (indexer, ScopeCatalog.Build([("vanilla", root)], null, null));
+    }
+
+    // F29 把「谎称完整」降级成了「说被截了」，但候选池那道上限还在：总数数的是**进了池的**
+    // 那 500 个键挂着的成员，剩下 100 个连同它们的成员从未被数过。少数出来的成员只是慢一轮，
+    // 把一个下界当确数报出去才是会让调用方直接下反向结论的那种错。
+    [Fact]
+    public void PoolFullOfEquallyGoodKeys_ReportsTheTotalAsAFloor()
+    {
+        var (indexer, catalog) = BuildPoolOverflowIndex();
+
+        var hits = indexer.SearchMembersByKeywords(["Zqp"], catalog.Everything, 10, ["Method"]);
+
+        Assert.True(hits.TotalIsLowerBound);
+        Assert.InRange(hits.TotalInScope, 1, PoolOverflowCount - 1);
+    }
+
+    [Fact]
+    public async Task LocatePoolOverflowQuery_HeaderSaysTheTotalIsAFloor()
+    {
+        var (indexer, catalog) = BuildPoolOverflowIndex();
+        var defIndexer = new DefIndexer();
+        defIndexer.FreezeIndex();
+
+        var tool = new LocateTool(indexer, defIndexer, catalog);
+        using var args = JsonDocument.Parse("""{"query":"method:Zqp","limit":10}""");
+        var result = await tool.ExecuteAsync(args.RootElement, CancellationToken.None);
+
+        Assert.Contains("of at least", result.Content);
     }
 
     // ── 两字符关键词那条路 ──────────────────────────────────────────────
@@ -200,5 +278,9 @@ public class MemberFuzzyPoolTests : IDisposable
         var hits = indexer.SearchMembersByKeywords(["Zq"], catalog.Everything, 10, ["Method"]);
 
         Assert.Contains(hits.Items, entry => entry.Item.MemberName == "Zqa");
+
+        // 这条路的池子只有 50，而前缀命中一律 90 分、个个够分，故 301 个键里超出的 251 个
+        // 连同其成员从未被数过：总数同样只是地板，判据与 2-gram 那条路是同一条。
+        Assert.True(hits.TotalIsLowerBound);
     }
 }

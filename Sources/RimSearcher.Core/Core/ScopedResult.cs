@@ -38,13 +38,15 @@ public sealed class ScopedResult<T>
         int totalInScope,
         List<(string Source, int Count)> outOfScope,
         bool truncatedByScoreGap,
-        bool truncatedByLimit = false)
+        bool truncatedByLimit = false,
+        bool totalIsLowerBound = false)
     {
         Items = items;
         TotalInScope = totalInScope;
         OutOfScope = outOfScope;
         TruncatedByScoreGap = truncatedByScoreGap;
         TruncatedByLimit = truncatedByLimit;
+        TotalIsLowerBound = totalIsLowerBound;
     }
 
     public List<ScopedEntry<T>> Items { get; }
@@ -59,6 +61,12 @@ public sealed class ScopedResult<T>
     // limit 是否真的砍掉了东西。断层收口砍掉的那部分调多大的 limit 都拿不回来（见 ScopeFilter），
     // 两者不分开的话折叠行只能笼统地劝「pass limit:'all'」——照做了却一条也多不出来。
     public bool TruncatedByLimit { get; }
+
+    // TotalInScope 只是下界——检索层在数出这个总数之前就有候选被内部上限截掉了。
+    // 与 TruncatedByLimit / TruncatedByScoreGap 是不同的两件事：那两个说的是「这个总数里
+    // 有多少没列出来」（总数本身是准的），这个说的是**总数自己不准**，展示层要据此改口
+    // （`N of M` → `N of at least M`），否则调用方会把一个下界当成穷尽结论。
+    public bool TotalIsLowerBound { get; }
 
     public int HiddenCount => Math.Max(0, TotalInScope - Items.Count);
 
@@ -82,11 +90,13 @@ public static class ScopeFilter
     // 候选序列须已按调用方自己的次要规则排好（如名字长度）——这里的排序是稳定的，
     // 故 Score 降序、同分 Rank 升序之后，调用方的次序仍作为第三级保留。
     // scoreGap 传 null 关闭断层收口（用于按命中计数排序、分值不可比的场景）。
+    // totalIsLowerBound 由调用方传：候选是不是已经被它自己的内部上限截过，这里无从判断。
     public static ScopedResult<T> Apply<T>(
         IEnumerable<ScoredCandidate<T>> candidates,
         ScopeSelection scope,
         int limit,
-        double? scoreGap = DefaultScoreGap)
+        double? scoreGap = DefaultScoreGap,
+        bool totalIsLowerBound = false)
     {
         var inScope = new List<(ScoredCandidate<T> Candidate, int Rank)>();
         Dictionary<string, int>? outOfScope = null;
@@ -147,6 +157,7 @@ public static class ScopeFilter
                 .ToList();
 
         return new ScopedResult<T>(
-            items, ordered.Count, outOfScopeList, truncatedByScoreGap, truncatedByLimit: items.Count < cutoff);
+            items, ordered.Count, outOfScopeList, truncatedByScoreGap,
+            truncatedByLimit: items.Count < cutoff, totalIsLowerBound: totalIsLowerBound);
     }
 }
