@@ -1,0 +1,7 @@
+`<ROOT>/Core` (12 entries, showing the first 5)
+ZzEntry00.cs
+ZzEntry01.cs
+ZzEntry02.cs
+ZzEntry03.cs
+ZzEntry04.cs
+... +7 more entries (pass offset=5 for the next page, or a larger limit)

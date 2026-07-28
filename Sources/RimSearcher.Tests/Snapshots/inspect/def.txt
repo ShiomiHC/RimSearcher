@@ -1,0 +1,13 @@
+## Def: ZzWidgetAlpha
+Type: ZzWidgetDef
+Source: vanilla
+File: `<ROOT>/Core/ZzWidgets.xml`
+Inheritance chain: none (this def declares no ParentName)
+
+**Resolved XML** (4 lines; mod PatchOperations are not applied, so a mod patch against this def is not reflected below):
+```xml
+<ZzWidgetDef>
+  <defName>ZzWidgetAlpha</defName>
+  <label>alpha widget</label>
+</ZzWidgetDef>
+```

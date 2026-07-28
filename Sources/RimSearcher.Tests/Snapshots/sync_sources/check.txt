@@ -1,0 +1,4 @@
+Source check (<MS> ms, game version 1.6) — assembly hashes compared against the record left by the last sync:
+  Core: cannot sync — the output directory '<ROOT>/src' is not empty and was not produced by RimSearcher (no .rimsearcher-decompiled marker), so it will not be overwritten. Point the source at an empty directory, or place the marker file there by hand once you are sure.
+
+All followable sources are up to date.

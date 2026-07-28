@@ -1,0 +1,4 @@
+`<ROOT>/Core` (3 entries)
+Sub/
+ZzOne.cs
+ZzTwo.cs

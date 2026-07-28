@@ -1,0 +1,1 @@
+No matches for pattern '(a+)+b' in scope 'all', case-insensitive.

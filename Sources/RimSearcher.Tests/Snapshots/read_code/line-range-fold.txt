@@ -1,0 +1,15 @@
+```csharp
+// <ROOT>/Core/ZzLong.cs (lines 1-10 of 40)
+L1: // line 1
+L2: // line 2
+L3: // line 3
+L4: // line 4
+L5: // line 5
+L6: // line 6
+L7: // line 7
+L8: // line 8
+L9: // line 9
+L10: // line 10
+```
+
+... +30 more of 40 lines (pass startLine=10)

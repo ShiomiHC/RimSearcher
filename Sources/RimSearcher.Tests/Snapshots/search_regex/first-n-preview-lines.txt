@@ -1,0 +1,153 @@
+Regex matches for 'ZzNeedle' (first 100 preview lines in scope 'all', case-insensitive):
+
+`ZzFile000.cs`
+  L1: // ZzNeedle
+
+`ZzFile001.cs`
+  L1: // ZzNeedle
+
+`ZzFile002.cs`
+  L1: // ZzNeedle
+
+`ZzFile003.cs`
+  L1: // ZzNeedle
+
+`ZzFile004.cs`
+  L1: // ZzNeedle
+
+`ZzFile005.cs`
+  L1: // ZzNeedle
+
+`ZzFile006.cs`
+  L1: // ZzNeedle
+
+`ZzFile007.cs`
+  L1: // ZzNeedle
+
+`ZzFile008.cs`
+  L1: // ZzNeedle
+
+`ZzFile009.cs`
+  L1: // ZzNeedle
+
+`ZzFile010.cs`
+  L1: // ZzNeedle
+
+`ZzFile011.cs`
+  L1: // ZzNeedle
+
+`ZzFile012.cs`
+  L1: // ZzNeedle
+
+`ZzFile013.cs`
+  L1: // ZzNeedle
+
+`ZzFile014.cs`
+  L1: // ZzNeedle
+
+`ZzFile015.cs`
+  L1: // ZzNeedle
+
+`ZzFile016.cs`
+  L1: // ZzNeedle
+
+`ZzFile017.cs`
+  L1: // ZzNeedle
+
+`ZzFile018.cs`
+  L1: // ZzNeedle
+
+`ZzFile019.cs`
+  L1: // ZzNeedle
+
+`ZzFile020.cs`
+  L1: // ZzNeedle
+
+`ZzFile021.cs`
+  L1: // ZzNeedle
+
+`ZzFile022.cs`
+  L1: // ZzNeedle
+
+`ZzFile023.cs`
+  L1: // ZzNeedle
+
+`ZzFile024.cs`
+  L1: // ZzNeedle
+
+`ZzFile025.cs`
+  L1: // ZzNeedle
+
+`ZzFile026.cs`
+  L1: // ZzNeedle
+
+`ZzFile027.cs`
+  L1: // ZzNeedle
+
+`ZzFile028.cs`
+  L1: // ZzNeedle
+
+`ZzFile029.cs`
+  L1: // ZzNeedle
+
+`ZzFile030.cs`
+  L1: // ZzNeedle
+
+`ZzFile031.cs`
+  L1: // ZzNeedle
+
+`ZzFile032.cs`
+  L1: // ZzNeedle
+
+`ZzFile033.cs`
+  L1: // ZzNeedle
+
+`ZzFile034.cs`
+  L1: // ZzNeedle
+
+`ZzFile035.cs`
+  L1: // ZzNeedle
+
+`ZzFile036.cs`
+  L1: // ZzNeedle
+
+`ZzFile037.cs`
+  L1: // ZzNeedle
+
+`ZzFile038.cs`
+  L1: // ZzNeedle
+
+`ZzFile039.cs`
+  L1: // ZzNeedle
+
+`ZzFile040.cs`
+  L1: // ZzNeedle
+
+`ZzFile041.cs`
+  L1: // ZzNeedle
+
+`ZzFile042.cs`
+  L1: // ZzNeedle
+
+`ZzFile043.cs`
+  L1: // ZzNeedle
+
+`ZzFile044.cs`
+  L1: // ZzNeedle
+
+`ZzFile045.cs`
+  L1: // ZzNeedle
+
+`ZzFile046.cs`
+  L1: // ZzNeedle
+
+`ZzFile047.cs`
+  L1: // ZzNeedle
+
+`ZzFile048.cs`
+  L1: // ZzNeedle
+
+`ZzFile049.cs`
+  L1: // ZzNeedle
+
+... more matches exist (scan stopped at the 100-preview cap; only the first 50 files are listed, and the 100 distinct files seen so far are not the total number of matching files; pass limit:'all' to raise the cap to 200, or narrow the query or the scope)

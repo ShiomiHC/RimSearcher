@@ -1,0 +1,5 @@
+No results for 'member:ZzTick' in scope 'all'.
+
+_'member:' is not a query filter, so it was matched as ordinary search text. Known filters: type:, method:, field:, def:, scope:._
+
+Try: partial names, or search_regex for patterns.

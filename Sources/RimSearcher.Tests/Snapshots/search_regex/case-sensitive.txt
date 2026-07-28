@@ -1,0 +1,4 @@
+Regex matches for 'ZzNeedle' (1 matching line in scope 'all', case-sensitive):
+
+`ZzCase.cs`
+  L1: // ZzNeedle

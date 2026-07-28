@@ -1,0 +1,1 @@
+No type named 'ZzNoSuchType' is in the index, so this is not evidence that it has no subclasses. Check the spelling with rimworld-searcher__locate, and note that inheritors resolves C# type names only.

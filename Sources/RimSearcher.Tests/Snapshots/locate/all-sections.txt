@@ -1,0 +1,14 @@
+## 'ZzWidget' — 1 C# type, 1 member (0 at 100%), 1 XML def (0 at 100%), 1 content match
+
+**C# Types**:
+- `ZzWidget` (100%)
+
+**Members**:
+  Methods:
+  - `Zz.ZzWidget.ZzWidgetTick` (90%)
+
+**XML Defs**:
+- `ZzWidgetAlpha` (90%) - ZzWidgetDef "alpha widget"
+
+**Content Matches**:
+- ZzWidgetDef.ZzNote in `ZzUnrelatedBeta`

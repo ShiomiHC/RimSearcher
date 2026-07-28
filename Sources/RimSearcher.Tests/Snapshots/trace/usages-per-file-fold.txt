@@ -1,0 +1,12 @@
+Text matches for 'ZzMark' (10 matching lines in scope 'all', whole word and case-insensitive — all match the query's own casing):
+
+`ZzGuest.cs`
+  L1: namespace Zz { public class ZzGuest { void M() { ZzMark(); } } }
+
+`ZzHost.cs`
+  L2: // ZzMark 0
+  L3: // ZzMark 1
+  L4: // ZzMark 2
+  ... +6 more of 9 matching lines in this file
+
+... previews are capped at 3 lines per file and no parameter widens that; use read_code on a file to see the rest
