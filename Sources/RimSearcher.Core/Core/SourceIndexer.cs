@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Collections.Frozen;
+using System.Numerics;
 using System.Text.RegularExpressions;
 
 namespace RimSearcher.Core;
@@ -664,6 +665,93 @@ public class SourceIndexer
             : name;
     }
 
+    // 成员模糊候选池的容量。与 FuzzySearchTypes 那边的 Take(500) 同一个量级：池子只是喂给
+    // CalculateFuzzyScore 的输入，真正决定输出的是后面按分数取的前 10 条。
+    private const int MemberFuzzyPoolSize = 500;
+
+    // 按 2-gram 重合度给**全部** member key 排名，取前 poolSize 条当模糊候选池。
+    //
+    // 这一步必须扫全量，不能「凑够 poolSize 条就停」。memberKeys 的枚举序跟着索引期的并发写入
+    // 走，与查询毫无关系：真实语料里几十万个 key，光 `comptickrar` 的头一个 2-gram `co` 就能
+    // 瞬间填满配额，真值再也进不来——`method:CompTickRar` 在有 CompTickRare 的语料里返回 0 条
+    // 成员，根因就是旧代码那句 `foreach (ngram) foreach (key) { … if (set.Count >= 200) break; }`。
+    // 于是 locate 对成员既不是精确匹配也不是可靠的模糊匹配，而是随枚举序退化。
+    //
+    // 排名的全序是「重合度降序 → key 短的优先 → key 升序」，三项都与扫描次序无关，故同一条
+    // 查询在任何进程里得到同一个池子——与 F22/F25 立的是同一条可复现判据。长度排在名字之前，
+    // 是因为重合度并列时短 key 的模糊分更高（编辑距离更小），与本文件其余排序同一条判据。
+    //
+    // 代价是一次 O(全部 key) 扫描。每个 key 只按自身长度走一遍、每个 2-gram 查一次哈希，
+    // 比旧代码「每个 query 2-gram 各扫一遍全表、每次 Contains 走子串搜索」的最坏情形还便宜；
+    // 旧代码之所以快，靠的正是那个让它出错的 break。
+    private static List<string> TopKeysByNgramOverlap(
+        IEnumerable<string> keys,
+        IReadOnlyList<string> queryNgrams,
+        int poolSize)
+    {
+        // 2-gram 打包成 int 查表，而不是逐位置 Substring(i, 2)——全表扫描下那是几百万次分配。
+        // 位掩码给同一个 2-gram 在一个 key 里出现多次去重，只有 64 位；GenerateNgrams 自带
+        // maxCount:50 的闸，越界分支只为不让这里依赖那个常数。
+        var bitOfNgram = new Dictionary<int, int>();
+        foreach (var ngram in queryNgrams)
+        {
+            if (ngram.Length != 2 || bitOfNgram.Count >= 64) continue;
+            bitOfNgram.TryAdd(PackNgram(ngram[0], ngram[1]), bitOfNgram.Count);
+        }
+
+        if (bitOfNgram.Count == 0) return [];
+
+        var pool = new List<(int Overlap, string Key)>();
+
+        // 池子满过一次之后，重合度低于这条线的 key 再也挤不进前 poolSize，直接跳过
+        var cutoff = 0;
+        var capacity = poolSize * 4;
+
+        foreach (var key in keys)
+        {
+            var seen = 0UL;
+            for (var i = 0; i + 1 < key.Length; i++)
+            {
+                if (bitOfNgram.TryGetValue(PackNgram(key[i], key[i + 1]), out var bit))
+                    seen |= 1UL << bit;
+            }
+
+            var overlap = BitOperations.PopCount(seen);
+            if (overlap == 0 || overlap < cutoff) continue;
+
+            pool.Add((overlap, key));
+            if (pool.Count < capacity) continue;
+
+            TrimToTopByOverlap(pool, poolSize);
+            cutoff = pool[^1].Overlap;
+        }
+
+        TrimToTopByOverlap(pool, poolSize);
+        return pool.Select(entry => entry.Key).ToList();
+    }
+
+    private static int PackNgram(char first, char second)
+        => (char.ToLowerInvariant(first) << 16) | char.ToLowerInvariant(second);
+
+    // 边扫边裁，结果仍是全局前 poolSize：在一个全序下，「属于全局前 N」蕴含「属于任何含它的
+    // 子集的前 N」，故真值不可能被中途裁掉；而侥幸留到最后的非前 N 项会被最后这一次裁掉。
+    // 于是内存有上界，而选出来的那一批与扫描次序无关。
+    private static void TrimToTopByOverlap(List<(int Overlap, string Key)> pool, int poolSize)
+    {
+        pool.Sort(static (left, right) =>
+        {
+            var byOverlap = right.Overlap.CompareTo(left.Overlap);
+            if (byOverlap != 0) return byOverlap;
+
+            var byLength = left.Key.Length.CompareTo(right.Key.Length);
+            return byLength != 0
+                ? byLength
+                : StringComparer.OrdinalIgnoreCase.Compare(left.Key, right.Key);
+        });
+
+        if (pool.Count > poolSize) pool.RemoveRange(poolSize, pool.Count - poolSize);
+    }
+
     // memberKinds 非空时只留这几类成员（取值同索引层的 MemberType：Method / Property / Field）。
     // 过滤必须发生在**取回**这一层而不是展示层：候选是按分数取 limit 条的，不分种类。
     // field:Tick 这类查询里方法数量压倒性多于字段，筛在后面等于先让方法把配额吃光——
@@ -706,22 +794,19 @@ public class SourceIndexer
             if (keyLower.Length >= 3)
             {
                 var ngrams = FuzzyMatcher.GenerateNgrams(keyLower, 2).Distinct().ToList();
-                var candidateSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var ngram in ngrams)
-                {
-                    foreach (var mk in memberKeys)
-                    {
-                        if (mk.Contains(ngram, StringComparison.OrdinalIgnoreCase))
-                            candidateSet.Add(mk);
-                        if (candidateSet.Count >= 200) break;
-                    }
-                    if (candidateSet.Count >= 200) break;
-                }
-                fuzzyCandidates = candidateSet;
+                fuzzyCandidates = TopKeysByNgramOverlap(memberKeys, ngrams, MemberFuzzyPoolSize);
             }
             else
             {
-                fuzzyCandidates = memberKeys.Where(k => k.StartsWith(keyLower, StringComparison.OrdinalIgnoreCase)).Take(50);
+                // 两字符关键词走前缀匹配，同样不能按枚举序截断：几十万个 key 下前缀命中动辄
+                // 上千条，取到哪 50 条纯看索引写入次序。前缀命中在 CalculateFuzzyScore 下全部
+                // 同分（90），故按「短的优先、同长按名字」定序——短名才是调用方要的那一个。
+                fuzzyCandidates = memberKeys
+                    .Where(k => k.StartsWith(keyLower, StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(k => k.Length)
+                    .ThenBy(k => k, StringComparer.OrdinalIgnoreCase)
+                    .Take(50)
+                    .ToList();
             }
             
             var fuzzyMatches = fuzzyCandidates

@@ -1363,24 +1363,24 @@ public class OutputReadabilityTests : IDisposable
         Assert.Contains("complete set", description);
     }
 
-    // locate 自称「把残缺或拼错的名字换成准确名」，而这条承诺对**成员**在真实规模的索引上
-    // 站不住：`method:CompTickRar` 在有 CompTickRare 的语料里一条都不回（成员模糊匹配的候选池
-    // 按索引枚举序硬截 200 条，几十万个 key 下真值几乎必然落选，见台账「七、待办」）。
-    // 描述因此不能笼统地承诺模糊，而要把「空的 Members 段 ≠ 这个成员不存在」说出来。
+    // R52 当初把 member 从这句模糊承诺里摘掉，并补了一句「空的 Members 段 ≠ 这个成员不存在」，
+    // 因为**成员**段在真实规模的索引上等于查不到：候选池按索引枚举序硬截 200 条，几十万个 key
+    // 下真值几乎必然落选。根因已修（候选池改为按 2-gram 重合度全序排名取前 500，回归见
+    // MemberFuzzyPoolTests），成员与其余三段站在同一条线上，那句免责因此必须撤——它描述的是
+    // 一个不复存在的行为，而「空的 Members 段不算证据」会把调用方从一条已经走得通的路上劝走。
     //
-    // 这里只断言措辞，不断言匹配行为：小 fixture 上候选池装得下，模糊是**生效**的——
-    // 断言「差一个字符就没有」会把一个只在大索引上成立的现象写成契约。
+    // 这里只断言措辞。匹配行为由 MemberFuzzyPoolTests 断言，那边的 fixture 专门把候选池撑爆，
+    // 小 fixture 上装得下、怎么写都过。
     [Fact]
-    public void LocateDescription_DoesNotPromiseFuzzyMemberLookup()
+    public void LocateDescription_PutsMembersBackInTheFuzzyPromise()
     {
         var (indexer, defs, catalog) = BuildIndex(
             ("ZzOwner.cs", "namespace Zz { public class ZzOwner { public void ZzMemberTick() { } } }"));
         var description = new LocateTool(indexer, defs, catalog).Description;
 
-        Assert.Contains("not evidence", description);
-        Assert.Contains("search_regex", description);
-        // 模糊那句承诺不再把 member 列进去
-        Assert.DoesNotContain("exact C# type / member / XML def name", description);
+        Assert.Contains("exact C# type / member / XML def / file name", description);
+        Assert.DoesNotContain("Members are the weakest", description);
+        Assert.DoesNotContain("not evidence", description);
     }
 
     // 「the complete effective definition」在 RimWorld 语境里会被读成运行时最终值，而实现只做

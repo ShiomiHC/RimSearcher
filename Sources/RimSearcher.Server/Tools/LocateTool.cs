@@ -28,11 +28,8 @@ public class LocateTool : ITool
     public IEnumerable<string> ExtraAcceptedKeys => ["query", "name", "symbol", "search", "term", "maxResults", "count", "scopes", "source", "sources", "mod", "mods", "in"];
 
     public string Description =>
-        "Fuzzy name lookup: turns a partial or misspelled name into the exact C# type / XML def / file name that " +
-        "other tools require — the only tool that accepts approximate input. " +
-        "Members are the weakest of the four: on an index this size a misspelled or truncated member name " +
-        "usually returns nothing at all rather than a near miss, so an empty Members section is not evidence " +
-        "that the member does not exist — retry with the exact spelling, or use search_regex. " +
+        "Fuzzy name lookup: turns a partial or misspelled name into the exact C# type / member / XML def / file " +
+        "name that other tools require — the only tool that accepts approximate input. " +
         "Results are split into C# Types, Members, XML Defs and Content Matches (defs matched on a field value rather " +
         "than on their name), each section capped by limit and folded independently, plus a Files section of indexed " +
         "paths — fuzzy when the other four come back empty, otherwise just the file whose name matches the query " +
