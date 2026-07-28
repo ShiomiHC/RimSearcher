@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Collections.Concurrent;
 using RimSearcher.Core;
+using RimSearcher.Server.Tools.Output;
 
 namespace RimSearcher.Server.Tools;
 
@@ -60,7 +61,7 @@ public class TraceTool : ITool
         // 这个工具此前一句都没有，理由是不想把 R59 那段常驻边界贴第三遍。收敛成契约之后
         // 它只有一句，而 inheritors 恰恰是最需要它的地方：一个只在 CE 启用时才存在的子类，
         // 与 vanilla 的子类在返回里逐字同形。
-        ScopeArgs.LabelContract + " " +
+        SourceLabeling.Contract + " " +
         ConditionalReport.Contract;
 
     public object JsonSchema => new
@@ -116,7 +117,7 @@ public class TraceTool : ITool
 
         // 拼错的 scope 被静默退回全域，两个 mode 的每条返回路径都要带上这行，
         // 否则调用方会把全域结果当成自己限定过的范围内结果。
-        var scopeNotice = ScopeArgs.UnresolvedNotice(_scopeCatalog, scope) ?? string.Empty;
+        var scopeNotice = ScopeNotices.Unresolved(_scopeCatalog, scope) ?? string.Empty;
 
         if (mode == "inheritors")
         {
@@ -161,10 +162,10 @@ public class TraceTool : ITool
             }
 
             // 列出来的类型全同源时标签只印一次；被 200 上限截断时表头改印全树的来源构成
-            // （见 ScopeArgs.SourceLabeling）。这里的截断是结构性偏置：候选按 depth 再按字母序
+            // （见 SourceLabeling）。这里的截断是结构性偏置：候选按 depth 再按字母序
             // 排，vanilla 的直接子类挤满前 200 条，于是「切片全是 vanilla、全树横跨五个源」
             // 是常态而非巧合。
-            var inheritorLabels = ScopeArgs.SourceLabeling.Of(inheritors);
+            var inheritorLabels = SourceLabeling.Of(inheritors);
             var inheritorConditional = new ConditionalReport(_conditional);
 
             var results = inheritors.Items.Select(entry =>
@@ -229,7 +230,7 @@ public class TraceTool : ITool
             // 顶到 200 时「narrow the query」在继承树上不是个可执行动作：查询词就是那个类名，
             // 没得再窄，而这个模式既没有 offset 也没有任何参数抬得动上限。唯一的出路是从列表里
             // 挑一个子树根重跑——这个动作在 schema、Description、返回里此前一处都没写。
-            var fold = ScopeArgs.FoldLine(
+            var fold = Fold.Line(
                 inheritors, "subclasses", indent: "", limit: limit,
                 // 只给这一条出路时它的语气太足：第十三轮盲测里被测方据此断定「要拼出全树得对
                 // 306 个直接子类逐个盲试」，转而去跑正则补料，多花四次调用，产出一份自己都标注
@@ -318,7 +319,7 @@ public class TraceTool : ITool
             int lineCappedFiles = 0;
             int unreadableFiles = 0;
 
-            // 与两个计数并行的名单（基名）。见 ScopeArgs.NameSample：只报个数时调用方
+            // 与两个计数并行的名单（基名）。见 ScanReport.NameSample：只报个数时调用方
             // 无从判断那个文件与本次查询有没有关系，只能把整份结果一律当成下界。
             var lineCappedNames = new ConcurrentBag<string>();
             var unreadableNames = new ConcurrentBag<string>();
@@ -428,7 +429,7 @@ public class TraceTool : ITool
                 return new ToolResult(
                     $"No text matches for '{symbol}' in scope '{scope.Expression}' "
                     + "(whole word, case-insensitive)."
-                    + $"{ScopeArgs.RetryWiderNotice(scope)}{scopeNotice}");
+                    + $"{ScopeNotices.RetryWider(scope)}{scopeNotice}");
 
             // 按 (文件序号, 行号) 排完再截：序号来自 files，files 就是展示顺序，故留下的恒是
             // 读者看到的那一段的前缀。拿 ConcurrentBag 的枚举序去截则每次都可能不同。
@@ -445,8 +446,8 @@ public class TraceTool : ITool
             // 文件」，随线程调度浮动，同一次查询重跑两遍会给出两个数。与其报一个不稳定的下界，
             // 不如只说确定的量（显示了多少条、扫描在何处停下），把总数留给末尾的提示。
             var sb = new System.Text.StringBuilder();
-            // 列出来的文件全同源时标签只印一次（见 ScopeArgs.SourceLabeling）
-            var usageLabels = ScopeArgs.SourceLabeling.Of(
+            // 列出来的文件全同源时标签只印一次（见 SourceLabeling）
+            var usageLabels = SourceLabeling.Of(
                 grouped.Select(g => scope.ShowLabels ? scope.SourceNameOf(g.Key) : null));
 
             var capped = Interlocked.CompareExchange(ref lineCappedFiles, 0, 0);
@@ -470,16 +471,16 @@ public class TraceTool : ITool
             sb.AppendLine(wasTruncated
                 ? $"Text matches for '{symbol}' (first {shownResults.Count} preview lines in scope "
                   + $"'{scope.Expression}', whole word and case-insensitive){usageLabels.Header}:"
-                // 下界记号必须就地指出成因，否则读者会拿 limit 去解释它（见 ScopeArgs.LowerBoundReason）
-                : $"Text matches for '{symbol}' ({ScopeArgs.FoundCount(totalMatches, anyFileIncomplete)} "
+                // 下界记号必须就地指出成因，否则读者会拿 limit 去解释它（见 ScanReport.LowerBoundReason）
+                : $"Text matches for '{symbol}' ({ScanReport.FoundCount(totalMatches, anyFileIncomplete)} "
                   + $"in scope '{scope.Expression}'{casing}"
-                  + $"{ScopeArgs.LowerBoundReason(anyFileIncomplete)}){usageLabels.Header}:");
+                  + $"{ScanReport.LowerBoundReason(anyFileIncomplete)}){usageLabels.Header}:");
             sb.AppendLine();
 
-            // 本次要列出的文件里有重名时补目录（见 ScopeArgs.DisambiguateFileNames）。
+            // 本次要列出的文件里有重名时补目录（见 FileNames.Disambiguate）。
             // 两处都叫调用方 `use read_code on a file`，而 read_code 收基名——重名不消歧，
             // 那句下一步就是错的。
-            var usageDisplayNames = ScopeArgs.DisambiguateFileNames(grouped.Select(g => g.Key));
+            var usageDisplayNames = FileNames.Disambiguate(grouped.Select(g => g.Key));
 
             var groupsWritten = 0;
             var anyFileFolded = false;
@@ -509,7 +510,7 @@ public class TraceTool : ITool
                 var inFile = matchesByFile.TryGetValue(group.Key, out var c) ? c : shown;
                 if (inFile > shown)
                 {
-                    sb.AppendLine(ScopeArgs.PerFileFold(inFile - shown, inFile));
+                    sb.AppendLine(Fold.PerFile(inFile - shown, inFile));
                     // 只有真撞上每文件上限的折叠才让脚注出现——配额在这个文件中途耗尽时 shown
                     // 不足 3，那条折叠的成因是扫描停了，不是每文件上限。同 search_regex。
                     if (shown >= MaxMatchesPerFile) anyFileFolded = true;
@@ -524,13 +525,13 @@ public class TraceTool : ITool
                 // 各写各的措辞，而它们的输出结构本来就一样。已顶到硬上限时那句里不会再劝
                 // limit:'all'（原地重试），这条判断在 ScanStoppedLine 内部。
                 sb.AppendLine();
-                sb.AppendLine(ScopeArgs.ScanStoppedLine(maxTotalResults, limit));
+                sb.AppendLine(ScanReport.ScanStopped(maxTotalResults, limit));
             }
 
             if (anyFileFolded)
             {
                 sb.AppendLine();
-                sb.AppendLine(ScopeArgs.PerFilePreviewCapLine(MaxMatchesPerFile));
+                sb.AppendLine(Fold.PerFilePreviewCap(MaxMatchesPerFile));
             }
 
             // 与 search_regex 逐字同句：两个工具有一模一样的两处静默削减，此前只有它说出口
@@ -546,14 +547,14 @@ public class TraceTool : ITool
                 if (unreadable > 0)
                     incomplete.Add($"{OutputText.Quantity(unreadable, "files")} could not be read "
                                    + $"and {(unreadable == 1 ? "was" : "were")} skipped entirely"
-                                   + ScopeArgs.NameSample(sorted(unreadableNames)));
+                                   + ScanReport.NameSample(sorted(unreadableNames)));
                 if (capped > 0)
                     incomplete.Add($"{OutputText.Quantity(capped, "files")} {(capped == 1 ? "was" : "were")} "
                                    + $"only scanned to line {MaxLinesScannedPerFile}"
-                                   + ScopeArgs.NameSample(sorted(lineCappedNames)));
+                                   + ScanReport.NameSample(sorted(lineCappedNames)));
 
                 sb.AppendLine();
-                sb.AppendLine(ScopeArgs.NotScannedInFullLine(incomplete));
+                sb.AppendLine(ScanReport.NotScannedInFull(incomplete));
             }
 
             // 条件目录的成因整份说一次（行内只放键，见 ConditionalReport）
@@ -561,7 +562,7 @@ public class TraceTool : ITool
 
             // usages 分支是硬 scope 过滤、没有 ScopeReport footer（见上面扫盘的注释）。
             // 那条 footer 的缺席本身会被读成「scope 外没有」，故把缺席的含义明说一次。
-            sb.Append(ScopeArgs.HardScopeFilterNotice(scope));
+            sb.Append(ScopeNotices.HardScopeFilter(scope));
             sb.Append(scopeNotice);
 
             return new ToolResult(sb.ToString());

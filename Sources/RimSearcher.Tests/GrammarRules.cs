@@ -58,7 +58,7 @@ public static class GrammarRules
     };
 
     // 结果行末尾方括号里**不是**来源标签的那几种。来源标签的判据是「行尾的 [x]」（见
-    // ScopeArgs.SourceLabeling），而 def 行的 [Abstract]、trace 的 [depth N] 与 F34 的
+    // SourceLabeling），而 def 行的 [Abstract]、trace 的 [depth N] 与 F34 的
     // [conditional: X] 在没有后续字段时也会落到行尾。
     //
     // conditional 那一个尤其要豁免：单源 scope 下来源标签整段不印，于是几条同一个条件目录
@@ -130,7 +130,7 @@ public static class GrammarRules
         "server cap",
     ];
 
-    // 下界记号自带的、指向真成因的引用（ScopeArgs.LowerBoundReason / locate 的 floorNotice）
+    // 下界记号自带的、指向真成因的引用（ScanReport.LowerBoundReason / locate 的 floorNotice）
     private static readonly string[] FloorPointers =
     [
         "'at least' because",
@@ -323,7 +323,7 @@ public static class GrammarRules
 
     // ---- 六、来源标签（管「说不说」；同源标签上提那一条） ----
     //
-    // 判据来自 ScopeArgs.SourceLabeling：一段结果全部同源时标签提到段头印一次，逐行不再重复；
+    // 判据来自 SourceLabeling：一段结果全部同源时标签提到段头印一次，逐行不再重复；
     // 真的混源才逐行印。于是**逐行标签存在 ⟹ 整份返回里至少有两种不同的标签**——某一段之所以
     // 逐行印，正是因为那一段内部就有两个不同的源。全篇逐行标签只有一种取值，就说明有一段把
     // 纯噪音逐行印了出来（实测一次 200 条的返回里 412 个标签约占正文 14%）。
@@ -394,7 +394,7 @@ public static class GrammarRules
     // 甲：每条 `... ` 开头的截断提示都要给出可执行的下一步。只说「被截了」而不说怎么拿到，
     //     调用方只能把它读成服务端在敷衍。
     // 乙：`limit` 已经顶到硬上限时不许再劝 `limit:'all'`——照做是原地重试。同一份返回里
-    //     `server cap N reached` 与 `pass limit:'all'` 互斥（见 ScopeArgs.FoldLine 的三分支）。
+    //     `server cap N reached` 与 `pass limit:'all'` 互斥（见 Fold.Line 的三分支）。
     private static void TruncationGivesANextStep(string text, string[] lines, List<GrammarViolation> found)
     {
         string[] actionable =

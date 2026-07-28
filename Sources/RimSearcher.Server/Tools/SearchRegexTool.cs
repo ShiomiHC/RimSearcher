@@ -1,5 +1,6 @@
 using System.Text.Json;
 using RimSearcher.Core;
+using RimSearcher.Server.Tools.Output;
 
 namespace RimSearcher.Server.Tools;
 
@@ -53,7 +54,7 @@ public class SearchRegexTool : ITool
         "count is not a count of things that exist — confirm with locate or inspect before treating it as one. " +
         // R59 那三句常驻能力边界（「条件目录一律收下、条件不判定」）对每一次调用都成立，因而
         // 对**手上这一条命中**什么也没说。F34 把它收敛成契约，条件由命中自己带（见 ConditionalReport）。
-        ScopeArgs.LabelContract + " " +
+        SourceLabeling.Contract + " " +
         ConditionalReport.Contract + " " +
         "The header echoes whether the scan ran case-insensitively (the default).";
 
@@ -96,7 +97,7 @@ public class SearchRegexTool : ITool
                 pattern, scope, fileFilter, ignoreCase, limit.Count, cancellationToken, progress);
 
             // 拼错的 scope 被静默退回全域，有结果、无结果两条路径都要说
-            var scopeNotice = ScopeArgs.UnresolvedNotice(_scopeCatalog, scope) ?? string.Empty;
+            var scopeNotice = ScopeNotices.Unresolved(_scopeCatalog, scope) ?? string.Empty;
 
             // 同 trace usages：scope 对扫盘工具是硬过滤，落选来源不统计，故要显式点一句
             if (results.Count == 0)
@@ -115,7 +116,7 @@ public class SearchRegexTool : ITool
                 return new ToolResult(
                     $"No matches for pattern '{pattern}' in scope '{scope.Expression}'{filterNote}, "
                     + $"{(ignoreCase ? "case-insensitive" : "case-sensitive")}."
-                    + $"{ScopeArgs.RetryWiderNotice(scope)}{scopeNotice}");
+                    + $"{ScopeNotices.RetryWider(scope)}{scopeNotice}");
             }
 
             // 索引层是并发扫描后从 ConcurrentBag 收口的，文件之间的先后完全看线程调度；
@@ -153,15 +154,15 @@ public class SearchRegexTool : ITool
             var headline = truncated
                 ? $"first {results.Count} preview lines in scope '{scope.Expression}', {casing}{filtered}"
                 // 有文件没扫全时这个总数只是下界，表头与末尾那条尾注要同时改口。
-                // 改口时还要就地指出成因在哪——见 ScopeArgs.LowerBoundReason。
-                : $"{ScopeArgs.FoundCount(totalMatches, diagnostics.AnyFileIncomplete)} "
+                // 改口时还要就地指出成因在哪——见 ScanReport.LowerBoundReason。
+                : $"{ScanReport.FoundCount(totalMatches, diagnostics.AnyFileIncomplete)} "
                   + $"in scope '{scope.Expression}', {casing}{filtered}"
-                  + ScopeArgs.LowerBoundReason(diagnostics.AnyFileIncomplete);
+                  + ScanReport.LowerBoundReason(diagnostics.AnyFileIncomplete);
 
-            // 本次要列出的文件里有重名时补目录（见 ScopeArgs.DisambiguateFileNames）
-            var displayNames = ScopeArgs.DisambiguateFileNames(shownFiles.Select(g => g.Key));
+            // 本次要列出的文件里有重名时补目录（见 FileNames.Disambiguate）
+            var displayNames = FileNames.Disambiguate(shownFiles.Select(g => g.Key));
 
-            // 列出来的文件全同源时标签只印一次（见 ScopeArgs.SourceLabeling）。
+            // 列出来的文件全同源时标签只印一次（见 SourceLabeling）。
             //
             // 但只印一次的前提是它对表头那个数为真。第九轮的事故记在下面 `allFiles.Count >
             // MaxFilesShown` 那一支的注释里：调用方据 50 个文件的来源标签断言「97 个文件清一色
@@ -178,7 +179,7 @@ public class SearchRegexTool : ITool
                     .Select(g => (g.Key, g.Count()))
                     .ToList()
                 : null;
-            var labels = ScopeArgs.SourceLabeling.Of(
+            var labels = SourceLabeling.Of(
                 shownFiles.Select(g => scope.ShowLabels ? scope.SourceNameOf(g.Key) : null),
                 fileScopeTotals);
 
@@ -206,11 +207,11 @@ public class SearchRegexTool : ITool
                              // 只能看到 3 行」，而其实放宽 limit 就能多印一行。
                              if (inFile > shown && shown >= SourceIndexer.MaxPreviewsPerFile) anyFileFolded = true;
                              var moreCount = inFile > shown
-                                 ? "\n" + ScopeArgs.PerFileFold(inFile - shown, inFile)
+                                 ? "\n" + Fold.PerFile(inFile - shown, inFile)
                                  : "";
 
                              // 条件标记排在来源标签**之前**：行尾的 `[x]` 是全服的来源标签位
-                             // （见 ScopeArgs.SourceLabeling 与文法闸规则六），别的记号挤进去
+                             // （见 SourceLabeling 与文法闸规则六），别的记号挤进去
                              // 会让「同源就提到表头」那条判据在这一行上读不出来。
                              var label = labels.Row(scope.ShowLabels ? scope.SourceNameOf(g.Key) : null);
                              return $"`{fileName}`{conditional.Tag(g.Key)}{label}\n"
@@ -235,7 +236,7 @@ public class SearchRegexTool : ITool
                         + "seen so far are not the total number of matching files"
                     }
                     : null;
-                output += "\n\n" + ScopeArgs.ScanStoppedLine(results.Count, limit, extra);
+                output += "\n\n" + ScanReport.ScanStopped(results.Count, limit, extra);
             }
             else if (allFiles.Count > MaxFilesShown)
             {
@@ -253,7 +254,7 @@ public class SearchRegexTool : ITool
             }
 
             if (anyFileFolded)
-                output += "\n\n" + ScopeArgs.PerFilePreviewCapLine(SourceIndexer.MaxPreviewsPerFile);
+                output += "\n\n" + Fold.PerFilePreviewCap(SourceIndexer.MaxPreviewsPerFile);
 
             // 「没有尾注即完整」是本工具写在 Description 里的契约，被跳过/被弃扫的文件必须破这个契约
             if (diagnostics.AnyFileIncomplete)
@@ -267,25 +268,25 @@ public class SearchRegexTool : ITool
                           + "(catastrophic backtracking) — its per-file match count is missing"
                         : $"{diagnostics.TimedOutFiles} files were abandoned mid-scan because the pattern "
                           + "timed out on them (catastrophic backtracking) — their per-file match counts are missing")
-                        + ScopeArgs.NameSample(diagnostics.TimedOutNames));
+                        + ScanReport.NameSample(diagnostics.TimedOutNames));
                 if (diagnostics.UnreadableFiles > 0)
                     incomplete.Add($"{OutputText.Quantity(diagnostics.UnreadableFiles, "files")} could not be read "
                                    + $"and {(diagnostics.UnreadableFiles == 1 ? "was" : "were")} skipped entirely"
-                                   + ScopeArgs.NameSample(diagnostics.UnreadableNames));
+                                   + ScanReport.NameSample(diagnostics.UnreadableNames));
                 if (diagnostics.LineCappedFiles > 0)
                     incomplete.Add($"{OutputText.Quantity(diagnostics.LineCappedFiles, "files")} "
                                    + $"{(diagnostics.LineCappedFiles == 1 ? "was" : "were")} "
                                    + $"only scanned to line {diagnostics.LineCap}"
-                                   + ScopeArgs.NameSample(diagnostics.LineCappedNames));
+                                   + ScanReport.NameSample(diagnostics.LineCappedNames));
 
-                output += "\n\n" + ScopeArgs.NotScannedInFullLine(incomplete);
+                output += "\n\n" + ScanReport.NotScannedInFull(incomplete);
             }
 
             // 条件目录的成因整份说一次（行内只放键，见 ConditionalReport）
             output += conditional.Render() ?? string.Empty;
 
             // 同 trace usages：这里没有 out-of-scope 逐源计数，而缺席会被读成「scope 外没有」
-            output += ScopeArgs.HardScopeFilterNotice(scope);
+            output += ScopeNotices.HardScopeFilter(scope);
             output += scopeNotice;
 
             return new ToolResult(output);

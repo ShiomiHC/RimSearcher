@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using RimSearcher.Core;
+using RimSearcher.Server.Tools.Output;
 
 namespace RimSearcher.Server.Tools;
 
@@ -336,7 +337,7 @@ public class ReadCodeTool : ITool
 
             if (startLine + lineCount < totalLines)
             {
-                // 文法与全服统一的截断脚注一致：`... +N more <什么> (<怎么拿到>)`，见 ScopeArgs.FoldLine。
+                // 文法与全服统一的截断脚注一致：`... +N more <什么> (<怎么拿到>)`，见 Fold.Line。
                 // 总数要在这一行里给出，判据同 R47 的每文件折叠行（`+4 more of 7 matching lines`）：
                 // 文件总行数只在顶部那行位置注释里出现过一次，而作答时它早已滚出视野——第十轮
                 // 盲测里一条链差点在没读完的情况下下结论，同一轮里另一条链正是靠 search_regex
@@ -376,7 +377,7 @@ public class ReadCodeTool : ITool
     // 一律追加在正文最末尾：正文通常是 ```csharp 代码块，提示混进块里就成了源码的一部分。
     private ToolResult WithUnresolvedScopeNotice(ScopeSelection scope, ToolResult result)
     {
-        var notice = ScopeArgs.UnresolvedNotice(_scopeCatalog, scope);
+        var notice = ScopeNotices.Unresolved(_scopeCatalog, scope);
         return notice == null ? result : result with { Content = result.Content + notice };
     }
 

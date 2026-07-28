@@ -460,7 +460,7 @@ public class SyncSourcesTool : ITool
                     + $"the last page starts at offset={lastPage})");
             }
 
-            // 文法与全服统一的截断脚注一致：`... +N more of M <什么> (<怎么拿到>)`，见 ScopeArgs.FoldLine。
+            // 文法与全服统一的截断脚注一致：`... +N more of M <什么> (<怎么拿到>)`，见 Fold.Line。
             // 这一行原先三处都在共用文法之外：丢了 `+`（调用方就是按 `... +` 认截断的）、总数后面
             // 裸着一个没有名词的数（`of 30` 数的是什么全靠猜）、下一步写在破折号后面而不是括号里。
             // 同一个记号在别的六个工具上都是那一形，独这里要再学一遍。

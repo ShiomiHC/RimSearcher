@@ -1,6 +1,7 @@
 using System.Text.Json;
 using RimSearcher.Core;
 using RimSearcher.Server.Tools;
+using RimSearcher.Server.Tools.Output;
 
 namespace RimSearcher.Tests;
 
@@ -247,7 +248,7 @@ public class ScopeArgsTests
             totalInScope: ScopeArgs.HardLimit + 5,
             outOfScope: [], truncatedByScoreGap: false, truncatedByLimit: true);
 
-        var atCapLine = ScopeArgs.FoldLine(atCap, "items", limit: expanded);
+        var atCapLine = Fold.Line(atCap, "items", limit: expanded);
         Assert.DoesNotContain("limit:'all'", atCapLine);
         Assert.Contains($"server cap {ScopeArgs.HardLimit}", atCapLine);
 
@@ -256,7 +257,7 @@ public class ScopeArgsTests
             [new ScopedEntry<string>("a", 100, null)], totalInScope: 5,
             outOfScope: [], truncatedByScoreGap: false, truncatedByLimit: true);
 
-        var underCapLine = ScopeArgs.FoldLine(wellUnderCap, "items", limit: expanded);
+        var underCapLine = Fold.Line(wellUnderCap, "items", limit: expanded);
         Assert.DoesNotContain("limit:'all'", underCapLine);
         Assert.DoesNotContain("server cap", underCapLine);
     }
@@ -270,7 +271,7 @@ public class ScopeArgsTests
             [new ScopedEntry<string>("a", 100, null)], totalInScope: 5,
             outOfScope: [], truncatedByScoreGap: true, truncatedByLimit: false);
 
-        var line = ScopeArgs.FoldLine(gapOnly, "items");
+        var line = Fold.Line(gapOnly, "items");
 
         Assert.Contains("lower relevance", line);
         Assert.DoesNotContain("limit:'all'", line);
@@ -302,17 +303,17 @@ public class ScopeArgsTests
         var withGap = new ScopedResult<string>(
             [new ScopedEntry<string>("a", 100, null)], totalInScope: 5,
             outOfScope: [], truncatedByScoreGap: true);
-        Assert.Contains("lower relevance", ScopeArgs.FoldLine(withGap, "items"));
+        Assert.Contains("lower relevance", Fold.Line(withGap, "items"));
 
         var withoutGap = new ScopedResult<string>(
             [new ScopedEntry<string>("a", 100, null)], totalInScope: 5,
             outOfScope: [], truncatedByScoreGap: false);
-        Assert.DoesNotContain("lower relevance", ScopeArgs.FoldLine(withoutGap, "items"));
+        Assert.DoesNotContain("lower relevance", Fold.Line(withoutGap, "items"));
 
         var complete = new ScopedResult<string>(
             [new ScopedEntry<string>("a", 100, null)], totalInScope: 1,
             outOfScope: [], truncatedByScoreGap: false);
-        Assert.Null(ScopeArgs.FoldLine(complete, "items"));
+        Assert.Null(Fold.Line(complete, "items"));
     }
 
     [Fact]

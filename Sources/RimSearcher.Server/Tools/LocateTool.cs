@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using RimSearcher.Core;
+using RimSearcher.Server.Tools.Output;
 
 namespace RimSearcher.Server.Tools;
 
@@ -78,7 +79,7 @@ public class LocateTool : ITool
         "Member rows are deduplicated by declaring type + member name + kind + file, so same-named overloads " +
         "collapse into one row: the count is of member names, not of declarations — inspect the type to see " +
         "how many overloads a row stands for. " +
-        ScopeArgs.LabelContract + " " +
+        SourceLabeling.Contract + " " +
         ConditionalReport.Contract + " " +
         "Filters go inside the query: type:, method:, field:, def:, and scope: as an alias for the scope parameter.";
 
@@ -127,7 +128,7 @@ public class LocateTool : ITool
         // 拼错的 scope 被静默退回全域，每条返回路径都要带上这行，
         // 否则调用方拿着全域结果却以为自己限定过范围。表头在全域时不打 scope 标注，
         // 正是这种情况下最没痕迹的地方。
-        var scopeNotice = ScopeArgs.UnresolvedNotice(_scopeCatalog, scope) ?? string.Empty;
+        var scopeNotice = ScopeNotices.Unresolved(_scopeCatalog, scope) ?? string.Empty;
 
         var report = new ScopeReport();
 
@@ -164,7 +165,7 @@ public class LocateTool : ITool
                 hasResults = true;
                 tally.Add(Count(types.Items.Count, types.TotalInScope, "C# types",
                     fullScore: types.FullScoreCount));
-                var typeLabels = ScopeArgs.SourceLabeling.Of(types);
+                var typeLabels = SourceLabeling.Of(types);
                 sb.AppendLine($"\n**C# Types**{typeLabels.Header}:");
                 foreach (var entry in types.Items)
                 {
@@ -175,7 +176,7 @@ public class LocateTool : ITool
                         + $"{conditional.TagAll(paths)}{typeLabels.Row(entry.SourceName)}");
                 }
 
-                var fold = ScopeArgs.FoldLine(types, "C# types", limit: limit);
+                var fold = Fold.Line(types, "C# types", limit: limit);
                 if (fold != null) sb.AppendLine(fold);
             }
         }
@@ -220,7 +221,7 @@ public class LocateTool : ITool
                 // 段头的方括号则必须按全集判：这一段的截断是两层的（ScopeFilter 的 limit 加每组
                 // 配额），shown < TotalInScope 才是「有东西没列出来」的完整判据，ScopedResult
                 // 自己只看得见第一层，故这里显式传。
-                var memberLabels = ScopeArgs.SourceLabeling.Of(
+                var memberLabels = SourceLabeling.Of(
                     shownGroups.SelectMany(g => g.Items).Select(e => e.SourceName),
                     shown < members.TotalInScope ? members.SourcesInScope : null);
                 sb.AppendLine($"\n**Members**{memberLabels.Header}:");
@@ -253,7 +254,7 @@ public class LocateTool : ITool
                 // 折叠行放在整段末尾、按 TotalInScope 计数。原先每组各打一行、只数「取回的这批里
                 // 还剩几条」，而取回本身已被 limit.Scale(3) 砍过：method:CompTick 因此报 +25，
                 // 实际有 186 条。组内那行还漏了「怎么拿到更多」，调用方连能展开都不知道。
-                var memberFold = ScopeArgs.FoldLine(
+                var memberFold = Fold.Line(
                     Math.Max(0, members.TotalInScope - shown),
                     shown,
                     members.TruncatedByScoreGap,
@@ -277,7 +278,7 @@ public class LocateTool : ITool
                 hasResults = true;
                 tally.Add(Count(defs.Items.Count, defs.TotalInScope, "XML defs",
                     fullScore: defs.FullScoreCount));
-                var defLabels = ScopeArgs.SourceLabeling.Of(defs);
+                var defLabels = SourceLabeling.Of(defs);
                 sb.AppendLine($"\n**XML Defs**{defLabels.Header}:");
                 foreach (var entry in defs.Items)
                 {
@@ -298,7 +299,7 @@ public class LocateTool : ITool
                         + $"{conditional.Tag(def.FilePath)}{defLabels.Row(entry.SourceName)}");
                 }
 
-                var fold = ScopeArgs.FoldLine(defs, "XML defs", indent: "  ", limit: limit);
+                var fold = Fold.Line(defs, "XML defs", indent: "  ", limit: limit);
                 if (fold != null) sb.AppendLine(fold);
             }
 
@@ -311,7 +312,7 @@ public class LocateTool : ITool
                 {
                     hasResults = true;
                     tally.Add(Count(defsByContent.Items.Count, defsByContent.TotalInScope, "content matches"));
-                    var contentLabels = ScopeArgs.SourceLabeling.Of(defsByContent);
+                    var contentLabels = SourceLabeling.Of(defsByContent);
                     sb.AppendLine($"\n**Content Matches**{contentLabels.Header}:");
 
                     foreach (var entry in defsByContent.Items)
@@ -331,7 +332,7 @@ public class LocateTool : ITool
                                       + $"{conditional.Tag(location.FilePath)}{contentLabels.Row(entry.SourceName)}");
                     }
 
-                    var fold = ScopeArgs.FoldLine(defsByContent, "content matches", indent: "  ", limit: limit);
+                    var fold = Fold.Line(defsByContent, "content matches", indent: "  ", limit: limit);
                     if (fold != null) sb.AppendLine(fold);
                 }
             }
@@ -414,7 +415,7 @@ public class LocateTool : ITool
                 // 读作「完整集」，而它确实是完整集，只是其中一半根本不叫这个名字。
                 var fileFullScore = queryIsFileName ? exactFiles.TotalInScope : files.FullScoreCount;
                 tally.Add(Count(items.Count, fileTotal, "files", fullScore: fileFullScore));
-                // 段头的方括号按全集判（见 ScopeArgs.SourceLabeling）。只有兜底那一支会被截断，
+                // 段头的方括号按全集判（见 SourceLabeling）。只有兜底那一支会被截断，
                 // 且构成数的是 files.TotalInScope——WithExactFilesFirst 往 items 里补进过模糊结果
                 // 之外的精确命中时，构成会比表头的 fileTotal 少那几条。加起来对不上的构成不如
                 // 不印：它自证的本事全在「各源之和恰好等于表头那个总数」上。
@@ -422,7 +423,7 @@ public class LocateTool : ITool
                     wantsFileFallback && items.Count == files.Items.Count && items.Count < fileTotal
                         ? files.SourcesInScope
                         : null;
-                var fileLabels = ScopeArgs.SourceLabeling.Of(items.Select(e => e.SourceName), fileScopeTotals);
+                var fileLabels = SourceLabeling.Of(items.Select(e => e.SourceName), fileScopeTotals);
                 sb.AppendLine($"\n**Files**{fileLabels.Header}:");
                 foreach (var entry in items)
                 {
@@ -437,7 +438,7 @@ public class LocateTool : ITool
                 // 折叠行只对兜底那一支有意义：精确补充本来就只列同名的那几条，没有「还有更多」。
                 if (wantsFileFallback)
                 {
-                    var fold = ScopeArgs.FoldLine(files, "files", limit: limit);
+                    var fold = Fold.Line(files, "files", limit: limit);
                     if (fold != null) sb.AppendLine(fold);
                 }
 
@@ -507,7 +508,7 @@ public class LocateTool : ITool
         {
             var message = new StringBuilder(
                 $"No results for '{ToolArgs.ForEcho(rawQuery)}' in scope '{scope.Expression}'.");
-            message.Append(ScopeArgs.RetryWiderNotice(scope, footer != null));
+            message.Append(ScopeNotices.RetryWider(scope, footer != null));
             if (footer != null) message.Append(footer);
             message.Append(scopeNotice);
             message.Append(prefixNotice);
@@ -587,7 +588,7 @@ public class LocateTool : ITool
     }
 
     // totalIsLowerBound 时改口成 `at least N`。文法与 search_regex / trace 的表头共用
-    // （见 ScopeArgs.FoundCount），那边是「有文件没扫全所以总数只是下界」，这边是「候选池
+    // （见 ScanReport.FoundCount），那边是「有文件没扫全所以总数只是下界」，这边是「候选池
     // 装不下所以总数只是下界」——两处成因不同，而调用方要学的读法是同一条：出现 at least
     // 就说明这个数只是地板。
     //

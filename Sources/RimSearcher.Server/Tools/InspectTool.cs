@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using RimSearcher.Core;
+using RimSearcher.Server.Tools.Output;
 
 namespace RimSearcher.Server.Tools;
 
@@ -285,7 +286,7 @@ public class InspectTool : ITool
 
         // 拼错的 scope 被静默退回全域，两个分支的每条返回路径都要带上这行，
         // 否则调用方会把全域结果当成自己限定过的范围内结果。
-        var scopeNotice = ScopeArgs.UnresolvedNotice(_scopeCatalog, scope) ?? string.Empty;
+        var scopeNotice = ScopeNotices.Unresolved(_scopeCatalog, scope) ?? string.Empty;
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -515,7 +516,7 @@ public class InspectTool : ITool
                 {
                     sb.AppendLine(
                         $"\n**Also declared in** `{entry.Item}`{typeConditional.Tag(entry.Item)}"
-                        + $"{ScopeArgs.Label(entry.SourceName)} "
+                        + $"{SourceLabeling.Label(entry.SourceName)} "
                         // 两支出路必须各自带全自己的限定。原先是「narrow scope to this source,
                         // or use read_code extractClass」——第一支自带限定（narrow **scope**），
                         // 第二支没有，而不锁源的 read_code 按 scope 里排在前面的源取，拿回的正是
@@ -530,7 +531,7 @@ public class InspectTool : ITool
                 // 横线分隔的是空气，读者却会把它读成「后面还有内容、被截断了」。
                 sb.AppendLine(outlinesShown == 0 ? "" : "\n---\n");
                 sb.AppendLine($"**Outline** (`{entry.Item}`)"
-                              + $"{typeConditional.Tag(entry.Item)}{ScopeArgs.Label(entry.SourceName)}:");
+                              + $"{typeConditional.Tag(entry.Item)}{SourceLabeling.Label(entry.SourceName)}:");
 
                 // 按状态判断而不是看正文——正文里出现 "not found" 之类的字面量是常态
                 var outline = await RoslynHelper.GetClassOutlineAsync(entry.Item, name, OutlineLimit(args));

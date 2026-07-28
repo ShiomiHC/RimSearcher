@@ -338,7 +338,7 @@ public static class RoslynHelper
     private static void AppendOutlineFold(StringBuilder sb, int total, int shownCap, string kindPlural)
     {
         if (total <= shownCap) return;
-        // 措辞对齐全服统一的截断脚注文法「... +N more <什么> (<怎么拿到>)」——见 ScopeArgs.FoldLine。
+        // 措辞对齐全服统一的截断脚注文法「... +N more <什么> (<怎么拿到>)」——见 Fold.Line。
         // "not shown" 是 "more" 已经说过的话。
         sb.AppendLine(
             $"    ... +{total - shownCap} more {OutputText.NounFor(total - shownCap, kindPlural)} "
@@ -346,7 +346,7 @@ public static class RoslynHelper
             // 自己声明**的那些」。第十二轮盲测：调用方要在 `Pawn` 上找取地图的成员，照这句展开
             // 全部 118 条属性也拿不到 `Map`——它声明在基类 `Verse.Thing` 上。答对那位是靠 C# 常识
             // 绕开了这句话，而不是照它做。辖域那半句由 Inheritance chain 那行承担（见 InspectTool），
-            // 这里只把担保不了的话删掉，与 ScopeArgs.FoldLine 的同位措辞对齐。
+            // 这里只把担保不了的话删掉，与 Fold.Line 的同位措辞对齐。
             + "(pass limit:'all' to expand, or read one with read_code methodName)");
     }
 

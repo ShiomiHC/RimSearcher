@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using RimSearcher.Core;
 using RimSearcher.Server.Tools;
+using RimSearcher.Server.Tools.Output;
 
 namespace RimSearcher.Tests;
 
@@ -857,7 +858,7 @@ public class OutputReadabilityTests : IDisposable
     [InlineData(2, "C# types")]
     public void FoldLine_AgreesInNumberWithItsCount(int hidden, string expected)
     {
-        var fold = ScopeArgs.FoldLine(hidden, 1, false, true, "C# types");
+        var fold = Fold.Line(hidden, 1, false, true, "C# types");
 
         Assert.NotNull(fold);
         Assert.Contains($"+{hidden} more {expected} (", fold);
