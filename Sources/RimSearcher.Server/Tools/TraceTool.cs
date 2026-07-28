@@ -41,9 +41,10 @@ public class TraceTool : ITool
     public string Description =>
         "Cross-reference analysis for C# and XML. 'inheritors' lists the transitive subclass/implementor tree — " +
         "every descendant, not just direct ones, each tagged with its depth — and expands to the server cap by " +
-        "default; 'usages' is a line-by-line regex text match (default 50, at most 3 preview " +
-        "lines per file plus a '+N more in this file' count). Usages is not a call graph: same-named members on " +
-        "unrelated types land in one list and inherited calls are missed.";
+        "default; 'usages' is a line-by-line regex text match (default 50, at most 3 preview lines per file plus " +
+        "a '+N more matching lines in this file' count — counts are matching lines, not match sites, so a line " +
+        "hit twice counts once). Usages is not a call graph: same-named members on unrelated types land in one " +
+        "list and inherited calls are missed.";
 
     public object JsonSchema => new
     {
@@ -342,6 +343,7 @@ public class TraceTool : ITool
             sb.AppendLine();
 
             var groupsWritten = 0;
+            var anyFileFolded = false;
             foreach (var group in grouped)
             {
                 // 组与组之间空一行。search_regex 输出的是同一个结构（文件名 + 缩进的预览行）
@@ -363,7 +365,11 @@ public class TraceTool : ITool
                 // 减的是实际显示条数而不是 MaxMatchesPerFile：配额在这个文件中途耗尽时
                 // shown 会不足 3，按常数减会少报。文案与 search_regex 保持一致。
                 var inFile = matchesByFile.TryGetValue(group.Key, out var c) ? c : shown;
-                if (inFile > shown) sb.AppendLine($"  ... +{inFile - shown} more in this file");
+                if (inFile > shown)
+                {
+                    sb.AppendLine(ScopeArgs.PerFileFold(inFile - shown));
+                    anyFileFolded = true;
+                }
             }
 
             // 判据只看 truncatedFlag。原先还或上 `totalMatches >= maxTotalResults`，
@@ -375,6 +381,12 @@ public class TraceTool : ITool
                 // limit:'all'（原地重试），这条判断在 ScanStoppedLine 内部。
                 sb.AppendLine();
                 sb.AppendLine(ScopeArgs.ScanStoppedLine(maxTotalResults, limit));
+            }
+
+            if (anyFileFolded)
+            {
+                sb.AppendLine();
+                sb.AppendLine(ScopeArgs.PerFilePreviewCapLine(MaxMatchesPerFile));
             }
 
             // 与 search_regex 逐字同句：两个工具有一模一样的两处静默削减，此前只有它说出口

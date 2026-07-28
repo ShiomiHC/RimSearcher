@@ -741,9 +741,11 @@ public class OutputReadabilityTests : IDisposable
             Assert.Contains(expected, trace);
             Assert.Contains(expected, regex);
 
-            // 表头同时改口：有文件没扫全时那个总数只是下界，不能再说 "N found"
-            Assert.Contains("at least 1 in scope", trace);
+            // 表头同时改口：有文件没扫全时那个总数只是下界，不能再说 "N found"。
+            // 名词也补上（R30）：数的是命中行不是命中次数，且 N=1 时收单数。
+            Assert.Contains("at least 1 matching line in scope", trace);
             Assert.DoesNotContain("1 found in scope", trace);
+            Assert.DoesNotContain("1 matching lines", trace);
         }
     }
 
@@ -796,6 +798,144 @@ public class OutputReadabilityTests : IDisposable
     }
 
     // 组名行与预览行的排布骨架，逐字内容无关
+    // ---- R29：每文件折叠行的两个空槽 ----
+
+    // `... +N more in this file` 是全语料里出现最频的一条折叠行（92/181），也是唯一
+    // 名词槽与提示槽都空着的一条。名词非补不可：两个工具数的都是 `regex.IsMatch(line)`
+    // 逐行累加，一行里命中两次仍只算一行，不写名词读者会按「命中次数」读。
+    [Fact]
+    public async Task PerFileFold_NamesWhatItCounts_InBothScanningTools()
+    {
+        var body = string.Join("\n", Enumerable.Range(0, 9).Select(i => $"    // ZzMark {i}"));
+        var (indexer, defs, catalog) = BuildIndex(("ZzDense.cs", $"namespace Zz {{ public class ZzDense {{\n{body}\n}} }}"));
+
+        var regex = await RunAsync(new SearchRegexTool(indexer, catalog), new { pattern = "ZzMark" });
+        var trace = await RunAsync(new TraceTool(indexer, catalog), new { symbol = "ZzMark", mode = "usages" });
+
+        foreach (var content in new[] { regex, trace })
+        {
+            Assert.Contains("more matching lines in this file", content);
+            Assert.DoesNotContain("more in this file", content);
+        }
+    }
+
+    // 其余每一种折叠行都以 `(pass … )` 之类的下一步收尾，于是这条把提示槽留空会被读成
+    // 「漏印了参数名」。而每文件预览条数是常数、没有参数放得宽——这件事推不出来，必须明说；
+    // 且按 R19 的判据只在整份返回里说一次，不逐文件重复。
+    [Fact]
+    public async Task PerFilePreviewCap_IsStatedOnce_AndOnlyWhenSomethingWasFolded()
+    {
+        var body = string.Join("\n", Enumerable.Range(0, 9).Select(i => $"    // ZzMark {i}"));
+        var (dense, defs, catalog) = BuildIndex(("ZzDense.cs", $"namespace Zz {{ public class ZzDense {{\n{body}\n}} }}"));
+
+        var folded = await RunAsync(new SearchRegexTool(dense, catalog), new { pattern = "ZzMark" });
+        Assert.Equal(1, CountOccurrences(folded, "no parameter widens that"));
+        Assert.Contains("read_code", folded);
+
+        // 没有任何文件被折叠时这条整句不出现——「没有这行」即「每个文件都印全了」。
+        // 同一份索引换一条只命中一行的 pattern，把「有没有折叠」隔离成唯一变量。
+        var whole = await RunAsync(new SearchRegexTool(dense, catalog), new { pattern = "class ZzDense" });
+        Assert.DoesNotContain("no parameter widens that", whole);
+        Assert.DoesNotContain("more matching lines in this file", whole);
+    }
+
+    // ---- R30：名词槽的单复数 ----
+
+    // R5 已经为 locate 表头定过「不写 `1 C# types`」，而折叠行与 FoundCount 一直漏着。
+    // 全语料里 `... +1 more C# types` 出现在 locate / inspect / trace 三个工具上。
+    [Theory]
+    [InlineData(1, "C# type")]
+    [InlineData(2, "C# types")]
+    public void FoldLine_AgreesInNumberWithItsCount(int hidden, string expected)
+    {
+        var fold = ScopeArgs.FoldLine(hidden, 1, false, true, "C# types");
+
+        Assert.NotNull(fold);
+        Assert.Contains($"+{hidden} more {expected} (", fold);
+    }
+
+    // 裸去 's' 会写出 entrie / content matche / propertie
+    [Theory]
+    [InlineData("entries", "entry")]
+    [InlineData("content matches", "content match")]
+    [InlineData("properties", "property")]
+    [InlineData("subclasses", "subclass")]
+    [InlineData("matching lines", "matching line")]
+    [InlineData("XML defs", "XML def")]
+    [InlineData("matching files", "matching file")]
+    public void Singular_IsBuiltBackFromEachPluralActuallyInUse(string plural, string singular)
+        => Assert.Equal($"1 {singular}", OutputText.Quantity(1, plural));
+
+    private static int CountOccurrences(string haystack, string needle)
+    {
+        var count = 0;
+        for (var i = haystack.IndexOf(needle, StringComparison.Ordinal); i >= 0;
+             i = haystack.IndexOf(needle, i + needle.Length, StringComparison.Ordinal))
+            count++;
+        return count;
+    }
+
+    // ---- F25：locate 的同分并列结果在进程之间不可复现 ----
+
+    // F21 修的是 search_regex、F22 修的是 trace usages，而 locate——三个工具里被调用得最多的
+    // 那个——一直漏着。分数与名字长度并列之后，次序落回 matchedMembers / def 索引的枚举顺序，
+    // 而它跟着索引期的并发写入走。实测两轮全量转储之间，`method:CompTick` 的前十条整批换过，
+    // `Vethara_Head_0` 换成了 `Vethara_Head_3`——调用方据此得出的「这个符号不在结果里」不可复现。
+    //
+    // 这里不靠「重跑五次」断言（同一进程内枚举顺序本就稳定，复现不出来），而是直接断言
+    // 并列组按声明的末级键有序——那才是与插入顺序无关的不变量。
+    [Fact]
+    public async Task Locate_TiedMembers_ComeBackInADeclaredOrder()
+    {
+        // 30 个同名同长的成员：分数、名字长度两级全并列，只剩末级键定序
+        var files = Enumerable.Range(0, 30)
+            .Select(i => ($"ZzHost{i:D2}.cs",
+                $"namespace Zz {{ public class ZzHost{i:D2} {{ public void ZzTick() {{ }} }} }}"))
+            .ToArray();
+        var (indexer, defs, catalog) = BuildIndex(files);
+
+        var content = await RunAsync(
+            new LocateTool(indexer, defs, catalog), new { query = "method:ZzTick", limit = "all" });
+
+        var hosts = content.Split('\n')
+            .Select(l => System.Text.RegularExpressions.Regex.Match(l, @"`Zz\.(ZzHost\d+)\.ZzTick`"))
+            .Where(m => m.Success)
+            .Select(m => m.Groups[1].Value)
+            .ToList();
+
+        Assert.Equal(30, hosts.Count);
+        Assert.Equal(hosts.OrderBy(h => h, StringComparer.OrdinalIgnoreCase).ToList(), hosts);
+    }
+
+    // def 侧同理：`Vethara_Head_0` 与 `Vethara_Head_3` 同分同长，谁进前十全看 def 索引写入顺序
+    [Fact]
+    public async Task Locate_TiedDefs_ComeBackInADeclaredOrder()
+    {
+        var root = _workspace.Dir("Defs");
+        var body = string.Concat(Enumerable.Range(0, 20).Select(i =>
+            $"<ZzGadgetDef><defName>ZzGadget_{i:D2}</defName><label>zz</label></ZzGadgetDef>"));
+        _workspace.WriteFile(Path.Combine("Defs", "ZzGadgets.xml"), $"<Defs>{body}</Defs>");
+
+        var indexer = new SourceIndexer();
+        indexer.FreezeIndex();
+        var defs = new DefIndexer();
+        defs.Scan(root);
+        defs.FreezeIndex();
+
+        var content = await RunAsync(
+            new LocateTool(indexer, defs, ScopeCatalog.Build([("vanilla", root)], null, null)),
+            new { query = "ZzGadget", limit = "all" });
+
+        var names = content.Split('\n')
+            .Select(l => System.Text.RegularExpressions.Regex.Match(l, @"`(ZzGadget_\d+)`"))
+            .Where(m => m.Success)
+            .Select(m => m.Groups[1].Value)
+            .ToList();
+
+        Assert.Equal(20, names.Count);
+        Assert.Equal(names.OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList(), names);
+    }
+
     private static string GroupLayout(string content) =>
         string.Concat(content.Split('\n').SkipWhile(l => !l.StartsWith('`')).Select(l =>
             l.Length == 0 ? "_" : l.StartsWith('`') ? "G" : l.StartsWith("  ") ? "p" : "?"));

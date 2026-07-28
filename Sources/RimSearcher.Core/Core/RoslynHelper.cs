@@ -341,7 +341,7 @@ public static class RoslynHelper
         // 措辞对齐全服统一的截断脚注文法「... +N more <什么> (<怎么拿到>)」——见 ScopeArgs.FoldLine。
         // "not shown" 是 "more" 已经说过的话。
         sb.AppendLine(
-            $"    ... +{total - shownCap} more {kindPlural} "
+            $"    ... +{total - shownCap} more {OutputText.NounFor(total - shownCap, kindPlural)} "
             + "(pass limit:'all' for the whole list, or read one with read_code methodName)");
     }
 

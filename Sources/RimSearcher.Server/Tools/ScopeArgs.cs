@@ -258,8 +258,8 @@ public static class ScopeArgs
         // 于是 `... +1938 more` 紧跟在 Properties 组末尾时读起来像「还有 1938 个 property」，
         // 而它数的是三类之和。全服文法（README「低 Token 消耗」一节）本就要求这个槽有名词。
         return truncatedByScoreGap
-            ? $"{indent}... +{hiddenCount} more {noun} (lower relevance, {hint})"
-            : $"{indent}... +{hiddenCount} more {noun} ({hint})";
+            ? $"{indent}... +{hiddenCount} more {OutputText.NounFor(hiddenCount, noun)} (lower relevance, {hint})"
+            : $"{indent}... +{hiddenCount} more {OutputText.NounFor(hiddenCount, noun)} ({hint})";
     }
 
     // 「扫到预览行上限就停了」的尾注。search_regex 与 trace usages 报的是同一件事，原先
@@ -281,8 +281,31 @@ public static class ScopeArgs
 
     // 有文件没扫全时，命中总数就不再是确定值而是下界。表头与上面那行尾注必须同时改口，
     // 否则一句说「7 found」、一句说「有文件没扫全」，调用方无从判断该信哪个。
+    //
+    // 名词是 matching lines 而不是 matches：两个工具数的都是 `regex.IsMatch(line)` 逐行累加，
+    // 同一行里命中两次仍只算一行。原先只写 `743 found`，而表头前半句是 "Regex matches for" /
+    // "References to"——读者按「743 处命中」读，在一行多处的 pattern 上这个数直接是错的。
     public static string FoundCount(int total, bool anyFileIncomplete)
-        => anyFileIncomplete ? $"at least {total}" : $"{total} found";
+        => anyFileIncomplete
+            ? $"at least {OutputText.Quantity(total, "matching lines")}"
+            : OutputText.Quantity(total, "matching lines");
+
+
+
+    // 每文件预览的折叠行。search_regex 与 trace usages 共用，且它是全语料里出现最频的一条
+    // 折叠行（92/181），此前却是唯一两个槽都空着的一条：`... +77 more in this file`。
+    // 名词按 FoundCount 同一条判据补成 matching lines。
+    public static string PerFileFold(int hiddenCount, string indent = "  ")
+        => $"{indent}... +{hiddenCount} more {OutputText.NounFor(hiddenCount, "matching lines")} in this file";
+
+    // 「怎么才能拿到更多」这半句不逐文件印，整份返回里说一次（同 §R19：逐行一模一样的东西
+    // 上提到表头/脚注）。且只在这次真有文件被折叠时才印——没有折叠就没有这条。
+    //
+    // 其余 19 种折叠行都以 `(pass limit:'all' …)` 之类收尾，于是「留空」会被读成「这条漏印了
+    // 参数名」。而这里每文件预览条数是常数、没有任何参数放得宽，这件事推不出来，必须明说。
+    public static string PerFilePreviewCapLine(int previewsPerFile)
+        => $"... previews are capped at {previewsPerFile} lines per file and no parameter widens that; "
+           + "use read_code on a file to see the rest";
 
     public static string ScanStoppedLine(
         int previewCap, ResultLimit limit, IReadOnlyList<string>? extraNotes = null)

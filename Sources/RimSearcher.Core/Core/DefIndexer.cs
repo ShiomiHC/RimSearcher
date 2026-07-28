@@ -352,6 +352,10 @@ public class DefIndexer
             .Select(g => g.OrderByDescending(x => x.Score).First())
             .OrderByDescending(x => x.Score)
             .ThenBy(x => x.Loc.DefName.Length)
+            // 末级定序，判据同 SourceIndexer 的成员搜索：`Vethara_Head_0` 与 `Vethara_Head_3`
+            // 同分同长，谁进前十全看 def 索引的写入顺序
+            .ThenBy(x => x.Loc.DefName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(x => x.Loc.FilePath, StringComparer.OrdinalIgnoreCase)
             .Select(x => new ScoredCandidate<DefLocation>(x.Loc, x.Score, x.Loc.FilePath));
 
         return ScopeFilter.Apply(candidates, scope, limit);
@@ -412,6 +416,8 @@ public class DefIndexer
         var candidates = matchedDefs.Values
             .OrderByDescending(x => x.MatchCount)
             .ThenBy(x => x.Location.DefName.Length)
+            .ThenBy(x => x.Location.DefName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(x => x.Location.FilePath, StringComparer.OrdinalIgnoreCase)
             .Select(x => new ScoredCandidate<(DefLocation, List<string>)>(
                 (x.Location, x.FieldPaths.ToList()), x.MatchCount, x.Location.FilePath));
 

@@ -481,7 +481,11 @@ public class SourceIndexer
             .Where(x => x.Score > 0)
             .OrderByDescending(x => x.Score)
             .ThenBy(x => x.Key.Length)
-            .SelectMany(x => x.Value.Select(path => new ScoredCandidate<string>(path, x.Score, path)))
+            .ThenBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+            // 一个键下挂多条路径时，那几条之间同样要定序——它们同分同键，全靠数组顺序
+            .SelectMany(x => x.Value
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .Select(path => new ScoredCandidate<string>(path, x.Score, path)))
             .DistinctBy(x => x.Item, StringComparer.OrdinalIgnoreCase);
 
         return ScopeFilter.Apply(candidates, scope, limit);
@@ -688,6 +692,9 @@ public class SourceIndexer
                 .Select(k => (Key: k, Score: FuzzyMatcher.CalculateFuzzyScore(k, keyLower)))
                 .Where(x => x.Score >= 60.0)
                 .OrderByDescending(x => x.Score)
+                // 同分并列时「选中哪十个」也随 memberKeys 的枚举顺序变，而这一步决定了
+                // 后面整批候选的成分，不只是次序
+                .ThenBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
                 .Take(10)
                 .Select(x => x.Key);
                 
@@ -724,6 +731,13 @@ public class SourceIndexer
             })
             .OrderByDescending(x => x.score)
             .ThenBy(x => x.memberName.Length)
+            // 末级按「宿主类型 + 成员名 + 文件」定序。前两级并列的条目之间，次序否则由
+            // matchedMembers 的枚举顺序决定，而它跟着索引期的并发写入走：`method:CompTick`
+            // 这种几百条同分同长的查询，同一条查询换个进程重跑，前十条就能换一批。
+            // 与 SearchTypesByName 的第三级排序是同一条判据，那里改了、这里一直没改。
+            .ThenBy(x => x.typeName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(x => x.memberName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(x => x.filePath, StringComparer.OrdinalIgnoreCase)
             .Select(x => new ScoredCandidate<(string, string, string, string)>(
                 (x.typeName, x.memberName, x.memberType, x.filePath), x.score, x.filePath));
 
@@ -739,7 +753,7 @@ public class SourceIndexer
     // 这个数必须与展示层每文件显示的条数一致（SearchRegexTool 的 Take(3)）。取 5 时多出来的
     // 两条照样占掉 maxResults 配额却永远不会被显示，等于把默认档能覆盖的文件数从 33 压到 20——
     // 而展示层的文件上限是 50，密集命中下那个上限根本摸不到，扫描先停了。
-    private const int MaxPreviewsPerFile = 3;
+    public const int MaxPreviewsPerFile = 3;
 
     // 数完整个文件是为了把每文件命中数报准，但不能让一个病态大文件吃光整轮扫描的时间。
     private const int MaxLinesScannedPerFile = 20000;

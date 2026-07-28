@@ -29,7 +29,8 @@ public class SearchRegexTool : ITool
     public string Description =>
         ".NET regex search across indexed C# and XML files, with an optional extension filter (e.g. '.cs') and " +
         "scope. Results are grouped by file, showing at most 3 preview lines per file and at most 50 files; both " +
-        "cuts are always stated in a trailing note, so output without that note is the complete match set.";
+        "cuts are always stated in a trailing note, so output without that note is the complete match set. " +
+        "Counts are matching lines, not match sites — a line the pattern hits twice counts once.";
 
     private static readonly ToolArgSpec ArgSpec = new(
         "rimworld-searcher__search_regex",
@@ -115,6 +116,8 @@ public class SearchRegexTool : ITool
             var labels = ScopeArgs.SourceLabeling.Of(
                 shownFiles.Select(g => scope.ShowLabels ? scope.SourceNameOf(g.Key) : null));
 
+            // string.Join 立即枚举，故读这个旗时它已经攒完了
+            var anyFileFolded = false;
             var output = $"Regex matches for '{pattern}' ({headline}){labels.Header}:\n\n" +
                          string.Join("\n\n", shownFiles.Select(g =>
                          {
@@ -122,14 +125,17 @@ public class SearchRegexTool : ITool
                              // 同理，同一文件内的命中也是乱序到达的。不排序时 Take(3) 拿到的是任意
                              // 三条，读起来像 L17、L15 这样倒着走，且靠前的命中可能根本没被选中。
                              var groupItems = g.OrderBy(m => m.LineNumber).ToList();
-                             var matches = groupItems.Take(3).Select(m => $"  L{m.LineNumber}: {m.Preview}");
+                             var matches = groupItems.Take(SourceIndexer.MaxPreviewsPerFile).Select(m => $"  L{m.LineNumber}: {m.Preview}");
 
                              // 减的是实际显示条数，且基数取索引层数出来的真实命中数：预览在索引层
                              // 每文件封顶 3 条（与这里的 Take 对齐），拿 groupItems.Count 当基数
                              // 会把第 4 条起的命中吞掉。
-                             var shown = Math.Min(groupItems.Count, 3);
+                             var shown = Math.Min(groupItems.Count, SourceIndexer.MaxPreviewsPerFile);
                              var inFile = matchesByFile.TryGetValue(g.Key, out var c) ? c : groupItems.Count;
-                             var moreCount = inFile > shown ? $"\n  ... +{inFile - shown} more in this file" : "";
+                             if (inFile > shown) anyFileFolded = true;
+                             var moreCount = inFile > shown
+                                 ? "\n" + ScopeArgs.PerFileFold(inFile - shown)
+                                 : "";
 
                              var label = labels.Row(scope.ShowLabels ? scope.SourceNameOf(g.Key) : null);
                              return $"`{fileName}`{label}\n{string.Join("\n", matches)}{moreCount}";
@@ -160,6 +166,9 @@ public class SearchRegexTool : ITool
                 output += $"\n\n... +{allFiles.Count - MaxFilesShown} more matching files "
                           + "(narrow the pattern or the scope)";
             }
+
+            if (anyFileFolded)
+                output += "\n\n" + ScopeArgs.PerFilePreviewCapLine(SourceIndexer.MaxPreviewsPerFile);
 
             // 「没有尾注即完整」是本工具写在 Description 里的契约，被跳过/被弃扫的文件必须破这个契约
             if (diagnostics.AnyFileIncomplete)
