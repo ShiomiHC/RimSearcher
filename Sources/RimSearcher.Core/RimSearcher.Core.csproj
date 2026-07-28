@@ -6,6 +6,14 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <RootNamespace>RimSearcher.Core</RootNamespace>
+
+        <!-- packages.lock.json 里 `net10.0/win-x64` 那一段的归属声明。Server 无条件钉着
+             RuntimeIdentifier=win-x64（见那边的注释），于是构建 Server 会给本项目还原出该段；
+             而 `dotnet test` 经 Tests 引用本项目时是无 RID 还原，又把它删掉。两条命令交替跑，
+             锁文件就在「有这段/没这段」之间来回翻，每次都变成一条待提交改动。
+             用复数式 RuntimeIdentifiers 把目标声明在项目里：它只登记「本项目要为哪些 RID 还原」，
+             不像单数式那样把构建输出切成 RID 专属目录，故 Debug/test 的产物路径不受影响。 -->
+        <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     </PropertyGroup>
 
     <ItemGroup>
