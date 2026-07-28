@@ -48,6 +48,16 @@ if (!cacheDirectoryUsable)
 
 PathSecurity.Initialize(resolvedSources.AllPaths, enabled: !appConfig.SkipPathSecurity);
 
+// 条件加载目录的查表。空表时各工具那一路整段短路，故没有 mod 的配置一分钱不花。
+var conditionalFolders = ConditionalFolders.Build(resolvedSources.ConditionalAreas);
+if (!conditionalFolders.IsEmpty)
+{
+    await ServerLogger.Info("Program", "Conditional folders indexed",
+        ("dirs", conditionalFolders.Areas.Count),
+        ("folders", string.Join("; ", conditionalFolders.Areas
+            .Select(a => $"{a.Source} {a.Folder}").Distinct(StringComparer.Ordinal))));
+}
+
 var scopeCatalog = ScopeCatalog.Build(resolvedSources.AllSources, appConfig.ScopeGroups, appConfig.DefaultScope);
 if (scopeCatalog.HasSources)
 {
@@ -139,12 +149,12 @@ var server = new RimSearcher.Server.RimSearcher(protocolOut);
 // tool 实例无会话状态（只持索引引用），故宿主的各管道会话直接共享同一批
 var tools = new ITool[]
 {
-    new ListDirectoryTool(scopeCatalog),
-    new LocateTool(indexer, defIndexer, scopeCatalog, localization),
-    new InspectTool(indexer, defIndexer, scopeCatalog, localization),
-    new TraceTool(indexer, scopeCatalog),
-    new ReadCodeTool(indexer, scopeCatalog),
-    new SearchRegexTool(indexer, scopeCatalog),
+    new ListDirectoryTool(scopeCatalog, conditionalFolders),
+    new LocateTool(indexer, defIndexer, scopeCatalog, localization, conditionalFolders),
+    new InspectTool(indexer, defIndexer, scopeCatalog, localization, conditionalFolders),
+    new TraceTool(indexer, scopeCatalog, conditionalFolders),
+    new ReadCodeTool(indexer, scopeCatalog, conditionalFolders),
+    new SearchRegexTool(indexer, scopeCatalog, conditionalFolders),
     new SyncSourcesTool(syncService, indexRebuilder)
 };
 

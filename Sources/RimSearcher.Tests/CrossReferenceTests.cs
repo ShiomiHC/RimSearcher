@@ -12,6 +12,11 @@ namespace RimSearcher.Tests;
 // `[depth 4]` 抓表头的 `deepest 6`，`87 个根` 抓 scope 的 11 个源）。
 //
 // 这一组守的就是那些线：下界↔成因、表头↔列表排序、脚注合计↔构成、索引口径↔运行时口径。
+//
+// 进 PathSecurity 集合是因为 RootsSentence_TiesRootCountToSourceCount 要数根：AllowedRoots
+// 是进程级静态且只追加不清空，并行时别的类塞进来的根会把 `These 2 roots` 顶成 3、4……
+// 这条一直是并行调度撞得到才现形的，加一条新用例改变调度顺序就能把它撞出来。
+[Collection("PathSecurity")]
 public class CrossReferenceTests : IDisposable
 {
     private readonly TempWorkspace _workspace = new();
@@ -322,6 +327,7 @@ public class CrossReferenceTests : IDisposable
     {
         var a = _workspace.Dir("SrcA");
         var b = _workspace.Dir("SrcB");
+        PathSecurity.ResetForTests();
         PathSecurity.Initialize([a, b]);
 
         // 一个源跨两个根：正是让「根数 ≠ 源数」的那种配置

@@ -10,17 +10,20 @@ public class LocateTool : ITool
     private readonly DefIndexer _defIndexer;
     private readonly ScopeCatalog _scopeCatalog;
     private readonly LocalizationIndex? _localization;
+    private readonly ConditionalFolders _conditional;
 
     public LocateTool(
         SourceIndexer sourceIndexer,
         DefIndexer defIndexer,
         ScopeCatalog scopeCatalog,
-        LocalizationIndex? localization = null)
+        LocalizationIndex? localization = null,
+        ConditionalFolders? conditional = null)
     {
         _sourceIndexer = sourceIndexer;
         _defIndexer = defIndexer;
         _scopeCatalog = scopeCatalog;
         _localization = localization;
+        _conditional = conditional ?? ConditionalFolders.None;
     }
 
     public string Name => "rimworld-searcher__locate";
@@ -51,6 +54,7 @@ public class LocateTool : ITool
         "as well — they restrict the search to members, they do not make the name match exact. In the member " +
         "sections a query of two or more keywords can also carry a near-name up to 100%, so there 100% is the " +
         "top score rather than a guarantee of identical spelling. " +
+        ConditionalReport.Contract + " " +
         "Filters go inside the query: type:, method:, field:, def:, and scope: as an alias for the scope parameter.";
 
     public object JsonSchema => new
@@ -115,6 +119,9 @@ public class LocateTool : ITool
         // 表头是否把成员总数改口成了 `at least`。改口时必须同时给出成因——见末尾那条脚注。
         var memberTotalIsFloor = false;
 
+        // 条件加载目录：五段共用一份，成因在末尾统一说（见 ConditionalReport）
+        var conditional = new ConditionalReport(_conditional);
+
         if (query.TypeFilter != null || (string.IsNullOrEmpty(query.MethodFilter) && string.IsNullOrEmpty(query.FieldFilter) && string.IsNullOrEmpty(query.DefFilter)))
         {
             var typeSearchTerm = query.TypeFilter ?? QueryParser.GetCombinedSearchTerm(query);
@@ -134,7 +141,8 @@ public class LocateTool : ITool
                     var paths = _sourceIndexer.GetPathsByType(entry.Item);
                     shownTypeNames.Add(entry.Item);
                     sb.AppendLine(
-                        $"- `{entry.Item}` ({entry.Score:F0}%){FileNote(entry.Item, paths)}{typeLabels.Row(entry.SourceName)}");
+                        $"- `{entry.Item}` ({entry.Score:F0}%){FileNote(entry.Item, paths)}"
+                        + $"{conditional.TagAll(paths)}{typeLabels.Row(entry.SourceName)}");
                 }
 
                 var fold = ScopeArgs.FoldLine(types, "C# types", limit: limit);
@@ -191,7 +199,8 @@ public class LocateTool : ITool
                         var (typeName, memberName, _, filePath) = entry.Item;
                         sb.AppendLine(
                             $"  - `{typeName}.{memberName}` ({entry.Score:F0}%)"
-                            + $"{FileNote(typeName, [filePath])}{memberLabels.Row(entry.SourceName)}");
+                            + $"{FileNote(typeName, [filePath])}{conditional.Tag(filePath)}"
+                            + $"{memberLabels.Row(entry.SourceName)}");
                     }
                 }
 
@@ -237,8 +246,12 @@ public class LocateTool : ITool
                     var localized = _localization?.Lookup(def.DefType, def.DefName)?.Label;
                     var localizedTag = !string.IsNullOrEmpty(localized) ? $" / {localized}" : "";
 
+                    // def 行不印文件路径（R20），故这个标记是整段里唯一能看出「这条 def 来自
+                    // 一个条件目录」的地方——而 vanilla 的 def 与条件补丁包里的 def 在这一行上
+                    // 逐字同形（HAR 的 1.6/Mods/Ideology 就落在默认 scope 'base' 里）。
                     sb.AppendLine(
-                        $"- `{def.DefName}` ({entry.Score:F0}%) - {def.DefType}{abstractTag}{label}{localizedTag}{defLabels.Row(entry.SourceName)}");
+                        $"- `{def.DefName}` ({entry.Score:F0}%) - {def.DefType}{abstractTag}{label}{localizedTag}"
+                        + $"{conditional.Tag(def.FilePath)}{defLabels.Row(entry.SourceName)}");
                 }
 
                 var fold = ScopeArgs.FoldLine(defs, "XML defs", indent: "  ", limit: limit);
@@ -263,7 +276,8 @@ public class LocateTool : ITool
                         var (location, matchedFields) = entry.Item;
                         var fieldSummary = string.Join(", ", matchedFields.Take(3));
                         var moreFields = matchedFields.Count > 3 ? $" +{matchedFields.Count - 3}" : "";
-                        sb.AppendLine($"- `{location.DefName}` - {fieldSummary}{moreFields}{contentLabels.Row(entry.SourceName)}");
+                        sb.AppendLine($"- `{location.DefName}` - {fieldSummary}{moreFields}"
+                                      + $"{conditional.Tag(location.FilePath)}{contentLabels.Row(entry.SourceName)}");
                     }
 
                     var fold = ScopeArgs.FoldLine(defsByContent, "content matches", indent: "  ", limit: limit);
@@ -347,7 +361,7 @@ public class LocateTool : ITool
                 foreach (var entry in items)
                 {
                     // 原先是「基名 - 全路径」，而基名逐字包含在全路径的末尾，说的是同一件事。
-                    sb.AppendLine($"- {entry.Item}{fileLabels.Row(entry.SourceName)}");
+                    sb.AppendLine($"- {entry.Item}{conditional.Tag(entry.Item)}{fileLabels.Row(entry.SourceName)}");
                 }
 
                 // 折叠行只对兜底那一支有意义：精确补充本来就只列同名的那几条，没有「还有更多」。
@@ -418,6 +432,10 @@ public class LocateTool : ITool
             // search_regex 零命中都是 false，locate 独自为 true 只会让调用方两套判据。
             return Task.FromResult(new ToolResult(message.ToString()));
         }
+
+        // 条件目录的成因整份说一次。放在 scope 脚注之前：五段的行内标记都在它上面，
+        // 中间隔着别的脚注就又成了「记号与成因之间没有可指认的连接」那一形。
+        sb.Append(conditional.Render() ?? string.Empty);
 
         if (footer != null) sb.Append(footer);
         // 零命中那条路径不挂：那时整份返回的第一句就是 "No results for 'X'"，

@@ -15,11 +15,14 @@ public class SearchRegexTool : ITool
 
     private readonly SourceIndexer _indexer;
     private readonly ScopeCatalog _scopeCatalog;
+    private readonly ConditionalFolders _conditional;
 
-    public SearchRegexTool(SourceIndexer indexer, ScopeCatalog scopeCatalog)
+    public SearchRegexTool(
+        SourceIndexer indexer, ScopeCatalog scopeCatalog, ConditionalFolders? conditional = null)
     {
         _indexer = indexer;
         _scopeCatalog = scopeCatalog;
+        _conditional = conditional ?? ConditionalFolders.None;
     }
 
     public string Name => "rimworld-searcher__search_regex";
@@ -42,9 +45,9 @@ public class SearchRegexTool : ITool
         "never reports how many lines or files matched across the whole corpus when the scan stopped early. " +
         "Matches are raw text: commented-out code, disabled XML and prose inside comments all count, so a match " +
         "count is not a count of things that exist — confirm with locate or inspect before treating it as one. " +
-        "A mod's files are indexed as its loadFolders.xml declares them, conditionally-loaded folders included; " +
-        "whether such a folder actually loads in a given game is not something this index can tell you, so a " +
-        "hit inside one is not evidence that it takes effect at runtime. " +
+        // R59 那三句常驻能力边界（「条件目录一律收下、条件不判定」）对每一次调用都成立，因而
+        // 对**手上这一条命中**什么也没说。F34 把它收敛成契约，条件由命中自己带（见 ConditionalReport）。
+        ConditionalReport.Contract + " " +
         "The header echoes whether the scan ran case-insensitively (the default).";
 
     private static readonly ToolArgSpec ArgSpec = new(
@@ -146,8 +149,9 @@ public class SearchRegexTool : ITool
             var labels = ScopeArgs.SourceLabeling.Of(
                 shownFiles.Select(g => scope.ShowLabels ? scope.SourceNameOf(g.Key) : null));
 
-            // string.Join 立即枚举，故读这个旗时它已经攒完了
+            // string.Join 立即枚举，故读这两个旗时它们已经攒完了
             var anyFileFolded = false;
+            var conditional = new ConditionalReport(_conditional);
             var output = $"Regex matches for '{pattern}' ({headline}){labels.Header}:\n\n" +
                          string.Join("\n\n", shownFiles.Select(g =>
                          {
@@ -172,8 +176,12 @@ public class SearchRegexTool : ITool
                                  ? "\n" + ScopeArgs.PerFileFold(inFile - shown, inFile)
                                  : "";
 
+                             // 条件标记排在来源标签**之前**：行尾的 `[x]` 是全服的来源标签位
+                             // （见 ScopeArgs.SourceLabeling 与文法闸规则六），别的记号挤进去
+                             // 会让「同源就提到表头」那条判据在这一行上读不出来。
                              var label = labels.Row(scope.ShowLabels ? scope.SourceNameOf(g.Key) : null);
-                             return $"`{fileName}`{label}\n{string.Join("\n", matches)}{moreCount}";
+                             return $"`{fileName}`{conditional.Tag(g.Key)}{label}\n"
+                                    + $"{string.Join("\n", matches)}{moreCount}";
                          }));
 
             // 两处截断互相独立：truncated 说的是扫描在命中上限处停了，文件数上限则是
@@ -239,6 +247,9 @@ public class SearchRegexTool : ITool
 
                 output += "\n\n" + ScopeArgs.NotScannedInFullLine(incomplete);
             }
+
+            // 条件目录的成因整份说一次（行内只放键，见 ConditionalReport）
+            output += conditional.Render() ?? string.Empty;
 
             // 同 trace usages：这里没有 out-of-scope 逐源计数，而缺席会被读成「scope 外没有」
             output += ScopeArgs.HardScopeFilterNotice(scope);

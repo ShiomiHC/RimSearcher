@@ -1,3 +1,4 @@
+using RimSearcher.Core;
 using Tomlyn.Model;
 
 namespace RimSearcher.Server;
@@ -14,6 +15,11 @@ public sealed class SourceDefinition
     // mod 展开出来的 Languages 目录，只喂译文查表。用户不直接写它——写了也没用，
     // 手写 xml 路径下的语言目录由 ResolveSources 自己探（见 DiscoverLanguageDirs）。
     public IReadOnlyList<string> Languages { get; init; } = [];
+
+    // mod 展开出来的、加载条件没判定过的内容目录。同样不是用户写的：它来自 loadFolders.xml。
+    // 源名此刻还没定（About.xml 里的名字会顶掉从数字 ID 猜的那个），故 Source 一律留空，
+    // 由 ResolveSources 在贴完名之后补（见那里的注释）。
+    public IReadOnlyList<ConditionalArea> ConditionalAreas { get; init; } = [];
 
     // mod 根目录。写了它就不必再手写 xml/assemblies：ResolveSources 会按 loadFolders.xml
     // 与当前游戏版本展开成游戏真正加载的那些目录，旧版本目录一律不进。
@@ -85,6 +91,10 @@ public sealed record ResolvedSources(List<SourcePathEntry> Csharp, List<SourcePa
     // mod 展开时被高优先级同名文件顶掉的文件（绝对路径）。索引侧照此跳过——
     // 游戏不解析它们，搜到了只会把人带去一份运行时根本不生效的旧定义。
     public IReadOnlySet<string> Shadowed { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    // 收进索引、加载条件却没判定过的那些目录，已贴上源名。与 Shadowed 相反：那批是
+    // 「确定不生效，故不收」，这批是「不知道生不生效，收下但要在返回里说出来」。
+    public IReadOnlyList<ConditionalArea> ConditionalAreas { get; init; } = [];
 
     // 展开 mod 时实际采用的游戏版本（config 显式给出，或从 Version.txt 探得）
     public string? GameVersion { get; init; }

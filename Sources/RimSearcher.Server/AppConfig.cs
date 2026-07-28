@@ -117,6 +117,7 @@ public record AppConfig
         var xml = new List<SourcePathEntry>();
         var languages = new List<LanguageDirEntry>();
         var shadowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var conditional = new List<ConditionalArea>();
         var notes = new List<string>();
 
         var gameVersion = GameVersion ?? DetectGameVersion();
@@ -168,6 +169,18 @@ public record AppConfig
                 });
             }
 
+            // 源名要等 ExpandMods 跑完才定（About.xml 里的名字会顶掉从数字 ID 猜的那个），
+            // 故贴名放在这里而不是 ExpandMods 里面。反编译产物那批同理：它要 paths[0]。
+            foreach (var area in definition.ConditionalAreas)
+                conditional.Add(area with { Source = definition.Name });
+
+            if (paths.Count > 0)
+            {
+                foreach (var area in DecompiledConditionalAreas(
+                             paths[0], definition.Assemblies, definition.ConditionalAreas))
+                    conditional.Add(area with { Source = definition.Name });
+            }
+
             foreach (var path in definition.Xml)
             {
                 xml.Add(new SourcePathEntry { Name = definition.Name, Path = path });
@@ -184,9 +197,88 @@ public record AppConfig
         {
             Languages = languages,
             Shadowed = shadowed,
+            ConditionalAreas = conditional,
             GameVersion = gameVersion,
             Notes = notes
         };
+    }
+
+    // 条件目录里的**程序集**反编译出来的那棵源码树。
+    //
+    // XML 那边条件与路径是同一件事（文件就躺在条件目录里），C# 这边中间隔了一次反编译：
+    // `1.6/CE/Assemblies/EmbergardenCE.dll` 的产物落在 `<反编译根>/EmbergardenCE`，
+    // 路径上再没有一点 CE 的痕迹。不补这一段的话，`trace inheritors` 列出的 CE 专属类型
+    // 与 vanilla 的类型在返回里完全同形——正是 XML 那边要修的同一个缺陷。
+    //
+    // 判据是「全有全无」：同名程序集只要有一份落在无条件目录里，这棵树在任何实机上都在，
+    // 打标就成了假警报。（SourceSyncService 按内容哈希去重，同名同容的只会留一份。）
+    //
+    // 已知的一处不覆盖：同一个源里两个**同名不同容**的 dll 会让第二棵树落在
+    // `<名>.<哈希前8位>` 下（见 SourceSyncService.DeduplicateByContent），而这里只登记
+    // `<名>`。那种配置本语料里一例都没有，且漏标的方向是「少说一句」，不是说错。
+    private static List<ConditionalArea> DecompiledConditionalAreas(
+        string decompileTarget,
+        IReadOnlyList<string> assemblyDirs,
+        IReadOnlyList<ConditionalArea> conditionalDirs)
+    {
+        var results = new List<ConditionalArea>();
+        if (assemblyDirs.Count == 0 || conditionalDirs.Count == 0) return results;
+
+        var conditionalByPath = new Dictionary<string, ConditionalArea>(StringComparer.OrdinalIgnoreCase);
+        foreach (var area in conditionalDirs)
+        {
+            var key = NormalizeDir(area.Path);
+            if (key != null) conditionalByPath[key] = area;
+        }
+
+        var unconditionalNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var candidates = new Dictionary<string, ConditionalArea>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var directory in assemblyDirs)
+        {
+            var key = NormalizeDir(directory);
+            if (key == null) continue;
+
+            var area = conditionalByPath.GetValueOrDefault(key);
+
+            string[] files;
+            try
+            {
+                files = Directory.GetFiles(key, "*.dll", SearchOption.TopDirectoryOnly);
+            }
+            catch
+            {
+                continue;
+            }
+
+            foreach (var file in files)
+            {
+                var name = Path.GetFileNameWithoutExtension(file);
+                if (area == null) unconditionalNames.Add(name);
+                else candidates.TryAdd(name, area);
+            }
+        }
+
+        foreach (var (name, area) in candidates)
+        {
+            if (unconditionalNames.Contains(name)) continue;
+            results.Add(area with { Path = Path.Combine(decompileTarget, name) });
+        }
+
+        return results;
+    }
+
+    private static string? NormalizeDir(string path)
+    {
+        try
+        {
+            return Path.GetFullPath(path.Trim())
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     // 从一条手写的 xml 路径往下找 Languages 目录。深度 2 覆盖了实际会出现的两种写法：
@@ -244,6 +336,7 @@ public record AppConfig
         var xml = definition.Xml.ToList();
         var assemblies = definition.Assemblies.ToList();
         var languages = new List<string>();
+        var conditional = new List<ConditionalArea>();
         string? modName = null;
 
         foreach (var modRoot in definition.Mods)
@@ -269,6 +362,7 @@ public record AppConfig
             xml.AddRange(layout.XmlDirs);
             assemblies.AddRange(layout.AssemblyDirs);
             languages.AddRange(layout.LanguageDirs);
+            conditional.AddRange(layout.ConditionalDirs);
             foreach (var file in layout.Shadowed) shadowed.Add(file);
 
             modName ??= layout.Name;
@@ -284,6 +378,7 @@ public record AppConfig
             Xml = xml,
             Assemblies = assemblies,
             Languages = languages,
+            ConditionalAreas = conditional,
             Mods = definition.Mods,
             ActiveMods = definition.ActiveMods
         };

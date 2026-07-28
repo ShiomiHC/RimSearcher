@@ -27,11 +27,14 @@ public class TraceTool : ITool
 
     private readonly SourceIndexer _sourceIndexer;
     private readonly ScopeCatalog _scopeCatalog;
+    private readonly ConditionalFolders _conditional;
 
-    public TraceTool(SourceIndexer sourceIndexer, ScopeCatalog scopeCatalog)
+    public TraceTool(
+        SourceIndexer sourceIndexer, ScopeCatalog scopeCatalog, ConditionalFolders? conditional = null)
     {
         _sourceIndexer = sourceIndexer;
         _scopeCatalog = scopeCatalog;
+        _conditional = conditional ?? ConditionalFolders.None;
     }
 
     public string Name => "rimworld-searcher__trace";
@@ -53,7 +56,11 @@ public class TraceTool : ITool
         // 而这边最顺手的上限恰好是 limit 的 default 50。
         "A usages header that reads 'at least N matching lines' means some file could not be scanned in full " +
         "and N is a floor; the trailing note names those files. limit never produces that wording — when the " +
-        "result cap bites, the header switches to 'first N preview lines' instead.";
+        "result cap bites, the header switches to 'first N preview lines' instead. " +
+        // 这个工具此前一句都没有，理由是不想把 R59 那段常驻边界贴第三遍。收敛成契约之后
+        // 它只有一句，而 inheritors 恰恰是最需要它的地方：一个只在 CE 启用时才存在的子类，
+        // 与 vanilla 的子类在返回里逐字同形。
+        ConditionalReport.Contract;
 
     public object JsonSchema => new
     {
@@ -154,6 +161,7 @@ public class TraceTool : ITool
 
             // 列出来的类型全同源时标签只印一次（见 ScopeArgs.SourceLabeling）
             var inheritorLabels = ScopeArgs.SourceLabeling.Of(inheritors.Items.Select(e => e.SourceName));
+            var inheritorConditional = new ConditionalReport(_conditional);
 
             var results = inheritors.Items.Select(entry =>
             {
@@ -165,7 +173,10 @@ public class TraceTool : ITool
                 // 表头在有深层项时会点明「无标记 = 直接子类」。
                 var depth = depths.TryGetValue(entry.Item, out var d) ? d : 1;
                 var depthLabel = depth == 1 ? "" : $" [depth {depth}]";
-                return $"- `{entry.Item}`{depthLabel}{SymbolRow.FileNote(entry.Item, paths)}{inheritorLabels.Row(entry.SourceName)}";
+                // 声明散在多份文件里时只有全部落在条件目录里才打标——有一份无条件的，
+                // 这个类型在任何实机上都在（见 ConditionalFolders.OfAll）。
+                return $"- `{entry.Item}`{depthLabel}{SymbolRow.FileNote(entry.Item, paths)}"
+                       + $"{inheritorConditional.TagAll(paths)}{inheritorLabels.Row(entry.SourceName)}";
             });
 
             // 表头里所有数都描述**同一批东西**：scope 内的整棵树。direct 与 deepest 原先取自
@@ -215,6 +226,11 @@ public class TraceTool : ITool
                 inheritors, "subclasses", indent: "", limit: limit,
                 capAction: "re-trace a listed type as its own root; depths then restart from it");
             if (fold != null) sbInheritors.AppendLine(fold);
+
+            // 行内标记是上面那个 Select 打的，而它是惰性的——AppendLine(string.Join(...)) 已经
+            // 把它跑完了，故这里读得到。位置按全服惯例：本段自己的脚注在前，scope 相关的在后。
+            var inheritorsConditionalFooter = inheritorConditional.Render();
+            if (inheritorsConditionalFooter != null) sbInheritors.Append(inheritorsConditionalFooter);
 
             var inheritorsReport = new ScopeReport();
             inheritorsReport.Add(inheritors);
@@ -448,6 +464,7 @@ public class TraceTool : ITool
 
             var groupsWritten = 0;
             var anyFileFolded = false;
+            var usageConditional = new ConditionalReport(_conditional);
             foreach (var group in grouped)
             {
                 // 组与组之间空一行。search_regex 输出的是同一个结构（文件名 + 缩进的预览行）
@@ -456,8 +473,10 @@ public class TraceTool : ITool
 
                 // 原先每组挂一个 `[C#]` / `[XML]` 前缀，而紧跟其后的文件名带着 .cs / .xml
                 // 后缀，说的是同一件事。search_regex 同样按文件分组、从来没有这个前缀。
+                // 条件标记排在来源标签之前（同 search_regex）：行尾的 `[x]` 是来源标签位
                 var fileName = usageDisplayNames[group.Key];
-                sb.AppendLine($"`{fileName}`{usageLabels.Row(scope.ShowLabels ? scope.SourceNameOf(group.Key) : null)}");
+                sb.AppendLine($"`{fileName}`{usageConditional.Tag(group.Key)}"
+                              + $"{usageLabels.Row(scope.ShowLabels ? scope.SourceNameOf(group.Key) : null)}");
 
                 var shown = 0;
                 foreach (var match in group.OrderBy(m => m.lineNum))
@@ -517,6 +536,9 @@ public class TraceTool : ITool
                 sb.AppendLine();
                 sb.AppendLine(ScopeArgs.NotScannedInFullLine(incomplete));
             }
+
+            // 条件目录的成因整份说一次（行内只放键，见 ConditionalReport）
+            sb.Append(usageConditional.Render() ?? string.Empty);
 
             // usages 分支是硬 scope 过滤、没有 ScopeReport footer（见上面扫盘的注释）。
             // 那条 footer 的缺席本身会被读成「scope 外没有」，故把缺席的含义明说一次。

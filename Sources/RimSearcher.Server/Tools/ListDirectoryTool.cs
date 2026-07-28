@@ -6,10 +6,15 @@ namespace RimSearcher.Server.Tools;
 public class ListDirectoryTool : ITool
 {
     private readonly ScopeCatalog? _scopeCatalog;
+    private readonly ConditionalFolders _conditional;
 
     // catalog 可选：这个工具本身不吃 scope，要它只为把「根」与「源」的关系说清（见 RootsSentence）。
     // 测试里大量以无参形式构造，故不改成必需参数。
-    public ListDirectoryTool(ScopeCatalog? scopeCatalog = null) => _scopeCatalog = scopeCatalog;
+    public ListDirectoryTool(ScopeCatalog? scopeCatalog = null, ConditionalFolders? conditional = null)
+    {
+        _scopeCatalog = scopeCatalog;
+        _conditional = conditional ?? ConditionalFolders.None;
+    }
 
     public string Name => "rimworld-searcher__list_directory";
 
@@ -23,7 +28,10 @@ public class ListDirectoryTool : ITool
         + "Entries come back sorted — subdirectories first, then files, each by name — so a truncated listing is "
         + "the alphabetical head of the directory, and `offset` pages through the rest. "
         + "The path must be one of the server's indexed source roots or a directory below one; anything outside "
-        + "that whitelist is refused, the parent of a source root included. " + RootsSentence(_scopeCatalog);
+        + "that whitelist is refused, the parent of a source root included. "
+        // 白名单恰好就是那些被索引的内容目录，故一个条件目录要么整个可列、要么整个不可列
+        // ——标记打在回显的路径上，不必逐项重复（见 ExecuteAsync 里的注释）。
+        + ConditionalReport.Contract + " " + RootsSentence(_scopeCatalog);
 
     // 白名单在启动时按 config 解析定型，故可以直接读进说明书。skip_path_security 关掉检查时
     // 说「没有限制」，否则调用方会照着一份并不生效的清单去自我设限。
@@ -158,13 +166,18 @@ public class ListDirectoryTool : ITool
             // 目录并不罕见——Mods 下一个只放 About/ 的壳目录就是。
             var count = OutputText.Quantity(all.Count, "entries");
 
-            var result = $"`{path}` ({count}"
+            // 目录本身落在条件加载目录里时，这一整屏文件名都是条件性内容。标记挂在**表头那一行**
+            // 而不是逐项挂：条件是整个目录的属性，逐项印一模一样的东西是把同一句话说一百遍（R19）。
+            var conditional = new ConditionalReport(_conditional);
+            var pathTag = conditional.Tag(path);
+
+            var result = $"`{path}`{pathTag} ({count}"
                 + (offset > 0 ? $", showing {offset + 1}-{shownThrough}" : shownThrough < all.Count ? $", showing the first {page.Count}" : "")
                 + ")\n"
                 + string.Join("\n", page.Select(e => e.Name + (e.IsDir ? "/" : "")));
 
             if (page.Count == 0)
-                result = $"`{path}` ({count}) — offset {offset} is past the end.";
+                result = $"`{path}`{pathTag} ({count}) — offset {offset} is past the end.";
 
             // 「list a deeper subdirectory / use search_regex」两条旧出路对触发上限的目录都是
             // 死路：被略去的多半正是顶层文件（不在任何子目录里），而 search_regex 匹配的是
@@ -174,6 +187,8 @@ public class ListDirectoryTool : ITool
             else if (shownThrough < all.Count)
                 result += $"\n... +{all.Count - shownThrough} more entries (pass offset={shownThrough} for the next page"
                     + (limit >= MaxEntries ? $"; {MaxEntries} is the server cap per page)" : ", or a larger limit)");
+
+            result += conditional.Render() ?? string.Empty;
 
             return Task.FromResult(new ToolResult(result));
         }

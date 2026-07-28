@@ -13,11 +13,14 @@ public class ReadCodeTool : ITool
 
     private readonly SourceIndexer _sourceIndexer;
     private readonly ScopeCatalog _scopeCatalog;
+    private readonly ConditionalFolders _conditional;
 
-    public ReadCodeTool(SourceIndexer sourceIndexer, ScopeCatalog scopeCatalog)
+    public ReadCodeTool(
+        SourceIndexer sourceIndexer, ScopeCatalog scopeCatalog, ConditionalFolders? conditional = null)
     {
         _sourceIndexer = sourceIndexer;
         _scopeCatalog = scopeCatalog;
+        _conditional = conditional ?? ConditionalFolders.None;
     }
 
     public string Name => "rimworld-searcher__read_code";
@@ -36,11 +39,11 @@ public class ReadCodeTool : ITool
         // 与一份无条件补丁**完全同形**（裸 <Patch>、无 mod 守卫、正文照改 defaultProjectile），
         // 守卫在 loadFolders.xml 那一层，而那一层不在任何返回里。最省事的读法「补丁存在 → 一定生效」
         // 于是无从证伪：一条靠领域常识补上这一层、代价两轮调用加置信度下调，另一条完全没察觉。
-        // 索引侧按 loadFolders 给每个文件打标是对的做法，但那是一次独立改动（见台账待办）；
-        // 这里先把能力边界说出来——答不了不是缺陷，不说自己答不了才是。
-        + "A mod's files are indexed as its loadFolders.xml declares them, conditionally-loaded folders "
-        + "included; the load conditions are not evaluated here, so a file read out of one is not evidence "
-        + "that it takes effect in any particular game.";
+        //
+        // R59 当时只能在这里立一句常驻的能力边界（「条件目录一律收下、条件不判定」）——它对
+        // 所有调用都成立，因而对**手上这一条**什么也没说，调用方仍得自己去比对路径。F34 把
+        // 索引侧的条件目录建成了查表，于是这句收敛成契约：真落在条件目录里时返回自己会说。
+        + ConditionalReport.Contract;
 
     private static readonly ToolArgSpec ArgSpec = new(
         "rimworld-searcher__read_code",
@@ -166,6 +169,12 @@ public class ReadCodeTool : ITool
         if (siblings is { Count: > 1 })
             notes.Add($"note: {siblings.Count} files share this name in scope '{scope.Expression}'; "
                 + $"reading the highest-priority one. The others: {string.Join(", ", siblings.Skip(1))}");
+
+        // 条件目录里的文件与无条件的那份在返回里逐字同形，而守卫在 loadFolders.xml 那一层。
+        // 与上面三条同处：它们说的都是「你读到的这一份到底是什么」，都必须跟着失败分支一起走
+        // ——「这里没有这个成员」正是最需要知道读的是不是一份条件性内容的时刻。
+        var conditionalNote = ConditionalReport.Explain(_conditional.Of(path));
+        if (conditionalNote != null) notes.Add($"note: {conditionalNote}");
 
         var scopeNotice = notes.Count == 0
             ? string.Empty

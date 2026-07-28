@@ -43,6 +43,7 @@
 - `read_code` 支持按 `methodName`/`extractClass` 精确读取代码，未指定成员时再按小范围行号读取，避免一次返回整个文件
 - 结果行不重复印能从符号名逐字推出来的文件名（`locate` / `trace` / `inspect` 共用同一条判据，见 `locate` 一节）——留下的每一个文件名都是「它不在同名文件里」的信号
 - **同源标签只印一次**：一段结果全部来自同一个源时，`[vanilla]` 这类来源标记提到表头（`**C# Types** [vanilla]:`），逐行不再重复；真的混源时才逐行印。于是**行末出现来源标记，本身就是「这段结果跨了多个源」的信号**。`scope` 已经把源钉死时一个标记都不印
+- **条件加载目录逐条打标**：`loadFolders.xml` 里带 `IfModActive` 之类条件的目录，索引侧一律收下而不判条件（见「mod 展开规则」），故命中落在里头时行末挂一个键 `[conditional: 1.6/CE]`，整份返回末尾一条脚注把键兑换成成因（`` `1.6/CE` [Cinders] needs CETeam.CombatExtended active ``）。行内只放键、成因整份说一次，与来源标记同一套判据；`loadFolders.xml` 的一条 `li` 展开成 `Defs` / `Patches` / `Assemblies` 好几个目录时，脚注仍只算一条——那几个目录说给调用方听的是同一句话。**没打标就是不在这类目录里**，这句反面读法写在脚注最后一句里：不说的话这个记号只能单向使用（看见了才有意义），而调用方要判的恰恰是「我手上这条到底受不受影响」。整份返回只落在一个目标上时（`read_code` 一个文件、`inspect` 一条 def）键与成因合成一句、不再另起脚注。配了 `active_mods` 的源一个字都不打：那里的条件已经判过了，再打标是把有答案的问题重新说成悬案。条件里的 packageId 保留 `loadFolders.xml` 的原样拼写（`CETeam.CombatExtended`），拿它能直接去 mod 列表里对号
 - **截断提示全服一套文法**：`... +N more <什么> (<怎么拿到>)`。看到 `... +` 开头的行就是被截断了，`<什么>` 恒有名词（它数的到底是哪一类），括号里那句就是下一步该怎么传参，各工具不必分别认。例：
   `... +71 more methods (pass limit:'all' for the whole list, or read one with read_code methodName)` ·
   `... +367 more lines (pass startLine=20)` · `... +43 more entries (pass offset=7 for the next page, or a larger limit)`
@@ -487,13 +488,15 @@ assemblies = 'C:\SteamLibrary\steamapps\common\RimWorld\RimWorldWin64_Data\Manag
 - 只收 `Defs`、`Patches`、`Assemblies`，`Languages` / `Textures` / `Sounds` 不进索引
 - 源名取 `About.xml` 里的 `<name>`（workshop 目录名是纯数字 ID）；显式写了 `name` 则以显式的为准
 
-**条件目录**（`IfModActive` = 任一启用、`IfModActiveAll` = 全部启用、`IfModNotActive` = 任一启用即排除，三者可并存取合取；packageId 比对不分大小写且忽略 `_steam` 后缀）默认**全部收下**——手动指 mod 根时无从判断哪些 mod 处于启用状态，索引宽一点无害。**收了哪几个会在启动提示里点名**（`14 conditional folders in loadFolders.xml included unconditionally (1.6/Royalty, 1.6/Biotech, 1.6/CE/PLA and 11 more) — a hit under one of these may come from content the game would not load`）：只说「收了 N 个」的话，调用方拿到一条 `1.6/CE/Defs/…` 下的命中时无从判断它是不是那 N 个之一，而这类目录的内容在没装对应前置的实机上根本不加载。
+**条件目录**（`IfModActive` = 任一启用、`IfModActiveAll` = 全部启用、`IfModNotActive` = 任一启用即排除，三者可并存取合取；packageId 比对不分大小写且忽略 `_steam` 后缀，回显则保留 `loadFolders.xml` 里的原样拼写）默认**全部收下**——手动指 mod 根时无从判断哪些 mod 处于启用状态，索引宽一点无害。**收了哪几个会在启动提示里点名**（``14 conditional folders in loadFolders.xml included unconditionally (1.6/Royalty, 1.6/Biotech, 1.6/CE/PLA and 11 more) — results from inside one come back tagged `[conditional: <folder>]` ``）：只说「收了 N 个」的话，调用方拿到一条 `1.6/CE/Defs/…` 下的命中时无从判断它是不是那 N 个之一，而这类目录的内容在没装对应前置的实机上根本不加载。
+
+这份名单是**整份索引**的口径，回答不了「我手上这一条呢」——它对每一次调用都成立，因而对具体某一条什么也没说。故落在这些目录里的结果**逐条打标** `[conditional: 1.6/CE]`，成因由整份返回末尾的脚注给出（见「低 Token 消耗」一节）。程序集也算：`1.6/CE/Assemblies/EmbergardenCE.dll` 反编译出来的那棵源码树在 `Decompiled/Cinders/EmbergardenCE/`，与条件目录字面上毫无关系，靠 dll 基名映射回去后同样打标——否则脚注最后那句「没打标就不在条件目录里」对 C# 那一侧就是假的。
 
 但有一种情形宽不得：**一个 mod 用两组互斥条件挂了两套内容**（前置 A 装了用这套、装了 B 用那套）。此时两套的文件同名，谁遮蔽谁由 `loadFolders.xml` 的书写顺序决定，而不是由哪个前置真的启用着决定——搜到的可能恰好是运行时不生效的那套。这种情形会在启动日志里报出来：
 
 ```text
 [WARN] Mod layout note | detail=RatkinGene: mutually exclusive conditional folders, both included:
-       Common [solaris.ratkinracemod] vs Common [fxz.solaris.ratkinracemod.odyssey] — set active_mods to pick one
+       Common [Solaris.RatkinRaceMod] vs Common [fxz.Solaris.RatkinRaceMod.odyssey] — set active_mods to pick one
 ```
 
 照提示给那个源加 `active_mods` 即可选定一支：

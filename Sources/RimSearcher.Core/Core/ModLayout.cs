@@ -59,6 +59,12 @@ public sealed record ModLayout
     // 游戏根本不会解析它们，索引也不该收。
     public required IReadOnlySet<string> Shadowed { get; init; }
 
+    // 收进索引、但加载条件**没被判定过**的那些内容目录（`1.6/CE/Patches`）。
+    // 判定过的不在此列：config 给了 active_mods 时条件已有答案，再打标就是把结论重新说成悬案。
+    // 消费者是各工具的行内标记（见 Server 侧 ConditionalReport）——只列目录，不逐文件展开：
+    // 索引条目多一个字段的代价落在每一条上，而挂脚注只落在真正相关的返回上。
+    public IReadOnlyList<ConditionalArea> ConditionalDirs { get; init; } = [];
+
     // 解析过程中的降级说明，交给 Server 侧记日志——Core 不依赖日志设施
     public required IReadOnlyList<string> Notes { get; init; }
 
@@ -99,8 +105,12 @@ public static class ModLayoutResolver
 
     private static readonly Regex VersionDirName = new(@"^1\.\d+$", RegexOptions.Compiled);
 
-    // 一个内容文件夹，以及 loadFolders.xml 给它挂的加载条件（无条件则为 null）
-    private sealed record FolderEntry(string Path, LoadCondition? Condition);
+    // 一个内容文件夹，以及 loadFolders.xml 给它挂的加载条件（无条件则为 null）。
+    //
+    // ConditionChecked 记的是「这个条件当时判过没有」，而不是「判成了什么」——只有没判过的
+    // 才需要在返回里打标。两者必须分开：给了 active_mods 时条件为真的目录同样 Condition != null，
+    // 但它已经有答案了。
+    private sealed record FolderEntry(string Path, LoadCondition? Condition, bool ConditionChecked = false);
 
     // LoadFolder.ShouldLoad 的三个来源：IfModActive 是「任一启用」，IfModActiveAll 是
     // 「全部启用」，IfModNotActive 是「任一启用即排除」。三者可以同时挂在一个 li 上，取合取。
@@ -126,6 +136,25 @@ public static class ModLayoutResolver
             if (NotAnyOf.Length > 0) parts.Add("!" + string.Join("|", NotAnyOf));
 
             return string.Join(" ", parts);
+        }
+
+        // 给人读的那一形。Describe() 的 `a|b !c` 是日志/冲突提示里的紧凑写法，而这一句最终
+        // 落在工具返回里，读它的是调用方——`!` 与 `&` 在那里既不是英文也不是任何调用方认得的
+        // 表达式语法，读者只能猜。单个 packageId 时不写「any of」：那读起来像还有别的选项。
+        public string Explain()
+        {
+            var parts = new List<string>();
+
+            if (AnyOf.Length == 1) parts.Add($"{AnyOf[0]} active");
+            else if (AnyOf.Length > 1) parts.Add($"any of {string.Join(", ", AnyOf)} active");
+
+            if (AllOf.Length == 1) parts.Add($"{AllOf[0]} active");
+            else if (AllOf.Length > 1) parts.Add($"all of {string.Join(", ", AllOf)} active");
+
+            if (NotAnyOf.Length == 1) parts.Add($"{NotAnyOf[0]} not active");
+            else if (NotAnyOf.Length > 1) parts.Add($"none of {string.Join(", ", NotAnyOf)} active");
+
+            return string.Join(" and ", parts);
         }
     }
 
@@ -253,6 +282,7 @@ public static class ModLayoutResolver
             AssemblyDirs = assemblyDirs,
             LanguageDirs = languageDirs,
             Shadowed = shadowed,
+            ConditionalDirs = ConditionalDirs(root, resolved),
             // 版本链上试过几个候选就会走几遍 FoldersFor，同一条降级说明会被记多次
             Notes = notes.Distinct(StringComparer.Ordinal).ToList()
         };
@@ -393,7 +423,7 @@ public static class ModLayoutResolver
 
             if (Directory.Exists(resolved)
                 && !folders.Any(entry => entry.Path.Equals(resolved, StringComparison.OrdinalIgnoreCase)))
-                folders.Add(new FolderEntry(resolved, condition));
+                folders.Add(new FolderEntry(resolved, condition, ConditionChecked: activeMods != null));
         }
 
         if (folders.Count == 0) return null;
@@ -404,6 +434,12 @@ public static class ModLayoutResolver
         // 可指认的连接——第九轮盲测里两条链各自读了 `1.6/CE/Patches/` 下的文件，而它与一份
         // 无条件补丁在返回里完全同形；判据与 R49（未扫全的文件要点名）、W1（下界记号要指向
         // 成因）同源：记号本身够不上，记号与成因之间那条线才是要害。
+        //
+        // 点名之后余下的一半是「我手上这条命中怎么对号入座」。R59 当时给的后半句
+        // （「这些目录下的命中可能来自游戏不会加载的内容」）把这道题原样退回给了调用方：
+        // 它得自己拿命中路径去比对这三个目录名，而返回里印的多半只是基名。F34 之后命中自带
+        // `[conditional: <folder>]`，这条提示只要指向那个记号即可——一条启动提示与逐条命中
+        // 之间从此有了同一个键。
         if (includedNames.Count > 0 && activeMods == null)
         {
             var head = string.Join(", ", includedNames.Take(3));
@@ -411,7 +447,7 @@ public static class ModLayoutResolver
             notes.Add($"{OutputText.Quantity(includedNames.Count, "conditional folders")} in "
                       + $"{LoadFoldersFileName} included unconditionally "
                       + $"({head}{(rest > 0 ? $" and {rest} more" : string.Empty)}) — "
-                      + "a hit under one of these may come from content the game would not load");
+                      + "results from inside one come back tagged `[conditional: <folder>]`");
         }
 
         if (skipped > 0)
@@ -472,20 +508,28 @@ public static class ModLayoutResolver
 
     // 脱掉 _steam 后缀后重复是常态：作者写 "CETeam.CombatExtended, CETeam.CombatExtended_steam"
     // 就是为了同时点到 CE 的两个发行版，而那两个的 NoSuffix 形式本就是同一个
+    //
+    // 这里刻意**不**小写化。packageId 的大小写在比对时无关（活跃集是 OrdinalIgnoreCase），
+    // 在回显时却要紧：这批 id 会经 Explain() 进到工具返回里，调用方拿它去 About.xml / mods
+    // 列表里对号，而那两处写的都是 `CETeam.CombatExtended`。印成 `ceteam.combatextended`
+    // 等于给出一个在别处一个字都搜不到的写法。
     private static string[] SplitPackageIds(string value)
         => value
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(NormalizePackageId)
-            .Distinct(StringComparer.Ordinal)
+            .Select(StripSteamPostfix)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-    private static string NormalizePackageId(string id)
+    private static string StripSteamPostfix(string id)
     {
-        var normalized = id.Trim().ToLowerInvariant();
-        return normalized.EndsWith(SteamPostfix, StringComparison.Ordinal)
-            ? normalized[..^SteamPostfix.Length]
-            : normalized;
+        var trimmed = id.Trim();
+        return trimmed.EndsWith(SteamPostfix, StringComparison.OrdinalIgnoreCase)
+            ? trimmed[..^SteamPostfix.Length]
+            : trimmed;
     }
+
+    // 活跃 mod 白名单这一侧仍归一到小写：它只参与比对，不回显。
+    private static string NormalizePackageId(string id) => StripSteamPostfix(id).ToLowerInvariant();
 
     private static (List<string> Xml, List<string> Assemblies, List<string> Languages) ContentDirs(
         IReadOnlyList<FolderEntry> folders)
@@ -510,6 +554,48 @@ public static class ModLayoutResolver
         }
 
         return (xml, assemblies, languages);
+    }
+
+    // 收进索引、而加载条件没被判定过的那些内容目录。
+    //
+    // 粒度取**目录**而不是文件：条件挂在文件夹上（loadFolders.xml 的一条 li），逐文件展开
+    // 既要多枚举一遍磁盘，又要给每个索引条目多带一个字段，而查表侧本来就是按路径前缀问的。
+    // Languages 不收——它不进任何搜索索引（见 ModLayout.LanguageDirs）。
+    private static List<ConditionalArea> ConditionalDirs(string root, IReadOnlyList<FolderEntry> folders)
+    {
+        var areas = new List<ConditionalArea>();
+
+        foreach (var folder in folders)
+        {
+            if (folder.Condition == null || folder.ConditionChecked) continue;
+
+            var label = FolderLabel(root, folder.Path);
+            var condition = folder.Condition.Explain();
+
+            foreach (var name in XmlDirNames.Append(AssemblyDirName))
+            {
+                var directory = Path.Combine(folder.Path, name);
+                if (Directory.Exists(directory))
+                    areas.Add(new ConditionalArea(directory, label, condition));
+            }
+        }
+
+        return areas;
+    }
+
+    // loadFolders.xml 里那条 li 的写法。相对 mod 根的路径与 li 原文逐字相同（ModLoadFolders
+    // 就是这么解析的），只有分隔符要统一——Windows 上 GetRelativePath 给反斜杠，而 li 写 '/'。
+    private static string FolderLabel(string root, string folderPath)
+    {
+        try
+        {
+            var relative = Path.GetRelativePath(root, folderPath).Replace('\\', '/');
+            return relative is "." or "" ? "/" : relative;
+        }
+        catch
+        {
+            return folderPath;
+        }
     }
 
     // folders 已是降序优先级，故先见到的即胜出者，后来的同相对路径文件全是死内容。
@@ -554,9 +640,15 @@ public static class ModLayoutResolver
                     {
                         shadowed.Add(Path.GetFullPath(file));
 
+                        // 不分大小写：packageId 现在保留原样拼写（见 SplitPackageIds），同一个
+                        // 前置在两处写成 `Ludeon.Ideology` 与 `ludeon.ideology` 是常事，按序数比
+                        // 会凭空造出一条「互斥」提示。
                         if (winner.Condition != null
                             && folder.Condition != null
-                            && winner.Condition.Describe() != folder.Condition.Describe())
+                            && !string.Equals(
+                                winner.Condition.Describe(),
+                                folder.Condition.Describe(),
+                                StringComparison.OrdinalIgnoreCase))
                         {
                             conflicts.Add(
                                 $"{Path.GetFileName(winner.Path)} [{winner.Condition.Describe()}] vs " +

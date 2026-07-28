@@ -58,9 +58,14 @@ public static class GrammarRules
     };
 
     // 结果行末尾方括号里**不是**来源标签的那几种。来源标签的判据是「行尾的 [x]」（见
-    // ScopeArgs.SourceLabeling），而 def 行的 [Abstract] 与 trace 的 [depth N] 在没有后续
-    // 字段时也会落到行尾。
-    private static readonly Regex NonSourceTag = new(@"^(Abstract|depth \d+)$", RegexOptions.Compiled);
+    // ScopeArgs.SourceLabeling），而 def 行的 [Abstract]、trace 的 [depth N] 与 F34 的
+    // [conditional: X] 在没有后续字段时也会落到行尾。
+    //
+    // conditional 那一个尤其要豁免：单源 scope 下来源标签整段不印，于是几条同一个条件目录
+    // 的结果行会各挂一个逐字相同的 [conditional: 1.6/CE]——而它按设计就该逐行挂（哪一行
+    // 受影响是逐行不同的事实），把它当成「该上提到段头的噪音」正好反了。
+    private static readonly Regex NonSourceTag = new(
+        @"^(Abstract|depth \d+|conditional: .+)$", RegexOptions.Compiled);
 
     // 折叠行的正式文法：`<缩进>... +N more [of M ]<名词> [(<下一步>)]`
     private static readonly Regex FoldLine = new(

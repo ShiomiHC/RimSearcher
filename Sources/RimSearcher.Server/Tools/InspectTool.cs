@@ -34,16 +34,20 @@ public class InspectTool : ITool
     // 几份大纲通常高度重合，而体积是实打实地翻倍。
     private const int MaxOutlinedFiles = 1;
 
+    private readonly ConditionalFolders _conditional;
+
     public InspectTool(
         SourceIndexer sourceIndexer,
         DefIndexer defIndexer,
         ScopeCatalog scopeCatalog,
-        LocalizationIndex? localization = null)
+        LocalizationIndex? localization = null,
+        ConditionalFolders? conditional = null)
     {
         _sourceIndexer = sourceIndexer;
         _defIndexer = defIndexer;
         _scopeCatalog = scopeCatalog;
         _localization = localization;
+        _conditional = conditional ?? ConditionalFolders.None;
     }
 
     public string Name => "rimworld-searcher__inspect";
@@ -64,7 +68,10 @@ public class InspectTool : ITool
         + "outlined but read_code can still read them by name. Enums are outlined as their values, delegates as "
         + "their signature. The outline lists at most 40 members per kind, and when several sources declare the "
         + "same type only the highest-priority one is outlined; both cuts are stated inline where they happen. "
-        + "Method bodies come from read_code.";
+        + "Method bodies come from read_code. "
+        // 「PatchOperation 从不被应用」上面已经说了，而条件目录是它的姊妹缺口：那一条说的是
+        // 「这份 XML 会被别人改」，这一条说的是「这份 XML 未必会被加载」。两条都要有才闭合。
+        + ConditionalReport.Contract;
 
     private static readonly ToolArgSpec ArgSpec = new(
         "rimworld-searcher__inspect",
@@ -301,6 +308,12 @@ public class InspectTool : ITool
 
             sb.AppendLine($"File: `{def.FilePath}`");
 
+            // 「这份 XML 会被 PatchOperation 改」下面 Resolved XML 的标题已经说了（R62），
+            // 而「这份 XML 未必会被加载」是它的姊妹缺口——两者都让「照着这里读就是运行时」
+            // 落空，且都不在返回的任何别处留痕。整份返回只讲一条 def，故合成一句说完。
+            var defConditional = ConditionalReport.Explain(_conditional.Of(def.FilePath));
+            if (defConditional != null) sb.AppendLine($"_Note: {defConditional}._");
+
             // 同名 def 散在多处时必须说清取的是哪一个，否则读者会把这份 XML 当成唯一定义。
             // 光说「有 3 条」没有可操作性：把类型一并列出来，调用方才看得出自己要的是不是这条
             // （Human 在 vanilla 里就是 ThingDef / BodyDef / HediffGiverSetDef 各一条）。
@@ -427,6 +440,10 @@ public class InspectTool : ITool
             // 每份都全量渲染一次大纲，体积就按文件数线性放大。读者要的通常是作用域里
             // 优先级最高的那一份——Items 已按该顺序排好——其余只报路径，真要看就收窄
             // scope 或用 read_code extractClass 点名去取。
+            // 类型可能只存在于某个条件目录的程序集里（Cinders 的 EmbergardenCE 就是），
+            // 而反编译产物的路径上一点条件的痕迹都没有——见 AppConfig.DecompiledConditionalAreas。
+            var typeConditional = new ConditionalReport(_conditional);
+
             var outlinesShown = 0;
             foreach (var entry in csharpPaths.Items)
             {
@@ -435,7 +452,8 @@ public class InspectTool : ITool
                 if (outlinesShown >= MaxOutlinedFiles)
                 {
                     sb.AppendLine(
-                        $"\n**Also declared in** `{entry.Item}`{ScopeArgs.Label(entry.SourceName)} "
+                        $"\n**Also declared in** `{entry.Item}`{typeConditional.Tag(entry.Item)}"
+                        + $"{ScopeArgs.Label(entry.SourceName)} "
                         + "— outline omitted; narrow scope to this source, or use read_code extractClass, to see it.");
                     continue;
                 }
@@ -443,13 +461,16 @@ public class InspectTool : ITool
                 // 分隔线画在两份大纲**之间**而不是每份之后：只有一份时（绝大多数调用）结尾那道
                 // 横线分隔的是空气，读者却会把它读成「后面还有内容、被截断了」。
                 sb.AppendLine(outlinesShown == 0 ? "" : "\n---\n");
-                sb.AppendLine($"**Outline** (`{entry.Item}`){ScopeArgs.Label(entry.SourceName)}:");
+                sb.AppendLine($"**Outline** (`{entry.Item}`)"
+                              + $"{typeConditional.Tag(entry.Item)}{ScopeArgs.Label(entry.SourceName)}:");
 
                 // 按状态判断而不是看正文——正文里出现 "not found" 之类的字面量是常态
                 var outline = await RoslynHelper.GetClassOutlineAsync(entry.Item, name, OutlineLimit(args));
                 sb.AppendLine(outline.IsOk ? outline.Content : DescribeOutlineFailure(outline.Status, name));
                 outlinesShown++;
             }
+
+            sb.Append(typeConditional.Render() ?? string.Empty);
 
             var typeFooter = new ScopeReport();
             typeFooter.Add(csharpPaths);
