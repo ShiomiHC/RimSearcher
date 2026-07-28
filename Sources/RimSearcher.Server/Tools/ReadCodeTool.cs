@@ -261,7 +261,7 @@ public class ReadCodeTool : ITool
                 return WithUnresolvedScopeNotice(scope, new ToolResult(
                     plainNotice
                     + $"Line range {startLine + 1}-{startLine + lineCount} exceeds "
-                    + $"file length ({totalLines} lines) in {path}.", true));
+                    + $"file length ({OutputText.Quantity(totalLines, "lines")}) in {path}.", true));
 
             var sb = new StringBuilder();
             sb.AppendLine($"```{Fence(path)}");

@@ -20,8 +20,16 @@ namespace RimSearcher.Tests;
 // F30（表头口径）：F29 之后候选池是这条链上仅剩的一道限额，而它同样在总数之前生效——总数
 // 数的是**进了池的**键挂着的成员。这一道不打算取消（它是成本上界），故改由表头说出来：
 // 装不下同等好的匹配时写 `N of at least M`。本文件因此有两组相反的断言，缺一不可——
-// 装不下时必须改口（PoolOverflow 那两条），而池子被噪声填满、只有少数够分时**不许**改口
-// （NearMiss 那三条）：一个常亮的下界警告与没有警告等价。
+// 装不下时必须改口，而池子被噪声填满、只有少数够分时**不许**改口（NearMiss 那三条）：
+// 一个常亮的下界警告与没有警告等价。
+//
+// 精确化（本轮）：候选池整个取消了。60 分这条线可以逐条翻译成结构条件（前缀 / 词边界 /
+// camel 首字母 / 编辑距离 <= 3），于是「哪些键够分」从**打完分再看**变成**查得出来**，
+// 合格集合是精确算出来的。两个魔数（500 / 50）与 F30 那条启发式判据一起消失。
+//
+// **本文件有三条断言因此反向重写**（600 那两条 + 两字符那条）：它们钉的是「池子装不下」，
+// 而 600 与 301 都远在新上限之内，池子这个概念本身已经不存在。下界那条路仍然守着，
+// 只是判据换成了可判定的那一个，见 CapOverflow 两条。
 public class MemberFuzzyPoolTests : IDisposable
 {
     private readonly TempWorkspace _workspace = new();
@@ -76,10 +84,12 @@ public class MemberFuzzyPoolTests : IDisposable
             entry.Item.TypeName == "Zz.ZzThing" && entry.Item.MemberName == "CompTickRare");
         Assert.DoesNotContain(hits.Items, entry => entry.Item.MemberName.StartsWith("CompTickNode"));
 
-        // 池子确实被截了（1200 个噪声键远超 500），但只有一个键分够 60——60 分这条线是在池子
-        // **内部**切完的，池外那些重合度更低的更不可能够分，故总数是确数、不该改口。
-        // 「池子满了就报下界」会在这里误报，而真实语料上池子几乎恒满，那种判据等于常亮。
+        // 1200 个噪声键一个都不够分：它们既不以查询串为前缀、编辑距离也远超 3。
+        // 合格集合只有 `comptickrare` 一个，故总数是确数、不该改口。
+        // （旧实现在这里是靠「进池的是否全部够分」猜出同一个结论的——那条启发式自带漏报角落，
+        // 现在不必猜了。）
         Assert.False(hits.TotalIsLowerBound);
+        Assert.Equal(1, hits.TotalInScope);
     }
 
     // 候选池的取舍是全序的（重合度 → key 长度 → key），三项都与扫描次序无关，故同一条查询
@@ -187,15 +197,13 @@ public class MemberFuzzyPoolTests : IDisposable
         Assert.DoesNotContain("at least", result.Content);
     }
 
-    // ── 候选池装不下时的表头口径 ────────────────────────────────────────
+    // ── 反向重写：600 个同前缀成员不再是「装不下」 ──────────────────────
 
-    // 同前缀成员数要压过候选池容量（MemberFuzzyPoolSize = 500）。上面那批 15 个是用来验
-    // 「装得下时全部可达」，这批是用来验「装不下时表头怎么说」。
+    // 这个数原本的意义是「压过 MemberFuzzyPoolSize = 500」。池子取消之后它压不过任何东西，
+    // 但用例本身留着——它现在钉的是相反的一件事：**600 个同等好的匹配必须一个不少地数进总数**。
     private const int PoolOverflowCount = 600;
 
-    // 名字构造同 BuildSamePrefixIndex：无大写边界无下划线，故一个方法恰好一个 member key，
-    // 600 个成员就是 600 个键，池子只装得下 500。查询 `Zqp` 对每个键都是 StartsWith（90 分），
-    // 于是进池的 500 个**全部**够分——这正是「线还没切完」的形状。
+    // 名字构造同 BuildSamePrefixIndex：无大写边界无下划线，故一个方法恰好一个 member key。
     private (SourceIndexer Indexer, ScopeCatalog Catalog) BuildPoolOverflowIndex()
     {
         var root = _workspace.Dir("Overflow");
@@ -219,22 +227,23 @@ public class MemberFuzzyPoolTests : IDisposable
         return (indexer, ScopeCatalog.Build([("vanilla", root)], null, null));
     }
 
-    // F29 把「谎称完整」降级成了「说被截了」，但候选池那道上限还在：总数数的是**进了池的**
-    // 那 500 个键挂着的成员，剩下 100 个连同它们的成员从未被数过。少数出来的成员只是慢一轮，
-    // 把一个下界当确数报出去才是会让调用方直接下反向结论的那种错。
+    // 反向重写（原 `PoolFullOfEquallyGoodKeys_ReportsTheTotalAsAFloor`）。
+    // 旧断言是 `TotalIsLowerBound == true` 且 `TotalInScope ∈ [1, 599]`——那描述的是
+    // 「池子只装得下 500 个键」这个已经不存在的事实。600 个键远在新上限之内，故总数是确数。
     [Fact]
-    public void PoolFullOfEquallyGoodKeys_ReportsTheTotalAsAFloor()
+    public void SixHundredEquallyGoodKeys_AreAllCounted_NotCappedAtAPoolSize()
     {
         var (indexer, catalog) = BuildPoolOverflowIndex();
 
         var hits = indexer.SearchMembersByKeywords(["Zqp"], catalog.Everything, 10, ["Method"]);
 
-        Assert.True(hits.TotalIsLowerBound);
-        Assert.InRange(hits.TotalInScope, 1, PoolOverflowCount - 1);
+        Assert.Equal(PoolOverflowCount, hits.TotalInScope);
+        Assert.False(hits.TotalIsLowerBound);
     }
 
+    // 反向重写（原 `LocatePoolOverflowQuery_HeaderSaysTheTotalIsAFloor`）
     [Fact]
-    public async Task LocatePoolOverflowQuery_HeaderSaysTheTotalIsAFloor()
+    public async Task LocateSixHundredQuery_HeaderGivesTheRealTotal()
     {
         var (indexer, catalog) = BuildPoolOverflowIndex();
         var defIndexer = new DefIndexer();
@@ -244,16 +253,16 @@ public class MemberFuzzyPoolTests : IDisposable
         using var args = JsonDocument.Parse("""{"query":"method:Zqp","limit":10}""");
         var result = await tool.ExecuteAsync(args.RootElement, CancellationToken.None);
 
-        Assert.Contains("of at least", result.Content);
+        Assert.Contains($"10 of {PoolOverflowCount} members", result.Content);
+        Assert.DoesNotContain("at least", result.Content);
     }
 
     // ── 两字符关键词那条路 ──────────────────────────────────────────────
 
-    // 两字符关键词走的是另一条路（前缀匹配 + Take(50)），当年同样按枚举序截断。
-    // 前缀命中在 CalculateFuzzyScore 下全部同分 90，故取哪 50 条完全决定了输出，
-    // 而正确答案——最短的那个——只是运气好才在里面。
+    // 两字符关键词此前走的是另一条路（前缀匹配 + Take(50)），10 倍于 2-gram 那条路的收紧，
+    // 而两个数都是旧代码的遗留、没有判据支撑。现在两条路合成一条：判据都是「分够 60」。
     [Fact]
-    public void TwoCharKeyword_KeepsTheShortestPrefixMatches()
+    public void TwoCharKeyword_KeepsTheShortestPrefixMatches_AndCountsThemAll()
     {
         var root = _workspace.Dir("Short");
 
@@ -277,10 +286,115 @@ public class MemberFuzzyPoolTests : IDisposable
 
         var hits = indexer.SearchMembersByKeywords(["Zq"], catalog.Everything, 10, ["Method"]);
 
+        // 短的优先这一条不变：`Zqa` 必须在，而不是被 300 个长名按名序挤掉
         Assert.Contains(hits.Items, entry => entry.Item.MemberName == "Zqa");
 
-        // 这条路的池子只有 50，而前缀命中一律 90 分、个个够分，故 301 个键里超出的 251 个
-        // 连同其成员从未被数过：总数同样只是地板，判据与 2-gram 那条路是同一条。
+        // 反向重写：旧断言是 `TotalIsLowerBound == true`（301 个键塞不进 50 的池子）。
+        // 两字符查询不再有自己的一道上限，301 个同分命中一个不少。
+        Assert.Equal(301, hits.TotalInScope);
+        Assert.False(hits.TotalIsLowerBound);
+    }
+
+    // ── 可判定的那一道上限 ──────────────────────────────────────────────
+
+    // 展开上限仍然存在（它是成本上界），只是判据换成了可判定的那一个：合格集合先算完整，
+    // 再看装不装得下。本仓的固定套路是「每加一道限额，就配一个刚好越过它的 fixture」，
+    // 这一条就是那个 fixture——上限是多少，fixture 就跟到多少。
+    private const int OverCapCount = SourceIndexer.MemberQualifiedKeyCap + 100;
+
+    // 一个方法恰好一个键（无大写边界无下划线），故键数 == 成员数 == OverCapCount，
+    // 越过上限的那 100 个连同它们的成员从未被数过。
+    private (SourceIndexer Indexer, ScopeCatalog Catalog) BuildOverCapIndex()
+    {
+        var root = _workspace.Dir("OverCap");
+
+        var source = new StringBuilder();
+        source.AppendLine("namespace Zq");
+        source.AppendLine("{");
+        source.AppendLine("    public class ZqCapHolder");
+        source.AppendLine("    {");
+        for (var i = 0; i < OverCapCount; i++)
+            source.AppendLine($"        public void Zqc{i:D6}() {{ }}");
+        source.AppendLine("    }");
+        source.AppendLine("}");
+
+        _workspace.WriteFile(Path.Combine("OverCap", "ZqCapHolder.cs"), source.ToString());
+
+        var indexer = new SourceIndexer();
+        indexer.Scan(root);
+        indexer.FreezeIndex();
+
+        return (indexer, ScopeCatalog.Build([("vanilla", root)], null, null));
+    }
+
+    [Fact]
+    public void MoreQualifiedKeysThanTheCap_ReportsTheTotalAsAFloor()
+    {
+        var (indexer, catalog) = BuildOverCapIndex();
+
+        var hits = indexer.SearchMembersByKeywords(["Zqc"], catalog.Everything, 10, ["Method"]);
+
         Assert.True(hits.TotalIsLowerBound);
+        Assert.Equal(SourceIndexer.MemberQualifiedKeyCap, hits.TotalInScope);
+    }
+
+    [Fact]
+    public async Task LocateOverCapQuery_HeaderSaysTheTotalIsAFloor_AndNamesTheCause()
+    {
+        var (indexer, catalog) = BuildOverCapIndex();
+        var defIndexer = new DefIndexer();
+        defIndexer.FreezeIndex();
+
+        var tool = new LocateTool(indexer, defIndexer, catalog);
+        using var args = JsonDocument.Parse("""{"query":"method:Zqc","limit":10}""");
+        var result = await tool.ExecuteAsync(args.RootElement, CancellationToken.None);
+
+        Assert.Contains("of at least", result.Content);
+
+        // `at least` 不许孤立出现。扫描类工具的那一个恒与「有文件没扫全」的尾注同现，
+        // 调用方从那里学到的读法是「出现 at least 就去看成因」；locate 此前只改表头、
+        // 不给成因，于是同一个记号在两个工具上要学两遍。
+        Assert.Contains("expansion cap", result.Content);
+    }
+
+    // ---- 精确枚举那条承重论证上的唯一破口 ----
+
+    // QualifiedMemberKeys 把「够 60 分」翻译成四个区间查询，其中「相等/前缀」那一支查的是
+    // **OrdinalIgnoreCase** 排序数组。这只有在 CalculateFuzzyScore 的 90 分支也按序数判前缀时
+    // 才等价，而 `StartsWith(string)` 的默认重载是 CurrentCulture——ICU 会整体忽略
+    // default-ignorable 码点，于是软连字符、零宽字符、C0 控制符能凭空造出一个「前缀」。
+    //
+    // 三路独立验算（逐支枚举 / 代数 / 对抗性穷举）各带一名反驳者，一致收敛到这一处：干净
+    // 字母表上穷举五千多万对零违例，把可忽略字符加进字母表后成批出现，且**全部**是 90 分那支。
+    // 已改成显式 Ordinal，这两条守住它不被改回去——改回去不会有任何现成用例变红。
+    //
+    // 不可见字符**不写进字面量**，一律由码点现算。直接贴进源码的话，下一次格式化、编码转换
+    // 或一次复制粘贴就能把它悄悄抹掉，用例于是变成「abcdefgh 对 abcd 不该得 90」——恒假，
+    // 而没有任何人看得出它已经不测原来那件事了。
+    private static string Ignorable(int codePoint, int count = 1) => new((char)codePoint, count);
+
+    [Theory]
+    // 前缀凭空成立：序数前缀不成立、编辑距离 5、其余每一支也都不成立，旧实现却给 90
+    [InlineData(0x00AD, "abcdefgh", "abcd")]
+    [InlineData(0x200B, "compproperties_power", "compprop")]
+    [InlineData(0x200D, "pawnkinddef_colonist", "pawnkinddef")]
+    public void IgnorableCodePoints_DoNotFabricateAPrefixMatch(int codePoint, string text, string query)
+    {
+        Assert.True(FuzzyMatcher.CalculateFuzzyScore(Ignorable(codePoint) + text, query) < 90.0);
+    }
+
+    // 反向：可忽略字符落在 query 侧同样能造出前缀
+    [Fact]
+    public void IgnorableCodePointsInTheQuery_DoNotFabricateAPrefixMatchEither()
+    {
+        Assert.True(FuzzyMatcher.CalculateFuzzyScore("abcdefgh", "abcd" + Ignorable(0x00AD)) < 90.0);
+    }
+
+    // 最狠的一头：query 整串都是可忽略字符时它 collate 成空串，于是**任意** text 都「以它
+    // 开头」——一次查询把整个索引当成满分命中。第一行的非空判断拦不住（串确实非空）。
+    [Fact]
+    public void AQueryOfNothingButIgnorableCodePoints_DoesNotMatchEverything()
+    {
+        Assert.Equal(0.0, FuzzyMatcher.CalculateFuzzyScore("pawn_needs_joy", Ignorable(0x00AD, 2)));
     }
 }

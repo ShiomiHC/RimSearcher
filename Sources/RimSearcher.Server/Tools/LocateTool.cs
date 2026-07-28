@@ -35,8 +35,9 @@ public class LocateTool : ITool
         "paths — fuzzy when the other four come back empty, otherwise just the file whose name matches the query " +
         "exactly. " +
         "A section header reading 'N of M' means the listing was cut and M is the scope's total; a bare 'N' means " +
-        "the listing is that section's complete set; 'at least M' means M is a floor rather than the total — the " +
-        "member search filled its candidate pool with equally good name matches, so narrow the query for an exact count. " +
+        "the listing is that section's complete set; 'at least M' means M is a floor rather than the total, which " +
+        "only happens when the member search matches more name keys than the server expands in one call — a trailing " +
+        "note then states that cap, and narrowing the query gives an exact count. " +
         "Filters go inside the query: type:, method:, field:, def:, and scope: as an alias for the scope parameter.";
 
     public object JsonSchema => new
@@ -97,6 +98,9 @@ public class LocateTool : ITool
         // C# Types 段列过的名字。文件段用它去重：类型 `CompShield` 与文件 CompShield.cs 是
         // 同一个东西的两种写法，两段各列一次只是把同一条结果说两遍。
         var shownTypeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // 表头是否把成员总数改口成了 `at least`。改口时必须同时给出成因——见末尾那条脚注。
+        var memberTotalIsFloor = false;
 
         if (query.TypeFilter != null || (string.IsNullOrEmpty(query.MethodFilter) && string.IsNullOrEmpty(query.FieldFilter) && string.IsNullOrEmpty(query.DefFilter)))
         {
@@ -178,7 +182,8 @@ public class LocateTool : ITool
                     }
                 }
 
-                tally[tallySlot] = Count(shown, members.TotalInScope, "members", members.TotalIsLowerBound);
+                memberTotalIsFloor = members.TotalIsLowerBound;
+                tally[tallySlot] = Count(shown, members.TotalInScope, "members", memberTotalIsFloor);
 
                 // 折叠行放在整段末尾、按 TotalInScope 计数。原先每组各打一行、只数「取回的这批里
                 // 还剩几条」，而取回本身已被 limit.Scale(3) 砍过：method:CompTick 因此报 +25，
@@ -263,27 +268,56 @@ public class LocateTool : ITool
         var hasFilterPrefix = query.TypeFilter != null || query.MethodFilter != null
                               || query.FieldFilter != null || query.DefFilter != null;
 
+        // 调用方**显式打了扩展名**，那就是在问文件、不是在问类型。
+        var queryIsFileName = LooksLikeIndexedFileName(rawQuery);
+
         if (wantsFileFallback || !hasFilterPrefix)
         {
             var files = _sourceIndexer.Search(rawQuery, scope, limit.Count);
 
+            // 打了扩展名就走精确查表。模糊那条路是拿查询串跟**去掉扩展名**的基名比分的，
+            // 于是 `Pawn.cs` 对 `Pawn` 编辑距离恒为 3、短名直接 0 分出局
+            // （判据与实测见 SourceIndexer.GetPathsByFileName）。
+            var exactFiles = queryIsFileName
+                ? _sourceIndexer.GetPathsByFileName(rawQuery, scope, limit.Count)
+                : ScopedResult<string>.Empty;
+
             // 精确补充时只留「基名与查询词逐字相同」的那些，并去掉已在 C# Types 段出现过的
             // 同名项（类型 CompShield 与文件 CompShield.cs 是同一件事的两种写法）。
+            //
+            // 两道都只在调用方**没**说清要哪一个时才成立：
+            //   比较层——带扩展名时左边去了扩展名、右边没去，恒不等；
+            //   去重层——反编译产物的文件名逐个对应类型名，故查一个 .cs 文件名时同名类型
+            //           必然已在 C# Types 段列过，去重必然命中。
+            // 两道叠加，`.cs` 文件名查询的 Files 段在结构上永远不可达（`.xml` 之所以正常，
+            // 只是因为 XML 文件名通常不是类型名，走的是下面零命中兜底那一支）。
             var items = wantsFileFallback
-                ? files.Items.ToList()
-                : files.Items
-                    .Where(entry => string.Equals(
-                        Path.GetFileNameWithoutExtension(entry.Item), rawQuery, StringComparison.OrdinalIgnoreCase))
-                    .Where(entry => !shownTypeNames.Contains(Path.GetFileNameWithoutExtension(entry.Item)))
-                    .ToList();
+                ? WithExactFilesFirst(files.Items, exactFiles.Items)
+                : queryIsFileName
+                    ? exactFiles.Items.ToList()
+                    : files.Items
+                        .Where(entry => string.Equals(
+                            Path.GetFileNameWithoutExtension(entry.Item), rawQuery, StringComparison.OrdinalIgnoreCase))
+                        .Where(entry => !shownTypeNames.Contains(Path.GetFileNameWithoutExtension(entry.Item)))
+                        .ToList();
 
             if (items.Count > 0)
             {
                 // footer 的落选计数只在真的列出这一段时才计入，否则「补一条精确文件」会顺带
                 // 把几十条模糊文件命中的 out-of-scope 计数灌进去，脚注的数字就不再对应正文。
-                report.Add(files);
+                // 精确补充那一支计的是精确查表自己的落选数，两份不相加——相加会把同一条路径
+                // 数两遍。
+                report.Add(!wantsFileFallback && queryIsFileName ? exactFiles : files);
 
-                tally.Add(Count(items.Count, items.Count, "files"));
+                // 这一段的总数：兜底那一支列出来的是模糊结果（可能被 limit 砍过），故总数是
+                // 「列出的 + 被砍掉的」；精确补充那一支本来就只列同名的那几条，没有被砍的。
+                //
+                // 原先两个位置都传 items.Count，于是 total == shown 恒成立，表头**永远**写不出
+                // `of`——而同一段下面照样印着 `... +43 more files`。README 把 of 定成截断记号
+                // （「看到 of 就是被截了」），调用方读到的却是「5 files」加一行「还有 43 条」，
+                // 两句在同一屏里互相否定。
+                var fileTotal = wantsFileFallback ? items.Count + files.HiddenCount : items.Count;
+                tally.Add(Count(items.Count, fileTotal, "files"));
                 var fileLabels = ScopeArgs.SourceLabeling.Of(items.Select(e => e.SourceName));
                 sb.AppendLine($"\n**Files**{fileLabels.Header}:");
                 foreach (var entry in items)
@@ -308,6 +342,16 @@ public class LocateTool : ITool
         // 查询串里那些没被当成过滤器用的前缀必须说出来。'member:CompTick' 回一句 "No results"
         // 而 'method:CompTick' 有 144 条——同一个符号，一个说不存在、一个说有一百多处。
         // 差别全在那个没被识别的前缀上，而调用方在返回里看不到任何线索。
+        // 表头改口成 `at least` 时必须同时说清成因。两个扫描类工具的 `at least` 恒与
+        // 「有文件没扫全」那条尾注同现，调用方从那里学到的读法就是「看到 at least 去找成因」；
+        // locate 此前只改表头、一句成因都不给，于是同一个记号在两个工具上要各学一遍，
+        // 而这边那一次还无从判断「narrow the query」到底要窄到什么程度。
+        var floorNotice = memberTotalIsFloor
+            ? $"\n\n_The member search matched more than {SourceIndexer.MemberQualifiedKeyCap} name keys and "
+              + "expanded only that many, so the member total above is a floor rather than the total "
+              + "(server expansion cap; no parameter widens it). Narrow the query for an exact count._"
+            : string.Empty;
+
         var prefixNotice = new StringBuilder();
         if (query.UnknownPrefixes.Count > 0)
         {
@@ -345,6 +389,7 @@ public class LocateTool : ITool
         }
 
         if (footer != null) sb.Append(footer);
+        sb.Append(floorNotice);
         sb.Append(scopeNotice);
         sb.Append(prefixNotice);
 
@@ -411,6 +456,29 @@ public class LocateTool : ITool
         return total > shown
             ? $"{shown} of {floor}{OutputText.Quantity(total, plural)}"
             : $"{floor}{OutputText.Quantity(shown, plural)}";
+    }
+
+    // 索引只收 .cs / .xml（SourceIndexer.CollectFilesIterative 扫描时的判据），故只认这两种扩展名。
+    // 不能用 Path.GetExtension 泛判——`Verse.AI.Pawn` 的「扩展名」会被算成 `.Pawn`，
+    // 而带命名空间的全名查询是 locate 的一等输入。
+    private static bool LooksLikeIndexedFileName(string query) =>
+        query.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+        || query.EndsWith(".xml", StringComparison.OrdinalIgnoreCase);
+
+    // 零命中兜底那一支**不改**：模糊列出若干条正是它的用途（查 `Bodies_Humanlike.xml` 会顺带
+    // 给出 `Races_Humanlike.xml`，那是有用的）。这里只把精确命中补进最前面——它可能因为 0 分
+    // 根本没进模糊结果，而「索引里到底有没有这个文件」是这一段唯一必须答对的事。
+    // 折叠行仍按模糊那份的 HiddenCount 算：补进来的是模糊结果**之外**的条目，总数与已列出数
+    // 同增，差值不变。
+    private static List<ScopedEntry<string>> WithExactFilesFirst(
+        IReadOnlyList<ScopedEntry<string>> fuzzy, IReadOnlyList<ScopedEntry<string>> exact)
+    {
+        if (exact.Count == 0) return fuzzy.ToList();
+
+        var present = new HashSet<string>(fuzzy.Select(e => e.Item), StringComparer.OrdinalIgnoreCase);
+        var items = exact.Where(e => !present.Contains(e.Item)).ToList();
+        items.AddRange(fuzzy);
+        return items;
     }
 
     // 判据与 trace 共用（见 SymbolRow）：文件名推得出来就不印。locate 用 ` - 名字` 的破折号写法，

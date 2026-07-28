@@ -1362,8 +1362,8 @@ public class OutputReadabilityTests : IDisposable
         Assert.Contains("'N of M'", description);
         Assert.Contains("complete set", description);
 
-        // 第三形态：M 只是地板。成员段的候选池装不下同等好的匹配时表头改口 `at least M`
-        // （回归见 MemberFuzzyPoolTests），而调用方读到的只有这段 Description——
+        // 第三形态：M 只是地板。成员搜索匹配到的名字键超过服务端一次展开的上限时，表头改口
+        // `at least M`（回归见 MemberFuzzyPoolTests），而调用方读到的只有这段 Description——
         // 前两形写在这里、第三形不写，等于让 `at least` 变成一个没人认得的记号。
         Assert.Contains("at least M", description);
         Assert.Contains("floor", description);
@@ -1371,12 +1371,13 @@ public class OutputReadabilityTests : IDisposable
 
     // R52 当初把 member 从这句模糊承诺里摘掉，并补了一句「空的 Members 段 ≠ 这个成员不存在」，
     // 因为**成员**段在真实规模的索引上等于查不到：候选池按索引枚举序硬截 200 条，几十万个 key
-    // 下真值几乎必然落选。根因已修（候选池改为按 2-gram 重合度全序排名取前 500，回归见
-    // MemberFuzzyPoolTests），成员与其余三段站在同一条线上，那句免责因此必须撤——它描述的是
-    // 一个不复存在的行为，而「空的 Members 段不算证据」会把调用方从一条已经走得通的路上劝走。
+    // 下真值几乎必然落选。根因已修——候选池整个撤掉了，改为直接枚举「分数 >= 60」的解集
+    // （前缀区间 + 长度桶 + 首字母表，回归见 MemberFuzzyPoolTests），成员与其余三段站在同一条
+    // 线上，那句免责因此必须撤：它描述的是一个不复存在的行为，而「空的 Members 段不算证据」
+    // 会把调用方从一条已经走得通的路上劝走。
     //
-    // 这里只断言措辞。匹配行为由 MemberFuzzyPoolTests 断言，那边的 fixture 专门把候选池撑爆，
-    // 小 fixture 上装得下、怎么写都过。
+    // 这里只断言措辞。匹配行为由 MemberFuzzyPoolTests 断言，那边的 fixture 专门把合格键堆到
+    // 展开上限之上，小 fixture 上一次就展开完了、怎么写都过。
     [Fact]
     public void LocateDescription_PutsMembersBackInTheFuzzyPromise()
     {

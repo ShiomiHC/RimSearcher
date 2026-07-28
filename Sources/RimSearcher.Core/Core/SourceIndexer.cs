@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Collections.Frozen;
-using System.Numerics;
 using System.Text.RegularExpressions;
 
 namespace RimSearcher.Core;
@@ -50,7 +49,19 @@ public class SourceIndexer
     private FrozenDictionary<string, string[]>? _frozenShortTypeMap;
     private FrozenDictionary<string, string[]>? _frozenNgramIndex;
     private FrozenDictionary<string, (string TypeName, string MemberName, string MemberType, string FilePath)[]>? _frozenMemberIndex;
-    
+
+    // 成员键的四份检索结构。它们存在的理由是同一条：`CalculateFuzzyScore(key, query) >= 60`
+    // 的解集**可以精确枚举**，不必扫全表打分（推导见 QualifiedMemberKeys）。四份分别对应
+    // 能拿到 60 分的四类结构条件，前三份都是「前缀区间」形态，二分即可。
+    //
+    // 都只在 FreezeIndex 里建。冻结前 `_memberIndex` 的键集还在变，那时退化成一次全表打分——
+    // 慢，但判据逐字相同，故不存在「两套行为」（这是本方案与原 design 的分歧点：原方案是
+    // 冻结前沿用旧的候选池实现，那会让同一条查询在两种状态下给不同答案）。
+    private string[]? _frozenMemberKeysSorted;
+    private (string Word, string Key)[]? _frozenMemberWordIndex;
+    private (string Initials, string Key)[]? _frozenMemberInitialsIndex;
+    private FrozenDictionary<int, string[]>? _frozenMemberKeysByLength;
+
     // 索引里实际收进来了多少个文件。启动后用来判定「索引是空的」——空索引下每一条
     // 「没找到」都是不可信的，调用方必须被告知，否则会把它读成「这东西不存在」。
     public int IndexedFileCount => _processedFiles.Count;
@@ -68,12 +79,69 @@ public class SourceIndexer
         _frozenNgramIndex = _ngramIndex.ToFrozenDictionary(
             kv => kv.Key, kv => kv.Value.Distinct().ToArray(), StringComparer.OrdinalIgnoreCase);
         _frozenMemberIndex = _memberIndex.ToFrozenDictionary(
-            kv => kv.Key, 
-            kv => kv.Value.Distinct().ToArray(), 
+            kv => kv.Key,
+            kv => kv.Value.Distinct().ToArray(),
             StringComparer.OrdinalIgnoreCase);
-        
+
+        BuildMemberKeyLookups(_frozenMemberIndex.Keys);
+
         _cachedAllTypeNames = _frozenTypeMap.Keys.Concat(_frozenShortTypeMap.Keys)
             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    // 四份检索结构一次建完。代价是一次排序（真实语料几十万个键，与本方法已在做的
+    // FrozenDictionary 构建同量级），换来的是查询期不再扫全表。
+    //
+    // 字符串本身是共享的（数组里装的是同一批引用），新增的只有：一个键数组、两份
+    // (串, 键) 对、以及 initials / word 那些短串本身。
+    private void BuildMemberKeyLookups(IEnumerable<string> keys)
+    {
+        var sorted = keys.ToArray();
+        Array.Sort(sorted, StringComparer.OrdinalIgnoreCase);
+        _frozenMemberKeysSorted = sorted;
+
+        _frozenMemberKeysByLength = sorted
+            .GroupBy(key => key.Length)
+            .ToFrozenDictionary(group => group.Key, group => group.ToArray());
+
+        var words = new List<(string Word, string Key)>();
+        var initials = new List<(string Initials, string Key)>();
+
+        foreach (var key in sorted)
+        {
+            var parts = FuzzyMatcher.SplitIntoWords(key);
+
+            // 只有一个词、且那个词逐字就是键本身时，「某个词以 query 开头」与「键以 query 开头」
+            // 是同一个判定，前缀区间已经覆盖，不必再存一份。带分隔符的键（`notify_used`、
+            // `_hitpoints`）才进这两张表——键是小写的，故 SplitCamelCase 分不出边界，
+            // 实际入表的就是那批含 `_` / `.` / `-` / 空白的键。
+            if (parts.Count == 1 && string.Equals(parts[0], key, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            foreach (var word in parts.Distinct(StringComparer.OrdinalIgnoreCase))
+                words.Add((word, key));
+
+            // 首字母只有一个时永远匹配不上：查询词最短两个字符（见 SearchMembersByKeywords
+            // 里那道 `keyword.Length < 2` 的闸），而判据是 initials 以 query 开头。
+            var camel = FuzzyMatcher.ExtractCamelCaseInitials(key);
+            if (camel.Length >= 2) initials.Add((camel, key));
+        }
+
+        _frozenMemberWordIndex = SortPairs(words);
+        _frozenMemberInitialsIndex = SortPairs(initials);
+    }
+
+    // 第二级按 key 排：同一个词挂着多个键时，次序否则由上面那次分组的枚举顺序决定。
+    // 本方法的结果参与「合格键取前 N 条」的截断，故它必须是全序（同 F22/F25 的可复现判据）。
+    private static (string Text, string Key)[] SortPairs(List<(string Text, string Key)> pairs)
+    {
+        var array = pairs.ToArray();
+        Array.Sort(array, static (left, right) =>
+        {
+            var byText = StringComparer.OrdinalIgnoreCase.Compare(left.Text, right.Text);
+            return byText != 0 ? byText : StringComparer.OrdinalIgnoreCase.Compare(left.Key, right.Key);
+        });
+        return array;
     }
 
     public SourceIndexerSnapshot ExportSnapshot()
@@ -507,6 +575,40 @@ public class SourceIndexer
         return ScopeFilter.Apply(candidates, scope, limit, scoreGap: null);
     }
 
+    // 按**带扩展名的**文件名精确查表。调用方显式打了扩展名时（locate 的 Files 段）走这一条，
+    // 而不是从 Search 那份模糊结果里筛。
+    //
+    // 不能复用模糊那条路：`_index` 的键是 `Path.GetFileNameWithoutExtension`（见 Scan），
+    // 于是 CalculateFuzzyScore 拿 `Pawn.cs` 跟 `Pawn` 比，编辑距离恒为 3——长名还能靠
+    // 70×similarity 勉强得几十分（`CompShield.cs` 实测 54%），短名连 `similarity >= 0.6`
+    // 都够不到，子串支也不成立（`pawn` 里找不到 `pawn.cs`），**score 归零直接出局**。
+    // 实测 `locate 'Pawn.cs'` 回 671 条成员、一条路径都没有，而 Pawn.cs 确在索引里。
+    // 也就是说这一支的可达性此前取决于文件名有多长，那不是任何人立过的判据。
+    //
+    // 分数一律 100 且关掉断层收口：同名文件之间没有「谁更像」可言，它们逐字同名。
+    public ScopedResult<string> GetPathsByFileName(string fileName, ScopeSelection scope, int limit = 0)
+    {
+        if (string.IsNullOrWhiteSpace(fileName)) return ScopedResult<string>.Empty;
+
+        var stem = Path.GetFileNameWithoutExtension(fileName);
+        if (string.IsNullOrEmpty(stem)) return ScopedResult<string>.Empty;
+
+        IEnumerable<string> paths;
+        if (_frozenIndex != null && _frozenIndex.TryGetValue(stem, out var frozen)) paths = frozen;
+        else if (_index.TryGetValue(stem, out var bag)) paths = bag;
+        else return ScopedResult<string>.Empty;
+
+        var candidates = paths
+            .Where(path => string.Equals(
+                Path.GetFileName(path), fileName, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            // 同名文件散在多个源里时次序否则由索引期的并发写入决定，与本文件其余排序同一条判据
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .Select(path => new ScoredCandidate<string>(path, 100.0, path));
+
+        return ScopeFilter.Apply(candidates, scope, limit, scoreGap: null);
+    }
+
     public ScopedResult<string> Search(string query, ScopeSelection scope, int limit = 30)
     {
         var source = _frozenIndex != null
@@ -665,105 +767,148 @@ public class SourceIndexer
             : name;
     }
 
-    // 成员模糊候选池的容量。与 FuzzySearchTypes 那边的 Take(500) 同一个量级：池子是喂给
-    // CalculateFuzzyScore 的输入，而 F29 之后分够 60 的 key **全部**展开、不再二次截断——
-    // 于是这条上限是这条链上剩下的唯一一道限额，也是表头那个总数可能只是下界的唯一成因，
-    // 判据见 SearchMembersByKeywords 末尾的 totalIsLowerBound。
-    private const int MemberFuzzyPoolSize = 500;
+    // 成员键够不够格进结果的那条线。取值与判据都不动（这一整块改的是「怎么找出够分的键」，
+    // 不是「多少分算够」），只是从一个散在各处的字面量收成一个名字。
+    private const double MemberScoreFloor = 60.0;
 
-    // 两字符关键词那条路的池子容量。那条路按前缀匹配取，不按 2-gram 重合度排（见下面的分支）。
-    private const int MemberPrefixPoolSize = 50;
+    // 合格键的展开上限。
+    //
+    // 这道闸与它取代的那两道（`MemberFuzzyPoolSize = 500` / `MemberPrefixPoolSize = 50`）
+    // 形状完全不同：那两道是**先截断再判断谁够分**，于是「池外还有没有够分的」只能靠启发式猜
+    // （F30 那条「进池的是否全部够分」判据，自带一个承认过的漏报角落）；这一道是**先把够分的
+    // 全部算出来、再看装不装得下**，于是 `TotalIsLowerBound` 有确切依据——超限就是超限。
+    //
+    // 取这个数是为了给最坏情形一个上界（两字符查询的前缀区间在几十万个键上能拉出上万条），
+    // 而不是为了省常规查询的开销。真实语料上最宽的那几条（`method:Do` / `method:Is` /
+    // `field:id`）都落在它以内，故 `at least` 在成员这条路上从常见退化成罕见。
+    //
+    // public 而非 private：展示层要在改口成 `at least` 时把成因连同这个数说出来
+    // （见 LocateTool 的下界脚注），而「一个数字在两处各写一遍」正是本仓反复清理过的那类缺陷。
+    public const int MemberQualifiedKeyCap = 12000;
 
-    // 按 2-gram 重合度给**全部** member key 排名，取前 poolSize 条当模糊候选池。
-    // Truncated 报「有 key 因为这道上限被丢掉了」——重合度为 0 的不算，那些本来就不是候选。
+    // 编辑距离要往外找多远。
     //
-    // 这一步必须扫全量，不能「凑够 poolSize 条就停」。memberKeys 的枚举序跟着索引期的并发写入
-    // 走，与查询毫无关系：真实语料里几十万个 key，光 `comptickrar` 的头一个 2-gram `co` 就能
-    // 瞬间填满配额，真值再也进不来——`method:CompTickRar` 在有 CompTickRare 的语料里返回 0 条
-    // 成员，根因就是旧代码那句 `foreach (ngram) foreach (key) { … if (set.Count >= 200) break; }`。
-    // 于是 locate 对成员既不是精确匹配也不是可靠的模糊匹配，而是随枚举序退化。
+    // 分数 >= 60 只可能出自 CalculateFuzzyScore 的前六条 return，其中：
+    //   相等(100) / 前缀(90)        → 前缀区间
+    //   camel 首字母(85 / 75)       → initials 前缀区间
+    //   词边界(80)                  → word 前缀区间
+    //   typo(85~93)                 → 编辑距离 <= 2
+    //   `ed<=3 && sim>=0.75` 的 70×similarity → 要 >= 60 需 sim >= 6/7，即 maxLength >= 7×ed
+    // 再往后的 `55×similarity` 封顶 55、子串支封顶 50，**永远**够不到这条线。
+    // 故编辑距离那两支合起来的最远半径是 3，而 ed >= |两串长度差| 使长度桶成为一个完备的筛。
+    private const int MemberMaxUsefulEditDistance = 3;
+
+    // 「分够 MemberScoreFloor 的成员键」的**精确**集合（按 short-first 全序，越限时截断并报出来）。
     //
-    // 排名的全序是「重合度降序 → key 短的优先 → key 升序」，三项都与扫描次序无关，故同一条
-    // 查询在任何进程里得到同一个池子——与 F22/F25 立的是同一条可复现判据。长度排在名字之前，
-    // 是因为重合度并列时短 key 的模糊分更高（编辑距离更小），与本文件其余排序同一条判据。
+    // 这里替换掉的是 F28 建立、F29/F30 修补过的那套「候选池」。候选池的结构缺陷是
+    // **池子按 A 排序、取舍按 B 判定，而 A 不是 B 的上界**：2-gram 重合度高的可能分很低
+    // （`target` 对 `get`：含 `ge`+`et`，一分不够），重合度低的也可能分很高（短键编辑距离小）。
+    // 于是截断时丢掉的里面可能有合格项，而「池里有不合格项」也推不出「池外没有合格项」。
     //
-    // 代价是一次 O(全部 key) 扫描。每个 key 只按自身长度走一遍、每个 2-gram 查一次哈希，
-    // 比旧代码「每个 query 2-gram 各扫一遍全表、每次 Contains 走子串搜索」的最坏情形还便宜；
-    // 旧代码之所以快，靠的正是那个让它出错的 break。
-    private static (List<string> Keys, bool Truncated) TopKeysByNgramOverlap(
-        IEnumerable<string> keys,
-        IReadOnlyList<string> queryNgrams,
-        int poolSize)
+    // 改法不是把池子调大，是把「哪些键够分」从**打完分再看**变成**查得出来**：60 分这条线
+    // 可以逐条翻译成结构条件（见 MemberMaxUsefulEditDistance 上方那张对照），而每一条要么是
+    // 前缀区间、要么被长度桶框住。前三支一个不漏地取（它们各自蕴含 >= 60，不必再打分核对），
+    // 第四支拿真实分数精筛——于是结果与「扫全表逐个打分」逐字相同，代价却是对数级。
+    private (List<string> Keys, bool Truncated) QualifiedMemberKeys(string query)
     {
-        // 2-gram 打包成 int 查表，而不是逐位置 Substring(i, 2)——全表扫描下那是几百万次分配。
-        // 位掩码给同一个 2-gram 在一个 key 里出现多次去重，只有 64 位；GenerateNgrams 自带
-        // maxCount:50 的闸，越界分支只为不让这里依赖那个常数。
-        var bitOfNgram = new Dictionary<int, int>();
-        foreach (var ngram in queryNgrams)
+        var qualified = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (_frozenMemberKeysSorted != null
+            && _frozenMemberWordIndex != null
+            && _frozenMemberInitialsIndex != null
+            && _frozenMemberKeysByLength != null)
         {
-            if (ngram.Length != 2 || bitOfNgram.Count >= 64) continue;
-            bitOfNgram.TryAdd(PackNgram(ngram[0], ngram[1]), bitOfNgram.Count);
-        }
+            // 相等(100) 与前缀(90)
+            foreach (var key in PrefixRange(_frozenMemberKeysSorted, query))
+                qualified.Add(key);
 
-        if (bitOfNgram.Count == 0) return ([], false);
+            // 词边界(80)：SplitIntoWords(key) 里有词以 query 开头
+            foreach (var (_, key) in PrefixRange(_frozenMemberWordIndex, query))
+                qualified.Add(key);
 
-        var pool = new List<(int Overlap, string Key)>();
+            // camel 首字母(85 / 75)：initials 以 query 开头
+            foreach (var (_, key) in PrefixRange(_frozenMemberInitialsIndex, query))
+                qualified.Add(key);
 
-        // 池子满过一次之后，重合度低于这条线的 key 再也挤不进前 poolSize，直接跳过
-        var cutoff = 0;
-        var capacity = poolSize * 4;
-
-        // 只由裁剪那一步置位就够：cutoff 只在裁过之后才 > 0，故「因低于 cutoff 被跳过」
-        // 蕴含「已经裁过一次」。
-        var truncated = false;
-
-        foreach (var key in keys)
-        {
-            var seen = 0UL;
-            for (var i = 0; i + 1 < key.Length; i++)
+            // typo 与 70×similarity 两支：编辑距离 <= 3，故只可能落在 ±3 的长度桶里
+            for (var length = Math.Max(1, query.Length - MemberMaxUsefulEditDistance);
+                 length <= query.Length + MemberMaxUsefulEditDistance;
+                 length++)
             {
-                if (bitOfNgram.TryGetValue(PackNgram(key[i], key[i + 1]), out var bit))
-                    seen |= 1UL << bit;
+                if (!_frozenMemberKeysByLength.TryGetValue(length, out var bucket)) continue;
+
+                foreach (var key in bucket)
+                {
+                    if (qualified.Contains(key)) continue;
+                    // 先做便宜的编辑距离判定：桶里绝大多数键连这一关都过不了，
+                    // 而 CalculateFuzzyScore 每次都要给两个串各做一次 ToLowerInvariant。
+                    if (!FuzzyMatcher.EditDistanceAtMost(key, query, MemberMaxUsefulEditDistance)) continue;
+                    if (FuzzyMatcher.CalculateFuzzyScore(key, query) >= MemberScoreFloor) qualified.Add(key);
+                }
             }
-
-            var overlap = BitOperations.PopCount(seen);
-            if (overlap == 0 || overlap < cutoff) continue;
-
-            pool.Add((overlap, key));
-            if (pool.Count < capacity) continue;
-
-            truncated |= TrimToTopByOverlap(pool, poolSize);
-            cutoff = pool[^1].Overlap;
+        }
+        else
+        {
+            // 冻结前：检索结构还没建。判据一字不改，只是退化成一次全表打分。
+            foreach (var key in _memberIndex.Keys)
+            {
+                if (FuzzyMatcher.CalculateFuzzyScore(key, query) >= MemberScoreFloor) qualified.Add(key);
+            }
         }
 
-        truncated |= TrimToTopByOverlap(pool, poolSize);
-        return (pool.Select(entry => entry.Key).ToList(), truncated);
+        // 短的优先、同长按名。与本文件其余排序同一条判据：同分时短键的模糊分更高，
+        // 而调用方要的多半正是最短的那一个（`Zq` 该先给 `Zqa` 而不是 `Zqlongername0000`）。
+        // 三项都与扫描次序无关，故同一条查询在任何进程里给同一批键。
+        var ordered = qualified
+            .OrderBy(key => key.Length)
+            .ThenBy(key => key, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (ordered.Count <= MemberQualifiedKeyCap) return (ordered, false);
+
+        ordered.RemoveRange(MemberQualifiedKeyCap, ordered.Count - MemberQualifiedKeyCap);
+        return (ordered, true);
     }
 
-    private static int PackNgram(char first, char second)
-        => (char.ToLowerInvariant(first) << 16) | char.ToLowerInvariant(second);
-
-    // 边扫边裁，结果仍是全局前 poolSize：在一个全序下，「属于全局前 N」蕴含「属于任何含它的
-    // 子集的前 N」，故真值不可能被中途裁掉；而侥幸留到最后的非前 N 项会被最后这一次裁掉。
-    // 于是内存有上界，而选出来的那一批与扫描次序无关。
-    // 返回「这一次是否真丢了东西」，调用方拿它判断池子有没有把候选截掉。
-    private static bool TrimToTopByOverlap(List<(int Overlap, string Key)> pool, int poolSize)
+    // 排序数组上的前缀区间。以 query 开头的元素在 OrdinalIgnoreCase 全序下**必然连续**：
+    // 设 k 以 query 开头、x 不以 query 开头且 x >= query，则 x 与 query 在某个 i < |query|
+    // 处首次相异且 x[i] > query[i]；而 k[i] == query[i]，故 x > k。也就是说非前缀项不可能
+    // 夹在前缀项中间。
+    private static IEnumerable<string> PrefixRange(string[] sorted, string prefix)
     {
-        pool.Sort(static (left, right) =>
+        for (var i = LowerBound(sorted.Length, index => Compare(sorted[index], prefix)); i < sorted.Length; i++)
         {
-            var byOverlap = right.Overlap.CompareTo(left.Overlap);
-            if (byOverlap != 0) return byOverlap;
+            if (!sorted[i].StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) yield break;
+            yield return sorted[i];
+        }
+    }
 
-            var byLength = left.Key.Length.CompareTo(right.Key.Length);
-            return byLength != 0
-                ? byLength
-                : StringComparer.OrdinalIgnoreCase.Compare(left.Key, right.Key);
-        });
+    private static IEnumerable<(string Text, string Key)> PrefixRange(
+        (string Text, string Key)[] sorted, string prefix)
+    {
+        for (var i = LowerBound(sorted.Length, index => Compare(sorted[index].Text, prefix)); i < sorted.Length; i++)
+        {
+            if (!sorted[i].Text.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) yield break;
+            yield return sorted[i];
+        }
+    }
 
-        if (pool.Count <= poolSize) return false;
+    private static int Compare(string left, string right)
+        => StringComparer.OrdinalIgnoreCase.Compare(left, right);
 
-        pool.RemoveRange(poolSize, pool.Count - poolSize);
-        return true;
+    // 头一个「不小于目标」的下标。Array.BinarySearch 在有多个相等项时不保证返回第一个，
+    // 而这里要的是区间左端。
+    private static int LowerBound(int count, Func<int, int> compareToTarget)
+    {
+        var low = 0;
+        var high = count;
+        while (low < high)
+        {
+            var mid = low + ((high - low) >> 1);
+            if (compareToTarget(mid) < 0) low = mid + 1;
+            else high = mid;
+        }
+        return low;
     }
 
     // 一个 member key 下挂的成员全部计入 into，值是「命中了几个关键词」（keywordBonus 用它）。
@@ -816,11 +961,8 @@ public class SourceIndexer
             return ScopedResult<(string, string, string, string)>.Empty;
         var matchedMembers = new Dictionary<(string, string, string, string), int>();
 
-        var memberKeys = _frozenMemberIndex != null
-            ? (IEnumerable<string>)_frozenMemberIndex.Keys
-            : _memberIndex.Keys;
-
-        // 候选池装不下时，总数就不再是确定值而是下界，见循环末尾的判据。
+        // 合格键多到装不下展开上限时，总数就不再是确定值而是下界。
+        // 这个判定现在是**可判定**的（合格集合是算出来的），不再是 F30 那条带漏报角落的启发式。
         var totalIsLowerBound = false;
 
         foreach (var keyword in keywords)
@@ -833,63 +975,17 @@ public class SourceIndexer
             // 故按关键词开一份去重集，同一关键词内只计一次。
             var seenForThisKeyword = new HashSet<(string, string, string, string)>();
 
-            CollectMembersUnderKey(keyLower, matchedMembers, seenForThisKeyword, memberKinds);
+            var (qualifiedKeys, truncated) = QualifiedMemberKeys(keyLower);
+            if (truncated) totalIsLowerBound = true;
 
-            List<string> fuzzyCandidates;
-            bool poolTruncated;
-            if (keyLower.Length >= 3)
-            {
-                var ngrams = FuzzyMatcher.GenerateNgrams(keyLower, 2).Distinct().ToList();
-                (fuzzyCandidates, poolTruncated) = TopKeysByNgramOverlap(memberKeys, ngrams, MemberFuzzyPoolSize);
-            }
-            else
-            {
-                // 两字符关键词走前缀匹配，同样不能按枚举序截断：几十万个 key 下前缀命中动辄
-                // 上千条，取到哪 50 条纯看索引写入次序。前缀命中在 CalculateFuzzyScore 下全部
-                // 同分（90），故按「短的优先、同长按名字」定序——短名才是调用方要的那一个。
-                var prefixMatches = memberKeys
-                    .Where(k => k.StartsWith(keyLower, StringComparison.OrdinalIgnoreCase))
-                    .OrderBy(k => k.Length)
-                    .ThenBy(k => k, StringComparer.OrdinalIgnoreCase)
-                    .ToList();
-
-                // 这一路的截断判定不必看分数：前缀命中一律 90 分，全部合格，故「有没有第 51 条」
-                // 就是「总数准不准」。上面那句 OrderBy 本来就要把它们全部物化，不多一次扫描。
-                poolTruncated = prefixMatches.Count > MemberPrefixPoolSize;
-                fuzzyCandidates = prefixMatches.Take(MemberPrefixPoolSize).ToList();
-            }
-
-            var qualified = 0;
-
-            // 分够 60 的 key 全部展开，不再二次截断。取舍已经在候选池那一层做完了——
-            // 那里按 2-gram 重合度排了全序、取前 MemberFuzzyPoolSize 条（见 TopKeysByNgramOverlap）。
+            // 分够 60 的 key **全部**展开。与 F29 之前那道 `.Take(10)` 的差别不在这里——
+            // 那道早就去掉了；差别在于 qualifiedKeys 现在是完整解集而不是一个候选池的采样，
+            // 于是 `TotalInScope` 数的确实是这个 scope 下的全部命中，而不是某道内部上限
+            // 切出来的一片（`method:Notify_` 曾把 22 条印成「完整集」，真值 1361）。
             //
-            // 这里原先还有一道 `.Take(10)`，而它是 F28 之后剩下的最后一道假承诺：分够 60 的 key
-            // 常常远多于 10 个（`StartsWith` 一律给 90 分，共同前缀的成员名在本体里成百上千），
-            // 第 11 个之后的 key 连同它挂着的全部成员一起消失，**而 TotalInScope 数的是截断之后
-            // 的那一批**——于是表头把一个切片印成了「完整集」：`method:Notify_` 报 `22 members`
-            // （bare N，按契约即完整集），22 条去重后只有 10 个方法名，全落在字母序最前的
-            // `Notify_Ab…` 到 `Notify_Ap…` 上，而 `Notify_StartedCasting` 确在索引里。
-            // 少回结果只是慢一轮，把不全的说成全的会让调用方直接得出反向结论。
-            foreach (var fuzzyKey in fuzzyCandidates)
-            {
-                if (FuzzyMatcher.CalculateFuzzyScore(fuzzyKey, keyLower) < 60.0) continue;
-                qualified++;
-                CollectMembersUnderKey(fuzzyKey, matchedMembers, seenForThisKeyword, memberKinds);
-            }
-
-            // 池子截掉了东西、而进池的 key **全部**分够 60——说明 60 分这条线在池子边界处还没
-            // 切完，第 501 个多半也合格，于是它连同它挂着的成员都没被数进总数：总数是下界。
-            //
-            // 判据不能换成「池子满了」：几十万个 key 里含任一 2-gram 的太多，池子几乎总是满的，
-            // 那个信号会退化成常亮，而常亮的警告等于没有警告。分够 60 的只有少数（`CompTickRar`
-            // 那种池里只有 1 个够分）时，线是在池子内部切完的，池外那些更不可能够分，总数是准的。
-            //
-            // 两头都是启发式而非证明：重合度低的 key 偶尔也能拿高分（短 key 编辑距离小），
-            // 故理论上存在「没报下界但其实是下界」的角落。方向是安全的一侧——宁可少标，
-            // 不可把下界说成确数，那正是 F29 要治的病。
-            if (poolTruncated && qualified > 0 && qualified == fuzzyCandidates.Count)
-                totalIsLowerBound = true;
+            // 关键词自身那个 key 不必单独取：它以自己为前缀，前缀区间必然含它。
+            foreach (var key in qualifiedKeys)
+                CollectMembersUnderKey(key, matchedMembers, seenForThisKeyword, memberKinds);
         }
 
         var candidates = matchedMembers
@@ -1191,6 +1287,10 @@ public class SourceIndexer
         _frozenShortTypeMap = null;
         _frozenNgramIndex = null;
         _frozenMemberIndex = null;
+        _frozenMemberKeysSorted = null;
+        _frozenMemberWordIndex = null;
+        _frozenMemberInitialsIndex = null;
+        _frozenMemberKeysByLength = null;
     }
 
     private static ConcurrentBag<string> ToStringBag(IEnumerable<string> values)

@@ -135,13 +135,17 @@ public class ListDirectoryTool : ITool
             var page = all.Skip(offset).Take(limit).ToList();
             var shownThrough = offset + page.Count;
 
-            var result = $"`{path}` ({all.Count} entries"
+            // 单复数走全服共用的构词（README「低 Token 消耗」：不写 `1 entries`）。只有一项的
+            // 目录并不罕见——Mods 下一个只放 About/ 的壳目录就是。
+            var count = OutputText.Quantity(all.Count, "entries");
+
+            var result = $"`{path}` ({count}"
                 + (offset > 0 ? $", showing {offset + 1}-{shownThrough}" : shownThrough < all.Count ? $", showing the first {page.Count}" : "")
                 + ")\n"
                 + string.Join("\n", page.Select(e => e.Name + (e.IsDir ? "/" : "")));
 
             if (page.Count == 0)
-                result = $"`{path}` ({all.Count} entries) — offset {offset} is past the end.";
+                result = $"`{path}` ({count}) — offset {offset} is past the end.";
 
             // 「list a deeper subdirectory / use search_regex」两条旧出路对触发上限的目录都是
             // 死路：被略去的多半正是顶层文件（不在任何子目录里），而 search_regex 匹配的是

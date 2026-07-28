@@ -207,7 +207,7 @@ public class InspectTool : ITool
 
         // 明确点名续读要回到 inspect，且说清 File: 那一行不是这份 XML 的来源
         string ContinueHint(int nextStart) =>
-            $"(Full merged XML: {xmlLines.Length} lines. This is the merge of the whole ParentName chain, so it is "
+            $"(Full merged XML: {OutputText.Quantity(xmlLines.Length, "lines")}. This is the merge of the whole ParentName chain, so it is "
             + $"not the content of any one file — the `File:` path above holds only {defName}'s own un-merged lines. "
             + $"For the rest call inspect again with xmlStartLine: {nextStart}.)";
 
@@ -222,7 +222,7 @@ public class InspectTool : ITool
 
             sb.AppendLine(to < xmlLines.Length
                 ? ContinueHint(to + 1)
-                : $"(End of the merged XML, {xmlLines.Length} lines total.)");
+                : $"(End of the merged XML, {OutputText.Quantity(xmlLines.Length, "lines")} total.)");
             return;
         }
 
