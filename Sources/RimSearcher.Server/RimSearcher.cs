@@ -245,7 +245,10 @@ public sealed class RimSearcher
                     protocolVersion = NegotiateProtocolVersion(root),
                     capabilities = new
                     {
-                        tools = new { },
+                        // listChanged：client 缓存的工具表来自上一个进程实例，而本进程可能是另一个
+                        // 二进制（开发期改完描述重新构建，client 会懒 spawn 新 exe 却继续用旧缓存）。
+                        // 声明这项能力才有资格在握手后告诉它那份缓存可能已经过期。
+                        tools = new { listChanged = true },
                         logging = new { }
                     },
                     serverInfo = new
@@ -262,6 +265,11 @@ public sealed class RimSearcher
             else if (method == "notifications/initialized" || method == "initialized")
             {
                 await LogAsync("RimSearcher: Server initialized and ready to handle requests.", "info");
+
+                // 每次握手完都推一条：一个刚起来的进程无从知道 client 缓存的是哪个二进制的工具表，
+                // 而这条通知的代价只是让它重拉一次 tools/list。反过来漏发的代价是整场会话都对着
+                // 旧描述工作——两边不对称，所以宁可每次都发。
+                await SendNotificationAsync("notifications/tools/list_changed", new { });
             }
             // 保活探针。不应答会让 client 判定连接已死，进而整体弃用本服务器。
             else if (method == "ping")

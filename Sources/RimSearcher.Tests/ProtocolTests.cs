@@ -217,6 +217,23 @@ public class ProtocolTests
         });
     }
 
+    // 声明 tools.listChanged 是发 notifications/tools/list_changed 的前提：能力没声明就推通知，
+    // 严格的 client 有理由直接丢弃它。两件事只有同时成立才有意义，所以在同一个测试里一起断言。
+    [Fact]
+    public async Task Initialized_AnnouncesToolListChanged()
+    {
+        var lines = await ExchangeAsync(
+            """{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}""",
+            """{"jsonrpc":"2.0","method":"notifications/initialized"}""");
+
+        var capabilities = Assert
+            .Single(lines, line => line.TryGetProperty("result", out var r) && r.TryGetProperty("capabilities", out _))
+            .GetProperty("result").GetProperty("capabilities");
+        Assert.True(capabilities.GetProperty("tools").GetProperty("listChanged").GetBoolean());
+
+        Assert.Single(lines, line => IsMethod(line, "notifications/tools/list_changed"));
+    }
+
     [Fact]
     public async Task Ping_IsAnswered()
     {
