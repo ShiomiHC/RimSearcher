@@ -47,7 +47,13 @@ public class TraceTool : ITool
         "per file plus a '+N more of M matching lines in this file' count — counts are matching lines, not match " +
         "sites, so a line hit twice counts once). Usages is not a call graph: it is raw text, so same-named " +
         "members on unrelated types, differently-cased identifiers and commented-out code all land in the same " +
-        "list, while inherited calls are missed.";
+        "list, while inherited calls are missed. " +
+        // `at least N` 的读法此前只成文于 locate 的 Description，而这个工具同样会印它。
+        // 记号在两处出现、读法只在一处写着，缺席的那一处就只能靠调用方就近找个上限来解释——
+        // 而这边最顺手的上限恰好是 limit 的 default 50。
+        "A usages header that reads 'at least N matching lines' means some file could not be scanned in full " +
+        "and N is a floor; the trailing note names those files. limit never produces that wording — when the " +
+        "result cap bites, the header switches to 'first N preview lines' instead.";
 
     public object JsonSchema => new
     {
@@ -174,11 +180,26 @@ public class TraceTool : ITool
             var sbInheritors = new System.Text.StringBuilder();
             // 深度标记的约定只在**这次真的印出了标记**时才需要说明；一个标记都没有时讲解一套
             // 不存在的记法，反而会让读者去找它（同 R9：表头说过的话不逐行重复，没发生的事不说）。
-            var depthLegend = shownDeepest > 1 ? ", untagged = direct" : "";
+            //
+            // 「direct = depth 1」必须点破：整份返回里 depth 的原点从没写过，于是表头的
+            // `deepest 6 levels down` 该对应 `[depth 6]` 还是 `[depth 5]` 无从判断，而这两种
+            // 读法在「要覆写哪一层」上给出不同答案。
+            var depthLegend = shownDeepest > 1 ? ", untagged = direct (depth 1)" : "";
             // 没被截断就不写「Listed below」——那时它逐字等于前面那个总数。沿用 R33 的读法：
             // 出现「列了多少」这一格本身就是「被截了」的信号。
+            //
+            // 截断留下的**恒是最浅的那一批**（GetInheritors 按 depth 升序排候选，见那里的注释），
+            // 而返回里一个字都没说这件事。默认读法是「列表是这棵树的一个样本」，于是「样本里
+            // 最深的一层」被当成「树最深的一层」——R42 治好的是表头报错深度，这里复发成
+            // **把 depth 4 的那批名字报成 depth 6 的成员**。尾行只说「被截了」，没说截的是哪一批。
+            //
+            // 「第 5、6 层有谁」这套工具确实给不出（没有 offset、也没有参数抬得动 200 这个顶）。
+            // 答不了不是缺陷，不说自己答不了才是。
+            var depthCoverage = shownDeepest < shape.Deepest
+                ? $", shallowest first — nothing below depth {shownDeepest} is listed"
+                : ", shallowest first";
             var listed = inheritors.Items.Count < inheritors.TotalInScope
-                ? $". Listed below: {inheritors.Items.Count}"
+                ? $". Listed below: {inheritors.Items.Count}{depthCoverage}"
                 : string.Empty;
             sbInheritors.AppendLine(
                 $"Subclasses of '{symbol}' ({inheritors.TotalInScope} in scope '{scope.Expression}', transitive — "
@@ -187,12 +208,29 @@ public class TraceTool : ITool
                 + $"{listed}{inheritorLabels.Header}:");
             sbInheritors.AppendLine(string.Join(Environment.NewLine, results));
 
-            var fold = ScopeArgs.FoldLine(inheritors, "subclasses", indent: "", limit: limit);
+            // 顶到 200 时「narrow the query」在继承树上不是个可执行动作：查询词就是那个类名，
+            // 没得再窄，而这个模式既没有 offset 也没有任何参数抬得动上限。唯一的出路是从列表里
+            // 挑一个子树根重跑——这个动作在 schema、Description、返回里此前一处都没写。
+            var fold = ScopeArgs.FoldLine(
+                inheritors, "subclasses", indent: "", limit: limit,
+                capAction: "re-trace a listed type as its own root; depths then restart from it");
             if (fold != null) sbInheritors.AppendLine(fold);
 
             var inheritorsReport = new ScopeReport();
             inheritorsReport.Add(inheritors);
-            var inheritorsFooter = inheritorsReport.Render(scope, "subclasses");
+            // 越界脚注原先只报「外面还有 91 个」，而表头那句 `23 direct, deepest 6 levels down`
+            // 是 scope 内的形状——「换个 scope 会不会改变深度」在返回里完全不可判定，调用方只能猜。
+            // 盲测里它猜错并写进了答案正文（实测 scope:'all' 仍是 deepest 6）。与 R42 同形，
+            // 轴从「整树 vs 截断切片」换成「域内树 vs 全域树」。
+            //
+            // 这两个数不必重算：depths 是 GetInheritors 在**全域**上跑完 BFS 的产物，
+            // scope 过滤发生在它之后。
+            var directEverywhere = depths.Values.Count(d => d == 1);
+            var deepestEverywhere = depths.Values.DefaultIfEmpty(1).Max();
+            var inheritorsFooter = inheritorsReport.Render(
+                scope, "subclasses",
+                extra: $"including them the tree is {directEverywhere} direct, deepest "
+                       + $"{OutputText.Quantity(deepestEverywhere, "levels")} down");
             if (inheritorsFooter != null) sbInheritors.Append(inheritorsFooter);
             sbInheritors.Append(scopeNotice);
 
@@ -397,8 +435,10 @@ public class TraceTool : ITool
             sb.AppendLine(wasTruncated
                 ? $"Text matches for '{symbol}' (first {shownResults.Count} preview lines in scope "
                   + $"'{scope.Expression}', whole word and case-insensitive){usageLabels.Header}:"
+                // 下界记号必须就地指出成因，否则读者会拿 limit 去解释它（见 ScopeArgs.LowerBoundReason）
                 : $"Text matches for '{symbol}' ({ScopeArgs.FoundCount(totalMatches, anyFileIncomplete)} "
-                  + $"in scope '{scope.Expression}'{casing}){usageLabels.Header}:");
+                  + $"in scope '{scope.Expression}'{casing}"
+                  + $"{ScopeArgs.LowerBoundReason(anyFileIncomplete)}){usageLabels.Header}:");
             sb.AppendLine();
 
             // 本次要列出的文件里有重名时补目录（见 ScopeArgs.DisambiguateFileNames）。

@@ -366,7 +366,7 @@ public static class ModLayoutResolver
         if (node == null) return null;
 
         var folders = new List<FolderEntry>();
-        var included = 0;
+        var includedNames = new List<string>();
         var skipped = 0;
 
         foreach (var item in node.Elements("li"))
@@ -383,7 +383,7 @@ public static class ModLayoutResolver
                     continue;
                 }
 
-                included++;
+                includedNames.Add(value);
             }
 
             // ModLoadFolders 只把 "/" 和 "\" 当作 mod 根
@@ -398,10 +398,21 @@ public static class ModLayoutResolver
 
         if (folders.Count == 0) return null;
 
-        // 没给 active_mods 时条件目录一律收下：索引比游戏宽一点无害，漏索引才难查
-        if (included > 0 && activeMods == null)
-            notes.Add($"{OutputText.Quantity(included, "conditional folders")} in {LoadFoldersFileName} "
-                      + "included unconditionally");
+        // 没给 active_mods 时条件目录一律收下：索引比游戏宽一点无害，漏索引才难查。
+        //
+        // 目录名必须点出来。只给个数时，这条忠告与「我手上这个命中在不在其中」之间没有任何
+        // 可指认的连接——第九轮盲测里两条链各自读了 `1.6/CE/Patches/` 下的文件，而它与一份
+        // 无条件补丁在返回里完全同形；判据与 R49（未扫全的文件要点名）、W1（下界记号要指向
+        // 成因）同源：记号本身够不上，记号与成因之间那条线才是要害。
+        if (includedNames.Count > 0 && activeMods == null)
+        {
+            var head = string.Join(", ", includedNames.Take(3));
+            var rest = includedNames.Count - Math.Min(3, includedNames.Count);
+            notes.Add($"{OutputText.Quantity(includedNames.Count, "conditional folders")} in "
+                      + $"{LoadFoldersFileName} included unconditionally "
+                      + $"({head}{(rest > 0 ? $" and {rest} more" : string.Empty)}) — "
+                      + "a hit under one of these may come from content the game would not load");
+        }
 
         if (skipped > 0)
             notes.Add($"{OutputText.Quantity(skipped, "conditional folders")} skipped by active_mods");

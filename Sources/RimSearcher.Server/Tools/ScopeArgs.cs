@@ -135,12 +135,20 @@ public static class ScopeArgs
             + "negatives are all clamped to that cap. Anything else — 'many', true, an object — is rejected "
             + "rather than silently replaced by the default."
             // 断层收口只作用于**真正模糊的那一批**。无条件写「fuzzy sections also fold away…」时，
-            // method:/def: 这类精确名查询也被扣上「可能还有你永远拿不到的结果」——那是个不可证伪
-            // 的疑虑：返回里没有任何一处能判断它有没有发生。实测精确名过滤走的是全等匹配，
-            // 分数恒为 100，断层收口对它不可能触发。
+            // method:/def: 这类查询也被扣上「可能还有你永远拿不到的结果」——那是个不可证伪
+            // 的疑虑：返回里没有任何一处能判断它有没有发生。
+            //
+            // 原先这句把 method:/field: 称作 "exact-name filters"，理由是「实测精确名过滤走的是
+            // 全等匹配，分数恒为 100」。F32 之后那个理由不成立了：合格键改成按 60 分线精确枚举，
+            // 前缀命中（CompTickRare 之于 CompTick）以 90 分正式进入这一段的总数。于是
+            // `method:CompTick` 的表头写 200，而叫这个名字的方法只有 144，默认 limit 印出来的
+            // 前 10 条又恰好全是 100%——混合在默认返回里一处痕迹都没有。
+            // 这句话本身成了假陈述，且是**唯一**一处告诉调用方「这个总数只含同名项」的地方。
             + (fuzzy
                 ? " Score-gap folding drops results far below the top score and no limit brings them back; it "
-                  + "only applies to fuzzy matching, so exact-name filters (method:, field:) are never folded that way."
+                  + "only applies to fuzzy matching. method: and field: restrict the search to members but still "
+                  + "match names by score, so their section total counts near-name matches too — the (N%) on each "
+                  + "row is what tells them apart, and anything below 100% is not the name that was asked for."
                 : string.Empty)
     };
 
@@ -290,10 +298,11 @@ public static class ScopeArgs
     //     的 effectiveLimit = Min(limit, cutoff)）。原先这里一律劝 'all'，调用方照做后
     //     一条也没多出来，还会把「+N more」读成服务端在敷衍。
     public static string? FoldLine<T>(
-        ScopedResult<T> result, string noun, string indent = "  ", ResultLimit? limit = null)
+        ScopedResult<T> result, string noun, string indent = "  ", ResultLimit? limit = null,
+        string? capAction = null)
         => FoldLine(
             result.HiddenCount, result.Items.Count,
-            result.TruncatedByScoreGap, result.TruncatedByLimit, noun, indent, limit);
+            result.TruncatedByScoreGap, result.TruncatedByLimit, noun, indent, limit, capAction);
 
     // 显式计数的重载。分段显示的场景（locate 的 Members 按 method/property/field 分组）里，
     // 真正被藏起来的条数由「ScopeFilter 的 limit」和「每组的显示配额」两层共同决定，
@@ -305,7 +314,12 @@ public static class ScopeArgs
         bool truncatedByLimit,
         string noun,
         string indent = "  ",
-        ResultLimit? limit = null)
+        ResultLimit? limit = null,
+        // 顶到硬上限时「怎么才能看到剩下的」因工具而异。inheritors 没有 offset、也没有任何
+        // 参数能抬这个顶，唯一出路是换一个子树根重跑——而「narrow the query」在一棵继承树上
+        // 根本不是个可执行动作（查询词就是那个类名，没得再窄）。盲测里调用方为此拿 9 次 trace
+        // 盲探，其中两次纯白跑。留给调用方自己填的那半句，各工具自己说。
+        string? capAction = null)
     {
         if (hiddenCount <= 0) return null;
 
@@ -315,7 +329,7 @@ public static class ScopeArgs
 
         var hint = truncatedByLimit
             ? capReached
-                ? $"server cap {HardLimit} reached, narrow the query"
+                ? $"server cap {HardLimit} reached, {capAction ?? "narrow the query"}"
                 : limit?.Unlimited == true
                     ? "narrow the query to see the rest"
                     // 'all' 也只到硬上限。藏起来的比上限还多时，`to expand` 会被读成「照做就拿全了」
@@ -328,7 +342,14 @@ public static class ScopeArgs
             // 断层收口砍掉的是「相对首条掉了 40 分以上」的结果，要够到它们只能让首条不再那么
             // 突出——换个更宽泛的词，或改用 search_regex。原先写的是 refine（收窄），方向正好反了：
             // 照做只会把这些结果推得更远。
-            : "broaden or reword the query; limit does not expand these";
+            //
+            // 后来写成 "broaden or reword" 仍不够：reword 不带方向，而调用方手上最顺的
+            // 「换个说法」恰恰是**加限定**（盲测里加了 `type:` 前缀，那是收窄），照做后被折叠的
+            // 那批更够不着，于是把一条查得到的结果写成了 unanswerable（实测
+            // `locate type:Shield scope:'all' limit:'all'` 一次就列出 DrawNewCompShieldPatch）。
+            // 方向必须写死在句子里。
+            : "use a shorter, less specific query; folding is relative to the top score, so narrowing "
+              + "never brings these back and limit does not expand them";
 
         // 名词槽不留空。locate 的 Members 段是分种类子组印的，折叠行又与组内条目同缩进，
         // 于是 `... +1938 more` 紧跟在 Properties 组末尾时读起来像「还有 1938 个 property」，
@@ -383,6 +404,20 @@ public static class ScopeArgs
             ? $"at least {OutputText.Quantity(total, "matching lines")}"
             : OutputText.Quantity(total, "matching lines");
 
+    // 下界记号自己不带成因引用时，读者会就近找一个上限来解释它。search_regex 的 schema 里唯一
+    // 带上限语义的东西是 `limit` 的 default 100，而 `at least 105` 与它只差 5——第九轮盲测三条
+    // 互不相干的任务链各自独立做了同一个算术推断（「被 limit 截了」），其中一条据此归因错人并
+    // 写进结论，另一条为「解除截断」白跑一轮。真正的成因（有文件没扫全）写在整份结果之后，
+    // 中间还隔着预览上限那一行，两处之间没有任何可指认的连接。
+    //
+    // R49 点名了是哪个文件，但点名解决的是「该不该在意」，不是「这个 at least 从哪来」。
+    // 这里补的正是后者：记号旁边就说清成因在哪、以及 limit 与它无关（limit 咬人时表头走的是
+    // `first N preview lines` 那一形，压根不会出现 at least）。
+    public static string LowerBoundReason(bool anyFileIncomplete)
+        => anyFileIncomplete
+            ? "; 'at least' comes from the trailing 'not scanned in full' note, not from limit"
+            : string.Empty;
+
 
 
     // 每文件预览的折叠行。search_regex 与 trace usages 共用，且它是全语料里出现最频的一条
@@ -431,11 +466,19 @@ public sealed class ScopeReport
 {
     private readonly Dictionary<string, int> _outOfScope = new(StringComparer.OrdinalIgnoreCase);
 
-    public void Add<T>(ScopedResult<T> result)
+    // 合计是由哪些段凑出来的。locate 的这份脚注跨五段累加，而**哪几段参与**跟着这次查询的
+    // 命中形态变：`method:CompTick` 在 scope 'base' 下只有 Members 段，报 miho 7；同一条查询
+    // 在 scope 'HAR' 下 Members 段空了、触发 Files 段模糊查名，同一个 miho 就报 8。
+    // 调用方看到同一个源两次计数不一致，只能对整份脚注打折使用——R48 花力气建起来的合计
+    // 就此变成一个不可复现的数。构成一列出来，两个数立刻都对得上。
+    private readonly Dictionary<string, int> _byNoun = new(StringComparer.Ordinal);
+
+    public void Add<T>(ScopedResult<T> result, string? noun = null)
     {
         foreach (var (source, count) in result.OutOfScope)
         {
             _outOfScope[source] = _outOfScope.GetValueOrDefault(source) + count;
+            if (noun != null) _byNoun[noun] = _byNoun.GetValueOrDefault(noun) + count;
         }
     }
 
@@ -449,7 +492,9 @@ public sealed class ScopeReport
 
     // noun：合计的名词槽。locate 的这份脚注跨四段累加（类型 / 成员 / def / 内容命中），
     // 只有 "matches" 说得准；trace inheritors 那边全是子类，故由调用方点名。
-    public string? Render(ScopeSelection scope, string noun = "matches")
+    // extra：调用方独有的、只有把落选那批算进来才成立的一句话（trace inheritors 用它给出
+    // 全域树的形状）。挂在逐源列表之后、出路那句之前。
+    public string? Render(ScopeSelection scope, string noun = "matches", string? extra = null)
     {
         if (_outOfScope.Count == 0) return null;
 
@@ -463,13 +508,28 @@ public sealed class ScopeReport
         // 且紧挨着一个不必做算术的同型数字。盲测里 7 个分项被加成 41（真值 47）。
         // 单源时不加：那时合计逐字等于那一个数（同「推得出来就不印」）。
         var total = _outOfScope.Count > 1
-            ? $"{OutputText.Quantity(_outOfScope.Values.Sum(), noun)} — "
+            ? $"{OutputText.Quantity(_outOfScope.Values.Sum(), noun)}{Composition()} — "
             : string.Empty;
 
         var sb = new StringBuilder();
         sb.Append($"\n_Outside scope '{scope.Expression}': {total}");
         sb.Append(string.Join(", ", parts));
+        if (extra != null) sb.Append($"; {extra}");
         sb.Append(". Pass scope to include them (e.g. scope:'all')._");
         return sb.ToString();
+    }
+
+    // 只有一种构成时不印：那时它逐字等于前面那个合计（同「推得出来就不印」）。
+    // 次序按数量降序，与后面的逐源列表同序。
+    private string Composition()
+    {
+        if (_byNoun.Count < 2) return string.Empty;
+
+        var parts = _byNoun
+            .OrderByDescending(kv => kv.Value)
+            .ThenBy(kv => kv.Key, StringComparer.Ordinal)
+            .Select(kv => OutputText.Quantity(kv.Value, kv.Key));
+
+        return $" ({string.Join(" + ", parts)})";
     }
 }

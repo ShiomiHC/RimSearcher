@@ -54,8 +54,9 @@ public class InspectTool : ITool
         "Full detail for one exactly-named def or C# type; no fuzzy matching. " +
         "Def mode returns the XML merged down the whole ParentName chain within the current scope — inheritance " +
         "only, which no single XML file contains — plus the C# classes referenced from it. Mod PatchOperations " +
-        "are never applied, so this is the merged definition, not the one the running game would see; a def also " +
-        "overridden by an out-of-scope mod resolves to the in-scope copy. Fields are not marked by origin — to " +
+        "are never applied, so this is the merged definition, not the one the running game would see; if a mod " +
+        "outside the current scope also defines this def, that copy is ignored and the in-scope one is returned. " +
+        "Fields are not marked by origin — to " +
         "tell a def's own fields from inherited ones, read_code the `File:` path, which holds only its own " +
         "un-merged lines. " +
         "Type mode returns the base-class chain (interfaces are not on it — use trace mode:'inheritors' for those) "
@@ -201,9 +202,16 @@ public class InspectTool : ITool
 
     private static void AppendResolvedXml(StringBuilder sb, string[] xmlLines, string defName, int startLine)
     {
+        // R51 那句「PatchOperations 从不被应用」此前只在 tools/list 的 Description 里。第九轮
+        // 盲测里它两次是整条链的转折点，但两次都靠调用方通读了 schema——返回本身一个字没说。
+        // 而这一段恰恰是整份返回里唯一会被当作「游戏里的那个 def」读的东西：base 与 all 逐字
+        // 相同时（HAR 的补丁改的是 Class 属性，不进这份 XML），读起来就是「没有 mod 改过」。
+        // 能力边界不是缺陷，不说自己答不了才是——把那半句复制到它作用的那个块的标题上。
+        const string PatchNote = "mod PatchOperations are not applied, so a mod patch against this def "
+                                 + "is not reflected below";
         sb.AppendLine(startLine > 0
-            ? $"\n**Resolved XML** (lines {startLine}-{Math.Min(startLine + XmlWindowLines - 1, xmlLines.Length)} of {xmlLines.Length}):"
-            : "\n**Resolved XML:**");
+            ? $"\n**Resolved XML** (lines {startLine}-{Math.Min(startLine + XmlWindowLines - 1, xmlLines.Length)} of {xmlLines.Length}; {PatchNote}):"
+            : $"\n**Resolved XML** ({PatchNote}):");
 
         // 明确点名续读要回到 inspect，且说清 File: 那一行不是这份 XML 的来源
         string ContinueHint(int nextStart) =>

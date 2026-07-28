@@ -47,11 +47,14 @@ public static class GrammarRules
 
     // 数词后面**合法地**跟着一个以 s 结尾的非名词的那几个词。规则二甲是纯结构判定（不查词表），
     // 少了这张表会把 `1 file was abandoned mid-scan` 里的 was 判成复数名词。
+    // `ms` 是单位符号，单复数同形（1 ms / 5 ms），不是漏写的单数式。它此前不在表里，于是
+    // sync_sources 的 `Source check (N ms, …)` 只在这次耗时恰好取整到 1 时才红——一道
+    // 跟着机器快慢闪的闸比没有闸更糟：它红的时候没人相信是真的。
     private static readonly HashSet<string> NotNouns = new(StringComparer.Ordinal)
     {
         "is", "was", "has", "this", "its", "as", "less", "plus", "versus", "does", "goes",
         "needs", "gives", "says", "exists", "starts", "shares", "of", "more", "and", "or",
-        "to", "in", "for", "at", "from", "on", "the",
+        "to", "in", "for", "at", "from", "on", "the", "ms",
     };
 
     // 结果行末尾方括号里**不是**来源标签的那几种。来源标签的判据是「行尾的 [x]」（见
@@ -111,6 +114,22 @@ public static class GrammarRules
     [
         "were not scanned in full",
         "expansion cap",
+    ];
+
+    // 「看起来像成因、其实不是」的上限说明。它们与下界记号同屏时，读者会就近用它们解释那个下界。
+    private static readonly string[] FloorDecoys =
+    [
+        "previews are capped at",
+        "files are listed",
+        "scan stopped at",
+        "server cap",
+    ];
+
+    // 下界记号自带的、指向真成因的引用（ScopeArgs.LowerBoundReason / locate 的 floorNotice）
+    private static readonly string[] FloorPointers =
+    [
+        "'at least' because",
+        "so the member total above is a floor",
     ];
 
     public static IReadOnlyList<GrammarViolation> Check(string text)
@@ -243,9 +262,16 @@ public static class GrammarRules
 
     // ---- 四、`at least` 的读法（管「说不说」；F26 表头没随尾注改口、F30 新记号只在一处实现） ----
     //
-    // 甲：出现下界记号就必须给成因。两个扫描类工具的 `at least` 恒与「有文件没扫全」同现，
-    //     调用方从那里学到的读法就是「看到 at least 去找成因」；locate 加这个记号时若只改表头，
-    //     同一个记号在两个工具上就要各学一遍。
+    // 甲：出现下界记号就必须给成因，**且成因必须是可指认的**。两个扫描类工具的 `at least` 恒与
+    //     「有文件没扫全」同现，调用方从那里学到的读法就是「看到 at least 去找成因」；locate 加
+    //     这个记号时若只改表头，同一个记号在两个工具上就要各学一遍。
+    //
+    //     第九轮把这条从「同现」升格成「可指认」：三条互不相干的任务链在**成因确实同现**的返回上
+    //     各自独立误读了同一个 `at least 105`——它们就近拿 `limit` 的 default 100 去解释那个下界
+    //     （只差 5，算术上太顺），而真正的成因隔在整份结果之后、中间还夹着别的尾注。同现不够，
+    //     记号自己必须带一条指向成因的引用（LowerBoundReason）。
+    //     反面用例见 GrammarRulesTests：`at least` 与一个**并非其成因**的上限说明同时可见时，
+    //     不带引用就判违规。
     // 乙：反向。有文件没扫全时总数只是下界，表头必须跟着改口，否则一句说「7 found」、一句说
     //     「有文件没扫全」，调用方无从判断该信哪个。
     //     例外是表头已经换了量纲的那一支：扫描停在预览上限时表头数的是**印出来的**预览行
@@ -258,6 +284,13 @@ public static class GrammarRules
         if (hasFloor && !hasCause)
             found.Add(new GrammarViolation("at least 的读法", string.Empty,
                 "表头改口成 `at least` 却没有任何一句说清成因"));
+
+        // 成因在场还不够：返回里同时可见另一个上限说明时，读者能就近拿它解释这个下界。
+        // 此时记号必须自带指向真成因的引用。
+        if (hasFloor && hasCause && FloorDecoys.Any(d => text.Contains(d, StringComparison.Ordinal))
+            && !FloorPointers.Any(p => text.Contains(p, StringComparison.Ordinal)))
+            found.Add(new GrammarViolation("at least 的读法", string.Empty,
+                "`at least` 与一个并非其成因的上限说明同时可见，而记号自己没有指向真成因的引用"));
 
         var switchedUnit = text.Contains("preview lines in scope", StringComparison.Ordinal);
         if (text.Contains("were not scanned in full", StringComparison.Ordinal) && !hasFloor && !switchedUnit)
@@ -361,8 +394,8 @@ public static class GrammarRules
     {
         string[] actionable =
         [
-            "pass ", "use ", "raise ", "narrow", "broaden", "reword", "offset=",
-            "limit", "scope", "next page", "read_code", "search_regex", "locate",
+            "pass ", "use ", "raise ", "narrow", "broaden", "reword", "offset=", "shorter",
+            "limit", "scope", "next page", "read_code", "search_regex", "locate", "trace",
         ];
 
         foreach (var line in lines)

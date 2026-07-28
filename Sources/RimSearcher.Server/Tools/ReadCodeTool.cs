@@ -31,7 +31,16 @@ public class ReadCodeTool : ITool
         + "Three exclusive modes: extractClass (the whole type), methodName (one member), or startLine/lineCount "
         + "(raw lines). If more than one is passed, extractClass wins over methodName, which wins over the line range. "
         + "The first two parse C#; on an XML file only the line range applies. extractClass output is capped at "
-        + $"{MaxLineCount} lines — the same cap the line range has — and says so when it truncates.";
+        + $"{MaxLineCount} lines — the same cap the line range has — and says so when it truncates. "
+        // 第九轮盲测的两条链都撞上同一件没人说过的事：Cinders 的 `1.6/CE/Patches/Weapons_Mech.xml`
+        // 与一份无条件补丁**完全同形**（裸 <Patch>、无 mod 守卫、正文照改 defaultProjectile），
+        // 守卫在 loadFolders.xml 那一层，而那一层不在任何返回里。最省事的读法「补丁存在 → 一定生效」
+        // 于是无从证伪：一条靠领域常识补上这一层、代价两轮调用加置信度下调，另一条完全没察觉。
+        // 索引侧按 loadFolders 给每个文件打标是对的做法，但那是一次独立改动（见台账待办）；
+        // 这里先把能力边界说出来——答不了不是缺陷，不说自己答不了才是。
+        + "A mod's files are indexed as its loadFolders.xml declares them, conditionally-loaded folders "
+        + "included; the load conditions are not evaluated here, so a file read out of one is not evidence "
+        + "that it takes effect in any particular game.";
 
     private static readonly ToolArgSpec ArgSpec = new(
         "rimworld-searcher__read_code",

@@ -38,6 +38,19 @@ public class LocateTool : ITool
         "the listing is that section's complete set; 'at least M' means M is a floor rather than the total, which " +
         "only happens when the member search matches more name keys than the server expands in one call — a trailing " +
         "note then states that cap, and narrowing the query gives an exact count. " +
+        // 每行尾巴那个 (N%) 此前一处没成文，而 F32 之后它是唯一能把「叫这个名字」和「像这个
+        // 名字」分开的记号：`method:CompTick` 的 200 里有 56 条是 90 分前缀命中
+        // （CompTickRare / CompTickInterval / CompTickLong），叫 CompTick 的方法只有 144，
+        // 而默认 limit 印出来的前 10 条恰好全是 100%——混合在默认返回里零痕迹。
+        // 判官还提议把 Members 表头拆成 `144 exact-name, 56 approximate`。不做：那个拆分只能按
+        // score==100 算，而成员分是 baseScore + keywordBonus 封顶 100（SourceIndexer 的
+        // `Math.Min(matchCount - 1, 5) * 10`），两个以上关键词时一个 90 分的前缀命中也能被推到
+        // 100——拆出来的「exact-name」于是是个假数。写进返回里的读法只能取恒真的那一半方向。
+        "Every listed row carries its match score as (N%). Anything below 100% is a near-name match and not " +
+        "the name that was asked for, so a section total counts those too. This holds for method: and field: " +
+        "as well — they restrict the search to members, they do not make the name match exact. In the member " +
+        "sections a query of two or more keywords can also carry a near-name up to 100%, so there 100% is the " +
+        "top score rather than a guarantee of identical spelling. " +
         "Filters go inside the query: type:, method:, field:, def:, and scope: as an alias for the scope parameter.";
 
     public object JsonSchema => new
@@ -108,7 +121,7 @@ public class LocateTool : ITool
             // 短名/全名的合并在索引层完成（见 SourceIndexer.CollapseNameAliases）——那里是截断
             // 之前，计数才对得上；在这里折叠只会把已经被 limit 砍过的一批再去一次重。
             var types = _sourceIndexer.FuzzySearchTypes(typeSearchTerm, scope, limit.Count);
-            report.Add(types);
+            report.Add(types, "C# types");
 
             if (types.Items.Count > 0)
             {
@@ -148,7 +161,7 @@ public class LocateTool : ITool
             // Scale 放大后仍夹在服务端硬上限内
             var members = _sourceIndexer.SearchMembersByKeywords(
                 keywords.ToArray(), scope, limit.Scale(3).Count, memberKinds);
-            report.Add(members);
+            report.Add(members, "members");
 
             if (members.Items.Count > 0)
             {
@@ -205,7 +218,7 @@ public class LocateTool : ITool
         {
             var defSearchTerm = query.DefFilter ?? QueryParser.GetCombinedSearchTerm(query);
             var defs = _defIndexer.FuzzySearch(defSearchTerm, scope, limit.Count);
-            report.Add(defs);
+            report.Add(defs, "XML defs");
 
             if (defs.Items.Count > 0)
             {
@@ -235,7 +248,7 @@ public class LocateTool : ITool
             if (query.Keywords.Count > 0)
             {
                 var defsByContent = _defIndexer.SearchByContent(query.Keywords.ToArray(), scope, limit.Count);
-                report.Add(defsByContent);
+                report.Add(defsByContent, "content matches");
 
                 if (defsByContent.Items.Count > 0)
                 {
@@ -271,6 +284,15 @@ public class LocateTool : ITool
         // 调用方**显式打了扩展名**，那就是在问文件、不是在问类型。
         var queryIsFileName = LooksLikeIndexedFileName(rawQuery);
 
+        // F31 立的判据是「显式带扩展名 = 在问文件」，但只做了命中那一半。零命中时这一段
+        // **整个不印**，返回里只剩别的段落对同一个查询串做的模糊命中——实测
+        // `locate 'LoadFolders.xml' scope:'all'` 回的是「1 C# type: LoadFolder (37%)」，
+        // 全篇没有一个字说索引里没有叫这个名字的文件。名字几乎相同的那条被读成「找到了」，
+        // 调用方据此以为条件加载信息可查（真值：loadFolders.xml 不是 .cs/.xml 内容文件，不进索引）。
+        // 兜底那一支同样要说：它列出来的是模糊文件名命中，而 Files 段的行**不带分数**，
+        // 于是一条 40 分的近名文件与一条精确命中在版面上逐字同形。
+        var exactFileMissing = false;
+
         if (wantsFileFallback || !hasFilterPrefix)
         {
             var files = _sourceIndexer.Search(rawQuery, scope, limit.Count);
@@ -281,6 +303,8 @@ public class LocateTool : ITool
             var exactFiles = queryIsFileName
                 ? _sourceIndexer.GetPathsByFileName(rawQuery, scope, limit.Count)
                 : ScopedResult<string>.Empty;
+
+            exactFileMissing = queryIsFileName && exactFiles.Items.Count == 0;
 
             // 精确补充时只留「基名与查询词逐字相同」的那些，并去掉已在 C# Types 段出现过的
             // 同名项（类型 CompShield 与文件 CompShield.cs 是同一件事的两种写法）。
@@ -307,7 +331,7 @@ public class LocateTool : ITool
                 // 把几十条模糊文件命中的 out-of-scope 计数灌进去，脚注的数字就不再对应正文。
                 // 精确补充那一支计的是精确查表自己的落选数，两份不相加——相加会把同一条路径
                 // 数两遍。
-                report.Add(!wantsFileFallback && queryIsFileName ? exactFiles : files);
+                report.Add(!wantsFileFallback && queryIsFileName ? exactFiles : files, "files");
 
                 // 这一段的总数：兜底那一支列出来的是模糊结果（可能被 limit 砍过），故总数是
                 // 「列出的 + 被砍掉的」；精确补充那一支本来就只列同名的那几条，没有被砍的。
@@ -346,6 +370,13 @@ public class LocateTool : ITool
         // 「有文件没扫全」那条尾注同现，调用方从那里学到的读法就是「看到 at least 去找成因」；
         // locate 此前只改表头、一句成因都不给，于是同一个记号在两个工具上要各学一遍，
         // 而这边那一次还无从判断「narrow the query」到底要窄到什么程度。
+        // 见上面 exactFileMissing 处的判据。措辞点明「上面那些是按查询串比名字比出来的」，
+        // 因为这一句唯一要防的误读就是把近名结果当成那个文件本身。
+        var missingFileNotice = exactFileMissing
+            ? $"\n\n_No indexed file is named '{ToolArgs.ForEcho(rawQuery)}' in scope '{scope.Expression}'; "
+              + "anything listed above matched the query as a name, not as that file._"
+            : string.Empty;
+
         var floorNotice = memberTotalIsFloor
             ? $"\n\n_The member search matched more than {SourceIndexer.MemberQualifiedKeyCap} name keys and "
               + "expanded only that many, so the member total above is a floor rather than the total "
@@ -389,6 +420,9 @@ public class LocateTool : ITool
         }
 
         if (footer != null) sb.Append(footer);
+        // 零命中那条路径不挂：那时整份返回的第一句就是 "No results for 'X'"，
+        // 再说一遍「没有叫 X 的文件」是同一件事说两遍。
+        sb.Append(missingFileNotice);
         sb.Append(floorNotice);
         sb.Append(scopeNotice);
         sb.Append(prefixNotice);

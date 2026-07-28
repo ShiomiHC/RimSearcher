@@ -26,13 +26,25 @@ public class SearchRegexTool : ITool
 
     public IEnumerable<string> ExtraAcceptedKeys => ["query", "regex", "fileExtension", "extension", "ext", "caseInsensitive", "maxResults", "count", "scopes", "source", "sources", "mod", "mods", "in"];
 
+    // 「both cuts are always stated in a trailing note」原先只数了两刀（每文件 3 行预览、
+    // 50 个文件），而第三刀——有文件没被扫全——不只加一条尾注，还会把表头的总数降格成
+    // `at least N`。三刀混在一句「both」里说，于是那个下界记号在 schema 里找不到自己的成因，
+    // 读者只能就近拿 `limit` 的 default 100 去解释它（`at least 105` 与 100 只差 5）。
+    // 三刀分开写，并把「limit 从不改这个数」明说出来。
     public string Description =>
         ".NET regex search across indexed C# and XML files, with an optional extension filter (e.g. '.cs') and " +
-        "scope. Results are grouped by file, showing at most 3 preview lines per file and at most 50 files; both " +
-        "cuts are always stated in a trailing note, so output without that note is the complete match set. " +
-        "Counts are matching lines, not match sites — a line the pattern hits twice counts once. " +
+        "scope. Results are grouped by file, showing at most 3 preview lines per file and at most 50 files. " +
+        "Three things can cut the output: those two caps, and files the scan could not read in full; all three " +
+        "are stated in a trailing note, and the third additionally degrades the header count to 'at least N'. " +
+        "limit never changes that count — when the result cap bites instead, the header switches to " +
+        "'first N preview lines' and a trailing line says the scan stopped there. " +
+        "Counts are matching lines, not match sites — a line the pattern hits twice counts once — and this tool " +
+        "never reports how many lines or files matched across the whole corpus when the scan stopped early. " +
         "Matches are raw text: commented-out code, disabled XML and prose inside comments all count, so a match " +
         "count is not a count of things that exist — confirm with locate or inspect before treating it as one. " +
+        "A mod's files are indexed as its loadFolders.xml declares them, conditionally-loaded folders included; " +
+        "whether such a folder actually loads in a given game is not something this index can tell you, so a " +
+        "hit inside one is not evidence that it takes effect at runtime. " +
         "The header echoes whether the scan ran case-insensitively (the default).";
 
     private static readonly ToolArgSpec ArgSpec = new(
@@ -121,9 +133,11 @@ public class SearchRegexTool : ITool
             var casing = ignoreCase ? "case-insensitive" : "case-sensitive";
             var headline = truncated
                 ? $"first {results.Count} preview lines in scope '{scope.Expression}', {casing}"
-                // 有文件没扫全时这个总数只是下界，表头与末尾那条尾注要同时改口
+                // 有文件没扫全时这个总数只是下界，表头与末尾那条尾注要同时改口。
+                // 改口时还要就地指出成因在哪——见 ScopeArgs.LowerBoundReason。
                 : $"{ScopeArgs.FoundCount(totalMatches, diagnostics.AnyFileIncomplete)} "
-                  + $"in scope '{scope.Expression}', {casing}";
+                  + $"in scope '{scope.Expression}', {casing}"
+                  + ScopeArgs.LowerBoundReason(diagnostics.AnyFileIncomplete);
 
             // 本次要列出的文件里有重名时补目录（见 ScopeArgs.DisambiguateFileNames）
             var displayNames = ScopeArgs.DisambiguateFileNames(shownFiles.Select(g => g.Key));
@@ -188,9 +202,13 @@ public class SearchRegexTool : ITool
                 // **没列出来的文件**——三个口径三个名词，唯独「本次列了几个文件」从头到尾没出现，
                 // 而它是常数 50 这件事也没写在任何地方。扫描没被截断时 allFiles.Count 就是命中文件
                 // 总数（是确定值），直接给出来，读者不必去数正文里的文件块。
+                // 「列了几个」也要给。同一个工具的 scan-stopped 那一形明写 `only the first 50
+                // files are listed`，这一形不写，读者只能做 97−47 的减法——R47 当时判定这个减法
+                // 可接受，第九轮盲测里它第一次结出错误推理：调用方据 50 个文件的来源标签断言
+                // 「97 个文件清一色落在那 11 个源内」。两形对齐，减法就不必做了。
                 output += $"\n\n... +{allFiles.Count - MaxFilesShown} more of "
                           + $"{OutputText.Quantity(allFiles.Count, "matching files")} "
-                          + "(narrow the pattern or the scope)";
+                          + $"({MaxFilesShown} listed; narrow the pattern or the scope)";
             }
 
             if (anyFileFolded)

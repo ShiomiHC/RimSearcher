@@ -139,7 +139,7 @@ var server = new RimSearcher.Server.RimSearcher(protocolOut);
 // tool 实例无会话状态（只持索引引用），故宿主的各管道会话直接共享同一批
 var tools = new ITool[]
 {
-    new ListDirectoryTool(),
+    new ListDirectoryTool(scopeCatalog),
     new LocateTool(indexer, defIndexer, scopeCatalog, localization),
     new InspectTool(indexer, defIndexer, scopeCatalog, localization),
     new TraceTool(indexer, scopeCatalog),

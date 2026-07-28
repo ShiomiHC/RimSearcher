@@ -47,15 +47,15 @@
   `... +71 more methods (pass limit:'all' for the whole list, or read one with read_code methodName)` ·
   `... +367 more lines (pass startLine=20)` · `... +43 more entries (pass offset=7 for the next page, or a larger limit)`
   - 名词与 N **单复数一致**（`... +1 more C# type` / `... +18 more C# types`），故这个槽可以直接当句子读。表头、尾注、启动提示里的计数同此判据，全服不写 `N thing(s)`
-  - **总数已知时写成 `... +N more of M <什么>`**（`... +19 more of 22 matching lines in this file` · `... +82 more of 132 matching files`）。只给增量的话，读者要拿它和印出来的条数相加才得到总数，而「上面印了几条」并不总是常数——扫描停在预览配额上时最后一个文件可能只印了 1–2 行也带折叠，那条被诱导出来的心算就会算错。`of` 的读法与表头一致：**看到 `of` 就是没给全**。总数推不出来时（扫描停了、后面的文件没打开过）不写 `of`
+  - **总数已知时写成 `... +N more of M <什么>`**（`... +19 more of 22 matching lines in this file` · `... +82 more of 132 matching files (50 listed; …)`）。**文件那一形还要印出「这次列了几个」**——同一个工具的 scan-stopped 那一形明写 `only the first 50 files are listed`，两形不对齐时读者只能做 132−82 的减法，而那 50 是个从不出现在返回里的常数。只给增量的话，读者要拿它和印出来的条数相加才得到总数，而「上面印了几条」并不总是常数——扫描停在预览配额上时最后一个文件可能只印了 1–2 行也带折叠，那条被诱导出来的心算就会算错。`of` 的读法与表头一致：**看到 `of` 就是没给全**。总数推不出来时（扫描停了、后面的文件没打开过）不写 `of`
   - 唯一不带括号的一形是 `trace usages` / `search_regex` 的**每文件**折叠行 `... +N more of M matching lines in this file`：它的下一步整份返回里只说一次（见下条），不逐文件重复
   - 括号里那句**会说清 `limit:'all'` 够不够**：藏起来的比服务端上限（200）还多时写的是 `pass limit:'all' for the first 200; the rest needs a narrower query`，只有真能一次拿全时才写 `pass limit:'all' to expand`。`'all'` 从来不是「无限」，它只把上限抬到 200
 - 扫描类工具（`trace usages` / `search_regex`）停在预览上限时另有一句共用的 `... more matches exist (…)`——与 `... +N more` 的区别是**它数不出还剩多少**（后面的文件根本没打开过），故不给数字。括号里同样给下一步；`limit` 已经是 `'all'` 时不会再劝你提 `limit`
-- 这两个工具还共用一句 `... some files were not scanned in full (…)`：有文件读不开、或大到只扫了前 20000 行时才出现，**并点名是哪几个文件**（列前三个，其余记数）。不点名时调用方无从判断那个文件与本次查询有没有关系，只能把整份结果一律当成下界。**它一出现，表头的命中数就改口成 `at least N matching lines`**（那时那个数只是下界，即便被截断的那个文件在已扫部分零命中也一样——行闸之后有没有命中谁也不知道）——反过来说，表头直接写 `N matching lines` 就是确定值
+- 这两个工具还共用一句 `... some files were not scanned in full (…)`：有文件读不开、或大到只扫了前 20000 行时才出现，**并点名是哪几个文件**（列前三个，其余记数）。不点名时调用方无从判断那个文件与本次查询有没有关系，只能把整份结果一律当成下界。**它一出现，表头的命中数就改口成 `at least N matching lines`，且表头就地带一句指向它的引用**（`; 'at least' comes from the trailing 'not scanned in full' note, not from limit`）——成因同现还不够：盲测里三条互不相干的任务链在成因确实在场的返回上各自把那个下界归给了 `limit` 的默认值（`at least 105` 与 default 100 只差 5，算术上太顺），而真成因隔在整份结果之后。**下界记号必须携带可指认的成因引用**。改口本身的判据不变：那时那个数只是下界，即便被截断的那个文件在已扫部分零命中也一样——行闸之后有没有命中谁也不知道。反过来说，表头直接写 `N matching lines` 就是确定值
 - **两个扫描类工具报的数都是「命中行」，不是「命中次数」**：判据是逐行 `IsMatch`，同一行被 pattern 命中两次仍只算一行。表头与每文件折叠行用的是同一个量纲
 - **表头回显生效的大小写档位**。`search_regex` 的 `ignoreCase` 默认 true 而只写在参数表里，于是同一个 pattern 的命中数会因为一个没人传过的开关而浮动，返回里却没有任何字段能事后判断跑的是哪一档——拿它去「交叉验证」`trace usages` 的数时，两边其实跑的是同一个默认开关。`trace usages` 是固定的不分大小写全词匹配，故未截断时它还多给一个数：`Text matches for 'CompRefuelable' (108 matching lines in scope 'base', whole word and case-insensitive — 82 of them match the query's own casing)`。C# 的命名习惯保证「类型 `CompRefuelable` → 局部变量 `compRefuelable`」，那 26 行的差额正是纯变量行；不给这个数，108 会被当成「这个类被引用了 108 处」写进结论
 - 但**表头的数在截断与未截断两种情形下量纲不同**，措辞会说清是哪一个：截断时写 `first N preview lines`（数的是**印出来的**行，每文件封顶 3 条），未截断时写 `N matching lines`（数的是命中行，含没印出来的）。两个数不可横向比较——`first 100 preview lines` 背后的命中量可以远大于另一次查询的 `49 matching lines`
-- `locate` / `trace inheritors` 的逐源越界脚注在**跨多个源**时先给合计（`Outside scope 'base': 47 matches — Milira 15, RatkinAnomaly 10, …`）——同一份返回里 scope 内的量在表头已经加总好，这一行句式并列却要读者临时心算，是整份输出唯一要做算术的地方。只有一个源落在外面时不加，那时合计逐字等于那一个数。
+- `locate` / `trace inheritors` 的逐源越界脚注在**跨多个源**时先给合计（`Outside scope 'base': 47 matches — Milira 15, RatkinAnomaly 10, …`）——同一份返回里 scope 内的量在表头已经加总好，这一行句式并列却要读者临时心算，是整份输出唯一要做算术的地方。只有一个源落在外面时不加，那时合计逐字等于那一个数。**合计跨了多个段时还要点名构成**（`Outside scope 'base': 2122 matches (1607 members + 491 C# types + 24 XML defs) — miho 1151, Milira 286, …`）：参与相加的段随命中形态变，同一条查询换个 scope 就可能多出一段，于是同一个源的计数在两次调用里对不上，而调用方无从判断哪一次算漏了、哪一次算多了。
 
 - 这两个工具的 scope 是**硬过滤**：落选的文件根本没被打开，故它们给不出 `locate` / `trace inheritors` 那条逐源的 `Outside scope 'X': …` 计数。缺席会被读成「scope 外没有」，所以它们改为明说一句 `Files outside scope 'X' were never opened, … this tool never prints such a line`
 - 同一份返回里出现**重名文件**时，文件名补上刚好能把它们分开的那几级目录（`Core/Defs/…/RangedIndustrial.xml` 与 `Biotech/Defs/…/RangedIndustrial.xml`）——判据与结果行文件名同源：唯一就只印基名，重名才补。两个工具都叫调用方 `use read_code on a file`，而 `read_code` 收基名，不消歧那句下一步就是错的
@@ -99,9 +99,11 @@
 | `scope:` | `s:` `source:` `in:` | 等同于 `scope` 参数 |
 
 - 冒号后**带不带空格都行**（`type:CompShield` 与 `type: CompShield` 等价）。光杆前缀（`type:`）视同没写，返回会说明它被忽略了
-- **不在上表里的前缀不是过滤器**，整个 token 会当成普通搜索词去匹配（于是 `member:CompTick` 零命中，而 `method:CompTick` 有一百多条）。这种情况返回会明确点出来，不再让调用方把「前缀写错了」读成「这个符号不存在」
+- **不在上表里的前缀不是过滤器**，整个 token 会当成普通搜索词去匹配（于是 `member:CompTick` 零命中，而 `method:CompTick` 有两百条）。这种情况返回会明确点出来，不再让调用方把「前缀写错了」读成「这个符号不存在」
 
-**结果分段**：`C# Types` / `Members` / `XML Defs` / `Content Matches`（按 Def 的字段值命中，而非按名），每段各自受 `limit` 约束并独立折叠。表头一行给出**各段列出了几条、这个 scope 里一共有几条**（`## 'Pawn' — 1 of 768 C# types, 3 of 1931 members`），不必自己数行、也不必拿折叠行去做加法就能判断要不要调 `limit`。没被截断的段不写 `of N`——**看到 `of` 就是被截了**，与折叠行是同一条读法。`Members` 段的总数还有一种形态 `N of at least M`：一条关键词能匹配的**成员名键**超过服务端一次展开的上限（12000）时，M 只是地板而不是总数，此时末尾另有一句脚注把这个上限说出来。与扫描类工具的 `at least N matching lines` 是同一条读法：**出现 `at least` 就说明这个数只是下界**，且成因一定写在返回里。反过来说，没有那句脚注、表头直接写 `N members`，这个 M 就是该 scope 下的确定总数——包括 `method:Notify_` 这类共同前缀成百上千的查询。这一条以前不成立：成员搜索当年是先把候选截成一个 500 键的池子、再看谁够分，于是「池外还有没有够分的」只能靠启发式猜；现在是先把够分的键精确算出来（60 分线可以逐条翻译成前缀 / 词边界 / camel 首字母 / 编辑距离 ≤ 3 四种结构条件，每一种都是一次区间查询）、再看装不装得下，故「是不是下界」有确切依据。（这里与 `trace inheritors` 的 `(381 …) Listed below: 200` 是同一个口径，只是排版不同：两个工具的表头都同时给总数与显示数。）另有 `Files` 段（已索引的文件路径）：四段全部零命中时它是兜底，按名模糊列出若干条；四段有命中时它只补上**基名与查询词逐字相同**的那一份，且不重复已经出现在 `C# Types` 里的同名项——文件名是一等查询目标，不该因为顺带蹭到一条低分 def 就整段消失。
+**结果分段**：`C# Types` / `Members` / `XML Defs` / `Content Matches`（按 Def 的字段值命中，而非按名），每段各自受 `limit` 约束并独立折叠。表头一行给出**各段列出了几条、这个 scope 里一共有几条**（`## 'Pawn' — 1 of 768 C# types, 3 of 1931 members`），不必自己数行、也不必拿折叠行去做加法就能判断要不要调 `limit`。没被截断的段不写 `of N`——**看到 `of` 就是被截了**，与折叠行是同一条读法。`Members` 段的总数还有一种形态 `N of at least M`：一条关键词能匹配的**成员名键**超过服务端一次展开的上限（12000）时，M 只是地板而不是总数，此时末尾另有一句脚注把这个上限说出来。与扫描类工具的 `at least N matching lines` 是同一条读法：**出现 `at least` 就说明这个数只是下界**，且成因一定写在返回里。反过来说，没有那句脚注、表头直接写 `N members`，这个 M 就是该 scope 下的确定总数——包括 `method:Notify_` 这类共同前缀成百上千的查询。这一条以前不成立：成员搜索当年是先把候选截成一个 500 键的池子、再看谁够分，于是「池外还有没有够分的」只能靠启发式猜；现在是先把够分的键精确算出来（60 分线可以逐条翻译成前缀 / 词边界 / camel 首字母 / 编辑距离 ≤ 3 四种结构条件，每一种都是一次区间查询）、再看装不装得下，故「是不是下界」有确切依据。（这里与 `trace inheritors` 的 `(381 …) Listed below: 200` 是同一个口径，只是排版不同：两个工具的表头都同时给总数与显示数。）另有 `Files` 段（已索引的文件路径）：四段全部零命中时它是兜底，按名模糊列出若干条；四段有命中时它只补上**基名与查询词逐字相同**的那一份，且不重复已经出现在 `C# Types` 里的同名项——文件名是一等查询目标，不该因为顺带蹭到一条低分 def 就整段消失。**查询显式带了扩展名、而索引里没有同名文件时，返回末尾另有一句 `No indexed file is named 'X' in scope '…'; anything listed above matched the query as a name, not as that file.`**——那时 `Files` 段整个不出现，版面上只剩别的段落对同一个查询串做的模糊命中（查 `LoadFolders.xml` 回的是「1 C# type: `LoadFolder` (37%)」），而 `Files` 段的行是**不带分数**的：一条近名文件与一条逐字命中在那一段里同形，缺席因此读不出来。零命中时不挂这句——那时表头的 `No results for 'X'` 已经说完了。
+
+**每行尾部的 `(N%)` 是匹配分，`100%` 以下一律不是所查的那个名字**，故任何一段的总数都含近名命中。反过来不成立：成员分是 `baseScore + keywordBonus` 封顶 100，**两个以上关键词**时一个 90 分的前缀命中也能被推到 100，故成员段的 `100%` 是「本次的最高分」而不是「拼写逐字相同」的保证（单关键词查询如 `method:CompTick` 没有这个口子）。这一条对 `method:` / `field:` 同样成立：它们把搜索限定在成员上，**不**把名字匹配变成精确匹配（`method:CompTickRar` 的表头是 `3 of 31 members`，而这 31 条里一条 `100%` 都没有——列出来的全是 `CompTickRare` 这类 90 分前缀命中，索引里根本没有叫 `CompTickRar` 的方法。反过来，`method:CompTick` 那 200 条里也混着 `CompTickRare` / `CompTickInterval`，而默认 `limit:10` 印出来的头几行恰好都是 `100%`，这个差额在默认返回的版面上一处痕迹都不留）。
 
 **同分并列的结果次序是定的**。分数与名字长度都并列时，末级按符号全名（再按文件路径）排序，故同一条查询换个进程、换个索引重建轮次都给同一批结果——`method:CompTick` 这类几百条同分同长的查询尤其依赖这一条。与 `search_regex` / `trace usages` 是同一条可复现保证。
 
@@ -123,7 +125,7 @@ scope:mods pawn
 
 **Def 模式**
 - 展示 Def 类型、来源文件、译名（`localization_description` 开启时连译文描述一起）。`Type:` 行同时回答「这个 DefType 的 C# 类在不在索引里」：光名字 = 在，且在同名文件里；带文件注 = 在别的文件里或有多份；`(C# class not indexed)` = 不在索引里
-- 返回沿整条 `ParentName` 链合并后的 XML——任何单个 XML 文件都不含这份内容。但**「合并」只指继承**：服务端不解析 mod 的 `PatchOperation`，也不越过当前 `scope`，所以这不是运行中的游戏看到的那份定义。被 patch 改过、或被 scope 外的 mod 覆盖过的 def，这里给出的数字看着权威却是过期的，返回里没有任何提示
+- 返回沿整条 `ParentName` 链合并后的 XML——任何单个 XML 文件都不含这份内容。但**「合并」只指继承**：服务端不解析 mod 的 `PatchOperation`，也不越过当前 `scope`，所以这不是运行中的游戏看到的那份定义。被 patch 改过、或被 scope 外的 mod 覆盖过的 def，这里给出的数字看着权威却是过期的。**这句边界就写在 `**Resolved XML**` 那行标题里**（`(mod PatchOperations are not applied, so a mod patch against this def is not reflected below)`），不是只写在正文前的散段里：调用方是照着 XML 正文抄数值的，而正文可以长到几百行、`xmlStartLine` 续读时更是连开头都看不见
 - **字段不标来源**。要区分「这个字段是它自己写的」还是「继承来的」，去 `read_code` 读 `File:` 那个路径——那份文件里只有它自己未合并的几行，继承来的字段恰恰不在其中。此前这件事只写在 `xmlStartLine` 这个分页参数的说明里，而那个参数只在合并 XML 过长时才需要读
 - 头部固定给一行**父链状态**：合并成功印 `Inheritance chain: A <- B`，没有父则明说，某一环查不到则给**警告**并指出「下面这份不是完整生效定义、继承来的字段全缺」。三种情形此前渲染得逐字同形，调用方无从分辨自己拿到的是不是半成品
 - 合并 XML 过长会被截断（首屏给头 200 行 + 尾 50 行）。**续读用 `xmlStartLine`，不要去 `read_code` 读 `File:` 那个路径**：那份文件里只有该 def 自己未合并的几行，继承来的字段恰恰不在其中。截断提示会直接给出下一次该填的 `xmlStartLine`
@@ -151,16 +153,18 @@ RimWorld.CompShield
 交叉引用追踪工具。
 
 **模式**
-- `inheritors`：列出某基类/接口的**传递闭包**子类与实现类树——间接后代（子类的子类）同样列出。默认展开到服务端硬上限 200，**树比 200 大时照样是截断的**，`limit` 抬不动这个上限。截断时保留的是浅层：调用方先要的是「谁直接继承了它」
-  - 表头括号里的每个数都描述 **scope 内的整棵树**：`(381 in scope 'base', transitive — indirect descendants included; 221 direct, deepest 4 levels down)`。只有后面单列的 `Listed below: 200` 描述这次列出来的那一段，**且没被截断时整格不印**（同「看到 `of` 就是被截了」那条读法）。此前 `direct` 与 `deepest` 数的是截断后的切片，而它俩紧跟在描述全树的总数后面、句法完全对称——`ThingComp` 因此写出「381 … 200 direct, deepest 1 level down」，读者据此断定这棵树只有一层，实际有四层
-  - **只有间接后代带标记**（`[depth 2]` 起）；直接子类不标，表头会在**这次真印了标记**时补一句 `untagged = direct`。一个标记都没印时不讲解这套记法——讲了反而会让读者去找它
+- `inheritors`：列出某基类/接口的**传递闭包**子类与实现类树——间接后代（子类的子类）同样列出。默认展开到服务端硬上限 200，**树比 200 大时照样是截断的**，`limit` 抬不动这个上限。截断时保留的是浅层：调用方先要的是「谁直接继承了它」。撞上这个上限时折叠行给的下一步是 `re-trace a listed type as its own root; depths then restart from it`——这是**唯一真能拿到剩下那些**的走法（`limit` 抬不动、收窄 scope 只会连带砍掉本来在内的），而通用的「narrow the query」在这里根本不成立：`trace` 的查询就是一个类型名，没有可收窄的余地
+  - 表头括号里的每个数都描述 **scope 内的整棵树**：`(381 in scope 'base', transitive — indirect descendants included; 221 direct, deepest 4 levels down)`。只有后面单列的 `Listed below: 200, shallowest first — nothing below depth 1 is listed` 描述这次列出来的那一段，**且没被截断时整格不印**（同「看到 `of` 就是被截了」那条读法）。此前 `direct` 与 `deepest` 数的是截断后的切片，而它俩紧跟在描述全树的总数后面、句法完全对称——`ThingComp` 因此写出「381 … 200 direct, deepest 1 level down」，读者据此断定这棵树只有一层，实际有四层
+  - **`Listed below` 那一格还要说清缺的是哪几层**：截断保留浅层，`ThingComp` 那 200 条**全部停在第 1 层**，于是整份列表一个 `[depth N]` 标记都没有，而表头写着 `deepest 4 levels down`。版面上这两处分列两地、都不说彼此的关系——盲测里的读法是「第 2–4 层要么不存在、要么零零星星」，实际那三层被整层砍掉了。深度确实列全了（没截断、或截断恰好停在最深一层）时写的是 `, shallowest first`，不提缺层
+  - **只有间接后代带标记**（`[depth 2]` 起）；直接子类不标，表头会在**这次真印了标记**时补一句 `untagged = direct`。一个标记都没印时不讲解这套记法——讲了反而会让读者去找它。补的那句是 `untagged = direct (depth 1)`：不写出那个 `1`，读者只知道无标记行「是直接子类」，却没有依据把它接到 `[depth 2]` 这套编号上去，也就无从判断「无标记」在深度轴上占的是哪一格
   - 零结果分两种，措辞不同：**索引里没有这个类型名**（拼写待核，去 `locate`）与**类型在索引里、只是没人继承它**（这已经是答案）
     - 后者还再分两种：scope 外也确实没有时才写 `(this is an answer, not a lookup failure)`；scope 外有派生类时改写成 `…but it does have subclasses outside that scope, so this is not the whole answer`。「这是答案」这句背书只在真的是完整答案时给——否则它会盖过下面那行小字的越界计数，整份返回被读成「没有子类」
     - 零结果**不再劝 `scope:'all'` 重试**。继承闭包是全域算出来再按 scope 过滤的，「索引里有没有这个类型名」也与 scope 无关，故换个 scope 返回逐字相同：那句劝退在「这是答案」后面语气正相反，在「拼写待核」后面则保证白跑一轮。真有越界派生类时，逐源计数那行仍在
+  - 越界的那行还会补一句**把两边合起来看整棵树是什么形状**（`; including them the tree is 306 direct, deepest 4 levels down`）：表头的 `221 direct, deepest 4 levels down` 只算 scope 内，而闭包本身是全域算的，两个数并列时读者会把 scope 内的形状当成这个类型的固有形状
 - `usages`：符号的**逐行文本匹配**（不分大小写的全词匹配），C# 与 XML 都扫，带行号预览。默认 50 条，每个文件最多 3 行预览，其余记为 `+N more of M matching lines in this file`
   - 表头动词是 `Text matches for`，不是 `References to`。后者配上「文件 + 行号 + 代码」的正文排版读起来就是一份引用清单，于是那个数被当成「这个符号被引用了多少处」——而它含大小写不同的同名标识符、含注释掉的行、含无关类型上的同名成员
   - 与 `search_regex` 同款保证：**同一条查询恒给同一份答案**，截断时拿到的是文件表的**前缀**（按文件名排序，扫描与展示同一个顺序），把 `limit` 调大只会往后接上更多文件，不会把先前给过的换掉
-  - 同款的还有完整性契约：读不开的文件与只扫到 20000 行的大文件会在末尾计数上报，同时表头改口 `at least N matching lines`。没有那句尾注、表头直接写 `N matching lines`，这 N 就是该 scope 下的确定总数
+  - 同款的还有完整性契约：读不开的文件与只扫到 20000 行的大文件会在末尾计数上报，同时表头改口 `at least N matching lines` 并就地带上指向那句尾注的引用（见 `search_regex` 一节）。没有那句尾注、表头直接写 `N matching lines`，这 N 就是该 scope 下的确定总数
 
 > `usages` 不是调用图：同名成员挂在无关类型上也会混进同一份列表，而经由继承发生的调用则会漏掉。
 
@@ -216,7 +220,7 @@ path: CompShield.cs, methodName: CompTick
 - **同一条查询恒给同一份答案**。扫描按候选表顺序分块推进、命中按 `(文件序号, 行号)` 排序后再截，所以截断时拿到的是候选表的**前缀**：复查一遍是同一批文件，把 `limit` 调大只会往后接上更多，不会把先前给过的换掉。**候选表顺序就是印出来的顺序**（按文件名，同名再按完整路径），故「这个文件没出现在结果里」可以按字母序直接判断是真没有还是被截了
 - 会让命中集不完整的路径**全部**在末尾明说，**因此没有那些提示的输出就是完整命中集**：
   - 扫描停在命中上限（此时同时提示 `limit:'all'` 可把上限抬到 200）
-  - 文件数超 50（未截断时折叠行给出总数 `... +82 more of 132 matching files`；截断状态下那个文件数只是「已扫预览里的去重文件数」、不是命中文件总数，输出会点明并因此不给 `of`）
+  - 文件数超 50（未截断时折叠行同时给出总数与已列出数 `... +82 more of 132 matching files (50 listed; narrow the pattern or the scope)`；截断状态下那个文件数只是「已扫预览里的去重文件数」、不是命中文件总数，输出会点明并因此不给 `of`）
   - 正则在某文件上超时（灾难性回溯）被中途弃扫、文件读不开被跳过、单文件只扫到 20000 行——三者都计数上报
 
 **示例**
@@ -231,7 +235,7 @@ fileFilter: .cs
 列出某个**绝对路径**目录下的文件与子目录（子目录名以 `/` 结尾）。
 
 **特性**
-- 路径必须是服务端的已索引源根（`config.toml` 各源解析出的 `csharp` / `xml` 路径，含省略 `csharp` 时拿到的反编译输出目录）或其下级目录。白名单之外一律拒绝，**源根的父目录也在拒绝之列**。拒绝消息与工具描述都会**列出本机上真实可用的根路径**，不必先撞一次再猜
+- 路径必须是服务端的已索引源根（`config.toml` 各源解析出的 `csharp` / `xml` 路径，含省略 `csharp` 时拿到的反编译输出目录）或其下级目录。白名单之外一律拒绝，**源根的父目录也在拒绝之列**。拒绝消息与工具描述都会**列出本机上真实可用的根路径**，不必先撞一次再猜。那句话同时说清这个数是什么：`These 87 roots are the indexed folders of the 11 configured sources listed under 'scope' — one source usually spans several roots, so this count is not a source count.`——一个源通常摊成 `csharp` / `xml` 两条以上的根，`87` 与 `scope` 那 11 个源名不是一个量纲，并排出现时会被当成同一件事的两种说法
 - 条目**先排序再截断**：子目录在前、文件在后，各自按名序。所以截断后拿到的是「按名序的前 N 个」，缺席是可推理的
 - 输出头部固定给**总条目数**。`limit` 默认 100，服务端上限 1000；传 `0` 或负数表示用满上限
 - `offset` 翻页。目录条目数超过 1000 时，这是唯一能把它枚举完的途径——脚注会直接算出下一页该填的值。`search_regex` 顶不上这个用：它匹配的是**文件正文行**不是文件名，`fileFilter` 也只是路径后缀，写不出「限定在这个目录下」
@@ -483,7 +487,7 @@ assemblies = 'C:\SteamLibrary\steamapps\common\RimWorld\RimWorldWin64_Data\Manag
 - 只收 `Defs`、`Patches`、`Assemblies`，`Languages` / `Textures` / `Sounds` 不进索引
 - 源名取 `About.xml` 里的 `<name>`（workshop 目录名是纯数字 ID）；显式写了 `name` 则以显式的为准
 
-**条件目录**（`IfModActive` = 任一启用、`IfModActiveAll` = 全部启用、`IfModNotActive` = 任一启用即排除，三者可并存取合取；packageId 比对不分大小写且忽略 `_steam` 后缀）默认**全部收下**——手动指 mod 根时无从判断哪些 mod 处于启用状态，索引宽一点无害。
+**条件目录**（`IfModActive` = 任一启用、`IfModActiveAll` = 全部启用、`IfModNotActive` = 任一启用即排除，三者可并存取合取；packageId 比对不分大小写且忽略 `_steam` 后缀）默认**全部收下**——手动指 mod 根时无从判断哪些 mod 处于启用状态，索引宽一点无害。**收了哪几个会在启动提示里点名**（`14 conditional folders in loadFolders.xml included unconditionally (1.6/Royalty, 1.6/Biotech, 1.6/CE/PLA and 11 more) — a hit under one of these may come from content the game would not load`）：只说「收了 N 个」的话，调用方拿到一条 `1.6/CE/Defs/…` 下的命中时无从判断它是不是那 N 个之一，而这类目录的内容在没装对应前置的实机上根本不加载。
 
 但有一种情形宽不得：**一个 mod 用两组互斥条件挂了两套内容**（前置 A 装了用这套、装了 B 用那套）。此时两套的文件同名，谁遮蔽谁由 `loadFolders.xml` 的书写顺序决定，而不是由哪个前置真的启用着决定——搜到的可能恰好是运行时不生效的那套。这种情形会在启动日志里报出来：
 
@@ -548,7 +552,7 @@ mod 没适配当前版本（只有 `1.4/` 目录）时会回退到能用的最�
 
 选中多个源时，结果每行尾部标注来源（如 `[vanilla]`、`[Milira]`）。落在作用域**之外**的命中会在结果末尾汇总计数（`Outside scope 'base': Ratkin 8, Milira 1`），避免把「当前作用域搜不到」误读成「不存在」；`trace usages` 与 `search_regex` 因为要真读文件，不做这项统计，作用域对它们是硬过滤。
 
-`limit` 参数控制每段结果条数，传 `"all"`（`0` 与负数同义）展开到服务端硬上限 200。默认值按工具而异：`locate` 是 10，`trace usages` 是 50，`search_regex` 是 100，`trace inheritors` 直接就是硬上限 200（子类树默认一次给全）。`list_directory` 的 `limit` 不走这套，见上文该工具一节；`inspect` 的 `limit`（大纲每类成员数）也不受 200 上限夹持，`'all'` 在那里是真无限。**解释不了的值（`"many"`、`true`、对象）一律报错，不会被静默换成默认值**——静默退回默认给出的是子集，调用方会把「少给的那部分」读成「一共就这么多」。低相关度结果会在出现明显分数断层时另行折叠，折叠行注明 `lower relevance`——**那一部分与 `limit` 无关，调多大都拿不回来**，只能靠更精确的查询词或换个过滤前缀。折叠行会分别说清是哪一种。
+`limit` 参数控制每段结果条数，传 `"all"`（`0` 与负数同义）展开到服务端硬上限 200。默认值按工具而异：`locate` 是 10，`trace usages` 是 50，`search_regex` 是 100，`trace inheritors` 直接就是硬上限 200（子类树默认一次给全）。`list_directory` 的 `limit` 不走这套，见上文该工具一节；`inspect` 的 `limit`（大纲每类成员数）也不受 200 上限夹持，`'all'` 在那里是真无限。**解释不了的值（`"many"`、`true`、对象）一律报错，不会被静默换成默认值**——静默退回默认给出的是子集，调用方会把「少给的那部分」读成「一共就这么多」。低相关度结果会在出现明显分数断层时另行折叠，折叠行注明 `lower relevance`——**那一部分与 `limit` 无关，调多大都拿不回来**。折叠行会分别说清是哪一种，并且**把方向写进句子里**：`use a shorter, less specific query; folding is relative to the top score, so narrowing never brings these back and limit does not expand them`。断层是相对**本次最高分**算的，故收窄查询词只会把最高分推得更高、折掉更多——而「拿不回来」这半句单独出现时，默认读法恰好是往收窄的方向再试一次。
 
 3. 在 MCP 客户端中把 `RimSearcher.Server.exe` 注册为 **stdio MCP Server**，并设置环境变量 `RIMSEARCHER_CONFIG` 指向上一步的 `config.toml`。
 

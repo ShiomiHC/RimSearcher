@@ -275,8 +275,11 @@ public class ScopeArgsTests
         Assert.Contains("lower relevance", line);
         Assert.DoesNotContain("limit:'all'", line);
 
-        // 断层收口砍掉的是低相关结果，够到它们要放宽查询而不是收窄——建议方向写反了照做也拿不到
-        Assert.Contains("broaden", line);
+        // 断层收口砍掉的是低相关结果，够到它们要放宽查询而不是收窄——建议方向写反了照做也拿不到。
+        // 「broaden or reword」不够：reword 不带方向，而调用方最顺手的「换个说法」恰恰是加限定
+        // （盲测里加了 type: 前缀，那是收窄），照做后被折叠的那批更够不着。方向要写死在句子里。
+        Assert.Contains("shorter", line);
+        Assert.Contains("narrowing never brings these back", line);
         Assert.DoesNotContain("refine", line);
     }
 

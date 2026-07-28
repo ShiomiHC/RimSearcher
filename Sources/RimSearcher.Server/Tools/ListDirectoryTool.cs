@@ -5,6 +5,12 @@ namespace RimSearcher.Server.Tools;
 
 public class ListDirectoryTool : ITool
 {
+    private readonly ScopeCatalog? _scopeCatalog;
+
+    // catalog 可选：这个工具本身不吃 scope，要它只为把「根」与「源」的关系说清（见 RootsSentence）。
+    // 测试里大量以无参形式构造，故不改成必需参数。
+    public ListDirectoryTool(ScopeCatalog? scopeCatalog = null) => _scopeCatalog = scopeCatalog;
+
     public string Name => "rimworld-searcher__list_directory";
 
     public IEnumerable<string> ExtraAcceptedKeys => ["query", "directory", "dir", "maxResults", "count", "skip", "start"];
@@ -17,11 +23,11 @@ public class ListDirectoryTool : ITool
         + "Entries come back sorted — subdirectories first, then files, each by name — so a truncated listing is "
         + "the alphabetical head of the directory, and `offset` pages through the rest. "
         + "The path must be one of the server's indexed source roots or a directory below one; anything outside "
-        + "that whitelist is refused, the parent of a source root included. " + RootsSentence();
+        + "that whitelist is refused, the parent of a source root included. " + RootsSentence(_scopeCatalog);
 
     // 白名单在启动时按 config 解析定型，故可以直接读进说明书。skip_path_security 关掉检查时
     // 说「没有限制」，否则调用方会照着一份并不生效的清单去自我设限。
-    private static string RootsSentence()
+    private static string RootsSentence(ScopeCatalog? catalog)
     {
         if (!PathSecurity.Enabled)
             return "Path security is off (skip_path_security in config.toml), so any absolute directory is listable.";
@@ -30,8 +36,21 @@ public class ListDirectoryTool : ITool
         if (roots.Count == 0) return "No source root is configured, so every path is refused.";
 
         var shown = string.Join(", ", roots.Take(8));
+
+        // 露出来的前 8 个根形如 `Decompiled\<源名>`，逐一对应 scope 里的前 8 个源名——于是
+        // 「根 ≈ 源」被坐实，87 个根读成 87 个源，而 scope 只枚举 11 个。第九轮盲测里两条链
+        // 各自撞上这道粒度差：一条据此写下「scope:'all' 可能有盲区」的假 unanswerable，
+        // 一条为反查覆盖面多跑一整轮。真值（PathSecurity 与 ScopeCatalog 是同一份 resolvedSources
+        // 的两个投影：前者取路径、后者取名字）只写在 ScopeCatalog 的注释里，注释不进输出。
+        var attribution = catalog is { HasSources: true }
+            ? $" These {roots.Count} roots are the indexed folders of the {catalog.Sources.Count} configured "
+              + "sources listed under 'scope' — one source usually spans several roots, so this count is not "
+              + "a source count."
+            : string.Empty;
+
         return $"The roots on this server: {shown}"
-            + (roots.Count > 8 ? $", and {roots.Count - 8} more." : ".");
+            + (roots.Count > 8 ? $", and {roots.Count - 8} more." : ".")
+            + attribution;
     }
 
     public object JsonSchema => new
@@ -102,8 +121,8 @@ public class ListDirectoryTool : ITool
             // 相对路径会先被解析成相对于服务进程工作目录的一条路径，再判越界，于是拼错路径与
             // 「忘了写成绝对路径」都收敛到同一句越界提示上。后者其实是参数格式问题。
             var hint = Path.IsPathRooted(path)
-                ? "Only the server's indexed source roots and directories below them can be listed. " + RootsSentence()
-                : "This path is not absolute; list_directory takes an absolute directory path. " + RootsSentence();
+                ? "Only the server's indexed source roots and directories below them can be listed. " + RootsSentence(_scopeCatalog)
+                : "This path is not absolute; list_directory takes an absolute directory path. " + RootsSentence(_scopeCatalog);
             return Task.FromResult(new ToolResult($"Path outside allowed directories: '{path}'. {hint}", true));
         }
 
