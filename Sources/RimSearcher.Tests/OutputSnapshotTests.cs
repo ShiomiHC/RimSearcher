@@ -702,6 +702,123 @@ public class OutputSnapshotTests : IDisposable
         Verify("locate/out-of-scope-footer", content);
     }
 
+    // 混源：五段的来源标签逐行印（未截断，故段头不印构成）
+    [Fact]
+    public async Task Locate_MixedSources()
+    {
+        var (indexer, defs, catalog) = BuildTwoSourceIndex(
+            [("ZzWidget.cs", "namespace Zz { public class ZzWidget { } }")],
+            [("ZzWidgetTwo.cs", "namespace Zz { public class ZzWidgetTwo { } }")]);
+
+        var content = await Run(new LocateTool(indexer, defs, catalog), new { query = "ZzWidget" });
+
+        Verify("locate/mixed-sources", content);
+    }
+
+    // 截断 + 总数跨源：段头改印全集构成（各源之和恒等于表头那个总数）
+    [Fact]
+    public async Task Locate_TruncatedSpanningSources()
+    {
+        var vanilla = Enumerable.Range(0, 12)
+            .Select(i => ($"ZzThing{i:D2}.cs", $"namespace Zz {{ public class ZzThing{i:D2} {{ }} }}"))
+            .ToArray();
+
+        var (indexer, defs, catalog) = BuildTwoSourceIndex(
+            vanilla, [("ZzThingGuest.cs", "namespace Zz { public class ZzThingGuest { } }")]);
+
+        var content = await Run(new LocateTool(indexer, defs, catalog), new { query = "ZzThing" });
+
+        Verify("locate/truncated-spanning-sources", content);
+    }
+
+    // Files 段的**兜底**那一支：其余四段全空时列模糊文件名命中，且总数是「列出的 + 被砍掉的」
+    // （精确补充那一支没有折叠行，两支的 fileTotal 判据不同）
+    [Fact]
+    public async Task Locate_FilesFallbackWithFold()
+    {
+        var files = Enumerable.Range(0, 14)
+            .Select(i => ($"ZzLonely{i:D2}.xml", "<Defs>\n  <ZzOtherDef>\n    <defName>ZzUnrelated"
+                                                + $"{i:D2}</defName>\n  </ZzOtherDef>\n</Defs>\n"))
+            .ToArray();
+
+        var (indexer, defs, catalog) = BuildIndex(files);
+        var content = await Run(new LocateTool(indexer, defs, catalog), new { query = "ZzLonely" });
+
+        Verify("locate/files-fallback-fold", content);
+    }
+
+    // Members 段多组：三类轮流占配额 + 段末一条按总量计的折叠行
+    [Fact]
+    public async Task Locate_MembersAcrossKinds()
+    {
+        var files = Enumerable.Range(0, 8)
+            .Select(i => ($"ZzHolder{i:D2}.cs",
+                $"namespace Zz {{ public class ZzHolder{i:D2} {{ public int ZzSlotField{i:D2}; "
+                + $"public void ZzSlotTick{i:D2}() {{ }} public int ZzSlotProp{i:D2} {{ get; set; }} }} }}"))
+            .ToArray();
+
+        var (indexer, defs, catalog) = BuildIndex(files);
+        var content = await Run(new LocateTool(indexer, defs, catalog), new { query = "ZzSlot" });
+
+        Verify("locate/members-across-kinds", content);
+    }
+
+    // 零命中 + scope 外有命中：RetryWider 让位给越界脚注（两句并排会把同一个出路说两遍）
+    [Fact]
+    public async Task Locate_ZeroHitsWithOutOfScopeFooter()
+    {
+        var (indexer, defs, catalog) = BuildTwoSourceIndex(
+            [("ZzHost.cs", "namespace Zz { public class ZzHost { } }")],
+            [("ZzGuestWidget.cs", "namespace Zz { public class ZzGuestWidget { } }")]);
+
+        var content = await Run(
+            new LocateTool(indexer, defs, catalog), new { query = "ZzGuestWidget", scope = "vanilla" });
+
+        Verify("locate/zero-hits-out-of-scope", content);
+    }
+
+    // 前缀给了冒号却没给值
+    [Fact]
+    public async Task Locate_EmptyFilterValueNotice()
+    {
+        var (indexer, defs, catalog) = BuildIndex(
+            ("ZzWidget.cs", "namespace Zz { public class ZzWidget { } }"));
+
+        // 冒号后带空格是被支持的写法（`type: ZzWidget` 照样生效），故这里要的是**后面什么都没有**
+        var content = await Run(new LocateTool(indexer, defs, catalog), new { query = "ZzWidget type:" });
+
+        Verify("locate/empty-filter-value", content);
+    }
+
+    // 条件目录：五段共用一份 ConditionalReport，行内的键与整份的成因各印一半
+    [Fact]
+    public async Task Locate_ConditionalFolderTagAndFootnote()
+    {
+        var conditionalDir = _workspace.Dir("Core", "1.6", "CE");
+        _workspace.WriteFile(Path.Combine("Core", "ZzWidget.cs"),
+            "namespace Zz { public class ZzWidget { } }");
+        _workspace.WriteFile(Path.Combine("Core", "1.6", "CE", "ZzWidgets.xml"),
+            "<Defs>\n  <ZzWidgetDef>\n    <defName>ZzWidgetGated</defName>\n  </ZzWidgetDef>\n</Defs>\n");
+
+        var root = _workspace.Dir("Core");
+        var indexer = new SourceIndexer();
+        indexer.Scan(root);
+        indexer.FreezeIndex();
+        var defs = new DefIndexer();
+        defs.Scan(root);
+        defs.FreezeIndex();
+
+        var content = await Run(
+            new LocateTool(
+                indexer, defs, ScopeCatalog.Build([("vanilla", root)], null, null),
+                conditional: ConditionalFolders.Build([
+                    new ConditionalArea(conditionalDir, "1.6/CE", "CETeam.CombatExtended active", "vanilla")
+                ])),
+            new { query = "ZzWidget" });
+
+        Verify("locate/conditional-folder", content);
+    }
+
     // ================= read_code =================
 
     // 行区间形 + 折叠行（`+N more of M lines (pass startLine=N)`）

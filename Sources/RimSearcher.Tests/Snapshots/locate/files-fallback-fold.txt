@@ -1,0 +1,14 @@
+## 'ZzLonely' — 10 of 14 files (0 at 100%)
+
+**Files**:
+- <ROOT>/Core/ZzLonely00.xml (90%)
+- <ROOT>/Core/ZzLonely01.xml (90%)
+- <ROOT>/Core/ZzLonely02.xml (90%)
+- <ROOT>/Core/ZzLonely03.xml (90%)
+- <ROOT>/Core/ZzLonely04.xml (90%)
+- <ROOT>/Core/ZzLonely05.xml (90%)
+- <ROOT>/Core/ZzLonely06.xml (90%)
+- <ROOT>/Core/ZzLonely07.xml (90%)
+- <ROOT>/Core/ZzLonely08.xml (90%)
+- <ROOT>/Core/ZzLonely09.xml (90%)
+  ... +4 more files (pass limit:'all' to expand)

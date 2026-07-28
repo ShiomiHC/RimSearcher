@@ -1,0 +1,14 @@
+## 'ZzThing' — 10 of 13 C# types (0 at 100%)
+
+**C# Types** [vanilla 12, milira 1]:
+- `ZzThing00` (90%)
+- `ZzThing01` (90%)
+- `ZzThing02` (90%)
+- `ZzThing03` (90%)
+- `ZzThing04` (90%)
+- `ZzThing05` (90%)
+- `ZzThing06` (90%)
+- `ZzThing07` (90%)
+- `ZzThing08` (90%)
+- `ZzThing09` (90%)
+  ... +3 more C# types (pass limit:'all' to expand)

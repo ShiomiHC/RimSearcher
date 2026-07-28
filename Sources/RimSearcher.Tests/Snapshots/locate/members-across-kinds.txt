@@ -1,0 +1,17 @@
+## 'ZzSlot' — 10 of 24 members (0 at 100%)
+
+**Members**:
+  Properties:
+  - `Zz.ZzHolder00.ZzSlotProp00` (90%)
+  - `Zz.ZzHolder01.ZzSlotProp01` (90%)
+  - `Zz.ZzHolder02.ZzSlotProp02` (90%)
+  - `Zz.ZzHolder03.ZzSlotProp03` (90%)
+  Methods:
+  - `Zz.ZzHolder00.ZzSlotTick00` (90%)
+  - `Zz.ZzHolder01.ZzSlotTick01` (90%)
+  - `Zz.ZzHolder02.ZzSlotTick02` (90%)
+  Fields:
+  - `Zz.ZzHolder00.ZzSlotField00` (90%)
+  - `Zz.ZzHolder01.ZzSlotField01` (90%)
+  - `Zz.ZzHolder02.ZzSlotField02` (90%)
+  ... +14 more members (pass limit:'all' to expand)
