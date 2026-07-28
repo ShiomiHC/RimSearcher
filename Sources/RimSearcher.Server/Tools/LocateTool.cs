@@ -138,7 +138,8 @@ public class LocateTool : ITool
             if (query.MethodFilter != null) memberKinds.Add("Method");
             if (query.FieldFilter != null) { memberKinds.Add("Field"); memberKinds.Add("Property"); }
 
-            // 成员按 method/property/field 分组显示，每组各给一份配额，故这里要多取一些；
+            // 成员按 method/property/field 分组显示、各组轮流占配额，故取回要比 limit 多一些：
+            // 只取回 limit 条的话，分数最高的那一批可能全是同一类，轮流也就无从轮起。
             // Scale 放大后仍夹在服务端硬上限内
             var members = _sourceIndexer.SearchMembersByKeywords(
                 keywords.ToArray(), scope, limit.Scale(3).Count, memberKinds);
@@ -150,14 +151,14 @@ public class LocateTool : ITool
                 var tallySlot = tally.Count;
                 tally.Add("");
 
-                // 'all' 时不再按组折叠（总量已被硬上限约束住），否则每组各给一半配额
-                var perGroup = limit.Unlimited ? limit.Count : Math.Max(3, limit.Count / 2);
+                // limit 是**这一段的上限**（schema 写的 result cap per section），故按总量切。
+                // 原先是 perGroup = max(3, limit/2)、每个种类各切一份，于是同一个 limit 既不是
+                // 上限也不是下限：`energy` limit:10 列出 13 条（Properties 5 + Fields 5 +
+                // Methods 3），而 `method:CompTick` limit:10 只列 5 条——单一种类只拿得到一份配额。
                 var groupedMembers = members.Items.GroupBy(m => m.Item.MemberType).ToList();
 
                 // 来源标签按**实际列出的那些行**判，故先把分组配额切出来再写表头
-                var shownGroups = groupedMembers
-                    .Select(group => (Kind: group.Key, Items: group.Take(perGroup).ToList()))
-                    .ToList();
+                var shownGroups = TakeRoundRobin(groupedMembers, limit.Unlimited ? int.MaxValue : limit.Count);
                 var shown = shownGroups.Sum(g => g.Items.Count);
 
                 var memberLabels = ScopeArgs.SourceLabeling.Of(
@@ -364,6 +365,37 @@ public class LocateTool : ITool
     // 两个数都给，且沿用「看到 of 就是被截了」这条读法：没被截时不写 `of N`，那时显示即全部。
     //
     // 名词跟总数走（"1 of 768 C# types" 是属格复数，"5 C# types" 跟 5），与 R30 判据一致。
+    // 各组轮流取一条，直到取满 budget 或全部取完。组的先后与组内次序都保持传入时的样子——
+    // 那是取回层排好的（分数 → 名字长度 → 宿主类型 → 成员名 → 文件），这里只负责切配额。
+    //
+    // 轮流而不是「按顺序装满一组再装下一组」：后者会让第一类把配额吃光，而那正是 F10 当初
+    // 把 kind 过滤推到取回层要防的事。带前缀的查询只有一类，轮流退化成顺序取，正好拿满 limit。
+    // 取空的组不返回，否则会印出一个底下一条都没有的 `Fields:` 标题。
+    private static List<(string Kind, List<T> Items)> TakeRoundRobin<T>(
+        List<IGrouping<string, T>> groups,
+        int budget)
+    {
+        var pools = groups.Select(group => group.ToList()).ToList();
+        var taken = groups.Select(group => (Kind: group.Key, Items: new List<T>())).ToList();
+
+        var remaining = budget;
+        for (var round = 0; remaining > 0; round++)
+        {
+            var progressed = false;
+            for (var i = 0; i < pools.Count && remaining > 0; i++)
+            {
+                if (round >= pools[i].Count) continue;
+                taken[i].Items.Add(pools[i][round]);
+                remaining--;
+                progressed = true;
+            }
+
+            if (!progressed) break;
+        }
+
+        return taken.Where(group => group.Items.Count > 0).ToList();
+    }
+
     private static string Count(int shown, int total, string plural) =>
         total > shown
             ? $"{shown} of {OutputText.Quantity(total, plural)}"

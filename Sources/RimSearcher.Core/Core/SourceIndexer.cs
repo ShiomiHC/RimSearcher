@@ -752,6 +752,42 @@ public class SourceIndexer
         if (pool.Count > poolSize) pool.RemoveRange(poolSize, pool.Count - poolSize);
     }
 
+    // 一个 member key 下挂的成员全部计入 into，值是「命中了几个关键词」（keywordBonus 用它）。
+    //
+    // kind 过滤放在这里、而不是留到最后一并 Where：去掉 key 层的 Take(10) 之后，宽泛查询
+    // （`method:Draw`）能展开几百个 key、上万条成员，其中大半会被 kind 筛掉。先筛再进字典，
+    // 省掉的正是最贵的那部分（四段元组的哈希与装箱）。
+    private void CollectMembersUnderKey(
+        string memberKey,
+        Dictionary<(string, string, string, string), int> into,
+        HashSet<(string, string, string, string)> seenForThisKeyword,
+        IReadOnlyCollection<string>? memberKinds)
+    {
+        IEnumerable<(string TypeName, string MemberName, string MemberType, string FilePath)>? members = null;
+        if (_frozenMemberIndex != null && _frozenMemberIndex.TryGetValue(memberKey, out var frozen))
+            members = frozen;
+        else if (_memberIndex.TryGetValue(memberKey, out var bag))
+            members = bag;
+
+        if (members == null) return;
+
+        foreach (var member in members)
+        {
+            if (memberKinds is { Count: > 0 }
+                && !memberKinds.Contains(member.MemberType, StringComparer.OrdinalIgnoreCase))
+                continue;
+
+            var key = (member.TypeName, member.MemberName, member.MemberType, member.FilePath);
+
+            // 同一关键词内重复命中不加分，见调用处 seenForThisKeyword 的注释。不去重的话，
+            // 去掉 Take(10) 带来的「能命中同一成员的 key 变多了」会直接变成分数虚高：
+            // keywordBonus 每多一次 +10，单关键词查询也能被推到 100 封顶，排序随之失真。
+            if (!seenForThisKeyword.Add(key)) continue;
+
+            into[key] = into.GetValueOrDefault(key) + 1;
+        }
+    }
+
     // memberKinds 非空时只留这几类成员（取值同索引层的 MemberType：Method / Property / Field）。
     // 过滤必须发生在**取回**这一层而不是展示层：候选是按分数取 limit 条的，不分种类。
     // field:Tick 这类查询里方法数量压倒性多于字段，筛在后面等于先让方法把配额吃光——
@@ -765,9 +801,9 @@ public class SourceIndexer
         if (keywords == null || keywords.Length == 0)
             return ScopedResult<(string, string, string, string)>.Empty;
         var matchedMembers = new Dictionary<(string, string, string, string), int>();
-        
-        var memberKeys = _frozenMemberIndex != null 
-            ? (IEnumerable<string>)_frozenMemberIndex.Keys 
+
+        var memberKeys = _frozenMemberIndex != null
+            ? (IEnumerable<string>)_frozenMemberIndex.Keys
             : _memberIndex.Keys;
 
         foreach (var keyword in keywords)
@@ -775,20 +811,12 @@ public class SourceIndexer
             if (string.IsNullOrWhiteSpace(keyword) || keyword.Length < 2) continue;
             var keyLower = keyword.ToLowerInvariant();
 
-            IEnumerable<(string TypeName, string MemberName, string MemberType, string FilePath)>? members = null;
-            if (_frozenMemberIndex != null && _frozenMemberIndex.TryGetValue(keyLower, out var frozenMembers))
-                members = frozenMembers;
-            else if (_memberIndex.TryGetValue(keyLower, out var bagMembers))
-                members = bagMembers;
-                
-            if (members != null)
-            {
-                foreach (var member in members)
-                {
-                    var key = (member.TypeName, member.MemberName, member.MemberType, member.FilePath);
-                    matchedMembers[key] = matchedMembers.GetValueOrDefault(key) + 1;
-                }
-            }
+            // 一个成员会被同一个关键词的多个 key 命中（成员名整体是一个 key，camelCase 分出来的
+            // 每个词各是一个 key），而 matchedMembers 的值要数的是「命中了几个**关键词**」。
+            // 故按关键词开一份去重集，同一关键词内只计一次。
+            var seenForThisKeyword = new HashSet<(string, string, string, string)>();
+
+            CollectMembersUnderKey(keyLower, matchedMembers, seenForThisKeyword, memberKinds);
 
             IEnumerable<string> fuzzyCandidates;
             if (keyLower.Length >= 3)
@@ -809,38 +837,24 @@ public class SourceIndexer
                     .ToList();
             }
             
-            var fuzzyMatches = fuzzyCandidates
-                .Select(k => (Key: k, Score: FuzzyMatcher.CalculateFuzzyScore(k, keyLower)))
-                .Where(x => x.Score >= 60.0)
-                .OrderByDescending(x => x.Score)
-                // 同分并列时「选中哪十个」也随 memberKeys 的枚举顺序变，而这一步决定了
-                // 后面整批候选的成分，不只是次序
-                .ThenBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
-                .Take(10)
-                .Select(x => x.Key);
-                
-            foreach (var fuzzyKey in fuzzyMatches)
+            // 分够 60 的 key 全部展开，不再二次截断。取舍已经在候选池那一层做完了——
+            // 那里按 2-gram 重合度排了全序、取前 MemberFuzzyPoolSize 条（见 TopKeysByNgramOverlap）。
+            //
+            // 这里原先还有一道 `.Take(10)`，而它是 F28 之后剩下的最后一道假承诺：分够 60 的 key
+            // 常常远多于 10 个（`StartsWith` 一律给 90 分，共同前缀的成员名在本体里成百上千），
+            // 第 11 个之后的 key 连同它挂着的全部成员一起消失，**而 TotalInScope 数的是截断之后
+            // 的那一批**——于是表头把一个切片印成了「完整集」：`method:Notify_` 报 `22 members`
+            // （bare N，按契约即完整集），22 条去重后只有 10 个方法名，全落在字母序最前的
+            // `Notify_Ab…` 到 `Notify_Ap…` 上，而 `Notify_StartedCasting` 确在索引里。
+            // 少回结果只是慢一轮，把不全的说成全的会让调用方直接得出反向结论。
+            foreach (var fuzzyKey in fuzzyCandidates)
             {
-                IEnumerable<(string TypeName, string MemberName, string MemberType, string FilePath)>? fuzzyMemberList = null;
-                if (_frozenMemberIndex != null && _frozenMemberIndex.TryGetValue(fuzzyKey, out var frozenFuzzy))
-                    fuzzyMemberList = frozenFuzzy;
-                else if (_memberIndex.TryGetValue(fuzzyKey, out var bagFuzzy))
-                    fuzzyMemberList = bagFuzzy;
-                    
-                if (fuzzyMemberList != null)
-                {
-                    foreach (var member in fuzzyMemberList)
-                    {
-                        var key = (member.TypeName, member.MemberName, member.MemberType, member.FilePath);
-                        matchedMembers[key] = matchedMembers.GetValueOrDefault(key) + 1;
-                    }
-                }
+                if (FuzzyMatcher.CalculateFuzzyScore(fuzzyKey, keyLower) < 60.0) continue;
+                CollectMembersUnderKey(fuzzyKey, matchedMembers, seenForThisKeyword, memberKinds);
             }
         }
 
         var candidates = matchedMembers
-            .Where(kv => memberKinds == null || memberKinds.Count == 0
-                         || memberKinds.Contains(kv.Key.Item3, StringComparer.OrdinalIgnoreCase))
             .Select(kv =>
             {
                 var (typeName, memberName, memberType, filePath) = kv.Key;
