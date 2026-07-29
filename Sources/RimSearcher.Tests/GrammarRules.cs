@@ -30,20 +30,64 @@ public readonly record struct GrammarViolation(string Rule, string Line, string 
 
 public static class GrammarRules
 {
-    // 受单复数与自洽两条规则覆盖的名词。**这就是本闸的覆盖面**：新加一个计数名词却不登记在
-    // 这里，那个槽位的单复数就没人守——故这张表要与产品代码里传给 OutputText.Quantity /
-    // NounFor 的那批字面量同步。
+    // 受单复数、名词槽两组规则覆盖的名词。**这就是本闸的覆盖面**：新加一个计数名词却不登记在
+    // 这里，那个槽位就没人守——故这张表要与产品代码里那批名词字面量同步。
+    //
+    // 「同步」此前只是这条注释里的一句话，于是表从落地那天起就漂着：`changed sources` 与
+    // `name keys` 在产品侧一处对应的字面量都没有，而产品真正在数的 `checked sources` 从没进过
+    // 表。现在那件事由 CountedNounRegistryTests 双向钉住（产品有词必登记、登记必有产品字面量）。
+    //
+    // `defs` 也是死项，但它是手工删的：产品里确有 `"defs"` 字面量，那是 AppConfig 的**配置键名**
+    // 而不是计数名词，纯文本判定分不出这两者。这个盲区要靠给计数名词一个类型来堵（M3）。
     //
     // 只收复数式，单数一律由 OutputText.NounFor 现算：闸与产品共用同一个构词函数，否则
     // 「这里说该写 match」与「那里写出 matche」会各自成立。
     private static readonly string[] CountedNouns =
     [
         "C# types", "XML defs", "members", "content matches", "files", "matching files",
-        "matching lines", "preview lines", "changed files", "changed sources", "entries",
+        "matching lines", "preview lines", "changed files", "checked sources", "entries",
         "lines", "subclasses", "items", "types", "methods", "properties", "fields",
         "levels", "minutes", "conditional folders", "versions", "C# paths", "XML paths",
-        "parameters", "matches", "defs", "name keys",
+        "parameters", "matches",
     ];
+
+    // 登记名词的两种合法写法：复数式本身，与 NounFor 现算出来的单数式。两个名词槽在 N==1 时
+    // 印的正是后者（`... +1 more C# type`），只认复数式的话那一侧整片都是假阳性。
+    //
+    // 单数式仍不入 CountedNouns：那张表是**与产品字面量同步的名单**，产品侧传的一律是复数式，
+    // 表里多出一批产品从不传的词，下一次核对就分不清哪些是漏删的死项。
+    private static readonly HashSet<string> CountedNounForms = new(
+        CountedNouns.Concat(CountedNouns.Select(p => OutputText.NounFor(1, p))),
+        StringComparer.Ordinal);
+
+    // 名词槽里那个词是不是登记在案。
+    //
+    // 两个槽此前都只验形状（「非空且首词不在 NotNouns 里」/「下一个字符是字母」），于是
+    // `... +7 more nothing (…)` 与 `5 of 12 in scope 'all'` 都能过闸——而单复数那条规则又只对
+    // 表里的词生效。三条合起来：没登记的名词，覆盖是零。这个函数是那个零的补丁。
+    private static bool IsCountedNoun(string noun)
+        => CountedNounForms.Contains(noun);
+
+    // 给同步闸（CountedNounRegistryTests）看的两个入口。它判的是「表与产品源码对不对得上」，
+    // 与本文件判输出文本是两件事，故只借名单、不借判断——正好是 §3 判据六那条边界。
+    //
+    // 登记式只暴露复数式：产品侧传的一律是复数式，单数式是 NounFor 现算出来的，拿它去对源码
+    // 字面量只会找不到。
+    public static IReadOnlyList<string> RegisteredCountedNouns => CountedNouns;
+
+    public static bool IsRegisteredCountedNoun(string noun) => CountedNounForms.Contains(noun);
+
+    // tail 是不是**以**一个登记名词开头。`N of M` 那个槽后面还跟着句子的其余部分
+    // （`10 of 21 C# types (1 at 100%)`），故只能判词头。
+    //
+    // 词边界对齐：`type` 不许把 `types` 的前四个字母认下来，否则单复数那一侧就被这条悄悄豁免了。
+    private static bool LeadsWithCountedNoun(string tail)
+    {
+        var t = tail.TrimStart();
+        return CountedNounForms.Any(n =>
+            t.StartsWith(n, StringComparison.Ordinal)
+            && (t.Length == n.Length || !char.IsLetter(t[n.Length])));
+    }
 
     // 数词后面**合法地**跟着一个以 s 结尾的非名词的那几个词。规则二甲是纯结构判定（不查词表），
     // 少了这张表会把 `1 file was abandoned mid-scan` 里的 was 判成复数名词。
@@ -86,11 +130,17 @@ public static class GrammarRules
         @"(?<![-\d])\b(?<n>\d+) of (?:the )?(?<floor>at least )?(?<m>\d+)(?<tail>.{0,40})",
         RegexOptions.Compiled);
 
+    // 每文件折叠行的名词与它后面那个作用域限定。分成两个常量是因为规则一要拿前者去查词表，
+    // 而这一形的名词槽本来就带着 `in this file`（见 Fold.PerFile）——那半句说的是「在哪儿」，
+    // 不是名词的一部分，连着查词表要么恒红、要么逼词表收一个带地点状语的假名词。
+    private const string PerFileFoldNoun = "matching lines";
+    private const string PerFileFoldTail = $" {PerFileFoldNoun} in this file";
+
     // 每文件折叠行。README 明写它是**唯一**不带括号的一形：它的下一步整份返回里只说一次
     // （`... previews are capped at N lines per file …`），不逐文件重复。规则一与规则九
     // 共用这一个判据——两处各写一份的话，改了一处另一处就成了新的假阳性来源。
     private static bool IsPerFileFold(string trimmed)
-        => trimmed.EndsWith(" matching lines in this file", StringComparison.Ordinal)
+        => trimmed.EndsWith(PerFileFoldTail, StringComparison.Ordinal)
            && trimmed.StartsWith("... +", StringComparison.Ordinal);
 
     private static readonly Regex OnePlus = new(
@@ -202,10 +252,21 @@ public static class GrammarRules
                 found.Add(new GrammarViolation("折叠行文法", line,
                     "折叠行不以 `(<下一步>)` 收尾，而唯一豁免是每文件折叠行"));
 
-            var head = noun.Split(' ').FirstOrDefault() ?? string.Empty;
-            if (noun.Length == 0 || NotNouns.Contains(head))
+            // 每文件折叠行的名词后面还带一个作用域限定（`… matching lines in this file`）：
+            // 名词是 `matching lines`，`in this file` 说的是「在哪儿」。判词表前先摘掉它，
+            // 否则这一形要么恒红，要么逼着词表收一个带地点状语的假名词。
+            var slot = perFileFold ? PerFileFoldNoun : noun;
+
+            var head = slot.Split(' ').FirstOrDefault() ?? string.Empty;
+            if (slot.Length == 0 || NotNouns.Contains(head))
                 found.Add(new GrammarViolation("名词槽不空", line,
-                    $"折叠行数的是什么没写出来（名词槽 = '{noun}'）"));
+                    $"折叠行数的是什么没写出来（名词槽 = '{slot}'）"));
+
+            // 非空还不够：`... +7 more nothing (…)` 也满足上面那条。名词必须是登记在案的那批，
+            // 否则它落在单复数规则的辖域之外——即「加一个词就能把这个槽的单复数覆盖清零」。
+            else if (!IsCountedNoun(slot))
+                found.Add(new GrammarViolation("名词槽登记在案", line,
+                    $"折叠行的名词 '{slot}' 不在 CountedNouns 里，它的单复数没人守"));
         }
     }
 
@@ -284,8 +345,8 @@ public static class GrammarRules
     //     各自独立误读了同一个 `at least 105`——它们就近拿 `limit` 的 default 100 去解释那个下界
     //     （只差 5，算术上太顺），而真正的成因隔在整份结果之后、中间还夹着别的尾注。同现不够，
     //     记号自己必须带一条指向成因的引用（LowerBoundReason）。
-    //     反面用例见 GrammarRulesTests：`at least` 与一个**并非其成因**的上限说明同时可见时，
-    //     不带引用就判违规。
+    //     反面用例见 GrammarRulesTests.FloorMarkNextToADecoyCause_NeedsAPointer：`at least` 与一个
+    //     **并非其成因**的上限说明同时可见时，不带引用就判违规。
     // 乙：反向。有文件没扫全时总数只是下界，表头必须跟着改口，否则一句说「7 found」、一句说
     //     「有文件没扫全」，调用方无从判断该信哪个。
     //     例外是表头已经换了量纲的那一支：扫描停在预览上限时表头数的是**印出来的**预览行
@@ -314,8 +375,11 @@ public static class GrammarRules
 
     // ---- 五、名词槽不空（管「怎么说」；R19/R21） ----
     //
-    // 折叠行那一侧在规则一里判了，这里补计数那一侧：`N of M` 后面必须紧跟名词。
+    // 折叠行那一侧在规则一里判了，这里补计数那一侧：`N of M` 后面必须紧跟一个**登记在案的**名词。
     // 历史上 sync_sources 的 `... 12 more of 30 — next page` 就是一个裸着的 30。
+    //
+    // 此前这里只验「下一个字符是字母」，于是 `5 of 12 in scope 'all'` 里的 `in` 就当了那个名词
+    // ——一个数了什么全没写的计数记号照样过闸。查词表之后这一形才有判据。
     private static void CountsCarryANoun(string[] lines, List<GrammarViolation> found)
     {
         foreach (var line in lines)
@@ -323,9 +387,14 @@ public static class GrammarRules
             foreach (Match m in NofM.Matches(line))
             {
                 var tail = m.Groups["tail"].Value;
-                if (tail.Length > 0 && tail[0] == ' ' && tail.Length > 1 && char.IsLetter(tail[1])) continue;
+                if (LeadsWithCountedNoun(tail)) continue;
+
+                var naked = tail.Length < 2 || tail[0] != ' ' || !char.IsLetter(tail[1]);
                 found.Add(new GrammarViolation("名词槽不空", line,
-                    $"`{m.Groups["n"].Value} of {m.Groups["m"].Value}` 后面没有名词，数的是什么全靠猜"));
+                    naked
+                        ? $"`{m.Groups["n"].Value} of {m.Groups["m"].Value}` 后面没有名词，数的是什么全靠猜"
+                        : $"`{m.Groups["n"].Value} of {m.Groups["m"].Value}` 后面跟的"
+                          + $"`{tail.Trim()}` 不是登记在案的计数名词"));
             }
         }
     }
