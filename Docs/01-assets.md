@@ -26,6 +26,29 @@ TraceTool 27),这些资产与存储层无关,不论各点择优选了谁的做�
 | UnifiedDiffFormatter | `Sources/RimSearcher.Core/Core/UnifiedDiffFormatter.cs` | 若做 patch 前后 diff(03 拦截点)直接复用 |
 | 模糊匹配实现 | `Sources/RimSearcher.Core/Core/FuzzyMatcher.cs`(148 行) | 特例:取数层里唯一值得考虑带走的实现——上游 FTS5 搜索要用户手加 `*` 前缀(02-7),locate 的模糊体验优于它;可移植到 def_name 列表上 |
 
+## 落账(2026-07-30,04 验收要求「无第三态」)
+
+上表逐条的去向。「已移植」指落地并有闸盯着,不是「写了个像的」。
+
+| 资产 | 去向 |
+|---|---|
+| 三态截断文法 | `Output/CountedNoun.cs` 的 `Tally`;闸在 `GrammarTests` + `GateTests.基线里没有伪截断的计数` |
+| 截断自证 | `Report.TruncationNotice`;完整集合零字节,被截必发声,两侧都有断言 |
+| 能力边界诚实声明 | `NoticeKind.Boundary`。R51 那条「写进它作用的那个块」落在 `get` 的导出侧截断标记上 |
+| 产地唯一 | `CommandSpec`/`OptionSpec` 是唯一产地,`--help` 与 markdown 参考页是两个渲染器;闸是 `GateTests.入库的参数参考与声明渲染逐字节一致` |
+| 声明政策 | `ArgParser` 严格模式 + 有意接受的拼写变体(07-② 的 9 种写法);数字从 `Limits` 插值进散文,`DeclarationTests` 盯着 |
+| 闸的事实侧取行为 | `ProcessTests` —— 真起进程读 stdout。**不做「找不到就跳过」**:xunit 2.x 没有真跳过,拿 `Assert.True` 冒充会把「没跑」记成「跑过且通过」 |
+| ToolResult 输出收口 | `Output/OutputText.cs`;LF、TrimEnd、单个结尾换行,进程侧也验 |
+| 未知参数提示 | `ArgParser` 未知 flag 报错带近似候选;无候选时直接列出接受的参数,免得再跑一轮 help |
+| scope 语法设计 | `Snapshot/ScopeFilter.cs`,`all,-vanilla` 排除语法与配置组都在 |
+| 文法/措辞系统 | `CountedNoun` / `OutputText` / `GrammarTests`。1338603 的写法教训贯彻到底:判产地渲染的槽空不空 |
+| 字节级基线方法 | `OutputSnapshotTests` + `Snapshots/`(25 份)。`SnapshotGrammarGateTests` 那道缝合进 `GateTests`——基线逐行喂回文法检查,已验证故意写坏会红 |
+| 盲测方法论 | workflow 盲测,第一轮结果与教训在 04 |
+| staleness 机制设计 | `CommandBase.AnnounceSnapshot`;判据在实现阶段改过一次,记在 06 |
+| 模糊匹配实现 | `Search/FuzzyMatcher.cs`,Ordinal-vs-CurrentCulture 那条教训原样带注释搬来;另加 `StripKindPrefix` 应对 07-⑤ 的 `method:` 前缀 |
+| 可移植测试类 | **部分移植**。OutputSnapshotTests / OutputGrammarGateTests(并入 GateTests)/ OutputVolumeCapTests(并入 GrammarTests 的声明区行数上限)/ GrammarRulesTests / CountedNounRegistryTests 都在。**OutputReadabilityTests 未移植** —— 它判的是表格可读性(列宽、对齐),而这里的表格渲染已被 25 份字节基线整体钉死,再立一层同源的判据是 schema 验 schema |
+| UnifiedDiffFormatter | **明确弃置(暂)**。它的用武之地是 patch 前后 diff,而本轮**没有做** patch 拦截点 —— 运行时导出拿到的就是合并后的结果,「前」那一半根本不在场。真要做 03 的拦截点时再从 master 取,产地已记在上表 |
+
 ## 扔掉(取数实现,被「游戏运行时已加载数据库」整体替代)
 
 `SourceIndexer` / `RoslynHelper` / `DecompileService` / `XmlInheritanceHelper` /

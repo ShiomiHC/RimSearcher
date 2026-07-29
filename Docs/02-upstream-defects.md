@@ -66,3 +66,19 @@ FTS5 `unicode61` 分词,复合名(`Apparel_ShieldBelt`)搜 `shield` 不中,必�
   releases」的教训,和 24h 缓存文件要带仓库名防串的坑,两条都适用。
 - CJK bigram 展开(`ExpandCjkBigrams`)与去噪清单是 `d81e667` 一并进的,中文检索
   依赖它,改 FTS 结构时别顺手丢了。
+
+## 落账(2026-07-30,04 验收要求「1-6 修完,7-9 有去向」)
+
+| # | 状态 | 落点 |
+|---|---|---|
+| 1 截断不自证 | 已修 | `Tally` 三态 + `Report.TruncationNotice`;完整集合零字节,被截必发声。`code-search` 有**四刀**分开的截断声明(行数 / 单文件 / 文件数 / 正则超时),原因不同旋钮也不同 |
+| 2 噪声清单两份手写 | 结构性消解 | B 案把建库搬到 CLI 侧,噪声只剩一个产地 `Storage/NoiseFilter.cs`,游戏侧不再有第二份。改口径的代价从「重开一局游戏」降到「重导一次」。`ImportTests.噪声字段不进库` 盯着 |
+| 3 暗截断无声明 | 已修 | 导出侧截断随 def 入库(`fields_truncated`),`get` 在该 def 的块里说破:「路径不在下面**不等于** def 没有它」。这条区分上游整个略过 |
+| 4 快照过期静默 | 已修 | `AnnounceSnapshot`。判据在实现阶段改过一次(见 06),实测代价记在 04 |
+| 5 无测试 | 已修 | 122 项。名单侧 / 事实侧 / 字节基线三层,基线已验证故意写坏会红 |
+| 6 导出非原子 | 已修 | 中间格式带结束标记与条数,对不上一律拒收;temp→rename;失败不留半成品(`ImportTests` 三条) |
+| 7 search 模糊体验弱 | 已修 | `BuildMatchQuery` 自动补 `*`,调用方永远不需要知道它;FTS 落空再退模糊匹配。**外加实现阶段发现的一条**:值域不含 C# 类名要说清,否则零结果会被读成「模糊匹配坏了」 |
+| 8-① FTS5 P/Invoke 脆 | 不适用 | 游戏侧不再建库,`System.Data.SQLite` 整个不需要。DataMod 是纯托管、零原生依赖 |
+| 8-② 编译产物进库 | 已修 | `.gitignore` 挡掉 `bin/`、`obj/`、`.build/`;DataMod 输出直接落本机 Mods 目录 |
+| 8-③ update 命令 | **明确弃置** | 本轮不做自更新。那条教训(fork 用户被导流到上游 releases、缓存文件要带仓库名)只在有 update 命令时才成立;真要做时产地在 master 的 `UpdateChecker.cs` |
+| 8-④ CJK bigram 别丢 | 已守住 | `Storage/FtsText.ExpandCjkBigrams`;`ImportTests.中文标签搜得到` 是闸,真实 mod 语料上另验过四个词均命中 |
