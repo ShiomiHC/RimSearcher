@@ -169,9 +169,13 @@ public static class ScanOutputRenderer
         // 表头数的是**行**、正文分的是**文件**、这一行数的是**没列出来的文件**——三个口径三个
         // 名词。扫描没被截断时 Blocks.Count 就是命中文件总数（确定值），直接给出来，读者不必去
         // 数正文里的文件块。
-        return $"\n\n... +{hidden} more of "
-               + $"{OutputText.Quantity(output.Blocks.Count, "matching files")} "
-               + $"({output.FileListCap} listed; narrow the pattern or the scope)";
+        //
+        // 走 Fold.Explicit：文件数上限是个定长常数，没有参数放得宽它，下一步是收窄 pattern
+        // 或 scope，与 limit 的三分支无关。这一行此前是 renderer 里唯一还在手拼共用文法的。
+        return "\n\n" + Fold.Explicit(
+            hidden, "matching files",
+            $"{output.FileListCap} listed; narrow the pattern or the scope",
+            total: output.Blocks.Count, indent: string.Empty);
     }
 
     // 尾注的排序。此前它只活在各 ExecuteAsync 的代码顺序里，没有任何一处把它写成规则——而两个

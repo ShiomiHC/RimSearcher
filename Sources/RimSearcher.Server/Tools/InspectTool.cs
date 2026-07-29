@@ -465,8 +465,11 @@ public class InspectTool : ITool
                         var paths = _sourceIndexer.GetPathsByType(cls);
                         sb.AppendLine($"- `{cls}`{SymbolRow.FileNote(cls, paths)}");
                     }
+                    // 定长上限，不经过 ScopeFilter：没有任何参数放得宽这个 10，故下一步是换工具
+                    // 而不是调 limit——落不进 Fold.Line 的三分支，走显式那一形。
                     if (foundTypes.Count > 10)
-                        sb.AppendLine($"  ... +{foundTypes.Count - 10} more types (use locate to find them)");
+                        sb.AppendLine(Fold.Explicit(
+                            foundTypes.Count - 10, "types", "use locate to find them", pluralize: false));
                 }
             }
             catch (OperationCanceledException) { throw; }

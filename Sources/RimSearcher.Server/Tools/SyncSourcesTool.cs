@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using RimSearcher.Core;
+using RimSearcher.Server.Tools.Output;
 
 namespace RimSearcher.Server.Tools;
 
@@ -460,16 +461,20 @@ public class SyncSourcesTool : ITool
                     + $"the last page starts at offset={lastPage})");
             }
 
-            // 文法与全服统一的截断脚注一致：`... +N more of M <什么> (<怎么拿到>)`，见 Fold.Line。
-            // 这一行原先三处都在共用文法之外：丢了 `+`（调用方就是按 `... +` 认截断的）、总数后面
-            // 裸着一个没有名词的数（`of 30` 数的是什么全靠猜）、下一步写在破折号后面而不是括号里。
-            // 同一个记号在别的六个工具上都是那一形，独这里要再学一遍。
+            // 文法归 Fold.Explicit：`... +N more of M <什么> (<怎么拿到>)`。这一行原先三处都在
+            // 共用文法之外：丢了 `+`（调用方就是按 `... +` 认截断的）、总数后面裸着一个没有名词
+            // 的数（`of 30` 数的是什么全靠猜）、下一步写在破折号后面而不是括号里。同一个记号在别的
+            // 六个工具上都是那一形，独这里要再学一遍——那三处偏离现在按构造不可能再发生。
+            //
+            // 走显式那一形而不是 Fold.Line：翻页不经过 ScopeFilter，下一步是 offset，
+            // 而 limit:'all' 在这里只是换一页、narrow the query 更无从执行。
             if (remaining > 0)
             {
-                builder.AppendLine(
-                    $"  ... +{remaining} more of {OutputText.Quantity(diff.Changes.Count, "changed files")} "
-                    + $"(next page: offset={request.Offset + shown}"
-                    + (request.Limit < MaxLimit ? $", or raise limit, max {MaxLimit})" : ")"));
+                builder.AppendLine(Fold.Explicit(
+                    remaining, "changed files",
+                    $"next page: offset={request.Offset + shown}"
+                    + (request.Limit < MaxLimit ? $", or raise limit, max {MaxLimit}" : string.Empty),
+                    total: diff.Changes.Count));
             }
 
             builder.AppendLine();
@@ -526,11 +531,11 @@ public class SyncSourcesTool : ITool
         foreach (var line in lines.Take(MaxMembersPerFileInListing)) builder.AppendLine($"    {line}");
         if (lines.Count > MaxMembersPerFileInListing)
         {
-            // 同上：`... +N more <什么> (<怎么拿到>)`。原先丢了 `+`、下一步挂在破折号后面。
-            builder.AppendLine(
-                $"    ... +{lines.Count - MaxMembersPerFileInListing} more "
-                + $"{OutputText.NounFor(lines.Count - MaxMembersPerFileInListing, "members")} "
-                + $"(pass file='{relativePath}' with granularity='members' to list them all)");
+            // 同上：原先丢了 `+`、下一步挂在破折号后面。缩进比列举那条深一级（这是文件下的成员）。
+            builder.AppendLine(Fold.Explicit(
+                lines.Count - MaxMembersPerFileInListing, "members",
+                $"pass file='{relativePath}' with granularity='members' to list them all",
+                indent: "    "));
         }
     }
 
