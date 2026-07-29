@@ -238,6 +238,8 @@ modlist 别名、scope 组。**不放**:指纹事实(产地在 db meta)、任何
 - `references/cli-reference.md`:**生成产物**(见声明层),手改无效、闸会红。
 - `references/decompiler-mcp.md` **[上游]**:现成一份,随裁随改。
 - skill 本身进被测物(04 盲测一节):盲测发现 skill 在教绕路 → 修 CLI。
+- skill 文件住本仓 `skills/`(沿上游布局);会话发现路径到实际项目使用时再裁
+  (用户裁决,不阻塞)。
 
 ## 旁路 · C# 阅读能力
 
