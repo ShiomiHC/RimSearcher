@@ -12,6 +12,31 @@ namespace RimSearcher.Server.Tools.Output;
 // 「调用方要过 'all' 没有」和「顶到服务端上限没有」才分得开，那两件事本来就是参数语义。
 public static class Fold
 {
+    // 「藏起来的是哪一批」这个槽的居民。
+    //
+    // 三条共通的判据：它们描述的是**被折叠那批**，不是列出来那批。折叠行只说「还剩多少、
+    // 怎么拿」时，读者的默认读法是「列出来的是个样本」——而三种截断留下的都是有系统偏向的
+    // 前缀（分数最高的那批 / 最浅的那批），样本读法一次都不成立。
+    //
+    // 词收在这里一处，条件留在各自知道事实的地方（locate 知道自己有没有被断层收口砍过，
+    // inheritors 知道切片有没有触到最深层）——同 §3 判据六：共用名单，不共用判断。
+    public static class HiddenBatch
+    {
+        // 断层收口砍掉的是「相对首条掉了 40 分以上」的那批。
+        public const string LowerRelevance = "lower relevance";
+
+        // 切片已经触到最深层：藏起来的是同深度里的其余。
+        public const string ShallowestFirst = "shallowest first";
+
+        // 切片没触到最深层：藏起来的里面有更深的。与上一条是**两件不同的事实**，不是一件事的
+        // 两个精度，故不叠着说。
+        //
+        // 「below depth N」的方向要靠读者自己定：depth 数值越大越深，而「below」在版面上指的是
+        // 「下面那些行」。第十三轮盲测里被测方当场读反了一次。故写 deeper than。
+        public static string NothingDeeperThan(int depth)
+            => $"nothing deeper than depth {depth} is listed";
+    }
+
     // 折叠行。断层收口时说明被折叠的是低匹配度结果，免得读者以为还有同等相关的东西没显示。
     //
     // 下一步的建议必须按「是谁砍掉的」分开给，三种情况的正确动作互不相同：
@@ -22,10 +47,12 @@ public static class Fold
     //     一条也没多出来，还会把「+N more」读成服务端在敷衍。
     public static string? Line<T>(
         ScopedResult<T> result, string noun, string indent = "  ", ResultLimit? limit = null,
-        string? capAction = null)
+        string? capAction = null, string? hiddenBatch = null)
         => Line(
             result.HiddenCount, result.Items.Count,
-            result.TruncatedByScoreGap, result.TruncatedByLimit, noun, indent, limit, capAction);
+            // 调用方没自己说「藏的是哪一批」时，由结果自己答：断层收口砍过就是低匹配度那批。
+            hiddenBatch ?? (result.TruncatedByScoreGap ? HiddenBatch.LowerRelevance : null),
+            result.TruncatedByLimit, noun, indent, limit, capAction);
 
     // 显式计数的重载。分段显示的场景（locate 的 Members 按 method/property/field 分组）里，
     // 真正被藏起来的条数由「ScopeFilter 的 limit」和「每组的显示配额」两层共同决定，
@@ -33,7 +60,11 @@ public static class Fold
     public static string? Line(
         int hiddenCount,
         int shownCount,
-        bool truncatedByScoreGap,
+        // 「藏起来的是哪一批」。null = 这一形说不出（也就不硬说）。取值见 HiddenBatch。
+        // 此前这里是个 bool，只答得出「是不是断层收口」——于是 inheritors 那条同样有系统偏向的
+        // 截断（留下的恒是最浅的那批）在折叠行上无处可说，只能挂在表头 `Listed below` 后面，
+        // 与「这次列了几个」挤成一句。
+        string? hiddenBatch,
         bool truncatedByLimit,
         string noun,
         string indent = "  ",
@@ -77,9 +108,8 @@ public static class Fold
         // 名词槽不留空。locate 的 Members 段是分种类子组印的，折叠行又与组内条目同缩进，
         // 于是 `... +1938 more` 紧跟在 Properties 组末尾时读起来像「还有 1938 个 property」，
         // 而它数的是三类之和。全服文法（README「低 Token 消耗」一节）本就要求这个槽有名词。
-        return truncatedByScoreGap
-            ? $"{indent}... +{hiddenCount} more {OutputText.NounFor(hiddenCount, noun)} (lower relevance, {hint})"
-            : $"{indent}... +{hiddenCount} more {OutputText.NounFor(hiddenCount, noun)} ({hint})";
+        var batch = hiddenBatch is { Length: > 0 } b ? $"{b}, " : string.Empty;
+        return $"{indent}... +{hiddenCount} more {OutputText.NounFor(hiddenCount, noun)} ({batch}{hint})";
     }
 
     // 下一步由调用方**显式给出**的那一形。

@@ -164,17 +164,28 @@ public class CrossReferenceTests : IDisposable
     // R42 让表头描述整棵树（真值），而列表按深度升序截断。两者并排、句法对称，于是
     // 「样本里最深的一层」被当成「树最深的一层」——盲测里 depth 4 的那批名字被报成了
     // depth 6 的成员。截断先吃掉最深层这件事，返回里此前一个字都没有。
+    //
+    // N1 之后这件事归折叠行的「哪一批」槽（Fold.HiddenBatch），且**两支不叠着说**：切片没触到
+    // 最深层时说的是「藏起来的里面有更深的」，触到了才说「藏的是同深度里的其余」。这一棵树
+    // 深 4 层而切片只到 depth 1，故只该出现前者。
     [Fact]
     public async Task TruncatedInheritors_StateWhichDepthsAreStillMissing()
     {
         var content = await Run(BuildDeepTree(250), new { symbol = "ZzBase", mode = "inheritors" });
 
         Assert.Contains("Listed below: 200", content);
-        Assert.Contains("shallowest first", content);
         // `below depth N` 的方向要靠读者自己定（数值越大越深，而版面上「below」指下面那些行），
         // 第十三轮盲测里被测方当场读反了一次。
         Assert.Contains("nothing deeper than depth 1 is listed", content);
         Assert.DoesNotContain("nothing below depth", content);
+
+        // 它挂在**折叠行**上，不再挤在表头「列了几个」的后面：那一格只该有一个量。
+        Assert.Contains("subclasses (nothing deeper than depth 1 is listed,", content);
+
+        // 另一支不同时出现。两句叠着说时读者要自己判断哪半句描述列出来的、哪半句描述藏起来的，
+        // 而它们描述的根本是两件事。
+        Assert.DoesNotContain("shallowest first", content);
+
         // 表头仍报整棵树的真深度——这一条是 R42 的产物，不许回退
         Assert.Contains("deepest 4 levels down", content);
     }

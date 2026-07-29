@@ -858,7 +858,7 @@ public class OutputReadabilityTests : IDisposable
     [InlineData(2, "C# types")]
     public void FoldLine_AgreesInNumberWithItsCount(int hidden, string expected)
     {
-        var fold = Fold.Line(hidden, 1, false, true, "C# types");
+        var fold = Fold.Line(hidden, 1, hiddenBatch: null, truncatedByLimit: true, noun: "C# types");
 
         Assert.NotNull(fold);
         Assert.Contains($"+{hidden} more {expected} (", fold);

@@ -80,7 +80,8 @@ public static class InheritorsRenderer
             output.Inheritors, "subclasses", indent: "", limit: output.Limit,
             capAction: "re-trace a listed type as its own root (depths then restart from it), "
                        + "or narrow scope to one source — a per-source subtree is listed in full "
-                       + "whenever it fits under the cap");
+                       + "whenever it fits under the cap",
+            hiddenBatch: HiddenBatchOf(output, ShownDeepest(output)));
 
         // 这里**不要**加「limit 在本模式无效」那类注文。第十三轮照盲测的结论加过一条，实测当场
         // 自打嘴巴：`limit:20` 明明就列了 20 条。盲测证到的只是「limit:'all' 拿不到更多」——那是
@@ -110,7 +111,7 @@ public static class InheritorsRenderer
                + $"'{output.Scope.Expression}', transitive — indirect descendants included; "
                + $"{output.Shape.Direct} direct, deepest "
                + $"{OutputText.Quantity(output.Shape.Deepest, "levels")} down{depthLegend})"
-               + $"{Listed(output, shownDeepest)}{labels.Header}:";
+               + $"{Listed(output)}{labels.Header}:";
     }
 
     // 切片里最深的那一层。表头的图例与覆盖说明都从它派生，故只数一次。
@@ -121,26 +122,27 @@ public static class InheritorsRenderer
 
     // 「列了几个」这一格。判据与折叠行是同一个（`HiddenCount > 0`）：没被截断就不写它——那时它
     // 逐字等于前面那个总数。沿用 R33 的读法：出现「列了多少」这一格本身就是「被截了」的信号。
-    private static string Listed(InheritorsOutput output, int shownDeepest)
-    {
-        if (output.Inheritors.HiddenCount <= 0) return string.Empty;
+    //
+    // 「藏起来的是哪一批」此前也挤在这一格里（`, shallowest first — nothing deeper than …`），
+    // 现已移进折叠行的 HiddenBatch 槽——那是全服说这件事的地方，见 Fold.HiddenBatch。
+    // 这一格于是只剩它本来的那一个量：这次列了几个。
+    private static string Listed(InheritorsOutput output)
+        => output.Inheritors.HiddenCount > 0
+            ? $". Listed below: {output.Inheritors.Items.Count}"
+            : string.Empty;
 
-        // 截断留下的**恒是最浅的那一批**（GetInheritors 按 depth 升序排候选），而返回里此前一个
-        // 字都没说这件事。默认读法是「列表是这棵树的一个样本」，于是「样本里最深的一层」被当成
-        // 「树最深的一层」——R42 治好的是表头报错深度，这里复发成**把 depth 4 的那批名字报成
-        // depth 6 的成员**。尾行只说「被截了」，没说截的是哪一批。
-        //
-        // 「第 5、6 层有谁」这套工具确实给不出（没有 offset、也没有参数抬得动 200 这个顶）。
-        // 答不了不是缺陷，不说自己答不了才是。
-        //
-        // 「below depth N」的方向要靠读者自己定：depth 数值越大越深，而「below」在版面上指的是
-        // 「下面那些行」。第十三轮盲测里被测方当场读反了一次。改用 deeper than。
-        var coverage = shownDeepest < output.Shape.Deepest
-            ? $", shallowest first — nothing deeper than depth {shownDeepest} is listed"
-            : ", shallowest first";
-
-        return $". Listed below: {output.Inheritors.Items.Count}{coverage}";
-    }
+    // 「藏起来的是哪一批」。截断留下的**恒是最浅的那一批**（GetInheritors 按 depth 升序排候选），
+    // 而返回里此前只在表头顺带提了一句。默认读法是「列表是这棵树的一个样本」，于是「样本里最深的
+    // 一层」被当成「树最深的一层」——R42 治好的是表头报错深度，这里复发成**把 depth 4 的那批名字
+    // 报成 depth 6 的成员**。
+    //
+    // 两支是两件不同的事实，不是一件事的两个精度，故不叠着说：切片没触到最深层时，藏起来的里面
+    // **有更深的**（这套工具给不出「第 5、6 层有谁」——没有 offset、也没有参数抬得动 200 这个顶；
+    // 答不了不是缺陷，不说自己答不了才是）；触到了，藏的就是同深度里的其余。
+    private static string HiddenBatchOf(InheritorsOutput output, int shownDeepest)
+        => shownDeepest < output.Shape.Deepest
+            ? Fold.HiddenBatch.NothingDeeperThan(shownDeepest)
+            : Fold.HiddenBatch.ShallowestFirst;
 
     // 一行：类型全名 + 深度标记 + 文件注记 + 条件标记 + 来源标签。
     // 后两个的**相对次序**是全服判据：行尾的 `[x]` 是来源标签位（见 SourceLabeling 与文法闸

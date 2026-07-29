@@ -62,7 +62,8 @@ public static class LocateRenderer
         {
             var fold = Fold.Line(
                 section.Total - section.Shown, section.Shown,
-                section.TruncatedByScoreGap, section.TruncatedByLimit,
+                section.TruncatedByScoreGap ? Fold.HiddenBatch.LowerRelevance : null,
+                section.TruncatedByLimit,
                 section.Noun, indent: "  ", limit: limit);
             if (fold != null) sb.Append(fold).Append('\n');
         }
