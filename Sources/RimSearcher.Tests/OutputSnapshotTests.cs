@@ -1080,6 +1080,122 @@ public class OutputSnapshotTests : IDisposable
         Verify("inspect/def", content);
     }
 
+    // ---- M1：inspect 剩下的六形 ----
+    //
+    // 这个工具此前只有四份基线，而它的字面量体量是全服第二（`InspectTool` 641 行 131 处），
+    // 于是「触碰它」等于没有闸。下面六形按返回点逐个盘出来，一形一份。
+
+    // 合并 XML 一屏放不下时的**首次调用**：头 200 行 + 尾 50 行两段。表头走 F30 那套三态
+    // （裸 N = 完整集，`N of M` = 被截了）——第十三轮盲测里被测方从「裸表头」归纳出「这就是
+    // 完整的」并写进了交付答案，那条假规则的判据至今只活在源码注释里，输出侧一份闸都没有。
+    [Fact]
+    public async Task Inspect_DefXmlWindow()
+    {
+        var content = await Run(BuildLongDef(), new { name = "ZzLongAlpha" });
+
+        Verify("inspect/def-xml-window", content);
+    }
+
+    // 续读窗口正好收到末尾：表头改口 `lines X-Y of Z`，末行是「读完了」而不是再指一次
+    // xmlStartLine——指了就是死循环，而这一形是分页路径唯一的出口。
+    [Fact]
+    public async Task Inspect_DefXmlPagedTail()
+    {
+        var content = await Run(BuildLongDef(), new { name = "ZzLongAlpha", xmlStartLine = 300 });
+
+        Verify("inspect/def-xml-paged-tail", content);
+    }
+
+    // 同名 def 分属两个 defType。返回的是其中一个，而那句 `_Note:` 是调用方唯一能看出
+    // 「还有另一个同名的」的地方；缺席时这份返回读起来就是「这个名字只有这一个 def」。
+    [Fact]
+    public async Task Inspect_DefTypeAmbiguous()
+    {
+        var (indexer, defs, catalog) = BuildIndex(
+            ("ZzShared.xml",
+                "<Defs>\n  <ZzAlphaDef>\n    <defName>ZzSharedName</defName>\n  </ZzAlphaDef>\n"
+                + "  <ZzBetaDef>\n    <defName>ZzSharedName</defName>\n  </ZzBetaDef>\n</Defs>\n"));
+
+        var content = await Run(new InspectTool(indexer, defs, catalog), new { name = "ZzSharedName" });
+
+        Verify("inspect/def-type-ambiguous", content);
+    }
+
+    // def 模式从不读 limit，而 schema 里 limit 是这个工具的正式参数。传了不说一声，
+    // 调用方拿到的是一份「limit 生效了」的默认解读——而 def 模式确实会截断，只是换了个参数。
+    [Fact]
+    public async Task Inspect_DefLimitIgnoredNote()
+    {
+        var (indexer, defs, catalog) = BuildIndex(
+            ("ZzWidgetDef.cs", "namespace Zz { public class ZzWidgetDef { } }"),
+            ("ZzWidgets.xml",
+                "<Defs>\n  <ZzWidgetDef>\n    <defName>ZzWidgetAlpha</defName>\n"
+                + "    <label>alpha widget</label>\n  </ZzWidgetDef>\n</Defs>\n"));
+
+        var content = await Run(
+            new InspectTool(indexer, defs, catalog), new { name = "ZzWidgetAlpha", limit = 5 });
+
+        Verify("inspect/def-limit-ignored", content);
+    }
+
+    // def 沿 ParentName 链合并：链行印的是链本身，而下面那份 XML 是合并后的结果——
+    // 与类型模式同名的那行语义正好相反（类型模式：继承成员**不**在下面）。
+    [Fact]
+    public async Task Inspect_DefParentChain()
+    {
+        var (indexer, defs, catalog) = BuildIndex(
+            ("ZzChain.xml",
+                "<Defs>\n  <ZzWidgetDef Name=\"ZzWidgetBase\" Abstract=\"True\">\n"
+                + "    <label>base widget</label>\n  </ZzWidgetDef>\n"
+                + "  <ZzWidgetDef ParentName=\"ZzWidgetBase\">\n    <defName>ZzWidgetChild</defName>\n"
+                + "  </ZzWidgetDef>\n</Defs>\n"));
+
+        var content = await Run(new InspectTool(indexer, defs, catalog), new { name = "ZzWidgetChild" });
+
+        Verify("inspect/def-parent-chain", content);
+    }
+
+    // 「scope 内找不到」与「根本不存在」是两件事，混为一谈会让调用方断言符号不存在。
+    // 两形各一份：前者必须点名去哪儿找得到，后者只指路 locate。
+    [Fact]
+    public async Task Inspect_NotFoundInScopeButElsewhere()
+    {
+        var (indexer, defs, catalog) = BuildTwoSourceIndex(
+            [("ZzHere.cs", "namespace Zz { public class ZzHere { } }")],
+            [("ZzThere.cs", "namespace Zz { public class ZzThere { } }")]);
+
+        var content = await Run(
+            new InspectTool(indexer, defs, catalog), new { name = "ZzThere", scope = "vanilla" });
+
+        Verify("inspect/not-found-in-scope", content);
+    }
+
+    [Fact]
+    public async Task Inspect_NotFoundAnywhere()
+    {
+        var (indexer, defs, catalog) = BuildIndex(
+            ("ZzHere.cs", "namespace Zz { public class ZzHere { } }"));
+
+        var content = await Run(new InspectTool(indexer, defs, catalog), new { name = "ZzNoSuchThing" });
+
+        Verify("inspect/not-found-anywhere", content);
+    }
+
+    // 323 行合并 XML：> 头 200 + 尾 50 + 50，故首次调用走截断那一支。
+    private InspectTool BuildLongDef()
+    {
+        var fields = string.Concat(
+            Enumerable.Range(0, 320).Select(i => $"    <zzField{i:D3}>{i}</zzField{i:D3}>\n"));
+
+        var (indexer, defs, catalog) = BuildIndex(
+            ("ZzLongDef.cs", "namespace Zz { public class ZzLongDef { } }"),
+            ("ZzLong.xml",
+                "<Defs>\n  <ZzLongDef>\n    <defName>ZzLongAlpha</defName>\n"
+                + fields + "  </ZzLongDef>\n</Defs>\n"));
+
+        return new InspectTool(indexer, defs, catalog);
+    }
+
     // ================= sync_sources =================
 
     [Fact]
@@ -1127,6 +1243,89 @@ public class OutputSnapshotTests : IDisposable
             BuildSyncWithArchive(), new { action = "diff", granularity = "members", limit = 5 });
 
         Verify("sync_sources/diff-member-fold", content);
+    }
+
+    // ---- M1：sync_sources 剩下的五形 ----
+
+    // 单文件行级 diff。这条路径与列表模式是两段各自独立的代码（`RunFileDiff`），此前
+    // 一份基线都没有，而它是这个工具唯一会印代码正文的返回。
+    [Fact]
+    public async Task SyncSources_DiffSingleFile()
+    {
+        var content = await Run(
+            BuildSyncWithArchive(), new { action = "diff", file = "ZzSync00.cs", limit = 50 });
+
+        Verify("sync_sources/diff-single-file", content);
+    }
+
+    // 单文件 + granularity='members'：已经收窄到一个文件，成员清单不再截断，末行改成
+    // 「拿 method 去看行级差异」。这一形此前只认复数 'members'，两种写法的输出如今同出一处。
+    [Fact]
+    public async Task SyncSources_DiffSingleFileMembers()
+    {
+        var content = await Run(
+            BuildSyncWithArchive(),
+            new { action = "diff", file = "ZzChanged.cs", granularity = "members" });
+
+        Verify("sync_sources/diff-single-file-members", content);
+    }
+
+    // 要的版本比保留的还老：夹到最老那一代并**说明夹过**。夹到最新一代会给出与不传 version
+    // 完全相同的结果，等于把参数悄悄吃掉——那条判据只有这一形照得到。
+    [Fact]
+    public async Task SyncSources_DiffVersionClampedToOldest()
+    {
+        var content = await Run(
+            BuildSyncWithArchive(), new { action = "diff", file = "ZzSync00.cs", version = 99, limit = 50 });
+
+        Verify("sync_sources/diff-version-clamped", content);
+    }
+
+    // source_history_depth = 0：diff 是确定性报错，且指引必须带时序（改 config → 重启 →
+    // 先跑一次 sync），否则照做后重跑拿到的是逐字相同的这一句。
+    [Fact]
+    public async Task SyncSources_DiffWithHistoryDisabled()
+    {
+        var source = _workspace.Dir("src");
+        _workspace.WriteFile(Path.Combine("src", "ZzWidget.cs"), "// current\n");
+
+        var config = new AppConfig { SourceHistoryDepth = 0, GameVersion = "1.6" };
+        var entry = new SourcePathEntry
+        {
+            Name = "Core",
+            Path = source,
+            AssemblyPaths = [_workspace.Dir("assemblies")],
+        };
+
+        var service = new SourceSyncService(config, new ResolvedSources([entry], []), _workspace.Dir("cache"));
+        PathSecurity.Initialize([source]);
+
+        var content = await Run(new SyncSourcesTool(service), new { action = "diff" });
+
+        Verify("sync_sources/diff-history-disabled", content);
+    }
+
+    // 开着历史但还没归档过：与上一形的措辞必须分开——一个要改配置重启，一个只要跑一次 sync。
+    [Fact]
+    public async Task SyncSources_DiffWithNothingArchivedYet()
+    {
+        var source = _workspace.Dir("src");
+        _workspace.WriteFile(Path.Combine("src", "ZzWidget.cs"), "// current\n");
+
+        var config = new AppConfig { SourceHistoryDepth = 2, GameVersion = "1.6" };
+        var entry = new SourcePathEntry
+        {
+            Name = "Core",
+            Path = source,
+            AssemblyPaths = [_workspace.Dir("assemblies")],
+        };
+
+        var service = new SourceSyncService(config, new ResolvedSources([entry], []), _workspace.Dir("cache"));
+        PathSecurity.Initialize([source]);
+
+        var content = await Run(new SyncSourcesTool(service), new { action = "diff" });
+
+        Verify("sync_sources/diff-nothing-archived", content);
     }
 
     // 13 个变更文件（limit=5 时翻页折叠行成立），其中一个删掉了 25 个成员

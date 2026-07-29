@@ -1,0 +1,1 @@
+Source history is disabled, so nothing has been archived to diff against. Set source_history_depth to 1 or more in config.toml, restart the server, then run action='sync' — the archive is written by that sync, so diff stays empty until then.
