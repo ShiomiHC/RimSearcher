@@ -18,10 +18,25 @@
    `snapshot use`),`ModsConfig.xml` 自动检测只作兜底与自证(用户补充裁决:当前游戏
    启用的不一定是期望查询的环境);config.toml 只放路径与别名,不复制指纹。
 
+第二轮(DataMod 细化)追加裁决:
+
+5. **B 案分工**:游戏侧只写中间格式(JSONL+gzip 流,纯托管),SQLite+FTS 由 CLI
+   `snapshot import` 构建。磁盘健康顾虑已量化打消:落盘为压缩流(几十~几百 MB/次,
+   量级估算),B 相对 A 的额外写入仅此一份,TBW 换算每年 <0.01%。
+6. **导出自动化**:CLI 编排「隔离 savedatafolder + 指定 modlist + 无人值守导出 +
+   自动 import + 指纹自校」,真实 ModsConfig.xml 永不触碰(备份还原方案否决:
+   崩溃窗口 + 游戏退出回写竞争)。
+7. **modlist 格式**:采用游戏原生 `.rml`,不发明新格式;合法生产者三个
+   (游戏界面 / CLI / 手写含 LLM),CLI 宽读严写(用户裁决:不得强制依赖游戏内操作)。
+
 ## 总览
 
 ```
-游戏内 DataMod ──导出──▶ SQLite 快照(可多份,meta 自带身份)
+游戏内 DataMod ──导出──▶ 中间格式(JSONL+gzip,含 meta 头+尾标记)
+  ▲ 两入口:设置页按钮 /            │
+    命令行无人值守(CLI 编排)        │ snapshot import(建库+登记+指纹自校)
+                                   ▼
+                        SQLite 快照(可多份,meta 自带身份)
                               │
                  rimsearcher CLI(快照寻址 + 查询 + code-search)
                               │ stdout(结构主体 + 散文声明区)
@@ -33,31 +48,85 @@
       DecompilerServer MCP ◀── 符号级 C# 阅读(skill 指路)
 ```
 
-## 层 1 · 导出器(DataMod)
+## 层 1 · 导出侧(DataMod + CLI 编排)
+
+### 分工(B 案,第二轮裁决 5)
+
+游戏侧**只做反射遍历 + 写中间格式**(JSONL+gzip 流,纯托管零原生依赖);
+SQLite 建库、FTS、噪声过滤全部在 CLI `snapshot import` 侧。论据:
+
+- 建库与查询同居一个程序集 → 产地唯一由进程边界保证,02-2 病根结构性消解;
+- 策略变化(噪声判据/分词/schema)只需重跑 import(秒级),不进游戏重导(分钟级);
+  重建初期 schema 多轮变动,此条施工期价值最大;
+- 建库逻辑进测试闸:固定一份中间文件作语料,import→建库→查询全链在 `dotnet test`
+  里真跑(A 案下建库代码在游戏进程里,闸够不着);
+- DataMod 缩到纯托管几十 KB,无 SQLite.Interop / LoadLibrary hack(02-8 整条消失);
+- 风险对称性:A 脆在运行期(每次导出过原生加载),B 脆在设计期(中间格式契约,一次付清)。
+
+### 中间格式 [全新]
+
+- JSONL+gzip 单文件:首行 meta(见下)、每 def 一行、**尾行记录数标记**(完整性自证,
+  游戏中途崩 = 尾标记缺失,import 拒收)。自带格式版本号。
+- 契约面性质:反射遍历的原样倾倒,稳定极少变(与 A 案要跨进程同步的多变查询 schema
+  相反,这是 B 的收益之一)。
+- 游戏侧**不过滤噪声**:原样导出,过滤策略归 import 侧单一产地(02-2),
+  策略变化免重导。
+
+### 设计点
 
 | 设计点 | 择优 | 说明 |
 |---|---|---|
 | 取数入口 | [上游] | `GenDefDatabase.AllDefTypesWithDatabases()` 逐类型枚举(03 甲) |
-| 噪声清单 | [混合] | 清单内容沿上游,**产地收成一份**、末段匹配语义(02-2);`generated` 从清单剔除保留入库(03 甲:区分 XML 定义与代码生成,对查询方有信息量) |
-| 深度/体量上限 | [上游+声明] | MaxFieldDepth 语义沿上游(叶子不占深度,覆盖比旧世系深 2~3 层,03 乙换算);数值可调,**截断必须落库自证**:defs 行加截断标志列(见层 2),CLI 呈现时声明。02-3 |
-| 原子写入 | [全新] | 临时文件写完 rename 替换(02-6);journal_mode=OFF 可保留,裸奔的是先删后写不是 pragma |
-| meta 表写入 | [全新] | 见层 2;指纹在导出时点采集(启用 packageId **有序**列表 + 各 mod 版本 + 游戏 build + 语言 + 导出时间 + schema_version + 各上限参数值)。**顺序入指纹**:激活顺序 = patch 应用顺序(03 甲),换序就是另一份数据 |
-| patch 溯源拦截 | [可选后备] | ApplyPatches Harmony dump + UnifiedDiffFormatter(03 甲拦截点);不在第一批,04 步骤 9 |
-| FTS 构建 | [上游] | unicode61 + CJK bigram 展开(02-8:改 FTS 结构别丢 `ExpandCjkBigrams`) |
-| SQLite.Interop 预载 | [上游] | 仅 DataMod 侧需要(net472);脆但可接受,02-8 |
+| 反射遍历 | [上游] | `ExtractFieldValuesRecursive` 语义(叶子不占深度,覆盖比旧世系深 2~3 层,03 乙换算);上限数值可调,**每 def 截断计数随行带出**(02-3 自证源头) |
+| ImpliedDefs | [上游机制+呈现] | 运行时枚举自然捕获(00 论据 1);`generated` 保留入库(03 甲);`source_file` 对该批存 `"ImpliedDefs"` 事实,呈现侧按 R51 在作用块明示「代码生成,无 XML 源文件」;「从谁生成」反查走 `find` 通用路径(`race.corpseDef` / `entityDefToBuild` 等正向字段),不单独建模 |
+| 触发入口 | [混合] | 设置页按钮(上游)+ 命令行无人值守分支(`-rimsearcher-export=<path>`,`GenCommandLine.TryGetCommandLineArg` 实证);两入口共用导出核心;时机 `StaticConstructorOnStartup`(ImpliedDefs 两批已生成),无人值守分支完成后 `Root.Shutdown()` |
+| meta 采集 | [全新] | 写进中间格式首行:游戏 build、当前语言(label 是该语言产物)、**有序** packageId 列表+各 mod 版本、导出时间、各上限参数值、导出器版本、mod 设置文件哈希(留缝,见开放点)。**顺序入指纹**:激活顺序 = patch 应用顺序(03 甲) |
+| 原子性 | [全新] | 游戏侧 temp+rename+尾标记(02-6);import 侧 temp db 建完 rename+登记 |
+| patch 溯源拦截 | [可选后备] | ApplyPatches Harmony dump,走同一导出通道,CLI 侧 UnifiedDiffFormatter diff(03 甲);不在第一批(04 步骤 9);mod 工程给它独立源文件位,Harmony 依赖不搅进主导出路径 |
+| 工程 | [机器事实] | net472 + Krafs.Rimworld.Ref;编译产物不进库(02-8),csproj 输出到本地 Mods 目录;About.xml 留发布缝 |
 
-## 层 2 · SQLite schema
+### 自动化编排 [全新](第二轮裁决 6)
+
+`rimsearcher export --modlist <name>` 全流程,真实 ModsConfig.xml **永不触碰**:
+
+1. 解析 `.rml` 取有序 packageId(见下节);
+2. **启动前验证**:逐个对照本机三处 mod 目录,缺失即失败并报候选,不烧游戏启动;
+3. 制备隔离 savedatafolder:真实 Config/ **整体复制**(`Mod_*.xml` 设置影响 patch 结果,
+   03 甲的 ConditionalSettings/EasyMode),就地改写 ModsConfig.xml 的 activeMods 节点;
+4. `RimWorldWin64.exe -savedatafolder=<隔离> -rimsearcher-export=<出口>`
+   (`-savedatafolder` 重定向整个 SaveData,`GenFilePaths` 实证);
+5. 等进程退出+出口文件出现,超时可配(大 modlist 载入分钟级);
+6. 自动 `snapshot import` + **指纹自校**:请求的 ids 序列 == 产出 meta 的 ids 序列,
+   不等即报错。期望环境由 CLI 主动制造并验证,自动检测只剩「手动导出归属谁」一个用途。
+
+备份还原方案否决记录:「换入后还原前」崩溃窗口 + 游戏退出可能回写 ModsConfig 的竞争。
+
+### modlist(`.rml`)[混合:游戏原生格式](第二轮裁决 7)
+
+- 格式唯一 `.rml`(`SaveData/ModLists/`,游戏 mod 界面「保存模组列表」的产物);
+  结构三块:meta 存档头(仅告警用)/ **有序 `ids`(唯一效力载体)** / `names`(展示糖)。
+- 合法生产者三个:游戏界面、CLI `modlist save <name>`(抓当前 ModsConfig 落盘)、
+  手写(含 LLM —— skill reference 写明结构,编 modlist 本身可被自动化)。
+- **宽读严写**:CLI 读只要求 `ids`(meta/names 可缺,手写门槛 = 一列 packageId);
+  写补全 names(查已装 mod About.xml)与 meta 头(gameVersion 从游戏目录读),
+  保证游戏载入对话框兼容;`modlist save` 兼作手写文件的规范化升格通道。
+- 手写笔误由编排第 2 步的启动前验证兜底。
+
+## 层 2 · SQLite schema(import 侧构建)
 
 - 基础表 **[上游]**:`defs` / `field_values` / `defs_fts`(形状见上游 cli-reference,列名沿用)。
-- `meta` 表 **[全新]**:单行,内容见层 1「meta 表写入」。**指纹事实的唯一产地在这里**,
+- FTS 构建 **[上游逻辑,移址 CLI]**:unicode61 + CJK bigram 展开(02-8:别丢
+  `ExpandCjkBigrams`);Microsoft.Data.Sqlite 自带 FTS5,无 Interop 问题。
+- 噪声过滤 **[混合]**:清单内容沿上游、末段匹配语义,**单一产地在 import 侧**(02-2);
+  `generated` 不在清单里(03 甲)。
+- `meta` 表 **[全新]**:单行,内容 = 中间格式首行 meta 原样落库。**指纹事实的唯一产地**,
   config.toml 只存别名指针。
-- 截断自证列 **[全新]**:`defs.fields_truncated`(该 def 被 MaxFieldValuesPerDef /
-  MaxFieldDepth 截掉的条数,0 = 完整)。「字段被截」与「没有该字段」必须可区分
-  (02-3;离群 mod 那 687 个 def 是现成实证样本,03 乙)。
-- `schema_version` **[全新]**:自立计数,**不兼容上游 db** —— CLI 读到无 meta 或版本不符
-  的库,拒读并指导重导(留发布缝:错误消息不含本机路径)。
+- 截断自证列 **[全新]**:`defs.fields_truncated`(该 def 被上限截掉的条数,0 = 完整)。
+  「字段被截」与「没有该字段」必须可区分(02-3;离群 mod 687 个 def 是实证样本,03 乙)。
+- `schema_version` **[全新]**:自立计数,**不兼容上游 db** —— 无 meta 或版本不符拒读并
+  指导重导(错误消息不含本机路径,发布缝)。
 - 模糊体验 **[本地]**:FuzzyMatcher(01)移植到 def_name 层,或最低限 FTS 查询自动补
-  前缀 `*`(02-7)。落点在 CLI 查询侧,不改 FTS 结构。
+  前缀 `*`(02-7)。落点在查询侧,不改 FTS 结构。
 
 ## 层 3 · CLI
 
@@ -68,7 +137,9 @@
 | `search` | [混合] | 上游 FTS 底子 + 本地模糊体验(02-7):调用方不该需要知道 `*` 才搜得到复合名 |
 | `get` / `find` / `list` / `fields` / `values` / `types` / `mods` | [上游] | 语义沿上游;输出契约按下节改造 |
 | `code-search` | [本地] | SearchRegexAsync 扫描段移植(chunk 扫描 + Regex 超时 + 诊断回传),对象是反编译落盘目录;**三刀自证契约整体带走**(每文件预览上限 / 文件数上限 / 未扫全 → `at least N`,三刀分开声明) |
-| `snapshot`(子族:`list` / `import` / `use` / `status`) | [全新] | 快照登记、指纹比对、自动检测报告 |
+| `snapshot`(子族:`list` / `import` / `use` / `status`) | [全新] | 快照登记、指纹比对、自动检测报告;`import` 兼任建库(层 2),无参时扫描 config.toml 导出目录 |
+| `export` | [全新] | 自动化编排全流程(层 1「自动化编排」) |
+| `modlist`(子族:`list` / `save` / `show`) | [全新] | `.rml` 枚举/抓取/查看;宽读严写(层 1「modlist」) |
 | `docs` | [全新] | 维护用:把声明层渲染成 markdown 参数表(见「声明层」) |
 | ~~`update`~~ | — | 不做(自用);发布缝备忘:02-8 两条教训 |
 
@@ -159,3 +230,5 @@ modlist 别名、scope 组。**不放**:指纹事实(产地在 db meta)、任何
   解析(顺带解决未知 flag 严格模式);动手第一步验证。
 - 三态文法与 JSON 主体的具体缝合格式(散文区在 stdout 顶部还是 stderr):盲测第一轮
   前定稿即可,倾向 stdout 顶部(stderr 在管道场景会被 LLM 调用方漏读)。
+- mod 设置是否进快照指纹:设置变化会改 patch 结果(03 甲),严格说影响数据身份;
+  第一批只在 meta 存设置文件哈希留缝,不参与寻址比对。
