@@ -259,9 +259,10 @@ public class ReadCodeTool : ITool
                           + "or pass startLine to continue"
                         : "pass methodName for one member, or startLine to continue";
 
-                    classNote =
-                        $"\n... +{classLines.Length - MaxLineCount} more lines "
-                        + $"({span} and the cap is {MaxLineCount}; {next})";
+                    classNote = "\n" + Fold.Explicit(
+                        classLines.Length - MaxLineCount, "lines",
+                        $"{span} and the cap is {MaxLineCount}; {next}",
+                        indent: string.Empty, pluralize: false);
                 }
 
                 // 目标名不在这里回显：classContent 的首行已经是 `// Class <全名> — <路径>:<行>`，
@@ -337,14 +338,15 @@ public class ReadCodeTool : ITool
 
             if (startLine + lineCount < totalLines)
             {
-                // 文法与全服统一的截断脚注一致：`... +N more <什么> (<怎么拿到>)`，见 Fold.Line。
                 // 总数要在这一行里给出，判据同 R47 的每文件折叠行（`+4 more of 7 matching lines`）：
                 // 文件总行数只在顶部那行位置注释里出现过一次，而作答时它早已滚出视野——第十轮
                 // 盲测里一条链差点在没读完的情况下下结论，同一轮里另一条链正是靠 search_regex
                 // 那个 `of 7` 拦住了一次误算。有总数的那处救了一次，没总数的这处险些误一次。
-                sb.AppendLine(
-                    $"\n... +{totalLines - (startLine + lineCount)} more of {totalLines} lines "
-                    + $"(pass startLine={startLine + lineCount})");
+                // 「给了 total 就走 `of M` 形」现在由 Fold.Explicit 一处决定，不再逐处手拼。
+                sb.AppendLine("\n" + Fold.Explicit(
+                    totalLines - (startLine + lineCount), "lines",
+                    $"pass startLine={startLine + lineCount}",
+                    total: totalLines, indent: string.Empty));
             }
 
             return WithUnresolvedScopeNotice(scope, new ToolResult(sb.ToString()));

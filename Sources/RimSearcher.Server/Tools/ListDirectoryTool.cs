@@ -1,5 +1,6 @@
 using System.Text.Json;
 using RimSearcher.Core;
+using RimSearcher.Server.Tools.Output;
 
 namespace RimSearcher.Server.Tools;
 
@@ -233,10 +234,14 @@ public class ListDirectoryTool : ITool
             // 死路：被略去的多半正是顶层文件（不在任何子目录里），而 search_regex 匹配的是
             // 文件正文行、fileFilter 只是路径后缀，写不出「限定在这个目录下」。offset 才是
             // 真的能把 >1000 项的目录枚举完的那条路。
-            // 文法与全服统一的截断脚注一致：`... +N more <什么> (<怎么拿到>)`，见 Fold.Line。
+            // 文法归 Fold.Explicit，这里只给「下一步是什么」——分页折叠落不进 Fold.Line 的
+            // 三分支（那三支问的是「是谁砍掉的」，而这里谁也没砍，只是还没翻到）。
             else if (shownThrough < all.Count)
-                result += $"\n... +{all.Count - shownThrough} more entries (pass offset={shownThrough} for the next page"
-                    + (limit >= MaxEntries ? $"; {MaxEntries} is the server cap per page)" : ", or a larger limit)");
+                result += "\n" + Fold.Explicit(
+                    all.Count - shownThrough, "entries",
+                    $"pass offset={shownThrough} for the next page"
+                    + (limit >= MaxEntries ? $"; {MaxEntries} is the server cap per page" : ", or a larger limit"),
+                    indent: string.Empty, pluralize: false);
 
             result += conditional.Render() ?? string.Empty;
 

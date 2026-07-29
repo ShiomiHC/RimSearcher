@@ -82,6 +82,40 @@ public static class Fold
             : $"{indent}... +{hiddenCount} more {OutputText.NounFor(hiddenCount, noun)} ({hint})";
     }
 
+    // 下一步由调用方**显式给出**的那一形。
+    //
+    // 上面那两个重载的三分支全建立在「是谁砍掉的」上，而那件事只有 ScopedResult 答得出来。
+    // 分页与定长上限这两类折叠不经过 ScopeFilter：list_directory 的下一步是 `pass offset=N`，
+    // read_code 的是 `pass startLine=N`，两者都与 limit 的三分支无关——limit:'all' 在这里
+    // 不是「展开」而是「换一页」，劝 narrow the query 更是无从执行。
+    //
+    // 故这一形只共用**文法**，不共用建议。此前三处调用方各手拼一条模仿它的字符串，其中
+    // list_directory 那处上一行的注释还写着「文法与全服统一的截断脚注一致……见 Fold.Line」
+    // ——契约靠模仿加测试事后拦截，而不是按构造成立。
+    //
+    // total 给了就走 `of M` 形，且名词跟总数走（同 PerFile 与 Tally.Cell 的 R30 判据）；
+    // 不给就是纯增量形，名词跟增量走。
+    //
+    // pluralize：迁移期的临时开关。三处调用方原先都不按数定单复数（`+1 more entries`），
+    // 而同一份输出的表头是走构词的（`12 entries`）。这一步的判据是输出一个字不变，故先按
+    // 原样保住、成因记在指导文档 §7 与那一批一同改——改完这个参数就该消失，届时唯一的
+    // 单复数判据是下面这两行。
+    public static string? Explicit(
+        int hiddenCount, string noun, string nextStep, int? total = null, string indent = "  ",
+        bool pluralize = true)
+    {
+        // 同 Line：没被折叠就没有这一行。三处调用方各自都还有别的在场条件（分页到底、
+        // 顶到定长上限），那些留在调用方，这里只兜住「增量为 0」。
+        if (hiddenCount <= 0) return null;
+
+        var totalNoun = pluralize ? OutputText.NounFor(total ?? 0, noun) : noun;
+        var what = total is { } m
+            ? $"of {m} {totalNoun}"
+            : pluralize ? OutputText.NounFor(hiddenCount, noun) : noun;
+
+        return $"{indent}... +{hiddenCount} more {what} ({nextStep})";
+    }
+
     // 每文件预览的折叠行。search_regex 与 trace usages 共用，且它是全语料里出现最频的一条
     // 折叠行（92/181），此前却是唯一两个槽都空着的一条：`... +77 more in this file`。
     // 名词按 ScanReport.FoundCount 同一条判据补成 matching lines。
