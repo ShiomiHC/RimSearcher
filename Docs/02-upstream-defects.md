@@ -26,7 +26,8 @@
 `MaxFieldDepth=3`(field_values 不含深层字段)、`MaxFieldValuesPerDef=5000`、
 `MaxJsonDepth=10`(JSON 超深写 `"..."`)。ThingDef 的 comps 套 props,3 层不够用。
 输出无任何提示,`fields`/`find` 查不到深层字段时调用方会得出「没有这个字段」的错误结论。
-→ 上限本身可调,声明必须有(能力边界诚实声明,01 资产)。
+→ 上限本身可调,声明必须有(能力边界诚实声明,01 资产)。声明成什么按 01 的声明政策判:
+这三个都是**静默截断**(不是拒绝),故不声明成硬约束,写进输出与 help 的散文并带上数。
 
 ## 4. 快照过期静默
 
@@ -49,7 +50,8 @@ staleness 机制(SourceChangeProbe + 会话内过期提示)倒退,且更隐蔽�
 
 FTS5 `unicode61` 分词,复合名(`Apparel_ShieldBelt`)搜 `shield` 不中,必须 `shield*`
 前缀 hack —— 上游 SKILL.md 专门教用户绕(「Always prefix-search」)。skill 文档教用户
-绕自家缺陷是反模式(04 盲测一节)。master 的 locate 是真模糊匹配。
+绕自家缺陷是反模式(04 盲测一节);按 01 的声明政策这是可判定的,不只是观感:吃亏的
+恰恰是照文档走的那批调用方,故修的只能是 CLI。master 的 locate 是真模糊匹配。
 → 移植 FuzzyMatcher 到 def_name 层,或最低限度 FTS 查询前自动补 `*`。
 
 ## 8. 杂项
