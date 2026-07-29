@@ -801,7 +801,6 @@ public class OutputReadabilityTests : IDisposable
         Assert.Contains("Type: ZzUnindexedDef (C# class not indexed)", content);
     }
 
-    // 组名行与预览行的排布骨架，逐字内容无关
     // ---- R29：每文件折叠行的两个空槽 ----
 
     // `... +N more in this file` 是全语料里出现最频的一条折叠行（92/181），也是唯一
@@ -1414,6 +1413,7 @@ public class OutputReadabilityTests : IDisposable
         Assert.Contains("tell a def's own fields from inherited ones", description);
     }
 
+    // 组名行与预览行的排布骨架，逐字内容无关
     private static string GroupLayout(string content) =>
         string.Concat(content.Split('\n').SkipWhile(l => !l.StartsWith('`')).Select(l =>
             l.Length == 0 ? "_" : l.StartsWith('`') ? "G" : l.StartsWith("  ") ? "p" : "?"));
