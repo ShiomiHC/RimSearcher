@@ -58,6 +58,36 @@ internal static class ToolSourceKeys
         return keys;
     }
 
+    // 必填参数**及其别名**，从 `GetRequired*` 的调用点刮。这一族与 ReadBy 不同：ReadBy 把全体
+    // 键揉成一个集合，认得出「这个键读得到」，认不出「它是谁的别名」。而缺参提示里那句
+    // `Aliases accepted: …` 说的恰恰是归属，故要一个分得开的名单。
+    //
+    // 形状是固定的：`ToolArgs.GetRequiredFuzzyString(args, ArgSpec, "symbol", "symbolName", …)`
+    // ——函数名里带 Required 就说明这个参数必填，第一个字符串是正名，其余是别名。
+    public static Dictionary<string, string[]> RequiredBy(ITool tool, [CallerFilePath] string here = "")
+    {
+        var source = SourceOf(tool, here);
+        Assert.True(File.Exists(source),
+            $"{tool.Name} 的取参代码没在 {tool.GetType().Name}.cs 里找到，本闸扫不到它的必填参数。");
+
+        var required = new Dictionary<string, string[]>(StringComparer.Ordinal);
+
+        foreach (Match call in Regex.Matches(
+                     File.ReadAllText(source),
+                     @"ToolArgs\.GetRequired\w*\((?:[^()]|\([^()]*\))*\)"))
+        {
+            var names = Regex.Matches(call.Value, "\"(?<key>[^\"]*)\"")
+                .Select(m => m.Groups["key"].Value)
+                .Where(key => key.Length > 0 && !key.Contains(' '))
+                .ToArray();
+
+            if (names.Length == 0) continue;
+            required[names[0]] = [.. names.Skip(1)];
+        }
+
+        return required;
+    }
+
     private static string SourceOf(ITool tool, string here)
         => Path.Combine(
             Directory.GetParent(Path.GetDirectoryName(here)!)!.FullName,

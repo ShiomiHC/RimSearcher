@@ -109,7 +109,11 @@ public class TraceTool : ITool
 
     private static readonly ToolArgSpec ArgSpec = new(
         "rimworld-searcher__trace",
-        "symbol (a class or member, e.g. 'ThingComp') and mode ('inheritors' or 'usages'). Aliases accepted for symbol: query, name, type.",
+        // 两个必填参数各有各的别名，故都写成 `for <参数名>` 的形式：不点名的话读者只能猜这串
+        // 别名是谁的，而这个工具恰好两个都收别名。
+        "symbol (a class or member, e.g. 'ThingComp') and mode ('inheritors' or 'usages'). "
+        + "Aliases accepted for symbol: symbolName, query, name, type, typeName. "
+        + "Aliases accepted for mode: traceMode, direction.",
         "symbol (required), mode (required, 'inheritors' | 'usages'), scope, limit.");
 
     public async Task<ToolResult> ExecuteAsync(JsonElement args, CancellationToken cancellationToken, IProgress<double>? progress = null)

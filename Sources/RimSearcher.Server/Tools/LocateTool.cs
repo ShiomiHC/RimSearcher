@@ -110,7 +110,7 @@ public class LocateTool : ITool
 
     private static readonly ToolArgSpec ArgSpec = new(
         "rimworld-searcher__locate",
-        "query (search text, optionally filtered: 'def:Apparel_ShieldBelt', 'method:CompTick'). Aliases accepted: name, symbol, pattern, search.",
+        "query (search text, optionally filtered: 'def:Apparel_ShieldBelt', 'method:CompTick'). Aliases accepted: name, symbol, pattern, search, term.",
         "query (required), scope, limit.");
 
     public Task<ToolResult> ExecuteAsync(JsonElement args, CancellationToken cancellationToken, IProgress<double>? progress = null)

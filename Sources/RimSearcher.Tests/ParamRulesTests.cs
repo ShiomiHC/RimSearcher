@@ -51,6 +51,65 @@ public class ParamRulesTests : IDisposable
         Assert.True(violations.Count == 0, ParamRules.Describe("洞-9", violations));
     }
 
+    // ---- 洞-5 / 洞-6：缺参提示那份名单，与 schema、与读取点 ----
+    //
+    // 事实侧是**真跑一次**：给工具喂一个空参数对象，接住它自己抛的那条缺参消息，从里面切出
+    // `Required:` 与 `All parameters:` 两行。要验的就是调用方缺参时看到的那段字，不是产品
+    // 内部某个私有字段的值——后者一样是「拿声明对声明」。
+    //
+    // 没有必填参数的工具（sync_sources）不在这里调用：它一跑就是真去同步。它由洞-6 那条
+    // 从两侧同时盖住——schema 的 required 为空，源码里也确实没有 GetRequired* 调用点。
+
+    [Fact]
+    public async Task EveryParameterIsListedInTheUsageHint()
+    {
+        var violations = new List<ParamViolation>();
+
+        foreach (var tool in EveryTool())
+        {
+            if (ParamRules.RequiredOf(tool).Count == 0) continue;
+
+            var (_, allParameters) = ParamRules.UsageIn(await MissingArgumentMessage(tool));
+            violations.AddRange(ParamRules.AllParametersMatchesTheSchema(FactsFor(tool), allParameters));
+        }
+
+        Assert.True(violations.Count == 0, ParamRules.Describe("洞-5", violations));
+    }
+
+    [Fact]
+    public async Task EveryAliasOfARequiredParameterIsListedInTheUsageHint()
+    {
+        var violations = new List<ParamViolation>();
+
+        foreach (var tool in EveryTool())
+        {
+            var required = ToolSourceKeys.RequiredBy(tool);
+            if (required.Count == 0) continue;
+
+            var (summary, _) = ParamRules.UsageIn(await MissingArgumentMessage(tool));
+            violations.AddRange(ParamRules.RequiredAliasesAreComplete(FactsFor(tool), summary, required));
+        }
+
+        Assert.True(violations.Count == 0, ParamRules.Describe("洞-5′", violations));
+    }
+
+    [Fact]
+    public void EveryRequiredPropertyHasAGetRequiredCallSite()
+    {
+        var violations = EveryTool()
+            .SelectMany(tool => ParamRules.RequiredListMatchesTheReadingPoints(
+                FactsFor(tool), ParamRules.RequiredOf(tool), ToolSourceKeys.RequiredBy(tool)))
+            .ToList();
+
+        Assert.True(violations.Count == 0, ParamRules.Describe("洞-6", violations));
+    }
+
+    private static async Task<string> MissingArgumentMessage(ITool tool)
+    {
+        var error = await Assert.ThrowsAsync<ToolArgumentException>(() => Run(tool, new { }));
+        return error.Message;
+    }
+
     // ---- 洞-2 / 洞-3：schema 广告的 default 与 maximum，就是服务端真正做的那件事 ----
     //
     // 这两条的事实侧是**行为**，不是另一份声明。理由是判据甲：拿 schema 的 default 去比对
@@ -160,6 +219,94 @@ public class ParamRulesTests : IDisposable
                 OtherToolOwns("scope")));
     }
 
+    // 用法说明少列一个 schema 属性。§2 丁那一形：加一个 schema 属性、忘了加进散文，缺参提示
+    // 就少列一个参数，而调用方照这句改会以为这个工具没有这个参数。
+    [Fact]
+    public void ARuleFires_WhenTheUsageHintOmitsASchemaProperty()
+    {
+        var violation = Assert.Single(
+            ParamRules.AllParametersMatchesTheSchema(FactsWithSchema("path", "limit"), "path (required)."));
+
+        Assert.Contains("'limit'", violation.Detail);
+    }
+
+    // 反方向：列了一个 schema 里没有的名字。照这句传进来会吃到一句未知参数提示。
+    [Fact]
+    public void ARuleFires_WhenTheUsageHintListsAParameterThatDoesNotExist()
+    {
+        var violation = Assert.Single(
+            ParamRules.AllParametersMatchesTheSchema(FactsWithSchema("path"), "path (required), limit."));
+
+        Assert.Contains("'limit'", violation.Detail);
+    }
+
+    // 括号里是说明不是名单。`fileFilter (aliases: fileExtension, extension, ext)` 里那三个
+    // 逗号后面的词一个都不是参数名——不剥括号的话这条规则会把它们全报成「schema 里没有」，
+    // 那是**误报**，而误报会逼着下一个人把规则关掉。
+    [Fact]
+    public void TheRuleIsSilent_ForNamesThatOnlyAppearInsideAParenthetical()
+    {
+        Assert.Empty(ParamRules.AllParametersMatchesTheSchema(
+            FactsWithSchema("pattern", "fileFilter"),
+            "pattern (required), fileFilter (aliases: fileExtension, extension, ext)."));
+    }
+
+    // 读取点收的别名，缺参提示没列。locate 的 `term` 就是这一形（P6 已修）。
+    [Fact]
+    public void ARuleFires_WhenARequiredParametersAliasIsNotListed()
+    {
+        var violation = Assert.Single(
+            ParamRules.RequiredAliasesAreComplete(
+                FactsWithSchema("symbol"), "symbol (a class). Aliases accepted: query.",
+                new Dictionary<string, string[]> { ["symbol"] = ["query", "symbolName"] }));
+
+        Assert.Contains("'symbolName'", violation.Detail);
+    }
+
+    // 反方向：列了一个读取点不认的别名。这一条比漏列更坏——照这句传进去，那个必填参数照样算缺。
+    [Fact]
+    public void ARuleFires_WhenTheUsageHintInventsAnAlias()
+    {
+        var violation = Assert.Single(
+            ParamRules.RequiredAliasesAreComplete(
+                FactsWithSchema("symbol"), "symbol (a class). Aliases accepted: query, nope.",
+                new Dictionary<string, string[]> { ["symbol"] = ["query"] }));
+
+        Assert.Contains("'nope'", violation.Detail);
+    }
+
+    // 两个必填参数，而 `Aliases accepted:` 没说这串是谁的。判红而不是挑一个猜：猜错的方向是
+    // 把另一个参数的别名算作已列出，那是变松。
+    [Fact]
+    public void ARuleFires_WhenAliasesAreListedWithoutSayingWhichParameterOwnsThem()
+    {
+        var violations = ParamRules.RequiredAliasesAreComplete(
+            FactsWithSchema("symbol", "mode"), "symbol and mode. Aliases accepted: query.",
+            new Dictionary<string, string[]> { ["symbol"] = ["query"], ["mode"] = [] }).ToList();
+
+        Assert.Contains(violations, v => v.Detail.Contains("没说是谁的"));
+    }
+
+    [Fact]
+    public void ARuleFires_WhenSchemaCallsAParameterRequiredButNoCodeDoes()
+    {
+        var violation = Assert.Single(
+            ParamRules.RequiredListMatchesTheReadingPoints(
+                FactsWithSchema("name"), ["name"], new Dictionary<string, string[]>()));
+
+        Assert.Contains("'name'", violation.Detail);
+    }
+
+    [Fact]
+    public void ARuleFires_WhenCodeDemandsAParameterSchemaDoesNotCallRequired()
+    {
+        var violation = Assert.Single(
+            ParamRules.RequiredListMatchesTheReadingPoints(
+                FactsWithSchema("name"), [], new Dictionary<string, string[]> { ["name"] = [] }));
+
+        Assert.Contains("'name'", violation.Detail);
+    }
+
     // ---- 洞-2 / 洞-3 的取数与语料 ----
 
     // 从 schema 里把那个数取出来。**只取名单，不取判断**：取的是「这个工具对外广告了多少」，
@@ -233,6 +380,10 @@ public class ParamRulesTests : IDisposable
     private ParamRules.Facts FactsWithProse(string description)
         => new(new ProseTool(description), SchemaProperties: ["path"],
             SchemaDescriptions: new Dictionary<string, string>(), KeysActuallyRead: ["path"]);
+
+    private static ParamRules.Facts FactsWithSchema(params string[] properties)
+        => new(new ProseTool("no prose."), properties,
+            SchemaDescriptions: new Dictionary<string, string>(), KeysActuallyRead: properties);
 
     private static Dictionary<string, IReadOnlyList<string>> OtherToolOwns(string parameter)
         => new() { ["rimworld-searcher__locate"] = new[] { parameter } };

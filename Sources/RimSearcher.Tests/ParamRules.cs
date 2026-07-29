@@ -113,6 +113,125 @@ public static class ParamRules
         }
     }
 
+    // ---- 洞-5：缺参提示里那份参数名单，与 schema 的属性是同一份吗 ----
+    //
+    // §2 丁：`ToolArgSpec.allParameters` 是 schema `properties` 的散文版，六份**当前全对得上**，
+    // 但没有任何一处保证它继续对得上，而它坏起来是静默的——加一个 schema 属性、忘了加进散文，
+    // 缺参提示就少列一个参数，一条测试都不红。
+    //
+    // 事实侧不反射那个私有字段，而是**真调一次工具、拿它自己抛出来的那份用法说明**：要验的
+    // 就是调用方缺参时看到的那段字，不是产品内部某个字段的值。
+    //
+    // 两个方向都判：漏列把调用方引到「这个工具没有这个参数」，错列把它引到一个传了会被
+    // 报成未知的名字上。
+    public static IEnumerable<ParamViolation> AllParametersMatchesTheSchema(Facts facts, string allParameters)
+    {
+        var listed = new HashSet<string>(ListedNames(allParameters), StringComparer.Ordinal);
+
+        foreach (var property in facts.SchemaProperties)
+        {
+            if (listed.Contains(property)) continue;
+            yield return new ParamViolation(
+                "洞-5 用法说明漏列了一个参数",
+                $"{facts.Tool.Name} 的 schema 有 '{property}'，而缺参提示的 All parameters 没列它——"
+                + $"调用方照这句改会以为这个工具没有这个参数。原句：{allParameters.Trim()}");
+        }
+
+        var mine = new HashSet<string>(facts.SchemaProperties, StringComparer.Ordinal);
+        foreach (var name in listed)
+        {
+            if (mine.Contains(name)) continue;
+            yield return new ParamViolation(
+                "洞-5 用法说明列了一个不存在的参数",
+                $"{facts.Tool.Name} 的缺参提示列了 '{name}'，而 schema 里没有这个属性——"
+                + $"照这句传进来会吃到一句未知参数提示。原句：{allParameters.Trim()}");
+        }
+    }
+
+    // `path (required), limit (default 100), offset (page past the server cap).`
+    // 参数名是每个顶层逗号段的头一个标识符。括号里也有逗号（`fileFilter (aliases: ext, extension)`），
+    // 故先把括号连内容一起剥掉——括号里是说明不是名单，剥掉之后剩下的才是可切的。
+    private static IEnumerable<string> ListedNames(string allParameters)
+        => Regex.Replace(allParameters, @"\([^()]*\)", string.Empty)
+            .Split(',')
+            .Select(segment => Regex.Match(segment, @"[A-Za-z][A-Za-z0-9_]*"))
+            .Where(match => match.Success)
+            .Select(match => match.Value);
+
+    // ---- §2 丁 后半：`requiredSummary` 里那串别名，与读取点收的是同一批吗 ----
+    //
+    // 这一条与洞-5 是同型的两侧对比，但事实侧换成源码的 `GetRequired*` 调用点——那里第一个
+    // 字符串是正名、其余是别名，归属分得开，故漏列与错列两个方向都判得动。
+    //
+    // 散文的两种写法都认：单必填参数写 `Aliases accepted: a, b`，多必填参数写
+    // `Aliases accepted for symbol: a, b`。多必填却不带 `for` 时判红而不是猜——猜错的方向
+    // 是把另一个参数的别名算作已列出，那是变松。
+    private static readonly Regex AliasClause = new(
+        @"Aliases accepted(?: for (?<owner>\w+))?:(?<list>[^.]*)", RegexOptions.Compiled);
+
+    public static IEnumerable<ParamViolation> RequiredAliasesAreComplete(
+        Facts facts, string requiredSummary, IReadOnlyDictionary<string, string[]> required)
+    {
+        var declared = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+
+        foreach (Match clause in AliasClause.Matches(requiredSummary))
+        {
+            var owner = clause.Groups["owner"].Value;
+            if (owner.Length == 0)
+            {
+                if (required.Count != 1)
+                {
+                    yield return new ParamViolation(
+                        "洞-5′ 别名归属不明",
+                        $"{facts.Tool.Name} 有 {required.Count} 个必填参数，而 `Aliases accepted:` 没说是谁的。"
+                        + "写成 `Aliases accepted for <参数名>:`——不写的话读者只能猜，闸也只能猜。");
+                    continue;
+                }
+                owner = required.Keys.Single();
+            }
+
+            declared[owner] = [.. Regex.Matches(clause.Groups["list"].Value, @"[A-Za-z][A-Za-z0-9_]*")
+                .Select(m => m.Value)];
+        }
+
+        foreach (var (canonical, aliases) in required)
+        {
+            var listed = declared.TryGetValue(canonical, out var set) ? set : [];
+
+            foreach (var alias in aliases.Where(alias => !listed.Contains(alias)))
+                yield return new ParamViolation(
+                    "洞-5′ 别名漏列",
+                    $"{facts.Tool.Name} 的读取点收 '{alias}' 作 '{canonical}' 的别名，而缺参提示没列它。"
+                    + $"原句：{requiredSummary.Trim()}");
+
+            var real = new HashSet<string>(aliases, StringComparer.Ordinal) { canonical };
+            foreach (var alias in listed.Where(alias => !real.Contains(alias)))
+                yield return new ParamViolation(
+                    "洞-5′ 别名错列",
+                    $"{facts.Tool.Name} 的缺参提示把 '{alias}' 列成 '{canonical}' 的别名，而读取点不认它——"
+                    + $"照这句传进来这个必填参数照样算缺。原句：{requiredSummary.Trim()}");
+        }
+    }
+
+    // ---- 洞-6：schema 的 `required` 与 `GetRequired*` 的调用点 ----
+    //
+    // 顺带落地：上面那条为了分清别名归属已经把「哪些参数必填」从源码刮出来了，与 schema 的
+    // `required` 对一下就是一句话。两边不一致时，schema 多一个会让校验型客户端提前拦下本来
+    // 能跑的调用，少一个会让缺参走到服务端才报。
+    public static IEnumerable<ParamViolation> RequiredListMatchesTheReadingPoints(
+        Facts facts, IReadOnlyList<string> schemaRequired, IReadOnlyDictionary<string, string[]> required)
+    {
+        foreach (var name in schemaRequired.Where(name => !required.ContainsKey(name)))
+            yield return new ParamViolation(
+                "洞-6 schema 说必填，代码没当必填",
+                $"{facts.Tool.Name} 的 schema 把 '{name}' 列进 required，而源码里没有一处 GetRequired* 读它。");
+
+        foreach (var name in required.Keys.Where(name => !schemaRequired.Contains(name)))
+            yield return new ParamViolation(
+                "洞-6 代码当必填，schema 没说",
+                $"{facts.Tool.Name} 的 '{name}' 走 GetRequired* 读取（缺了就抛），而 schema 的 required 没有它。");
+    }
+
     private static IEnumerable<(string Where, string Prose)> ProseOf(Facts facts)
     {
         yield return ("Description", facts.Tool.Description);
@@ -145,6 +264,30 @@ public static class ParamRules
         }
 
         return (properties, descriptions);
+    }
+
+    // schema 的 `required`。缺这个键与空数组同义（都是「没有必填参数」）。
+    public static List<string> RequiredOf(ITool tool)
+    {
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(tool.JsonSchema));
+        if (!document.RootElement.TryGetProperty("required", out var list)
+            || list.ValueKind != JsonValueKind.Array) return [];
+
+        return [.. list.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.String)
+            .Select(e => e.GetString()!)];
+    }
+
+    // 缺参提示里那两行。事实侧要的是**调用方看到的字**，故由调用方真跑一次工具拿到 message
+    // 再切开，不从产品的私有字段反射。
+    public static (string RequiredSummary, string AllParameters) UsageIn(string missingMessage)
+    {
+        var required = Regex.Match(missingMessage, @"^Required: (?<text>.*)$", RegexOptions.Multiline);
+        var all = Regex.Match(missingMessage, @"^All parameters: (?<text>.*)$", RegexOptions.Multiline);
+
+        Assert.True(required.Success && all.Success,
+            $"缺参提示里没找到 `Required:` / `All parameters:` 两行，本闸无从比对。原文：\n{missingMessage}");
+
+        return (required.Groups["text"].Value.TrimEnd(), all.Groups["text"].Value.TrimEnd());
     }
 
     public static string Describe(string where, IReadOnlyList<ParamViolation> violations)
