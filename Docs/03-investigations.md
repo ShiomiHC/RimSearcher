@@ -172,7 +172,7 @@ AncientMarket_Libraray.CustomMapDataDef.thingDatas.li.allPositions.li  345,808
 ## 与上游 `MaxFieldDepth=3` 的换算(读码推断,未实测)
 
 **两个 3 语义不同,数据不可直接套用。** 上游
-`DefExporter.ExtractFieldValuesRecursive`(基座 `8a0a4f7`):
+`DefExporter.ExtractFieldValuesRecursive`(上游 `8a0a4f7`):
 
 - 入口 `(def, "", 0)`,判据是 `depth > MaxFieldDepth`(`>` 非 `>=`)→ depth 0–3 均处理
 - **叶子不占深度**:string / Type / ValueType / Def / Enum 字段在父对象的循环里直接

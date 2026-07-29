@@ -64,7 +64,7 @@ ILAst。这个选择决定构建时间是「几秒」还是「几十秒」量级
 DecompilerServer 的 `find_callers` 同样受此限制。
 
 补法是与继承关系交叉。master 侧有现成的 `InheritorsMap`(`trace mode:'inheritors'` 走它);
-新基座上继承关系可由运行时对象导出直接得到,精度更高。
+运行时导出方案下继承关系可由导出对象直接得到,精度更高。
 
 ## 6. 成本量化
 
@@ -99,7 +99,7 @@ master 构建产物实测(`.cache/index/manifest.json`,schemaVersion 5):
 `usages` 的全词文本匹配能命中 IL 调用图永远看不见的东西:XML 里的 `<compClass>` 一类类名
 引用、反射用的字符串字面量、注释中的提及。IL 调用图只覆盖 C# 方法调用。任何形态下二者并列。
 
-对新基座:XML 侧的类名引用不再需要文本匹配 —— SQLite 的 `field_values` 可直接精确回答,
+对运行时导出方案:XML 侧的类名引用不再需要文本匹配 —— SQLite 的 `field_values` 可直接精确回答,
 上游 CLI 的 `find <fieldPath> <value>`(路径后缀匹配、值精确)就是这个能力,SKILL.md 把它
 列为「C# 类 → 所有使用该类的 Def」的反查主路径。这与 00 决定性论据第 4 条(引用已解析)同源。
 

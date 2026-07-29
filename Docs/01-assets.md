@@ -2,7 +2,8 @@
 
 原则一句话:**扔掉的是「怎么拿到数据」,带走的是「怎么把数据说清楚」**。
 master 130 个提交的热区全在呈现层(LocateTool 36 次改动、InspectTool 33、ReadCodeTool 28、
-TraceTool 27),这些资产与存储层无关,换基座后原样成立。
+TraceTool 27),这些资产与存储层无关,不论各点择优选了谁的做法都原样成立。
+定位(00):逐点择优的本地侧证据库 —— 每条资产即本地 2.x 在该点胜出的记录。
 
 ## 带走(设计资产,每条附产地)
 
@@ -31,7 +32,7 @@ TraceTool 27),这些资产与存储层无关,换基座后原样成立。
 `IndexCacheService`(JSON 快照)/ `DefIndexer` / `AssemblyScanner` / `ScopeCatalog` 实现 /
 `IndexGate` / `IndexHost` / Startup 一族。
 
-勿因惋惜捡回:它们回答的问题(「XML 合并后长什么样」「谁继承谁」)在新基座上由导出时点的
+勿因惋惜捡回:它们回答的问题(「XML 合并后长什么样」「谁继承谁」)在运行时导出方案下由导出时点的
 运行时数据直接回答。C# 源码阅读能力(read_code / trace 的那半边)按决定外包给
 DecompilerServer MCP,skill 里引导(上游 `skills/rimsearcher/references/decompiler-mcp.md`
 已有现成一份)。
