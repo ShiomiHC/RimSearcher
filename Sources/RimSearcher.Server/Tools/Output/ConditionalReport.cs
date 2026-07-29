@@ -1,6 +1,6 @@
 using RimSearcher.Core;
 
-namespace RimSearcher.Server.Tools;
+namespace RimSearcher.Server.Tools.Output;
 
 // 一次返回里出现过的条件加载目录。
 //
