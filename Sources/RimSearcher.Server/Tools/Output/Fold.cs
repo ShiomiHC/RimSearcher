@@ -93,25 +93,23 @@ public static class Fold
     // list_directory 那处上一行的注释还写着「文法与全服统一的截断脚注一致……见 Fold.Line」
     // ——契约靠模仿加测试事后拦截，而不是按构造成立。
     //
-    // total 给了就走 `of M` 形，且名词跟总数走（同 PerFile 与 Tally.Cell 的 R30 判据）；
-    // 不给就是纯增量形，名词跟增量走。
-    //
-    // pluralize：迁移期的临时开关。三处调用方原先都不按数定单复数（`+1 more entries`），
-    // 而同一份输出的表头是走构词的（`12 entries`）。这一步的判据是输出一个字不变，故先按
-    // 原样保住、成因记在指导文档 §7 与那一批一同改——改完这个参数就该消失，届时唯一的
-    // 单复数判据是下面这两行。
+    // 名词的单复数也在这里定，四个调用方一处也不许自己拼——它们此前全都不做这件事
+    // （`+1 more entries` / `+1 more lines` / `+1 more types`），而 list_directory 同一份输出的
+    // 表头是走构词的（`12 entries`，那处注释还专门写着「不写 `1 entries`」）：同一屏上同一个
+    // 名词数同一批东西、四行之隔两种写法。其余 19 种折叠行全走 NounFor，故那三处是例外而不是
+    // 另一种规矩。
     public static string? Explicit(
-        int hiddenCount, string noun, string nextStep, int? total = null, string indent = "  ",
-        bool pluralize = true)
+        int hiddenCount, string noun, string nextStep, int? total = null, string indent = "  ")
     {
         // 同 Line：没被折叠就没有这一行。三处调用方各自都还有别的在场条件（分页到底、
         // 顶到定长上限），那些留在调用方，这里只兜住「增量为 0」。
         if (hiddenCount <= 0) return null;
 
-        var totalNoun = pluralize ? OutputText.NounFor(total ?? 0, noun) : noun;
+        // 名词跟哪个数走：给了总数就跟总数（`+1 more of 13 changed files` 是属格复数），
+        // 没给就跟增量。同 PerFile 与 Tally.Cell 的 R30 判据。
         var what = total is { } m
-            ? $"of {m} {totalNoun}"
-            : pluralize ? OutputText.NounFor(hiddenCount, noun) : noun;
+            ? $"of {m} {OutputText.NounFor(m, noun)}"
+            : OutputText.NounFor(hiddenCount, noun);
 
         return $"{indent}... +{hiddenCount} more {what} ({nextStep})";
     }

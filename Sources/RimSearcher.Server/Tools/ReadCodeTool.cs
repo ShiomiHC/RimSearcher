@@ -262,7 +262,7 @@ public class ReadCodeTool : ITool
                     classNote = "\n" + Fold.Explicit(
                         classLines.Length - MaxLineCount, "lines",
                         $"{span} and the cap is {MaxLineCount}; {next}",
-                        indent: string.Empty, pluralize: false);
+                        indent: string.Empty);
                 }
 
                 // 目标名不在这里回显：classContent 的首行已经是 `// Class <全名> — <路径>:<行>`，

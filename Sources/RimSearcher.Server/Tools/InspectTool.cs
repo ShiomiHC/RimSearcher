@@ -469,7 +469,7 @@ public class InspectTool : ITool
                     // 而不是调 limit——落不进 Fold.Line 的三分支，走显式那一形。
                     if (foundTypes.Count > 10)
                         sb.AppendLine(Fold.Explicit(
-                            foundTypes.Count - 10, "types", "use locate to find them", pluralize: false));
+                            foundTypes.Count - 10, "types", "use locate to find them"));
                 }
             }
             catch (OperationCanceledException) { throw; }

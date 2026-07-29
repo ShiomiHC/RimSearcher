@@ -241,7 +241,7 @@ public class ListDirectoryTool : ITool
                     all.Count - shownThrough, "entries",
                     $"pass offset={shownThrough} for the next page"
                     + (limit >= MaxEntries ? $"; {MaxEntries} is the server cap per page" : ", or a larger limit"),
-                    indent: string.Empty, pluralize: false);
+                    indent: string.Empty);
 
             result += conditional.Render() ?? string.Empty;
 

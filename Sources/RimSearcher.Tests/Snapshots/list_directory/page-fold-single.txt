@@ -10,4 +10,4 @@ ZzEntry07.cs
 ZzEntry08.cs
 ZzEntry09.cs
 ZzEntry10.cs
-... +1 more entries (pass offset=11 for the next page, or a larger limit)
+... +1 more entry (pass offset=11 for the next page, or a larger limit)
