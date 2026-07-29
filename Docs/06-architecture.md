@@ -226,7 +226,9 @@ modlist 别名、scope 组。**不放**:指纹事实(产地在 db meta)、任何
   **不复述参数**(指路 cli-reference),**不教绕路**(04 验收条款;上游
   「Always prefix-search」是反例,修的是 CLI)。上游「Never fall back to shell tools」
   一条不继承 —— 本形态下 CLI 自身就是 shell 工具,该 guardrail 改写为
-  「文本检索用 code-search,不用裸 grep」。
+  「文本检索用 code-search,不用裸 grep」。上游「写任何 Harmony patch 前必须
+  `get_il`」同步收窄为「**transpiler 前必须**」——IL 的不可替代场景仅此一个,
+  Prefix/Postfix 读反编译 C# 即可(05-3)。
 - `references/cli-reference.md`:**生成产物**(见声明层),手改无效、闸会红。
 - `references/decompiler-mcp.md` **[上游]**:现成一份,随裁随改。
 - skill 本身进被测物(04 盲测一节):盲测发现 skill 在教绕路 → 修 CLI。
@@ -236,6 +238,16 @@ modlist 别名、scope 组。**不放**:指纹事实(产地在 db meta)、任何
 - 符号级(反编译单成员、callers/callees、IL、版本 diff):DecompilerServer MCP,00 已裁。
   能力洞与固有缺陷底账在 05,skill 的 decompiler-mcp.md 承接。
 - 跨文件正则:`code-search`(本篇层 3),对象是落盘目录。
+- **类型定位 [本地体验,零索引]**:落盘树本身即类型级符号索引(WholeProjectDecompiler
+  一类型一文件、命名空间分目录、按源分根)——`code-search` 加类型/文件名模式,
+  FuzzyMatcher 复用(与 def_name 同一实现两个数据集),scope = 选根目录。
+  符号级工作流两段式:树上跨源模糊定位类型 → DecompilerServer 对该类型精查
+  (`list_members`/单成员/调用图)。master `locate→inspect→read_code` 链路的新对应物。
+  残余损失仅两样且可近似:跨源成员级模糊搜索(正则近似)、跨源成员大纲一次视图
+  (两段式多一跳,非丢能力);「类型↔def」方向反而升级为精确反查(05-8)。
+- **继承图洞 [已知洞]**:master `trace inheritors` 的 InheritorsMap 无 DecompilerServer
+  对应物,且 05-5 的 callvirt 缺陷补法依赖它。过渡:`code-search` 正则 `:\s*Base\b`
+  文本近似;若痛感明显,InheritorsMap 实现现成可搬(输入即落盘目录),见开放点。
 - 落盘再生成:短期 master `sync_sources` 代管;**后备记账**:若 master 退役,把
   DecompileService 砍成独立命令带走(自包含百行级,锁 C#9 保 diff 基线,05-2)——
   用现成 ilspycmd 会丢该基线,不取。现在不动手。
@@ -256,3 +268,6 @@ modlist 别名、scope 组。**不放**:指纹事实(产地在 db meta)、任何
   前定稿即可,倾向 stdout 顶部(stderr 在管道场景会被 LLM 调用方漏读)。
 - mod 设置是否进快照指纹:设置变化会改 patch 结果(03 甲),严格说影响数据身份;
   第一批只在 meta 存设置文件哈希留缝,不参与寻址比对。
+- 继承图是否自建:过渡用 code-search 文本近似(旁路一节);盲测若显示痛感,
+  搬 master InheritorsMap(输入=落盘目录,实现现成),作为 `code-search` 或独立
+  命令的 mode 落地。
