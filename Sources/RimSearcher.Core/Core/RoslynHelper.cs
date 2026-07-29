@@ -364,16 +364,11 @@ public static class RoslynHelper
         CountedNoun kind, Func<T, string> render)
     {
         if (members.Count == 0) return;
-        sb.AppendLine($"  {SentenceCase(kind.Plural)}:");
+        sb.AppendLine($"  {kind.Heading}:");
         foreach (var member in members.Take(maxMembersPerKind))
             sb.AppendLine($"    {render(member)}");
         AppendOutlineFold(sb, members.Count, maxMembersPerKind, kind);
     }
-
-    // 计数名词一律小写（它们要嵌进句子），而大纲的分组表头是行首，故首字母大写。
-    // 只动首字母：`C# types` 这类本就带大写的词不能整体改。
-    private static string SentenceCase(string plural) =>
-        plural.Length == 0 ? plural : char.ToUpperInvariant(plural[0]) + plural[1..];
 
     // 与 FormatParameter 同一条判据：大纲是「照着它写调用或写 Harmony patch」的抄写样本，
     // 丢掉修饰符就等于给出错的样本。private 与 public、static 与实例、const 与可写字段

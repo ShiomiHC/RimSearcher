@@ -58,40 +58,41 @@ public class CountedNounRegistryTests
         Assert.Equal(registered.Count, CountedNoun.All.Count);
     }
 
-    // 每个词的单数式逐条钉住。`Singularize` 是回推式的（按词尾猜），改动它会静默地把某个词
-    // 写成 `entrie` / `content matche` 这类——而那正是 R30 那批缺陷的形状。名单是封闭的，
-    // 故这件事做得完：这里列的必须与 CountedNoun.All 一一对上，多一条少一条都判红。
+    // 每个词的两种派生式逐条钉住。`Singularize` 是回推式的（按词尾猜），改动它会静默地把某个
+    // 词写成 `entrie` / `content matche` 这类——而那正是 R30 那批缺陷的形状；`TitleCase` 同理，
+    // 写成 `Xml Defs` / `C# Types` 走样一个字母都不会有别的东西喊出来。名单是封闭的，故这件事
+    // 做得完：这里列的必须与 CountedNoun.All 一一对上，多一条少一条都判红。
     [Fact]
-    public void EveryRegisteredNoun_HasTheSingularWeExpect()
+    public void EveryRegisteredNoun_HasTheFormsWeExpect()
     {
-        Dictionary<string, string> expected = new(StringComparer.Ordinal)
+        Dictionary<string, (string Singular, string Heading)> expected = new(StringComparer.Ordinal)
         {
-            ["C# types"] = "C# type",
-            ["members"] = "member",
-            ["XML defs"] = "XML def",
-            ["content matches"] = "content match",
-            ["files"] = "file",
-            ["matching files"] = "matching file",
-            ["matching lines"] = "matching line",
-            ["preview lines"] = "preview line",
-            ["subclasses"] = "subclass",
-            ["levels"] = "level",
-            ["methods"] = "method",
-            ["properties"] = "property",
-            ["fields"] = "field",
-            ["types"] = "type",
-            ["lines"] = "line",
-            ["entries"] = "entry",
-            ["changed files"] = "changed file",
-            ["checked sources"] = "checked source",
-            ["versions"] = "version",
-            ["C# paths"] = "C# path",
-            ["XML paths"] = "XML path",
-            ["matches"] = "match",
-            ["items"] = "item",
-            ["parameters"] = "parameter",
-            ["conditional folders"] = "conditional folder",
-            ["minutes"] = "minute",
+            ["C# types"] = ("C# type", "C# Types"),
+            ["members"] = ("member", "Members"),
+            ["XML defs"] = ("XML def", "XML Defs"),
+            ["content matches"] = ("content match", "Content Matches"),
+            ["files"] = ("file", "Files"),
+            ["matching files"] = ("matching file", "Matching Files"),
+            ["matching lines"] = ("matching line", "Matching Lines"),
+            ["preview lines"] = ("preview line", "Preview Lines"),
+            ["subclasses"] = ("subclass", "Subclasses"),
+            ["levels"] = ("level", "Levels"),
+            ["methods"] = ("method", "Methods"),
+            ["properties"] = ("property", "Properties"),
+            ["fields"] = ("field", "Fields"),
+            ["types"] = ("type", "Types"),
+            ["lines"] = ("line", "Lines"),
+            ["entries"] = ("entry", "Entries"),
+            ["changed files"] = ("changed file", "Changed Files"),
+            ["checked sources"] = ("checked source", "Checked Sources"),
+            ["versions"] = ("version", "Versions"),
+            ["C# paths"] = ("C# path", "C# Paths"),
+            ["XML paths"] = ("XML path", "XML Paths"),
+            ["matches"] = ("match", "Matches"),
+            ["items"] = ("item", "Items"),
+            ["parameters"] = ("parameter", "Parameters"),
+            ["conditional folders"] = ("conditional folder", "Conditional Folders"),
+            ["minutes"] = ("minute", "Minutes"),
         };
 
         Assert.Equal(
@@ -99,7 +100,10 @@ public class CountedNounRegistryTests
             CountedNoun.All.Select(n => n.Plural).OrderBy(x => x, StringComparer.Ordinal).ToList());
 
         foreach (var noun in CountedNoun.All)
-            Assert.Equal(expected[noun.Plural], noun.Singular);
+        {
+            Assert.Equal(expected[noun.Plural].Singular, noun.Singular);
+            Assert.Equal(expected[noun.Plural].Heading, noun.Heading);
+        }
     }
 
     // `CountedNoun.cs` 里那批 `public static readonly CountedNoun Xxx = Register("…");`。

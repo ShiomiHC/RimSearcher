@@ -159,7 +159,7 @@ public class LocateTool : ITool
                         entry.SourceName));
                 }
 
-                sections.Add(Section(types, "C# Types", CountedNoun.CSharpTypes, rows));
+                sections.Add(Section(types, CountedNoun.CSharpTypes, rows));
             }
         }
 
@@ -218,7 +218,6 @@ public class LocateTool : ITool
 
                 sections.Add(new LocateSection
                 {
-                    Name = "Members",
                     Noun = CountedNoun.Members,
                     Rows = rows,
                     // 这一段的截断是两层的（ScopeFilter 的 limit 加每组配额），故显示数要另数：
@@ -269,7 +268,7 @@ public class LocateTool : ITool
                         entry.SourceName));
                 }
 
-                sections.Add(Section(defs, "XML Defs", CountedNoun.XmlDefs, rows));
+                sections.Add(Section(defs, CountedNoun.XmlDefs, rows));
             }
 
             if (query.Keywords.Count > 0)
@@ -299,7 +298,7 @@ public class LocateTool : ITool
                             entry.SourceName));
                     }
 
-                    sections.Add(Section(defsByContent, "Content Matches", CountedNoun.ContentMatches, rows));
+                    sections.Add(Section(defsByContent, CountedNoun.ContentMatches, rows));
                 }
             }
         }
@@ -393,7 +392,6 @@ public class LocateTool : ITool
 
                 sections.Add(new LocateSection
                 {
-                    Name = "Files",
                     Noun = CountedNoun.Files,
                     Rows = rows,
                     Shown = items.Count,
@@ -481,10 +479,9 @@ public class LocateTool : ITool
     // 五段里有四段的形状是一样的：显示数、总数、满分数、来源构成、两种截断标记全取自
     // 同一份 ScopedResult。只有 Members（两层截断）与 Files（两支不同的总数算法）要自己拼。
     private static LocateSection Section<T>(
-        ScopedResult<T> result, string name, CountedNoun noun, IReadOnlyList<LocateRow> rows)
+        ScopedResult<T> result, CountedNoun noun, IReadOnlyList<LocateRow> rows)
         => new()
         {
-            Name = name,
             Noun = noun,
             Rows = rows,
             Shown = result.Items.Count,

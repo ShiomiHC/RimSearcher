@@ -71,11 +71,10 @@ public sealed record LocateOutput
 // 对不上——那正是此前五段各写一遍时唯一防不住的事。
 public sealed record LocateSection
 {
-    // 段头，如 "C# Types"（renderer 加 `**` 与冒号）。
-    public required string Name { get; init; }
-
-    // Tally 那一格与折叠行共用的名词，如 "C# types"。共用是判据而不是巧合：两处数的是
-    // 同一批东西，措辞分家就会长出两个名词指同一类东西（见 ScopeReport.Composition 里同型的坑）。
+    // Tally 那一格、段末的折叠行、**以及段头**共用的名词，如 "C# types"。共用是判据而不是
+    // 巧合：三处数的是同一批东西，措辞分家就会长出两个名词指同一类东西（见 ScopeReport.Composition
+    // 里同型的坑）。段头此前恰恰分着家——工具另传一个 `Name = "C# Types"`，与这里只差首字母
+    // 大小写；现在由 `Noun.Heading` 推出来（renderer 加 `**` 与冒号）。
     public required CountedNoun Noun { get; init; }
 
     // 行文本，**不含**行尾的来源标签（那由 renderer 按整段判完再挂，见 LocateRow）。

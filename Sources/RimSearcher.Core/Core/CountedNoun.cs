@@ -25,6 +25,7 @@ public sealed class CountedNoun
     {
         Plural = plural;
         Singular = Singularize(plural);
+        Heading = TitleCase(plural);
     }
 
     private static CountedNoun Register(string plural)
@@ -43,6 +44,13 @@ public sealed class CountedNoun
     // 单数式在构造时算一次。它不入名单：产品侧传的一律是名词本身，单数是构词的产物而不是
     // 第二个词条，两者并列会让「这张表与产品字面量同步」这条判据分不清哪些是漏删的死项。
     public string Singular { get; }
+
+    // 同一个名词做**段头 / 组头**时的写法。计数名词一律小写（它们要嵌进句子），而表头在行首，
+    // 逐词首字母大写。这不是第二个词条：`**C# Types**:` 与它下面那条 `+43 more C# types`
+    // 数的是同一批东西，此前由调用点各写一遍（locate 的五段传 `"C# Types"` + `CountedNoun`，
+    // inspect 大纲传 `"Properties"` + `CountedNoun`），而 LocateSection.Noun 的注释恰好就
+    // 写着「措辞分家就会长出两个名词指同一类东西」——它自己上一行就分着家。
+    public string Heading { get; }
 
     // R5 已经为 locate 表头定过这条规矩（不写 `1 C# types`），其余槽位一直漏着——全语料里
     // `... +1 more C# types` 这类出现在 locate / inspect / trace 三个工具上。
@@ -100,6 +108,11 @@ public sealed class CountedNoun
     // 裸去 's' 在 entries / content matches / properties 上都会写错，故按英文构词回推。
     // 覆盖的是本服务实际用到的那批名词，不是通用英文形态学——名单是封闭的，故这件事做得完，
     // 且每一条的单数式都由 CountedNounRegistryTests 逐词钉住。
+    // 逐词首字母大写，其余字符原样留着——`XML defs` 要的是 `XML Defs` 而不是 `Xml Defs`，
+    // `C# types` 同理。名单封闭，故这条规则覆盖得完。
+    private static string TitleCase(string plural) => string.Join(
+        ' ', plural.Split(' ').Select(w => w.Length == 0 ? w : char.ToUpperInvariant(w[0]) + w[1..]));
+
     private static string Singularize(string plural)
     {
         if (plural.EndsWith("ies", StringComparison.Ordinal)) return plural[..^3] + "y";

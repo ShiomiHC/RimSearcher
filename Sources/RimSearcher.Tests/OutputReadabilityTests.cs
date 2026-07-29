@@ -866,7 +866,7 @@ public class OutputReadabilityTests : IDisposable
 
     // 裸去 's' 会写出 entrie / content matche / propertie。
     // 这里只钉几个**构词规则各不相同**的代表；名单里每一个词的单数式由
-    // CountedNounRegistryTests.EveryRegisteredNoun_HasTheSingularWeExpect 逐词钉住。
+    // CountedNounRegistryTests.EveryRegisteredNoun_HasTheFormsWeExpect 逐词钉住。
     [Theory]
     [InlineData("entries", "entry")]
     [InlineData("content matches", "content match")]

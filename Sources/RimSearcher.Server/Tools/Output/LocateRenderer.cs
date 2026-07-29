@@ -52,7 +52,7 @@ public static class LocateRenderer
     {
         var labels = SectionLabels(section);
 
-        var sb = new StringBuilder($"\n**{section.Name}**{labels.Header}:\n");
+        var sb = new StringBuilder($"\n**{section.Noun.Heading}**{labels.Header}:\n");
         foreach (var row in section.Rows)
             sb.Append(row.Text).Append(labels.Row(row.SourceName)).Append('\n');
 
