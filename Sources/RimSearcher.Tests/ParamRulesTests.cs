@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using RimSearcher.Core;
 using RimSearcher.Server;
 using RimSearcher.Server.Tools;
@@ -47,6 +49,64 @@ public class ParamRulesTests : IDisposable
             .ToList();
 
         Assert.True(violations.Count == 0, ParamRules.Describe("洞-9", violations));
+    }
+
+    // ---- 洞-2 / 洞-3：schema 广告的 default 与 maximum，就是服务端真正做的那件事 ----
+    //
+    // 这两条的事实侧是**行为**，不是另一份声明。理由是判据甲：拿 schema 的 default 去比对
+    // 「schema 的 default 引用的那个常量」，两边同时错时一片绿——那正是「schema 验 schema」。
+    // 故这里从 schema 反射把数取出来（名单侧），再造一份刚好越过它的语料真跑一次（事实侧）。
+    //
+    // 现成的反例就在指导 §3：list_directory 的 100 独立写了四遍（P5 已收成一个产地），
+    // 1000 写了三遍；而现有的三条夹紧测试验的都是「服务端确实夹了」，**没有一条验
+    // 「夹到了 schema 广告的那个数」**——服务端夹到 999 而 schema 广告 1000，一条都不会红。
+    //
+    // 只覆盖这两个工具，因为只有它们的 schema 真的发了 default / maximum 这两个键。
+    // 走 LimitSchemaProperty 的那三个（locate / trace / search_regex）一个都不发（丙-1），
+    // 无从比对——那不是这条闸照不到，是**没有东西可照**，属于 P7 那条政策要定的事。
+
+    [Fact]
+    public async Task ListDirectory_ClampsToTheMaximumItAdvertises()
+    {
+        var advertised = SchemaNumber("rimworld-searcher__list_directory", "limit", "maximum");
+
+        var (tool, directory) = ListDirectoryOver(advertised);
+        var content = await Run(tool, new { path = directory, limit = advertised * 10 });
+
+        Assert.Equal(advertised, CountEntries(content));
+    }
+
+    [Fact]
+    public async Task ListDirectory_DefaultsToTheLimitItAdvertises()
+    {
+        var advertised = SchemaNumber("rimworld-searcher__list_directory", "limit", "default");
+
+        var (tool, directory) = ListDirectoryOver(advertised);
+        var content = await Run(tool, new { path = directory });
+
+        Assert.Equal(advertised, CountEntries(content));
+    }
+
+    [Fact]
+    public async Task ReadCode_ClampsToTheMaximumItAdvertises()
+    {
+        var advertised = SchemaNumber("rimworld-searcher__read_code", "lineCount", "maximum");
+
+        var (tool, file) = ReadCodeFileOver(advertised);
+        var content = await Run(tool, new { path = file, startLine = 0, lineCount = advertised * 10 });
+
+        Assert.Equal(advertised, CountNumberedLines(content));
+    }
+
+    [Fact]
+    public async Task ReadCode_DefaultsToTheLineCountItAdvertises()
+    {
+        var advertised = SchemaNumber("rimworld-searcher__read_code", "lineCount", "default");
+
+        var (tool, file) = ReadCodeFileOver(advertised);
+        var content = await Run(tool, new { path = file, startLine = 0 });
+
+        Assert.Equal(advertised, CountNumberedLines(content));
     }
 
     // ---- 反面用例 ----
@@ -100,6 +160,68 @@ public class ParamRulesTests : IDisposable
                 OtherToolOwns("scope")));
     }
 
+    // ---- 洞-2 / 洞-3 的取数与语料 ----
+
+    // 从 schema 里把那个数取出来。**只取名单，不取判断**：取的是「这个工具对外广告了多少」，
+    // 拿它去比对的是真跑一次的行为，不是另一份声明。
+    private int SchemaNumber(string toolName, string property, string key)
+    {
+        var tool = Assert.Single(EveryTool(), t => t.Name == toolName);
+
+        using var schema = JsonDocument.Parse(JsonSerializer.Serialize(tool.JsonSchema));
+
+        var found = schema.RootElement
+            .GetProperty("properties").GetProperty(property)
+            .TryGetProperty(key, out var value);
+
+        Assert.True(found, $"{toolName} 的 schema 没给 '{property}' 声明 '{key}'，这条判据无从比对。");
+        return value.GetInt32();
+    }
+
+    // 刚好越过那个数一条的目录。多一条就够：要验的是「夹到了广告的那个数」，不是「夹住了」。
+    private (ListDirectoryTool Tool, string Directory) ListDirectoryOver(int count)
+    {
+        var root = _workspace.Dir("Paged");
+        for (var i = 0; i <= count; i++) _workspace.WriteFile(Path.Combine("Paged", $"Zz{i:D5}.cs"), "// x\n");
+
+        PathSecurity.ResetForTests();
+        PathSecurity.Initialize([root]);
+        return (new ListDirectoryTool(), root);
+    }
+
+    private (ReadCodeTool Tool, string File) ReadCodeFileOver(int lines)
+    {
+        var root = _workspace.Dir("Long");
+        _workspace.WriteFile(
+            Path.Combine("Long", "ZzLong.cs"),
+            string.Join("\n", Enumerable.Range(1, lines + 1).Select(i => $"// line {i}")) + "\n");
+
+        PathSecurity.ResetForTests();
+        PathSecurity.Initialize([root]);
+
+        var indexer = new SourceIndexer();
+        indexer.Scan(root);
+        indexer.FreezeIndex();
+
+        return (new ReadCodeTool(indexer, ScopeCatalog.Build([("vanilla", root)], null, null)),
+            Path.Combine(root, "ZzLong.cs"));
+    }
+
+    // 条目行：`Zz00001.cs`。表头与折叠行都不以 Zz 打头，故按前缀数就够，不必解析版面。
+    private static int CountEntries(string content)
+        => content.Split('\n').Count(line => line.StartsWith("Zz", StringComparison.Ordinal));
+
+    // 行区间模式的正文行：`L123: …`
+    private static int CountNumberedLines(string content)
+        => content.Split('\n').Count(line => Regex.IsMatch(line, @"^L\d+: "));
+
+    private static async Task<string> Run(ITool tool, object payload)
+    {
+        using var args = JsonDocument.Parse(JsonSerializer.Serialize(payload));
+        var result = await tool.ExecuteAsync(args.RootElement, CancellationToken.None);
+        return result.Content;
+    }
+
     // ---- 语料 ----
 
     private ParamRules.Facts FactsFor(ITool tool)
@@ -122,7 +244,7 @@ public class ParamRulesTests : IDisposable
         public object JsonSchema => new { type = "object" };
 
         public Task<ToolResult> ExecuteAsync(
-            System.Text.Json.JsonElement arguments, CancellationToken cancellationToken,
+            JsonElement arguments, CancellationToken cancellationToken,
             IProgress<double>? progress = null)
             => Task.FromResult(new ToolResult("ok"));
     }
