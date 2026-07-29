@@ -1004,7 +1004,8 @@ public class OutputReadabilityTests : IDisposable
         Assert.Contains("3 of 30 C# types", content);
     }
 
-    // 反面：没被截时不写 of N——「看到 of 就是被截了」这条读法要成立
+    // 反面：没被截时不写 of N——`<数> of <数>` 那条读法要成立（辖域是这一个计数惯用法，
+    // 不是 `of` 这个词；见 GrammarRules 规则三）
     [Fact]
     public async Task LocateHeader_OmitsTheTotal_WhenNothingWasCutOff()
     {

@@ -248,8 +248,17 @@ public static class GrammarRules
 
     // ---- 三、`of` 的读法（管「说不说」；R33） ----
     //
-    // README 把 `of` 定成截断记号：「看到 of 就是没给全」。那么 `N of M` 里 N < M 是这条读法
-    // 的最低要求——N == M 时那个 of 在说一件没发生的事，N > M 则连算术都不成立。
+    // 这条读法的辖域是**一个计数惯用法**，不是 `of` 这个词：`<数> of <数>` 里的 of 表示没给全。
+    //
+    // 说清辖域不是咬文嚼字。全语料 24 处 `of` 里只有 11 处是截断记号，另外 11 处是改不掉的普通
+    // 英文介词（`Subclasses of 'X'` 7 处、`lines of a N-line file`、`tokens of that length`），
+    // 还有 2 处是 read_code 的区间形（`lines 2-30 of 30`）。故「看到 of 就是被截了」当作一条
+    // 关于这个词的规则来读时是**假陈述**——照它读，`Subclasses of 'ThingComp'` 会被读成截断记号。
+    // 闸这边执行的从来就是窄的那条（下面的 NofM 只认 `\d+ of \d+`，还专门豁免了区间形），
+    // 与这句话本来就不是一回事；此处只是把注释改回它实际在做的事。
+    //
+    // 在这条窄读法之下，`N of M` 里 N < M 是最低要求——N == M 时那个 of 在说一件没发生的事，
+    // N > M 则连算术都不成立。
     private static void OfMeansTruncated(string[] lines, List<GrammarViolation> found)
     {
         foreach (var line in lines)

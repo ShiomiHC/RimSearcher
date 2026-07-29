@@ -116,7 +116,8 @@ public static class Fold
     // 而「上面印了几行」是常数 3 这条规则**并不总成立**：扫描停在预览配额上时，最后一个文件
     // 只印了 1–2 行也带这条折叠（本语料的 Alert_Exhaustion.cs 印 2 行、折叠 2 条）。于是那条
     // 被诱导出来的「加 3」心算在一部分文件上给出错数，而这一行自己看不出落在哪种情况。
-    // 沿用 R33 的 `N of M` 读法：出现 `of` 就是没给全。
+    // 沿用 R33 的 `N of M` 读法：**这一个计数惯用法**里的 of 表示没给全（不是「凡 of 皆截断」
+    // ——一半的 `of` 是普通介词，见 GrammarRules 规则三）。
     public static string PerFile(int hiddenCount, int totalInFile, string indent = "  ")
         => $"{indent}... +{hiddenCount} more of {OutputText.Quantity(totalInFile, "matching lines")} in this file";
 

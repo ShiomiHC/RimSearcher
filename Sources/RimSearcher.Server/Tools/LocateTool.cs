@@ -371,9 +371,9 @@ public class LocateTool : ITool
                 // 「列出的 + 被砍掉的」；精确补充那一支本来就只列同名的那几条，没有被砍的。
                 //
                 // 原先两个位置都传 items.Count，于是 total == shown 恒成立，表头**永远**写不出
-                // `of`——而同一段下面照样印着 `... +43 more files`。README 把 of 定成截断记号
-                // （「看到 of 就是被截了」），调用方读到的却是「5 files」加一行「还有 43 条」，
-                // 两句在同一屏里互相否定。
+                // `of`——而同一段下面照样印着 `... +43 more files`。README 把 `<数> of <数>` 定成
+                // 截断记号，调用方读到的却是「5 files」加一行「还有 43 条」，两句在同一屏里
+                // 互相否定。
                 var fileTotal = wantsFileFallback ? items.Count + files.HiddenCount : items.Count;
 
                 // 这一段里名字逐字相同的有几条。带扩展名的查询走精确查表，那份结果**整份**都是
