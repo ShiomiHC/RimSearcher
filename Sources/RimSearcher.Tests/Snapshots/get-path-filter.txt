@@ -13,7 +13,4 @@ source       Apparel_Belts.xml
 path                      value
 comps[0].compClass        RimWorld.CompShield
 comps[0].props.energyMax  0.5
-
-path   translated  original     language           origin
-label  护盾腰带        shield belt  ChineseSimplified  in effect
 --- stderr ---

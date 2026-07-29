@@ -1,6 +1,9 @@
 $ rimsearcher get Apparel_ShieldBelt
 exit 0
 --- stdout ---
+4 fields.
+1 translation.
+
 def_name     Apparel_ShieldBelt
 def_type     ThingDef
 label        shield belt

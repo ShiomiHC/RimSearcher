@@ -1,10 +1,14 @@
 $ rimsearcher values compClass
 exit 0
 --- stdout ---
+1 value.
+
 matched_paths    comps[0].compClass (2)
-def_types        ThingDef (2 of 4)
+def_types        ThingDef (2 of 8)
 defs_with_field  2
 
 value                defs
 RimWorld.CompShield  2
+
+Counted over indexed field paths only: 1 def of the same def types lost fields at export time and could belong here without showing up. 'rimsearcher snapshot truncated' lists them.
 --- stderr ---

@@ -1,7 +1,7 @@
 $ rimsearcher list ThingDef --limit 2
 exit 0
 --- stdout ---
-Showing 2 of 4 defs; 2 of 4 listed so far; pass --offset 2 for the next page.
+Showing 2 of 8 defs; 2 of 8 listed so far; pass --offset 2 for the next page.
 
 def_name            label            mod
 Apparel_ShieldBelt  shield belt      ludeon.rimworld

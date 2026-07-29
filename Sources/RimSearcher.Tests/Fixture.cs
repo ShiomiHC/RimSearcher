@@ -62,6 +62,12 @@ public static class Fixture
 
         void Def(string type, string name, string? label, string mod, string file, bool generated,
                  int truncated, params (string Path, string Value)[] fields)
+            => DefAs(type, "Verse." + type, name, label, mod, file, generated, truncated, fields);
+
+        // 运行时 class 与 def_type 不是一回事:游戏只给「祖先链上没有非抽象 Def」的类型建库,
+        // 所以子类型的 def 全落在基类桶里。语料里必须有这么一桶,否则 list --class 那条路没人守。
+        void DefAs(string type, string cls, string name, string? label, string mod, string file, bool generated,
+                   int truncated, params (string Path, string Value)[] fields)
         {
             var pairs = fields.Select(f => new KeyValuePair<string, string>(f.Path, f.Value)).ToList();
             w.WriteLine(new JsonLine()
@@ -73,7 +79,7 @@ public static class Fixture
                 .Str(IntermediateFormat.KeySourceMod, mod)
                 .Str(IntermediateFormat.KeySourceFile, file)
                 .Bool(IntermediateFormat.KeyGenerated, generated)
-                .Str(IntermediateFormat.KeyClass, "Verse." + type)
+                .Str(IntermediateFormat.KeyClass, cls)
                 .Pairs(IntermediateFormat.KeyFields, pairs)
                 .Int(IntermediateFormat.KeyFieldsTruncated, truncated)
                 .ToString());
@@ -105,6 +111,26 @@ public static class Fixture
         Def("ThingDef", "TestModGun", "test gun", "test.mod", "Guns.xml", false, 0,
             ("thingClass", "RimWorld.Apparel"),
             ("comps[0].compClass", "RimWorld.CompShield"));
+
+        // 同名跨 def 类型 —— RimWorld 常态,也是 JSON 撞键静默丢数据那条的唯一语料。
+        // 一个有字段一个没有,是为了让「后写的把先写的盖成空」当场暴露。
+        Def("StatDef", "Firefoam", null, "ludeon.rimworld", "Stats_Basics.xml", false, 0);
+
+        Def("ThingDef", "Firefoam", "firefoam", "ludeon.rimworld", "Buildings_Special.xml", false, 0,
+            ("thingClass", "RimWorld.Building"),
+            ("statBases[0].stat", "MarketValue"));
+
+        // 三级匹配的语料:查 "VoidNode" 时 FTS 命中前两个(词首对齐),第三个只有子串扫描找得到。
+        // 混合命中是「N of M 的 M 不许随 --limit 变」那道闸唯一的落点 —— 少了它,
+        // 「把没显示出来的 FTS 命中当成新增」与「先截断再累加」两个方向的错都没人守。
+        Def("ThingDef", "VoidNode", "void node", "test.mod", "Anomaly.xml", false, 0);
+        Def("ThingDef", "VoidNodeShard", "void node shard", "test.mod", "Anomaly.xml", false, 0);
+        Def("ThingDef", "GleamingVoidNode", "gleaming void node", "test.mod", "Anomaly.xml", false, 0);
+
+        // 异构桶:两个 def 的 def_type 都是 TestBaseDef,运行时 class 却不同。
+        DefAs("TestBaseDef", "Verse.TestVariantDef", "VariantOne", "variant one", "test.mod", "Variants.xml", false, 0,
+            ("workerClass", "Verse.TestWorker"));
+        DefAs("TestBaseDef", "Verse.TestBaseDef", "PlainOne", "plain one", "test.mod", "Variants.xml", false, 0);
 
         void Injection(string defName, string path, string translated, string original)
         {

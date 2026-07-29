@@ -157,6 +157,32 @@ reference 提到的**一个不缺**,另有 31 个未提。与本篇结论相关�
    仍未覆盖的是**任意正则匹配方法体文本**(如 `public\s+(?:virtual\s+)?void\s+Notify_\w+\(`
    之类跨全源的形状搜索)—— 这是 `code-search` 保留的独立价值。
 
+### 实测限制(2026-07-30,04 第二轮盲测 F13/F14;v1.3.7)
+
+装配那轮量的是**能力有没有**,这四条量的是**答案能不能读**——都是在真实任务里
+被 agent 撞出来的,不是探针发现的。前三条在 DecompilerServer 侧
+(`C:\Users\CCH\tools\decompiler-server`),第四条在 ToolSearch 侧,两处都不在本仓;
+本仓能做的已做:写进 `skills/rimsearcher/references/decompiler-mcp.md`。
+
+1. **`search_members(mode:"signatures")` 丢 `declaringType`**。6 个同名 `ExpandingIcon`
+   属性摆在一起认不出各属于哪个类,只能换 kind 过滤重查 —— 而默认的 discovery 模式
+   **反而有这一列**。`declaringType` 是消歧的最小必需信息,不该被任何模式省掉。
+2. **`list_members` 的 signature 擦掉泛型实参**。`VisibleHediffGroupsInOrder` 显示成
+   `IEnumerable …`,实际是 `IEnumerable<IGrouping<BodyPartRecord, Hediff>>` ——
+   而「它返回的是按部位分好的组」正是那题答案的要害。当事人判词:「换个人来大概率同样踩」。
+3. **字符串字面量索引未就绪与「确实没有」同形**。`search_string_literals` 在索引未建好时
+   返回 `{items:[], totalEstimate:0}`,与零命中一模一样;那次只因碰巧同批调了 `status`
+   才看到 `stringLiteralIndexReady:false`。**这正是本方设计里「缺席被读成事实」的同一形状**,
+   只是发生在外包侧。用法上的兜底:该工具报 0 时先看一眼 `status`。
+4. **`batch_get_decompiled_source` 对 203 行方法只回 1-50 行,外层却是 `truncated:false`**。
+   即 `firstSlice.endLine < totalLines` 时外层截断标记没跟着置位 —— 三态截断文法在外包侧
+   的反例。
+
+另有一条不在 server 而在工具装载侧:**`ToolSearch(query:"decompiler", max_results:30)`
+载回的 29 个工具里恰好缺了参考页开篇点名的 `status`/`search_types`/`search_members`/
+`resolve_member_id`**,三个 agent 各白花一个来回补发 `select:`。44 个工具在 30 上限下
+似乎按名字序而非重要度截断。修法是在参考页给一行可原样粘贴的 `select:` 指令。
+
 ## 复核途径
 
 - 上游提交:`git show <sha>`,上游 worktree 位置见 CLAUDE.local.md(只读)

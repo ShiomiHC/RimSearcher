@@ -32,8 +32,8 @@ TraceTool 27),这些资产与存储层无关,不论各点择优选了谁的做�
 
 | 资产 | 去向 |
 |---|---|
-| 三态截断文法 | `Output/CountedNoun.cs` 的 `Tally`;闸在 `GrammarTests` + `GateTests.基线里没有伪截断的计数` |
-| 截断自证 | `Report.TruncationNotice`;完整集合零字节,被截必发声,两侧都有断言 |
+| 三态截断文法 | `Output/CountedNoun.cs` 的 `Tally`;闸在 `GrammarTests` + `GateTests.基线里没有伪截断的计数`。**第二轮盲测后修订**:「裸 N」这一态原先从未渲染出来过(`TruncationNotice` 未截断时直接 return),靠沉默传达「这就是全部」被四个 agent 独立读错。现在裸计数无条件打出,省的是「怎么看到更多」那半句,成因与判据记在 06 |
+| 截断自证 | `Report.CountNotice` / `TruncationNotice`;**完整集合零边界字节但计数恒在**,被截必发声。两道闸:完整态只准有计数一句、且没有边界可申报时一个字的散文都没有(缺后者,边界尾注会退化成 00 论据 3 淘汰掉的常驻免责声明) |
 | 能力边界诚实声明 | `NoticeKind.Boundary`。R51 那条「写进它作用的那个块」落在 `get` 的导出侧截断标记上 |
 | 产地唯一 | `CommandSpec`/`OptionSpec` 是唯一产地,`--help` 与 markdown 参考页是两个渲染器;闸是 `GateTests.入库的参数参考与声明渲染逐字节一致` |
 | 声明政策 | `ArgParser` 严格模式 + 有意接受的拼写变体(07-② 的 9 种写法);数字从 `Limits` 插值进散文,`DeclarationTests` 盯着 |
@@ -42,8 +42,8 @@ TraceTool 27),这些资产与存储层无关,不论各点择优选了谁的做�
 | 未知参数提示 | `ArgParser` 未知 flag 报错带近似候选;无候选时直接列出接受的参数,免得再跑一轮 help |
 | scope 语法设计 | `Snapshot/ScopeFilter.cs`,`all,-vanilla` 排除语法与配置组都在 |
 | 文法/措辞系统 | `CountedNoun` / `OutputText` / `GrammarTests`。1338603 的写法教训贯彻到底:判产地渲染的槽空不空 |
-| 字节级基线方法 | `OutputSnapshotTests` + `Snapshots/`(25 份)。`SnapshotGrammarGateTests` 那道缝合进 `GateTests`——基线逐行喂回文法检查,已验证故意写坏会红 |
-| 盲测方法论 | workflow 盲测,第一轮结果与教训在 04 |
+| 字节级基线方法 | `OutputSnapshotTests` + `Snapshots/`(27 份)。`SnapshotGrammarGateTests` 那道缝合进 `GateTests`——基线逐行喂回文法检查,已验证故意写坏会红。**另补 SKILL.md 两道闸**:它是手写的、又按 04 的口径「本身进入被测物」,原先反而是唯一没人守的产物 —— 现在文中每条 `rimsearcher …` 命令行与收窄开关表都对着注册表验,故意写错开关会红 |
+| 盲测方法论 | workflow 盲测两轮,结果与教训在 04。第二轮的场景种子改从 Vethara 会话 transcript 逐条抽真实 episode(不再按 07 的意图分布编),同时兼任改版后的回归轮 |
 | staleness 机制设计 | `CommandBase.AnnounceSnapshot`;判据在实现阶段改过一次,记在 06 |
 | 模糊匹配实现 | `Search/FuzzyMatcher.cs`,Ordinal-vs-CurrentCulture 那条教训原样带注释搬来;另加 `StripKindPrefix` 应对 07-⑤ 的 `method:` 前缀 |
 | 可移植测试类 | **部分移植**。OutputSnapshotTests / OutputGrammarGateTests(并入 GateTests)/ OutputVolumeCapTests(并入 GrammarTests 的声明区行数上限)/ GrammarRulesTests / CountedNounRegistryTests 都在。**OutputReadabilityTests 未移植** —— 它判的是表格可读性(列宽、对齐),而这里的表格渲染已被 25 份字节基线整体钉死,再立一层同源的判据是 schema 验 schema |

@@ -60,7 +60,6 @@ namespace RimSearcher.Contract
         public const string KeySourceFile = "source_file";
         public const string KeyGenerated = "generated";
         public const string KeyClass = "class";
-        public const string KeyParent = "parent";
         public const string KeyFields = "fields";
         public const string KeyFieldsTruncated = "fields_truncated";
 

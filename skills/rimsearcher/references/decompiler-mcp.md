@@ -7,6 +7,14 @@ Tool names below are the bare names; the full prefix is `mcp__decompiler__`.
 
 ## Getting started
 
+If the tools are deferred, load them with this exact line. A keyword search for "decompiler"
+returns 30 of the 44 tools and, in practice, leaves out the four you need first — including
+`status` and `search_members`:
+
+```
+ToolSearch select:status,load_assembly,search_types,search_members,resolve_member_id,list_members,get_members_of_type,get_decompiled_source,batch_get_decompiled_source,find_usages,find_callers,get_overrides,find_derived_types,get_source_slice
+```
+
 ```
 load_assembly { gameDir: "<RimWorld folder>" }        # finds Assembly-CSharp.dll itself
 status / list_contexts                                # what is loaded, under which alias
@@ -39,6 +47,17 @@ That covers most of what you would otherwise reach for a text search to do.
 - `plan_chunking` + `get_source_slice` — for something too large to read whole.
 - `get_member_signature`, `get_overloads`, `get_xml_doc`, `get_ast_outline`.
 
+Two things the outline drops, both measured on v1.3.7:
+
+- **`list_members` signatures erase generic arguments.** `IEnumerable<IGrouping<BodyPartRecord,
+  Hediff>>` shows as `IEnumerable`. When the type arguments are the answer, read the member.
+- **`search_members` with `mode: "signatures"` drops `declaringType`.** Six same-named members
+  then look identical. The default discovery mode keeps that column — use it, or filter by
+  `declaringType` yourself.
+
+`batch_get_decompiled_source` can return the first 50 lines of a 203-line method while reporting
+`truncated: false` at the top level. Check `endLine` against `totalLines` per slice.
+
 ## Relationships
 
 All of these read metadata, so they are exact rather than textual:
@@ -64,7 +83,10 @@ lambdas, switch jump tables become `switch`. For a prefix or a postfix, read the
 ## Other
 
 - `search_string_literals` — regex over IL string literals. Finds reflection targets and
-  `Translate()` keys that no symbol-level query would.
+  `Translate()` keys that no symbol-level query would. **A result of zero does not mean the
+  literal is absent**: before the index is built this returns `{items: [], totalEstimate: 0}`,
+  which is indistinguishable from a genuine miss. Check `stringLiteralIndexReady` in `status`
+  before concluding anything from a zero.
 - `compare_symbols` / `compare_contexts` — differences between two loaded versions.
 - `set_decompile_settings` — **only seven switches**
   (`usingDeclarations`, `showXmlDocumentation`, `namedArguments`, `makeAssignmentExpressions`,

@@ -9,7 +9,4 @@ label        shield belt
 class        Verse.ThingDef
 mod          ludeon.rimworld
 source       Apparel_Belts.xml
-
-path   translated  original     language           origin
-label  护盾腰带        shield belt  ChineseSimplified  in effect
 --- stderr ---

@@ -6,39 +6,46 @@ exit 0
     {
       "kind": "truncation",
       "text": "Showing 3 of 4 fields; pass --limit all for the rest, or --path <text> to pick out the ones you want."
-    }
-  ],
-  "def": {
-    "def_name": "Apparel_ShieldBelt",
-    "def_type": "ThingDef",
-    "label": "shield belt",
-    "description": "",
-    "class": "Verse.ThingDef",
-    "parent": null,
-    "mod": "ludeon.rimworld",
-    "source": "Apparel_Belts.xml"
-  },
-  "fields": [
-    {
-      "path": "thingClass",
-      "value": "RimWorld.Apparel"
     },
     {
-      "path": "comps[0].compClass",
-      "value": "RimWorld.CompShield"
-    },
-    {
-      "path": "comps[0].props.energyMax",
-      "value": "0.5"
+      "kind": "count",
+      "text": "1 translation."
     }
   ],
-  "translations": [
+  "defs": [
     {
-      "path": "label",
-      "translated": "护盾腰带",
-      "original": "shield belt",
-      "language": "ChineseSimplified",
-      "origin": "in effect"
+      "def": {
+        "def_name": "Apparel_ShieldBelt",
+        "def_type": "ThingDef",
+        "label": "shield belt",
+        "description": "",
+        "class": "Verse.ThingDef",
+        "mod": "ludeon.rimworld",
+        "source": "Apparel_Belts.xml"
+      },
+      "fields": [
+        {
+          "path": "thingClass",
+          "value": "RimWorld.Apparel"
+        },
+        {
+          "path": "comps[0].compClass",
+          "value": "RimWorld.CompShield"
+        },
+        {
+          "path": "comps[0].props.energyMax",
+          "value": "0.5"
+        }
+      ],
+      "translations": [
+        {
+          "path": "label",
+          "translated": "护盾腰带",
+          "original": "shield belt",
+          "language": "ChineseSimplified",
+          "origin": "in effect"
+        }
+      ]
     }
   ]
 }

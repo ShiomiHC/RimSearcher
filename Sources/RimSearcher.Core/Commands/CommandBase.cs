@@ -134,10 +134,27 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
         var report = SnapshotCatalog.Compare(db, Config);
         var name = selection.Alias ?? Path.GetFileNameWithoutExtension(selection.Path);
 
+        // 「这次用了哪个快照」与「这个快照过没过期」是两件事,第一轮只修了后者。
+        // 实测:注册了 modded 与 vanilla 两个,问的是 vanilla 的事,不带 --snapshot 跑出来的是
+        // modded,而输出里一个字都没提 —— 发现它靠的是某个值里恰好混进了 mod 前缀,纯属运气。
+        // 快照选错就是答案错,这一行不能省。只有一个快照时仍然零字节:那时不存在选错。
+        if (selection.Source is not (SelectionSource.ExplicitAlias or SelectionSource.ExplicitDb))
+        {
+            var registered = SnapshotCatalog.Enumerate(Config);
+            if (registered.Count > 1)
+            {
+                var others = registered.Where(e => !string.Equals(e.Alias, name, StringComparison.OrdinalIgnoreCase))
+                                       .Select(e => e.Alias);
+                Report.Notice(NoticeKind.SnapshotChoice,
+                    $"Using snapshot '{name}' ({(selection.Source == SelectionSource.Pinned ? "pinned" : "auto-detected")}); " +
+                    $"also registered: {string.Join(", ", others)}.");
+            }
+        }
+
         switch (report.Match)
         {
             case EnvironmentMatch.Same:
-                return;   // 正常态:零字节
+                return;   // 一致:除了上面那行「用的是哪个」,不再多说
 
             case EnvironmentMatch.VersionDrift:
                 Report.Notice(NoticeKind.Staleness,

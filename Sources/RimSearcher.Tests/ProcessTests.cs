@@ -121,12 +121,43 @@ public class ProcessTests
         Assert.False(raw.EndsWith("\n\n", StringComparison.Ordinal), "Output ends with a blank line.");
     }
 
-    /// <summary>--json 出来的必须是能解析的 JSON,而不是「看起来像」。</summary>
+    /// <summary>
+    /// --json 出来的必须是能解析的 JSON,而不是「看起来像」。
+    ///
+    /// 形状必须**恒定**:单个 def 也是长度 1 的 defs 数组。原先单数一种形状、多数另一种,
+    /// 且多数时把名字拼进键里(<c>fields:{DefName}</c>),同名跨 def 类型就撞键、后写的
+    /// 静默覆盖 —— 照着一次输出写的解析器会在下一次撞名时拿到别的东西还不报错。
+    /// </summary>
     [Fact]
     public void json模式输出可解析()
     {
         var (stdout, _, _) = Run("get", "Apparel_ShieldBelt", "--json");
-        var doc = System.Text.Json.JsonDocument.Parse(stdout);
-        Assert.True(doc.RootElement.TryGetProperty("def", out _));
+        using var doc = System.Text.Json.JsonDocument.Parse(stdout);
+        Assert.True(doc.RootElement.TryGetProperty("defs", out var defs));
+        Assert.Equal(System.Text.Json.JsonValueKind.Array, defs.ValueKind);
+        Assert.Equal(1, defs.GetArrayLength());
+        Assert.True(defs[0].TryGetProperty("def", out _));
+        Assert.True(defs[0].TryGetProperty("fields", out _));
+    }
+
+    /// <summary>
+    /// 同名跨 def 类型时每个 def 都保住自己的槽位。这是上面那条形状约定唯一真正要挡的事故:
+    /// 撞键的那一版会一边在 notes 里说「匹配到 N 个字段」,一边给出空数组。
+    /// </summary>
+    [Fact]
+    public void 同名def在json里各占一个槽位()
+    {
+        var (stdout, _, _) = Run("get", "Firefoam", "--json");
+        using var doc = System.Text.Json.JsonDocument.Parse(stdout);
+        var defs = doc.RootElement.GetProperty("defs");
+        Assert.Equal(2, defs.GetArrayLength());
+
+        var types = defs.EnumerateArray()
+                        .Select(d => d.GetProperty("def").GetProperty("def_type").GetString())
+                        .ToList();
+        Assert.Equal(["StatDef", "ThingDef"], types.Order().ToList());
+
+        // 有字段的那一份不许被没字段的那一份盖掉。
+        Assert.Contains(defs.EnumerateArray(), d => d.GetProperty("fields").GetArrayLength() > 0);
     }
 }

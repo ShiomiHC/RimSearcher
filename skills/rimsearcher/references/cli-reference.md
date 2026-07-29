@@ -23,6 +23,7 @@ Answers questions about RimWorld's defs and C# from a snapshot of what the game 
 | `snapshot import` | Build a queryable snapshot database out of a file the in-game exporter wrote. |
 | `snapshot list` | List the snapshots this machine knows about. |
 | `snapshot status` | Explain in full which snapshot is in use and how it compares with the game as installed right now. |
+| `snapshot truncated` | List the defs whose fields the exporter stopped short on. |
 | `snapshot use` | Pin a snapshot so later commands use it without being told each time. |
 | `types` | List every def type in the snapshot with how many defs it has. |
 | `values` | List the distinct values a field takes, most common first. |
@@ -150,14 +151,14 @@ rimsearcher fields HediffDef --limit all
 Find defs by the value of a field. This is the reverse lookup: from a C# class or a value back to the defs that use it.
 
 ```
-rimsearcher find <fieldPath> [value] [options]
+rimsearcher find [fieldPath] [value] [options]
 ```
 
 The field path is matched from the end, so 'compClass' finds 'comps[3].compClass' without you knowing the index. This replaces grepping the XML: the values here are the merged, post-patch ones, and a class reference is an exact match rather than a text hit.
 
 | Argument | Meaning |
 |---|---|
-| `<fieldPath>` | A field path or just its last segment, such as compClass or defaultProjectile. |
+| `<fieldPath>` | A field path or just its last segment, such as compClass or defaultProjectile. Omit it when you pass --value. *(optional)* |
 | `<value>` | The value to look for. Omit it to list every def that has the field at all. *(optional)* |
 
 | Option | Meaning | Also accepted |
@@ -165,13 +166,14 @@ The field path is matched from the end, so 'compClass' finds 'comps[3].compClass
 | `-n`, `--limit` <n|all> | How many defs to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
 | `--exact` | Require the whole value to match. Without it, the value is matched as a substring. | `--exact-match`, `--whole` |
+| `--value` <text> | Search every field for this value and report which paths hold it, instead of naming a field yourself. | `--any-field`, `--search-values`, `--holding` |
 
 Examples:
 
 ```
 rimsearcher find compClass RimWorld.CompShield
 rimsearcher find defaultProjectile Bullet_Revolver
-rimsearcher find thingClass --limit all
+rimsearcher find --value World/WorldObjects/Expanding
 ```
 
 ## `get`
@@ -192,6 +194,7 @@ Field paths are the merged, post-patch shape the game actually had in memory whe
 |---|---|---|
 | `-n`, `--limit` <n|all> | How many fields to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `60`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--path` <text> | Only show field paths containing this text. Repeat it to widen the selection. | `--paths`, `--field`, `--field-path`, `--only`, `--filter`, `--grep` |
+| `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind`, `--category` |
 | `--fields` | Deprecated no-op: fields are always shown. Kept so that scripts that pass it keep working. | `--with-fields`, `--show-fields` |
 
 Examples:
@@ -219,11 +222,13 @@ rimsearcher list <defType> [options]
 | `-n`, `--limit` <n|all> | How many defs to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
 | `--offset` <n> | Skip this many defs before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start` |
+| `--class` <ClassName> | Only defs whose own class is this. Def types that hold several classes list them below the count. | `--def-class`, `--runtime-class` |
 
 Examples:
 
 ```
 rimsearcher list HediffDef
+rimsearcher list CreepJoinerBaseDef --class CreepJoinerAggressiveDef
 rimsearcher list ThingDef --scope all,-vanilla --limit all
 ```
 
@@ -273,17 +278,22 @@ rimsearcher modlist save tidy --from scratch.rml
 Show the mods in one list, in load order.
 
 ```
-rimsearcher modlist show <name>
+rimsearcher modlist show [name] [options]
 ```
 
 | Argument | Meaning |
 |---|---|
-| `<name>` | A name from 'modlist list', or a path to a .rml file. |
+| `<name>` | A name from 'modlist list', or a path to a .rml file. Omit it with --find to search every list. *(optional)* |
+
+| Option | Meaning | Also accepted |
+|---|---|---|
+| `--find` <text> | Only rows whose id or name contains this. Without a list name, every list is searched. | `--filter`, `--grep`, `--search`, `--match` |
 
 Examples:
 
 ```
 rimsearcher modlist show vanilla
+rimsearcher modlist show --find milira
 ```
 
 ## `mods`
@@ -390,6 +400,28 @@ Examples:
 rimsearcher snapshot status
 ```
 
+## `snapshot truncated`
+
+List the defs whose fields the exporter stopped short on.
+
+```
+rimsearcher snapshot truncated [options]
+```
+
+Every count this tool reports over field paths — 'find', 'values', 'fields' — is complete only for what got indexed. These defs are where that gap can hide, so this is how a claim of 'that is all of them' gets cross-checked rather than trusted.
+
+| Option | Meaning | Also accepted |
+|---|---|---|
+| `-n`, `--limit` <n|all> | How many defs to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+| `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
+
+Examples:
+
+```
+rimsearcher snapshot truncated
+rimsearcher snapshot truncated --limit all
+```
+
 ## `snapshot use`
 
 Pin a snapshot so later commands use it without being told each time.
@@ -448,10 +480,12 @@ Answers 'what am I allowed to put here' and 'which classes are actually in use' 
 |---|---|---|
 | `-n`, `--limit` <n|all> | How many values to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
+| `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind`, `--category` |
 
 Examples:
 
 ```
 rimsearcher values compClass
+rimsearcher values expandingIconTexture --type WorldObjectDef
 rimsearcher values thingClass --scope vanilla
 ```

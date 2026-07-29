@@ -1,6 +1,8 @@
 $ rimsearcher get Meat_Muffalo
 exit 0
 --- stdout ---
+2 fields.
+
 def_name     Meat_Muffalo
 def_type     ThingDef
 label        muffalo meat

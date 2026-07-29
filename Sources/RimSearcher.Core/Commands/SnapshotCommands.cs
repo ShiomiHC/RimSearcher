@@ -47,9 +47,12 @@ public sealed class SnapshotListCommand : Command
                 mods = game = exported = defs = "unreadable";
             }
 
+            // 状态不进名字格。凡是要被复制回命令行的单元格都只放能原样粘贴的东西 ——
+            // 实测里有人把 `modded (active)` 整个抄进 --snapshot,吃了一句「No snapshot named」。
             rows.Add(new Dictionary<string, object?>
             {
-                ["name"] = e.Alias + (string.Equals(e.Alias, active, StringComparison.OrdinalIgnoreCase) ? " (active)" : ""),
+                ["name"] = e.Alias,
+                ["active"] = string.Equals(e.Alias, active, StringComparison.OrdinalIgnoreCase) ? "yes" : "",
                 ["defs"] = defs,
                 ["mods"] = mods,
                 ["game"] = game,
@@ -57,7 +60,7 @@ public sealed class SnapshotListCommand : Command
             });
         }
 
-        ctx.Report.Table("snapshots", ["name", "defs", "mods", "game", "exported"], rows);
+        ctx.Report.Table("snapshots", ["name", "active", "defs", "mods", "game", "exported"], rows);
         return 0;
     }
 }
@@ -164,6 +167,49 @@ public sealed class SnapshotUseCommand : Command
 
         ctx.Config.SaveActiveSnapshot(hit.Alias);
         ctx.Report.Detail("pinned", [new("snapshot", hit.Alias), new("path", hit.Path)]);
+        return 0;
+    }
+}
+
+public sealed class SnapshotTruncatedCommand : Command
+{
+    public override CommandSpec Spec => new()
+    {
+        Name = "snapshot truncated",
+        Summary = "List the defs whose fields the exporter stopped short on.",
+        Remarks =
+            "Every count this tool reports over field paths — 'find', 'values', 'fields' — is complete only " +
+            "for what got indexed. These defs are where that gap can hide, so this is how a claim of " +
+            "'that is all of them' gets cross-checked rather than trusted.",
+        Options = [CommonOptions.Limit("defs"), CommonOptions.Scope],
+        Examples = ["rimsearcher snapshot truncated", "rimsearcher snapshot truncated --limit all"],
+    };
+
+    public override int Run(CommandContext ctx)
+    {
+        var limit = ctx.Args.Limit();
+        var scope = ctx.Scope();
+        var (rows, total) = ctx.Db.TruncatedDefs(scope, limit.Effective);
+
+        if (rows.Count == 0)
+        {
+            ctx.Report.Notice(NoticeKind.Count,
+                "No def in this snapshot lost fields at export time" +
+                (scope.IsAll ? "" : $" within --scope {scope.Expression}") +
+                ", so counts over field paths are complete for it.");
+            return 0;
+        }
+
+        ctx.Report.CountNotice(Tally.Of(rows.Count, total), "def", "raise --limit to see the rest.");
+        ctx.Report.Table("truncated", ["def_name", "def_type", "fields_dropped"],
+            rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+            {
+                ["def_name"] = r.DefName,
+                ["def_type"] = r.DefType,
+                ["fields_dropped"] = r.Dropped,
+            }).ToList());
+        ctx.Report.Notice(NoticeKind.Boundary,
+            "The count is a lower bound per def: the exporter stopped, it did not finish counting.");
         return 0;
     }
 }

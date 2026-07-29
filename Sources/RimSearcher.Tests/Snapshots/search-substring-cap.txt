@@ -1,0 +1,9 @@
+$ rimsearcher search VoidNode --limit 2
+exit 0
+--- stdout ---
+Showing 2 of 3 defs; raise --limit or narrow the query.
+
+def_name       def_type  label            matched_on  mod
+VoidNode       ThingDef  void node        def_name    test.mod
+VoidNodeShard  ThingDef  void node shard  def_name    test.mod
+--- stderr ---

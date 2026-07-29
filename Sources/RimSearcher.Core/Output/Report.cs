@@ -10,6 +10,10 @@ public enum NoticeKind
 {
     /// <summary>结果被上限截断(02-3 暗截断的对策)。</summary>
     Truncation,
+    /// <summary>结果计数,完整集也报(三态文法的「裸 N」态)。</summary>
+    Count,
+    /// <summary>调用方自己要求的过滤,不是截断 —— 机器侧靠 kind 分类,两者混用会被读成结果不完整。</summary>
+    Filter,
     /// <summary>快照与当前游戏环境不一致(02-4 过期自证)。</summary>
     Staleness,
     /// <summary>用了哪个快照、为什么。</summary>
@@ -26,7 +30,17 @@ public enum NoticeKind
 
 public sealed record Notice(NoticeKind Kind, string Text, bool Footnote = false);
 
-public abstract record Block;
+public abstract record Block
+{
+    /// <summary>
+    /// 属于哪个重复项集合。为 null 时块直接挂在 JSON 顶层;非 null 时它是
+    /// <c>root[Collection][Item]</c> 下的一个键 —— 这样「一次输出里有 N 个同构对象」
+    /// 有个恒定形状,不必把名字拼进键里。
+    /// </summary>
+    public string? Collection { get; init; }
+
+    public int Item { get; init; }
+}
 
 /// <summary>表格块。列名即 JSON 键(snake_case),文本与 JSON 两个渲染器共用同一份行数据。</summary>
 public sealed record TableBlock(string Name, IReadOnlyList<string> Columns,
@@ -57,7 +71,20 @@ public sealed class Report
         return this;
     }
 
-    /// <summary>只在被截断时发声。正常态一个字都不说(上下文预算硬约束)。</summary>
+    /// <summary>
+    /// 计数恒在。完整集渲染成裸 N 并按 <see cref="NoticeKind.Count"/> 归类,被截时追加
+    /// 怎么看到剩下的、按 <see cref="NoticeKind.Truncation"/> 归类 —— 两态同一个产地、
+    /// 同一个位置,读者不必靠「有没有那句话」反推(第二轮盲测:靠沉默传达完整会被读错)。
+    /// </summary>
+    public Report CountNotice(Tally tally, string noun, string howToSeeMore)
+        => tally.IsTruncated
+            ? Notice(NoticeKind.Truncation, $"Showing {tally.Render(noun)}; {howToSeeMore}")
+            : Notice(NoticeKind.Count, $"{tally.Render(noun)}.");
+
+    /// <summary>
+    /// 只在被截断时发声。留给「完整态另有更贴切的说法」的调用点(get 的字段表由
+    /// --path 分支自己报数,再补一条裸计数就成了两句话说同一件事)。
+    /// </summary>
     public Report TruncationNotice(Tally tally, string noun, string howToSeeMore)
     {
         if (!tally.IsTruncated) return this;
@@ -65,7 +92,32 @@ public sealed class Report
             $"Showing {tally.Render(noun)}; {howToSeeMore}");
     }
 
-    public Report Add(Block block) { _blocks.Add(block); return this; }
+    private string? _collection;
+    private int _item = -1;
+
+    /// <summary>
+    /// 开始集合里的下一项。之后加进来的块都归它,直到 <see cref="EndItems"/>。
+    ///
+    /// 起因(第二轮盲测,3 个 agent):get 输出多个同名 def 时,JSON 的键是
+    /// <c>fields:{DefName}</c> 两段而 <c>def:{DefName}:{DefType}</c> 三段,同名跨 def 类型
+    /// 就撞键,后写的把先写的**静默覆盖**掉。更毒的是同一份输出里 notes 还在说
+    /// 「1 field matched」,而那个键的值是空数组 —— 自相矛盾的输出比报错危险得多。
+    /// 键里拼名字本来就没法安全解析,所以改成集合。
+    /// </summary>
+    public Report Item(string collection)
+    {
+        if (_collection != collection) { _collection = collection; _item = 0; }
+        else _item++;
+        return this;
+    }
+
+    public Report EndItems() { _collection = null; _item = -1; return this; }
+
+    public Report Add(Block block)
+    {
+        _blocks.Add(_collection is null ? block : block with { Collection = _collection, Item = _item });
+        return this;
+    }
 
     public Report Table(string name, IReadOnlyList<string> columns,
                         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, string? caption = null)

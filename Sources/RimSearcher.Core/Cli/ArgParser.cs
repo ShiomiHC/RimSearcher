@@ -23,7 +23,8 @@ public static class ArgParser
         return sb.ToString();
     }
 
-    public static ParseResult Parse(CommandSpec spec, IReadOnlyList<OptionSpec> globals, IReadOnlyList<string> argv)
+    public static ParseResult Parse(CommandSpec spec, IReadOnlyList<OptionSpec> globals, IReadOnlyList<string> argv,
+                                    IReadOnlyList<CommandSpec>? siblings = null)
     {
         var options = spec.UsesGlobals ? [.. spec.Options, .. globals] : spec.Options.ToArray();
 
@@ -79,7 +80,7 @@ public static class ArgParser
 
                 if (opt is null)
                 {
-                    errors.Add(UnknownOptionMessage(arg, body, options));
+                    errors.Add(UnknownOptionMessage(arg, body, options, spec, siblings));
                     // 未知 flag 后面若跟着一个非 flag 的词,大概率是它的取值,一并跳过,
                     // 免得那个词又被当成位置参数引出第二条无关报错。
                     if (inlineValue is null && i + 1 < argv.Count && !argv[i + 1].StartsWith('-')) i++;
@@ -145,8 +146,23 @@ public static class ArgParser
         return new ParseResult(spec, positionals, values, errors, wantsHelp);
     }
 
-    private static string UnknownOptionMessage(string raw, string body, IReadOnlyList<OptionSpec> options)
+    private static string UnknownOptionMessage(string raw, string body, IReadOnlyList<OptionSpec> options,
+                                               CommandSpec spec, IReadOnlyList<CommandSpec>? siblings)
     {
+        // 「别的命令有、这条没有」比任何编辑距离候选都准。实测:四个调用方各自对 get / values
+        // 敲了 --type(那时它只挂在 search 上),吃到的却是「Did you mean --limit?」——
+        // 两个词既不形近也不同义,而真相「--type 是别的命令的参数」一个字没提。
+        var n = Normalize(body);
+        var elsewhere = (siblings ?? [])
+            .Where(s => !string.Equals(s.Name, spec.Name, StringComparison.Ordinal))
+            .Where(s => s.Options.Any(o => Normalize(o.Name) == n || o.Aliases.Any(a => Normalize(a) == n)))
+            .Select(s => s.Name)
+            .Take(Limits.MaxSuggestions)
+            .ToList();
+        if (elsewhere.Count > 0)
+            return $"Unknown option '{raw}'. It is accepted by " +
+                   string.Join(" and ", elsewhere.Select(c => $"'{c}'")) + $", but not by '{spec.Name}'.";
+
         var candidates = Suggest(body, options);
         var msg = $"Unknown option '{raw}'.";
         if (candidates.Count > 0)
@@ -167,8 +183,11 @@ public static class ArgParser
         var scored = new List<(int score, string name)>();
         foreach (var o in options)
         {
+            // 别名只认前缀/包含关系,不参与编辑距离打分。距离是给「打错规范名」用的,
+            // 而别名本来就是同义词列表 —— 让它也吃距离,`--type` 会经由别名 `top`
+            // (距离 2,恰好压线)被判成 `--limit` 的近似,把人推向一个毫不相干的参数。
             var best = int.MaxValue;
-            foreach (var key in new[] { o.Name }.Concat(o.Aliases))
+            foreach (var (key, isAlias) in new[] { (o.Name, false) }.Concat(o.Aliases.Select(a => (a, true))))
             {
                 var k = Normalize(key);
                 int score;
@@ -176,6 +195,8 @@ public static class ArgParser
                     score = 0;
                 else if (k.Contains(n, StringComparison.Ordinal) || n.Contains(k, StringComparison.Ordinal))
                     score = 1;
+                else if (isAlias)
+                    continue;
                 else
                     score = Distance(n, k);
                 best = Math.Min(best, score);

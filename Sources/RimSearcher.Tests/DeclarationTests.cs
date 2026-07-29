@@ -184,9 +184,11 @@ public class DeclarationTests
     }
 
     /// <summary>
-    /// 名词有**两个**入口:直接 <c>Render("x")</c>,以及交给 <c>TruncationNotice</c> 由它去
-    /// 渲染。只认前一个,后一个用到的名词会被判成「没人用」—— 第一次跑就是这样红的。
-    /// 两个入口都要认,闸才对得上真实用法。
+    /// 名词有**三个**入口:直接 <c>Render("x")</c>,以及交给 <c>CountNotice</c> /
+    /// <c>TruncationNotice</c> 由它们去渲染。漏掉任何一个,走那条路的名词都会被判成
+    /// 「没人用」—— 第一版漏了 TruncationNotice 就红过一次,这一版拆出 CountNotice 时又红了一次。
+    /// 每加一个会渲染名词的方法,这里都得跟上;判据是「代码里有没有把名词交出去」,
+    /// 不是「哪个方法名」。
     /// </summary>
     private static SortedSet<string> NounsUsedInCode()
     {
@@ -199,7 +201,8 @@ public class DeclarationTests
                      System.Text.RegularExpressions.Regex.Matches(text, @"\.Render\(\s*""([^""]+)""\s*\)"))
                 used.Add(m.Groups[1].Value);
             foreach (System.Text.RegularExpressions.Match m in
-                     System.Text.RegularExpressions.Regex.Matches(text, @"TruncationNotice\([^;]*?,\s*""([^""]+)""\s*,"))
+                     System.Text.RegularExpressions.Regex.Matches(
+                         text, @"(?:Count|Truncation)Notice\([^;]*?,\s*""([^""]+)""\s*,"))
                 used.Add(m.Groups[1].Value);
         }
         return used;

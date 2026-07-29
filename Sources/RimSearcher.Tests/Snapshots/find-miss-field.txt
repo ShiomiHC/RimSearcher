@@ -1,5 +1,5 @@
 $ rimsearcher find noSuchField x
 exit 1
 --- stdout ---
-No def has 'noSuchField' set to 'x'. 'rimsearcher values noSuchField --limit all' lists them.
+No def in this snapshot has a field path ending in 'noSuchField'. 'rimsearcher fields <DefType> --path <text>' lists the paths that a def type actually has, and 'rimsearcher find --value x' finds which field holds that value.
 --- stderr ---

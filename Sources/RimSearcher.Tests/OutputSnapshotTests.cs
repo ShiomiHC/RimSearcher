@@ -24,6 +24,10 @@ public class OutputSnapshotTests
         { "search-miss",           ["search", "zzzznothing"] },
         { "search-miss-classlike", ["search", "CompShield"] },
         { "search-typo",           ["search", "Aparel_ShieldBelt"] },
+        // 混合命中:两条 FTS + 一条只有子串扫描找得到,再加上一个小 limit ——
+        // 「N of M 的 M 不随 limit 变」除了 GrammarTests 那条断言,这里也逐字节钉一份。
+        { "search-substring",      ["search", "VoidNode"] },
+        { "search-substring-cap",  ["search", "VoidNode", "--limit", "2"] },
         { "get-full",              ["get", "Apparel_ShieldBelt"] },
         { "get-path-filter",       ["get", "Apparel_ShieldBelt", "--path", "comps"] },
         { "get-path-no-match",     ["get", "Apparel_ShieldBelt", "--path", "zzzz"] },

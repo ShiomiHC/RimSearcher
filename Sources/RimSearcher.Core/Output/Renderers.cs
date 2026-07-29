@@ -140,17 +140,48 @@ public static class JsonRenderer
                 })
                 .ToList();
 
+        var collections = new Dictionary<string, List<Dictionary<string, object?>>>(StringComparer.Ordinal);
+
         foreach (var block in report.Blocks)
         {
-            switch (block)
+            var (name, value) = block switch
             {
-                case TableBlock t: root[t.Name] = t.Rows; break;
-                case DetailBlock d: root[d.Name] = d.Pairs.ToDictionary(p => p.Key, p => p.Value); break;
-                case TextBlock x: root[x.Name] = x.Lines; break;
+                TableBlock t => (t.Name, (object?)t.Rows),
+                DetailBlock d => (d.Name, d.Pairs.ToDictionary(p => p.Key, p => p.Value)),
+                TextBlock x => (x.Name, x.Lines),
+                _ => ("", null),
+            };
+            if (name.Length == 0) continue;
+
+            if (block.Collection is { } coll)
+            {
+                if (!collections.TryGetValue(coll, out var items))
+                    collections[coll] = items = [];
+                while (items.Count <= block.Item) items.Add([]);
+                Put(items[block.Item], name, value, $"{coll}[{block.Item}]");
+            }
+            else
+            {
+                Put(root, name, value, "the top level");
             }
         }
 
+        foreach (var (name, items) in collections) Put(root, name, items, "the top level");
+
         return OutputText.Finish(JsonSerializer.Serialize(root, Options));
+    }
+
+    /// <summary>
+    /// 覆盖式赋值是这套输出唯一一处会**静默丢数据**的地方(第二轮盲测实证:同名 def 的
+    /// fields 被后一个覆盖成空,而 notes 还在说匹配到了)。宁可当场炸,也不许交出一份
+    /// 自洽度不明的 JSON —— 消费方没有任何办法从结果里看出少了东西。
+    /// </summary>
+    private static void Put(Dictionary<string, object?> target, string key, object? value, string where)
+    {
+        if (!target.TryAdd(key, value))
+            throw new InvalidOperationException(
+                $"Output block '{key}' was emitted twice at {where}. Repeated blocks belong in a collection " +
+                "(Report.Item) so that each one keeps its own slot; writing them to the same key loses data.");
     }
 
     private static string SnakeCase(string s)

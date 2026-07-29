@@ -9,7 +9,7 @@ namespace RimSearcher.Storage;
 public static class SnapshotSchema
 {
     /// <summary>schema 版本。表结构变化时 +1。</summary>
-    public const int Version = 1;
+    public const int Version = 2;
 
     public const string MetaKeySchemaVersion = "schema_version";
     public const string MetaKeyRaw = "export_meta_json";
@@ -37,7 +37,6 @@ public static class SnapshotSchema
             source_file      TEXT,
             generated        INTEGER NOT NULL DEFAULT 0,
             class            TEXT,
-            parent           TEXT,
             fields_truncated INTEGER NOT NULL DEFAULT 0
         );
 

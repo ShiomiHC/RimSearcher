@@ -11,12 +11,14 @@ Arguments:
   <defName>  The exact def name. 'search' finds it if you only know part of it.
 
 Options:
-  -n, --limit <n|all>  How many fields to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: 60.
-                       Also accepted: --max-results, --count, --top, --rows, --num, --head.
-      --path <text>    Only show field paths containing this text. Repeat it to widen the selection.
-                       Also accepted: --paths, --field, --field-path, --only, --filter, --grep.
-      --fields         Deprecated no-op: fields are always shown. Kept so that scripts that pass it keep working.
-                       Also accepted: --with-fields, --show-fields.
+  -n, --limit <n|all>   How many fields to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: 60.
+                        Also accepted: --max-results, --count, --top, --rows, --num, --head.
+      --path <text>     Only show field paths containing this text. Repeat it to widen the selection.
+                        Also accepted: --paths, --field, --field-path, --only, --filter, --grep.
+      --type <DefType>  Restrict results to one def type, for example ThingDef or HediffDef.
+                        Also accepted: --def-type, --kind, --category.
+      --fields          Deprecated no-op: fields are always shown. Kept so that scripts that pass it keep working.
+                        Also accepted: --with-fields, --show-fields.
 
 Global options:
       --snapshot <name>  Query this named snapshot instead of the one that would be picked automatically. An explicit choice always wins over auto-detection.

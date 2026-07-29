@@ -5,7 +5,7 @@ namespace RimSearcher.Storage;
 
 public sealed record DefRow(long Id, string DefType, string DefName, string? Label, string? Description,
                             string? SourceMod, string? SourceFile, bool Generated, string? Class,
-                            string? Parent, int FieldsTruncated);
+                            int FieldsTruncated);
 
 public sealed record FieldRow(string Path, string Leaf, string? Value);
 
@@ -148,6 +148,26 @@ public sealed class SnapshotDb : IDisposable
         return (rows, total);
     }
 
+    /// <summary>
+    /// 名字里含 <paramref name="query"/>、但 FTS **没**匹配上的 def 名。
+    ///
+    /// FTS 分词按分隔符与驼峰词首切,查询词落在名字中段就漏(`VoidNode` 找不到
+    /// `MonolithGleamingVoidNode`)。补扫必须在这里做减法而不是在调用方按已显示的行去重 ——
+    /// 那样 `--limit` 一小,没显示出来的 FTS 命中就会被当成新增重复计进总数。
+    /// </summary>
+    public IReadOnlyList<string> NamesContainingUnmatched(string query, ScopeFilter scope, string? defType)
+    {
+        var p = new Dictionary<string, object?> { ["@m"] = FtsText.BuildMatchQuery(query), ["@q"] = "%" + Escape(query) + "%" };
+        var conds = new List<string> { "d.def_name LIKE @q ESCAPE '\\'", "d.id NOT IN (SELECT rowid FROM defs_fts WHERE defs_fts MATCH @m)" };
+        if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
+        if (defType is { Length: > 0 }) { p["@dt"] = defType; conds.Add("d.def_type = @dt COLLATE NOCASE"); }
+
+        var names = new List<string>();
+        using var rd = Query($"SELECT d.def_name FROM defs d WHERE {string.Join(" AND ", conds)} ORDER BY LENGTH(d.def_name), d.def_name", p);
+        while (rd.Read()) names.Add(rd.GetString(0));
+        return names;
+    }
+
     public (IReadOnlyList<DefRow> Rows, int Total) ByNames(IReadOnlyList<string> names, int limit)
     {
         if (names.Count == 0) return ([], 0);
@@ -214,14 +234,73 @@ public sealed class SnapshotDb : IDisposable
     private static string Escape(string s)
         => s.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 
-    public (IReadOnlyList<DefRow> Rows, int Total) ListByType(string defType, ScopeFilter scope, int limit, int offset)
+    public (IReadOnlyList<DefRow> Rows, int Total) ListByType(
+        string defType, ScopeFilter scope, int limit, int offset, string? className = null)
     {
         var p = new Dictionary<string, object?> { ["@t"] = defType };
         var conds = new List<string> { "d.def_type = @t COLLATE NOCASE" };
+        if (className is { Length: > 0 })
+        {
+            p["@c"] = className;
+            conds.Add("(d.class = @c COLLATE NOCASE OR d.class LIKE '%.' || @c COLLATE NOCASE)");
+        }
         if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
         var where = "WHERE " + string.Join(" AND ", conds);
         var total = Scalar($"SELECT COUNT(*) FROM defs d {where}", p);
         var rows = ReadDefs($"SELECT {DefColumns} FROM defs d {where} ORDER BY d.def_name LIMIT {limit} OFFSET {offset}", p);
+        return (rows, total);
+    }
+
+    /// <summary>
+    /// 一个 def_type 桶里实际有几种运行时 class。
+    ///
+    /// 游戏的 <c>GenDefDatabase.AllDefTypesWithDatabases()</c> 只产出「祖先链上没有非抽象 Def」
+    /// 的类型,所以 <c>CreepJoinerAggressiveDef</c> 这种继承自具体类的子类型没有自己的库,
+    /// 它的 def 全落在 <c>CreepJoinerBaseDef</c> 桶里。def_type 记的是桶,不是运行时类型 ——
+    /// 桶异构时不把 class 摆出来,「列出所有 CreepJoinerAggressiveDef」就会得到
+    /// 「这个类型不存在」,而缺席会被读成事实。
+    /// </summary>
+    public IReadOnlyList<(string Class, int Count)> ClassesInType(string defType, ScopeFilter scope)
+    {
+        var p = new Dictionary<string, object?> { ["@t"] = defType };
+        var conds = new List<string> { "d.def_type = @t COLLATE NOCASE", "d.class IS NOT NULL" };
+        if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
+        var rows = new List<(string, int)>();
+        using var rd = Query(
+            $"SELECT d.class, COUNT(*) c FROM defs d WHERE {string.Join(" AND ", conds)} " +
+            "GROUP BY d.class ORDER BY c DESC, d.class", p);
+        while (rd.Read()) rows.Add((rd.GetString(0), rd.GetInt32(1)));
+        return rows;
+    }
+
+    /// <summary>名字不是 def_type 时的反查:有没有 def 的运行时 class 恰是它,在哪个桶下。</summary>
+    public IReadOnlyList<(string DefType, int Count)> TypesHoldingClass(string className, ScopeFilter scope)
+    {
+        var p = new Dictionary<string, object?> { ["@c"] = className };
+        var conds = new List<string> { "(d.class = @c COLLATE NOCASE OR d.class LIKE '%.' || @c COLLATE NOCASE)" };
+        if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
+        var rows = new List<(string, int)>();
+        using var rd = Query(
+            $"SELECT d.def_type, COUNT(*) c FROM defs d WHERE {string.Join(" AND ", conds)} " +
+            "GROUP BY d.def_type ORDER BY c DESC, d.def_type", p);
+        while (rd.Read()) rows.Add((rd.GetString(0), rd.GetInt32(1)));
+        return rows;
+    }
+
+    /// <summary>导出时被砍过字段的 def —— 「完整集」这个结论的唯一交叉验证入口。</summary>
+    public (IReadOnlyList<(string DefName, string DefType, int Dropped)> Rows, int Total)
+        TruncatedDefs(ScopeFilter scope, int limit)
+    {
+        var p = new Dictionary<string, object?>();
+        var conds = new List<string> { "d.fields_truncated > 0" };
+        if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
+        var where = "WHERE " + string.Join(" AND ", conds);
+        var total = Scalar($"SELECT COUNT(*) FROM defs d {where}", p);
+        var rows = new List<(string, string, int)>();
+        using var rd = Query(
+            $"SELECT d.def_name, d.def_type, d.fields_truncated FROM defs d {where} " +
+            $"ORDER BY d.fields_truncated DESC, d.def_name LIMIT {limit}", p);
+        while (rd.Read()) rows.Add((rd.GetString(0), rd.GetString(1), rd.GetInt32(2)));
         return (rows, total);
     }
 
@@ -262,7 +341,7 @@ public sealed class SnapshotDb : IDisposable
             $"SELECT {DefColumns}, fv.path, fv.value FROM field_values fv JOIN defs d ON d.id = fv.def_id {where} " +
             $"ORDER BY d.def_name LIMIT {limit}", p);
         while (rd.Read())
-            rows.Add((ReadDefRow(rd), rd.GetString(11), rd.IsDBNull(12) ? null : rd.GetString(12)));
+            rows.Add((ReadDefRow(rd), rd.GetString(10), rd.IsDBNull(11) ? null : rd.GetString(11)));
         return (rows, total);
     }
 
@@ -317,10 +396,13 @@ public sealed class SnapshotDb : IDisposable
     /// </summary>
     public (IReadOnlyList<(string Path, int Count)> Paths, int PathTotal,
             IReadOnlyList<(string DefType, int Count)> DefTypes, int DefsCovered)
-        ValueCoverage(string pathSuffix, ScopeFilter scope, int limit)
+        ValueCoverage(string pathSuffix, ScopeFilter scope, int limit, string? defType = null)
     {
         var p = new Dictionary<string, object?>();
         var where = SuffixWhere(pathSuffix, scope, p);
+        // 产地块必须描述**值表实际统计的那批行**。--type 只筛值表而不筛产地块,就会出现
+        // 「表里只有 ThingDef,产地却说还有 HediffDef 和 AbilityDef」—— 那是最容易骗人的一种不一致。
+        if (defType is { Length: > 0 }) { p["@cdt"] = defType; where += " AND d.def_type = @cdt COLLATE NOCASE"; }
         const string join = "FROM field_values fv JOIN defs d ON d.id = fv.def_id";
 
         var pathTotal = Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT fv.path {join} {where})", p);
@@ -345,10 +427,74 @@ public sealed class SnapshotDb : IDisposable
         return Scalar($"SELECT COUNT(*) FROM defs d WHERE {string.Join(" AND ", conds)}", p);
     }
 
-    public (IReadOnlyList<(string Value, int Count)> Rows, int Total) DistinctValues(string pathSuffix, ScopeFilter scope, int limit)
+    /// <summary>
+    /// 用到某字段路径的那些 def 类型里,有几个 def 在导出时被砍过。
+    ///
+    /// 「快照里一共有 N 个 def 被砍过」这个数字挂在每一次反查上,就成了 00 论据 3 淘汰掉的
+    /// 那种每次返回都带的免责声明 —— 说了等于没说,读的人只能把它抄进答案里当保留意见。
+    /// 收窄到「与本次结果同类型的 def」之后,它不发声时「完整」才是无条件的。
+    /// </summary>
+    public int TruncatedDefsSharingPath(string pathSuffix, ScopeFilter scope)
     {
         var p = new Dictionary<string, object?>();
         var where = SuffixWhere(pathSuffix, scope, p);
+        return Scalar(
+            "SELECT COUNT(*) FROM defs d WHERE d.fields_truncated > 0 AND d.def_type IN (" +
+            $"SELECT DISTINCT d.def_type FROM field_values fv JOIN defs d ON d.id = fv.def_id {where})", p);
+    }
+
+    /// <summary>某个 def 类型里有几个 def 在导出时被砍过。</summary>
+    public int TruncatedDefsOfType(string defType)
+    {
+        var p = new Dictionary<string, object?> { ["@t"] = defType };
+        return Scalar("SELECT COUNT(*) FROM defs WHERE fields_truncated > 0 AND def_type = @t COLLATE NOCASE", p);
+    }
+
+    /// <summary>某个字段后缀在快照里到底存不存在 —— find 的零结果要靠它分流成因。</summary>
+    public bool FieldPathExists(string pathSuffix, ScopeFilter scope)
+    {
+        var p = new Dictionary<string, object?>();
+        var where = SuffixWhere(pathSuffix, scope, p);
+        return Scalar($"SELECT EXISTS(SELECT 1 FROM field_values fv JOIN defs d ON d.id = fv.def_id {where})", p) != 0;
+    }
+
+    /// <summary>
+    /// 按值反查字段路径:给一段文本,回答「哪些字段取到过含它的值」。
+    ///
+    /// 「别再 grep XML」拿走了一种能力,就必须给回等价的一种,否则唯一的出路是猜字段名 ——
+    /// 而猜偏了,<c>--path</c> 会返回一个语法上完全正常、语义上完全错误的结果集。实测里
+    /// 有人用 <c>fields FactionDef --path texture</c> 拿到唯一命中 <c>settlementTexturePath</c>
+    /// 并准备据此下结论,真正管事的 <c>factionIconPath</c> 因为名字里没有 "texture" 被整个滤掉。
+    /// </summary>
+    public (IReadOnlyList<(string Path, string DefType, int Defs, string Sample)> Rows, int Total)
+        PathsWithValue(string valueSubstring, ScopeFilter scope, int limit)
+    {
+        var p = new Dictionary<string, object?> { ["@v"] = "%" + Escape(valueSubstring) + "%" };
+        var conds = new List<string> { "fv.value LIKE @v ESCAPE '\\'" };
+        if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
+        var where = "WHERE " + string.Join(" AND ", conds);
+        const string join = "FROM field_values fv JOIN defs d ON d.id = fv.def_id";
+
+        var total = Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT fv.path, d.def_type {join} {where})", p);
+        var rows = new List<(string, string, int, string)>();
+        using var rd = Query(
+            $"SELECT fv.path, d.def_type, COUNT(DISTINCT d.id) c, MIN(fv.value) {join} {where} " +
+            $"GROUP BY fv.path, d.def_type ORDER BY c DESC, fv.path LIMIT {limit}", p);
+        while (rd.Read())
+            rows.Add((rd.GetString(0), rd.GetString(1), rd.GetInt32(2), rd.IsDBNull(3) ? "" : rd.GetString(3)));
+        return (rows, total);
+    }
+
+    public (IReadOnlyList<(string Value, int Count)> Rows, int Total) DistinctValues(
+        string pathSuffix, ScopeFilter scope, int limit, string? defType = null)
+    {
+        var p = new Dictionary<string, object?>();
+        var where = SuffixWhere(pathSuffix, scope, p);
+        if (defType is { Length: > 0 })
+        {
+            p["@dt"] = defType;
+            where += " AND d.def_type = @dt COLLATE NOCASE";
+        }
 
         var total = Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT fv.value FROM field_values fv JOIN defs d ON d.id = fv.def_id {where})", p);
         var rows = new List<(string, int)>();
@@ -387,14 +533,13 @@ public sealed class SnapshotDb : IDisposable
     // ---------- 底层 ----------
 
     private const string DefColumns =
-        "d.id, d.def_type, d.def_name, d.label, d.description, d.source_mod, d.source_file, d.generated, d.class, d.parent, d.fields_truncated";
+        "d.id, d.def_type, d.def_name, d.label, d.description, d.source_mod, d.source_file, d.generated, d.class, d.fields_truncated";
 
     private static DefRow ReadDefRow(SqliteDataReader rd) => new(
         rd.GetInt64(0), rd.GetString(1), rd.GetString(2),
         rd.IsDBNull(3) ? null : rd.GetString(3), rd.IsDBNull(4) ? null : rd.GetString(4),
         rd.IsDBNull(5) ? null : rd.GetString(5), rd.IsDBNull(6) ? null : rd.GetString(6),
-        rd.GetInt32(7) != 0, rd.IsDBNull(8) ? null : rd.GetString(8),
-        rd.IsDBNull(9) ? null : rd.GetString(9), rd.GetInt32(10));
+        rd.GetInt32(7) != 0, rd.IsDBNull(8) ? null : rd.GetString(8), rd.GetInt32(9));
 
     private List<DefRow> ReadDefs(string sql, IDictionary<string, object?> p)
     {

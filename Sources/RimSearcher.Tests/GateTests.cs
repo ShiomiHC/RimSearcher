@@ -43,6 +43,88 @@ public class GateTests
         Assert.DoesNotContain("S:\\works", text, StringComparison.Ordinal);
     }
 
+    // ---- skill 文档 ----
+
+    private static string SkillPath =>
+        Path.Combine(DeclarationTests.RepoRoot(), "skills", "rimsearcher", "SKILL.md");
+
+    /// <summary>
+    /// SKILL.md 里写出来的每一条命令行都得真能跑。
+    ///
+    /// 参考页有逐字节闸是因为它是**生成产物**;SKILL.md 是手写的,反而一直没人守 ——
+    /// 而 04 的口径是「skill 文档本身进入被测物」:模型照它拼命令行,写错一个开关,
+    /// 代价是调用方白跑一轮。这里判的不是措辞,是**命令名与开关名在注册表里存不存在**。
+    /// </summary>
+    [Fact]
+    public void skill文档里的命令行都能解析()
+    {
+        var registry = new CommandRegistry();
+        var globals = GlobalOptions.All.Select(o => o.Name).ToHashSet(StringComparer.Ordinal);
+        var text = File.ReadAllText(SkillPath).Replace("\r\n", "\n");
+
+        var invocations = Regex.Matches(text, @"`" + CommandRegistry.ExeName + @"([^`]*)`");
+        Assert.True(invocations.Count > 5, "SKILL.md suddenly names almost no commands; the scanner is probably broken.");
+
+        foreach (Match inv in invocations)
+        {
+            var argv = Tokenize(inv.Groups[1].Value);
+            if (argv.Count == 0) continue;                       // 光提 exe 名(「the rimsearcher CLI」)
+            if (argv[0].StartsWith('<') || argv[0].StartsWith("--")) continue;  // 占位命令名
+
+            var (command, rest) = registry.Resolve(argv);
+            Assert.True(command is not null, $"SKILL.md invokes '{inv.Value}', but there is no such command.");
+
+            var accepted = command!.Spec.Options
+                                  .SelectMany(o => new[] { o.Name }.Concat(o.Aliases))
+                                  .ToHashSet(StringComparer.Ordinal);
+            foreach (var token in rest.Where(t => t.StartsWith("--", StringComparison.Ordinal)))
+            {
+                var name = token[2..].Split('=')[0];
+                Assert.True(accepted.Contains(name) || (command.Spec.UsesGlobals && globals.Contains(name)),
+                    $"SKILL.md writes '{inv.Value}', but '{command.Spec.Name}' does not accept '--{name}'.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// 收窄开关那张表:每一行的命令必须真的接受同一行里列出的每个开关。
+    /// 上一条只看得见成句的命令行,而这张表把命令与开关拆在两个单元格里 ——
+    /// 恰恰是最容易漂的形态(它的前身是一句「Every command takes --path, --type, --scope or --files」,
+    /// 而当时 --type 只挂在一条命令上,四个 agent 各撞一次)。
+    /// </summary>
+    [Fact]
+    public void skill文档的收窄开关表与声明一致()
+    {
+        var registry = new CommandRegistry();
+        var text = File.ReadAllText(SkillPath).Replace("\r\n", "\n");
+
+        var rows = Regex.Matches(text, @"^\| `([a-z-]+(?: [a-z-]+)?)` \| ((?:`--[a-z-]+`(?:, )?)+) \|$",
+                                 RegexOptions.Multiline);
+        Assert.True(rows.Count >= 5, "The narrowing table in SKILL.md was not found; the scanner needs updating.");
+
+        foreach (Match row in rows)
+        {
+            var (command, _) = registry.Resolve(row.Groups[1].Value.Split(' '));
+            Assert.True(command is not null, $"The narrowing table names '{row.Groups[1].Value}', which is not a command.");
+
+            var accepted = command!.Spec.Options
+                                  .SelectMany(o => new[] { o.Name }.Concat(o.Aliases))
+                                  .ToHashSet(StringComparer.Ordinal);
+            foreach (Match opt in Regex.Matches(row.Groups[2].Value, @"--([a-z-]+)"))
+                Assert.True(accepted.Contains(opt.Groups[1].Value),
+                    $"The narrowing table gives '{command.Spec.Name}' the option '--{opt.Groups[1].Value}', which it does not accept.");
+        }
+    }
+
+    /// <summary>引号与转义之外的最小分词 —— 这里只需要把一条命令行拆成 token。</summary>
+    private static List<string> Tokenize(string s)
+    {
+        var argv = new List<string>();
+        foreach (Match m in Regex.Matches(s, "\"([^\"]*)\"|(\\S+)"))
+            argv.Add(m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value);
+        return argv;
+    }
+
     // ---- 把基线喂回文法检查 ----
 
     /// <summary>
@@ -79,14 +161,22 @@ public class GateTests
 
         foreach (var (file, line) in BaselineLines())
         {
-            foreach (Match m in Regex.Matches(line, @"\b(\d+) ([a-z]+)\b"))
+            // 名词可能是多词的(field path / def type / source tree)。只截一个词去比,
+            // 「2 field paths」里的 "field" 会被拿去跟单词名词 field 对,判成该写 "fields" ——
+            // 一句完全正确的话被判红。这正是 1338603 那条教训的复发形态:用短子串重新
+            // 声明「该怎么说」。所以按**最长登记名词**匹配,先试两词再退回一词。
+            foreach (Match m in Regex.Matches(line, @"\b(\d+) ([a-z]+(?: [a-z]+)?)\b"))
             {
                 var count = int.Parse(m.Groups[1].Value);
-                var noun = m.Groups[2].Value;
+                var phrase = m.Groups[2].Value;
+                var oneWord = phrase.Split(' ')[0];
 
-                // 只管我们登记过的那批词的单复数;句子里别的词不归这道闸。
-                var singular = singulars.FirstOrDefault(s => s == noun || plurals[s] == noun);
+                var singular = singulars.FirstOrDefault(s => s == phrase || plurals[s] == phrase)
+                            ?? singulars.FirstOrDefault(s => s == oneWord || plurals[s] == oneWord);
                 if (singular is null) continue;
+
+                // 判的是与实际写出来的那一段对不对,而不是与截断出来的那一段。
+                var noun = singular == phrase || plurals[singular] == phrase ? phrase : oneWord;
 
                 var expected = NounRegistry.Form(singular, count);
                 Assert.True(noun == expected,

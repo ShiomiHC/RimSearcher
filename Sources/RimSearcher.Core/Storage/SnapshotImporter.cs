@@ -46,8 +46,8 @@ public sealed class SnapshotImporter
         {
             using var insertDef = Prepare(db, """
                 INSERT INTO defs (id, def_type, def_name, label, description, source_mod, source_file,
-                                  generated, class, parent, fields_truncated)
-                VALUES ($id,$t,$n,$l,$d,$sm,$sf,$g,$c,$p,$ft)
+                                  generated, class, fields_truncated)
+                VALUES ($id,$t,$n,$l,$d,$sm,$sf,$g,$c,$ft)
                 """);
             using var insertFv = Prepare(db, "INSERT INTO field_values (def_id, path, leaf, value) VALUES ($id,$p,$lf,$v)");
             using var insertFts = Prepare(db, "INSERT INTO defs_fts (rowid, def_name, label, description, translated) VALUES ($id,$n,$l,$d,$tr)");
@@ -104,7 +104,6 @@ public sealed class SnapshotImporter
                     Bind(insertDef, "$sf", Str(root, IntermediateFormat.KeySourceFile));
                     Bind(insertDef, "$g", root.TryGetProperty(IntermediateFormat.KeyGenerated, out var gEl) && gEl.GetBoolean() ? 1 : 0);
                     Bind(insertDef, "$c", Str(root, IntermediateFormat.KeyClass));
-                    Bind(insertDef, "$p", Str(root, IntermediateFormat.KeyParent));
                     Bind(insertDef, "$ft", truncated);
                     insertDef.ExecuteNonQuery();
                     defs++;

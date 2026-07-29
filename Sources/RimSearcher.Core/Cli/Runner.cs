@@ -29,6 +29,7 @@ public sealed class CommandRegistry
         new SnapshotListCommand(),
         new SnapshotStatusCommand(),
         new SnapshotUseCommand(),
+        new SnapshotTruncatedCommand(),
         new SnapshotImportCommand(),
         new ModListListCommand(),
         new ModListShowCommand(),
@@ -114,6 +115,21 @@ public static class Runner
         var (command, rest) = registry.Resolve(argv);
         if (command is null)
         {
+            // 帮助里管它叫 "Global options",那这个词本身就在暗示位置自由。放在命令前是
+            // 很自然的写法,而「Unknown command --snapshot」只说了它不是命令,没说它是什么。
+            var asGlobal = argv[0].StartsWith('-')
+                ? GlobalOptions.All.FirstOrDefault(o =>
+                      ArgParser.Normalize(argv[0].TrimStart('-')) == ArgParser.Normalize(o.Name) ||
+                      o.Aliases.Any(a => ArgParser.Normalize(argv[0].TrimStart('-')) == ArgParser.Normalize(a)))
+                : null;
+            if (asGlobal is not null)
+            {
+                stderr.Write(OutputText.Finish(
+                    $"'{argv[0]}' is a global option, not a command, and it goes after the command: " +
+                    $"'{CommandRegistry.ExeName} <command> ... --{asGlobal.Name} {asGlobal.Placeholder}'."));
+                return ExitUsage;
+            }
+
             var suggestions = registry.SuggestCommands(argv[0]);
             stderr.Write(OutputText.Finish(
                 $"Unknown command '{argv[0]}'." +
@@ -122,7 +138,7 @@ public static class Runner
             return ExitUsage;
         }
 
-        var parsed = ArgParser.Parse(command.Spec, GlobalOptions.All, rest);
+        var parsed = ArgParser.Parse(command.Spec, GlobalOptions.All, rest, registry.Specs);
 
         if (parsed.WantsHelp)
         {

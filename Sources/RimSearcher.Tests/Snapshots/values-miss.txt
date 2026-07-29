@@ -1,5 +1,5 @@
 $ rimsearcher values noSuchField
 exit 1
 --- stdout ---
-No def in this snapshot has a field path ending in 'noSuchField'. 'rimsearcher fields <DefType>' lists the paths a type actually has.
+No def in this snapshot has a field path ending in 'noSuchField'. 'rimsearcher fields <DefType>' lists the paths a type actually has, and 'rimsearcher find --value <text>' finds which path holds a value you already know.
 --- stderr ---

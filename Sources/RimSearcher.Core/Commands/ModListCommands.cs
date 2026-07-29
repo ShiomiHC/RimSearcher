@@ -159,26 +159,107 @@ public sealed class ModListShowCommand : Command
     {
         Name = "modlist show",
         Summary = "Show the mods in one list, in load order.",
-        Positionals = [new PositionalSpec { Name = "name", Help = "A name from 'modlist list', or a path to a .rml file." }],
-        Options = [],
-        Examples = ["rimsearcher modlist show vanilla"],
+        Positionals = [new PositionalSpec { Name = "name", Required = false, Help = "A name from 'modlist list', or a path to a .rml file. Omit it with --find to search every list." }],
+        Options =
+        [
+            new OptionSpec
+            {
+                // 「这个 mod 在本机装了没」原本无解:mods 只讲快照里已启用的,modlist show
+                // 一次只讲一个列表且不收窄,于是要把十个列表全 dump 一遍才敢下结论 ——
+                // 实测里为此还被逼着违反 skill 去 pipe grep,循环 exit 1 分不清是没匹配还是挂了。
+                Name = "find",
+                Aliases = ["filter", "grep", "search", "match"],
+                Placeholder = "<text>",
+                Help = "Only rows whose id or name contains this. Without a list name, every list is searched.",
+            },
+        ],
+        Examples =
+        [
+            "rimsearcher modlist show vanilla",
+            "rimsearcher modlist show --find milira",
+        ],
     };
 
     public override int Run(CommandContext ctx)
     {
-        var list = ModListIo.Resolve(ctx.Config, ctx.Args.Positional(0)!);
+        var filter = ctx.Args.Value("find");
+        var which = ctx.Args.Positional(0);
+
+        if (which is null)
+        {
+            if (filter is null)
+                throw new CliUsageException(
+                    "'modlist show' needs a list name, or --find <text> to search every list.");
+            return SearchAll(ctx, filter);
+        }
+
+        var list = ModListIo.Resolve(ctx.Config, which);
+        var rows = list.Ids.Select((id, i) => (Order: i, Id: id, Name: i < list.Names.Count ? list.Names[i] : null))
+                           .Where(r => filter is null || Matches(r.Id, r.Name, filter))
+                           .ToList();
+
+        ctx.Report.CountNotice(
+            filter is null ? Tally.Complete(rows.Count) : Tally.Of(rows.Count, list.Ids.Count),
+            "mod", "drop --find to see the whole list.");
+
         ctx.Report.Table("mods", ["order", "package_id", "name"],
-            list.Ids.Select((id, i) => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+            rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
-                ["order"] = i,
-                ["package_id"] = id,
-                ["name"] = i < list.Names.Count ? list.Names[i] : null,
+                ["order"] = r.Order,
+                ["package_id"] = r.Id,
+                ["name"] = r.Name,
             }).ToList());
 
-        if (list.Names.Count == 0)
+        if (rows.Count == 0)
+            ctx.Report.Notice(NoticeKind.NextStep,
+                $"No mod in '{which}' matches '{filter}'. Drop the list name to search every list at once.");
+        else if (list.Names.Count == 0)
             ctx.Report.Notice(NoticeKind.Boundary,
                 "This list carries no display names, which is normal for a hand-written file. " +
                 "Load order comes from the ids alone, so nothing is missing.");
+        return rows.Count == 0 ? 1 : 0;
+    }
+
+    private static bool Matches(string id, string? name, string filter)
+        => id.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+           (name is not null && name.Contains(filter, StringComparison.OrdinalIgnoreCase));
+
+    private static int SearchAll(CommandContext ctx, string filter)
+    {
+        var rows = new List<IReadOnlyDictionary<string, object?>>();
+        var searched = 0;
+
+        foreach (var entry in ModListIo.Enumerate(ctx.Config))
+        {
+            ModListFile list;
+            try { list = ModListIo.Resolve(ctx.Config, entry.Name); }
+            catch (CliUsageException) { continue; }
+            searched++;
+            for (var i = 0; i < list.Ids.Count; i++)
+            {
+                var name = i < list.Names.Count ? list.Names[i] : null;
+                if (!Matches(list.Ids[i], name, filter)) continue;
+                rows.Add(new Dictionary<string, object?>
+                {
+                    ["modlist"] = entry.Name,
+                    ["order"] = i,
+                    ["package_id"] = list.Ids[i],
+                    ["name"] = name,
+                });
+            }
+        }
+
+        if (rows.Count == 0)
+        {
+            ctx.Report.Notice(NoticeKind.NextStep,
+                $"No mod matching '{filter}' appears in any of the {searched} lists on this machine. " +
+                "That says nothing about whether it is installed — only that no saved list names it.");
+            return 1;
+        }
+
+        ctx.Report.CountNotice(Tally.Complete(rows.Count), "mod",
+            $"searched all {searched} lists.");
+        ctx.Report.Table("mods", ["modlist", "order", "package_id", "name"], rows);
         return 0;
     }
 }
