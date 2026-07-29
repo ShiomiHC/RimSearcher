@@ -5,10 +5,10 @@ namespace RimSearcher.Server.Tools.Output;
 // 折叠行：「还有多少没印出来，以及怎么拿到」。
 //
 // 全服一套文法 `<缩进>... +N more [of M ]<名词> (<下一步>)`，由 GrammarRules 规则一与规则九
-// 常驻把守。这些成员此前寄居在 ScopeArgs 里——那是 scope / limit 两个**参数**的家，折叠行
+// 常驻把守。这些成员此前寄居在 ScopeAndLimitArgs 里——那是 scope / limit 两个**参数**的家，折叠行
 // 与它没有关系，只是因为六个工具都 using 着它才被放在那儿。
 //
-// 唯一仍指向参数层的东西是 ScopeArgs.HardLimit 与 ResultLimit：折叠行的三个分支要靠
+// 唯一仍指向参数层的东西是 ScopeAndLimitArgs.HardLimit 与 ResultLimit：折叠行的三个分支要靠
 // 「调用方要过 'all' 没有」和「顶到服务端上限没有」才分得开，那两件事本来就是参数语义。
 public static class Fold
 {
@@ -79,19 +79,19 @@ public static class Fold
 
         // Unlimited 只说明调用方要过 'all'，不等于真的产出了 HardLimit 条——
         // 五条结果的查询也会走进这里，原先照样宣布「server cap 200 reached」。
-        var capReached = limit?.Unlimited == true && shownCount >= ScopeArgs.HardLimit;
+        var capReached = limit?.Unlimited == true && shownCount >= ScopeAndLimitArgs.HardLimit;
 
         var hint = truncatedByLimit
             ? capReached
-                ? $"server cap {ScopeArgs.HardLimit} reached, {capAction ?? "narrow the query"}"
+                ? $"server cap {ScopeAndLimitArgs.HardLimit} reached, {capAction ?? "narrow the query"}"
                 : limit?.Unlimited == true
                     ? "narrow the query to see the rest"
                     // 'all' 也只到硬上限。藏起来的比上限还多时，`to expand` 会被读成「照做就拿全了」
                     // ——`... +767 more C# types (pass limit:'all' to expand)` 照做仍差 567 条，
                     // 而调用方没有任何线索能察觉。同一件事 trace usages 那边是说清了的
                     // （`raise the cap to 200`），这里跟上。
-                    : shownCount + hiddenCount > ScopeArgs.HardLimit
-                        ? $"pass limit:'all' for the first {ScopeArgs.HardLimit}; the rest needs a narrower query"
+                    : shownCount + hiddenCount > ScopeAndLimitArgs.HardLimit
+                        ? $"pass limit:'all' for the first {ScopeAndLimitArgs.HardLimit}; the rest needs a narrower query"
                         : "pass limit:'all' to expand"
             // 断层收口砍掉的是「相对首条掉了 40 分以上」的结果，要够到它们只能让首条不再那么
             // 突出——换个更宽泛的词，或改用 search_regex。原先写的是 refine（收窄），方向正好反了：
@@ -133,7 +133,7 @@ public static class Fold
     // 成员大纲的文本整段由 RoslynHelper 拼（inspect 只是把它原样接进返回），它够不到这个
     // 命名空间，于是那一条折叠行一直是全服唯一手拼的一条。而这一形不含任何成因判断——
     // 下一步整句由调用方给——正好落在 OutputText 那条既有边界的可下沉一侧（构词因同一个理由
-    // 早已在 Core，现在住在 CountedNoun）。上面三个成员下不去：它们要读 ScopeArgs.HardLimit
+    // 早已在 Core，现在住在 CountedNoun）。上面三个成员下不去：它们要读 ScopeAndLimitArgs.HardLimit
     // 与 ResultLimit。
     public static string? Explicit(
         int hiddenCount, CountedNoun noun, string nextStep, int? total = null, string indent = "  ")

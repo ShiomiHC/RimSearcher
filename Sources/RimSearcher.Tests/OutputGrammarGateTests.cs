@@ -137,7 +137,7 @@ public class OutputGrammarGateTests : IDisposable
 
         // inspect 的「计数恰好为 1」那一格用的：Linked C# Types 段的上限写死在 10，故 11 个链接
         // 恰好溢出 1 个。**这是 inspect 唯一一个能取到 1 的计数槽**——大纲折叠取不到，因为
-        // ScopeArgs.GetDisplayLimit 在 limit >= 200 时直接返回 Unlimited（不折叠），而 ZzWide 有
+        // ScopeAndLimitArgs.GetDisplayLimit 在 limit >= 200 时直接返回 Unlimited（不折叠），而 ZzWide 有
         // 210 个成员，limit 只能取到 199，溢出至少 11 个。
         //
         // 元素名各不相同：Def 解析按 XML 语义合并同名子元素（后者胜），11 个同名 Class 元素只会

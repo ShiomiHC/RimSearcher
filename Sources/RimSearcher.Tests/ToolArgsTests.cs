@@ -145,26 +145,26 @@ public class ToolArgsTests
         => Assert.Equal("type:CompShield", ToolArgs.ForEcho("type:CompShield"));
 }
 
-public class ScopeArgsTests
+public class ScopeAndLimitArgsTests
 {
     private static JsonElement Args(string json) => JsonDocument.Parse(json).RootElement.Clone();
 
     // 显式数字原样生效；'all' 与 0/负数一律解析成「展开到服务端硬上限」，
     // 不再是一个交给各工具自己翻译的 0 —— TraceTool 曾把它翻译成 50。
     [Theory]
-    [InlineData("""{}""", ScopeArgs.DefaultDisplayLimit, false)]
+    [InlineData("""{}""", ScopeAndLimitArgs.DefaultDisplayLimit, false)]
     [InlineData("""{"limit":5}""", 5, false)]
     [InlineData("""{"limit":"5"}""", 5, false)]
     [InlineData("""{"maxResults":7}""", 7, false)]
     [InlineData("""{"top":3}""", 3, false)]
-    [InlineData("""{"limit":"all"}""", ScopeArgs.HardLimit, true)]
-    [InlineData("""{"limit":"*"}""", ScopeArgs.HardLimit, true)]
-    [InlineData("""{"limit":"everything"}""", ScopeArgs.HardLimit, true)]
-    [InlineData("""{"limit":-1}""", ScopeArgs.HardLimit, true)]
-    [InlineData("""{"limit":0}""", ScopeArgs.HardLimit, true)]
+    [InlineData("""{"limit":"all"}""", ScopeAndLimitArgs.HardLimit, true)]
+    [InlineData("""{"limit":"*"}""", ScopeAndLimitArgs.HardLimit, true)]
+    [InlineData("""{"limit":"everything"}""", ScopeAndLimitArgs.HardLimit, true)]
+    [InlineData("""{"limit":-1}""", ScopeAndLimitArgs.HardLimit, true)]
+    [InlineData("""{"limit":0}""", ScopeAndLimitArgs.HardLimit, true)]
     public void GetDisplayLimit_UnderstandsNumbersAndExpandKeywords(string json, int expectedCount, bool expectedUnlimited)
     {
-        var limit = ScopeArgs.GetDisplayLimit(Args(json));
+        var limit = ScopeAndLimitArgs.GetDisplayLimit(Args(json));
         Assert.Equal(expectedCount, limit.Count);
         Assert.Equal(expectedUnlimited, limit.Unlimited);
     }
@@ -176,8 +176,8 @@ public class ScopeArgsTests
     [InlineData("""{"maxResults":100000}""")]
     public void GetDisplayLimit_ClampsRequestsAboveTheServerCap(string json)
     {
-        var limit = ScopeArgs.GetDisplayLimit(Args(json));
-        Assert.Equal(ScopeArgs.HardLimit, limit.Count);
+        var limit = ScopeAndLimitArgs.GetDisplayLimit(Args(json));
+        Assert.Equal(ScopeAndLimitArgs.HardLimit, limit.Count);
         Assert.True(limit.Unlimited);
     }
 
@@ -195,16 +195,16 @@ public class ScopeArgsTests
     [InlineData("""{"limit":["5","7"]}""")]
     public void GetDisplayLimit_RefusesValuesItCannotInterpret(string json)
     {
-        var ex = Assert.Throws<ToolArgumentException>(() => ScopeArgs.GetDisplayLimit(Args(json)));
+        var ex = Assert.Throws<ToolArgumentException>(() => ScopeAndLimitArgs.GetDisplayLimit(Args(json)));
 
         Assert.Contains("'all'", ex.Message);
-        Assert.Contains(ScopeArgs.HardLimit.ToString(), ex.Message);
+        Assert.Contains(ScopeAndLimitArgs.HardLimit.ToString(), ex.Message);
     }
 
     // 标量位收到单元素数组是客户端序列化的常见抖动，仍按 ToolArgs 的口径认下来
     [Fact]
     public void GetDisplayLimit_StillAcceptsASingleElementArray()
-        => Assert.Equal(7, ScopeArgs.GetDisplayLimit(Args("""{"limit":[7]}""")).Count);
+        => Assert.Equal(7, ScopeAndLimitArgs.GetDisplayLimit(Args("""{"limit":[7]}""")).Count);
 
     // 拒绝消息本身不得成为放大器
     [Fact]
@@ -212,7 +212,7 @@ public class ScopeArgsTests
     {
         var huge = new string('x', 5000);
         var ex = Assert.Throws<ToolArgumentException>(
-            () => ScopeArgs.GetDisplayLimit(Args(JsonSerializer.Serialize(new { limit = huge }))));
+            () => ScopeAndLimitArgs.GetDisplayLimit(Args(JsonSerializer.Serialize(new { limit = huge }))));
 
         Assert.DoesNotContain(huge, ex.Message);
         Assert.True(ex.Message.Length < 500);
@@ -222,7 +222,7 @@ public class ScopeArgsTests
     [Fact]
     public void GetDisplayLimit_NeverRaisesAnExplicitSmallLimit()
     {
-        var limit = ScopeArgs.GetDisplayLimit(Args("""{"limit":5}"""), fallback: 100);
+        var limit = ScopeAndLimitArgs.GetDisplayLimit(Args("""{"limit":5}"""), fallback: 100);
         Assert.Equal(5, limit.Count);
         Assert.False(limit.Unlimited);
     }
@@ -231,26 +231,26 @@ public class ScopeArgsTests
     [Fact]
     public void ResultLimit_ScaleStaysWithinTheServerCap()
     {
-        Assert.Equal(30, ScopeArgs.GetDisplayLimit(Args("""{"limit":10}""")).Scale(3).Count);
-        Assert.Equal(ScopeArgs.HardLimit, ScopeArgs.GetDisplayLimit(Args("""{"limit":"all"}""")).Scale(3).Count);
+        Assert.Equal(30, ScopeAndLimitArgs.GetDisplayLimit(Args("""{"limit":10}""")).Scale(3).Count);
+        Assert.Equal(ScopeAndLimitArgs.HardLimit, ScopeAndLimitArgs.GetDisplayLimit(Args("""{"limit":"all"}""")).Scale(3).Count);
     }
 
     // 已经展开到硬上限时不能再劝 'all'——那是让调用方原地重试同一个请求
     [Fact]
     public void FoldLine_DoesNotSuggestAllWhenAlreadyExpanded()
     {
-        var expanded = ScopeArgs.GetDisplayLimit(Args("""{"limit":"all"}"""));
+        var expanded = ScopeAndLimitArgs.GetDisplayLimit(Args("""{"limit":"all"}"""));
 
         // 真的顶到了硬上限：这时才该说出那个数字
         var atCap = new ScopedResult<string>(
-            Enumerable.Range(0, ScopeArgs.HardLimit)
+            Enumerable.Range(0, ScopeAndLimitArgs.HardLimit)
                 .Select(i => new ScopedEntry<string>($"a{i}", 100, null)).ToList(),
-            totalInScope: ScopeArgs.HardLimit + 5,
+            totalInScope: ScopeAndLimitArgs.HardLimit + 5,
             outOfScope: [], truncatedByScoreGap: false, truncatedByLimit: true);
 
         var atCapLine = Fold.Line(atCap, CountedNoun.Items, limit: expanded);
         Assert.DoesNotContain("limit:'all'", atCapLine);
-        Assert.Contains($"server cap {ScopeArgs.HardLimit}", atCapLine);
+        Assert.Contains($"server cap {ScopeAndLimitArgs.HardLimit}", atCapLine);
 
         // 要过 'all' 但只回了 1 条：远没到上限，说「server cap 200 reached」是假话
         var wellUnderCap = new ScopedResult<string>(
@@ -291,7 +291,7 @@ public class ScopeArgsTests
 
         foreach (var key in new[] { "scope", "source", "mod", "in" })
         {
-            var selection = ScopeArgs.Resolve(catalog, Args($$"""{"{{key}}":"milira"}"""));
+            var selection = ScopeAndLimitArgs.Resolve(catalog, Args($$"""{"{{key}}":"milira"}"""));
             Assert.Equal(1, selection.SelectedCount);
             Assert.Equal("milira", selection.Expression);
         }

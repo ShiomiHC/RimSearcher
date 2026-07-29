@@ -88,7 +88,7 @@ public class TraceToolTests : IDisposable
 
         var matches = PreviewLines(content);
         Assert.True(matches > 50, $"expected more than the old hard-coded 50, got {matches}");
-        Assert.Equal(ScopeArgs.HardLimit, matches);
+        Assert.Equal(ScopeAndLimitArgs.HardLimit, matches);
         Assert.Contains("server cap", content);
     }
 
@@ -99,7 +99,7 @@ public class TraceToolTests : IDisposable
         var tool = BuildTool(fileCount: 100);
         var content = await Run(tool, $$"""{"symbol":"{{Symbol}}","mode":"usages","limit":100000}""");
 
-        Assert.Equal(ScopeArgs.HardLimit, PreviewLines(content));
+        Assert.Equal(ScopeAndLimitArgs.HardLimit, PreviewLines(content));
     }
 
     // 缺省仍是 50，不因硬上限抬到 200（扫盘结果一条一行，默认就给满会吃掉上下文）

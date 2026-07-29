@@ -1026,7 +1026,7 @@ public class OutputReadabilityTests : IDisposable
     [Fact]
     public async Task FoldLine_SaysAllIsStillCapped_WhenMoreIsHiddenThanTheCapCanReturn()
     {
-        var beyondCap = ScopeArgs.HardLimit + 50;
+        var beyondCap = ScopeAndLimitArgs.HardLimit + 50;
         var files = Enumerable.Range(0, beyondCap)
             .Select(i => ($"ZzCap_{i:D4}.cs", $"namespace Zz {{ public class ZzCap_{i:D4} {{ }} }}"))
             .ToArray();
@@ -1035,7 +1035,7 @@ public class OutputReadabilityTests : IDisposable
         var content = await RunAsync(new LocateTool(indexer, defs, catalog), new { query = "ZzCap", limit = 5 });
 
         var fold = content.Split('\n').First(l => l.TrimStart().StartsWith("... +", StringComparison.Ordinal));
-        Assert.Contains($"for the first {ScopeArgs.HardLimit}", fold);
+        Assert.Contains($"for the first {ScopeAndLimitArgs.HardLimit}", fold);
         Assert.Contains("narrower query", fold);
     }
 

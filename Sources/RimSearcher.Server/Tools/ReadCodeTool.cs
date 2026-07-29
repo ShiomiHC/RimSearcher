@@ -30,11 +30,11 @@ public class ReadCodeTool : ITool
 
     public string Name => "rimworld-searcher__read_code";
 
-    // scope 一族取 ScopeArgs 的名单。limit 一族**不**取：这里的 limit 数的是行数、走的是
-    // 本工具自己的读取点，与 ScopeArgs 那份「结果条数」不是同一件事，共用名单会把 max / top
+    // scope 一族取 ScopeAndLimitArgs 的名单。limit 一族**不**取：这里的 limit 数的是行数、走的是
+    // 本工具自己的读取点，与 ScopeAndLimitArgs 那份「结果条数」不是同一件事，共用名单会把 max / top
     // 声明成认得而实际读不到——那是本条要防的缺陷的镜像。
     public IEnumerable<string> ExtraAcceptedKeys =>
-        [.. ScopeArgs.ScopeKeys,
+        [.. ScopeAndLimitArgs.ScopeKeys,
          "query", "file", "filePath", "fileName", "method", "methodName", "member", "memberName",
          "class", "extractClass", "type", "typeName", "start", "offset", "lines", "count",
          "limit", "maxResults"];
@@ -113,7 +113,7 @@ public class ReadCodeTool : ITool
                     $"Optional number of lines for raw read mode. Default is {DefaultLineCount}, " +
                     $"values above {MaxLineCount} are clamped to it."
             },
-            scope = ScopeArgs.ScopeSchemaProperty(_scopeCatalog)
+            scope = ScopeAndLimitArgs.ScopeSchemaProperty(_scopeCatalog)
         },
         required = new[] { "path" }
     };
@@ -130,7 +130,7 @@ public class ReadCodeTool : ITool
         var memberArg = ToolArgs.GetOptionalName(args, ArgSpec, "a member name", "methodName", "method", "member", "memberName");
         var className = ToolArgs.GetOptionalName(args, ArgSpec, "a type name", "className", "type", "typeName");
 
-        var scope = ScopeArgs.Resolve(_scopeCatalog, args);
+        var scope = ScopeAndLimitArgs.Resolve(_scopeCatalog, args);
 
         var requestedPath = path;
         var resolution = ResolvePath(path, scope);

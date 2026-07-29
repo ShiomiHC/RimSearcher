@@ -11,7 +11,7 @@ public class SearchRegexTool : ITool
     private const int MaxFilesShown = 50;
 
     // 缺省命中上限。扫盘型工具比列表型工具给得多（默认 10 条对正则搜索没意义），
-    // 但 'all' 一律走 ScopeArgs.HardLimit，不再是原先那个写死的 500。
+    // 但 'all' 一律走 ScopeAndLimitArgs.HardLimit，不再是原先那个写死的 500。
     private const int DefaultMatchLimit = 100;
 
     private readonly SourceIndexer _indexer;
@@ -28,10 +28,10 @@ public class SearchRegexTool : ITool
 
     public string Name => "rimworld-searcher__search_regex";
 
-    // scope / limit 两族取 ScopeArgs 的名单，不再在这里各抄一遍：抄漏的 `max` 与 `top`
+    // scope / limit 两族取 ScopeAndLimitArgs 的名单，不再在这里各抄一遍：抄漏的 `max` 与 `top`
     // 读得进来却被报成被忽略，同一份返回自相矛盾。
     public IEnumerable<string> ExtraAcceptedKeys =>
-        [.. ScopeArgs.ScopeKeys, .. ScopeArgs.LimitKeys,
+        [.. ScopeAndLimitArgs.ScopeKeys, .. ScopeAndLimitArgs.LimitKeys,
          "query", "pattern", "regex", "fileFilter", "fileExtension", "extension", "ext",
          "ignoreCase", "caseInsensitive"];
 
@@ -81,8 +81,8 @@ public class SearchRegexTool : ITool
             },
             ignoreCase = new { type = "boolean", @default = true, description = "Whether to ignore case, defaults to true." },
             fileFilter = new { type = "string", description = "Optional extension filter such as '.cs' or '.xml'. Aliases 'fileExtension'/'extension'/'ext' are also accepted." },
-            scope = ScopeArgs.ScopeSchemaProperty(_scopeCatalog),
-            limit = ScopeArgs.LimitSchemaProperty(DefaultMatchLimit, fuzzy: false)
+            scope = ScopeAndLimitArgs.ScopeSchemaProperty(_scopeCatalog),
+            limit = ScopeAndLimitArgs.LimitSchemaProperty(DefaultMatchLimit, fuzzy: false)
         },
         required = new[] { "pattern" }
     };
@@ -92,8 +92,8 @@ public class SearchRegexTool : ITool
         var pattern = ToolArgs.GetRequiredString(args, ArgSpec, "pattern", "query", "regex");
         var ignoreCase = ToolArgs.GetBool(args, true, "ignoreCase", "caseInsensitive");
         var fileFilter = ToolArgs.GetOptionalString(args, "fileFilter", "fileExtension", "extension", "ext");
-        var scope = ScopeArgs.Resolve(_scopeCatalog, args);
-        var limit = ScopeArgs.GetDisplayLimit(args, fallback: DefaultMatchLimit);
+        var scope = ScopeAndLimitArgs.Resolve(_scopeCatalog, args);
+        var limit = ScopeAndLimitArgs.GetDisplayLimit(args, fallback: DefaultMatchLimit);
 
         try
         {

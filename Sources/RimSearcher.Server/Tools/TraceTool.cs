@@ -9,8 +9,8 @@ public class TraceTool : ITool
 {
     // 两个 mode 的缺省条数不同：继承树本身就是要看全的，故 inheritors 缺省即展开到硬上限；
     // usages 是扫盘结果、一条命中一行，缺省就给到硬上限会把上下文吃掉，仍按 50 起步。
-    // 两者的显式 limit 与 'all' 都走同一套语义（见 ScopeArgs）。
-    private const int InheritorsDefaultLimit = ScopeArgs.HardLimit;
+    // 两者的显式 limit 与 'all' 都走同一套语义（见 ScopeAndLimitArgs）。
+    private const int InheritorsDefaultLimit = ScopeAndLimitArgs.HardLimit;
     private const int UsagesDefaultLimit = 50;
 
     // 单文件最多显示几条预览，避免一个文件把配额吃光。
@@ -40,10 +40,10 @@ public class TraceTool : ITool
 
     public string Name => "rimworld-searcher__trace";
 
-    // scope / limit 两族取 ScopeArgs 的名单，不再在这里各抄一遍：抄漏的 `max` 与 `top`
+    // scope / limit 两族取 ScopeAndLimitArgs 的名单，不再在这里各抄一遍：抄漏的 `max` 与 `top`
     // 读得进来却被报成被忽略，同一份返回自相矛盾。
     public IEnumerable<string> ExtraAcceptedKeys =>
-        [.. ScopeArgs.ScopeKeys, .. ScopeArgs.LimitKeys,
+        [.. ScopeAndLimitArgs.ScopeKeys, .. ScopeAndLimitArgs.LimitKeys,
          "query", "name", "type", "typeName", "symbol", "symbolName", "traceMode", "direction"];
 
     public string Description =>
@@ -88,17 +88,17 @@ public class TraceTool : ITool
                 description =
                     "Trace mode: 'inheritors' for the transitive subclass/implementor tree (interfaces included; " +
                     "indirect descendants are listed too and tagged '[depth N]', direct ones are untagged), " +
-                    $"which defaults to the server cap of {ScopeArgs.HardLimit} — trees bigger than that come " +
+                    $"which defaults to the server cap of {ScopeAndLimitArgs.HardLimit} — trees bigger than that come " +
                     "back truncated and no limit lifts the cap, so read the header's total before treating the " +
                     "listing as the whole tree; 'usages' for textual references in C# and XML, which defaults " +
                     "to 50 matches. The 'limit' default noted below is the 'usages' one."
             },
-            scope = ScopeArgs.ScopeSchemaProperty(_scopeCatalog),
+            scope = ScopeAndLimitArgs.ScopeSchemaProperty(_scopeCatalog),
             // trace 两种模式都不是模糊搜索：inheritors 的候选分数恒为 100（继承关系是精确的，
             // ScopeFilter 那里 scoreGap 传的就是 null），usages 是逐行全词文本匹配。
             // 照抄模糊工具的文案会让调用方以为「剩下的是低相关度、调多大 limit 都拿不回来」，
             // 从而把一份被 limit 截断的引用清单当成完整结论。
-            limit = ScopeArgs.LimitSchemaProperty(UsagesDefaultLimit, fuzzy: false)
+            limit = ScopeAndLimitArgs.LimitSchemaProperty(UsagesDefaultLimit, fuzzy: false)
         },
         required = new[] { "symbol", "mode" }
     };
@@ -118,7 +118,7 @@ public class TraceTool : ITool
         if (mode is not ("inheritors" or "usages"))
             return new ToolResult($"Unknown mode '{mode}'. Use 'inheritors' (subclass tree) or 'usages' (textual references).", true);
 
-        var scope = ScopeArgs.Resolve(_scopeCatalog, args);
+        var scope = ScopeAndLimitArgs.Resolve(_scopeCatalog, args);
 
         // 拼错的 scope 被静默退回全域，两个 mode 的每条返回路径都要带上这行，
         // 否则调用方会把全域结果当成自己限定过的范围内结果。
@@ -126,7 +126,7 @@ public class TraceTool : ITool
 
         if (mode == "inheritors")
         {
-            var limit = ScopeArgs.GetDisplayLimit(args, fallback: InheritorsDefaultLimit);
+            var limit = ScopeAndLimitArgs.GetDisplayLimit(args, fallback: InheritorsDefaultLimit);
 
             cancellationToken.ThrowIfCancellationRequested();
             var inheritors = _sourceIndexer.GetInheritors(
@@ -157,7 +157,7 @@ public class TraceTool : ITool
         {
             // 显式 limit 原样生效：原先写成 `limit == 0 ? 50 : Math.Max(limit, 50)`，
             // limit:5 会被抬到 50，limit:'all' 又被压在 50 —— 两个方向都不听调用方的。
-            var limit = ScopeArgs.GetDisplayLimit(args, fallback: UsagesDefaultLimit);
+            var limit = ScopeAndLimitArgs.GetDisplayLimit(args, fallback: UsagesDefaultLimit);
             var maxTotalResults = limit.Count;
 
             // 每条命中带上它所属文件在 files 里的序号：截断与排序都靠它，才与线程调度无关。

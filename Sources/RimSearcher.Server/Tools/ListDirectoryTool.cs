@@ -127,7 +127,7 @@ public class ListDirectoryTool : ITool
             limit = new
             {
                 type = "integer",
-                // 不声明 minimum：服务端认的是 `<= 0`（与 ScopeArgs 的同类参数一致），
+                // 不声明 minimum：服务端认的是 `<= 0`（与 ScopeAndLimitArgs 的同类参数一致），
                 // 声明 minimum=0 会让照着描述传 -1 的调用在 client 侧就被校验挡下。
                 maximum = 1000,
                 description =
@@ -152,7 +152,7 @@ public class ListDirectoryTool : ITool
 
     // schema 里的 maximum 只是给 client 的提示、不是约束——client 照样能传 999999，
     // 真正的夹紧必须发生在服务端。这里执行的是 schema 自己声明的那个 1000，而不是
-    // ScopeArgs.HardLimit（200）：那个数是按「一行一条结果、预览行截 100 字符」算出来的
+    // ScopeAndLimitArgs.HardLimit（200）：那个数是按「一行一条结果、预览行截 100 字符」算出来的
     // 体积天花板，而目录项一行只有一个文件名，1000 条与之同量级。
     private const int MaxEntries = 1000;
 

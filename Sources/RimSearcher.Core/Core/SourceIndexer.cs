@@ -1060,7 +1060,7 @@ public class SourceIndexer
     // 两者的折中：块越大越接近全量扫描，块越小越容易在块边界上把并发槽喂不满。
     private const int RegexScanChunkFiles = 256;
 
-    // 预览行长度上限，与 trace usages 用的是同一个数。ScopeArgs.HardLimit 那笔体积账
+    // 预览行长度上限，与 trace usages 用的是同一个数。ScopeAndLimitArgs.HardLimit 那笔体积账
     // （一条一行、每行按 100 字符算，200 行 ≈ 20KB）正是以此为前提，而本方法此前整条
     // 链路一次都没截：XML 里一行写完的 <li> 列表、反编译产物里的长泛型签名都能把单行
     // 拉到几百字符，150 行预览就此涨到那笔账的三倍，且随 pattern 与 scope 不可预测地浮动。

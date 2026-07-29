@@ -104,11 +104,11 @@ public class UnknownParameterNoticeTests : IDisposable
 
             var keys = KeyLiteralsIn(text);
 
-            // scope / limit 两族的读取点住在 ScopeArgs 里，故按名单取——不在闸这边重列一遍
-            if (text.Contains("ScopeArgs.Resolve", StringComparison.Ordinal))
-                keys.UnionWith(ScopeArgs.ScopeKeys);
-            if (text.Contains("ScopeArgs.GetDisplayLimit", StringComparison.Ordinal))
-                keys.UnionWith(ScopeArgs.LimitKeys);
+            // scope / limit 两族的读取点住在 ScopeAndLimitArgs 里，故按名单取——不在闸这边重列一遍
+            if (text.Contains("ScopeAndLimitArgs.Resolve", StringComparison.Ordinal))
+                keys.UnionWith(ScopeAndLimitArgs.ScopeKeys);
+            if (text.Contains("ScopeAndLimitArgs.GetDisplayLimit", StringComparison.Ordinal))
+                keys.UnionWith(ScopeAndLimitArgs.LimitKeys);
 
             foreach (var key in keys.OrderBy(k => k, StringComparer.Ordinal))
             {
@@ -138,10 +138,10 @@ public class UnknownParameterNoticeTests : IDisposable
             var text = File.ReadAllText(source);
 
             var read = KeyLiteralsIn(text);
-            if (text.Contains("ScopeArgs.Resolve", StringComparison.Ordinal))
-                read.UnionWith(ScopeArgs.ScopeKeys);
-            if (text.Contains("ScopeArgs.GetDisplayLimit", StringComparison.Ordinal))
-                read.UnionWith(ScopeArgs.LimitKeys);
+            if (text.Contains("ScopeAndLimitArgs.Resolve", StringComparison.Ordinal))
+                read.UnionWith(ScopeAndLimitArgs.ScopeKeys);
+            if (text.Contains("ScopeAndLimitArgs.GetDisplayLimit", StringComparison.Ordinal))
+                read.UnionWith(ScopeAndLimitArgs.LimitKeys);
 
             foreach (var declared in tool.ExtraAcceptedKeys)
             {

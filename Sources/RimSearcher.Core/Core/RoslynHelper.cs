@@ -219,7 +219,7 @@ public static class RoslynHelper
     // 一次就是几千 token，而 inspect 是 locate 之后的必经一站，这份开销每次查询都要付。
     // 配额不做成「总数顺序截断」：一个有两百个字段的类会把 Method 整段挤掉，而方法签名
     // 恰恰是大纲最常被用到的部分（照着写调用、写 Harmony patch）。三类各 40 条 ≈ 120 行，
-    // 落在 ScopeArgs.HardLimit 那笔体积账之内；超出的由 locate / read_code 按名精取。
+    // 落在 ScopeAndLimitArgs.HardLimit 那笔体积账之内；超出的由 locate / read_code 按名精取。
     public const int DefaultMaxOutlineMembersPerKind = 40;
 
     public static async Task<SourceLookupResult> GetClassOutlineAsync(

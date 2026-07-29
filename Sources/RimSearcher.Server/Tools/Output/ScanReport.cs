@@ -60,7 +60,7 @@ public static class ScanReport
             : $"scan stopped at the {previewCap}-preview cap";
         var route = limit.Unlimited
             ? "narrow the query or the scope"
-            : $"pass limit:'all' to raise the cap to {ScopeArgs.HardLimit}, or narrow the query or the scope";
+            : $"pass limit:'all' to raise the cap to {ScopeAndLimitArgs.HardLimit}, or narrow the query or the scope";
 
         var notes = new List<string> { cap };
         if (extraNotes != null) notes.AddRange(extraNotes);

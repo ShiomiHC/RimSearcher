@@ -15,7 +15,7 @@ namespace RimSearcher.Core;
 // 住在 Core 而不是 Server 的 `Tools/Output/`：两个变量槽里的 `RoslynHelper.kindPlural` 就在
 // Core 里，而项目引用是 Server → Core 单向的——入口放进 `Output/` 时 Core 那个槽根本够不到，
 // 等于一开始就漏掉一半。判据与 `OutputText` 同一条：**不含成因判断才下得去**。计数名词是纯
-// 名单加构词，不读 `ScopeArgs.HardLimit` / `ResultLimit`，下得去。
+// 名单加构词，不读 `ScopeAndLimitArgs.HardLimit` / `ResultLimit`，下得去。
 public sealed class CountedNoun
 {
     // 名单在这里一处。加词只有这一种写法，且加完立刻处处可用；删词会让引用它的那一行编译不过。

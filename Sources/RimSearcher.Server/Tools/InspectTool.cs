@@ -58,10 +58,10 @@ public class InspectTool : ITool
 
     public string Name => "rimworld-searcher__inspect";
 
-    // scope / limit 两族取 ScopeArgs 的名单，不再在这里各抄一遍：抄漏的 `max` 与 `top`
+    // scope / limit 两族取 ScopeAndLimitArgs 的名单，不再在这里各抄一遍：抄漏的 `max` 与 `top`
     // 读得进来却被报成被忽略，同一份返回自相矛盾。
     public IEnumerable<string> ExtraAcceptedKeys =>
-        [.. ScopeArgs.ScopeKeys, .. ScopeArgs.LimitKeys,
+        [.. ScopeAndLimitArgs.ScopeKeys, .. ScopeAndLimitArgs.LimitKeys,
          "query", "defName", "typeName", "symbol", "defTypeName", "xmlStart", "startLine"];
 
     public string Description =>
@@ -132,17 +132,17 @@ public class InspectTool : ITool
                     + "on a large file. "
                     + "Ignored in def mode."
             },
-            scope = ScopeArgs.ScopeSchemaProperty(_scopeCatalog)
+            scope = ScopeAndLimitArgs.ScopeSchemaProperty(_scopeCatalog)
         },
         required = new[] { "name" }
     };
 
     // 折叠掉的成员此前在整套 API 里没有任何取全途径：inspect 没有 limit、locate 只能按已知
     // 名字找、read_code extractClass 到 2000 行就二次截断。'all' 在这里必须是真无限，
-    // 不能沿用 ScopeArgs.HardLimit——单个类型的成员数超过 200 是常态。
+    // 不能沿用 ScopeAndLimitArgs.HardLimit——单个类型的成员数超过 200 是常态。
     private static int OutlineLimit(JsonElement args)
     {
-        var limit = ScopeArgs.GetDisplayLimit(args, RoslynHelper.DefaultMaxOutlineMembersPerKind);
+        var limit = ScopeAndLimitArgs.GetDisplayLimit(args, RoslynHelper.DefaultMaxOutlineMembersPerKind);
         return limit.Unlimited ? int.MaxValue : limit.Count;
     }
 
@@ -293,7 +293,7 @@ public class InspectTool : ITool
         var name = ToolArgs.StripLocateFilterPrefix(
             ToolArgs.GetRequiredFuzzyString(args, ArgSpec, "name", "query", "defName", "typeName", "symbol"));
 
-        var scope = ScopeArgs.Resolve(_scopeCatalog, args);
+        var scope = ScopeAndLimitArgs.Resolve(_scopeCatalog, args);
 
         // 拼错的 scope 被静默退回全域，两个分支的每条返回路径都要带上这行，
         // 否则调用方会把全域结果当成自己限定过的范围内结果。

@@ -29,10 +29,10 @@ public class LocateTool : ITool
 
     public string Name => "rimworld-searcher__locate";
 
-    // scope / limit 两族取 ScopeArgs 的名单，不再在这里各抄一遍：抄漏的 `max` 与 `top`
+    // scope / limit 两族取 ScopeAndLimitArgs 的名单，不再在这里各抄一遍：抄漏的 `max` 与 `top`
     // 读得进来却被报成被忽略，同一份返回自相矛盾。
     public IEnumerable<string> ExtraAcceptedKeys =>
-        [.. ScopeArgs.ScopeKeys, .. ScopeArgs.LimitKeys, "query", "name", "symbol", "pattern", "search", "term"];
+        [.. ScopeAndLimitArgs.ScopeKeys, .. ScopeAndLimitArgs.LimitKeys, "query", "name", "symbol", "pattern", "search", "term"];
 
     public string Description =>
         "Fuzzy name lookup: turns a partial or misspelled name into the exact C# type / member / XML def / file " +
@@ -102,8 +102,8 @@ public class LocateTool : ITool
                     "Search text or filtered query. Examples: 'Apparel_ShieldBelt', 'RimWorld.Pawn', "
                     + "'def:Apparel_ShieldBelt', 'type:CompShield', 'method:CompTick', 'field:energy'."
             },
-            scope = ScopeArgs.ScopeSchemaProperty(_scopeCatalog),
-            limit = ScopeArgs.LimitSchemaProperty()
+            scope = ScopeAndLimitArgs.ScopeSchemaProperty(_scopeCatalog),
+            limit = ScopeAndLimitArgs.LimitSchemaProperty()
         },
         required = new[] { "query" }
     };
@@ -126,8 +126,8 @@ public class LocateTool : ITool
         // 这里把它当作 scope 参数吸收，而不是让它变成一个搜不到东西的关键词。
         var scope = query.ScopeFilter != null
             ? _scopeCatalog.Resolve(query.ScopeFilter)
-            : ScopeArgs.Resolve(_scopeCatalog, args);
-        var limit = ScopeArgs.GetDisplayLimit(args);
+            : ScopeAndLimitArgs.Resolve(_scopeCatalog, args);
+        var limit = ScopeAndLimitArgs.GetDisplayLimit(args);
 
         var report = new ScopeReport();
 

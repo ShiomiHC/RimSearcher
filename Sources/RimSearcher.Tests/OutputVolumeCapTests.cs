@@ -8,7 +8,7 @@ namespace RimSearcher.Tests;
 // 三处此前没有体积上限的输出。inspect 的 C# 大纲是 locate 之后的必经一站，成员数以百计的
 // 巨型类型每次查询都要全量渲染一遍，同名类型散在多个源里时还会按文件数线性翻倍；read_code
 // 的 extractClass 提一个几千行的类就返回几千行；search_regex 的预览行整条链路一次都没截，
-// 而 ScopeArgs.HardLimit 的体积账正是按「每行 ≤100 字符」算出来的。
+// 而 ScopeAndLimitArgs.HardLimit 的体积账正是按「每行 ≤100 字符」算出来的。
 //
 // 三处都按「指回按名精取」的方向收口，而不是默默砍掉尾巴——只截不说，调用方会把半份结果
 // 当成全部。
