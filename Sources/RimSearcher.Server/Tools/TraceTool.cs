@@ -40,7 +40,11 @@ public class TraceTool : ITool
 
     public string Name => "rimworld-searcher__trace";
 
-    public IEnumerable<string> ExtraAcceptedKeys => ["query", "name", "typeName", "symbolName", "traceMode", "direction", "maxResults", "scopes", "source", "sources", "mod", "mods", "in"];
+    // scope / limit 两族取 ScopeArgs 的名单，不再在这里各抄一遍：抄漏的 `max` 与 `top`
+    // 读得进来却被报成被忽略，同一份返回自相矛盾。
+    public IEnumerable<string> ExtraAcceptedKeys =>
+        [.. ScopeArgs.ScopeKeys, .. ScopeArgs.LimitKeys,
+         "query", "name", "type", "typeName", "symbol", "symbolName", "traceMode", "direction"];
 
     public string Description =>
         "Cross-reference analysis for C# and XML. 'inheritors' lists the transitive subclass/implementor tree — " +
@@ -107,7 +111,8 @@ public class TraceTool : ITool
     public async Task<ToolResult> ExecuteAsync(JsonElement args, CancellationToken cancellationToken, IProgress<double>? progress = null)
     {
         var symbol = ToolArgs.StripLocateFilterPrefix(
-            ToolArgs.GetRequiredFuzzyString(args, ArgSpec, "symbol", "query", "name", "type"));
+            ToolArgs.GetRequiredFuzzyString(
+                args, ArgSpec, "symbol", "symbolName", "query", "name", "type", "typeName"));
         var mode = ToolArgs.GetRequiredString(args, ArgSpec, "mode", "traceMode", "direction").ToLowerInvariant();
 
         if (mode is not ("inheritors" or "usages"))

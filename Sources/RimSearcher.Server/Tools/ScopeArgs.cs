@@ -41,15 +41,23 @@ public static class ScopeArgs
     // 只会把上下文里更有用的东西挤出去。
     public const int HardLimit = 200;
 
+    // 两族别名各自只写一遍：读取点用它，工具的 ExtraAcceptedKeys 也用它。
+    //
+    // 此前两侧各写一遍，于是六个工具的 ExtraAcceptedKeys 里一个 `max` 一个 `top` 都没有——
+    // 这两个键读得进来、真的改了结果，同一份返回却在末尾写着「_Ignored unknown parameter:
+    // 'top'_」。同一份返回自相矛盾比不提示更糟：调用方据此认定自己的 limit 没生效。
+    public static readonly string[] ScopeKeys = ["scope", "scopes", "source", "sources", "mod", "mods", "in"];
+    public static readonly string[] LimitKeys = ["limit", "maxResults", "max", "count", "top"];
+
     public static ScopeSelection Resolve(ScopeCatalog catalog, JsonElement args)
     {
-        var expression = ToolArgs.GetOptionalString(args, "scope", "scopes", "source", "sources", "mod", "mods", "in");
+        var expression = ToolArgs.GetOptionalString(args, ScopeKeys);
         return catalog.Resolve(expression);
     }
 
     public static ResultLimit GetDisplayLimit(JsonElement args, int fallback = DefaultDisplayLimit)
     {
-        if (!ToolArgs.TryGetElement(args, out var value, "limit", "maxResults", "max", "count", "top"))
+        if (!ToolArgs.TryGetElement(args, out var value, LimitKeys))
             return fallback >= HardLimit || fallback <= 0 ? Unlimited : new ResultLimit(fallback, false);
 
         if (value.ValueKind == JsonValueKind.String)

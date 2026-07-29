@@ -19,7 +19,8 @@ public class ListDirectoryTool : ITool
 
     public string Name => "rimworld-searcher__list_directory";
 
-    public IEnumerable<string> ExtraAcceptedKeys => ["query", "directory", "dir", "maxResults", "count", "skip", "start"];
+    public IEnumerable<string> ExtraAcceptedKeys =>
+        ["query", "directory", "dir", "limit", "maxResults", "count", "offset", "skip", "start"];
 
     // 「allowed path」原先只写了**规则**（「已索引源根及其下级」），一个具体路径都没有，
     // 而调用方读不到 config.toml——那次本想省掉的越界失败照样要撞。同一份 tools/list 里

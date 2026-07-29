@@ -28,7 +28,12 @@ public class SearchRegexTool : ITool
 
     public string Name => "rimworld-searcher__search_regex";
 
-    public IEnumerable<string> ExtraAcceptedKeys => ["query", "regex", "fileExtension", "extension", "ext", "caseInsensitive", "maxResults", "count", "scopes", "source", "sources", "mod", "mods", "in"];
+    // scope / limit 两族取 ScopeArgs 的名单，不再在这里各抄一遍：抄漏的 `max` 与 `top`
+    // 读得进来却被报成被忽略，同一份返回自相矛盾。
+    public IEnumerable<string> ExtraAcceptedKeys =>
+        [.. ScopeArgs.ScopeKeys, .. ScopeArgs.LimitKeys,
+         "query", "pattern", "regex", "fileFilter", "fileExtension", "extension", "ext",
+         "ignoreCase", "caseInsensitive"];
 
     // 「both cuts are always stated in a trailing note」原先只数了两刀（每文件 3 行预览、
     // 50 个文件），而第三刀——有文件没被扫全——不只加一条尾注，还会把表头的总数降格成

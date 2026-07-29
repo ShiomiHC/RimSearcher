@@ -58,7 +58,11 @@ public class InspectTool : ITool
 
     public string Name => "rimworld-searcher__inspect";
 
-    public IEnumerable<string> ExtraAcceptedKeys => ["query", "defName", "typeName", "symbol", "defTypeName", "xmlStart", "startLine", "maxResults", "count", "scopes", "source", "sources", "mod", "mods", "in"];
+    // scope / limit 两族取 ScopeArgs 的名单，不再在这里各抄一遍：抄漏的 `max` 与 `top`
+    // 读得进来却被报成被忽略，同一份返回自相矛盾。
+    public IEnumerable<string> ExtraAcceptedKeys =>
+        [.. ScopeArgs.ScopeKeys, .. ScopeArgs.LimitKeys,
+         "query", "defName", "typeName", "symbol", "defTypeName", "xmlStart", "startLine"];
 
     public string Description =>
         "Full detail for one exactly-named def or C# type; no fuzzy matching. " +

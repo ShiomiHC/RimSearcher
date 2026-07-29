@@ -29,7 +29,10 @@ public class LocateTool : ITool
 
     public string Name => "rimworld-searcher__locate";
 
-    public IEnumerable<string> ExtraAcceptedKeys => ["query", "name", "symbol", "search", "term", "maxResults", "count", "scopes", "source", "sources", "mod", "mods", "in"];
+    // scope / limit 两族取 ScopeArgs 的名单，不再在这里各抄一遍：抄漏的 `max` 与 `top`
+    // 读得进来却被报成被忽略，同一份返回自相矛盾。
+    public IEnumerable<string> ExtraAcceptedKeys =>
+        [.. ScopeArgs.ScopeKeys, .. ScopeArgs.LimitKeys, "query", "name", "symbol", "pattern", "search", "term"];
 
     public string Description =>
         "Fuzzy name lookup: turns a partial or misspelled name into the exact C# type / member / XML def / file " +
@@ -112,7 +115,8 @@ public class LocateTool : ITool
 
     public Task<ToolResult> ExecuteAsync(JsonElement args, CancellationToken cancellationToken, IProgress<double>? progress = null)
     {
-        var rawQuery = ToolArgs.GetRequiredFuzzyString(args, ArgSpec, "query", "name", "symbol", "pattern", "search");
+        var rawQuery = ToolArgs.GetRequiredFuzzyString(
+            args, ArgSpec, "query", "name", "symbol", "pattern", "search", "term");
 
         cancellationToken.ThrowIfCancellationRequested();
 

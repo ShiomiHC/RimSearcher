@@ -30,7 +30,14 @@ public class ReadCodeTool : ITool
 
     public string Name => "rimworld-searcher__read_code";
 
-    public IEnumerable<string> ExtraAcceptedKeys => ["query", "file", "filePath", "fileName", "method", "member", "memberName", "class", "type", "typeName", "start", "offset", "lines", "count", "maxResults", "scopes", "source", "sources", "mod", "mods", "in"];
+    // scope 一族取 ScopeArgs 的名单。limit 一族**不**取：这里的 limit 数的是行数、走的是
+    // 本工具自己的读取点，与 ScopeArgs 那份「结果条数」不是同一件事，共用名单会把 max / top
+    // 声明成认得而实际读不到——那是本条要防的缺陷的镜像。
+    public IEnumerable<string> ExtraAcceptedKeys =>
+        [.. ScopeArgs.ScopeKeys,
+         "query", "file", "filePath", "fileName", "method", "methodName", "member", "memberName",
+         "class", "extractClass", "type", "typeName", "start", "offset", "lines", "count",
+         "limit", "maxResults"];
 
     // 三种模式的优先级此前只写在下面几个 if 的先后顺序里，调用方同时传 extractClass 和
     // methodName 时无从知道哪个生效，只能从返回内容倒推。契约就得写在 description 里。

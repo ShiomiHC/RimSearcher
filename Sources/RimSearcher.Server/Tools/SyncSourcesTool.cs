@@ -20,7 +20,14 @@ public class SyncSourcesTool : ITool
 
     public string Name => "rimworld-searcher__sync_sources";
 
-    public IEnumerable<string> ExtraAcceptedKeys => ["mode", "op", "detail", "level", "versionId", "path", "filePath", "method", "member", "memberName", "class", "type", "typeName", "maxResults", "scopes", "source", "mod", "mods", "in"];
+    // 这里只列**真读得到**的键。scope 一族此前也在这张表上，而本工具按源名工作、一个都不读：
+    // 声明成认得等于把 scope:'all' 静默吞掉，而 ServerInstructions 正在教别的工具那么写。
+    // 不声明，它就照常走那条「_Ignored unknown parameter_」提示——这与下面 sources 那处
+    // 「不收 scope」的判据本就是同一句话，此前两处分着家。
+    public IEnumerable<string> ExtraAcceptedKeys =>
+        ["mode", "op", "name", "source", "detail", "level", "versionId", "path", "filePath",
+         "method", "methodName", "member", "memberName", "class", "type", "typeName",
+         "maxResults", "skip", "start"];
 
     // 本工具会调 IndexRebuilder 拿写锁，被读锁挡住就是自己等自己
     public bool BypassIndexGate => true;
