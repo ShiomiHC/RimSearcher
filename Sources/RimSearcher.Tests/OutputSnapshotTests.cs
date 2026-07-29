@@ -675,6 +675,30 @@ public class OutputSnapshotTests : IDisposable
         Verify("locate/tally-fold-and-full-score", content);
     }
 
+    // 断层收口那一形：`... +N more C# types (lower relevance, …)`。
+    //
+    // 补这一份是 N1 的前置。`lower relevance` 此前在整批基线里**一处都没有**（`grep -rl` 零命中）
+    // ——它只被文法闸矩阵的 locate/ScoreGap 格与 OutputReadabilityTests 的 Contains 断言守着，
+    // 两者都判得出「这句话还在」，判不出「这一段一个字没变」。而 N1 恰恰要动它的产地
+    // （把「藏起来的是哪一批」从 Fold.Line 里写死的 bool 分支变成一个槽），故先立判据再动。
+    //
+    // 语料的判据是分差要越过 40 那道收口线：查询串在 ZzWidget 上逐字相同（100 分），在其余几个
+    // 上只以**子串**形式出现（不在开头、也不在任何词的开头），子串支封顶 50 分，相对首条掉 50。
+    [Fact]
+    public async Task Locate_ScoreGapFold()
+    {
+        var files = Enumerable.Range(0, 4)
+            .Select(i => ($"ZzHolderOfZzWidgetParts{i:D2}.cs",
+                $"namespace Zz {{ public class ZzHolderOfZzWidgetParts{i:D2} {{ }} }}"))
+            .Append(("ZzWidget.cs", "namespace Zz { public class ZzWidget { } }"))
+            .ToArray();
+
+        var (indexer, defs, catalog) = BuildIndex(files);
+        var content = await Run(new LocateTool(indexer, defs, catalog), new { query = "type:ZzWidget" });
+
+        Verify("locate/score-gap-fold", content);
+    }
+
     // 零命中 + 窄 scope。这里的 RetryWiderNotice 与越界脚注互斥（两句并排会让同一个
     // 「改用 scope:'all'」被两套措辞各说一遍），故语料里另一个源不含近名项。
     [Fact]
