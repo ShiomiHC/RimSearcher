@@ -1067,8 +1067,12 @@ public class SourceIndexer
     private const int MaxPreviewLength = 100;
 
     // 在收集处截而不是展示处：matchesByFile 数的是命中数、不碰预览文本，因此不受影响，
-    // 而截短的行也不必再在内存里多留一份完整副本。与 TraceTool 的 usages 做法对称。
-    private static string TruncatePreview(string line)
+    // 而截短的行也不必再在内存里多留一份完整副本。
+    //
+    // public 而非 private：trace usages 的预览此前把同一段逻辑抄了一遍（同样的 100、
+    // 同样的 97、同样的省略号），两处只靠上面那句「与 trace usages 用的是同一个数」的注释
+    // 对齐。同一个数在两处各写一遍正是本仓反复清理过的那类缺陷，故改成 trace 直接调这里。
+    public static string TruncatePreview(string line)
     {
         var preview = line.Trim();
         return preview.Length > MaxPreviewLength

@@ -261,9 +261,11 @@ public class TraceTool : ITool
                             if (matchesInFile <= MaxMatchesPerFile)
                             {
                                 Interlocked.Increment(ref collectedCount);
-                                var preview = line.Trim();
-                                if (preview.Length > 100) preview = preview[..97] + "...";
-                                results.Add((fileOrdinal, file, lineNum, preview));
+                                // 预览行长度上限与截法都归 SourceIndexer 一处，见那边的
+                                // MaxPreviewLength：两个扫盘工具的预览进的是同一个渲染器，
+                                // 长度不一致会在同一屏上给出两种行宽。
+                                results.Add((fileOrdinal, file, lineNum,
+                                    SourceIndexer.TruncatePreview(line)));
                             }
                         }
 
@@ -310,13 +312,9 @@ public class TraceTool : ITool
             int totalMatches = Interlocked.CompareExchange(ref totalMatchCount, 0, 0);
             int exactCaseMatches = Interlocked.CompareExchange(ref exactCaseMatchCount, 0, 0);
 
-            // 匹配口径就地声明。截断时不报精确大小写数——那时 totalMatches 本身就只反映
-            // 「恰好扫到了哪些文件」，再派生一个数只是把不确定量翻倍。
-            //
-            // 匹配是不分大小写的全词匹配，而 C# 的命名习惯保证「类型 CompRefuelable → 局部变量
-            // compRefuelable」——实测 CompRefuelable 的 108 行里有 26 行是纯变量名。调用方拿这个
-            // 108 当「这个类被引用了多少处」写进结论就直接错了 32%，而返回里没有任何一处能让它
-            // 察觉。
+            // 匹配口径就地声明，这个数为什么必须报见 exactCaseRegex 上方。截断时不报它——
+            // 那时 totalMatches 本身就只反映「恰好扫到了哪些文件」，再派生一个数只是把
+            // 不确定量翻倍。
             var echoes = new List<string>
             {
                 wasTruncated
@@ -370,10 +368,8 @@ public class TraceTool : ITool
                 TotalMatchingLines = totalMatches,
                 ScanStopped = wasTruncated,
                 Limit = limit,
-                // 两处静默削减。search_regex 一直在报它们，trace 此前一声不吭——而「没有尾注即
-                // 完整命中集」这条读法是调用方从 search_regex 那儿学来的，套到这里就会把一份漏了
-                // 六万行的结果当成穷尽结论。这里没有超时那一档：本模式的 pattern 是转义后的全词
-                // 匹配，回溯不起来。
+                // 两处静默削减，为什么必须报见 lineCappedFiles 上方。这里没有超时那一档：
+                // 本模式的 pattern 是转义后的全词匹配，回溯不起来。
                 Completeness = new ScanCompleteness(
                     UnreadableFiles: Interlocked.CompareExchange(ref unreadableFiles, 0, 0),
                     UnreadableNames: sorted(unreadableNames),
