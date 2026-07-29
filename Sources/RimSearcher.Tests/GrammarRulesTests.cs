@@ -1,3 +1,7 @@
+using RimSearcher.Core;
+using RimSearcher.Server.Tools;
+using RimSearcher.Server.Tools.Output;
+
 namespace RimSearcher.Tests;
 
 // 闸自己的反面用例。
@@ -16,22 +20,38 @@ public class GrammarRulesTests
 
     // ---- 名词槽登记在案（规则一的词表侧） ----
 
-    // 这条是本轮新加的，故先证它能红：名词槽非空、首词也不在 NotNouns 里——旧判据整条放行。
+    // 名词槽非空、首词也不在 NotNouns 里——旧判据整条放行。
+    //
+    // 反面用例拿产地渲染一条真的，再**只**把名词换成名单外的词：这样它与产品的排版同步，
+    // 又保住了那一处故意的偏离。整行手写的话，产品哪天改了折叠行的排版，这条用例会从「名词槽
+    // 不合法」漂成「整个形状不合法」——闸照旧红，红的却不再是它要钉的那件事。
     [Fact]
     public void FoldLine_WithAnUnregisteredNoun_IsCaught()
     {
-        Assert.Contains("名词槽登记在案", Rules("  ... +7 more widgets (pass limit:'all' to expand)"));
+        var corrupted = FoldLineOf(CountedNoun.Files, 7)
+            .Replace(CountedNoun.Files.Plural, "widgets", StringComparison.Ordinal);
+
+        Assert.Contains("名词槽登记在案", Rules(corrupted));
     }
 
-    // 反向：登记过的词不许被这条误伤，单数式也一样——折叠行在 N==1 时印的正是单数式。
+    // 反向：登记过的词不许被这条误伤，单数式也一样——折叠行在 N==1 时印的正是单数式；
+    // 每文件折叠行（唯一不带括号的一形）同理。
+    public static TheoryData<string> WellFormedFoldLines() =>
+    [
+        FoldLineOf(CountedNoun.CSharpTypes, 7),
+        FoldLineOf(CountedNoun.CSharpTypes, 1),
+        Fold.PerFile(4, 7),
+    ];
+
     [Theory]
-    [InlineData("  ... +7 more C# types (pass limit:'all' to expand)")]
-    [InlineData("  ... +1 more C# type (pass limit:'all' to expand)")]
-    [InlineData("  ... +4 more of 7 matching lines in this file")]
+    [MemberData(nameof(WellFormedFoldLines))]
     public void FoldLine_WithARegisteredNoun_IsClean(string line)
     {
         Assert.DoesNotContain("名词槽登记在案", Rules(line));
     }
+
+    private static string FoldLineOf(CountedNoun noun, int hidden)
+        => OutputText.FoldLine(hidden, noun, "pass limit:'all' to expand", null, "  ")!;
 
     // ---- 名词槽不空（规则五的 `N of M` 侧） ----
 
@@ -49,14 +69,24 @@ public class GrammarRulesTests
         Assert.DoesNotContain("名词槽不空", Rules("## 'ZzBase' — 5 of 12 subclasses (in scope 'all')"));
     }
 
-    // read_code 的区间形不是这个计数惯用法：`lines 2-30 of 30` 里名词按英文语序落在区间前面，
-    // 那个 of 说的是「取自」。规则三与规则五都靠 NofM 的区间豁免放行它，故一并钉住。
+    // read_code 的区间形不是那个截断惯用法：`lines 2-30 of 30` 里名词按英文语序落在区间前面，
+    // 那个 of 说的是「取自」。它此前靠 NofM 的一条区间豁免放行，M2 之后靠的是它自己有了产地
+    // （Tally.Window）——故这里逐字拿产地渲染出来喂进去，闸认它就等于认那个产地。
     [Fact]
     public void ReadCodeLineRange_IsNotACountIdiom()
     {
-        var rules = Rules("ZzThing.cs (lines 2-30 of 30)");
+        var rules = Rules($"ZzThing.cs ({Tally.Window(CountedNoun.Lines, 2, 30, 30)})");
         Assert.DoesNotContain("名词槽不空", rules);
         Assert.DoesNotContain("of 的读法", rules);
+    }
+
+    // 上一条的反面，也是「豁免真的删掉了」的证据：豁免还在的话，它认的是「N 前面有没有连字符」
+    // 这个纯文本特征，于是任何长这样的东西都被放行。现在放行的判据是「出自 Tally.Window」，
+    // 而 rows 不是登记在案的计数名词，Window 渲染不出这一行。
+    [Fact]
+    public void ARangeThatNoOriginRenders_IsStillCaught()
+    {
+        Assert.NotEmpty(Rules("ZzThing.cs (rows 2-30 of 30)"));
     }
 
     // ---- of 的读法（规则三） ----
@@ -107,22 +137,26 @@ public class GrammarRulesTests
         Assert.Contains("at least 的读法", Rules("## 'Zz' — 5 of at least 12 subclasses"));
     }
 
-    // 第九轮把这条从「同现」升格成「可指认」：成因确实在场，但同屏还有另一个上限说明时，
-    // 读者会就近拿它解释那个下界（实测三条任务链各自独立误读了同一个 `at least 105`）。
-    // 此时记号必须自带指向真成因的引用。
+    // 第九轮把这条从「同现」升格成「可指认」：成因确实在场时，读者仍会就近拿另一个上限说明去
+    // 解释那个下界（实测三条任务链各自独立误读了同一个 `at least 105`）。M2 再升一格——从
+    // 「同屏有诱饵时才要引用」变成「一律要引用」，因为「读者可能拿来解释它的别的上限句」是个
+    // 开放集合，枚举得出来的那张诱饵表挡不住新加的第五句。
+    //
+    // 引用只认产地渲染出来的那两条（扫描侧 / 候选池侧）。此前闸另认一句 `'at least' because`，
+    // 而产品一处都不产出它——那是条从落地起就没有产地的死项，只在这个用例里活着。
     [Fact]
-    public void FloorMarkNextToADecoyCause_NeedsAPointer()
+    public void FloorMarkWithoutAPointer_IsCaught()
     {
-        var withDecoy =
-            "## 'Zz' — 5 of at least 12 subclasses\n"
-            + "... some files were not scanned in full (2 hit the time budget)\n"
-            + "... previews are capped at 3 lines per file and no parameter widens that";
+        var causeInPlace =
+            $"## 'Zz' — 5 of {ScanReport.FloorMark}12 subclasses\n"
+            + ScanReport.NotScannedInFull(["2 hit the time budget"]) + "\n"
+            + Fold.PerFilePreviewCap(3);
 
-        Assert.Contains("at least 的读法", Rules(withDecoy));
+        Assert.Contains("at least 的读法", Rules(causeInPlace));
 
-        var withPointer = withDecoy.Replace(
+        var withPointer = causeInPlace.Replace(
             "subclasses\n",
-            "subclasses\n_It says 'at least' because 2 files hit the time budget._\n",
+            "subclasses" + ScanReport.LowerBoundReason(true) + "\n",
             StringComparison.Ordinal);
 
         Assert.DoesNotContain("at least 的读法", Rules(withPointer));
@@ -183,13 +217,52 @@ public class GrammarRulesTests
         Assert.Contains("折叠行文法", Rules(line));
     }
 
-    // `... ` 开头却**故意**不带计数的那三句不是折叠行，不受这条管。
+    // `... ` 开头却**故意**不带计数的那四句不是折叠行，不受这条管。
+    //
+    // 逐字取产地渲染，不手写：此前这里的第一条写作 `... more matches exist (narrow the query)`
+    // ——一句产品从没产出过的话。闸那边的名单也只抄到括号为止，于是两边一起绿着，谁也没在验
+    // 真正那句长什么样。第四句（中段省略）此前压根不在名单里，只在规则九那边另有一条豁免。
+    public static TheoryData<string> UncountedNotices() =>
+    [
+        ScanReport.ScanStopped(3, new ResultLimit(3, false)),
+        ScanReport.NotScannedInFull(["2 hit the time budget"]),
+        Fold.PerFilePreviewCap(3),
+        Fold.Elision(73, 201, 273),
+    ];
+
     [Theory]
-    [InlineData("... more matches exist (narrow the query)")]
-    [InlineData("... some files were not scanned in full (2 hit the time budget)")]
-    [InlineData("... previews are capped at 3 lines per file and no parameter widens that")]
+    [MemberData(nameof(UncountedNotices))]
     public void DeliberatelyUncountedNotices_AreNotFoldLines(string line)
     {
         Assert.DoesNotContain("折叠行文法", Rules(line));
+    }
+
+    // ---- 下一步（规则九） ----
+
+    // 中段省略两侧的行都印着，翻页参数写在紧邻的续读提示里，故这一形本来就不带下一步。
+    // 此前它靠这里一句手写的 `StartsWith("... [Truncated ")` 豁免。
+    [Fact]
+    public void TheElisionMarker_DoesNotNeedANextStep()
+    {
+        Assert.DoesNotContain("下一步", Rules(Fold.Elision(73, 201, 273)));
+    }
+
+    // 乙：顶到服务端上限了还劝 `limit:'all'`，照做是原地重试。Fold.Line 的三分支本就把这两句写成
+    // 互斥的，故这条判的是「有人绕开三分支另拼了一句」。
+    //
+    // 两条提示语逐字取自 Fold.Line 自己的渲染——这同时是「闸这边的产地推导没退化成空串」的反面
+    // 用例：推导出空串的话 `Contains("")` 恒真，下面第二、三条断言会立刻红。
+    [Fact]
+    public void ServerCapReachedTogetherWithAdviseAll_IsCaught()
+    {
+        var capReached = Fold.Line(
+            1, ScopeAndLimitArgs.HardLimit, null, true, CountedNoun.Files, string.Empty,
+            new ResultLimit(ScopeAndLimitArgs.HardLimit, true))!;
+        var advisesAll = Fold.Line(
+            1, 1, null, true, CountedNoun.Files, string.Empty, new ResultLimit(5, false))!;
+
+        Assert.Contains("下一步", Rules(capReached + "\n" + advisesAll));
+        Assert.DoesNotContain("下一步", Rules(capReached));
+        Assert.DoesNotContain("下一步", Rules(advisesAll));
     }
 }

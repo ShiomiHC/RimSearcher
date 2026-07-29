@@ -8,7 +8,7 @@ namespace RimSearcher.Core;
 // 它们的取值在别的文件里赋进去，清单看不见。换成类型之后赋值处自动落进名单，
 // **没登记的名词编译期就进不来**。
 //
-// 这条边界此前只有一句注释在守（`CountedNouns` 那张表写着「新加一个计数名词却不登记在这里，
+// 这条边界此前只有一句注释在守（闸那边一张手抄的名词表，表头写着「新加一个计数名词却不登记在这里，
 // 那个槽位的单复数就没人守」），而它真的漂了：`changed sources` 从落地那天起就没有对应的产品
 // 字面量，产品那边一直叫 `checked sources`，那个词又从没进过表（见「单一产地重构指导」§2 甲）。
 //
@@ -35,7 +35,7 @@ public sealed class CountedNoun
         return noun;
     }
 
-    // 闸取的是这份名单（`GrammarRules.CountedNouns`），判断仍归闸自己写——同「指导」§3 判据六：
+    // 闸取的是这份名单（`GrammarRules` 里 `NounsMentionedIn` 与规则二乙），判断仍归闸自己写——同「指导」§3 判据六：
     // 闸与产品只许共用「名单」，不许共用「判断」。
     public static IReadOnlyList<CountedNoun> All => Registry;
 

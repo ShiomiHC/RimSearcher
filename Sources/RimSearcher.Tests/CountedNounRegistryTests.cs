@@ -41,7 +41,7 @@ public class CountedNounRegistryTests
     }
 
     // 名单与成员名一一对应。少一条说明有人给 CountedNoun 加了个不进 Registry 的字段——
-    // 那样它在闸这边隐形（`GrammarRules.CountedNouns` 取的是 `All`），产品那边却照用，
+    // 那样它在闸这边隐形（GrammarRules 一路取的都是 `CountedNoun.All`），产品那边却照用，
     // 于是那个槽位的单复数又没人守了，正好回到 M3 要消掉的那一形。
     [Fact]
     public void EveryPublicNoun_IsInTheRegistry()
