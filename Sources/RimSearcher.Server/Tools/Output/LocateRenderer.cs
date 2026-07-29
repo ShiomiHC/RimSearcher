@@ -24,7 +24,7 @@ public static class LocateRenderer
         foreach (var section in output.Sections)
             sb.Append(SectionText(section, output.Limit));
 
-        return Header(output) + "\n" + sb + Footnotes(output);
+        return FootnoteBlock.After(Header(output) + "\n" + sb, Footnotes(output));
     }
 
     // 表头。Tally 的格子由各段自己算，故「段在、格子不在」不可能发生。
@@ -93,16 +93,16 @@ public static class LocateRenderer
     // 下界成因不是一个整份字段而是逐段问出来的：Tally 里哪一格改口成 `at least`，成因就跟着
     // 那一格来（见 LocateSection.TotalIsLowerBound）。两者分居两个字段时，改口而不给成因是个
     // 静默分支。
-    private static string Footnotes(LocateOutput output)
-        => (output.Conditional.Render() ?? string.Empty)
-           + output.OutOfScope.Render(output.Scope)
-           + output.MissingFile
-           + string.Concat(output.Sections
-               .Where(s => s.TotalIsLowerBound)
-               .Select(s => s.LowerBoundNotice))
-           + output.ShortTokens
-           + output.ScopeNotice
-           + output.PrefixNotice;
+    private static string?[] Footnotes(LocateOutput output) =>
+    [
+        output.Conditional.Render(),
+        output.OutOfScope.Render(output.Scope),
+        output.MissingFile,
+        .. output.Sections.Where(s => s.TotalIsLowerBound).Select(s => s.LowerBoundNotice),
+        output.ShortTokens,
+        output.ScopeNotice,
+        output.PrefixNotice,
+    ];
 
     // 零命中形。
     //
@@ -113,31 +113,33 @@ public static class LocateRenderer
     {
         var footer = output.OutOfScope.Render(output.Scope);
 
-        var sb = new StringBuilder(output.EmptyLine);
         // 越界脚注在场时 RetryWider 让位：两句并排会把同一个「改用 scope:'all'」用两套措辞
-        // 各说一遍，读者以为是两条不同的提示。
-        sb.Append(ScopeNotices.RetryWider(output.Scope, footer != null));
-        sb.Append(footer);
+        // 各说一遍，读者以为是两条不同的提示。它是**同一句话的续写**（同行、空格分隔），
+        // 不是脚注，故与第一句一起作正文交给 FootnoteBlock。
+        var opening = output.EmptyLine + ScopeNotices.RetryWider(output.Scope, footer != null);
 
-        // 短词那句在这一路也要说，且槽位与 Footnotes() 同一档（「本次查询的能力边界」在
-        // 「参数被怎么理解了」之前）。此前它只挂在有结果那一路——而零命中恰恰是它最要紧的一形：
-        // 有结果时读者至少还能看到别的段落，零命中时整份返回只有「No results」一句，最自然的
-        // 读法就是「索引里没有」，而真相是那个短词一次都没被查过。
-        //
-        // 同一档的另外两条不挂，各有理由：MissingFile 与第一句说的是同一件事（`No results for
-        // 'X'` 已经涵盖「没有叫 X 的文件」）；下界成因要 Tally 里有格子改口，而这一路没有段。
-        sb.Append(output.ShortTokens);
+        return FootnoteBlock.After(
+            opening,
+            footer,
 
-        sb.Append(output.ScopeNotice);
-        sb.Append(output.PrefixNotice);
+            // 短词那句在这一路也要说，且槽位与 Footnotes() 同一档（「本次查询的能力边界」在
+            // 「参数被怎么理解了」之前）。此前它只挂在有结果那一路——而零命中恰恰是它最要紧的
+            // 一形：有结果时读者至少还能看到别的段落，零命中时整份返回只有「No results」一句，
+            // 最自然的读法就是「索引里没有」，而真相是那个短词一次都没被查过。
+            //
+            // 同一档的另外两条不挂，各有理由：MissingFile 与第一句说的是同一件事（`No results
+            // for 'X'` 已经涵盖「没有叫 X 的文件」）；下界成因要 Tally 里有格子改口，而这一路
+            // 没有段。
+            output.ShortTokens,
 
-        // 过滤器清单只列一次。PrefixNotice 在「前缀没被识别」时已经列过一遍（那正是最该看到
-        // 它的场合），这里再列就是同一行字紧挨着说两遍。
-        sb.Append(output.FilterListAlreadyShown
-            ? "\n\nTry: partial names, or search_regex for patterns."
-            : "\n\nTry: partial names, query filters (type:, method:, field:, def:), "
-              + "or search_regex for patterns.");
+            output.ScopeNotice,
+            output.PrefixNotice,
 
-        return sb.ToString();
+            // 过滤器清单只列一次。PrefixNotice 在「前缀没被识别」时已经列过一遍（那正是最该
+            // 看到它的场合），这里再列就是同一行字紧挨着说两遍。
+            output.FilterListAlreadyShown
+                ? "Try: partial names, or search_regex for patterns."
+                : "Try: partial names, query filters (type:, method:, field:, def:), "
+                  + "or search_regex for patterns.");
     }
 }

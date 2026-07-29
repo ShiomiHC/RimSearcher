@@ -48,7 +48,7 @@ public static class InheritorsRenderer
         //   - 索引里没这个名字      → IsKnownType 本就与 scope 无关，换 scope 返回逐字相同。
         // 实测第三种给出的是 "…Check the spelling… Only sources in scope 'base' were searched —
         // retry with scope:'all'"：两句语气相反，而后一句保证白跑一轮。
-        return message + footer + output.ScopeNotice;
+        return FootnoteBlock.After(message, footer, output.ScopeNotice);
     }
 
     private static string Listing(InheritorsOutput output)
@@ -87,9 +87,8 @@ public static class InheritorsRenderer
         // 抬不高（缺省已经顶在 200），不是不起作用。两个方向别混为一谈。天花板本身由 Fold.Line 的
         // `server cap 200 reached` 分支说，那条是对的。
 
-        return body
-               + (fold != null ? fold + "\n" : string.Empty)
-               + Footnotes(output);
+        return FootnoteBlock.After(
+            body + (fold != null ? fold + "\n" : string.Empty), Footnotes(output));
     }
 
     // 表头。三组数并排，每组各自说清数的是哪一批：
@@ -166,10 +165,12 @@ public static class InheritorsRenderer
     // （本段的量、整份结果的完整性）——继承闭包是精确的，没有「扫不全」这回事。
     //   3. 行内记号的成因（conditional）
     //   4. scope 相关（越界报告 / scopeNotice）
-    private static string Footnotes(InheritorsOutput output)
-        => (output.Conditional.Render() ?? string.Empty)
-           + OutOfScopeFooter(output, withTreeShape: true)
-           + output.ScopeNotice;
+    private static string?[] Footnotes(InheritorsOutput output) =>
+    [
+        output.Conditional.Render(),
+        OutOfScopeFooter(output, withTreeShape: true),
+        output.ScopeNotice,
+    ];
 
     // 越界脚注。原先只报「外面还有 91 个」，而表头那句 `23 direct, deepest 6 levels down` 是
     // scope 内的形状——「换个 scope 会不会改变深度」在返回里完全不可判定，调用方只能猜。盲测里

@@ -60,9 +60,10 @@ public static class ScanOutputRenderer
         var body = $"{output.Subject} ({Headline(output)}){labels.Header}:\n\n"
                    + string.Join("\n\n", blocks);
 
-        return body
-               + FileListOverflow(output)
-               + Footnotes(output, anyBlockHitTheCap);
+        // 正文↔脚注、脚注↔脚注的间距全归 FootnoteBlock：各条自己带的前缀在那里被削平，
+        // 于是「一个空行」不再取决于正文尾巴上有没有换行。
+        return FootnoteBlock.After(
+            body, [FileListOverflow(output), .. Footnotes(output, anyBlockHitTheCap)]);
     }
 
     // 表头括号里那一段。三态由两个事实决定，工具没法只改一半：
@@ -188,26 +189,23 @@ public static class ScanOutputRenderer
     //
     // 由近及远：越靠前的越只解释紧邻的那几行，越靠后的越是对整份返回的限定。scan-stopped 与
     // 文件数折叠不在这张表里——它们是正文的收尾（`... +N more`），由 FileListOverflow 紧贴正文印。
-    private static string Footnotes(ScanOutput output, bool anyBlockHitTheCap)
-    {
-        var text = string.Empty;
-
-        if (anyBlockHitTheCap)
-            text += "\n\n" + Fold.PerFilePreviewCap(output.PreviewCapPerFile);
+    private static string?[] Footnotes(ScanOutput output, bool anyBlockHitTheCap) =>
+    [
+        anyBlockHitTheCap ? Fold.PerFilePreviewCap(output.PreviewCapPerFile) : null,
 
         // 「没有尾注即完整命中集」是 search_regex 写在 Description 里的契约，被跳过/被弃扫的
         // 文件必须破这个契约。表头此刻已经改口成 `at least`（同出于 Completeness）。
-        if (output.Completeness.AnyIncomplete)
-            text += "\n\n" + ScanReport.NotScannedInFull(output.Completeness.Reasons());
+        output.Completeness.AnyIncomplete
+            ? ScanReport.NotScannedInFull(output.Completeness.Reasons())
+            : null,
 
         // 条件目录的成因整份说一次（行内只放键，见 ConditionalReport）
-        text += output.Conditional.Render() ?? string.Empty;
+        output.Conditional.Render(),
 
         // 这两个工具是硬 scope 过滤、没有逐源的越界计数，而那条脚注的**缺席**会被读成
         // 「scope 外没有」。故把缺席的含义明说一次。
-        text += ScopeNotices.HardScopeFilter(output.Scope);
-        text += output.ScopeNotice;
+        ScopeNotices.HardScopeFilter(output.Scope),
 
-        return text;
-    }
+        output.ScopeNotice,
+    ];
 }

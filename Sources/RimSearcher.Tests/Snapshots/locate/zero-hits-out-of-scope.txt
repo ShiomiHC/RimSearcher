@@ -1,4 +1,5 @@
 No results for 'ZzGuestWidget' in scope 'vanilla'.
+
 _Outside scope 'vanilla': milira 1. Pass scope to include them (e.g. scope:'all')._
 
 Try: partial names, query filters (type:, method:, field:, def:), or search_regex for patterns.

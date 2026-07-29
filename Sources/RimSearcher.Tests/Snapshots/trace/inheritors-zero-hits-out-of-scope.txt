@@ -1,2 +1,3 @@
 'ZzBase' is indexed, and nothing in scope 'vanilla' derives from it — but it does have subclasses outside that scope, so this is not the whole answer.
+
 _Outside scope 'vanilla': milira 1. Pass scope to include them (e.g. scope:'all')._
