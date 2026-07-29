@@ -91,6 +91,8 @@ public static class Runner
     public const int ExitUsage = 2;
     /// <summary>命令跑通了,但没有结果。</summary>
     public const int ExitNoResults = 1;
+    /// <summary>工具自己的缺陷。与「用法错」「没结果」分开,脚本才不会把故障当空集。</summary>
+    public const int ExitInternal = 70;
 
     public static int Run(IReadOnlyList<string> argv, TextWriter stdout, TextWriter stderr)
     {
@@ -156,6 +158,18 @@ public static class Runner
         {
             stderr.Write(OutputText.Finish(ex.Message));
             return ExitUsage;
+        }
+        catch (Exception ex)
+        {
+            // 兜底。没有它,一个内部错误就是一堆裸栈追踪直接糊到调用方脸上,而调用方
+            // 分不清「我用错了」和「这工具坏了」—— 两者的下一步完全不同。退出码也要分开,
+            // 否则脚本会把内部故障当成「没查到」。栈保留头几帧:读输出的是要复述缺陷的人。
+            var frames = (ex.StackTrace ?? "").Split('\n').Take(3).Select(l => l.Trim());
+            stderr.Write(OutputText.Finish(
+                $"rimsearcher {BuildInfo.Version} hit an internal error; this is a defect in the tool, " +
+                $"not in what you asked for.\n{ex.GetType().Name}: {ex.Message}\n" +
+                string.Join("\n", frames)));
+            return ExitInternal;
         }
         finally
         {

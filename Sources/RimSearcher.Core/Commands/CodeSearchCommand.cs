@@ -39,8 +39,24 @@ public sealed class CodeSearchCommand : Command
                 // 分隔符的差异,剩下的换词写法列在这里有意接受。
                 Aliases = ["file-filter", "file-glob", "glob", "file-pattern", "file-extension", "file-type", "path-filter", "include"],
                 Placeholder = "<glob>",
-                Help = "Only search files whose path matches this glob, for example *.cs or */Verse/*.",
+                // 实测:help 只给了 `*.cs` 和 `*/Verse/*` 两个例子,而这两个恰好是**不能**区分
+                // 语义的一对 —— 于是有人以为 `*` 跨目录,拿 `*/A*.cs` 扫了 26 轮几乎全空。
+                // 规则本身写清,比再补一个例子管用。
+                Help = "Only search files whose path matches this glob. A glob with no '/' matches the file name " +
+                       "alone (*.cs is every .cs file at any depth); with a '/' it matches the whole relative path, " +
+                       "where '*' stops at a '/' and '**' crosses it. So */Verse/* is one level down, **/Verse/** is any.",
                 Default = "*.cs",
+            },
+            new OptionSpec
+            {
+                // 上限本身是对的(防止一条正则扫穿整棵树),但不可调就等于「建议你换个更小的树」,
+                // 而当那棵树本身就超过上限时,这个建议是空的 —— 实测里 --source vanilla 换来
+                // 一模一样的警告。旋钮必须存在,声明才有落点。
+                Name = "max-files",
+                Aliases = ["file-limit", "scan-limit", "max-scan"],
+                Placeholder = "<n>",
+                Help = "How many files the scan may read before it stops. Pass 'all' to lift the cap.",
+                Default = Limits.CodeSearchMaxFiles.ToString(),
             },
             new OptionSpec
             {
@@ -125,6 +141,7 @@ public sealed class CodeSearchCommand : Command
         }
 
         var matcher = GlobToRegex(glob);
+        var maxFiles = ParseMaxFiles(ctx);
         var lines = new List<string>();
         var filesScanned = 0;
         var filesWithMatches = 0;
@@ -132,13 +149,21 @@ public sealed class CodeSearchCommand : Command
         var filesCapped = false;
         var perFileCapped = 0;
         var timedOut = new List<string>();
+        var reached = new List<string>();
+        var unreached = new List<string>();
 
-        foreach (var file in Directory.EnumerateFiles(searchRoot, "*", SearchOption.AllDirectories))
+        foreach (var (tree, files) in EnumerateTrees(searchRoot, sourceName))
+        {
+            // 空名字是「根目录下直接摆着的文件」那棵伪树,它没有名字可报,列进去只是个空占位。
+            if (filesCapped) { if (tree.Length > 0) unreached.Add(tree); continue; }
+            var before = filesScanned;
+
+        foreach (var file in files)
         {
             var rel = Path.GetRelativePath(searchRoot, file).Replace('\\', '/');
             if (!matcher.IsMatch(rel)) continue;
 
-            if (filesScanned >= Limits.CodeSearchMaxFiles) { filesCapped = true; break; }
+            if (filesScanned >= maxFiles) { filesCapped = true; break; }
             filesScanned++;
 
             string[] text;
@@ -169,7 +194,13 @@ public sealed class CodeSearchCommand : Command
             if (totalMatches > limit.Effective) break;
         }
 
-        // 三刀分开声明:被 --limit 截、被单文件上限截、被文件数上限截,原因不同,旋钮也不同。
+            if (filesScanned > before) { if (tree.Length > 0) reached.Add(tree); }
+            else if (filesCapped && tree.Length > 0) unreached.Add(tree);
+            if (totalMatches > limit.Effective) break;
+        }
+
+        // 四刀分开声明:被 --limit 截、被单文件上限截、被文件数上限截、被正则超时截,
+        // 原因不同,旋钮也不同。
         var shownMatches = Math.Min(totalMatches, limit.Effective);
         if (totalMatches > limit.Effective)
             ctx.Report.Notice(NoticeKind.Truncation,
@@ -180,8 +211,14 @@ public sealed class CodeSearchCommand : Command
                 "matches; only the first ones from each are shown.");
         if (filesCapped)
             ctx.Report.Notice(NoticeKind.Truncation,
-                $"The scan stopped after {Limits.CodeSearchMaxFiles} files, so files later in the tree were never " +
-                "read. Narrow it with --files or --source.");
+                $"The scan stopped after reading {maxFiles} files." +
+                // 说清**哪些树没被读到**。只说「后面的文件没读」等于没说 —— 实测里首屏
+                // 全是 mod 代码、vanilla 一条没有,而输出没有任何迹象表明 vanilla 还在后面,
+                // 一个不细看的人就会拿 mod 里的类当答案。
+                (unreached.Count > 0
+                    ? $" These source trees were never reached: {string.Join(", ", unreached)}."
+                    : " Files later in the tree were never read.") +
+                $" Raise it with --max-files all, or narrow with --source <tree> or --files <glob>.");
         if (timedOut.Count > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
                 $"The pattern took longer than {Limits.CodeSearchRegexTimeoutMs} ms on " +
@@ -197,10 +234,52 @@ public sealed class CodeSearchCommand : Command
             return 1;
         }
 
+        // 命中数放前面。问的是「有多少个这种形状的方法」,答的却是文件数 ——
+        // 实测里有人差点把 140(文件)当成方法数报出去,还得自己 wc 一遍输出。
+        var matchTally = totalMatches > limit.Effective
+            ? Tally.AtLeast(shownMatches)
+            : Tally.Complete(totalMatches);
         ctx.Report.Notice(NoticeKind.Boundary,
-            $"{Tally.Complete(filesWithMatches).Render("file")} matched out of {filesScanned} scanned.");
+            $"{matchTally.Render("match")} in {Tally.Complete(filesWithMatches).Render("file")}, " +
+            $"out of {filesScanned} scanned" +
+            (reached.Count > 1 ? $" across {Tally.Complete(reached.Count).Render("source tree")}" : "") + ".");
         ctx.Report.Text("matches", lines);
         return 0;
+    }
+
+    /// <summary>
+    /// 按**确定顺序**逐棵源码树走,而不是把整个根目录一把 EnumerateFiles。
+    /// 文件数上限是先到先得的,所以枚举顺序决定了谁被截掉 —— 交给文件系统顺序,
+    /// 就等于让「哪棵树被看见」取决于目录名的字母序。vanilla 排前面是有意的:
+    /// 它是问题的默认语境,被截掉的代价最大。
+    /// </summary>
+    private static IEnumerable<(string Tree, IEnumerable<string> Files)> EnumerateTrees(string searchRoot, string? sourceName)
+    {
+        if (sourceName is { Length: > 0 })
+        {
+            yield return (sourceName, Directory.EnumerateFiles(searchRoot, "*", SearchOption.AllDirectories));
+            yield break;
+        }
+
+        var dirs = Directory.EnumerateDirectories(searchRoot)
+                            .OrderBy(d => Path.GetFileName(d) is "vanilla" or "Core" ? 0 : 1)
+                            .ThenBy(d => Path.GetFileName(d), StringComparer.OrdinalIgnoreCase)
+                            .ToList();
+        foreach (var d in dirs)
+            yield return (Path.GetFileName(d), Directory.EnumerateFiles(d, "*", SearchOption.AllDirectories));
+
+        // 根目录下直接摆着的文件(没有分树的部署形态)。
+        yield return ("", Directory.EnumerateFiles(searchRoot, "*", SearchOption.TopDirectoryOnly));
+    }
+
+    private static int ParseMaxFiles(CommandContext ctx)
+    {
+        var raw = ctx.Args.Value("max-files");
+        if (string.IsNullOrEmpty(raw)) return Limits.CodeSearchMaxFiles;
+        if (raw is "all" or "none" or "0" or "-1") return int.MaxValue;
+        if (int.TryParse(raw, out var n) && n > 0) return n;
+        throw new CliUsageException(
+            $"--max-files takes a positive number or 'all'; got '{raw}'.");
     }
 
     /// <summary>

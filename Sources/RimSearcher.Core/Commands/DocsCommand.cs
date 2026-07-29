@@ -71,7 +71,10 @@ public sealed class DocsCommand : Command
 
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outPath))!);
         File.WriteAllText(outPath, markdown);
-        ctx.Report.Detail("written", [new("file", outPath), new("bytes", markdown.Length)]);
+        // 字符数不是字节数。文档里有破折号这类多字节字符,两个数会差出几个字节 ——
+        // 而这个数正是拿来跟磁盘对账的,标 bytes 就得真是 bytes。
+        ctx.Report.Detail("written",
+            [new("file", outPath), new("bytes", System.Text.Encoding.UTF8.GetByteCount(markdown))]);
         return 0;
     }
 }

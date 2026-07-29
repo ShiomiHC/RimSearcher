@@ -197,13 +197,27 @@ namespace RimSearcher.DataMod
             public readonly HashSet<object> Seen = new HashSet<object>(ReferenceEqualityComparer.Instance);
         }
 
+        /// <summary>
+        /// 绑定口径照抄游戏自己的 def 遍历(`DirectXmlSaver` / `DefInjectionUtility` 都是
+        /// `Instance | Public | NonPublic`)。只绑 Public 会漏掉一整类**能从 XML 写进去、
+        /// 却是私有字段**的数据 —— 1.6 的 `ThingDef.verbs` 与 `ProjectileProperties.damageAmountBase`
+        /// 都是私有的,漏掉它们意味着「这把枪打什么弹、这颗弹多少伤害」在快照里根本不存在,
+        /// 而输出侧无从区分「没这个字段」和「没看见这个字段」—— 缺席会被读成事实。
+        ///
+        /// 两类要滤掉:编译器生成的自动属性后备字段(名字里带尖括号,不是数据),
+        /// 以及游戏亲自标了 `[Unsaved]` 的运行期字段 —— 那是游戏自己声明的「这不是数据」,
+        /// `DirectXmlSaver.XElementFromField` 就是照这条跳过的,直接沿用而不是另立一套判据。
+        /// </summary>
         private static void Walk(object obj, string prefix, int depth,
                                  List<KeyValuePair<string, string>> output, WalkState state)
         {
             var type = obj.GetType();
-            foreach (var field in type.GetFields(BindingFlags.Public | BindingFlags.Instance))
+            foreach (var field in type.GetFields(
+                         BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
             {
                 if (field.IsStatic) continue;
+                if (field.Name.IndexOf('<') >= 0) continue;
+                if (Attribute.IsDefined(field, typeof(UnsavedAttribute))) continue;
                 object value;
                 try { value = field.GetValue(obj); }
                 catch { continue; }

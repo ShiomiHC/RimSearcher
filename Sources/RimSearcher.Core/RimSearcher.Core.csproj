@@ -8,6 +8,10 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.10" />
+    <!-- Microsoft.Data.Sqlite 10.0.10 传递引入 SQLitePCLRaw 2.1.11,而 2.1.11 带一个已知高危
+         漏洞(GHSA-2m69-gcr7-jv3q,NU1903)。直接钉到 3.x 把传递版本顶上去 ——
+         这条依赖负责解析我们喂给它的每一个快照文件,不是可以先欠着的那类债。 -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
   </ItemGroup>
 
 </Project>

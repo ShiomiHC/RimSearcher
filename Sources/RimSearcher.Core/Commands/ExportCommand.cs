@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using System.Xml.Linq;
 using RimSearcher.Cli;
 using RimSearcher.Contract;
@@ -82,6 +83,21 @@ public sealed class ExportCommand : Command
         Examples = ["rimsearcher export --modlist vanilla", "rimsearcher export --modlist vanilla --dry-run"],
     };
 
+    /// <summary>
+    /// 失败时才从游戏日志里取最后几行。成功路径一个字节都不带 —— 平常那几十行
+    /// Unity 启动横幅对调用方没有任何价值,只在什么都没产出时才是唯一线索。
+    /// </summary>
+    private static string LastLines(StringBuilder log, int n = 5)
+    {
+        var lines = log.ToString()
+                       .Split('\n')
+                       .Select(l => l.TrimEnd('\r'))
+                       .Where(l => l.Trim().Length > 0)
+                       .ToList();
+        if (lines.Count == 0) return " The game printed nothing.";
+        return " The game's last output was: " + string.Join(" | ", lines.TakeLast(n));
+    }
+
     public override int Run(CommandContext ctx)
     {
         var listName = ctx.Args.Value("modlist")!;
@@ -137,6 +153,11 @@ public sealed class ExportCommand : Command
         {
             WorkingDirectory = gameDir,
             UseShellExecute = false,
+            // 游戏的 stdout(Unity 的启动横幅、几十行 memorysetup-*)会顺着我们的 stdout 一起
+            // 流给调用方,把一条 6 行的结果冲成 80 行。它既不是本命令的输出,也不构成契约的
+            // 一部分 —— 接过来丢掉,需要的话再走 --verbose 交给日志文件。
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
         };
         psi.ArgumentList.Add($"-savedatafolder={temp}");
         psi.ArgumentList.Add($"-{IntermediateFormat.CommandLineSwitch}={outFile}");
@@ -144,9 +165,18 @@ public sealed class ExportCommand : Command
         var timeout = TimeSpan.FromSeconds(ctx.Args.Int("timeout", 900));
         var sw = Stopwatch.StartNew();
 
+        // 声明在 using 之外:游戏没写出文件时,它最后几行就是唯一的线索。
+        var gameLog = new StringBuilder();
+
         using (var proc = Process.Start(psi)
             ?? throw new CliUsageException($"Could not start '{exe}'."))
         {
+            // 必须读干净,否则管道缓冲区写满时游戏会卡在写 stdout 上,表现为「导出超时」。
+            proc.OutputDataReceived += (_, e) => { if (e.Data is not null) gameLog.AppendLine(e.Data); };
+            proc.ErrorDataReceived += (_, e) => { if (e.Data is not null) gameLog.AppendLine(e.Data); };
+            proc.BeginOutputReadLine();
+            proc.BeginErrorReadLine();
+
             if (!proc.WaitForExit((int)timeout.TotalMilliseconds))
             {
                 try { proc.Kill(entireProcessTree: true); } catch { /* 已经退了 */ }
@@ -163,7 +193,7 @@ public sealed class ExportCommand : Command
             throw new CliUsageException(
                 $"The game exited after {sw.Elapsed.TotalSeconds:0} seconds without writing an export file. " +
                 "The usual cause is that the exporter mod is not enabled in this list: it has to be one of the " +
-                $"entries in '{list.Name}'.");
+                $"entries in '{list.Name}'." + LastLines(gameLog));
 
         var importer = new SnapshotImporter
         {

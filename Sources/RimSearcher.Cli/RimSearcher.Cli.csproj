@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\RimSearcher.Core\RimSearcher.Core.csproj" />
@@ -9,6 +9,9 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- 可执行文件就叫 rimsearcher。skill 与 help 里写的是这个名字;程序集名与它对不上,
+         调用方照文档敲出来的第一条命令就会失败。 -->
+    <AssemblyName>rimsearcher</AssemblyName>
   </PropertyGroup>
 
 </Project>

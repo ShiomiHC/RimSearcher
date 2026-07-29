@@ -57,11 +57,22 @@ public sealed class SearchCommand : Command
         ctx.Report.TruncationNotice(tally, "def",
             limit.IsAll ? "narrow the query." : "raise --limit or narrow the query.");
         if (rows.Count == 0)
+        {
+            // 值域必须说清。search 覆盖的是 defName / label / description / 译文 ——
+            // **不含** C# 类名。实测里有人拿 CompShield 来搜,零结果被读成「模糊匹配坏了」,
+            // 而错误消息当时把他指向 code-search:那条路找得到类,却永远找不到用它的 def。
+            // 「像个类名」= 带命名空间点号,或者驼峰(首字母大写且内部还有大写)。
+            var looksLikeClass = query.Contains('.') ||
+                                 (query.Length > 2 && char.IsUpper(query[0]) && query.Skip(1).Any(char.IsUpper));
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"Nothing matched '{query}' in this snapshot" +
                 (scope.IsAll ? "" : $" within --scope {scope.Expression}") +
-                ". 'rimsearcher types' lists what kinds of def it holds; " +
-                "if you are looking for C# rather than data, use 'rimsearcher code-search'.");
+                ". This command covers def names, labels, descriptions and translations, not C# class names." +
+                (looksLikeClass
+                    ? $" That looks like a class: 'rimsearcher find compClass {query}' (or thingClass, workerClass) " +
+                      "finds the defs that use it, and 'rimsearcher code-search' searches the source text."
+                    : " 'rimsearcher types' lists what kinds of def this snapshot holds."));
+        }
 
         ctx.Report.Table("defs", ["def_name", "def_type", "label", "mod"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
@@ -95,13 +106,28 @@ public sealed class GetCommand : Command
             CommonOptions.Limit("fields") with { Default = Limits.DefaultFieldsPerDef.ToString() },
             new OptionSpec
             {
+                // 实测:一个 295 字段的 def 里找 statBases,唯一的办法是 --limit all 再 grep 输出。
+                // 那既烧上下文,又正好是这套工具劝人别做的事。
+                Name = "path",
+                Arity = Arity.Multi,
+                Aliases = ["paths", "field", "field-path", "only", "filter", "grep"],
+                Placeholder = "<text>",
+                Help = "Only show field paths containing this text. Repeat it to widen the selection.",
+            },
+            new OptionSpec
+            {
                 Name = "fields",
                 Arity = Arity.Flag,
                 Aliases = ["with-fields", "show-fields"],
                 Help = "Deprecated no-op: fields are always shown. Kept so that scripts that pass it keep working.",
             },
         ],
-        Examples = ["rimsearcher get Apparel_ShieldBelt", "rimsearcher get Bullet_Revolver --limit all"],
+        Examples =
+        [
+            "rimsearcher get Apparel_ShieldBelt",
+            "rimsearcher get Apparel_ShieldBelt --path statBases",
+            "rimsearcher get Bullet_Revolver --limit all",
+        ],
     };
 
     public override int Run(CommandContext ctx)
@@ -120,6 +146,7 @@ public sealed class GetCommand : Command
         }
 
         var limit = ctx.Args.Limit(fallback: Limits.DefaultFieldsPerDef);
+        var paths = ctx.Args.Values("path");
 
         foreach (var def in matches)
         {
@@ -138,7 +165,7 @@ public sealed class GetCommand : Command
             };
             ctx.Report.Detail(matches.Count == 1 ? "def" : $"def:{def.DefName}:{def.DefType}", pairs);
 
-            var (fields, total) = ctx.Db.Fields(def.Id, limit.Effective);
+            var (fields, matched, total) = ctx.Db.Fields(def.Id, limit.Effective, paths);
             ctx.Report.Table(matches.Count == 1 ? "fields" : $"fields:{def.DefName}", ["path", "value"],
                 fields.Select(f => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
                 {
@@ -146,7 +173,29 @@ public sealed class GetCommand : Command
                     ["value"] = f.Value,
                 }).ToList());
 
-            ctx.Report.TruncationNotice(Tally.Of(fields.Count, total), "field", "pass --limit all for the rest.");
+            // 多个 def 同名时,截断声明必须指名道姓 —— 否则两条「Showing 5 of N fields」
+            // 并排出现,读者无从知道哪条管哪个 def。
+            var whose = matches.Count == 1 ? "" : $" of {def.DefName} ({def.DefType})";
+            if (paths.Count > 0)
+            {
+                // 过滤后为空**不等于** def 没有这些字段,只等于没有路径含这段文本。
+                // 这两件事在输出上长得一样,所以必须由声明区把它们分开。
+                if (matched == 0)
+                    ctx.Report.Notice(NoticeKind.Boundary,
+                        $"No field path{whose} contains {Join(paths)}; the def does have " +
+                        $"{Tally.Complete(total).Render("field")}. Drop --path to see them.");
+                else
+                    ctx.Report.Notice(NoticeKind.Truncation,
+                        $"{Tally.Of(fields.Count, matched).Render("field")}{whose} " +
+                        $"match {Join(paths)}, out of {total} on the def." +
+                        (fields.Count < matched ? " Raise --limit for the rest." : ""));
+            }
+            else
+            {
+                ctx.Report.TruncationNotice(Tally.Of(fields.Count, total), "field",
+                    $"pass --limit all{(matches.Count == 1 ? "" : $" (this is {def.DefName})")} " +
+                    "for the rest, or --path <text> to pick out the ones you want.");
+            }
 
             // 02-3:「字段被截」与「没有该字段」必须可区分。上游把这件事整个略过了,
             // 于是深层字段查不到时调用方会得出「没有这个字段」的错误结论。
@@ -156,7 +205,12 @@ public sealed class GetCommand : Command
                     "were dropped at export time for depth or size, so a path missing from the list below is not " +
                     "proof that the def lacks it.");
 
-            var translations = ctx.Db.Translations(def.DefName);
+            // --limit 说的是「这次调用我要多少行」,不是「字段表要多少行」。译文表不听它的话,
+            // 就出现过 `get Muffalo --limit 5` 吐出八十行的实测 —— 限额说了不算,预算就是空话。
+            var allTranslations = ctx.Db.Translations(def.DefName);
+            var translations = limit.IsAll
+                ? allTranslations
+                : allTranslations.Take(limit.Effective).ToList();
             if (translations.Count > 0)
             {
                 // original 是被替换掉的原文。它值得占一列:导出时刻 def 上留的是译文,
@@ -174,6 +228,9 @@ public sealed class GetCommand : Command
                                    : $"file ({t.SourceMod}, outside this snapshot)",
                     }).ToList());
 
+                ctx.Report.TruncationNotice(Tally.Of(translations.Count, allTranslations.Count),
+                    "translation", $"pass --limit all to see the rest{whose}.");
+
                 if (translations.Any(t => t.Origin == TranslationOrigin.HarvestedOutside))
                     ctx.Report.Notice(NoticeKind.Advisory,
                         "Rows marked 'outside this snapshot' come from language files of mods that were installed " +
@@ -189,6 +246,9 @@ public sealed class GetCommand : Command
 
         return 0;
     }
+
+    private static string Join(IReadOnlyList<string> parts)
+        => parts.Count == 1 ? $"'{parts[0]}'" : string.Join(" or ", parts.Select(p => $"'{p}'"));
 }
 
 public sealed class FindCommand : Command
@@ -241,15 +301,55 @@ public sealed class FindCommand : Command
 
         if (rows.Count == 0)
         {
-            var (paths, _) = ctx.Db.FieldPathsForType("ThingDef", 0);
-            _ = paths;
+            if (value is null)
+            {
+                ctx.Report.Notice(NoticeKind.NextStep,
+                    $"No def in this snapshot has a field path ending in '{path}'. " +
+                    "'rimsearcher fields <DefType> --path <text>' lists the paths that a def type actually has.");
+                return 1;
+            }
+
+            // 直接把真实值域里的近似项端出来。指一条「去跑 values」的路是不够的:
+            // 实测里 compClass 有 175 个取值,默认只出 25 个,照着建议跑一遍照样看不见答案,
+            // 只能 --limit all 再自己 grep。近似项本来就在库里,算一次比让人跑两趟便宜。
+            var space = ctx.Db.DistinctValues(path, scope, Limits.MaxLimit).Rows.Select(v => v.Value).ToList();
+
+            // RimWorld 的约定:XML 里写的是 `Class="CompProperties_X"`,而落到 def 上的
+            // comps[N].compClass 存的是被解析出来的 `CompX`。照 XML 抄过来的名字必然查不到,
+            // 而这恰恰是从 grep XML 迁过来的人最先敲的那一条 —— skill 自己的示范就栽在这。
+            var alt = value.Contains("CompProperties_") ? value.Replace("CompProperties_", "Comp") : null;
+
+            // 先做精确关系:值域里存的是全限定名,调用方给的常是末段。这是**同一个名字**,
+            // 不是「长得像」,所以不该交给模糊打分 —— 实测里 CompAmbientSound 对
+            // RimWorld.CompAmbientSound 打分低于阈值,近似项一条都没出来。
+            var close = space.Where(v => Tail(v).Equals(alt ?? value, StringComparison.OrdinalIgnoreCase))
+                             .Concat(space.Where(v => alt is not null &&
+                                                      Tail(v).Contains(Tail(alt), StringComparison.OrdinalIgnoreCase)))
+                             .Distinct(StringComparer.Ordinal)
+                             .Take(Limits.MaxSuggestions)
+                             .ToList();
+
+            if (close.Count == 0)
+                close = FuzzyMatcher.Rank(space, alt ?? value).Take(Limits.MaxSuggestions).Select(t => t.Text).ToList();
+
             ctx.Report.Notice(NoticeKind.NextStep,
-                value is null
-                    ? $"No def in this snapshot has a field path ending in '{path}'. " +
-                      "'rimsearcher fields <DefType>' lists the paths that a def type actually has."
-                    : $"No def has '{path}' set to {(exact ? "exactly " : "")}'{value}'. " +
-                      $"'rimsearcher values {path}' lists the values that do occur.");
+                $"No def has '{path}' set to {(exact ? "exactly " : "")}'{value}'" +
+                (space.Count > 0 ? $", out of {Tally.Complete(space.Count).Render("value")} that the field does take" : "") +
+                "." +
+                (close.Count > 0
+                    ? $" Closest: {string.Join(", ", close)}." +
+                      (alt is not null && close.Any(c => Tail(c).Equals(alt, StringComparison.OrdinalIgnoreCase))
+                          // 说破规律,不只是给一个名字 —— 否则同一个人下一个 comp 还会再敲错一次。
+                          ? " The XML writes Class=\"CompProperties_X\"; this field holds the resolved CompX."
+                          : "")
+                    : $" 'rimsearcher values {path} --limit all' lists them."));
             return 1;
+        }
+
+        static string Tail(string v)
+        {
+            var i = v.LastIndexOf('.');
+            return i < 0 ? v : v[(i + 1)..];
         }
 
         ctx.Report.Table("matches", ["def_name", "def_type", "path", "value", "mod"],
@@ -341,18 +441,44 @@ public sealed class FieldsCommand : Command
             "Use this before 'find' when you are not sure what a field is called. The counts tell you whether a " +
             "path is universal for the type or only present on a handful of defs.",
         Positionals = [new PositionalSpec { Name = "defType", Help = "A def type such as ThingDef." }],
-        Options = [CommonOptions.Limit("field paths")],
-        Examples = ["rimsearcher fields ThingDef", "rimsearcher fields HediffDef --limit all"],
+        Options =
+        [
+            CommonOptions.Limit("field paths"),
+            new OptionSpec
+            {
+                // ThingDef 有 2973 条路径,默认只出 25 条。没有这个开关,调用方只能
+                // `fields ThingDef | grep comps` —— 而 grep 会连同截断声明一起滤掉,
+                // 于是「被截了」变成「没有」。管道会把声明区吃掉,所以筛选必须在工具里做。
+                Name = "path",
+                Arity = Arity.Multi,
+                Aliases = ["paths", "contains", "match", "filter", "grep", "only"],
+                Placeholder = "<text>",
+                Help = "Only list paths containing this text. Repeat it to widen the selection.",
+            },
+        ],
+        Examples =
+        [
+            "rimsearcher fields ThingDef",
+            "rimsearcher fields ThingDef --path comps",
+            "rimsearcher fields HediffDef --limit all",
+        ],
     };
 
     public override int Run(CommandContext ctx)
     {
         var type = ctx.Args.Positional(0)!;
         var limit = ctx.Args.Limit();
-        var (rows, total) = ctx.Db.FieldPathsForType(type, limit.Effective);
+        var filters = ctx.Args.Values("path");
+        var (rows, total) = ctx.Db.FieldPathsForType(type, limit.Effective, filters.FirstOrDefault());
 
         if (rows.Count == 0)
         {
+            if (filters.Count > 0 && ctx.Db.FieldPathsForType(type, 1).Rows.Count > 0)
+            {
+                ctx.Report.Notice(NoticeKind.Boundary,
+                    $"'{type}' has field paths, but none contains '{filters[0]}'. Drop --path to see them all.");
+                return 1;
+            }
             var types = ctx.Db.Types(ctx.Scope()).Select(t => t.Type).ToList();
             var close = FuzzyMatcher.Rank(types, type).Take(Limits.MaxSuggestions).Select(t => t.Text).ToList();
             ctx.Report.Notice(NoticeKind.NextStep,
@@ -361,7 +487,8 @@ public sealed class FieldsCommand : Command
             return 1;
         }
 
-        ctx.Report.TruncationNotice(Tally.Of(rows.Count, total), "field path", "raise --limit to see the rest.");
+        ctx.Report.TruncationNotice(Tally.Of(rows.Count, total), "field path",
+            "raise --limit, or narrow with --path <text>.");
         ctx.Report.Table("fields", ["path", "defs"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
@@ -379,7 +506,10 @@ public sealed class ValuesCommand : Command
         Name = "values",
         Aliases = ["distinct"],
         Summary = "List the distinct values a field takes, most common first.",
-        Remarks = "Answers 'what am I allowed to put here' and 'which classes are actually in use' without reading any XML.",
+        Remarks =
+            "Answers 'what am I allowed to put here' and 'which classes are actually in use' without reading any XML. " +
+            "A bare name such as compClass matches every path ending in it, so the table above the values tells you " +
+            "which full paths and which def types actually contributed, and how many defs are covered.",
         Positionals = [new PositionalSpec { Name = "fieldPath", Help = "A field path or its last segment, such as compClass." }],
         Options = [CommonOptions.Limit("values"), CommonOptions.Scope],
         Examples = ["rimsearcher values compClass", "rimsearcher values thingClass --scope vanilla"],
@@ -399,6 +529,24 @@ public sealed class ValuesCommand : Command
                 "'rimsearcher fields <DefType>' lists the paths a type actually has.");
             return 1;
         }
+
+        // 值的产地。后缀匹配天然会把语义不同的路径并进一张表,不说清就会被读成
+        // 「这个字段到处都是这个值」—— 实测里 `values damageAmountBase` 正是这样险些骗到人。
+        var cov = ctx.Db.ValueCoverage(path, scope, Limits.MaxSuggestions);
+
+        var pathList = string.Join(", ", cov.Paths.Select(x => $"{x.Path} ({x.Count})"));
+        if (cov.PathTotal > cov.Paths.Count) pathList += $", and {cov.PathTotal - cov.Paths.Count} more";
+
+        // 「N of M」是覆盖率的分母。少了它,一条 `Verse.Thing (7)` 分不清是「只有 7 个 def
+        // 这么写」还是「导出漏了一千多个」—— 实测里有人靠手工把 110 行加起来才敢下结论。
+        var typeList = string.Join(", ", cov.DefTypes.Select(x =>
+            $"{x.DefType} ({x.Count} of {ctx.Db.CountDefsOfType(x.DefType, scope)})"));
+
+        ctx.Report.Detail("field", [
+            new("matched_paths", pathList),
+            new("def_types", typeList),
+            new("defs_with_field", (object)cov.DefsCovered),
+        ]);
 
         ctx.Report.TruncationNotice(Tally.Of(rows.Count, total), "value", "raise --limit to see the rest.");
         ctx.Report.Table("values", ["value", "defs"],

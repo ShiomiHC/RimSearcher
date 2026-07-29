@@ -14,7 +14,9 @@ public static class GlobalOptions
     public static readonly OptionSpec Snapshot = new()
     {
         Name = "snapshot",
-        Aliases = ["snap", "env", "profile"],
+        // 'profile' 归 export 的 --modlist:mod 列表才是 RimWorld 语境里的 profile。
+        // 两处都挂着,同一命令里就有两个归宿,归一化后必然撞车(声明层的闸抓到的正是这个)。
+        Aliases = ["snap", "env"],
         Placeholder = "<name>",
         Help = "Query this named snapshot instead of the one that would be picked automatically. " +
                "An explicit choice always wins over auto-detection.",
@@ -71,7 +73,8 @@ public static class CommonOptions
         Aliases = ["mod", "mods", "source", "from"],
         Placeholder = "<expr>",
         Help = "Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. " +
-               "'all', 'vanilla', a packageId, or a group name from the config file. Example: all,-vanilla",
+               "'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' " +
+               "means everything except vanilla.",
         Default = ScopeFilter.DefaultScope,
     };
 
@@ -144,16 +147,25 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
                 return;
 
             case EnvironmentMatch.DifferentModlist:
-                // 声明调用方**没有选过**的事情,不声明它选过的。
-                // 显式指定或固定了快照,就等于已经说过「我要查的是另一个环境」——每次再复述一遍,
-                // 就是 00 论据 3 淘汰掉的那种「每次返回挂免责声明」换个马甲回来。
-                // 自动检测/只有一份兜底选出来的才需要说,因为那不是调用方的意思。
-                if (selection.Source is SelectionSource.ExplicitAlias or SelectionSource.ExplicitDb or SelectionSource.Pinned)
+                // 声明调用方**这次没有说过**的事情,不声明它这次说过的。
+                // 本次调用带了 --snapshot/--db,就是当场声明了「我要查的是那个环境」,再复述一遍
+                // 就是 00 论据 3 淘汰掉的「每次返回挂免责声明」换个马甲回来。
+                if (selection.Source is SelectionSource.ExplicitAlias or SelectionSource.ExplicitDb)
                     return;
+
+                // Pinned 不算说过。`snapshot use` 是**过去某一刻**的选择,而 mod 列表是会变的 ——
+                // 两者不一致恰恰说明那次选择已经过时,这与 VersionDrift 是同一类事实。
+                // 实测代价:Core-only 快照 + 22 个已启用 mod,`find` 返回一条裸计数,
+                // 按三态文法读就是「全世界只有这一个」,而真相是「这份快照里只有这一个」。
                 Report.Notice(NoticeKind.Staleness,
-                    $"Snapshot '{name}' was picked for you, and it does not describe the mods currently enabled in " +
-                    $"the game ({report.Added} enabled now that it lacks, {report.Removed} in it that are no longer " +
-                    "enabled). 'rimsearcher snapshot status' explains the difference; --snapshot picks another.");
+                    selection.Source == SelectionSource.Pinned
+                        ? $"Snapshot '{name}' is the pinned one, but the game's mod list has changed since " +
+                          $"({report.Added} enabled now that it lacks, {report.Removed} in it that are no longer " +
+                          "enabled), so counts below are complete for the snapshot, not for your game. " +
+                          "'rimsearcher snapshot status' explains the difference."
+                        : $"Snapshot '{name}' was picked for you, and it does not describe the mods currently enabled in " +
+                          $"the game ({report.Added} enabled now that it lacks, {report.Removed} in it that are no longer " +
+                          "enabled). 'rimsearcher snapshot status' explains the difference; --snapshot picks another.");
                 return;
 
             case EnvironmentMatch.Unknown:

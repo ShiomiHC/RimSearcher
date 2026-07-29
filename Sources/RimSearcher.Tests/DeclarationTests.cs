@@ -154,6 +154,65 @@ public class DeclarationTests
         }
     }
 
+    /// <summary>
+    /// 每个 <c>Render("noun")</c> 用到的名词都必须登记过。
+    ///
+    /// 登记处的设计是「没登记就抛」,方向对,但落点错了:那一抛发生在**用户面前**,
+    /// 表现为一条裸栈追踪。加一个名词是件小事,它却让一条正常查询整个失败 ——
+    /// 实测里就是这样炸的。把闸挪到这里,漏登记在提交前就是红的。
+    ///
+    /// 扫源码是有意的:名词是字符串字面量,没有类型系统能替它把关,
+    /// 而「跑一遍所有命令的所有分支」根本做不到 —— 报错分支恰恰是最难跑到的那些。
+    /// </summary>
+    [Fact]
+    public void 代码里渲染过的每个名词都登记过()
+    {
+        var used = NounsUsedInCode();
+        Assert.NotEmpty(used);
+        var missing = used.Where(n => !Output.NounRegistry.IsRegistered(n)).ToList();
+        Assert.True(missing.Count == 0,
+            $"Rendered but not registered in NounRegistry: {string.Join(", ", missing)}.");
+    }
+
+    /// <summary>登记了却没人用的名词也是债:表越长,越没人敢动它。</summary>
+    [Fact]
+    public void 登记表里没有无人使用的名词()
+    {
+        var used = NounsUsedInCode();
+        var unused = Output.NounRegistry.Known.Where(n => !used.Contains(n)).ToList();
+        Assert.True(unused.Count == 0, $"Registered but never used: {string.Join(", ", unused)}.");
+    }
+
+    /// <summary>
+    /// 名词有**两个**入口:直接 <c>Render("x")</c>,以及交给 <c>TruncationNotice</c> 由它去
+    /// 渲染。只认前一个,后一个用到的名词会被判成「没人用」—— 第一次跑就是这样红的。
+    /// 两个入口都要认,闸才对得上真实用法。
+    /// </summary>
+    private static SortedSet<string> NounsUsedInCode()
+    {
+        var used = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var file in Directory.EnumerateFiles(
+                     Path.Combine(RepoRoot(), "Sources", "RimSearcher.Core"), "*.cs", SearchOption.AllDirectories))
+        {
+            var text = File.ReadAllText(file);
+            foreach (System.Text.RegularExpressions.Match m in
+                     System.Text.RegularExpressions.Regex.Matches(text, @"\.Render\(\s*""([^""]+)""\s*\)"))
+                used.Add(m.Groups[1].Value);
+            foreach (System.Text.RegularExpressions.Match m in
+                     System.Text.RegularExpressions.Regex.Matches(text, @"TruncationNotice\([^;]*?,\s*""([^""]+)""\s*,"))
+                used.Add(m.Groups[1].Value);
+        }
+        return used;
+    }
+
+    internal static string RepoRoot()
+    {
+        var dir = AppContext.BaseDirectory;
+        while (dir is not null && !Directory.Exists(Path.Combine(dir, "Sources")))
+            dir = Path.GetDirectoryName(dir);
+        return dir ?? throw new InvalidOperationException("Could not find the repository root from " + AppContext.BaseDirectory);
+    }
+
     internal static List<string> SplitCommandLine(string line)
     {
         var result = new List<string>();

@@ -135,9 +135,14 @@ public sealed class SnapshotDb : IDisposable
         // 对调用方来说那是错的答案排在了对的答案前面。列权重让 def_name 压过 description。
         // 「有 label」是一条真信号而不是权宜:带 label 的是玩家看得见的东西,不带的是
         // EffecterDef/SoundDef 一类基础设施。搜 "shield" 的人要的是护盾腰带,不是护盾音效。
+        //
+        // 这一档必须压在**名字前缀**之上。反过来排过一版,结果是 `search shield` 把没有 label 的
+        // Shield_Break(EffecterDef)排到了 Apparel_ShieldBelt 前面 —— 只因为它的名字以
+        // shield 开头。前缀命中说明的是「名字长得像」,有没有 label 说明的是「这东西给人看」,
+        // 后者才是提问的人真正在筛的东西。
         var order = "ORDER BY (d.def_name = @q COLLATE NOCASE) DESC, " +
-                    "(d.def_name LIKE @q || '%' COLLATE NOCASE) DESC, " +
                     "(d.label IS NOT NULL AND d.label != '') DESC, " +
+                    "(d.def_name LIKE @q || '%' COLLATE NOCASE) DESC, " +
                     "bm25(defs_fts, 10.0, 4.0, 1.0, 3.0), LENGTH(d.def_name), d.def_name";
         var rows = ReadDefs($"SELECT {DefColumns} {from} {order} LIMIT {limit}", p);
         return (rows, total);
@@ -170,15 +175,44 @@ public sealed class SnapshotDb : IDisposable
         return ReadDefs($"SELECT {DefColumns} FROM defs d WHERE d.def_name = @n COLLATE NOCASE", p);
     }
 
-    public (IReadOnlyList<FieldRow> Rows, int Total) Fields(long defId, int limit)
+    /// <summary>
+    /// 一个 def 的字段。<paramref name="pathFilter"/> 非空时只留路径含该子串的行 ——
+    /// 没有它,调用方拿一个 295 字段的 def 找 statBases 只能把整份输出 grep 一遍,
+    /// 而「别拿文本匹配 def」正是这套工具存在的理由,自己逼出这个动作是自相矛盾。
+    /// <c>Matched</c> 是过滤后的总数,<c>Total</c> 是这个 def 的字段总数 —— 两个都给,
+    /// 调用方才分得清「过滤掉了多少」和「被 limit 截了多少」。
+    /// </summary>
+    public (IReadOnlyList<FieldRow> Rows, int Matched, int Total) Fields(
+        long defId, int limit, IReadOnlyList<string>? pathFilters = null)
     {
         var p = new Dictionary<string, object?> { ["@id"] = defId };
         var total = Scalar("SELECT COUNT(*) FROM field_values WHERE def_id = @id", p);
+
+        var filters = (pathFilters ?? []).Where(f => !string.IsNullOrEmpty(f)).ToList();
+        var where = "WHERE def_id = @id";
+        if (filters.Count > 0)
+        {
+            var ors = new List<string>();
+            for (var i = 0; i < filters.Count; i++)
+            {
+                p["@f" + i] = "%" + Escape(filters[i]) + "%";
+                ors.Add($"path LIKE @f{i} ESCAPE '\\'");
+            }
+            where += " AND (" + string.Join(" OR ", ors) + ")";
+        }
+
+        var matched = filters.Count == 0
+            ? total
+            : Scalar($"SELECT COUNT(*) FROM field_values {where}", p);
         var rows = new List<FieldRow>();
-        using var rd = Query($"SELECT path, leaf, value FROM field_values WHERE def_id = @id ORDER BY rowid LIMIT {limit}", p);
+        using var rd = Query($"SELECT path, leaf, value FROM field_values {where} ORDER BY rowid LIMIT {limit}", p);
         while (rd.Read()) rows.Add(new FieldRow(rd.GetString(0), rd.GetString(1), rd.IsDBNull(2) ? null : rd.GetString(2)));
-        return (rows, total);
+        return (rows, matched, total);
     }
+
+    /// <summary>LIKE 的通配符转义。用户给的过滤串里出现 <c>_</c> 是常事(field_path 之类)。</summary>
+    private static string Escape(string s)
+        => s.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 
     public (IReadOnlyList<DefRow> Rows, int Total) ListByType(string defType, ScopeFilter scope, int limit, int offset)
     {
@@ -232,23 +266,32 @@ public sealed class SnapshotDb : IDisposable
         return (rows, total);
     }
 
-    public (IReadOnlyList<(string Path, int Count)> Rows, int Total) FieldPathsForType(string defType, int limit)
+    public (IReadOnlyList<(string Path, int Count)> Rows, int Total) FieldPathsForType(
+        string defType, int limit, string? pathFilter = null)
     {
         var p = new Dictionary<string, object?> { ["@t"] = defType };
+        var where = "WHERE d.def_type = @t COLLATE NOCASE";
+        if (!string.IsNullOrEmpty(pathFilter))
+        {
+            p["@f"] = "%" + Escape(pathFilter!) + "%";
+            where += " AND fv.path LIKE @f ESCAPE '\\'";
+        }
         var total = Scalar(
-            "SELECT COUNT(*) FROM (SELECT DISTINCT fv.path FROM field_values fv JOIN defs d ON d.id = fv.def_id " +
-            "WHERE d.def_type = @t COLLATE NOCASE)", p);
+            $"SELECT COUNT(*) FROM (SELECT DISTINCT fv.path FROM field_values fv JOIN defs d ON d.id = fv.def_id {where})", p);
         var rows = new List<(string, int)>();
         using var rd = Query(
-            "SELECT fv.path, COUNT(*) c FROM field_values fv JOIN defs d ON d.id = fv.def_id " +
-            $"WHERE d.def_type = @t COLLATE NOCASE GROUP BY fv.path ORDER BY c DESC, fv.path LIMIT {limit}", p);
+            $"SELECT fv.path, COUNT(*) c FROM field_values fv JOIN defs d ON d.id = fv.def_id {where} " +
+            $"GROUP BY fv.path ORDER BY c DESC, fv.path LIMIT {limit}", p);
         while (rd.Read()) rows.Add((rd.GetString(0), rd.GetInt32(1)));
         return (rows, total);
     }
 
-    public (IReadOnlyList<(string Value, int Count)> Rows, int Total) DistinctValues(string pathSuffix, ScopeFilter scope, int limit)
+    /// <summary>
+    /// 后缀匹配的 WHERE 子句 —— <c>values</c> 与 <c>ValueCoverage</c> 必须用同一个,
+    /// 否则「覆盖面」描述的就不是「值表」实际统计的那批行,而这正是最容易骗人的一种不一致。
+    /// </summary>
+    private static string SuffixWhere(string pathSuffix, ScopeFilter scope, Dictionary<string, object?> p)
     {
-        var p = new Dictionary<string, object?>();
         var conds = new List<string>();
         if (pathSuffix.Contains('.') || pathSuffix.Contains('['))
         {
@@ -261,7 +304,51 @@ public sealed class SnapshotDb : IDisposable
             conds.Add("fv.leaf = @leaf COLLATE NOCASE");
         }
         if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
-        var where = "WHERE " + string.Join(" AND ", conds);
+        return "WHERE " + string.Join(" AND ", conds);
+    }
+
+    /// <summary>
+    /// 值表的归属面:这批值实际由哪些**完整路径**贡献,落在哪些 def 类型上,盖住多少 def。
+    ///
+    /// 没有这一层,后缀匹配会静默地把语义不同的路径混成一张表 —— 实测里
+    /// <c>values damageAmountBase</c> 报出「-1 / 37 defs」,读起来像「到处都是 -1」,
+    /// 实际上 37 条全是 <c>comps[N].damageAmountBase</c>(爆炸物),而问的那条
+    /// <c>projectile.damageAmountBase</c> 压根不在表里。值本身没错,错的是省掉了它的产地。
+    /// </summary>
+    public (IReadOnlyList<(string Path, int Count)> Paths, int PathTotal,
+            IReadOnlyList<(string DefType, int Count)> DefTypes, int DefsCovered)
+        ValueCoverage(string pathSuffix, ScopeFilter scope, int limit)
+    {
+        var p = new Dictionary<string, object?>();
+        var where = SuffixWhere(pathSuffix, scope, p);
+        const string join = "FROM field_values fv JOIN defs d ON d.id = fv.def_id";
+
+        var pathTotal = Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT fv.path {join} {where})", p);
+        var paths = new List<(string, int)>();
+        using (var rd = Query($"SELECT fv.path, COUNT(*) c {join} {where} GROUP BY fv.path ORDER BY c DESC, fv.path LIMIT {limit}", p))
+            while (rd.Read()) paths.Add((rd.GetString(0), rd.GetInt32(1)));
+
+        var types = new List<(string, int)>();
+        using (var rd = Query($"SELECT d.def_type, COUNT(DISTINCT d.id) c {join} {where} GROUP BY d.def_type ORDER BY c DESC, d.def_type LIMIT {limit}", p))
+            while (rd.Read()) types.Add((rd.GetString(0), rd.GetInt32(1)));
+
+        var covered = Scalar($"SELECT COUNT(DISTINCT d.id) {join} {where}", p);
+        return (paths, pathTotal, types, covered);
+    }
+
+    /// <summary>某个 def 类型在本作用域下的 def 总数 —— 覆盖率的分母。</summary>
+    public int CountDefsOfType(string defType, ScopeFilter scope)
+    {
+        var p = new Dictionary<string, object?> { ["@t"] = defType };
+        var conds = new List<string> { "d.def_type = @t COLLATE NOCASE" };
+        if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
+        return Scalar($"SELECT COUNT(*) FROM defs d WHERE {string.Join(" AND ", conds)}", p);
+    }
+
+    public (IReadOnlyList<(string Value, int Count)> Rows, int Total) DistinctValues(string pathSuffix, ScopeFilter scope, int limit)
+    {
+        var p = new Dictionary<string, object?>();
+        var where = SuffixWhere(pathSuffix, scope, p);
 
         var total = Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT fv.value FROM field_values fv JOIN defs d ON d.id = fv.def_id {where})", p);
         var rows = new List<(string, int)>();

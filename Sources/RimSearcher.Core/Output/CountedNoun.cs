@@ -60,12 +60,8 @@ public static class NounRegistry
         ["match"] = "matches",
         ["file"] = "files",
         ["mod"] = "mods",
-        ["snapshot"] = "snapshots",
         ["translation"] = "translations",
-        ["line"] = "lines",
-        ["record"] = "records",
-        ["entry"] = "entries",
-        ["modlist"] = "modlists",
+        ["source tree"] = "source trees",
     };
 
     public static IReadOnlyCollection<string> Known => Plurals.Keys;
