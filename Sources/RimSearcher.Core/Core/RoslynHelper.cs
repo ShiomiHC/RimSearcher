@@ -337,17 +337,20 @@ public static class RoslynHelper
     // 现在 inspect 自己带 limit，全量大纲三百来行，比读一遍类体便宜得多。
     private static void AppendOutlineFold(StringBuilder sb, int total, int shownCap, string kindPlural)
     {
-        if (total <= shownCap) return;
-        // 措辞对齐全服统一的截断脚注文法「... +N more <什么> (<怎么拿到>)」——见 Fold.Line。
-        // "not shown" 是 "more" 已经说过的话。
-        sb.AppendLine(
-            $"    ... +{total - shownCap} more {OutputText.NounFor(total - shownCap, kindPlural)} "
+        // 文法（缩进、`+N more`、名词构词、括号）归 OutputText.FoldLine 一处，这里只给
+        // 「下一步是什么」。此前这一条是全服二十来条折叠行里唯一手拼的一条，成因不是措辞
+        // 疏忽而是够不到 Server 的 Tools/Output——那一形现已下沉到 Core，见 FoldLine 的注释。
+        var line = OutputText.FoldLine(
+            total - shownCap, kindPlural,
             // `the whole list` 是个没有辖域的全称承诺，而服务端担保得了的只有「这一类里**本类型
             // 自己声明**的那些」。第十二轮盲测：调用方要在 `Pawn` 上找取地图的成员，照这句展开
             // 全部 118 条属性也拿不到 `Map`——它声明在基类 `Verse.Thing` 上。答对那位是靠 C# 常识
-            // 绕开了这句话，而不是照它做。辖域那半句由 Inheritance chain 那行承担（见 InspectTool），
-            // 这里只把担保不了的话删掉，与 Fold.Line 的同位措辞对齐。
-            + "(pass limit:'all' to expand, or read one with read_code methodName)");
+            // 绕开了这句话，而不是照它做。辖域那半句由 Inheritance chain 那行承担（见 InspectTool）。
+            "pass limit:'all' to expand, or read one with read_code methodName",
+            // 大纲的成员行缩进四格（类型名一格、组表头两格），折叠行与它数的那批东西同缩进
+            indent: "    ");
+
+        if (line != null) sb.AppendLine(line);
     }
 
     // 一类成员一块：表头 + 各行签名 + 折叠行。空的那类整块不出现——「没有这个表头」即

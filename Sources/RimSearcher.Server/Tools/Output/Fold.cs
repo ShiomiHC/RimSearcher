@@ -93,26 +93,20 @@ public static class Fold
     // list_directory 那处上一行的注释还写着「文法与全服统一的截断脚注一致……见 Fold.Line」
     // ——契约靠模仿加测试事后拦截，而不是按构造成立。
     //
-    // 名词的单复数也在这里定，四个调用方一处也不许自己拼——它们此前全都不做这件事
+    // 名词的单复数也在这里定，调用方一处也不许自己拼——它们此前全都不做这件事
     // （`+1 more entries` / `+1 more lines` / `+1 more types`），而 list_directory 同一份输出的
     // 表头是走构词的（`12 entries`，那处注释还专门写着「不写 `1 entries`」）：同一屏上同一个
     // 名词数同一批东西、四行之隔两种写法。其余 19 种折叠行全走 NounFor，故那三处是例外而不是
     // 另一种规矩。
+    //
+    // 实现在 Core 的 OutputText.FoldLine，这里只是入口。搬下去是因为**第六个**调用方在 Core 里：
+    // 成员大纲的文本整段由 RoslynHelper 拼（inspect 只是把它原样接进返回），它够不到这个
+    // 命名空间，于是那一条折叠行一直是全服唯一手拼的一条。而这一形不含任何成因判断——
+    // 下一步整句由调用方给——正好落在 OutputText 那条既有边界的可下沉一侧（NounFor 因同一个
+    // 理由早已在那儿）。上面三个成员下不去：它们要读 ScopeArgs.HardLimit 与 ResultLimit。
     public static string? Explicit(
         int hiddenCount, string noun, string nextStep, int? total = null, string indent = "  ")
-    {
-        // 同 Line：没被折叠就没有这一行。三处调用方各自都还有别的在场条件（分页到底、
-        // 顶到定长上限），那些留在调用方，这里只兜住「增量为 0」。
-        if (hiddenCount <= 0) return null;
-
-        // 名词跟哪个数走：给了总数就跟总数（`+1 more of 13 changed files` 是属格复数），
-        // 没给就跟增量。同 PerFile 与 Tally.Cell 的 R30 判据。
-        var what = total is { } m
-            ? $"of {m} {OutputText.NounFor(m, noun)}"
-            : OutputText.NounFor(hiddenCount, noun);
-
-        return $"{indent}... +{hiddenCount} more {what} ({nextStep})";
-    }
+        => OutputText.FoldLine(hiddenCount, noun, nextStep, total, indent);
 
     // 每文件预览的折叠行。search_regex 与 trace usages 共用，且它是全语料里出现最频的一条
     // 折叠行（92/181），此前却是唯一两个槽都空着的一条：`... +77 more in this file`。
