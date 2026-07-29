@@ -264,14 +264,18 @@ public class OutputSnapshotTests : IDisposable
     // 同一个 pattern、只是没有任何文件命中。这一路此前退化成一句 "No matches"，而扫描确实
     // 在一个文件上被放弃了——一个字都不提（§7 第一条）。已修（e388328），此处钉的是修好那一形：
     // 表头那半边在这一路无处可挂（没有表头，也没有要降格的总数），故成因整句落在尾注上。
+    //
+    // 名字里是 StillNames 而不是 Swallows：`Swallows` 正是那个已修的缺陷，而这个用例钉住的
+    // 恰恰是**不再吞掉**（快照里明明白白印着 `1 file was abandoned mid-scan … (ZzBacktrack.cs)`）。
+    // 方法名比注释显眼得多，读者第一眼看到的就是它命名的那个行为。
     [Fact]
-    public async Task SearchRegex_ZeroHits_SwallowsTheTimedOutFile()
+    public async Task SearchRegex_ZeroHits_StillNamesTheTimedOutFile()
     {
         var (indexer, _, catalog) = BuildIndex(("ZzBacktrack.cs", new string('a', 40) + "\n"));
 
         var content = await Run(new SearchRegexTool(indexer, catalog), new { pattern = "(a+)+b" });
 
-        Verify("search_regex/zero-hits-swallows-timeout", content);
+        Verify("search_regex/zero-hits-names-timeout", content);
     }
 
     // 表头第三形：limit 咬人 → `first N preview lines` + scan-stopped 尾注
