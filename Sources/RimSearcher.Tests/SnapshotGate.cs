@@ -20,8 +20,27 @@ internal static class SnapshotGate
 
     // 基线跟着**测试源文件**放，不进构建输出：它是要被人读、被 git diff 审的东西，
     // 拷进 bin/ 只会让「改了输出」这件事在 review 里看不见。
-    private static string SnapshotPath(string name, [CallerFilePath] string here = "")
-        => Path.Combine(Path.GetDirectoryName(here)!, "Snapshots", $"{name}.txt");
+    private static string SnapshotPath(string name) => Path.Combine(Root(), $"{name}.txt");
+
+    private static string Root([CallerFilePath] string here = "")
+        => Path.Combine(Path.GetDirectoryName(here)!, "Snapshots");
+
+    // ---- 已入库的基线本身也是语料 ----
+    //
+    // 每一份基线都是一段被人审过的真实产品输出，且**形态是指定出来的**——这正是台账 §七当年
+    // 判成「做不了」的那份东西（「语料来自本机 RimWorld 安装，不能进仓」）。它早就在仓里了，
+    // 只是一直没有第二道闸读它：字节级基线只回答「这次改动动了哪些字」，不回答「这些字合不合
+    // 共用文法」。消费者见 SnapshotGrammarGateTests。
+    //
+    // 名字与 Verify 收的那个 name 同形（相对 Snapshots/、不带扩展名、分隔符归一成 /），
+    // 于是「枚举出来的名字」与「写基线时用的名字」是同一个东西，中间没有第二套拼法。
+
+    public static IReadOnlyList<string> Names()
+        => [.. Directory.EnumerateFiles(Root(), "*.txt", SearchOption.AllDirectories)
+            .Select(path => Path.GetRelativePath(Root(), path).Replace('\\', '/')[..^".txt".Length])
+            .OrderBy(name => name, StringComparer.Ordinal)];
+
+    public static string Read(string name) => File.ReadAllText(SnapshotPath(name));
 
     // content 必须是**已经归一化过**的文本：随环境变的那几段（路径、耗时、时刻）由调用方
     // 各自处理——它们知道自己那份输出里哪些字是噪音，这里不知道。

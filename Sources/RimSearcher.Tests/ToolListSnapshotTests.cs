@@ -34,6 +34,11 @@ public class ToolListSnapshotTests : IDisposable
         _workspace.Dispose();
     }
 
+    // 这一族基线在 Snapshots/ 下的目录名。SnapshotGrammarGateTests 要按它把这一族排除在
+    // 共用输出文法之外（理由见那边），故它得有一个产地——两处各写一遍 "tools_list" 的话，
+    // 这里改个名，那边的排除会静默失效或静默扩大，而两种失效都表现为「继续绿」。
+    public const string Area = "tools_list";
+
     // 工具名单从注册表来。少一个工具、多一个工具，这条 Theory 的用例数跟着变——多出来的那个
     // 第一次跑必然红（基线不存在），这正是「新加工具要补基线」该有的表现。
     public static TheoryData<string> EveryTool => [.. RegisteredTools.Titles];
@@ -47,7 +52,7 @@ public class ToolListSnapshotTests : IDisposable
         var tool = Assert.Single(
             listed, entry => entry.GetProperty("title").GetString() == title);
 
-        SnapshotGate.Verify($"tools_list/{title}", Normalize(Render(tool)));
+        SnapshotGate.Verify($"{Area}/{title}", Normalize(Render(tool)));
     }
 
     // ---- 语料 ----
