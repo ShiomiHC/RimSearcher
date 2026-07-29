@@ -631,6 +631,24 @@ public sealed class ListCommand : Command
 
         if (rows.Count == 0)
         {
+            // 「这个 scope 里没有」不等于「快照里没有」。下面每一条判据都是 scope 过滤过的,
+            // 所以 `--scope zh`(汉化包,一个 def 都不加)会让 `list ThingDef` 报出
+            // 「No def type named 'ThingDef' in this snapshot」—— 一句彻头彻尾的假话。
+            // 这与 CreepJoinerAggressiveDef 那条同形:分不清缺席的成因就报最强的那种。
+            if (!scope.IsAll && offset == 0)
+            {
+                var (_, everywhere) = ctx.Db.ListByType(type, ctx.Unscoped(), 1, 0, wantClass);
+                if (everywhere > 0)
+                {
+                    ctx.Report.Notice(NoticeKind.NextStep,
+                        $"No def of type {type} is in scope '{scope.Expression}'" +
+                        (wantClass is null ? "" : $" with class '{wantClass}'") +
+                        $", but this snapshot has {Tally.Complete(everywhere).Render("def")} of it overall. " +
+                        $"Drop --scope, or run 'rimsearcher mods' to see which mods the scope selects.");
+                    return 1;
+                }
+            }
+
             // 「不是分桶键」不等于「不存在」。游戏只给「祖先链上没有非抽象 Def」的类型建库,
             // 于是 CreepJoinerAggressiveDef 的 def 全躺在 CreepJoinerBaseDef 桶里 —— 照直报
             // 「No def type named ...」就是把缺席说成了事实,而调用方没有任何办法看出区别。

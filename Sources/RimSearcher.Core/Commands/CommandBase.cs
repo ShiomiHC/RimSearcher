@@ -123,6 +123,12 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
     }
 
     /// <summary>
+    /// 不带任何 mod 过滤的 scope。零结果分流要用它 —— 「这个 scope 里没有」和
+    /// 「整个快照里没有」是两件事,而分不清时报后者就是把缺席说成事实。
+    /// </summary>
+    public ScopeFilter Unscoped() => ScopeFilter.Parse("all", Db.PackageIds(), Config);
+
+    /// <summary>
     /// 快照寻址与过期自证是同一次比对的两个产出(06)。
     /// **正常态一个字都不说** —— 上下文预算硬约束:一致时发声等于每次查询都交一次无用税。
     /// </summary>

@@ -93,6 +93,30 @@ public class GrammarTests
             Assert.Equal(whole, Total(limit));
     }
 
+    /// <summary>
+    /// scope 筛空了不许说成「快照里没有」。
+    ///
+    /// 装机验收时当场撞见的:`list ThingDef --scope zh`(汉化包一个 def 都不加)报了
+    /// 「No def type named 'ThingDef' in this snapshot」—— 一句彻头彻尾的假话,
+    /// 而 ThingDef 在同一份快照里有 3538 个。零结果分流的每条判据当时都是 scope 过滤过的,
+    /// 于是分不清成因就报了最强的那种,与 list CreepJoinerAggressiveDef 那条同形。
+    /// </summary>
+    [Fact]
+    public void scope筛空时不说成快照里没有()
+    {
+        // 语料:HediffDef 只有 ludeon.rimworld 那一个,test.mod 名下一个都没有。
+        var (stdout, _, code) = Fixture.Run("list", "HediffDef", "--scope", "test.mod");
+        Assert.Equal(RimSearcher.Cli.Runner.ExitNoResults, code);
+
+        Assert.DoesNotContain("No def type named", stdout, StringComparison.Ordinal);
+        Assert.Contains("test.mod", stdout, StringComparison.Ordinal);   // 说破是哪个 scope 筛空的
+        Assert.Contains("1 def of it overall", stdout, StringComparison.Ordinal);  // 并给出快照里的真实数量
+
+        // 另一半:真不存在的类型仍要照直说,否则这条分流就成了一律不认账。
+        var (absent, _, _) = Fixture.Run("list", "NoSuchDefType", "--scope", "test.mod");
+        Assert.Contains("No def type named", absent, StringComparison.Ordinal);
+    }
+
     // ---- 可数名词登记处 ----
 
     [Fact]

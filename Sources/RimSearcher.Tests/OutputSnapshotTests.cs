@@ -38,6 +38,7 @@ public class OutputSnapshotTests
         { "find-miss-compprops",   ["find", "compClass", "CompProperties_Shield"] },
         { "find-miss-field",       ["find", "noSuchField", "x"] },
         { "list-limited",          ["list", "ThingDef", "--limit", "2"] },
+        { "list-scope-empty",      ["list", "HediffDef", "--scope", "test.mod"] },
         { "fields-filtered",       ["fields", "ThingDef", "--path", "comps"] },
         { "values-coverage",       ["values", "compClass"] },
         { "values-miss",           ["values", "noSuchField"] },
