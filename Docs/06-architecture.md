@@ -236,7 +236,10 @@ modlist 别名、scope 组。**不放**:指纹事实(产地在 db meta)、任何
   `get_il`」同步收窄为「**transpiler 前必须**」——IL 的不可替代场景仅此一个,
   Prefix/Postfix 读反编译 C# 即可(05-3)。
 - `references/cli-reference.md`:**生成产物**(见声明层),手改无效、闸会红。
-- `references/decompiler-mcp.md` **[上游]**:现成一份,随裁随改。
+- `references/decompiler-mcp.md` **[上游+实测扩写]**:上游那份只教了 44 个工具中的 13 个
+  (05-9)。要补:继承关系全套、`search_*` 的 regex 与过滤、多 context 管理、
+  Harmony 辅助(`suggest_transpiler_targets` 等)、`batch_get_decompiled_source`/
+  `plan_chunking`;并提醒 `set_decompile_settings` 未知键静默忽略,设完读返回值核对。
 - skill 本身进被测物(04 盲测一节):盲测发现 skill 在教绕路 → 修 CLI。
 - skill 文件住本仓 `skills/`(沿上游布局);会话发现路径到实际项目使用时再裁
   (用户裁决,不阻塞)。
@@ -253,14 +256,26 @@ modlist 别名、scope 组。**不放**:指纹事实(产地在 db meta)、任何
   (`list_members`/单成员/调用图)。master `locate→inspect→read_code` 链路的新对应物。
   **实证权重(07-①)**:read_code 占真实消费流量 52%,此两段式是主干道非旁支,
   skill 教学与盲测覆盖列最高优先级;类型定位模式纳入 kind 前缀语法(07-⑤)。
+  **范围按 05-9 收窄**:DecompilerServer 的 `search_types`/`search_members` 自带 regex
+  与丰富过滤,单 context 内的符号定位已够用;落盘树类型定位的独立价值收缩为
+  **一次查询跨全部源**(外包侧要遍历 context)。据此其优先级下调至与 code-search 同批,
+  不作为第一批必做项。
   残余损失仅两样且可近似:跨源成员级模糊搜索(正则近似)、跨源成员大纲一次视图
   (两段式多一跳,非丢能力);「类型↔def」方向反而升级为精确反查(05-8)。
-- **继承图洞 [已知洞]**:master `trace inheritors` 的 InheritorsMap 无 DecompilerServer
-  对应物,且 05-5 的 callvirt 缺陷补法依赖它。过渡:`code-search` 正则 `:\s*Base\b`
-  文本近似;若痛感明显,InheritorsMap 实现现成可搬(输入即落盘目录),见开放点。
+- ~~**继承图洞**~~ **[已实测消除,05-9]**:DecompilerServer 具备
+  `find_derived_types(transitive)` / `find_base_types` / `get_overrides` /
+  `get_implementations` 全套且走元数据(实测 ThingComp → 378 个派生类型)。
+  InheritorsMap 不需自建,05-5 的 callvirt 补法在外包侧直接可做。
+- **确认存在的洞 [05-9]**:①**版本 diff 的字节基线**——`set_decompile_settings` 只有
+  7 个开关,`LanguageVersion` 不可设且未知键**静默忽略**,master 那条 C#9 锁定的
+  diff 基线确认无法复刻(后备 decompile 命令若兑现可救回);②**单次查询不跨 context**
+  ——多 assembly 可并存但要遍历 alias,属迭代成本;③**任意正则匹配方法体文本**
+  ——`search_string_literals` 只覆盖 IL 字面量,形状搜索仍归 `code-search`。
 - 落盘再生成:短期 master `sync_sources` 代管;**后备记账**:若 master 退役,把
   DecompileService 砍成独立命令带走(自包含百行级,锁 C#9 保 diff 基线,05-2)——
   用现成 ilspycmd 会丢该基线,不取。现在不动手。
+  注:落盘树仅服务 `code-search`(方法体形状搜索)与跨全源类型定位;DecompilerServer
+  自身**不需要**它(load_assembly 实测 0.4 秒自带 warm,无预处理,05-9)。
 
 ## 与 04 顺序的衔接
 
@@ -281,6 +296,4 @@ modlist 别名、scope 组。**不放**:指纹事实(产地在 db meta)、任何
   前定稿即可,倾向 stdout 顶部(stderr 在管道场景会被 LLM 调用方漏读)。
 - mod 设置是否进快照指纹:设置变化会改 patch 结果(03 甲),严格说影响数据身份;
   第一批只在 meta 存设置文件哈希留缝,不参与寻址比对。
-- 继承图是否自建:过渡用 code-search 文本近似(旁路一节);**优先级已按实证下调**
-  (07-③:消费方几乎不用 trace,且已在用正则手搓继承查询)。盲测若显示痛感,
-  搬 master InheritorsMap(输入=落盘目录,实现现成)。
+- ~~继承图是否自建~~ **已关闭**:05-9 实测外包侧全套具备,不自建。

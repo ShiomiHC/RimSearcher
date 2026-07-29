@@ -103,6 +103,60 @@ master 构建产物实测(`.cache/index/manifest.json`,schemaVersion 5):
 上游 CLI 的 `find <fieldPath> <value>`(路径后缀匹配、值精确)就是这个能力,SKILL.md 把它
 列为「C# 类 → 所有使用该类的 Def」的反查主路径。这与 00 决定性论据第 4 条(引用已解析)同源。
 
+## 9. DecompilerServer 实测(2026-07-29,v1.3.7 · 本机装配后)
+
+本节**推翻了本篇此前若干读码推断**。装配:`C:\Users\CCH\tools\decompiler-server\`
+(GitHub release v1.3.7 win-x64,MIT,依赖 .NET 10 运行时,本机 10.0.10 已在);
+MCP 名 `decompiler`,project-local scope。复核:直连 stdio 发 JSON-RPC
+(`probe*-mcp.mjs`,scratchpad,不进库)。
+
+### 工具面:44 个,上游 reference 只教了 13 个
+
+reference 提到的**一个不缺**,另有 31 个未提。与本篇结论相关的关键增补:
+
+- `find_derived_types`(**支持 `transitive`**)/ `find_base_types` / `get_overrides` /
+  `get_implementations` —— **继承关系全套具备**
+- `search_types` / `search_members` / `search_symbols` 均支持 `regex` 与丰富过滤
+  (kind / namespace / declaringType / accessibility / isStatic / genericArity…)
+- `search_string_literals`(IL 字面量正则)、`find_usages`、`get_ast_outline`、
+  `get_xml_doc`、`get_overloads`、`get_member_signature`
+- Harmony 专用:`suggest_transpiler_targets`、`generate_harmony_patch_skeleton`、
+  `generate_detour_stub`、`generate_extension_method_wrapper`
+- 上下文管理:`list_contexts` / `select_context` / `unload` / `set_decompile_settings` /
+  `warm_index` / `clear_caches` / `status` / `get_server_stats`
+- 批量与分块:`batch_get_decompiled_source`、`plan_chunking`、`get_source_slice`
+
+### 实测数据
+
+| 项 | 实测 |
+|---|---|
+| `load_assembly(gameDir)` | **0.4 秒**,自动发现 Assembly-CSharp.dll;16158 types / 76770 methods,`warmed:true`(对照 master:整包反编译落盘 + 7.3 秒索引构建) |
+| `find_derived_types(Verse.ThingComp, transitive)` | 378 个派生类型,分页(`hasMore`/`totalEstimate`) |
+| `get_overrides` | 返回 `baseDefinition` + `overrides[]`,走元数据 |
+| 多 assembly | mod dll 可作独立 context 与本体并存(实测 0Harmony.dll),各查询按 `contextAlias` 路由 |
+| `search_string_literals` | 有效(`"Shield"` 命中 3 条 IL 字面量;`"ShieldBelt"` 0 条 = 确实无此字面量) |
+
+### 对本篇既有结论的修订
+
+1. **§2 表「引用分析」与继承**:「DecompilerServer 无继承图对应物」的判断**错误** ——
+   `find_derived_types(transitive)` + `get_overrides` + `get_implementations` 齐全,
+   且走元数据。§5 记的 `callvirt` 缺陷补法(与继承关系交叉)在外包侧**可直接完成**。
+2. **§2「覆盖面:一次 load_assembly 一个程序集」**:精确但需补充 —— 多 context **可并存**,
+   `list_contexts` 枚举、各查询按 alias 路由。残余差异是**单次查询不跨 context**
+   (要遍历 alias),属迭代成本非能力缺失。
+3. **§2/§6「前置代价」**:load 实测 0.4 秒且自带 warm,「无预处理」比原表述更强。
+4. **§2 末段 diff 基线(不变,且已由实测坐实)**:`set_decompile_settings` 只暴露 7 个开关
+   (usingDeclarations / showXmlDocumentation / namedArguments / makeAssignmentExpressions /
+   alwaysUseBraces / removeDeadCode / introduceIncrementAndDecrement),
+   **`LanguageVersion` 不在其中**;传入未知键(`LanguageVersion`/`languageVersion`)
+   返回 `status:ok` 却**静默忽略**。故 master 那条「锁 C#9 换来两次反编译字节一致」的
+   diff 基线在外包侧**确认无法复刻**(此前是推断,现为实测)。
+   附带教训:该工具正是本方设计明令禁止的「未知参数静默吞掉」形态(06 输出契约),
+   skill 里要提醒调用方 set 完读返回值核对。
+5. **§8 文本引用**:`search_string_literals` 覆盖了「反射用字符串字面量」这一支;
+   仍未覆盖的是**任意正则匹配方法体文本**(如 `public\s+(?:virtual\s+)?void\s+Notify_\w+\(`
+   之类跨全源的形状搜索)—— 这是 `code-search` 保留的独立价值。
+
 ## 复核途径
 
 - 上游提交:`git show <sha>`,上游 worktree 位置见 CLAUDE.local.md(只读)
