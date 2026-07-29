@@ -1,0 +1,11 @@
+```csharp
+// Class Zz.ZzWidget — <ROOT>/Core/ZzWidget.cs:3
+    public class ZzWidget
+    {
+        public void ZzTick()
+        {
+            var x = 1;
+        }
+    }
+
+```

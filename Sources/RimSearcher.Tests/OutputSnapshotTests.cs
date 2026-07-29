@@ -894,6 +894,29 @@ public class OutputSnapshotTests : IDisposable
         Verify("read_code/class-cap-fold", content);
     }
 
+    // 择一提示 + 行数参数的**别名**。`extractClass + lineCount` 会印一行「startLine/lineCount
+    // was not applied」，`extractClass + limit` 一个字不印——而 lineCount 的读取点认的是五个名字
+    // （lineCount / lines / count / limit / maxResults），探测那边只手抄了头三个（参数层指导
+    // §2 甲-1）。后果不是「少了点什么」而是调用方以为自己那个 limit 生效了。
+    //
+    // 这份基线立在改动之前，钉的是当时的现状（那行 note 不在）。修好之后它作为 diff 出现一次，
+    // 现在钉的是修好那一形。
+    [Fact]
+    public async Task ReadCode_ExtractClassWithLimitAlias_IsToldItWasNotApplied()
+    {
+        var (indexer, _, catalog) = BuildIndex(
+            ("ZzWidget.cs",
+                "namespace Zz\n{\n    public class ZzWidget\n    {\n        public void ZzTick()\n"
+                + "        {\n            var x = 1;\n        }\n    }\n}\n"));
+        PathSecurity.Initialize([Path.Combine(_workspace.Root, "Core")]);
+
+        var content = await Run(
+            new ReadCodeTool(indexer, catalog),
+            new { fileName = "ZzWidget.cs", extractClass = "ZzWidget", limit = 5 });
+
+        Verify("read_code/extract-class-limit-alias", content);
+    }
+
     // XML 不该被套进 csharp 围栏
     [Fact]
     public async Task ReadCode_XmlFence()
@@ -1021,6 +1044,27 @@ public class OutputSnapshotTests : IDisposable
         var content = await Run(new InspectTool(indexer, defs, catalog), new { name = "ZzWidgetAlpha" });
 
         Verify("inspect/def", content);
+    }
+
+    // def 模式 + limit 的**别名**。`limit:5` 会印一句「它在这里被忽略了」，`max:5` 一个字不印
+    // ——同一个意图两种披露，而 GetDisplayLimit 认的是 LimitKeys 那五个（limit / maxResults /
+    // max / count / top），探测那边只手抄了头两个（参数层指导 §2 甲-2）。
+    //
+    // 这份基线立在改动之前，钉的是当时的现状（那句 Note 不在）。修好之后它作为 diff 出现一次，
+    // 现在钉的是修好那一形。
+    [Fact]
+    public async Task Inspect_DefMode_LimitAlias_IsToldItWasIgnored()
+    {
+        var (indexer, defs, catalog) = BuildIndex(
+            ("ZzWidgetDef.cs", "namespace Zz { public class ZzWidgetDef { } }"),
+            ("ZzWidgets.xml",
+                "<Defs>\n  <ZzWidgetDef>\n    <defName>ZzWidgetAlpha</defName>\n"
+                + "    <label>alpha widget</label>\n  </ZzWidgetDef>\n</Defs>\n"));
+
+        var content = await Run(
+            new InspectTool(indexer, defs, catalog), new { name = "ZzWidgetAlpha", max = 5 });
+
+        Verify("inspect/def-limit-alias", content);
     }
 
     // ---- M1：inspect 剩下的六形 ----
