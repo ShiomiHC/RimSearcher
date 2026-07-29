@@ -307,16 +307,16 @@ public static class RoslynHelper
             // `Property: ` / `Field: ` / `Method: `——那是把表头说过的话在下面每一行再说一遍
             // （同一条判据见 enum 分支）。locate 的 Members 段一直就是这么排的，两处至此同形。
             var properties = type.Members.OfType<PropertyDeclarationSyntax>().ToList();
-            AppendOutlineGroup(sb, properties, maxMembersPerKind, "Properties", "properties",
+            AppendOutlineGroup(sb, properties, maxMembersPerKind, "Properties", CountedNoun.Properties,
                 prop => $"{Modifiers(prop.Modifiers)}{prop.Type} {prop.Identifier.Text}");
 
             var fields = type.Members.OfType<FieldDeclarationSyntax>().ToList();
-            AppendOutlineGroup(sb, fields, maxMembersPerKind, "Fields", "fields",
+            AppendOutlineGroup(sb, fields, maxMembersPerKind, "Fields", CountedNoun.Fields,
                 field => $"{Modifiers(field.Modifiers)}{field.Declaration.Type} "
                          + string.Join(", ", field.Declaration.Variables.Select(v => v.Identifier.Text)));
 
             var methods = type.Members.OfType<MethodDeclarationSyntax>().ToList();
-            AppendOutlineGroup(sb, methods, maxMembersPerKind, "Methods", "methods",
+            AppendOutlineGroup(sb, methods, maxMembersPerKind, "Methods", CountedNoun.Methods,
                 method => $"{Modifiers(method.Modifiers)}{method.ReturnType} {method.Identifier.Text}"
                           + $"({string.Join(", ", method.ParameterList.Parameters.Select(FormatParameter))})");
 
@@ -335,7 +335,7 @@ public static class RoslynHelper
     // 名字找，而调用方恰恰是不知道剩下那些叫什么才来看大纲的；read_code extractClass 的
     // 上限是 2000 行，Pawn.cs 有 4740 行，照做只会先烧掉 2000 行源码再收到二次截断。
     // 现在 inspect 自己带 limit，全量大纲三百来行，比读一遍类体便宜得多。
-    private static void AppendOutlineFold(StringBuilder sb, int total, int shownCap, string kindPlural)
+    private static void AppendOutlineFold(StringBuilder sb, int total, int shownCap, CountedNoun kindPlural)
     {
         // 文法（缩进、`+N more`、名词构词、括号）归 OutputText.FoldLine 一处，这里只给
         // 「下一步是什么」。此前这一条是全服二十来条折叠行里唯一手拼的一条，成因不是措辞
@@ -357,7 +357,7 @@ public static class RoslynHelper
     // 「这个类型没有这类成员」，比印一个空表头少一行且同样说得清。
     private static void AppendOutlineGroup<T>(
         StringBuilder sb, List<T> members, int maxMembersPerKind,
-        string headerPlural, string foldPlural, Func<T, string> render)
+        string headerPlural, CountedNoun foldPlural, Func<T, string> render)
     {
         if (members.Count == 0) return;
         sb.AppendLine($"  {headerPlural}:");

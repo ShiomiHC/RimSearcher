@@ -124,7 +124,7 @@ var layoutAdvisories = new List<string>(resolvedSources.Notes);
 if (resolvedSources.Shadowed.Count > 0)
 {
     layoutAdvisories.Add(
-        $"{OutputText.Quantity(resolvedSources.Shadowed.Count, "files")} "
+        $"{CountedNoun.Files.Quantity(resolvedSources.Shadowed.Count)} "
         + $"{(resolvedSources.Shadowed.Count == 1 ? "is" : "are")} shadowed by a higher-priority copy "
         + $"in the same mod and {(resolvedSources.Shadowed.Count == 1 ? "is" : "are")} not indexed "
         + "(RimWorld's own file-level override rule).");

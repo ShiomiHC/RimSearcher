@@ -296,8 +296,8 @@ public class OutputSnapshotTests : IDisposable
     // （`1 preview lines` 里 lines 以 s 结尾、不在 NotNouns 里 → 判违规），压根不查词表，本来
     // 就抓得住。漏掉它的是矩阵少了「计数恰好为 1」这一维：两个 ScanStopped 格用的都是 limit = 4。
     //
-    // 这份基线钉的是**现状**（表头由 ScanOutputRenderer 手拼、不走 NounFor 构词），
-    // 下一个 commit 补维度并改产地，届时它会作为 diff 出现。
+    // 这份基线立在改动之前，钉的是当时的现状（表头由 ScanOutputRenderer 手拼、不走构词）。
+    // 补维度并改产地的那个 commit（086acc3）让它作为 diff 出现了一次，现在钉的是修好那一形。
     [Fact]
     public async Task SearchRegex_FirstOnePreviewLineHeader()
     {

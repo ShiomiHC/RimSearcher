@@ -260,7 +260,7 @@ public class ReadCodeTool : ITool
                         : "pass methodName for one member, or startLine to continue";
 
                     classNote = "\n" + Fold.Explicit(
-                        classLines.Length - MaxLineCount, "lines",
+                        classLines.Length - MaxLineCount, CountedNoun.Lines,
                         $"{span} and the cap is {MaxLineCount}; {next}",
                         indent: string.Empty);
                 }
@@ -323,7 +323,7 @@ public class ReadCodeTool : ITool
                 return WithUnresolvedScopeNotice(scope, new ToolResult(
                     plainNotice
                     + $"Line range {startLine + 1}-{startLine + lineCount} exceeds "
-                    + $"file length ({OutputText.Quantity(totalLines, "lines")}) in {path}.", true));
+                    + $"file length ({CountedNoun.Lines.Quantity(totalLines)}) in {path}.", true));
 
             var sb = new StringBuilder();
             sb.AppendLine($"```{Fence(path)}");
@@ -344,7 +344,7 @@ public class ReadCodeTool : ITool
                 // 那个 `of 7` 拦住了一次误算。有总数的那处救了一次，没总数的这处险些误一次。
                 // 「给了 total 就走 `of M` 形」现在由 Fold.Explicit 一处决定，不再逐处手拼。
                 sb.AppendLine("\n" + Fold.Explicit(
-                    totalLines - (startLine + lineCount), "lines",
+                    totalLines - (startLine + lineCount), CountedNoun.Lines,
                     $"pass startLine={startLine + lineCount}",
                     total: totalLines, indent: string.Empty));
             }

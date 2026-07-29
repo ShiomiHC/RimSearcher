@@ -222,7 +222,7 @@ public static class ToolArgs
         var unknown = received.Where(k => !accepted.Contains(NormalizeKey(k))).ToArray();
         if (unknown.Length == 0) return null;
 
-        return $"\n\n_Ignored unknown {OutputText.NounFor(unknown.Length, "parameters")}: "
+        return $"\n\n_Ignored unknown {CountedNoun.Parameters.For(unknown.Length)}: "
             + $"{string.Join(", ", unknown.Select(k => $"'{k}'"))}. "
             + $"{tool.Name} accepts: {string.Join(", ", SchemaPropertyNames(tool.JsonSchema))}._";
     }

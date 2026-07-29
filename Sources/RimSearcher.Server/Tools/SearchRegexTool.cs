@@ -118,7 +118,7 @@ public class SearchRegexTool : ITool
             var filterNote = string.IsNullOrEmpty(fileFilter)
                 ? string.Empty
                 : $" with fileFilter '{fileFilter}' "
-                  + $"(that filter left {OutputText.Quantity(diagnostics.CandidateFiles, "files")} to search)";
+                  + $"(that filter left {CountedNoun.Files.Quantity(diagnostics.CandidateFiles)} to search)";
 
             // 索引层是并发扫描后从 ConcurrentBag 收口的，文件之间的先后完全看线程调度；
             // 不排一下，同一次查询重跑两遍文件顺序就能不一样。

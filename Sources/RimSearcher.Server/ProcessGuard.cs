@@ -73,7 +73,7 @@ public static class ProcessGuard
             await Task.Delay(TimeSpan.FromMinutes(1));
             if (DateTime.UtcNow - _lastActivityUtc >= timeout)
             {
-                await ExitAsync($"idle for {OutputText.Quantity(idleTimeoutMinutes, "minutes")}", null);
+                await ExitAsync($"idle for {CountedNoun.Minutes.Quantity(idleTimeoutMinutes)}", null);
                 return;
             }
         }

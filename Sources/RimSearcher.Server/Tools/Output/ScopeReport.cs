@@ -14,9 +14,9 @@ public sealed class ScopeReport
     // 在 scope 'HAR' 下 Members 段空了、触发 Files 段模糊查名，同一个 miho 就报 8。
     // 调用方看到同一个源两次计数不一致，只能对整份脚注打折使用——R48 花力气建起来的合计
     // 就此变成一个不可复现的数。构成一列出来，两个数立刻都对得上。
-    private readonly Dictionary<string, int> _byNoun = new(StringComparer.Ordinal);
+    private readonly Dictionary<CountedNoun, int> _byNoun = [];
 
-    public void Add<T>(ScopedResult<T> result, string? noun = null)
+    public void Add<T>(ScopedResult<T> result, CountedNoun? noun = null)
     {
         foreach (var (source, count) in result.OutOfScope)
         {
@@ -37,7 +37,7 @@ public sealed class ScopeReport
     // 只有 "matches" 说得准；trace inheritors 那边全是子类，故由调用方点名。
     // extra：调用方独有的、只有把落选那批算进来才成立的一句话（trace inheritors 用它给出
     // 全域树的形状）。挂在逐源列表之后、出路那句之前。
-    public string? Render(ScopeSelection scope, string noun = "matches", string? extra = null)
+    public string? Render(ScopeSelection scope, CountedNoun? noun = null, string? extra = null)
     {
         if (_outOfScope.Count == 0) return null;
 
@@ -53,9 +53,9 @@ public sealed class ScopeReport
         // 只有一段参与时就用那一段自己的名词。泛称 "matches" 是为跨段累加准备的，而单段时
         // 它凭空造出第二个计数词：正文写着 `4 files`、脚注紧跟着写 `3 matches`，同一屏两个
         // 名词指的是同一类东西，读者得先确认它们不是两个量。
-        var summaryNoun = _byNoun.Count == 1 ? _byNoun.Keys.First() : noun;
+        var summaryNoun = _byNoun.Count == 1 ? _byNoun.Keys.First() : noun ?? CountedNoun.Matches;
         var total = _outOfScope.Count > 1
-            ? $"{OutputText.Quantity(_outOfScope.Values.Sum(), summaryNoun)}{Composition()} — "
+            ? $"{summaryNoun.Quantity(_outOfScope.Values.Sum())}{Composition()} — "
             : string.Empty;
 
         var sb = new StringBuilder();
@@ -74,8 +74,8 @@ public sealed class ScopeReport
 
         var parts = _byNoun
             .OrderByDescending(kv => kv.Value)
-            .ThenBy(kv => kv.Key, StringComparer.Ordinal)
-            .Select(kv => OutputText.Quantity(kv.Value, kv.Key));
+            .ThenBy(kv => kv.Key.Plural, StringComparer.Ordinal)
+            .Select(kv => kv.Key.Quantity(kv.Value));
 
         return $" ({string.Join(" + ", parts)})";
     }

@@ -1,78 +1,117 @@
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
+using RimSearcher.Core;
 
 namespace RimSearcher.Tests;
 
-// 词表与产品的**同步**闸。
+// 计数名词名单的**保鲜**闸。
 //
-// GrammarRules.CountedNouns 那张表的注释从落地那天起就写着「新加一个计数名词却不登记在这里，
-// 那个槽位的单复数就没人守」——警告在，机制不在。于是它真的漂了：28 项里 `changed sources`
-// 在产品侧一处字面量都没有（`git log -S'"changed sources"' -- Sources/` 只有引入 CountedNouns
-// 的那一个 commit），而产品那边一直叫 `checked sources`，那个词从没进过表。这一格从第一天起
-// 既守不住任何东西、也没有任何人守。
+// 「产品里有个计数名词没登记」这个方向已经不需要闸了：`CountedNoun` 是个类型，构造函数私有，
+// 名词槽只收它——没登记的词编译期就传不进去。这一条此前由本文件的一个源码扫描断言守着
+// （落地时它抓到了 `checked sources`），M3 之后由编译器接管，故删掉。
 //
-// 隔壁 OutputGrammarGateTests 抓不到这一形：它吃的是**输出文本**，而输出里那个名词写成什么样
-// 就是什么样，「它有没有被登记」在文本里看不见。故这一条改吃**产品源码**。
+// 剩下的是**反方向**：名单里的词不再被任何人用了，编译器不会说话。`changed sources` 与
+// `name keys` 当年逃掉的正是这一侧——两个词从没对应过任何产品字面量，而闸照绿了很久
+// （见「单一产地重构指导」§2 甲）。
 //
-// 两个方向各有各的判据，且都是纯文本判定——不共用产品的任何判断（§3 判据六）：
-//   - 正向：`NounFor` / `Quantity` 第二个实参上的字面量，按定义就是计数名词，必须在表里；
-//   - 反向：表里的词必须在产品源码里出现过，否则它守的是一句没人说的话。
-//
-// 反向那条有一个已知的盲区：`defs` 曾经是死项，却因为 AppConfig 里有个同名**配置键**而看起来
-// 活着。文本判定分不出这两者，故它是靠手工核对删掉的（见本轮 commit）。要把这个盲区也堵上，
-// 得让计数名词有自己的类型（`单一产地重构指导` 的 M3），那是另一步。
+// M3 顺带堵掉了这一侧原先的盲区。此前这条判据是「表里的词必须在产品源码里作为字符串出现过」，
+// 于是 `defs` 这个死项因为 `AppConfig` 里有个同名**配置键**而看起来活着，只能靠手工核对删掉。
+// 现在查的是 `CountedNoun.Defs` 这样的**成员引用**——配置键名与计数名词在文本上不再同形，
+// 盲区没有了。
 public class CountedNounRegistryTests
 {
-    // `OutputText.NounFor(n, "X")` / `OutputText.Quantity(n, "X")`。第一个实参允许含一层括号
-    // （`value.GetArrayLength()`），不允许含字符串——那样第二个槽就认错了。
-    private static readonly Regex NounLiteral = new(
-        @"\b(?:NounFor|Quantity)\(\s*[^(),""]*(?:\([^()""]*\))?[^(),""]*,\s*""(?<noun>[^""]+)""",
-        RegexOptions.Compiled);
-
-    // 退化守卫。正则一旦因为调用写法变化而失配，这条闸会静静地全绿——与矩阵那边的 Expect
-    // 同一个理由：查不到东西的检查与查过了都合格的检查，结果长得一模一样。
-    //
-    // 落地时实测 29 处，这里取 20：产品新增调用只会让它更宽松，而真的掉到 20 以下时，要么是
-    // 正则跟不上写法了，要么是构词入口被收敛了（M3 那一步就会这样）——两种都该被逼着重看一眼。
-    private const int KnownCallSites = 20;
-
     [Fact]
-    public void EveryCountedNounLiteralInTheProduct_IsRegistered()
+    public void EveryRegisteredNoun_IsActuallyUsedByTheProduct()
     {
-        var unregistered = new List<string>();
-        var seen = 0;
+        var sources = ProductSources().ToList();
 
-        foreach (var (path, text) in ProductSources())
-        foreach (Match m in NounLiteral.Matches(text))
-        {
-            seen++;
-            var noun = m.Groups["noun"].Value;
-            if (GrammarRules.IsRegisteredCountedNoun(noun)) continue;
-            unregistered.Add($"{Path.GetFileName(path)}：'{noun}' 走了构词却不在 CountedNouns 里");
-        }
+        // 声明本身不算引用：CountedNoun.cs 里每一条都写着自己的名字。
+        var uses = sources
+            .Where(s => Path.GetFileName(s.Path) != "CountedNoun.cs")
+            .Select(s => s.Text)
+            .ToList();
 
-        Assert.True(
-            seen >= KnownCallSites,
-            $"只扫到 {seen} 处构词调用（至少应有 {KnownCallSites} 处）——正则没跟上产品的写法，"
-            + "这道闸已经形同虚设。");
-
-        Assert.True(unregistered.Count == 0,
-            $"{unregistered.Count} 个计数名词没登记，它们的单复数没人守：\n"
-            + string.Join("\n", unregistered.Distinct()));
-    }
-
-    [Fact]
-    public void EveryRegisteredCountedNoun_IsSpokenByTheProduct()
-    {
-        var sources = ProductSources().Select(s => s.Text).ToList();
-
-        var dead = GrammarRules.RegisteredCountedNouns
-            .Where(noun => !sources.Any(t => t.Contains($"\"{noun}\"", StringComparison.Ordinal)))
+        var dead = MemberNames()
+            .Where(m => !uses.Any(t => Regex.IsMatch(t, $@"\bCountedNoun\.{Regex.Escape(m)}\b")))
             .ToList();
 
         Assert.True(dead.Count == 0,
-            $"{dead.Count} 个词登记了却没有任何产品字面量对应，它们守的是没人说的话：\n"
+            $"{dead.Count} 个词登记了却没有任何产品调用点，它们守的是没人说的话：\n"
             + string.Join("\n", dead));
+    }
+
+    // 名单与成员名一一对应。少一条说明有人给 CountedNoun 加了个不进 Registry 的字段——
+    // 那样它在闸这边隐形（`GrammarRules.CountedNouns` 取的是 `All`），产品那边却照用，
+    // 于是那个槽位的单复数又没人守了，正好回到 M3 要消掉的那一形。
+    [Fact]
+    public void EveryPublicNoun_IsInTheRegistry()
+    {
+        var declared = MemberNames().ToHashSet(StringComparer.Ordinal);
+        var registered = typeof(CountedNoun)
+            .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(f => f.FieldType == typeof(CountedNoun))
+            .Select(f => f.Name)
+            .ToList();
+
+        Assert.Equal(registered.OrderBy(x => x, StringComparer.Ordinal).ToList(),
+            declared.OrderBy(x => x, StringComparer.Ordinal).ToList());
+        Assert.Equal(registered.Count, CountedNoun.All.Count);
+    }
+
+    // 每个词的单数式逐条钉住。`Singularize` 是回推式的（按词尾猜），改动它会静默地把某个词
+    // 写成 `entrie` / `content matche` 这类——而那正是 R30 那批缺陷的形状。名单是封闭的，
+    // 故这件事做得完：这里列的必须与 CountedNoun.All 一一对上，多一条少一条都判红。
+    [Fact]
+    public void EveryRegisteredNoun_HasTheSingularWeExpect()
+    {
+        Dictionary<string, string> expected = new(StringComparer.Ordinal)
+        {
+            ["C# types"] = "C# type",
+            ["members"] = "member",
+            ["XML defs"] = "XML def",
+            ["content matches"] = "content match",
+            ["files"] = "file",
+            ["matching files"] = "matching file",
+            ["matching lines"] = "matching line",
+            ["preview lines"] = "preview line",
+            ["subclasses"] = "subclass",
+            ["levels"] = "level",
+            ["methods"] = "method",
+            ["properties"] = "property",
+            ["fields"] = "field",
+            ["types"] = "type",
+            ["lines"] = "line",
+            ["entries"] = "entry",
+            ["changed files"] = "changed file",
+            ["checked sources"] = "checked source",
+            ["versions"] = "version",
+            ["C# paths"] = "C# path",
+            ["XML paths"] = "XML path",
+            ["matches"] = "match",
+            ["items"] = "item",
+            ["parameters"] = "parameter",
+            ["conditional folders"] = "conditional folder",
+            ["minutes"] = "minute",
+        };
+
+        Assert.Equal(
+            expected.Keys.OrderBy(x => x, StringComparer.Ordinal).ToList(),
+            CountedNoun.All.Select(n => n.Plural).OrderBy(x => x, StringComparer.Ordinal).ToList());
+
+        foreach (var noun in CountedNoun.All)
+            Assert.Equal(expected[noun.Plural], noun.Singular);
+    }
+
+    // `CountedNoun.cs` 里那批 `public static readonly CountedNoun Xxx = Register("…");`。
+    // 用文本读而不是反射，是为了让上面那条「都进了 Registry 吗」有一个**独立**的第二来源：
+    // 两边都走反射的话，漏进 Registry 的字段两边同时看不见。
+    private static IEnumerable<string> MemberNames()
+    {
+        var text = ProductSources().Single(s => Path.GetFileName(s.Path) == "CountedNoun.cs").Text;
+
+        foreach (Match m in Regex.Matches(
+                     text, @"public static readonly CountedNoun (?<name>\w+) = Register\("))
+            yield return m.Groups["name"].Value;
     }
 
     private static IEnumerable<(string Path, string Text)> ProductSources(

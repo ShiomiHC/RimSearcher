@@ -76,7 +76,7 @@ public sealed record LocateSection
 
     // Tally 那一格与折叠行共用的名词，如 "C# types"。共用是判据而不是巧合：两处数的是
     // 同一批东西，措辞分家就会长出两个名词指同一类东西（见 ScopeReport.Composition 里同型的坑）。
-    public required string Noun { get; init; }
+    public required CountedNoun Noun { get; init; }
 
     // 行文本，**不含**行尾的来源标签（那由 renderer 按整段判完再挂，见 LocateRow）。
     public required IReadOnlyList<LocateRow> Rows { get; init; }

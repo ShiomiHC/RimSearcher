@@ -444,14 +444,14 @@ public static class ModLayoutResolver
         {
             var head = string.Join(", ", includedNames.Take(3));
             var rest = includedNames.Count - Math.Min(3, includedNames.Count);
-            notes.Add($"{OutputText.Quantity(includedNames.Count, "conditional folders")} in "
+            notes.Add($"{CountedNoun.ConditionalFolders.Quantity(includedNames.Count)} in "
                       + $"{LoadFoldersFileName} included unconditionally "
                       + $"({head}{(rest > 0 ? $" and {rest} more" : string.Empty)}) — "
                       + "results from inside one come back tagged `[conditional: <folder>]`");
         }
 
         if (skipped > 0)
-            notes.Add($"{OutputText.Quantity(skipped, "conditional folders")} skipped by active_mods");
+            notes.Add($"{CountedNoun.ConditionalFolders.Quantity(skipped)} skipped by active_mods");
 
         folders.Reverse();
         return folders;

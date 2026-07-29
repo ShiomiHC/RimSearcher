@@ -124,12 +124,12 @@ public sealed record ScanCompleteness(
                 + ScanReport.NameSample(TimedOutNames));
 
         if (UnreadableFiles > 0)
-            reasons.Add($"{OutputText.Quantity(UnreadableFiles, "files")} could not be read "
+            reasons.Add($"{CountedNoun.Files.Quantity(UnreadableFiles)} could not be read "
                         + $"and {(UnreadableFiles == 1 ? "was" : "were")} skipped entirely"
                         + ScanReport.NameSample(UnreadableNames));
 
         if (LineCappedFiles > 0)
-            reasons.Add($"{OutputText.Quantity(LineCappedFiles, "files")} "
+            reasons.Add($"{CountedNoun.Files.Quantity(LineCappedFiles)} "
                         + $"{(LineCappedFiles == 1 ? "was" : "were")} "
                         + $"only scanned to line {LineCap}"
                         + ScanReport.NameSample(LineCappedNames));

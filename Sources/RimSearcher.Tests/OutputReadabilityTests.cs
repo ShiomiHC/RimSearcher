@@ -858,13 +858,15 @@ public class OutputReadabilityTests : IDisposable
     [InlineData(2, "C# types")]
     public void FoldLine_AgreesInNumberWithItsCount(int hidden, string expected)
     {
-        var fold = Fold.Line(hidden, 1, hiddenBatch: null, truncatedByLimit: true, noun: "C# types");
+        var fold = Fold.Line(hidden, 1, hiddenBatch: null, truncatedByLimit: true, noun: CountedNoun.CSharpTypes);
 
         Assert.NotNull(fold);
         Assert.Contains($"+{hidden} more {expected} (", fold);
     }
 
-    // 裸去 's' 会写出 entrie / content matche / propertie
+    // 裸去 's' 会写出 entrie / content matche / propertie。
+    // 这里只钉几个**构词规则各不相同**的代表；名单里每一个词的单数式由
+    // CountedNounRegistryTests.EveryRegisteredNoun_HasTheSingularWeExpect 逐词钉住。
     [Theory]
     [InlineData("entries", "entry")]
     [InlineData("content matches", "content match")]
@@ -874,7 +876,9 @@ public class OutputReadabilityTests : IDisposable
     [InlineData("XML defs", "XML def")]
     [InlineData("matching files", "matching file")]
     public void Singular_IsBuiltBackFromEachPluralActuallyInUse(string plural, string singular)
-        => Assert.Equal($"1 {singular}", OutputText.Quantity(1, plural));
+        => Assert.Equal(
+            $"1 {singular}",
+            CountedNoun.All.Single(n => n.Plural == plural).Quantity(1));
 
     // R30 的第二半：`(s)` 那类偷懒写法。它比 `1 C# types` 更难看出来，因为读者会自动补全，
     // 但补全不了动词——`1 file(s) were only scanned` 展开成单数就是病句。故 N=1 的两条尾注

@@ -111,7 +111,7 @@ public static class ScopeArgs
     {
         JsonValueKind.String => $"the string '{ToolArgs.ForEcho(value.GetString() ?? string.Empty, 40)}'",
         JsonValueKind.True or JsonValueKind.False => $"the boolean {value.ValueKind.ToString().ToLowerInvariant()}",
-        JsonValueKind.Array => $"an array of {OutputText.Quantity(value.GetArrayLength(), "items")}",
+        JsonValueKind.Array => $"an array of {CountedNoun.Items.Quantity(value.GetArrayLength())}",
         JsonValueKind.Object => "an object",
         _ => value.ValueKind.ToString().ToLowerInvariant()
     };

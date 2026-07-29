@@ -46,7 +46,7 @@ public static class Fold
     //     的 effectiveLimit = Min(limit, cutoff)）。原先这里一律劝 'all'，调用方照做后
     //     一条也没多出来，还会把「+N more」读成服务端在敷衍。
     public static string? Line<T>(
-        ScopedResult<T> result, string noun, string indent = "  ", ResultLimit? limit = null,
+        ScopedResult<T> result, CountedNoun noun, string indent = "  ", ResultLimit? limit = null,
         string? capAction = null, string? hiddenBatch = null)
         => Line(
             result.HiddenCount, result.Items.Count,
@@ -66,7 +66,7 @@ public static class Fold
         // 后面，与它挤成一句。
         string? hiddenBatch,
         bool truncatedByLimit,
-        string noun,
+        CountedNoun noun,
         string indent = "  ",
         ResultLimit? limit = null,
         // 顶到硬上限时「怎么才能看到剩下的」因工具而异。inheritors 没有 offset、也没有任何
@@ -109,7 +109,7 @@ public static class Fold
         // 于是 `... +1938 more` 紧跟在 Properties 组末尾时读起来像「还有 1938 个 property」，
         // 而它数的是三类之和。全服文法（README「低 Token 消耗」一节）本就要求这个槽有名词。
         var batch = hiddenBatch is { Length: > 0 } b ? $"{b}, " : string.Empty;
-        return $"{indent}... +{hiddenCount} more {OutputText.NounFor(hiddenCount, noun)} ({batch}{hint})";
+        return $"{indent}... +{hiddenCount} more {noun.For(hiddenCount)} ({batch}{hint})";
     }
 
     // 下一步由调用方**显式给出**的那一形。
@@ -126,16 +126,17 @@ public static class Fold
     // 名词的单复数也在这里定，调用方一处也不许自己拼——它们此前全都不做这件事
     // （`+1 more entries` / `+1 more lines` / `+1 more types`），而 list_directory 同一份输出的
     // 表头是走构词的（`12 entries`，那处注释还专门写着「不写 `1 entries`」）：同一屏上同一个
-    // 名词数同一批东西、四行之隔两种写法。其余 19 种折叠行全走 NounFor，故那三处是例外而不是
+    // 名词数同一批东西、四行之隔两种写法。其余 19 种折叠行全走构词，故那三处是例外而不是
     // 另一种规矩。
     //
     // 实现在 Core 的 OutputText.FoldLine，这里只是入口。搬下去是因为**第六个**调用方在 Core 里：
     // 成员大纲的文本整段由 RoslynHelper 拼（inspect 只是把它原样接进返回），它够不到这个
     // 命名空间，于是那一条折叠行一直是全服唯一手拼的一条。而这一形不含任何成因判断——
-    // 下一步整句由调用方给——正好落在 OutputText 那条既有边界的可下沉一侧（NounFor 因同一个
-    // 理由早已在那儿）。上面三个成员下不去：它们要读 ScopeArgs.HardLimit 与 ResultLimit。
+    // 下一步整句由调用方给——正好落在 OutputText 那条既有边界的可下沉一侧（构词因同一个理由
+    // 早已在 Core，现在住在 CountedNoun）。上面三个成员下不去：它们要读 ScopeArgs.HardLimit
+    // 与 ResultLimit。
     public static string? Explicit(
-        int hiddenCount, string noun, string nextStep, int? total = null, string indent = "  ")
+        int hiddenCount, CountedNoun noun, string nextStep, int? total = null, string indent = "  ")
         => OutputText.FoldLine(hiddenCount, noun, nextStep, total, indent);
 
     // 每文件预览的折叠行。search_regex 与 trace usages 共用，且它是全语料里出现最频的一条
@@ -149,7 +150,7 @@ public static class Fold
     // 沿用 R33 的 `N of M` 读法：**这一个计数惯用法**里的 of 表示没给全（不是「凡 of 皆截断」
     // ——一半的 `of` 是普通介词，见 GrammarRules 规则三）。
     public static string PerFile(int hiddenCount, int totalInFile, string indent = "  ")
-        => $"{indent}... +{hiddenCount} more of {OutputText.Quantity(totalInFile, "matching lines")} in this file";
+        => $"{indent}... +{hiddenCount} more of {CountedNoun.MatchingLines.Quantity(totalInFile)} in this file";
 
     // 「怎么才能拿到更多」这半句不逐文件印，整份返回里说一次（同 §R19：逐行一模一样的东西
     // 上提到表头/脚注）。且只在这次真有文件被折叠时才印——没有折叠就没有这条。

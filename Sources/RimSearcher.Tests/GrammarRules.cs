@@ -30,34 +30,27 @@ public readonly record struct GrammarViolation(string Rule, string Line, string 
 
 public static class GrammarRules
 {
-    // 受单复数、名词槽两组规则覆盖的名词。**这就是本闸的覆盖面**：新加一个计数名词却不登记在
-    // 这里，那个槽位就没人守——故这张表要与产品代码里那批名词字面量同步。
+    // 受单复数、名词槽两组规则覆盖的名词。**这就是本闸的覆盖面**：新加一个计数名词却不登记，
+    // 那个槽位就没人守。
     //
-    // 「同步」此前只是这条注释里的一句话，于是表从落地那天起就漂着：`changed sources` 与
+    // 名单不在这里，在产品侧的 `CountedNoun`——这里只取它。此前这是一张手抄的字面量表，
+    // 「与产品同步」只是表头一句注释，于是它从落地那天起就漂着：`changed sources` 与
     // `name keys` 在产品侧一处对应的字面量都没有，而产品真正在数的 `checked sources` 从没进过
-    // 表。现在那件事由 CountedNounRegistryTests 双向钉住（产品有词必登记、登记必有产品字面量）。
+    // 表。现在名词是个类型，赋值处就是登记处，抄错这件事在编译期就不成立了。
     //
-    // `defs` 也是死项，但它是手工删的：产品里确有 `"defs"` 字面量，那是 AppConfig 的**配置键名**
-    // 而不是计数名词，纯文本判定分不出这两者。这个盲区要靠给计数名词一个类型来堵（M3）。
-    //
-    // 只收复数式，单数一律由 OutputText.NounFor 现算：闸与产品共用同一个构词函数，否则
-    // 「这里说该写 match」与「那里写出 matche」会各自成立。
+    // 照 §3 判据六：**只取名单，不取判断**。下面每一条规则的判据仍是这里自己写的——闸问的是
+    // 「文本里出现了名单外的计数名词吗」，不是「产品那边怎么算的」。
     private static readonly string[] CountedNouns =
-    [
-        "C# types", "XML defs", "members", "content matches", "files", "matching files",
-        "matching lines", "preview lines", "changed files", "checked sources", "entries",
-        "lines", "subclasses", "items", "types", "methods", "properties", "fields",
-        "levels", "minutes", "conditional folders", "versions", "C# paths", "XML paths",
-        "parameters", "matches",
-    ];
+        CountedNoun.All.Select(n => n.Plural).ToArray();
 
-    // 登记名词的两种合法写法：复数式本身，与 NounFor 现算出来的单数式。两个名词槽在 N==1 时
-    // 印的正是后者（`... +1 more C# type`），只认复数式的话那一侧整片都是假阳性。
+    // 登记名词的两种合法写法：复数式本身，与它的单数式。两个名词槽在 N==1 时印的正是后者
+    // （`... +1 more C# type`），只认复数式的话那一侧整片都是假阳性。
     //
-    // 单数式仍不入 CountedNouns：那张表是**与产品字面量同步的名单**，产品侧传的一律是复数式，
-    // 表里多出一批产品从不传的词，下一次核对就分不清哪些是漏删的死项。
+    // 单数式由产品那边算（`CountedNoun.Singular`）：闸与产品共用同一个构词结果，否则
+    // 「这里说该写 match」与「那里写出 matche」会各自成立。这仍是取名单，不是取判断——
+    // 单数式是名词自身的一个属性，与「什么时候该用它」无关。
     private static readonly HashSet<string> CountedNounForms = new(
-        CountedNouns.Concat(CountedNouns.Select(p => OutputText.NounFor(1, p))),
+        CountedNoun.All.SelectMany(n => new[] { n.Plural, n.Singular }),
         StringComparer.Ordinal);
 
     // 名词槽里那个词是不是登记在案。
@@ -67,15 +60,6 @@ public static class GrammarRules
     // 表里的词生效。三条合起来：没登记的名词，覆盖是零。这个函数是那个零的补丁。
     private static bool IsCountedNoun(string noun)
         => CountedNounForms.Contains(noun);
-
-    // 给同步闸（CountedNounRegistryTests）看的两个入口。它判的是「表与产品源码对不对得上」，
-    // 与本文件判输出文本是两件事，故只借名单、不借判断——正好是 §3 判据六那条边界。
-    //
-    // 登记式只暴露复数式：产品侧传的一律是复数式，单数式是 NounFor 现算出来的，拿它去对源码
-    // 字面量只会找不到。
-    public static IReadOnlyList<string> RegisteredCountedNouns => CountedNouns;
-
-    public static bool IsRegisteredCountedNoun(string noun) => CountedNounForms.Contains(noun);
 
     // tail 是不是**以**一个登记名词开头。`N of M` 那个槽后面还跟着句子的其余部分
     // （`10 of 21 C# types (1 at 100%)`），故只能判词头。
@@ -293,9 +277,10 @@ public static class GrammarRules
                 }
             }
 
-            foreach (var plural in CountedNouns)
+            foreach (var noun in CountedNoun.All)
             {
-                var singular = OutputText.NounFor(1, plural);
+                var plural = noun.Plural;
+                var singular = noun.Singular;
                 foreach (Match m in Regex.Matches(line, $@"\b(?<n>\d+) {Regex.Escape(singular)}\b"))
                     if (int.Parse(m.Groups["n"].Value) != 1)
                         found.Add(new GrammarViolation("单复数", line,
@@ -450,9 +435,9 @@ public static class GrammarRules
     // 名词落在词表之外时这条跳过——见 CountedNouns 的说明。
     private static void HeaderAndFoldAgree(string text, List<GrammarViolation> found)
     {
-        foreach (var plural in CountedNouns)
+        foreach (var noun in CountedNoun.All)
         {
-            var either = $"(?:{Regex.Escape(plural)}|{Regex.Escape(OutputText.NounFor(1, plural))})";
+            var either = $"(?:{Regex.Escape(noun.Plural)}|{Regex.Escape(noun.Singular)})";
 
             var header = Regex.Match(text, $@"\b(?<n>\d+) of (?:the )?(?:at least )?(?<m>\d+) {either}\b");
             if (!header.Success) continue;
@@ -466,7 +451,7 @@ public static class GrammarRules
             if (n + hidden == total) continue;
 
             found.Add(new GrammarViolation("自洽", fold.Value,
-                $"'{plural}' 段表头说 {n} of {total}，折叠行说 +{hidden}，{n} + {hidden} != {total}"));
+                $"'{noun}' 段表头说 {n} of {total}，折叠行说 +{hidden}，{n} + {hidden} != {total}"));
         }
     }
 

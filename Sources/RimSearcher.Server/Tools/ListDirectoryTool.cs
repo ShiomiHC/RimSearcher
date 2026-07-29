@@ -215,7 +215,7 @@ public class ListDirectoryTool : ITool
 
             // 单复数走全服共用的构词（README「低 Token 消耗」：不写 `1 entries`）。只有一项的
             // 目录并不罕见——Mods 下一个只放 About/ 的壳目录就是。
-            var count = OutputText.Quantity(all.Count, "entries");
+            var count = CountedNoun.Entries.Quantity(all.Count);
 
             // 目录本身落在条件加载目录里时，这一整屏文件名都是条件性内容。标记挂在**表头那一行**
             // 而不是逐项挂：条件是整个目录的属性，逐项印一模一样的东西是把同一句话说一百遍（R19）。
@@ -238,7 +238,7 @@ public class ListDirectoryTool : ITool
             // 三分支（那三支问的是「是谁砍掉的」，而这里谁也没砍，只是还没翻到）。
             else if (shownThrough < all.Count)
                 result += "\n" + Fold.Explicit(
-                    all.Count - shownThrough, "entries",
+                    all.Count - shownThrough, CountedNoun.Entries,
                     $"pass offset={shownThrough} for the next page"
                     + (limit >= MaxEntries ? $"; {MaxEntries} is the server cap per page" : ", or a larger limit"),
                     indent: string.Empty);

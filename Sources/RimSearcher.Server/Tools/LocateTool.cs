@@ -144,7 +144,7 @@ public class LocateTool : ITool
             // 短名/全名的合并在索引层完成（见 SourceIndexer.CollapseNameAliases）——那里是截断
             // 之前，计数才对得上；在这里折叠只会把已经被 limit 砍过的一批再去一次重。
             var types = _sourceIndexer.FuzzySearchTypes(typeSearchTerm, scope, limit.Count);
-            report.Add(types, "C# types");
+            report.Add(types, CountedNoun.CSharpTypes);
 
             if (types.Items.Count > 0)
             {
@@ -159,7 +159,7 @@ public class LocateTool : ITool
                         entry.SourceName));
                 }
 
-                sections.Add(Section(types, "C# Types", "C# types", rows));
+                sections.Add(Section(types, "C# Types", CountedNoun.CSharpTypes, rows));
             }
         }
 
@@ -182,7 +182,7 @@ public class LocateTool : ITool
             // Scale 放大后仍夹在服务端硬上限内
             var members = _sourceIndexer.SearchMembersByKeywords(
                 keywords.ToArray(), scope, limit.Scale(3).Count, memberKinds);
-            report.Add(members, "members");
+            report.Add(members, CountedNoun.Members);
 
             if (members.Items.Count > 0)
             {
@@ -219,7 +219,7 @@ public class LocateTool : ITool
                 sections.Add(new LocateSection
                 {
                     Name = "Members",
-                    Noun = "members",
+                    Noun = CountedNoun.Members,
                     Rows = rows,
                     // 这一段的截断是两层的（ScopeFilter 的 limit 加每组配额），故显示数要另数：
                     // Rows 里还混着子组标题，ScopedResult 也只看得见第一层。
@@ -244,7 +244,7 @@ public class LocateTool : ITool
         {
             var defSearchTerm = query.DefFilter ?? QueryParser.GetCombinedSearchTerm(query);
             var defs = _defIndexer.FuzzySearch(defSearchTerm, scope, limit.Count);
-            report.Add(defs, "XML defs");
+            report.Add(defs, CountedNoun.XmlDefs);
 
             if (defs.Items.Count > 0)
             {
@@ -269,13 +269,13 @@ public class LocateTool : ITool
                         entry.SourceName));
                 }
 
-                sections.Add(Section(defs, "XML Defs", "XML defs", rows));
+                sections.Add(Section(defs, "XML Defs", CountedNoun.XmlDefs, rows));
             }
 
             if (query.Keywords.Count > 0)
             {
                 var defsByContent = _defIndexer.SearchByContent(query.Keywords.ToArray(), scope, limit.Count);
-                report.Add(defsByContent, "content matches");
+                report.Add(defsByContent, CountedNoun.ContentMatches);
 
                 if (defsByContent.Items.Count > 0)
                 {
@@ -299,7 +299,7 @@ public class LocateTool : ITool
                             entry.SourceName));
                     }
 
-                    sections.Add(Section(defsByContent, "Content Matches", "content matches", rows));
+                    sections.Add(Section(defsByContent, "Content Matches", CountedNoun.ContentMatches, rows));
                 }
             }
         }
@@ -365,7 +365,7 @@ public class LocateTool : ITool
                 // 把几十条模糊文件命中的 out-of-scope 计数灌进去，脚注的数字就不再对应正文。
                 // 精确补充那一支计的是精确查表自己的落选数，两份不相加——相加会把同一条路径
                 // 数两遍。
-                report.Add(!wantsFileFallback && queryIsFileName ? exactFiles : files, "files");
+                report.Add(!wantsFileFallback && queryIsFileName ? exactFiles : files, CountedNoun.Files);
 
                 // 这一段的总数：兜底那一支列出来的是模糊结果（可能被 limit 砍过），故总数是
                 // 「列出的 + 被砍掉的」；精确补充那一支本来就只列同名的那几条，没有被砍的。
@@ -394,7 +394,7 @@ public class LocateTool : ITool
                 sections.Add(new LocateSection
                 {
                     Name = "Files",
-                    Noun = "files",
+                    Noun = CountedNoun.Files,
                     Rows = rows,
                     Shown = items.Count,
                     Total = fileTotal,
@@ -481,7 +481,7 @@ public class LocateTool : ITool
     // 五段里有四段的形状是一样的：显示数、总数、满分数、来源构成、两种截断标记全取自
     // 同一份 ScopedResult。只有 Members（两层截断）与 Files（两支不同的总数算法）要自己拼。
     private static LocateSection Section<T>(
-        ScopedResult<T> result, string name, string noun, IReadOnlyList<LocateRow> rows)
+        ScopedResult<T> result, string name, CountedNoun noun, IReadOnlyList<LocateRow> rows)
         => new()
         {
             Name = name,

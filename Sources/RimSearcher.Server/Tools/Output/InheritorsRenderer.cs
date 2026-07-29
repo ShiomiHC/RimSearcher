@@ -77,7 +77,7 @@ public static class InheritorsRenderer
         // depth 2/3/4，无折叠）。越界脚注只在窄 scope 时出现且只劝人放宽，方向恰好相反，
         // 故这条得写在这里。
         var fold = Fold.Line(
-            output.Inheritors, "subclasses", indent: "", limit: output.Limit,
+            output.Inheritors, CountedNoun.Subclasses, indent: "", limit: output.Limit,
             capAction: "re-trace a listed type as its own root (depths then restart from it), "
                        + "or narrow scope to one source — a per-source subtree is listed in full "
                        + "whenever it fits under the cap",
@@ -120,12 +120,12 @@ public static class InheritorsRenderer
         // 构成紧跟在它限定的那个总数后面。方括号描述的是**全集**的来源构成，而括号里那串是树的
         // 形状——中间隔着一整段形状描述时，`[vanilla 6, milira 1]` 会被读成「列出来这几行的来源」。
         var cell = Tally.Cell(
-            output.Inheritors.Items.Count, output.Inheritors.TotalInScope, "subclasses");
+            output.Inheritors.Items.Count, output.Inheritors.TotalInScope, CountedNoun.Subclasses);
 
         return $"## '{output.Symbol}' — {cell}{labels.Header} "
                + $"(in scope '{output.Scope.Expression}', transitive — indirect descendants "
                + $"included; {output.Shape.Direct} direct, deepest "
-               + $"{OutputText.Quantity(output.Shape.Deepest, "levels")} down{depthLegend}):";
+               + $"{CountedNoun.Levels.Quantity(output.Shape.Deepest)} down{depthLegend}):";
     }
 
     // 切片里最深的那一层。表头的图例与覆盖说明都从它派生，故只数一次。
@@ -191,14 +191,14 @@ public static class InheritorsRenderer
         var report = new ScopeReport();
         report.Add(output.Inheritors);
 
-        if (!withTreeShape) return report.Render(output.Scope, "subclasses");
+        if (!withTreeShape) return report.Render(output.Scope, CountedNoun.Subclasses);
 
         var directEverywhere = output.Depths.Values.Count(d => d == 1);
         var deepestEverywhere = output.Depths.Values.DefaultIfEmpty(1).Max();
 
         return report.Render(
-            output.Scope, "subclasses",
+            output.Scope, CountedNoun.Subclasses,
             extra: $"including them the tree is {directEverywhere} direct, deepest "
-                   + $"{OutputText.Quantity(deepestEverywhere, "levels")} down");
+                   + $"{CountedNoun.Levels.Quantity(deepestEverywhere)} down");
     }
 }

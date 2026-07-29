@@ -20,8 +20,8 @@ public static class ScanReport
     // "References to"——读者按「743 处命中」读，在一行多处的 pattern 上这个数直接是错的。
     public static string FoundCount(int total, bool anyFileIncomplete)
         => anyFileIncomplete
-            ? $"at least {OutputText.Quantity(total, "matching lines")}"
-            : OutputText.Quantity(total, "matching lines");
+            ? $"at least {CountedNoun.MatchingLines.Quantity(total)}"
+            : CountedNoun.MatchingLines.Quantity(total);
 
     // 下界记号自己不带成因引用时，读者会就近找一个上限来解释它。search_regex 的 schema 里唯一
     // 带上限语义的东西是 `limit` 的 default 100，而 `at least 105` 与它只差 5——第九轮盲测三条
@@ -56,7 +56,7 @@ public static class ScanReport
         // 「现在到不了」不是让一处产地留在名单外的理由。另一支 `{previewCap}-preview cap` 是
         // 定语复合词，英语里本就不带复数，不动。
         var cap = limit.Unlimited
-            ? $"scan stopped at the server cap of {OutputText.Quantity(previewCap, "preview lines")}"
+            ? $"scan stopped at the server cap of {CountedNoun.PreviewLines.Quantity(previewCap)}"
             : $"scan stopped at the {previewCap}-preview cap";
         var route = limit.Unlimited
             ? "narrow the query or the scope"

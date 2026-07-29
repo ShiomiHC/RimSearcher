@@ -41,12 +41,12 @@ public static class Tally
     // 是自费多跑一轮才刹住。这里补的就是那个推不出来的数，且只在它与总数不等时才印：
     // 相等时（全集本来就都是精确命中）一个字都不多，不会退化成常亮。
     public static string Cell(
-        int shown, int total, string plural, bool totalIsLowerBound = false, int fullScore = -1)
+        int shown, int total, CountedNoun plural, bool totalIsLowerBound = false, int fullScore = -1)
     {
         var floor = totalIsLowerBound ? "at least " : string.Empty;
         var head = total > shown
-            ? $"{shown} of {floor}{OutputText.Quantity(total, plural)}"
-            : $"{floor}{OutputText.Quantity(shown, plural)}";
+            ? $"{shown} of {floor}{plural.Quantity(total)}"
+            : $"{floor}{plural.Quantity(shown)}";
 
         // 下界形不带这个限定：那时总数自己都不准，再挂一个「其中几条精确」会被读成两处
         // 独立的不确定性（同折叠行只在表头限定一次那条判据）。

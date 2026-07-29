@@ -95,7 +95,7 @@ public static class ScanOutputRenderer
         // 于是 limit = 1 时线上输出的是 `first 1 preview lines`——闸的规则二甲本来就判得出它，
         // 缺的只是把计数逼到 1 的那一维 fixture（见 OutputGrammarGateTests 的 SingleCount）。
         if (output.ScanStopped)
-            return $"first {OutputText.Quantity(PreviewLinesCollected(output), "preview lines")} {where}";
+            return $"first {CountedNoun.PreviewLines.Quantity(PreviewLinesCollected(output))} {where}";
 
         var incomplete = output.Completeness.AnyIncomplete;
         return $"{ScanReport.FoundCount(output.TotalMatchingLines, incomplete)} {where}"
@@ -193,7 +193,7 @@ public static class ScanOutputRenderer
         // 走 Fold.Explicit：文件数上限是个定长常数，没有参数放得宽它，下一步是收窄 pattern
         // 或 scope，与 limit 的三分支无关。这一行此前是 renderer 里唯一还在手拼共用文法的。
         return "\n\n" + Fold.Explicit(
-            hidden, "matching files",
+            hidden, CountedNoun.MatchingFiles,
             $"{output.FileListCap} listed; narrow the pattern or the scope",
             total: output.Blocks.Count, indent: string.Empty);
     }

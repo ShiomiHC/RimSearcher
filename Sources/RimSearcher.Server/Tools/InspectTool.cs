@@ -237,12 +237,12 @@ public class InspectTool : ITool
             ? $"lines {startLine}-{Math.Min(startLine + XmlWindowLines - 1, xmlLines.Length)} of {xmlLines.Length}"
             : firstCallTruncated
                 ? $"{XmlWindowLines} of {xmlLines.Length} lines"
-                : OutputText.Quantity(xmlLines.Length, "lines");
+                : CountedNoun.Lines.Quantity(xmlLines.Length);
         sb.AppendLine($"\n**Resolved XML** ({extent}; {PatchNote}):");
 
         // 明确点名续读要回到 inspect，且说清 File: 那一行不是这份 XML 的来源
         string ContinueHint(int nextStart) =>
-            $"(Full merged XML: {OutputText.Quantity(xmlLines.Length, "lines")}. This is the merge of the whole ParentName chain, so it is "
+            $"(Full merged XML: {CountedNoun.Lines.Quantity(xmlLines.Length)}. This is the merge of the whole ParentName chain, so it is "
             + $"not the content of any one file — the `File:` path above holds only {defName}'s own un-merged lines. "
             + $"For the rest call inspect again with xmlStartLine: {nextStart}.)";
 
@@ -257,7 +257,7 @@ public class InspectTool : ITool
 
             sb.AppendLine(to < xmlLines.Length
                 ? ContinueHint(to + 1)
-                : $"(End of the merged XML, {OutputText.Quantity(xmlLines.Length, "lines")} total.)");
+                : $"(End of the merged XML, {CountedNoun.Lines.Quantity(xmlLines.Length)} total.)");
             return;
         }
 
@@ -469,7 +469,7 @@ public class InspectTool : ITool
                     // 而不是调 limit——落不进 Fold.Line 的三分支，走显式那一形。
                     if (foundTypes.Count > 10)
                         sb.AppendLine(Fold.Explicit(
-                            foundTypes.Count - 10, "types", "use locate to find them"));
+                            foundTypes.Count - 10, CountedNoun.Types, "use locate to find them"));
                 }
             }
             catch (OperationCanceledException) { throw; }
