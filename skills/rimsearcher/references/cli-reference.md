@@ -14,6 +14,7 @@ Answers questions about RimWorld's defs and C# from a snapshot of what the game 
 | `fields` | List the field paths that a def type actually uses, with how often each occurs. |
 | `find` | Find defs by the value of a field. This is the reverse lookup: from a C# class or a value back to the defs that use it. |
 | `get` | Show one def in full: its identity, its fields, and any translations of it. |
+| `inherit` | Show what an XML node inherits from and what inherits from it, including abstract parents. |
 | `list` | List every def of one type. |
 | `modlist list` | List the mod lists available on this machine. |
 | `modlist save` | Capture the mods currently enabled in the game as a named list. |
@@ -103,11 +104,14 @@ The game's own configuration is never modified. A copy of it is made in a tempor
 
 When it finishes, the mods the game reported are compared with the mods that were asked for, and the import is rejected if they differ.
 
+The game runs headless: no window appears and nothing is written to the display settings the game keeps outside its save-data folder. Pass --show-window if a mod in the list needs a graphics device while it loads.
+
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `--modlist` <name> | Which mod list to run. 'rimsearcher modlist list' shows the names. **required** | `--list`, `--mods`, `--profile` |
 | `--name` <name> | Name to register the resulting snapshot under. Defaults to the mod list's name. | `--as`, `--alias` |
 | `--timeout` <seconds> | How long to wait for the game to finish. A large mod list can take minutes to load. Default: `900`. | `--timeout-seconds`, `--wait` |
+| `--show-window` | Start the game with its window instead of headless. Only needed if a mod in the list requires a graphics device while loading; headless is otherwise identical and faster. | `--window`, `--windowed`, `--graphics` |
 | `--keep-temp` | Keep the temporary save-data folder afterwards, for looking at what the game was given. |  |
 | `--dry-run` | Do everything except start the game: resolve the list, check every mod is installed, and report what would be run. | `--check`, `--validate` |
 | `--harvest-translations` | Passed through to the import step: also index language files of installed mods that the list does not enable. | `--harvest` |
@@ -203,6 +207,34 @@ Examples:
 rimsearcher get Apparel_ShieldBelt
 rimsearcher get Apparel_ShieldBelt --path statBases
 rimsearcher get Bullet_Revolver --limit all
+```
+
+## `inherit`
+
+Show what an XML node inherits from and what inherits from it, including abstract parents.
+
+```
+rimsearcher inherit <name> [options]
+```
+
+This is the one part of a snapshot that is read from the mods' XML rather than from the objects the game had in memory, because the game resolves inheritance while loading and then discards it. Abstract parents exist only here: they never become defs, so 'get' will not find them.
+
+What is shown is the XML before PatchOperations are applied. Each named node reports how many patch operations target it by name, so a node with 0 of them is exactly what the game read. For the merged, post-patch values, read any concrete child with 'get' — everything a parent contributes is already in each of its children.
+
+| Argument | Meaning |
+|---|---|
+| `<name>` | A Name= of an XML node, or the defName of a def. Both are looked up. |
+
+| Option | Meaning | Also accepted |
+|---|---|---|
+| `-n`, `--limit` <n|all> | How many children to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+
+Examples:
+
+```
+rimsearcher inherit BaseBullet
+rimsearcher inherit Bullet_Revolver
+rimsearcher inherit BaseHumanlike --limit all
 ```
 
 ## `list`

@@ -2,5 +2,4 @@ $ rimsearcher get NoSuchDef
 exit 1
 --- stdout ---
 No def is named 'NoSuchDef' in this snapshot. Try 'rimsearcher search' instead.
-If it is an abstract XML parent (Name= with Abstract="True"), it will never be here: a snapshot holds the objects the game had in memory, and inheritance is resolved then discarded during loading. The fields such a parent contributes are already merged into each child, so read them off any child instead. Its own XML text is only in the mod's files.
 --- stderr ---

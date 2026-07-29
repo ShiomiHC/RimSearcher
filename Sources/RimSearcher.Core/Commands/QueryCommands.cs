@@ -221,22 +221,26 @@ public sealed class GetCommand : Command
 
         if (matches.Count == 0)
         {
+            // 抽象父节点原先只能靠一句**无条件**的边界句糊过去,因为快照里一点痕迹都没有 ——
+            // 那句话每次 get 落空都要说一遍,而十有八九问的根本不是抽象节点。继承层落地之后
+            // 这件事变成可判定的:名字在 xml_nodes 里就点名说它是什么、去哪儿看。
+            var node = ctx.Db.NodesNamed(name).FirstOrDefault();
+            if (node is not null)
+            {
+                ctx.Report.Notice(NoticeKind.NextStep,
+                    $"'{name}' is an XML node in {node.SourceMod} ({node.SourceFile}) but never becomes a def" +
+                    (node.Abstract ? " — it is Abstract=\"True\"" : "") +
+                    ", so 'get' cannot show it. 'rimsearcher inherit " + name + "' shows what it inherits from, " +
+                    "what inherits from it, and which concrete child to read the merged values off.");
+                return 1;
+            }
+
             var names = ctx.Db.AllDefNames(Snapshot.ScopeFilter.Parse("all", ctx.Db.PackageIds(), ctx.Config));
             var close = FuzzyMatcher.Rank(names, name).Take(Limits.MaxSuggestions).Select(t => t.Text).ToList();
 
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"No def is named '{name}' in this snapshot." +
                 (close.Count > 0 ? $" Closest names: {string.Join(", ", close)}." : " Try 'rimsearcher search' instead."));
-
-            // 这条边界必须无条件说,因为快照里**没有任何痕迹**可以用来判断问的是不是抽象父节点 ——
-            // 恰恰因为一点痕迹都没有。游戏在 LoadAllActiveMods 末尾就 XmlInheritance.Clear(),
-            // 到导出时点(StaticConstructorOnStartup)继承关系已经应用完并丢弃。这是
-            // 「答案不在这里」而不是「工具答不出」,而两者在输出上原本长得一模一样。
-            ctx.Report.Notice(NoticeKind.Boundary,
-                "If it is an abstract XML parent (Name= with Abstract=\"True\"), it will never be here: a snapshot " +
-                "holds the objects the game had in memory, and inheritance is resolved then discarded during " +
-                "loading. The fields such a parent contributes are already merged into each child, so read them " +
-                "off any child instead. Its own XML text is only in the mod's files.");
             return 1;
         }
 
@@ -263,6 +267,14 @@ public sealed class GetCommand : Command
                     ? $"{def.SourceFile} (created in code, not from an XML file)"
                     : def.SourceFile),
             };
+
+            // 有父节点才出这一行。没有的那九成 def 平白多一行空值,就是把上下文预算
+            // 花在「这里什么也没有」上 —— 而恒 null 的 parent 字段正是 F13 删掉的那个东西。
+            var xmlNode = ctx.Db.NodesNamed(def.DefName)
+                                .FirstOrDefault(n => string.Equals(n.DefName, def.DefName, StringComparison.OrdinalIgnoreCase));
+            if (xmlNode?.ParentName is { Length: > 0 } parentName)
+                pairs.Add(new("inherits_from", $"{parentName} (see 'rimsearcher inherit {def.DefName}')"));
+
             ctx.Report.Detail("def", pairs);
 
             var (fields, matched, total) = ctx.Db.Fields(def.Id, limit.Effective, paths);

@@ -132,6 +132,34 @@ public static class Fixture
             ("workerClass", "Verse.TestWorker"));
         DefAs("TestBaseDef", "Verse.TestBaseDef", "PlainOne", "plain one", "test.mod", "Variants.xml", false, 0);
 
+        void XmlNode(string defType, string name, string parentName, bool isAbstract,
+                     string defName, string mod, string file, int patchOps)
+        {
+            w.WriteLine(new JsonLine()
+                .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindXmlNode)
+                .Str(IntermediateFormat.KeyDefType, defType)
+                .Str(IntermediateFormat.KeyName, name)
+                .Str(IntermediateFormat.KeyParentName, parentName)
+                .Bool(IntermediateFormat.KeyAbstract, isAbstract)
+                .Str(IntermediateFormat.KeyDefName, defName)
+                .Str(IntermediateFormat.KeyLabel, "")
+                .Str(IntermediateFormat.KeySourceMod, mod)
+                .Str(IntermediateFormat.KeySourceFile, file)
+                .Int(IntermediateFormat.KeyPatchOps, patchOps)
+                .ToString());
+            records++;
+        }
+
+        // 继承层语料。四种形态各一条,因为四条判据各有各的错法:
+        //   BaseBullet    抽象、有子、被 patch 点名 —— 逐条申报那条闸的落点
+        //   BaseProjectile 抽象、是 BaseBullet 的父 —— 往上走的链
+        //   Bullet_Revolver 具体 def 且有父 —— get 的 inherits_from 那一行
+        //   OrphanChild   父节点不在本快照里 —— 「断链」与「到根了」必须分得开
+        XmlNode("ThingDef", "BaseProjectile", "", true, "", "ludeon.rimworld", "Projectiles_Guns.xml", 0);
+        XmlNode("ThingDef", "BaseBullet", "BaseProjectile", true, "", "ludeon.rimworld", "Projectiles_Guns.xml", 2);
+        XmlNode("ThingDef", "", "BaseBullet", false, "Bullet_Revolver", "ludeon.rimworld", "Projectiles_Guns.xml", 0);
+        XmlNode("ThingDef", "", "BaseFromSomeDisabledMod", false, "TestModGun", "test.mod", "Guns.xml", 0);
+
         void Injection(string defName, string path, string translated, string original)
         {
             w.WriteLine(new JsonLine()
@@ -155,6 +183,7 @@ public static class Fixture
                 .Int(IntermediateFormat.KeyRecords, wrongRecordCount ?? records)
                 .Int(IntermediateFormat.KeyDefs, 5)
                 .Int(IntermediateFormat.KeyInjections, 1)
+                .Int(IntermediateFormat.KeyXmlNodes, 4)
                 .ToString());
         }
 

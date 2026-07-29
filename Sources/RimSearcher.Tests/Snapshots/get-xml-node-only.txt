@@ -1,0 +1,5 @@
+$ rimsearcher get BaseBullet
+exit 1
+--- stdout ---
+'BaseBullet' is an XML node in ludeon.rimworld (Projectiles_Guns.xml) but never becomes a def — it is Abstract="True", so 'get' cannot show it. 'rimsearcher inherit BaseBullet' shows what it inherits from, what inherits from it, and which concrete child to read the merged values off.
+--- stderr ---

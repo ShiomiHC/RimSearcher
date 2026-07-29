@@ -9,7 +9,9 @@ Two sources of truth, and they answer different questions.
 
 **The snapshot** — a database of every def the game had in memory at the moment it was exported.
 Patches applied, inheritance resolved, defs generated in code included. Query it with the
-`rimsearcher` CLI.
+`rimsearcher` CLI. One part of it is read from the mods' XML rather than from memory — the
+inheritance layer, because the game throws inheritance away before the export point; `inherit`
+is the only command that reads it, and it says so.
 
 **The assemblies** — the game's compiled C#. Query it with the DecompilerServer MCP
 (`mcp__decompiler__*`), which reads metadata directly.
@@ -24,6 +26,7 @@ Patches applied, inheritance resolved, defs generated in code included. Query it
 | What can this field be set to? | `rimsearcher values <field>` |
 | What fields does this def type have? | `rimsearcher fields <DefType>` |
 | Everything of one kind | `rimsearcher list <DefType>` |
+| What does this inherit from / what inherits from it? | `rimsearcher inherit <name>` |
 | What does this method do? | `mcp__decompiler__get_decompiled_source` |
 | Who calls it / what does it override / what derives from it? | `mcp__decompiler__find_callers`, `get_overrides`, `find_derived_types` |
 | Where is this type? | `mcp__decompiler__search_types` |
@@ -44,6 +47,7 @@ Translate the intent instead:
 | grep `<li Class="CompProperties_AmbientSound">` | `rimsearcher find compClass CompAmbientSound` |
 | grep for a `<thingClass>` to see who uses it | `rimsearcher find thingClass <ClassName>` |
 | grep to find what values a tag takes | `rimsearcher values <tag>` |
+| grep `Name="BaseBullet"` to find the abstract parent | `rimsearcher inherit BaseBullet` |
 
 Note the second row: the XML names the **properties** class (`CompProperties_AmbientSound`),
 but the field on the def holds the **comp** class the game resolved it to (`CompAmbientSound`).
@@ -80,7 +84,14 @@ nothing and tells you so.
    `CreepJoinerBaseDef`. When a bucket holds more than one class, `list` adds a `class` column,
    and `--class <ClassName>` filters to one. `list <SomeClass>` tells you where to look rather
    than claiming the type does not exist.
-5. **Moving into the code.** Once you have a class name from a def, hand it to
+5. **Inheritance.** Every other command answers from the objects the game had in memory, where
+   inheritance is already resolved and invisible. `inherit` is the one exception: it reads the
+   mods' XML, so it can show abstract parents, `ParentName` chains, and what inherits from a
+   node. Two consequences. It is the XML **before** PatchOperations, and each named node reports
+   how many patch operations target it by name — zero means what you see is what the game read.
+   And an abstract node has no field values of its own here; everything it declares is already
+   merged, post-patch, into each child, so read a concrete child with `get`.
+6. **Moving into the code.** Once you have a class name from a def, hand it to
    `mcp__decompiler__search_types` and read the member you need. This is the common path:
    most def questions end in a C# question.
 
@@ -119,6 +130,7 @@ the tool instead, where the counts stay honest:
 | `values` | `--type`, `--scope`, `--limit` |
 | `search` | `--type`, `--scope`, `--limit` |
 | `list` | `--class`, `--scope`, `--offset`, `--limit` |
+| `inherit` | `--limit` |
 | `find` | `--scope`, `--exact`, `--limit` |
 | `code-search` | `--source`, `--files`, `--max-files`, `--limit` |
 
@@ -167,10 +179,11 @@ For the decompiler MCP, see [references/decompiler-mcp.md](references/decompiler
 - **The def exists in game but not in the snapshot.** Its mod was probably not enabled when the
   snapshot was taken. `rimsearcher mods` lists what the snapshot covers and
   `rimsearcher snapshot status` compares it with the installed game.
-- **You are looking for an abstract parent, and it is not there.** Abstract `<ThingDef Name="…">`
-  nodes and `ParentName` links exist only while the game is loading XML; the game clears them
-  before the export point, so **no snapshot has ever held them**. Their fields are not lost —
-  they are already merged into every child. Ask a child def with `get`, or use
-  `mcp__decompiler__find_derived_types` for the C# side of the hierarchy.
+- **You are looking for an abstract parent.** It is not a def and `get` will not find it: the
+  game resolves inheritance while loading and then discards it, so an abstract
+  `<ThingDef Name="…">` never becomes an object. `rimsearcher inherit <name>` answers from the
+  inheritance layer instead, which is read from the mods' XML. `get` recognises a name that
+  lives only there and says so rather than reporting it absent.
+  For the C# side of a hierarchy, `mcp__decompiler__find_derived_types`.
 - **Use text search last, not first.** `find` and `values` answer from resolved data and are
   exact; `code-search` is text and matches identically-named things from unrelated types.

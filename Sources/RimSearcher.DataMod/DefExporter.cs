@@ -39,6 +39,7 @@ namespace RimSearcher.DataMod
             long records = 0;
             var defs = 0;
             var injections = 0;
+            var xmlNodes = 0;
 
             using (var file = new FileStream(temp, FileMode.CreateNew, FileAccess.Write))
             using (var gz = new GZipStream(file, CompressionLevel.Optimal))
@@ -75,6 +76,15 @@ namespace RimSearcher.DataMod
                     injections++;
                 }
 
+                // 继承层。这一节从 XML 原文再读一遍,理由见 XmlNodeExporter ——
+                // 到这个时点「谁继承谁」在内存里已经被 XmlInheritance.Clear() 抹掉了。
+                foreach (var line in XmlNodeExporter.BuildLines())
+                {
+                    writer.WriteLine(line);
+                    records++;
+                    xmlNodes++;
+                }
+
                 // 尾行记录数标记 —— 完整性自证。游戏中途崩 = 这一行不在,import 拒收。
                 records++;
                 writer.WriteLine(new JsonLine()
@@ -82,6 +92,7 @@ namespace RimSearcher.DataMod
                     .Int(IntermediateFormat.KeyRecords, records)
                     .Int(IntermediateFormat.KeyDefs, defs)
                     .Int(IntermediateFormat.KeyInjections, injections)
+                    .Int(IntermediateFormat.KeyXmlNodes, xmlNodes)
                     .ToString());
 
                 writer.Flush();

@@ -31,7 +31,10 @@ public sealed class ExportCommand : Command
             "the copy's mod list is rewritten, and the game is pointed at the copy. Every mod in the list is checked " +
             "against what is installed before the game is started, so a typo costs a second rather than a whole launch.\n\n" +
             "When it finishes, the mods the game reported are compared with the mods that were asked for, and the " +
-            "import is rejected if they differ.",
+            "import is rejected if they differ.\n\n" +
+            "The game runs headless: no window appears and nothing is written to the display settings the game " +
+            "keeps outside its save-data folder. Pass --show-window if a mod in the list needs a graphics device " +
+            "while it loads.",
         Options =
         [
             new OptionSpec
@@ -59,6 +62,14 @@ public sealed class ExportCommand : Command
             },
             new OptionSpec
             {
+                Name = "show-window",
+                Arity = Arity.Flag,
+                Aliases = ["window", "windowed", "graphics"],
+                Help = "Start the game with its window instead of headless. Only needed if a mod in the list " +
+                       "requires a graphics device while loading; headless is otherwise identical and faster.",
+            },
+            new OptionSpec
+            {
                 Name = "keep-temp",
                 Arity = Arity.Flag,
                 Help = "Keep the temporary save-data folder afterwards, for looking at what the game was given.",
@@ -82,6 +93,23 @@ public sealed class ExportCommand : Command
         ],
         Examples = ["rimsearcher export --modlist vanilla", "rimsearcher export --modlist vanilla --dry-run"],
     };
+
+    /// <summary>
+    /// 起游戏的命令行。**唯一产地** —— <c>--dry-run</c> 报的和真跑用的是同一份,
+    /// 否则 dry-run 就成了「报告一件与实际不同的事」,而它存在的全部意义就是先看清楚。
+    ///
+    /// 无头是默认,理由在调用处的注释里(渲染零帧、注册表隔离不到)。
+    /// </summary>
+    public static IReadOnlyList<string> BuildGameArguments(string temp, string outFile, bool showWindow)
+    {
+        var argv = new List<string>
+        {
+            $"-savedatafolder={temp}",
+            $"-{IntermediateFormat.CommandLineSwitch}={outFile}",
+        };
+        if (!showWindow) { argv.Add("-batchmode"); argv.Add("-nographics"); }
+        return argv;
+    }
 
     /// <summary>
     /// 失败时才从游戏日志里取最后几行。成功路径一个字节都不带 —— 平常那几十行
@@ -151,6 +179,7 @@ public sealed class ExportCommand : Command
         var outFile = Path.GetFullPath(Path.Combine(exportDir, snapshotName + IntermediateFormat.FileExtension));
 
         var temp = Path.Combine(Path.GetTempPath(), "rimsearcher-export-" + Guid.NewGuid().ToString("N")[..8]);
+        var argv = BuildGameArguments(temp, outFile, ctx.Args.Flag("show-window"));
 
         if (ctx.Args.Flag("dry-run"))
         {
@@ -159,6 +188,7 @@ public sealed class ExportCommand : Command
                 new("modlist", list.Name),
                 new("mods", launchIds.Count),
                 new("executable", exe),
+                new("arguments", string.Join(' ', argv)),
                 new("export_file", outFile),
                 new("snapshot", snapshotName),
             ]);
@@ -181,8 +211,16 @@ public sealed class ExportCommand : Command
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
-        psi.ArgumentList.Add($"-savedatafolder={temp}");
-        psi.ArgumentList.Add($"-{IntermediateFormat.CommandLineSwitch}={outFile}");
+        // 无头是默认。导出在 StaticConstructorOnStartup 里做完就 Root.Shutdown(),整条路径
+        // 一帧都不渲染 —— 于是 Unity 的图形设备纯属额外开销,而那个抢焦点、能被误关的窗口
+        // 更是纯粹的副作用。实测(23 mod + 导出器):无头 26 秒、窗口 27 秒,产出 defs /
+        // field_values / translations 逐项相同。
+        //
+        // 不走「开个 640x480 小窗」那条路,虽然它也能跑通:-screen-width/-screen-height
+        // 会写进 HKCU\...\Screenmanager*,而那是 -savedatafolder **隔离不到**的地方
+        // (实测确实改了 Window Position Y)。导出不许在真实配置上留下任何痕迹,注册表
+        // 也算真实配置。无头两次实测注册表零改动。
+        foreach (var a in argv) psi.ArgumentList.Add(a);
 
         var timeout = TimeSpan.FromSeconds(ctx.Args.Int("timeout", 900));
         var sw = Stopwatch.StartNew();
@@ -215,7 +253,14 @@ public sealed class ExportCommand : Command
             throw new CliUsageException(
                 $"The game exited after {sw.Elapsed.TotalSeconds:0} seconds without writing an export file. " +
                 "The usual cause is that the exporter mod is not enabled in this list: it has to be one of the " +
-                $"entries in '{list.Name}'." + LastLines(gameLog));
+                $"entries in '{list.Name}'." +
+                // 无头是默认之后多了第二种成因。不指出来的话,一个在加载期碰 GUI 的 mod 会
+                // 一路把人往「导出器没装上」那条错路上引 —— 而那条路上什么也查不出来。
+                (ctx.Args.Flag("show-window")
+                    ? ""
+                    : " If it is enabled, a mod in the list may need a graphics device while loading: " +
+                      "retry with --show-window.") +
+                LastLines(gameLog));
 
         var importer = new SnapshotImporter
         {

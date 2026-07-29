@@ -8,7 +8,7 @@ namespace RimSearcher.Storage;
 
 public sealed record ImportStats(
     int Defs, int FieldValues, int NoiseDropped, int RuntimeTranslations,
-    int HarvestedTranslations, int TruncatedDefs, ExportMeta Meta, string DbPath);
+    int HarvestedTranslations, int TruncatedDefs, int XmlNodes, ExportMeta Meta, string DbPath);
 
 /// <summary>
 /// 中间格式 → SQLite。B 案把建库整个搬到这一侧,收益在 06「分工」一节记过:产地唯一由
@@ -38,6 +38,7 @@ public sealed class SnapshotImporter
 
         ExportMeta? meta = null;
         var defs = 0; var fieldValues = 0; var noise = 0; var runtimeTr = 0; var truncatedDefs = 0;
+        var xmlNodes = 0;
         long? declaredRecords = null;
         var sawEnd = false;
         var records = 0L;
@@ -54,6 +55,11 @@ public sealed class SnapshotImporter
             using var insertTr = Prepare(db, """
                 INSERT INTO translations (def_id, def_type, def_name, path, translated, original, language, source_mod, origin)
                 VALUES ($id,$t,$n,$p,$tr,$o,$lang,$sm,$origin)
+                """);
+            using var insertXn = Prepare(db, """
+                INSERT INTO xml_nodes (def_type, name, parent_name, abstract, def_name, label,
+                                       source_mod, source_file, patch_ops)
+                VALUES ($t,$n,$pn,$a,$dn,$l,$sm,$sf,$po)
                 """);
 
             var idByName = new Dictionary<string, long>(StringComparer.Ordinal);
@@ -131,6 +137,22 @@ public sealed class SnapshotImporter
                     Bind(insertFts, "$d", FtsText.ForIndex(Str(root, IntermediateFormat.KeyDescription)));
                     Bind(insertFts, "$tr", "");
                     insertFts.ExecuteNonQuery();
+                    continue;
+                }
+
+                if (kind == IntermediateFormat.KindXmlNode)
+                {
+                    Bind(insertXn, "$t", Str(root, IntermediateFormat.KeyDefType));
+                    Bind(insertXn, "$n", Str(root, IntermediateFormat.KeyName));
+                    Bind(insertXn, "$pn", Str(root, IntermediateFormat.KeyParentName));
+                    Bind(insertXn, "$a", root.TryGetProperty(IntermediateFormat.KeyAbstract, out var aEl) && aEl.GetBoolean() ? 1 : 0);
+                    Bind(insertXn, "$dn", Str(root, IntermediateFormat.KeyDefName));
+                    Bind(insertXn, "$l", Str(root, IntermediateFormat.KeyLabel));
+                    Bind(insertXn, "$sm", Str(root, IntermediateFormat.KeySourceMod));
+                    Bind(insertXn, "$sf", Str(root, IntermediateFormat.KeySourceFile));
+                    Bind(insertXn, "$po", root.TryGetProperty(IntermediateFormat.KeyPatchOps, out var poEl) ? poEl.GetInt32() : 0);
+                    insertXn.ExecuteNonQuery();
+                    xmlNodes++;
                     continue;
                 }
 
@@ -244,7 +266,7 @@ public sealed class SnapshotImporter
             if (File.Exists(dbPath)) File.Delete(dbPath);
             File.Move(tempDb, dbPath);
 
-            return new ImportStats(defs, fieldValues, noise, runtimeTr, harvested, truncatedDefs, meta, dbPath);
+            return new ImportStats(defs, fieldValues, noise, runtimeTr, harvested, truncatedDefs, xmlNodes, meta, dbPath);
         }
     }
 

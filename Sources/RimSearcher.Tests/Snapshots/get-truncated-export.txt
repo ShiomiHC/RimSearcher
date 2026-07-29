@@ -4,12 +4,13 @@ exit 0
 2 fields.
 The exporter stopped short on this def: at least 3 fields were dropped at export time for depth or size, so a path missing from the list below is not proof that the def lacks it.
 
-def_name     Bullet_Revolver
-def_type     ThingDef
-label        revolver bullet
-class        Verse.ThingDef
-mod          ludeon.rimworld
-source       Projectiles_Guns.xml
+def_name       Bullet_Revolver
+def_type       ThingDef
+label          revolver bullet
+class          Verse.ThingDef
+mod            ludeon.rimworld
+source         Projectiles_Guns.xml
+inherits_from  BaseBullet (see 'rimsearcher inherit Bullet_Revolver')
 
 path                         value
 thingClass                   RimWorld.Bullet

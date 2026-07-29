@@ -67,6 +67,9 @@ public static class NounRegistry
         ["mod"] = "mods",
         ["translation"] = "translations",
         ["source tree"] = "source trees",
+        ["XML node"] = "XML nodes",
+        ["direct child"] = "direct children",
+        ["patch operation"] = "patch operations",
     };
 
     public static IReadOnlyCollection<string> Known => Plurals.Keys;

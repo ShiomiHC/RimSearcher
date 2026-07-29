@@ -1,0 +1,5 @@
+$ rimsearcher inherit Apparel_ShieldBelt
+exit 1
+--- stdout ---
+'Apparel_ShieldBelt' is a def in this snapshot but its XML declares no Name=, ParentName= or Abstract=, so it takes part in no inheritance. 'rimsearcher get Apparel_ShieldBelt' shows it.
+--- stderr ---

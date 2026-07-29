@@ -37,6 +37,15 @@ public class OutputSnapshotTests
         { "find-hit",              ["find", "compClass", "RimWorld.CompShield"] },
         { "find-miss-compprops",   ["find", "compClass", "CompProperties_Shield"] },
         { "find-miss-field",       ["find", "noSuchField", "x"] },
+        // 继承层的四条路各钉一份:抽象节点(有子、被 patch 点名)、具体 def(往上走)、
+        // 断链(父不在快照里)、名字不在这一层。四条的措辞各说一件不同的事,
+        // 而它们混起来正是「零结果一律报最强的那种」那类事故的温床。
+        { "inherit-abstract",      ["inherit", "BaseBullet"] },
+        { "inherit-def",           ["inherit", "Bullet_Revolver"] },
+        { "inherit-broken-chain",  ["inherit", "TestModGun"] },
+        { "inherit-not-in-layer",  ["inherit", "Apparel_ShieldBelt"] },
+        { "inherit-missing",       ["inherit", "NoSuchNode"] },
+        { "get-xml-node-only",     ["get", "BaseBullet"] },
         { "list-limited",          ["list", "ThingDef", "--limit", "2"] },
         { "list-scope-empty",      ["list", "HediffDef", "--scope", "test.mod"] },
         { "fields-filtered",       ["fields", "ThingDef", "--path", "comps"] },

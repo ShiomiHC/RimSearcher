@@ -351,13 +351,50 @@ modlist 别名、scope 组。**不放**:指纹事实(产地在 db meta)、任何
 另一道判「没有边界可申报时完整结果集只有计数」—— 少了后一道,那条 boundary 尾注
 就可能悄悄变成常驻声明,而那正是 00 论据 3 淘汰掉的东西。
 
-**继承层的缺席是架构边界,不是缺陷。**(第二轮盲测 F11)`XmlInheritance.Clear()`
-在 `LoadedModManager.LoadAllActiveMods` 结尾被调用,早于 `StaticConstructorOnStartup` ——
-导出时点上 ParentName 与抽象父节点**已经不在内存里了**。要捕获就得在加载中途挂 Harmony,
-而纯托管的 DataMod 刻意不走这条路。于是:删掉 identity 里那个恒为 null 的 `parent` 键
-(它在替不存在的数据作伪证,让人以为「查过了、确实没父节点」),
-改在 `get` 查无此 def 时**无条件**声明这条边界 —— 不做条件判断,因为快照里根本
-没有任何痕迹可供判断「这个名字是不是一个抽象父节点」,那正是这条边界的内容。
+**继承层:先判成架构边界,后来补成了一层。**(第二轮盲测 F11 → 本轮落地)
+
+前半段的事实没有变:`XmlInheritance.Clear()` 在 `LoadedModManager.LoadAllActiveMods` 结尾
+被调用,早于 `StaticConstructorOnStartup` —— 导出时点上 ParentName 与抽象父节点**已经不在
+内存里了**,抽象节点更是从头到尾没有 Def 实例。所以 identity 里那个恒为 null 的 `parent` 键
+该删(它在替不存在的数据作伪证),这一条依然成立。
+
+**改掉的是「所以答不了」这个推论。**当时的处置是在 `get` 查无此 def 时**无条件**声明边界,
+理由写的是「快照里没有任何痕迹可供判断这个名字是不是抽象父节点」。这句话把「当前快照里没有」
+说成了「拿不到」。拿得到:`DirectXmlLoader.XmlAssetsInModFolder(mod, "Defs/")` 在任何时点
+都能调,走的是 `mod.foldersToLoadDescendingOrder`,也就是游戏自己解析完的 loadFolders.xml、
+版本目录、同名文件优先级去重。挂 Harmony 从来不是唯一出路,而**自己写一个 XML 读取器**才是
+真正该拒绝的那条 —— 它必然在上面那三件事上跟游戏分家,读到游戏根本没加载的文件比读不到更坏。
+
+于是加了 `kind=xmlnode` 一层与 `xml_nodes` 表,出口是 `inherit` 命令。代价说清楚:
+**这是快照里唯一一层不是「游戏内存里的对象」的数据,它是打补丁之前的 XML。**
+这份时间差不用一句常驻免责声明糊过去 —— 每个具名节点随行带出 `patch_ops`
+(有多少条 PatchOperation 的 xpath 点了它的名),0 就一个字都不说,非 0 就报出数字。
+
+量过两次,而两次差了一个数量级,**这正是逐条记账而不是写一句比例的理由**:
+- **全部已装 mod**(含未启用的创意工坊件):1781 个具名节点里 82 个被点名,4.60%;
+  5835 条 xpath 里 423 条(7.25%)按 `@Name=` 寻址,集中在 BaseStoryteller /
+  WaterDeepBase / MapCommonBase / LTS_DoorBase / BaseMakeableGrenade / RatkinFactionBase
+  这类高流量基节点上。
+- **当前 `modded` 快照**(24 个启用项,Vethara 那套):883 个具名节点里只有 2 个被点名。
+
+比例随启用了哪些 mod 整体漂移,所以任何一个写死的百分比都会在别人的环境里说谎。
+原先那句「抽象父节点定义了什么偶尔会偏」在第一组数据下是**不合格**的 —— 它偏在最常被问的
+那几个节点上;而在第二组数据下它又高估了。逐条报数是唯一两边都不撒谎的写法。
+
+层的规模(modded,24 mod):5213 个节点,其中 883 个具名、616 个抽象、4861 个带 ParentName。
+Core 那 2011 条与磁盘上 `Data/Core/Defs` 的逐条统计对得上。
+
+抽象节点没有自己的字段表,而这不是缺口:它写的每一条都已经合并进每个子节点,**并且那一份是
+patch 之后的**。所以指路到具体子节点比在这一层复制一份 patch 前的原文强 —— 后者是同一份数据的
+劣质副本,而劣质副本会被当成权威。
+
+**导出跑无头。**(本轮实测)导出在 `StaticConstructorOnStartup` 里做完就 `Root.Shutdown()`,
+整条路径一帧都不渲染,图形设备纯属开销。默认 `-batchmode -nographics`;逃生口是
+`--show-window`,给加载期真要图形设备的 mod 用。实测 23 mod + 导出器:无头 26 秒、
+带窗口 27 秒,产出的 defs / field_values / translations 逐项相同。
+**不走「开个 640×480 小窗」那条**,虽然它也跑得通:`-screen-width`/`-screen-height` 会写进
+`HKCU\…\Screenmanager*`,而那是 `-savedatafolder` 隔离不到的地方(实测确实改了一个键)。
+「真实配置永不触碰」这条约定里,注册表也算真实配置。
 
 **`def_type` 是分桶键,不是运行时类。** `GenDefDatabase.AllDefTypesWithDatabases()`
 只产出「没有非抽象 Def 祖先」的类型,子类共用基类的 DefDatabase。于是

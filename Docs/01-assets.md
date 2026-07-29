@@ -42,7 +42,7 @@ TraceTool 27),这些资产与存储层无关,不论各点择优选了谁的做�
 | 未知参数提示 | `ArgParser` 未知 flag 报错带近似候选;无候选时直接列出接受的参数,免得再跑一轮 help |
 | scope 语法设计 | `Snapshot/ScopeFilter.cs`,`all,-vanilla` 排除语法与配置组都在 |
 | 文法/措辞系统 | `CountedNoun` / `OutputText` / `GrammarTests`。1338603 的写法教训贯彻到底:判产地渲染的槽空不空 |
-| 字节级基线方法 | `OutputSnapshotTests` + `Snapshots/`(27 份)。`SnapshotGrammarGateTests` 那道缝合进 `GateTests`——基线逐行喂回文法检查,已验证故意写坏会红。**另补 SKILL.md 两道闸**:它是手写的、又按 04 的口径「本身进入被测物」,原先反而是唯一没人守的产物 —— 现在文中每条 `rimsearcher …` 命令行与收窄开关表都对着注册表验,故意写错开关会红 |
+| 字节级基线方法 | `OutputSnapshotTests` + `Snapshots/`(33 份)。`SnapshotGrammarGateTests` 那道缝合进 `GateTests`——基线逐行喂回文法检查,已验证故意写坏会红。**另补 SKILL.md 两道闸**:它是手写的、又按 04 的口径「本身进入被测物」,原先反而是唯一没人守的产物 —— 现在文中每条 `rimsearcher …` 命令行与收窄开关表都对着注册表验,故意写错开关会红 |
 | 盲测方法论 | workflow 盲测两轮,结果与教训在 04。第二轮的场景种子改从 Vethara 会话 transcript 逐条抽真实 episode(不再按 07 的意图分布编),同时兼任改版后的回归轮 |
 | staleness 机制设计 | `CommandBase.AnnounceSnapshot`;判据在实现阶段改过一次,记在 06 |
 | 模糊匹配实现 | `Search/FuzzyMatcher.cs`,Ordinal-vs-CurrentCulture 那条教训原样带注释搬来;另加 `StripKindPrefix` 应对 07-⑤ 的 `method:` 前缀 |
@@ -55,7 +55,12 @@ TraceTool 27),这些资产与存储层无关,不论各点择优选了谁的做�
 `IndexCacheService`(JSON 快照)/ `DefIndexer` / `AssemblyScanner` / `ScopeCatalog` 实现 /
 `IndexGate` / `IndexHost` / Startup 一族。
 
-勿因惋惜捡回:它们回答的问题(「XML 合并后长什么样」「谁继承谁」)在运行时导出方案下由导出时点的
-运行时数据直接回答。C# 源码阅读能力(read_code / trace 的那半边)按决定外包给
+勿因惋惜捡回:它们回答的问题(「XML 合并后长什么样」)在运行时导出方案下由导出时点的
+运行时数据直接回答。
+
+**「谁继承谁」那一半是例外,这句话原先写错了。**运行时数据答不了它 —— `XmlInheritance.Clear()`
+在导出时点之前就跑过了。补法不是捡回 `XmlInheritanceHelper`(自己写 XML 读取器,必然在
+loadFolders/版本目录/优先级去重上跟游戏分家),而是在 DataMod 里调游戏自己的
+`DirectXmlLoader.XmlAssetsInModFolder`,单独收一层 `kind=xmlnode`。成因与代价在 06。C# 源码阅读能力(read_code / trace 的那半边)按决定外包给
 DecompilerServer MCP,skill 里引导(上游 `skills/rimsearcher/references/decompiler-mcp.md`
 已有现成一份)。

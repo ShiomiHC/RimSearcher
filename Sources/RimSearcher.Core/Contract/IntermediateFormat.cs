@@ -5,10 +5,11 @@
 // 保持 net472 可编译:不用 record / init / 可空引用注解语义 / System.Text.Json。
 //
 // 格式:gzip 压缩的 JSONL 单文件。
-//   第 1 行            kind=meta   —— 快照身份(指纹)与上限参数
-//   第 2..N-1 行       kind=def    —— 每 def 一行
-//                      kind=definj —— 运行时 defInjection 一条一行(游戏语言为英文时无此类行)
-//   第 N 行(尾行)     kind=end    —— 记录数标记,完整性自证
+//   第 1 行            kind=meta    —— 快照身份(指纹)与上限参数
+//   第 2..N-1 行       kind=def     —— 每 def 一行
+//                      kind=definj  —— 运行时 defInjection 一条一行(游戏语言为英文时无此类行)
+//                      kind=xmlnode —— 继承层:XML 里一个带 Name/ParentName/Abstract 的节点一行
+//   第 N 行(尾行)     kind=end     —— 记录数标记,完整性自证
 //
 // 尾行缺失 = 游戏中途崩溃或被杀,import 拒收(02-6 原子性的游戏侧一半)。
 
@@ -17,7 +18,9 @@ namespace RimSearcher.Contract
     public static class IntermediateFormat
     {
         /// <summary>格式版本。中间格式契约变化时 +1;import 侧不认识就拒收。</summary>
-        public const int FormatVersion = 1;
+        /// <remarks>2:加了 kind=xmlnode 继承层。旧文件被拒收是对的 —— 拿它建出来的库
+        /// 会在「谁继承谁」上一律零结果,而零结果与「确实没有父节点」长得一模一样。</remarks>
+        public const int FormatVersion = 2;
 
         /// <summary>导出文件的推荐扩展名。</summary>
         public const string FileExtension = ".rsx.jsonl.gz";
@@ -35,6 +38,7 @@ namespace RimSearcher.Contract
         public const string KindMeta = "meta";
         public const string KindDef = "def";
         public const string KindDefInjection = "definj";
+        public const string KindXmlNode = "xmlnode";
         public const string KindEnd = "end";
 
         // 字段名(两侧共用,防手写漂移)
@@ -67,9 +71,21 @@ namespace RimSearcher.Contract
         public const string KeyTranslated = "translated";
         public const string KeyOriginal = "original";
 
+        // 继承层(kind=xmlnode)。def_type / def_name / source_mod / source_file / name 共用上面那批。
+        /// <summary>ParentName= 的值。空 = 这个节点不继承任何东西。</summary>
+        public const string KeyParentName = "parent_name";
+        /// <summary>Abstract="True" —— 抽象节点不进 def 数据库,只在这一层里存在。</summary>
+        public const string KeyAbstract = "abstract";
+        /// <summary>
+        /// 有多少条 PatchOperation 的 xpath 点名了这个 Name=。这一层是**打补丁之前**的 XML,
+        /// 而这个数把「偏差」从一句含糊的免责声明变成逐条、有数的申报。
+        /// </summary>
+        public const string KeyPatchOps = "patch_ops";
+
         public const string KeyRecords = "records";
         public const string KeyDefs = "defs";
         public const string KeyInjections = "injections";
+        public const string KeyXmlNodes = "xml_nodes";
 
         /// <summary>ImpliedDefs 批次在 source_file 上留的事实值(03 甲:来源标记是字符串而非文件)。</summary>
         public const string ImpliedDefsSourceFile = "ImpliedDefs";

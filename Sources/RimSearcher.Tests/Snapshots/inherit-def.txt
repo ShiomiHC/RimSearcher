@@ -1,0 +1,14 @@
+$ rimsearcher inherit Bullet_Revolver
+exit 0
+--- stdout ---
+def_name       Bullet_Revolver
+def_type       ThingDef
+abstract       no
+inherits_from  BaseBullet
+mod            ludeon.rimworld
+source         Projectiles_Guns.xml
+
+name            def_type  abstract  mod              source
+BaseBullet      ThingDef  yes       ludeon.rimworld  Projectiles_Guns.xml
+BaseProjectile  ThingDef  yes       ludeon.rimworld  Projectiles_Guns.xml
+--- stderr ---

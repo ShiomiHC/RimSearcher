@@ -21,6 +21,7 @@ public sealed class CommandRegistry
         new GetCommand(),
         new FindCommand(),
         new ListCommand(),
+        new InheritCommand(),
         new FieldsCommand(),
         new ValuesCommand(),
         new TypesCommand(),

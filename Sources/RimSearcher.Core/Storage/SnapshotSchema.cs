@@ -9,7 +9,8 @@ namespace RimSearcher.Storage;
 public static class SnapshotSchema
 {
     /// <summary>schema 版本。表结构变化时 +1。</summary>
-    public const int Version = 2;
+    /// <remarks>3:加了 xml_nodes 继承层。</remarks>
+    public const int Version = 3;
 
     public const string MetaKeySchemaVersion = "schema_version";
     public const string MetaKeyRaw = "export_meta_json";
@@ -59,6 +60,22 @@ public static class SnapshotSchema
             origin     TEXT NOT NULL
         );
 
+        -- 继承层。**唯一一张不是「游戏内存里的对象」的表** —— 它是打补丁之前的 XML 原文,
+        -- 因为「谁继承谁」在导出时点已经被 XmlInheritance.Clear() 抹掉了。
+        -- patch_ops 让这份时间差逐条可见,而不是靠一句总的免责声明糊过去。
+        CREATE TABLE xml_nodes (
+            id          INTEGER PRIMARY KEY,
+            def_type    TEXT NOT NULL,
+            name        TEXT,
+            parent_name TEXT,
+            abstract    INTEGER NOT NULL DEFAULT 0,
+            def_name    TEXT,
+            label       TEXT,
+            source_mod  TEXT,
+            source_file TEXT,
+            patch_ops   INTEGER NOT NULL DEFAULT 0
+        );
+
         CREATE TABLE mods (
             ordinal    INTEGER PRIMARY KEY,
             package_id TEXT NOT NULL,
@@ -81,6 +98,9 @@ public static class SnapshotSchema
         CREATE INDEX idx_fv_leaf    ON field_values(leaf);
         CREATE INDEX idx_fv_value   ON field_values(value);
         CREATE INDEX idx_tr_defname ON translations(def_name);
+        CREATE INDEX idx_xn_name    ON xml_nodes(name);
+        CREATE INDEX idx_xn_parent  ON xml_nodes(parent_name);
+        CREATE INDEX idx_xn_defname ON xml_nodes(def_name);
         """;
 
     public static void Create(SqliteConnection db)

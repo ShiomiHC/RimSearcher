@@ -13,6 +13,15 @@ public sealed record TranslationRow(string DefName, string Path, string? Transla
                                    string? Language, string? SourceMod, string Origin);
 
 /// <summary>
+/// 继承层的一行:XML 里一个带 <c>Name=</c> / <c>ParentName=</c> / <c>Abstract=</c> 的节点。
+/// <paramref name="PatchOps"/> 是有多少条 PatchOperation 的 xpath 点了这个 Name —— 这一层
+/// 是打补丁**之前**的原文,那个数就是这份时间差的逐条申报。
+/// </summary>
+public sealed record XmlNodeRow(string DefType, string? Name, string? ParentName, bool Abstract,
+                                string? DefName, string? Label, string? SourceMod, string? SourceFile,
+                                int PatchOps);
+
+/// <summary>
 /// 快照库的只读查询面。所有带上限的查询都同时回传总数 —— 三态文法要求调用方能区分
 /// 「就这么多」与「被截了」(02-1:上游全 CLI 返回裸数组,LIMIT 命中与否不可区分,
 /// 这是 master 上被盲测反复验证过的第一优先级问题)。
@@ -528,6 +537,51 @@ public sealed class SnapshotDb : IDisposable
         var keys = new List<string>();
         for (var i = 0; i < names.Count; i++) { p["@n" + i] = names[i]; keys.Add("@n" + i); }
         return Scalar($"SELECT COUNT(DISTINCT def_name) FROM translations WHERE origin = @o AND def_name IN ({string.Join(",", keys)})", p);
+    }
+
+    // ---------- 继承层 ----------
+
+    public int XmlNodeCount() => Scalar("SELECT COUNT(*) FROM xml_nodes");
+
+    /// <summary>
+    /// 一个名字在继承层里的全部落点。一个字符串可能同时是具名节点的 <c>Name=</c> 和
+    /// 某个 def 的 <c>defName</c>(RimWorld 里常见:抽象基与同名成品),两边都要回,
+    /// 否则「查不到」就掩盖了「查的是另一半」。
+    /// </summary>
+    public IReadOnlyList<XmlNodeRow> NodesNamed(string name)
+        => ReadNodes("WHERE name = @n COLLATE NOCASE OR def_name = @n COLLATE NOCASE",
+                     new Dictionary<string, object?> { ["@n"] = name });
+
+    /// <summary>直接子节点 —— <c>ParentName=</c> 指向这个名字的。</summary>
+    public IReadOnlyList<XmlNodeRow> NodesInheritingFrom(string parentName)
+        => ReadNodes("WHERE parent_name = @p COLLATE NOCASE",
+                     new Dictionary<string, object?> { ["@p"] = parentName });
+
+    /// <summary>
+    /// 具名节点的模糊候选池。零结果时用它分流:名字打错了,还是这个环境里真没有。
+    /// </summary>
+    public IReadOnlyList<string> AllXmlNodeNames()
+    {
+        var names = new List<string>();
+        using var rd = Query("SELECT DISTINCT name FROM xml_nodes WHERE name IS NOT NULL AND name <> '' ORDER BY name");
+        while (rd.Read()) names.Add(rd.GetString(0));
+        return names;
+    }
+
+    private List<XmlNodeRow> ReadNodes(string where, IDictionary<string, object?> p)
+    {
+        var rows = new List<XmlNodeRow>();
+        using var rd = Query(
+            "SELECT def_type, name, parent_name, abstract, def_name, label, source_mod, source_file, patch_ops " +
+            $"FROM xml_nodes {where} ORDER BY abstract DESC, name, def_name", p);
+        while (rd.Read())
+            rows.Add(new XmlNodeRow(rd.GetString(0),
+                rd.IsDBNull(1) ? null : rd.GetString(1), rd.IsDBNull(2) ? null : rd.GetString(2),
+                rd.GetInt32(3) != 0,
+                rd.IsDBNull(4) ? null : rd.GetString(4), rd.IsDBNull(5) ? null : rd.GetString(5),
+                rd.IsDBNull(6) ? null : rd.GetString(6), rd.IsDBNull(7) ? null : rd.GetString(7),
+                rd.GetInt32(8)));
+        return rows;
     }
 
     // ---------- 底层 ----------
