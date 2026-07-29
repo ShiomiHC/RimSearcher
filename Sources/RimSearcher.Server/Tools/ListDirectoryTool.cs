@@ -70,8 +70,8 @@ public class ListDirectoryTool : ITool
         // at …`）。这一处是同一件事没做对，故照那个写法把工具点出来。
         var attribution = catalog is { HasSources: true }
             ? $" These {roots.Count} roots are the indexed folders of the {catalog.Sources.Count} configured "
-              + "sources that the query tools list under their own 'scope' parameter (this tool takes none) — "
-              + "one source usually spans several roots, so this count is not a source count."
+              + "sources that locate and the other query tools list under 'scope'; list_directory itself takes "
+              + "no such parameter. One source usually spans several roots, so this count is not a source count."
             : string.Empty;
 
         return $"The roots on this server: {shown}"

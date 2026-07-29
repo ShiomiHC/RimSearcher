@@ -1,7 +1,4 @@
-using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using RimSearcher.Core;
 using RimSearcher.Server;
 using RimSearcher.Server.Tools;
@@ -99,17 +96,9 @@ public class UnknownParameterNoticeTests : IDisposable
     {
         var undeclared = new List<string>();
 
-        foreach (var (tool, source) in EveryToolWithItsSource())
+        foreach (var tool in EveryTool())
         {
-            var text = File.ReadAllText(source);
-
-            var keys = KeyLiteralsIn(text, tool.GetType());
-
-            // scope / limit 两族的读取点住在 ScopeAndLimitArgs 里，故按名单取——不在闸这边重列一遍
-            if (text.Contains("ScopeAndLimitArgs.Resolve", StringComparison.Ordinal))
-                keys.UnionWith(ScopeAndLimitArgs.ScopeKeys);
-            if (text.Contains("ScopeAndLimitArgs.GetDisplayLimit", StringComparison.Ordinal))
-                keys.UnionWith(ScopeAndLimitArgs.LimitKeys);
+            var keys = ToolSourceKeys.ReadBy(tool);
 
             foreach (var key in keys.OrderBy(k => k, StringComparer.Ordinal))
             {
@@ -134,15 +123,9 @@ public class UnknownParameterNoticeTests : IDisposable
     {
         var unread = new List<string>();
 
-        foreach (var (tool, source) in EveryToolWithItsSource())
+        foreach (var tool in EveryTool())
         {
-            var text = File.ReadAllText(source);
-
-            var read = KeyLiteralsIn(text, tool.GetType());
-            if (text.Contains("ScopeAndLimitArgs.Resolve", StringComparison.Ordinal))
-                read.UnionWith(ScopeAndLimitArgs.ScopeKeys);
-            if (text.Contains("ScopeAndLimitArgs.GetDisplayLimit", StringComparison.Ordinal))
-                read.UnionWith(ScopeAndLimitArgs.LimitKeys);
+            var read = ToolSourceKeys.ReadBy(tool);
 
             foreach (var declared in tool.ExtraAcceptedKeys)
             {
@@ -155,59 +138,10 @@ public class UnknownParameterNoticeTests : IDisposable
             + string.Join("\n", unread));
     }
 
-    // 传给 ToolArgs 读取函数的键。两种形态都要认：
-    //
-    //   1. **字面量** `ToolArgs.GetInt(args, 0, "startLine", "start")`。带空格的那些不是键
-    //      （GetOptionalName 的 whatItNames 槽收的是 "a member name" 这类说明文字）。
-    //   2. **名单常量** `ToolArgs.GetInt(args, 0, StartLineKeys)`。一族别名被收进一个 static
-    //      数组之后，字面量就不在调用点上了——只刮字面量的话这个键族整片扫不到，而**扫不到的
-    //      表现是键集变小，即判据变松，绿**。这一条是收 read_code 那两族别名时补上的：
-    //      收口本身修的是缺陷，若顺带把守着它的闸放松了，下一次同型的漂移就没人喊了。
-    //
-    // 认不出的名单标识符**判红**而不是跳过，理由同上：跳过就是静默变松。
-    private static ISet<string> KeyLiteralsIn(string text, Type toolType)
-    {
-        var keys = new HashSet<string>(StringComparer.Ordinal);
-
-        foreach (Match call in Regex.Matches(
-                     text, @"ToolArgs\.(?:Get\w+|TryGetElement)\((?:[^()]|\([^()]*\))*\)"))
-        {
-            foreach (Match literal in Regex.Matches(call.Value, "\"(?<key>[^\"]*)\""))
-            {
-                var key = literal.Groups["key"].Value;
-                if (key.Length > 0 && !key.Contains(' ')) keys.Add(key);
-            }
-
-            foreach (Match list in Regex.Matches(
-                         call.Value, @"\b(?:(?<owner>\w+)\.)?(?<field>\w+Keys)\b"))
-                keys.UnionWith(ResolveKeyList(list.Groups["owner"].Value, list.Groups["field"].Value, toolType));
-        }
-
-        return keys;
-    }
-
-    // 名单常量 → 它的值。owner 为空时是工具类自己的字段（read_code 的 StartLineKeys /
-    // LineCountKeys），否则按类名在 Server 程序集里找（ScopeAndLimitArgs.LimitKeys）。
-    private static string[] ResolveKeyList(string owner, string field, Type toolType)
-    {
-        var declaring = owner.Length == 0
-            ? toolType
-            : toolType.Assembly.GetTypes().FirstOrDefault(t => t.Name == owner);
-
-        var value = declaring
-            ?.GetField(field, BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)
-            ?.GetValue(null);
-
-        Assert.True(value is string[],
-            $"读取点用了名单 '{(owner.Length == 0 ? field : $"{owner}.{field}")}'，但闸反射不到它的值。"
-            + "扫不到的表现是键集变小、判据变松、照绿，故这里判红——要么它不是 public static string[]，"
-            + "要么它住在别的程序集里。");
-
-        return (string[])value!;
-    }
-
-    private IEnumerable<(ITool Tool, string Source)> EveryToolWithItsSource(
-        [CallerFilePath] string here = "")
+    // 七个工具的实例。名单与构造实参走注册表——此前这里另写了一份，连构造重载都与产品
+    // 不一样（`new ListDirectoryTool()` 对 `new ListDirectoryTool(scopeCatalog, conditionalFolders)`），
+    // 而新加一个工具时它不会红：闸问的是一张少了一行的表。
+    private ITool[] EveryTool()
     {
         var root = _workspace.Dir("Every");
         var indexer = new SourceIndexer();
@@ -220,27 +154,7 @@ public class UnknownParameterNoticeTests : IDisposable
         var entry = new SourcePathEntry { Name = "Core", Path = root, AssemblyPaths = [_workspace.Dir("asm")] };
         var sync = new SourceSyncService(config, new ResolvedSources([entry], []), _workspace.Dir("cache"));
 
-        // 名单与构造实参走注册表，不在这里再写一份：此前这份拷贝连构造重载都与产品不一样
-        // （`new ListDirectoryTool()` 对 `new ListDirectoryTool(scopeCatalog, conditionalFolders)`），
-        // 而新加一个工具时它不会红——闸问的是一张少了一行的表。
-        var tools = ToolRegistry.Create(indexer, defIndexer, catalog, sync);
-
-        var toolsDirectory = Path.Combine(
-            Directory.GetParent(Path.GetDirectoryName(here)!)!.FullName, "RimSearcher.Server", "Tools");
-
-        // 工具 → 源文件按类名猜。猜不中时**必须当场说清是怎么回事**：此前这里直接把路径交给
-        // File.ReadAllText，注册表里多一个工具就抛一条 FileNotFoundException，读者看到的是
-        // 一个路径而不是「这个工具的取参代码闸扫不到」。取参代码分在两个文件里那种情形这条
-        // 判据仍然照不到（它只验第一个文件在不在），那是已知的钝角，不在这条断言的射程内。
-        foreach (var tool in tools)
-        {
-            var source = Path.Combine(toolsDirectory, $"{tool.GetType().Name}.cs");
-            Assert.True(File.Exists(source),
-                $"{tool.Name} 的取参代码没在 {tool.GetType().Name}.cs 里找到，本闸扫不到它的读取点。"
-                + "工具类与文件同名是这条判据的前提，改名或拆文件时要一并改这里的映射。");
-
-            yield return (tool, source);
-        }
+        return ToolRegistry.Create(indexer, defIndexer, catalog, sync);
     }
 
     // 每个工具都要声明得住自己的别名，否则上线即误报

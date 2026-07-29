@@ -410,6 +410,8 @@ public class CrossReferenceTests : IDisposable
         var description = new ListDirectoryTool(catalog).Description;
 
         Assert.Contains("These 2 roots are the indexed folders of the 1 configured sources", description);
-        Assert.Contains("one source usually spans several roots", description);
+        // 句首大小写不进判据：这句在 P3 里从破折号从句改成了独立句（让「是谁的 scope」
+        // 指名道姓），钉住的语义没变，钉住的第一个字母变了。
+        Assert.Contains("source usually spans several roots", description);
     }
 }
