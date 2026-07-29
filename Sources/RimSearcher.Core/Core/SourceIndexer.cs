@@ -376,7 +376,8 @@ public class SourceIndexer
     {
         if (_frozenInheritorsMap != null && _frozenInheritorsMap.TryGetValue(key, out var frozen))
         { values = frozen; return true; }
-        // 冻结前也走同一个定序：冻结前后行为逐字相同是这个类的既有约定（见 BuildMemberKeyLookups）
+        // 冻结前也走同一个定序：冻结前后行为逐字相同是这个类的既有约定
+        // （成员键那四份检索结构的注释里写着同一条，见 _frozenMemberKeysSorted 上方）
         if (_inheritorsMap.TryGetValue(key, out var bag))
         { values = Ordered(bag); return true; }
         values = Array.Empty<string>(); return false;
@@ -513,7 +514,10 @@ public class SourceIndexer
         return ScopeFilter.Apply(candidates, scope, limit, scoreGap: null, rankIsASortKey: false);
     }
 
-    // 继承深度的护栏。RimWorld 里最深的链也就个位数，这个数只是防索引成环时空转。
+    // 继承深度的护栏。成环由上面那个 visited 集合兜住（每个类型只入队一次，BFS 必然停），
+    // 这个数管的是另一件事：链**很深但不成环**时不要一路走到底。RimWorld 里最深的链也就
+    // 个位数，故它在真实语料上摸不到——真摸到时它是静默截断（更深的子类既不进结果也不进
+    // shape.Deepest），所以别把它当成一道会说话的闸。
     private const int MaxInheritorDepth = 24;
 
     private string? FirstPathOfType(string typeName)
@@ -1027,7 +1031,7 @@ public class SourceIndexer
             // 末级按「宿主类型 + 成员名 + 文件」定序。前两级并列的条目之间，次序否则由
             // matchedMembers 的枚举顺序决定，而它跟着索引期的并发写入走：`method:CompTick`
             // 这种几百条同分同长的查询，同一条查询换个进程重跑，前十条就能换一批。
-            // 与 SearchTypesByName 的第三级排序是同一条判据，那里改了、这里一直没改。
+            // 与 FuzzySearchTypes 的第三级排序是同一条判据，两处一并补上的。
             .ThenBy(x => x.typeName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(x => x.memberName, StringComparer.OrdinalIgnoreCase)
             .ThenBy(x => x.filePath, StringComparer.OrdinalIgnoreCase)
@@ -1037,8 +1041,6 @@ public class SourceIndexer
         return ScopeFilter.Apply(candidates, scope, limit, totalIsLowerBound: totalIsLowerBound);
     }
 
-    // scope 与扩展名过滤都必须在扫描之前生效：这两个条件若留到结果产出后再筛，
-    // 命中上限会被过滤掉的文件吃光，筛完就成了假空（fileFilter 原先正是这个写法）。
     // 单文件最多留几条预览。只限「留」，不限「数」：原先收满就 break 掉整个文件，
     // 于是该文件剩下的命中既不进总数、也不进上层的「+N more in this file」，两个数一起少报，
     // 调用方据此以为这个文件里就那么几处。
@@ -1073,10 +1075,12 @@ public class SourceIndexer
 
     // MatchesByFile 是每个文件的真实命中数，与 Results 里的预览条数不是一回事。
     //
-    // Candidates / Failed / LineCapped 三个诊断量必须回传给展示层：本工具的契约是
-    //「没有尾注就是完整命中集」，而扫描里有三处会静默减少命中——文件读不开、正则在单个文件上
-    // 超时（1s，灾难性回溯）、单文件扫到 MaxLinesScannedPerFile 行就停。这三处原先都被
-    // `catch { }` 和一句 break 吞掉，输出照旧宣称完整。
+    // RegexScanDiagnostics 必须回传给展示层：本工具的契约是「没有尾注就是完整命中集」，
+    // 而扫描里有三处会静默减少命中——文件读不开、正则在单个文件上超时（1s，灾难性回溯）、
+    // 单文件扫到 MaxLinesScannedPerFile 行就停。这三处原先都被 `catch { }` 和一句 break
+    // 吞掉，输出照旧宣称完整。故三个成因各有一个计数（`UnreadableFiles` / `TimedOutFiles`
+    // / `LineCappedFiles`）加一份点名名单，另有 `CandidateFiles` 作分母、`LineCap` 说清
+    // 那道行上限是多少。
     public async Task<(List<(string Path, int LineNumber, string Preview)> Results,
                        bool Truncated,
                        IReadOnlyDictionary<string, int> MatchesByFile,
@@ -1097,6 +1101,9 @@ public class SourceIndexer
         // allFiles 的顺序是下面「分块推进 + 按序号排序」的基准，也是展示时的分组顺序：
         // 排成同一张表，截断留下的就恰好是读者看到的那一段的前缀（见 InDisplayOrder）。
         // 未冻结分支的 Distinct 防的是重扫时同一路径进同一个 bag 两次。
+        //
+        // scope 与扩展名两道过滤都在这里、也就是扫描之前生效：它们若留到结果产出后再筛，
+        // 命中上限会被过滤掉的文件吃光，筛完就成了假空（fileFilter 原先正是这个写法）。
         var allFiles = InDisplayOrder((_frozenIndex != null
                 ? _frozenIndex.Values.SelectMany(x => x)
                 : _index.Values.SelectMany(x => x).Distinct())
@@ -1206,8 +1213,9 @@ public class SourceIndexer
             }
         });
 
-        // 命中上限后剩下的文件从委托头部直接 return，不经过 finally 的计数，进度于是停在
-        // 半路。扫描到此已经结束，补一次满格，别让调用方的进度条挂着。
+        // 命中上限一到就 break 掉整个分块循环，剩下的块根本不进 ScanChunkAsync，也就不经过
+        // finally 的计数，进度于是停在半路。扫描到此已经结束，补一次满格，别让调用方的
+        // 进度条挂着。
         progress?.Report(1.0);
 
         // (文件序号, 行号) 是全序，故同一份语料 + 同一条查询恒给同一批、同一序的结果。
