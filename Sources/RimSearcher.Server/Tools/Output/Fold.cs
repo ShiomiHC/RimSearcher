@@ -4,8 +4,13 @@ namespace RimSearcher.Server.Tools.Output;
 
 // 折叠行：「还有多少没印出来，以及怎么拿到」。
 //
-// 全服一套文法 `<缩进>... +N more [of M ]<名词> (<下一步>)`，由 GrammarRules 规则一与规则九
-// 常驻把守。这些成员此前寄居在 ScopeAndLimitArgs 里——那是 scope / limit 两个**参数**的家，折叠行
+// 全服折叠行只有两个产地，由 GrammarRules 规则一与规则九常驻把守：
+//   - `OutputText.FoldLine`（下面 Line 与 Explicit 都转发过去）：`<缩进>... +N more [of M ]<名词> (<下一步>)`；
+//   - `Fold.PerFile`：`<缩进>... +N more of M <名词> in this file`——每文件预览那一形，
+//     全服唯一不带 `(<下一步>)` 的折叠行，因为那半句逐文件重复，上提到了 PerFilePreviewCap。
+// 「两个」是判据而不只是描述：M2 之后闸问的是「这一行渲染得出来吗」，产地多一个，闸就得多问一处。
+//
+// 这些成员此前寄居在 ScopeAndLimitArgs 里——那是 scope / limit 两个**参数**的家，折叠行
 // 与它没有关系，只是因为六个工具都 using 着它才被放在那儿。
 //
 // 唯一仍指向参数层的东西是 ScopeAndLimitArgs.HardLimit 与 ResultLimit：折叠行的三个分支要靠
@@ -169,7 +174,8 @@ public static class Fold
     // 中段省略记号。inspect 的 XML 窗口是头 200 + 尾 50，被跳过的那一段在原地留这一行。
     //
     // 它以 `... ` 开头却**不是**折叠行：两侧的行都印着，没有「还剩多少没拿到」这件事要说，
-    // 下一步（`xmlStartLine`）写在紧邻的续读提示里。此前它是 InspectTool 里一行裸插值，
+    // 下一步（`xmlStartLine`）由同一份返回里紧跟在代码块之后的续读提示给——不在这一行旁边，
+    // 中间还隔着那 50 行尾巴。此前它是 InspectTool 里一行裸插值，
     // 于是闸只能靠 `StartsWith("... [Truncated ")` 一条手抄前缀把它从折叠行文法里摘出去——
     // 名字与产地都在闸这边，产品那边改一个字，闸照旧绿。给它一个产地，闸就改问产地。
     public static string Elision(int elidedLines, int fromLine, int toLine)

@@ -25,9 +25,10 @@ public readonly record struct ResultLimit(int Count, bool Unlimited)
 // 参数语义。留在这边的 HardLimit 与 ResultLimit 仍被 Output 侧引用——折叠行的三个分支要靠
 // 「调用方要过 'all' 没有」和「顶到服务端上限没有」才分得开，那两件事本来就是参数语义。
 //
-// 名字里带 Limit 是因为搬家之后只剩 3 个成员碰 scope，而 HardLimit / ResultLimit /
-// GetDisplayLimit 才是被引用得最多的一批——叫 ScopeArgs 时，这个类名对着它 60 处引用里的
-// 大半说的是假话。与 ToolArgs 的分界另立：那是**机制**（怎么从 JsonElement 里把一个值取出来，
+// 名字里带 Limit 是因为搬家之后只剩 3 个成员碰 scope（`ScopeKeys` / `Resolve` /
+// `ScopeSchemaProperty`），而 HardLimit / ResultLimit / GetDisplayLimit 才是被引用得最多的
+// 一批——引用它的地方里碰 scope 的不到四分之一，叫 ScopeArgs 时这个类名对着其余那些说的是
+// 假话。与 ToolArgs 的分界另立：那是**机制**（怎么从 JsonElement 里把一个值取出来，
 // 不管它叫什么），这里是**这两个跨工具参数的政策**。合成一个类会让「任何参数都适用的规则」
 // 与「只有这两个参数适用的规则」住进同一个命名空间。
 public static class ScopeAndLimitArgs
