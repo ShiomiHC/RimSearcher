@@ -146,17 +146,10 @@ if (appConfig.CheckSourceUpdates && syncService.FollowableSources.Count > 0)
 
 var server = new RimSearcher.Server.RimSearcher(protocolOut);
 
-// tool 实例无会话状态（只持索引引用），故宿主的各管道会话直接共享同一批
-var tools = new ITool[]
-{
-    new ListDirectoryTool(scopeCatalog, conditionalFolders),
-    new LocateTool(indexer, defIndexer, scopeCatalog, localization, conditionalFolders),
-    new InspectTool(indexer, defIndexer, scopeCatalog, localization, conditionalFolders),
-    new TraceTool(indexer, scopeCatalog, conditionalFolders),
-    new ReadCodeTool(indexer, scopeCatalog, conditionalFolders),
-    new SearchRegexTool(indexer, scopeCatalog, conditionalFolders),
-    new SyncSourcesTool(syncService, indexRebuilder)
-};
+// tool 实例无会话状态（只持索引引用），故宿主的各管道会话直接共享同一批。
+// 名单与构造实参在 ToolRegistry 里，那是唯一产地——参数层与输出层的闸问的是同一份。
+var tools = ToolRegistry.Create(
+    indexer, defIndexer, scopeCatalog, syncService, localization, conditionalFolders, indexRebuilder);
 
 foreach (var tool in tools) server.RegisterTool(tool);
 

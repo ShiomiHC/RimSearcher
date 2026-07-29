@@ -57,10 +57,10 @@ public class OutputGrammarGateTests : IDisposable
         BadLimit,
     ];
 
-    private static readonly string[] AllTools =
-    [
-        "locate", "inspect", "read_code", "trace", "search_regex", "list_directory", "sync_sources",
-    ];
+    // 工具表从注册表推导，不在这里抄第二份：抄的那份在新加一个工具时不会红——那个工具压根
+    // 不进这张表，于是下面 TheMatrixCoversEveryToolAndBranch 照的是一张少了一列的矩阵，
+    // 而它本该正是喊「你少了一列」的那道闸。
+    private static readonly string[] AllTools = RegisteredTools.Titles;
 
     // Run 为 null 即「不适用」，此时 Why 必须写明为什么。Expect 是这一格**打算**产出的那个形态
     // 的记号——没有它，一格 fixture 悄悄退化成另一种形态时闸照样绿，覆盖率就成了错觉。

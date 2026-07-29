@@ -185,22 +185,27 @@ public class UnknownParameterNoticeTests : IDisposable
         var entry = new SourcePathEntry { Name = "Core", Path = root, AssemblyPaths = [_workspace.Dir("asm")] };
         var sync = new SourceSyncService(config, new ResolvedSources([entry], []), _workspace.Dir("cache"));
 
-        ITool[] tools =
-        [
-            new LocateTool(indexer, defIndexer, catalog),
-            new InspectTool(indexer, defIndexer, catalog),
-            new ReadCodeTool(indexer, catalog),
-            new TraceTool(indexer, catalog),
-            new SearchRegexTool(indexer, catalog),
-            new ListDirectoryTool(),
-            new SyncSourcesTool(sync),
-        ];
+        // 名单与构造实参走注册表，不在这里再写一份：此前这份拷贝连构造重载都与产品不一样
+        // （`new ListDirectoryTool()` 对 `new ListDirectoryTool(scopeCatalog, conditionalFolders)`），
+        // 而新加一个工具时它不会红——闸问的是一张少了一行的表。
+        var tools = ToolRegistry.Create(indexer, defIndexer, catalog, sync);
 
         var toolsDirectory = Path.Combine(
             Directory.GetParent(Path.GetDirectoryName(here)!)!.FullName, "RimSearcher.Server", "Tools");
 
+        // 工具 → 源文件按类名猜。猜不中时**必须当场说清是怎么回事**：此前这里直接把路径交给
+        // File.ReadAllText，注册表里多一个工具就抛一条 FileNotFoundException，读者看到的是
+        // 一个路径而不是「这个工具的取参代码闸扫不到」。取参代码分在两个文件里那种情形这条
+        // 判据仍然照不到（它只验第一个文件在不在），那是已知的钝角，不在这条断言的射程内。
         foreach (var tool in tools)
-            yield return (tool, Path.Combine(toolsDirectory, $"{tool.GetType().Name}.cs"));
+        {
+            var source = Path.Combine(toolsDirectory, $"{tool.GetType().Name}.cs");
+            Assert.True(File.Exists(source),
+                $"{tool.Name} 的取参代码没在 {tool.GetType().Name}.cs 里找到，本闸扫不到它的读取点。"
+                + "工具类与文件同名是这条判据的前提，改名或拆文件时要一并改这里的映射。");
+
+            yield return (tool, source);
+        }
     }
 
     // 每个工具都要声明得住自己的别名，否则上线即误报
