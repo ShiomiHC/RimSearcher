@@ -42,7 +42,10 @@ public class SearchRegexTool : ITool
     // 三刀分开写，并把「limit 从不改这个数」明说出来。
     public string Description =>
         ".NET regex search across indexed C# and XML files, with an optional extension filter (e.g. '.cs') and " +
-        "scope. Results are grouped by file, showing at most 3 preview lines per file and at most 50 files. " +
+        // 这两个数此前是手打的，而它们各归一个常量管——预览上限那个还**在另一个项目**
+        // （RimSearcher.Core），改执行侧时根本不会路过这句散文。
+        $"scope. Results are grouped by file, showing at most {SourceIndexer.MaxPreviewsPerFile} preview lines " +
+        $"per file and at most {MaxFilesShown} files. " +
         "Three things can cut the output: those two caps, and files the scan could not read in full; all three " +
         "are stated in a trailing note, and the third additionally degrades the header count to 'at least N'. " +
         // 「limit never changes that count」读起来是个无条件承诺：随便传多小的 limit，总数照报。

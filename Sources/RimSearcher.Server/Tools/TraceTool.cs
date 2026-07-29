@@ -49,9 +49,13 @@ public class TraceTool : ITool
     public string Description =>
         "Cross-reference analysis for C# and XML. 'inheritors' lists the transitive subclass/implementor tree — " +
         "every descendant, not just direct ones, indirect ones tagged '[depth N]' and direct ones left untagged " +
-        "— up to the server cap of 200; a tree larger than that comes back truncated, and the header states the " +
+        // 这三个数此前是手打的，而**同一个文件**下面 mode 那格的说明写的就是
+        // `{ScopeAndLimitArgs.HardLimit}` 的插值形——同一个 200，一句改得动一句改不动。
+        $"— up to the server cap of {ScopeAndLimitArgs.HardLimit}; a tree larger than that comes back truncated, " +
+        "and the header states the " +
         "true total plus how many of the whole tree are direct and how deep it goes. " +
-        "'usages' is a line-by-line whole-word text match, case-insensitive (default 50, at most 3 preview lines " +
+        $"'usages' is a line-by-line whole-word text match, case-insensitive (default {UsagesDefaultLimit}, " +
+        $"at most {MaxMatchesPerFile} preview lines " +
         "per file plus a '+N more of M matching lines in this file' count — counts are matching lines, not match " +
         "sites, so a line hit twice counts once). Usages is not a call graph: it is raw text, so same-named " +
         "members on unrelated types, differently-cased identifiers and commented-out code all land in the same " +

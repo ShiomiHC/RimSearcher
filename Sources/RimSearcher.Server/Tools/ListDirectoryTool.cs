@@ -133,11 +133,12 @@ public class ListDirectoryTool : ITool
                 type = "integer",
                 // 不声明 minimum：服务端认的是 `<= 0`（与 ScopeAndLimitArgs 的同类参数一致），
                 // 声明 minimum=0 会让照着描述传 -1 的调用在 client 侧就被校验挡下。
-                maximum = 1000,
+                maximum = MaxEntries,
                 description =
-                    "Maximum entries to return (default 100, server cap 1000). 0 or a negative value means "
+                    $"Maximum entries to return (default {DefaultEntryLimit}, server cap {MaxEntries}). "
+                    + "0 or a negative value means "
                     + "no cap below that server cap. If entries are left out, the output says so.",
-                @default = 100
+                @default = DefaultEntryLimit
             },
             offset = new
             {
@@ -160,10 +161,16 @@ public class ListDirectoryTool : ITool
     // 体积天花板，而目录项一行只有一个文件名，1000 条与之同量级。
     private const int MaxEntries = 1000;
 
+    // 缺省页大小。此前它是读取点里的一个裸字面量，而同一个数还独立写在 schema 的 description、
+    // schema 的 default、ArgSpec 里各一遍——**四份拷贝里没有一份是产地**，改哪一份都不影响其余
+    // 三份。同类的 SearchRegexTool.DefaultMatchLimit / ReadCodeTool.DefaultLineCount /
+    // SyncSourcesTool.DefaultLimit 都早就是具名常量，这一处是漏网的。
+    private const int DefaultEntryLimit = 100;
+
     private static readonly ToolArgSpec ArgSpec = new(
         "rimworld-searcher__list_directory",
         "path (an absolute directory path). Aliases accepted: query, directory, dir.",
-        "path (required), limit (default 100), offset (page past the server cap).");
+        $"path (required), limit (default {DefaultEntryLimit}), offset (page past the server cap).");
 
     public Task<ToolResult> ExecuteAsync(JsonElement args, CancellationToken cancellationToken, IProgress<double>? progress = null)
     {
@@ -172,7 +179,7 @@ public class ListDirectoryTool : ITool
         // limit<=0 与本服务器其余工具同义：不是「要 0 条」，而是「别截断」，故放到上限。
         // 夹到 1 曾经也算「夹住了下界」，但结果是一条目录项加一句「还有更多」，读起来像
         // 这个目录几乎是空的——而调用方的本意恰恰是要全部。
-        var requested = ToolArgs.GetInt(args, 100, "limit", "maxResults", "count");
+        var requested = ToolArgs.GetInt(args, DefaultEntryLimit, "limit", "maxResults", "count");
         int limit = requested <= 0 ? MaxEntries : Math.Min(requested, MaxEntries);
         int offset = Math.Max(0, ToolArgs.GetInt(args, 0, "offset", "skip", "start"));
 
