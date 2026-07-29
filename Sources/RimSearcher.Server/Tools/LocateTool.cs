@@ -563,7 +563,8 @@ public class LocateTool : ITool
         return note.Length == 0 ? string.Empty : $" - {note.Trim().Trim('(', ')')}";
     }
 
-    // MemberType 来自索引层，取值是 Method / Property / Field。直接加 's' 会写出 'Propertys'。
+    // MemberType 来自索引层，取值是 Method / Property / Field / Event / EnumMember。
+    // 直接加 's' 会写出 'Propertys'。
     private static string Plural(string memberType) =>
         memberType.EndsWith('y') ? $"{memberType[..^1]}ies" : $"{memberType}s";
 

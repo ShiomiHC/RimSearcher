@@ -337,9 +337,9 @@ public static class RoslynHelper
     // 现在 inspect 自己带 limit，全量大纲三百来行，比读一遍类体便宜得多。
     private static void AppendOutlineFold(StringBuilder sb, int total, int shownCap, CountedNoun kindPlural)
     {
-        // 文法（缩进、`+N more`、名词构词、括号）归 OutputText.FoldLine 一处，这里只给
-        // 「下一步是什么」。此前这一条是全服二十来条折叠行里唯一手拼的一条，成因不是措辞
-        // 疏忽而是够不到 Server 的 Tools/Output——那一形现已下沉到 Core，见 FoldLine 的注释。
+        // 文法（缩进、`+N more`、括号）归 OutputText.FoldLine 一处，单复数归 CountedNoun，
+        // 这里只给「下一步是什么」。此前这一条是全服二十来条折叠行里唯一手拼的一条，成因不是
+        // 措辞疏忽而是够不到 Server 的 Tools/Output——那一形现已下沉到 Core，见 FoldLine 的注释。
         var line = OutputText.FoldLine(
             total - shownCap, kindPlural,
             // `the whole list` 是个没有辖域的全称承诺，而服务端担保得了的只有「这一类里**本类型
@@ -474,8 +474,9 @@ public static class RoslynHelper
 
     // 位置行里印的名字。取语法节点自己的标识符而不是调用方传进来的字符串：`.ctor` /
     // `this` / `indexer` 这几个约定写法要还原成源码里真正写着的名字，否则位置行说的名字
-    // 在正文里根本找不到。字段和事件例外——一条声明可带多个变量（`public int a, b;`），
-    // 节点没有单一名字，此时调用方点的那个名字才是对的。
+    // 在正文里根本找不到。带变量列表的那两种声明例外——字段与 `public event Action E;`
+    // 形态的事件，一条声明可带多个变量（`public int a, b;`），节点没有单一名字，此时调用方
+    // 点的那个名字才是对的。add/remove 访问器写法的事件不在此列，它有自己的标识符。
     private static string MemberDisplayName(SyntaxNode node, string requestedName) => node switch
     {
         MethodDeclarationSyntax m => m.Identifier.Text,

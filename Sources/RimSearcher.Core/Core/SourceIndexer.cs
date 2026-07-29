@@ -975,7 +975,10 @@ public class SourceIndexer
         }
     }
 
-    // memberKinds 非空时只留这几类成员（取值同索引层的 MemberType：Method / Property / Field）。
+    // memberKinds 非空时只留这几类成员。取值同索引层的 MemberType，那一层实际会产出五种
+    // （Method / Property / Field / Event / EnumMember，见 IndexMembersFromList 的上游
+    // GetClassInfoCombined）；这个参数目前只被 locate 的 `method:` / `field:` 用到，
+    // 传进来的因而只有前三种，另两种在有过滤时一并被排除。
     // 过滤必须发生在**取回**这一层而不是展示层：候选是按分数取 limit 条的，不分种类。
     // field:Tick 这类查询里方法数量压倒性多于字段，筛在后面等于先让方法把配额吃光——
     // 实测 field:Tick 只捞回 1 条字段，而 README 承诺 field: 是「只搜字段/属性」。
