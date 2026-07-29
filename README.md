@@ -1,9 +1,11 @@
 # RimSearcher
+
 [![Latest Release](https://img.shields.io/github/v/release/ShiomiHC/RimSearcher?style=flat-square&color=333&logo=github)](https://github.com/ShiomiHC/RimSearcher/releases/latest)
 
 一个基于 MCP 的 RimWorld 源码检索与分析服务。它把本地 RimWorld C# / XML 数据建立为可查询索引，让 AI 助手能在真实源码上定位、追踪、阅读和解释逻辑，减少“幻觉式回答”。
 
 采用 Roslyn + XML 继承解析，支持高并发只读查询。
+
 > MCP 协议版本: `2025-11-25`
 
 ---
@@ -11,20 +13,24 @@
 ## 1. 核心特性
 
 ### 精准 C# 解析（Roslyn）
+
 - 单次解析提取类型继承和成员索引（方法/属性/字段/事件）
 - 支持类大纲、成员体提取、继承链追踪
 - 支持方法、属性、构造器、索引器、运算符级别读取
 
 ### XML Def 继承合并
+
 - 递归解析 `ParentName` 链路
 - 合并父子节点并处理列表容器/覆盖逻辑
 - 输出可直接阅读的“最终 Def 结果”
 
 ### C# 与 XML 语义桥接
+
 - 从 Def 自动提取关联 C# 类型（如 thingClass / compClass / workerClass）
 - 在 `inspect` 中同时展示 Def 信息与关联代码路径
 
 ### 本地化译名
+
 - `locate` / `inspect` 命中 def 时附带当前语言的译名，不必再靠英文 label 反查中文名
 - 语言默认跟随游戏设置（读 `Prefs.xml` 的 `langFolderName`），也可显式指定或关闭
 - 三类来源都收：本体与 DLC 的官方语言包（`.tar`）、mod 自带的 `Languages`、只有 `Languages` 的独立汉化包
@@ -33,43 +39,64 @@
 - 译名只作为附注，`inspect` 的 Resolved XML 保持原样
 
 ### 面向查询性能优化
+
 - 预建索引 + N-gram 候选筛选
 - 启动后冻结索引（`FrozenDictionary`）优化只读查询吞吐
 - 搜索结果带上限控制，避免超长输出拖慢上下文
 
 ### 低 Token 消耗（LLM 友好）
+
 - 采用先定位再深入的查询链路（`locate` → `inspect`/`trace` → `read_code`），避免一次返回大段无关文本
+
 - `locate` / `trace` / `search_regex` 工具采用结果上限与预览截断，控制上下文体积并保持关键信息密度
+
 - `read_code` 支持按 `methodName`/`extractClass` 精确读取代码，未指定成员时再按小范围行号读取，避免一次返回整个文件
+
 - 结果行不重复印能从符号名逐字推出来的文件名（`locate` / `trace` / `inspect` 共用同一条判据，见 `locate` 一节）——留下的每一个文件名都是「它不在同名文件里」的信号
+
 - **同源标签只印一次**：一段结果全部来自同一个源时，`[vanilla]` 这类来源标记提到表头（`**C# Types** [vanilla]:`），逐行不再重复；真的混源时才逐行印。于是**行末出现来源标记，本身就是「这段结果跨了多个源」的信号**。`scope` 已经把源钉死时一个标记都不印。**段头的方括号描述的是这一段的总数，不是它底下列出来的那几行**——这两者在被截断时不是一回事：`10 of 36 members` 的 36 条里可能有 2 条来自 mod，而印出来的 10 行恰好全是 vanilla（同分按源优先级排序，截断留下的前缀系统性地偏向 vanilla，这是结构性偏置而非巧合）。故被截断的一段若总数跨了多个源，段头改印构成：`**Members** [vanilla 34, Cinders 2]`、`Subclasses of 'ThingComp' (511 …) … [vanilla 378, Milira 41, RatkinAnomaly 21, …]`。**各源之和恒等于表头那个总数**，这是它自证的全部本事。总数本来就单源时照旧只印一个源名，一个字不多；没被截断时也不印构成——那时行本身就是构成。**`[source]` 里装的是配置里的源名，不是命名空间**：本机上大多数源两者恰好同形（`Milira` 的类型都在 `Milira.` 下），于是它会被当成命名空间拿去拼全限定名——而 `vanilla` 的类型分散在 `Verse` / `RimWorld` 等好几个命名空间下，`Cinders` 的类型全在 `Embergarden.` 下，拼出来的名字一个都不存在。这句写在 `scope` 参数的常驻契约里
+
 - **条件加载目录逐条打标**：`loadFolders.xml` 里带 `IfModActive` 之类条件的目录，索引侧一律收下而不判条件（见「mod 展开规则」），故命中落在里头时行末挂一个键 `[conditional: 1.6/CE]`，整份返回末尾一条脚注把键兑换成成因（`` `1.6/CE` [Cinders] needs CETeam.CombatExtended active ``）。行内只放键、成因整份说一次，与来源标记同一套判据；`loadFolders.xml` 的一条 `li` 展开成 `Defs` / `Patches` / `Assemblies` 好几个目录时，脚注仍只算一条——那几个目录说给调用方听的是同一句话。**没打标就是不在这类目录里**，这句反面读法写在脚注最后一句里（`Rows without that tag were checked and are not inside such a folder`——「checked」不可省，它堵的是把「没标记」读成「没查过」）：不说的话这个记号只能单向使用（看见了才有意义），而调用方要判的恰恰是「我手上这条到底受不受影响」。脚注同时说清另外两件推不出来的事：**条件不成立时那个目录整个不加载、里头的内容在游戏里不存在**（只说「命中不等于生效」的话，「这条到底在不在我游戏里」这个正面问题一句话都答不了，调用方只能把它记成悬案）；以及**这个记号只管目录这一层**，目录里的补丁或 def 可能另带自己的门（`PatchOperationFindMod`、`MayRequire`），那些不在这里报——记号在场时最容易被读成「门就这一道」。整份返回只落在一个目标上时（`read_code` 一个文件、`inspect` 一条 def）键与成因合成一句、不再另起脚注，上面三句边界在那一形里同样都有。反面那句还落在 `tools/list` 的常驻契约里，故只调 `inspect`、返回里一个条件记号都没出现时，「没标记」照样是可用的结论。配了 `active_mods` 的源一个字都不打：那里的条件已经判过了，再打标是把有答案的问题重新说成悬案。条件里的 packageId 保留 `loadFolders.xml` 的原样拼写（`CETeam.CombatExtended`），拿它能直接去 mod 列表里对号
+
 - **截断提示全服一套文法**：`... +N more <什么> (<怎么拿到>)`。看到 `... +` 开头的行就是被截断了，`<什么>` 恒有名词（它数的到底是哪一类），括号里那句就是下一步该怎么传参，各工具不必分别认。例：
   `... +71 more methods (pass limit:'all' for the whole list, or read one with read_code methodName)` ·
   `... +367 more of 387 lines (pass startLine=20)` · `... +43 more entries (pass offset=7 for the next page, or a larger limit)`
+  
   - 名词与 N **单复数一致**（`... +1 more C# type` / `... +18 more C# types`），故这个槽可以直接当句子读。表头、尾注、启动提示里的计数同此判据，全服不写 `N thing(s)`
   - **总数已知时写成 `... +N more of M <什么>`**（`... +19 more of 22 matching lines in this file` · `... +82 more of 132 matching files (50 listed; …)`）。**文件那一形还要印出「这次列了几个」**——同一个工具的 scan-stopped 那一形明写 `only the first 50 files are listed`，两形不对齐时读者只能做 132−82 的减法，而那 50 是个从不出现在返回里的常数。只给增量的话，读者要拿它和印出来的条数相加才得到总数，而「上面印了几条」并不总是常数——扫描停在预览配额上时最后一个文件可能只印了 1–2 行也带折叠，那条被诱导出来的心算就会算错。`of` 的读法与表头一致：**看到 `of` 就是没给全**。总数推不出来时（扫描停了、后面的文件没打开过）不写 `of`
   - 唯一不带括号的一形是 `trace usages` / `search_regex` 的**每文件**折叠行 `... +N more of M matching lines in this file`：它的下一步整份返回里只说一次（见下条），不逐文件重复
   - 括号里那句**会说清 `limit:'all'` 够不够**：藏起来的比服务端上限（200）还多时写的是 `pass limit:'all' for the first 200; the rest needs a narrower query`，只有真能一次拿全时才写 `pass limit:'all' to expand`。`'all'` 从来不是「无限」，它只把上限抬到 200
+
 - 扫描类工具（`trace usages` / `search_regex`）停在预览上限时另有一句共用的 `... more matches exist (…)`——与 `... +N more` 的区别是**它数不出还剩多少**（后面的文件根本没打开过），故不给数字。括号里同样给下一步；`limit` 已经是 `'all'` 时不会再劝你提 `limit`
+
 - 这两个工具还共用一句 `... some files were not scanned in full (…)`：有文件读不开、或大到只扫了前 20000 行时才出现，**并点名是哪几个文件**（列前三个，其余记数）。不点名时调用方无从判断那个文件与本次查询有没有关系，只能把整份结果一律当成下界。**它一出现，表头的命中数就改口成 `at least N matching lines`，且表头就地带一句指向它的引用**（`; 'at least' comes from the trailing 'not scanned in full' note, not from limit`）——成因同现还不够：盲测里三条互不相干的任务链在成因确实在场的返回上各自把那个下界归给了 `limit` 的默认值（`at least 105` 与 default 100 只差 5，算术上太顺），而真成因隔在整份结果之后。**下界记号必须携带可指认的成因引用**。改口本身的判据不变：那时那个数只是下界，即便被截断的那个文件在已扫部分零命中也一样——行闸之后有没有命中谁也不知道。反过来说，表头直接写 `N matching lines` 就是确定值
+
 - **两个扫描类工具报的数都是「命中行」，不是「命中次数」**：判据是逐行 `IsMatch`，同一行被 pattern 命中两次仍只算一行。表头与每文件折叠行用的是同一个量纲
+
 - **表头回显生效的大小写档位**。`search_regex` 的 `ignoreCase` 默认 true 而只写在参数表里，于是同一个 pattern 的命中数会因为一个没人传过的开关而浮动，返回里却没有任何字段能事后判断跑的是哪一档——拿它去「交叉验证」`trace usages` 的数时，两边其实跑的是同一个默认开关。`trace usages` 是固定的不分大小写全词匹配，故未截断时它还多给一个数：`Text matches for 'CompRefuelable' (108 matching lines in scope 'base', whole word and case-insensitive — 82 of them match the query's own casing)`。C# 的命名习惯保证「类型 `CompRefuelable` → 局部变量 `compRefuelable`」，那 26 行的差额正是纯变量行；不给这个数，108 会被当成「这个类被引用了 108 处」写进结论
+
 - 但**表头的数在截断与未截断两种情形下量纲不同**，措辞会说清是哪一个：截断时写 `first N preview lines`（数的是**印出来的**行，每文件封顶 3 条），未截断时写 `N matching lines`（数的是命中行，含没印出来的）。两个数不可横向比较——`first 100 preview lines` 背后的命中量可以远大于另一次查询的 `49 matching lines`
+
 - `locate` / `trace inheritors` 的逐源越界脚注在**跨多个源**时先给合计（`Outside scope 'base': 47 matches — Milira 15, RatkinAnomaly 10, …`）——同一份返回里 scope 内的量在表头已经加总好，这一行句式并列却要读者临时心算，是整份输出唯一要做算术的地方。只有一个源落在外面时不加，那时合计逐字等于那一个数。**合计的名词跟着构成走**：只有一个段参与时用那个段自己的名词（`Outside scope 'base': 3 files — Wolfein 2, Cinders 1`），泛称 `matches` 只留给真的跨段累加——正文写着 `4 files`、脚注紧跟着写 `3 matches`，同一屏两个计数词指的是同一类东西，读者得先确认它们不是两个量。**合计跨了多个段时还要点名构成**（`Outside scope 'base': 2122 matches (1607 members + 491 C# types + 24 XML defs) — miho 1151, Milira 286, …`）：参与相加的段随命中形态变，同一条查询换个 scope 就可能多出一段，于是同一个源的计数在两次调用里对不上，而调用方无从判断哪一次算漏了、哪一次算多了。
 
 - 这两个工具的 scope 是**硬过滤**：落选的文件根本没被打开，故它们给不出 `locate` / `trace inheritors` 那条逐源的 `Outside scope 'X': …` 计数。缺席会被读成「scope 外没有」，所以它们改为明说一句 `Files outside scope 'X' were never opened, … this tool never prints such a line`
+
 - 同一份返回里出现**重名文件**时，文件名补上刚好能把它们分开的那几级目录（`Core/Defs/…/RangedIndustrial.xml` 与 `Biotech/Defs/…/RangedIndustrial.xml`）——判据与结果行文件名同源：唯一就只印基名，重名才补。两个工具都叫调用方 `use read_code on a file`，而 `read_code` 收基名，不消歧那句下一步就是错的
+
 - 有文件的预览被折叠时，末尾补一句 `... previews are capped at 3 lines per file and no parameter widens that; use read_code on a file to see the rest`。**它整份返回只出现一次，且只在真有文件撞上那个上限时出现**——没有这句，就是没有任何文件因为「每文件 3 行」被折叠。这条单列的原因是其余折叠行都以 `(pass …)` 收尾，留空会被读成「这里漏印了参数名」，而这个上限确实没有参数放得宽
+  
   - 注意扫描停在预览配额上时，**最后一个文件**的折叠行成因是配额耗尽而非每文件上限（它可能只印了 1–2 行就折叠）。那种折叠不触发这句脚注，它的成因由 `... more matches exist (scan stopped at the N-preview cap…)` 解释
+
 - 返回不以空行结尾——结尾空行会被读成「后面还有、被截断了」
 
 ### 跟随游戏与 mod 更新
+
 - 按 sha256 检测已配置源的程序集变化，可一键重新反编译（进程内完成，不依赖外部工具）
 - 保留数代源码历史，支持文件级与行级 diff，游戏更新后能直接看出改了什么
 - 重新同步后索引就地重建，不需要重启服务
 
 ### 运行模型与边界
+
 - 本地运行，核心检索不依赖网络
 - 网络请求仅用于版本更新提示（可关闭）
 - 反编译仅针对使用者自己配置的本地程序集，且由 `sync_sources` 显式触发，不会自动进行
@@ -80,10 +107,12 @@
 
 以下为实际注册的 MCP 工具名与能力说明。
 
-###  `rimworld-searcher__locate`
+### `rimworld-searcher__locate`
+
 全局模糊定位入口，也是**唯一接受近似输入**的工具——其余工具都要求准确名字，先用它把残缺或拼错的名字换成准确名。
 
 **支持内容**
+
 - C# 类型、成员（方法/属性/字段）、XML Def、Def 字段内容、文件名
 - CamelCase 缩写与拼写容错（如 `JDW`）。**成员段与其余三段同等**：`method:CompTickRar` 会给出 `CompTickRare`。成员模糊匹配曾先把候选截成一个固定大小的池子再看谁够分（先按索引枚举序硬截 200 条，后改为按 2-gram 重合度取前 500）——两版都是「先截断、再判断」，于是池外有没有够分的键谁也说不出来。现已整个撤掉：60 分线可以逐条翻译成前缀 / 词边界 / camel 首字母 / 编辑距离 ≤ 3 四种结构条件，每一种都是一次区间查询，故**够分的键是精确枚举出来的**，与候选池大小、索引枚举序都无关。剩下的唯一一道限额是「一次最多展开 12000 个名字键」，撞上它时表头改口 `at least` 并附成因脚注（见「结果分段」）
 - `scope` / `limit` 参数（见「配置」一节）
@@ -91,13 +120,13 @@
 
 **过滤前缀**（写在查询串里，不是独立参数）
 
-| 前缀 | 别名 | 作用 |
-| --- | --- | --- |
-| `type:` | `t:` `class:` `c:` | 只搜 C# 类型 |
-| `method:` | `m:` | 只搜方法 |
-| `field:` | `f:` `property:` `p:` | 只搜字段/属性 |
-| `def:` | `d:` | 只搜 XML Def |
-| `scope:` | `s:` `source:` `in:` | 等同于 `scope` 参数 |
+| 前缀        | 别名                    | 作用             |
+| --------- | --------------------- | -------------- |
+| `type:`   | `t:` `class:` `c:`    | 只搜 C# 类型       |
+| `method:` | `m:`                  | 只搜方法           |
+| `field:`  | `f:` `property:` `p:` | 只搜字段/属性        |
+| `def:`    | `d:`                  | 只搜 XML Def     |
+| `scope:`  | `s:` `source:` `in:`  | 等同于 `scope` 参数 |
 
 - 冒号后**带不带空格都行**（`type:CompShield` 与 `type: CompShield` 等价）。光杆前缀（`type:`）视同没写，返回会说明它被忽略了
 - **不在上表里的前缀不是过滤器**，整个 token 会当成普通搜索词去匹配（于是 `member:CompTick` 零命中，而 `method:CompTick` 有两百条）。这种情况返回会明确点出来，不再让调用方把「前缀写错了」读成「这个符号不存在」
@@ -119,6 +148,7 @@
 **结果行末尾的文件名只在推不出来时才印**。`- \`CompShield\` (100%)` 后面没有文件名，意思就是它在 `CompShield.cs` 里（成员行同理，按宿主类型名推）。**印出来的每一个都是意外**——`- \`PawnFilter\` (100%) - Dialog_BeginRitual.cs` 表示这个符号不在同名文件里，值得看一眼。同一类型分散在多个文件时也会印，并带 `+N more files`。
 
 **示例查询**
+
 ```text
 def:Apparel_ShieldBelt
 type:CompShield
@@ -129,10 +159,12 @@ scope:mods pawn
 
 ---
 
-###  `rimworld-searcher__inspect`
+### `rimworld-searcher__inspect`
+
 深度分析单个 Def 或 C# 类型。**不做模糊匹配**：名字必须完整，大小写可以不管（返回会回显索引里的准确拼写），拼错与残缺都解析不出来——先用 `locate` 拿准确名。`def:` / `type:` 前缀会被自动剥掉。
 
 **Def 模式**
+
 - 展示 Def 类型、来源文件、译名（`localization_description` 开启时连译文描述一起）。`Type:` 行同时回答「这个 DefType 的 C# 类在不在索引里」：光名字 = 在，且在同名文件里；带文件注 = 在别的文件里或有多份；`(C# class not indexed)` = 不在索引里
 - 返回沿整条 `ParentName` 链合并后的 XML——任何单个 XML 文件都不含这份内容。但**「合并」只指继承**：服务端不解析 mod 的 `PatchOperation`，也不越过当前 `scope`，所以这不是运行中的游戏看到的那份定义。被 patch 改过、或被 scope 外的 mod 覆盖过的 def，这里给出的数字看着权威却是过期的。**这句边界就写在 `**Resolved XML**` 那行标题里**（`(mod PatchOperations are not applied, so a mod patch against this def is not reflected below)`），不是只写在正文前的散段里：调用方是照着 XML 正文抄数值的，而正文可以长到几百行、`xmlStartLine` 续读时更是连开头都看不见
 - **字段不标来源**。要区分「这个字段是它自己写的」还是「继承来的」，去 `read_code` 读 `File:` 那个路径——那份文件里只有它自己未合并的几行，继承来的字段恰恰不在其中。此前这件事只写在 `xmlStartLine` 这个分页参数的说明里，而那个参数只在合并 XML 过长时才需要读
@@ -144,6 +176,7 @@ scope:mods pawn
 - **`limit` 在 def 模式从不被读**（它只作用于 C# 大纲），而调用方传它时指望的恰恰是「别截断」，且 def 模式确实会截断、只是换了个参数。真传了才补一句 `'limit' applies to the C# type outline only and was ignored here; the merged XML below is paged with 'xmlStartLine'`
 
 **C# 模式**
+
 - 返回**基类链**，与 def 模式同一种写法的一行式：`Inheritance chain: Pawn <- ThingWithComps <- Thing <- Entity`（链上用短名，全限定名在大纲的 `Class:` 行）。接口不在这条链上，要看实现关系用 `trace mode:"inheritors"`
 - 这一行同时钉住**下面那份大纲的辖域**：`— inherited members are not in the outline below at any limit`。大纲只列本类型自己声明的成员，`Pawn` 上找不到 `Map` 是因为它声明在 `Verse.Thing` 上，`limit:'all'` 展开全部 118 条属性也不会出现——辖域不说清的话，折叠行读起来就像「展开就是全部成员」
 - 返回类成员大纲：**按种类分块**（`Properties:` / `Fields:` / `Methods:` 各一行表头 + 缩进的签名行），某类没有成员就整块不出现。构造器、索引器、运算符不进大纲，但 `read_code` 仍能按名读到它们
@@ -154,6 +187,7 @@ scope:mods pawn
 - 方法体不在这里，归 `read_code`
 
 **示例**
+
 ```text
 Apparel_ShieldBelt
 RimWorld.CompShield
@@ -161,10 +195,12 @@ RimWorld.CompShield
 
 ---
 
-###  `rimworld-searcher__trace`
+### `rimworld-searcher__trace`
+
 交叉引用追踪工具。
 
 **模式**
+
 - `inheritors`：列出某基类/接口的**传递闭包**子类与实现类树——间接后代（子类的子类）同样列出。默认展开到服务端硬上限 200，**树比 200 大时照样是截断的**，`limit` 抬不动这个上限。截断时保留的是浅层：调用方先要的是「谁直接继承了它」。撞上这个上限时折叠行给的下一步有两条：`re-trace a listed type as its own root (depths then restart from it)`，或 `narrow scope to one source — a per-source subtree is listed in full whenever it fits under the cap`。通用的「narrow the query」在这里根本不成立（`trace` 的查询就是一个类型名，没有可收窄的余地），而只给「换根重跑」那一条时语气太足：盲测里调用方据此断定「要拼出全树得对 306 个直接子类逐个盲试」，转而去跑正则补料，多花四次调用、产出一份自己都标注为「非完整」的名单——而 `scope:'Milira'` 一次就回了 41 条、含全部 depth 2/3/4、无折叠
   - **列表按深度排序，来源优先级不参与**。继承关系是精确的，每个候选的分数恒为 100，于是通用的「同分按来源 Rank 排」会把 Rank 顶成首要键——跨源查询里 `vanilla` 的 depth 4 因此排在 `Milira` 的 depth 1 前面，表头那句 `shallowest first` 成了假陈述，而「截断留下的恒是最浅的那一批」这条保证也被当场推翻（200 的配额先被 vanilla 吃光，被砍掉的恰恰是别的源的**直接**子类）。现在候选按深度升序原样保留，来源只用来判归属
   - 表头括号里的每个数都描述 **scope 内的整棵树**：`(381 in scope 'base', transitive — indirect descendants included; 221 direct, deepest 4 levels down)`。只有后面单列的 `Listed below: 200, shallowest first — nothing deeper than depth 1 is listed` 描述这次列出来的那一段，**且没被截断时整格不印**（同「看到 `of` 就是被截了」那条读法）。此前 `direct` 与 `deepest` 数的是截断后的切片，而它俩紧跟在描述全树的总数后面、句法完全对称——`ThingComp` 因此写出「381 … 200 direct, deepest 1 level down」，读者据此断定这棵树只有一层，实际有四层
@@ -182,6 +218,7 @@ RimWorld.CompShield
 > `usages` 不是调用图：同名成员挂在无关类型上也会混进同一份列表，而经由继承发生的调用则会漏掉。
 
 **示例**
+
 ```text
 symbol: ThingComp, mode: inheritors
 symbol: CompShield, mode: usages
@@ -189,25 +226,28 @@ symbol: CompShield, mode: usages
 
 ---
 
-###  `rimworld-searcher__read_code`
+### `rimworld-searcher__read_code`
+
 从**某一个指定文件**里精确读取源码。`path` 收的是文件（已索引的文件名或绝对路径），不是搜索词——手上只有搜索词时先走 `locate`。
 
 **三种互斥模式**（同时传多个时，`extractClass` > `methodName` > 行区间）。真的传多了时，返回**第一行就说清是谁赢了、谁被丢掉**：`// note: 'extractClass' takes precedence — methodName:'CompTick' and startLine/lineCount were not applied`。择一规则此前只写在 schema 里，返回里零字，于是一份「只按 `extractClass` 出的整类」会被当成「按我给的三个条件共同筛出来的」。只在真的多传了才印
 
-| 模式 | 参数 | 说明 |
-| --- | --- | --- |
-| 整个类型 | `extractClass` | 类/结构/接口/记录的完整实现体，枚举与委托声明同样可取。上限 2000 行（与行区间模式同一个上限），超出会截断并报出**这个类自己有多少行、以及它所在文件有多少行**（`'X' is 3200 lines of a 5100-line file and the cap is 2000`）——只报前一个数时读者无从判断这个类是不是整份文件。下一步的建议按本次实际传了什么给：传了 `methodName` 就劝 `drop extractClass to get just 'CompTick'`（那个参数本来就在手上，只是被择一规则丢掉了），没传才劝 `pass methodName for one member` |
-| 单个成员 | `methodName`（+ 可选 `className`） | 方法、属性、字段、事件、构造器（类名或 `.ctor`）、索引器（`this`）、运算符（`+`）、枚举值——凡 `locate` 列得出的成员都行。文件里同名成员会**全部**返回，传 `className` 才只取一个 |
-| 裸行区间 | `startLine` + `lineCount` | `startLine` 为 0 基；未指定成员时走这条 |
+| 模式   | 参数                             | 说明                                                                                                                                                                                                                                                                                                                      |
+| ---- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 整个类型 | `extractClass`                 | 类/结构/接口/记录的完整实现体，枚举与委托声明同样可取。上限 2000 行（与行区间模式同一个上限），超出会截断并报出**这个类自己有多少行、以及它所在文件有多少行**（`'X' is 3200 lines of a 5100-line file and the cap is 2000`）——只报前一个数时读者无从判断这个类是不是整份文件。下一步的建议按本次实际传了什么给：传了 `methodName` 就劝 `drop extractClass to get just 'CompTick'`（那个参数本来就在手上，只是被择一规则丢掉了），没传才劝 `pass methodName for one member` |
+| 单个成员 | `methodName`（+ 可选 `className`） | 方法、属性、字段、事件、构造器（类名或 `.ctor`）、索引器（`this`）、运算符（`+`）、枚举值——凡 `locate` 列得出的成员都行。文件里同名成员会**全部**返回，传 `className` 才只取一个                                                                                                                                                                                                         |
+| 裸行区间 | `startLine` + `lineCount`      | `startLine` 为 0 基；未指定成员时走这条                                                                                                                                                                                                                                                                                             |
 
 前两种要解析 C#，**XML 文件只有行区间模式可用**（读 Defs 原文就走这条）。
 
 **路径支持**
+
 - 绝对路径
 - 已索引文件名（如 `CompShield.cs`）
 - 文件基名（如 `CompShield`）
 
 **返回里必须读到的四件事**
+
 - 三种模式的头部都印**解析后的绝对路径**，成员与整类模式统一为一行 `// <种类> <名字>[ in <所属类型>] — <路径>:<行号>`（如 `// Method CompTick in RimWorld.CompShield — …/CompShield.cs:118-137`）。`in <所属类型>` 只在它与成员名不同名时出现。行号给的是**整段的范围**而不只是起点：只印起点时，读者拿它当 `startLine` 续读会从成员的第一行重新开始；成员本身只占一行时不印范围（那时 `118-118` 只是噪音）。文件里有多个同名成员时，每条正文之前各一行并带 `[i/N]` 编号——**看到 `[3/3]` 就是拿全了**，不必猜后面还有没有
 - 传基名时，`scope` 决定哪个源胜出；作用域内有多份同名文件时会追加一行 `note: N files share this name in scope …` 并列出其余候选——不看这行就可能把某个 mod 的覆盖版当成 vanilla 原版。读的是哪一份也说清：**`scope` 表达式里排在前面的那个源**，判据就在同一句话里的那个表达式上
 - `className` 只是**过滤器**。过滤后没有候选时，返回会说清「这个成员确实在这个文件里，只是不在你点的那个类里」并列出它实际声明在哪几个类型、第几行；只有整个文件里都没有才报 not found
@@ -215,16 +255,19 @@ symbol: CompShield, mode: usages
 - **错误返回与成功返回带同样的文件身份**：not found / 文件过大 / 行号越界都报解析后的绝对路径（不是基名），上面那几条 `note:` 也照带。基名撞名时，「没找到」说的是哪一份不必再猜
 
 **示例**
+
 ```text
 path: CompShield.cs, methodName: CompTick
 ```
 
 ---
 
-###  `rimworld-searcher__search_regex`
+### `rimworld-searcher__search_regex`
+
 在已索引的 C# 与 XML 上跑 .NET 正则。
 
 **特性**
+
 - 可选 `fileFilter`（如 `.cs` / `.xml`）与 `scope`，两者都在扫描前下推生效，不是拿到结果再筛。**有命中时表头也回显这个过滤器**（`(1 matching line in scope 'base', case-insensitive, files filtered to '.xml')`）：`scope` 与 `ignoreCase` 本来就一直回显，唯独 `fileFilter` 只在零命中那一支才提——于是「这个数是全语料的还是只算了 `.xml` 的」在有命中时反而看不出来，而这正是把命中数当结论用时最要紧的一格
 - 结果按文件分组，每个文件最多 3 行预览（其余记为 `+N more matching lines in this file`），最多列 50 个文件
 - `limit` 默认 100 条命中。**小到咬人的 `limit` 不是「少列几行」，它把总数整个换掉**：表头退化成 `first N preview lines`、扫描当场停在那里，`N matching lines` 那个总数不再出现。想要总数就传 `limit:'all'`；够不到上限时 `limit` 才只影响列出的条数、不影响报出来的总数
@@ -237,6 +280,7 @@ path: CompShield.cs, methodName: CompTick
   - 正则在某文件上超时（灾难性回溯）被中途弃扫、文件读不开被跳过、单文件只扫到 20000 行——三者都计数上报
 
 **示例**
+
 ```text
 pattern: class.*:.*ThingComp
 fileFilter: .cs
@@ -244,10 +288,12 @@ fileFilter: .cs
 
 ---
 
-###  `rimworld-searcher__list_directory`
+### `rimworld-searcher__list_directory`
+
 列出某个**绝对路径**目录下的文件与子目录（子目录名以 `/` 结尾）。
 
 **特性**
+
 - 路径必须是服务端的已索引源根（`config.toml` 各源解析出的 `csharp` / `xml` 路径，含省略 `csharp` 时拿到的反编译输出目录）或其下级目录。白名单之外一律拒绝，**源根的父目录也在拒绝之列**。拒绝消息与工具描述都会**列出本机上真实可用的根路径**，不必先撞一次再猜。举例是**按「盘符 + 第一级目录」分族轮流取**的，不是按配置序取头几条：反编译产物在配置里排在前面，按序取只会取到 `Decompiled\*` 那一族，装着 XML 的游戏与创意工坊目录一条都露不出来，读的人会以为它们不在白名单里。那句话同时说清这个数是什么：`These 87 roots are the indexed folders of the 11 configured sources listed under 'scope' — one source usually spans several roots, so this count is not a source count.`——一个源通常摊成 `csharp` / `xml` 两条以上的根，`87` 与 `scope` 那 11 个源名不是一个量纲，并排出现时会被当成同一件事的两种说法
 - 条目**先排序再截断**：子目录在前、文件在后，各自按名序。所以截断后拿到的是「按名序的前 N 个」，缺席是可推理的
 - 列的是**目录在磁盘上的实际内容**，不按「索引收没收」过滤：索引从没收进来的文件、以及贴图音效这类非源码资产，一样会出现在这里。工具描述里明说了这一条——白名单是按索引源根定的，很容易被读成「列出来的都是索引里的」，据此把某个文件的存在当成它已被索引的证据
@@ -257,18 +303,20 @@ fileFilter: .cs
 
 ---
 
-###  `rimworld-searcher__sync_sources`
+### `rimworld-searcher__sync_sources`
+
 程序集跟随与源码同步。仅对在配置里声明了 `assemblies` 的源生效，未声明的源视为手工副本，同步流程会跳过。
 
 **三种动作**
 
-| `action` | 行为 |
-| --- | --- |
-| `check`（默认） | 只比对程序集 sha256，报告哪些源变了。只读，通常几十到几百毫秒 |
-| `sync` | 对变更的源重新反编译，并就地重建索引（**不需要重启**） |
-| `diff` | 列出上次同步的源码增删改；带 `file` 参数则返回该文件的行级 diff |
+| `action`    | 行为                                     |
+| ----------- | -------------------------------------- |
+| `check`（默认） | 只比对程序集 sha256，报告哪些源变了。只读，通常几十到几百毫秒     |
+| `sync`      | 对变更的源重新反编译，并就地重建索引（**不需要重启**）          |
+| `diff`      | 列出上次同步的源码增删改；带 `file` 参数则返回该文件的行级 diff |
 
 **参数**
+
 - `sources`：逗号分隔的源名，限定操作范围；省略即覆盖全部可跟随源
 - `file`：`diff` 专用，取自 diff 列表的相对路径，给出后返回行级 unified diff
 - `method`（+ 可选 `className`）：`diff` 专用，与 `file` 同用，只 diff 该成员而不是整个文件
@@ -280,6 +328,7 @@ fileFilter: .cs
 - `offset`：`diff` 专用（不带 `file` 时），跳过前若干个变更文件，用于翻页；列表末尾会印出下一页该填的 `offset`
 
 **行为要点**
+
 - 反编译走进程内的 `ICSharpCode.Decompiler`，语言档位锁定 C# 9（Unity 2022.3 的实际水平），不依赖外部 `ilspycmd`
 - 引用集从程序集元数据的 `AssemblyRef` 推导，mod 引用 `Assembly-CSharp`、Harmony 或其它前置 mod 都能自动解析
 - mod 的多版本目录（`1.4/`、`1.5/`、`1.6/`…）只取当前游戏版本那一份，其余是历史死代码
@@ -336,6 +385,7 @@ Tool Layer
 ```
 
 **启动流程**
+
 1. 读取配置（优先 `RIMSEARCHER_CONFIG`，未设置时回退到同目录 `config.toml`）
 2. 把 `[[sources]]` 摊平为索引侧的统一视图（同名的块归为同一个源）
 3. 初始化路径安全策略
@@ -353,6 +403,7 @@ Tool Layer
 ## 3. 典型工作流
 
 ### 场景：分析护盾腰带如何生效
+
 1. `locate(def:Apparel_ShieldBelt)`：定位 Def
 2. `inspect(Apparel_ShieldBelt)`：看合并后 XML 与关联 C# 类型
 3. `inspect(RimWorld.CompShield)`：看继承链和类大纲
@@ -360,6 +411,7 @@ Tool Layer
 5. `trace(symbol=CompShield, mode=usages)`：追踪相关引用
 
 ### 场景：游戏或 mod 更新后跟进变更
+
 前提：相关源在配置里声明了 `assemblies`，且 `source_history_depth >= 1`。
 
 1. 启动时后台已自动探测过。若变更涉及你正在查的内容，工具返回末尾会出现提示
@@ -383,18 +435,18 @@ Tool Layer
 
 ## 4. 性能与安全
 
-| 维度 | 当前实现 |
-|------|----------|
-| 索引策略 | 启动优先加载本地缓存，未命中时扫描并冻结索引（`FrozenDictionary`） |
-| 索引缓存 | `manifest.json + index.bin`，默认目录 `<exe目录>/.cache/index` |
-| 模糊匹配 | N-gram 候选过滤 + 评分排序 |
-| 并发控制 | MCP 请求并发上限 10 |
-| 正则搜索保护 | 全局/单文件命中上限 + 行数上限 + regex 超时 |
-| 路径安全 | 白名单根目录校验（`skip_path_security = false` 时生效） |
-| 反编译隔离 | 先写暂存目录、成功后才替换；输出目录缺 `.rimsearcher-decompiled` 标记且非空时拒绝写入 |
-| 产物不外流 | 输出目录内自动写入 `.gitignore`（内容 `*`），避免反编译产物被误提交进版本库 |
-| 索引重建 | 就地清空重扫而非热替换（避免内存翻倍），重建期间查询挂起等待 |
-| 源码历史 | 反向增量，仅存被覆盖的旧文件，按 `source_history_depth` 轮转 |
+| 维度     | 当前实现                                                     |
+| ------ | -------------------------------------------------------- |
+| 索引策略   | 启动优先加载本地缓存，未命中时扫描并冻结索引（`FrozenDictionary`）               |
+| 索引缓存   | `manifest.json + index.bin`，默认目录 `<exe目录>/.cache/index`  |
+| 模糊匹配   | N-gram 候选过滤 + 评分排序                                       |
+| 并发控制   | MCP 请求并发上限 10                                            |
+| 正则搜索保护 | 全局/单文件命中上限 + 行数上限 + regex 超时                             |
+| 路径安全   | 白名单根目录校验（`skip_path_security = false` 时生效）               |
+| 反编译隔离  | 先写暂存目录、成功后才替换；输出目录缺 `.rimsearcher-decompiled` 标记且非空时拒绝写入 |
+| 产物不外流  | 输出目录内自动写入 `.gitignore`（内容 `*`），避免反编译产物被误提交进版本库           |
+| 索引重建   | 就地清空重扫而非热替换（避免内存翻倍），重建期间查询挂起等待                           |
+| 源码历史   | 反向增量，仅存被覆盖的旧文件，按 `source_history_depth` 轮转               |
 
 ### 索引缓存说明
 
@@ -406,21 +458,23 @@ Tool Layer
 - `verify_source_freshness`（默认开启）会把各源目录下 `.cs`/`.xml` 的**大小与修改时间**摘要一并纳入指纹，于是 Steam 更新过的 mod 也会自动触发重建。只 stat 不读文件内容，成本约百毫秒级；源全是不会变动的手工副本时可以关掉
 - 语言包（选中语言的目录或 `.tar`）同样进指纹：汉化包更新既不改路径集合也不动任何 Def，不纳入的话那份带旧译名的缓存会一直命中
 
-
 ---
 
 ## 5. 快速开始
 
 ### 前置要求
+
 > 运行 Release 版 `RimSearcher.Server.exe` 需要 [.NET 10 Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)；
 > 
 > 若需本地编译源码，则需要安装 .NET 10 SDK。
 
 ### 安装步骤
+
 1. 从 [Releases](https://github.com/ShiomiHC/RimSearcher/releases) 下载 `RimSearcher.Server.exe`。
 2. 创建 `config.toml`
 
 配置示例：
+
 ```toml
 default_scope = "base"
 
@@ -465,6 +519,7 @@ assemblies = 'C:\SteamLibrary\steamapps\common\RimWorld\RimWorldWin64_Data\Manag
 配好后跑一次 `sync_sources(action="sync")` 即可。目录在首次启动时就会建出来（空目录不影响索引缓存），产物写入后目录内会自动带上 `.gitignore` 和 `.rimsearcher-decompiled` 标记。
 
 字段说明（key 的大小写与 `_` / `-` 分隔不敏感，`source_history_depth`、`sourceHistoryDepth`、`source-history-depth`、`SourceHistoryDepth` 等价）：
+
 - `[[sources]]`: 一个块声明一个逻辑源的全部路径。`csharp` / `xml` / `assemblies` 三者都可以写单个字符串或字符串数组
   - `csharp`: 源码目录。**配了 `assemblies` 时，第一个 `csharp` 路径就是反编译输出目标**，其余视为附加的只读源码目录。整个 `csharp` 省略不写时，输出目标默认为 `<exe目录>/Decompiled/<源名>`
   - `xml`: 该源的 Def 目录，可多个（各 DLC 的 `Defs`、mod 的 `Defs` + `1.6/Defs`）
@@ -556,14 +611,14 @@ mod 没适配当前版本（只有 `1.4/` 目录）时会回退到能用的最�
 
 所有查询工具都接受 `scope` 参数：
 
-| 写法 | 含义 |
-| --- | --- |
-| `scope: "vanilla"` | 单个源 |
-| `scope: "base"` | 一个作用域组 |
-| `scope: "vanilla,Milira"` | 并选多个（书写顺序 = 同分时的优先级） |
-| `scope: "all"` | 全部源 |
-| `scope: "all,-vanilla"` | 排除（`-` 或 `!` 前缀） |
-| 不传 | 落到 `default_scope`（**不是全域**；本机默认是 `base` = vanilla + HAR） |
+| 写法                        | 含义                                                        |
+| ------------------------- | --------------------------------------------------------- |
+| `scope: "vanilla"`        | 单个源                                                       |
+| `scope: "base"`           | 一个作用域组                                                    |
+| `scope: "vanilla,Milira"` | 并选多个（书写顺序 = 同分时的优先级）                                      |
+| `scope: "all"`            | 全部源                                                       |
+| `scope: "all,-vanilla"`   | 排除（`-` 或 `!` 前缀）                                          |
+| 不传                        | 落到 `default_scope`（**不是全域**；本机默认是 `base` = vanilla + HAR） |
 
 `locate` 还接受写在查询串里的 `scope:` 前缀（如 `"scope:mods pawn"`），与 `type:` / `def:` 等前缀同一套写法。
 
@@ -576,12 +631,14 @@ mod 没适配当前版本（只有 `1.4/` 目录）时会回退到能用的最�
 3. 在 MCP 客户端中把 `RimSearcher.Server.exe` 注册为 **stdio MCP Server**，并设置环境变量 `RIMSEARCHER_CONFIG` 指向上一步的 `config.toml`。
 
 > 兼容模式说明：
+> 
 > - 若设置了 `RIMSEARCHER_CONFIG`，优先读取该路径。
 > - 若未设置，则回退到 `RimSearcher.Server.exe` 同目录下的 `config.toml`。
 
 ### 安装到 AI 助手（不同客户端配置差异）
 
 #### 通用 MCP 客户端（Claude Desktop / Gemini CLI / Cursor 等）
+
 ```json
 {
   "mcpServers": {
@@ -597,6 +654,7 @@ mod 没适配当前版本（只有 `1.4/` 目录）时会回退到能用的最�
 ```
 
 #### GitHub Copilot（`servers` 结构）
+
 ```json
 {
   "servers": {
@@ -612,6 +670,7 @@ mod 没适配当前版本（只有 `1.4/` 目录）时会回退到能用的最�
 ```
 
 #### OpenCode（`mcp` 结构）
+
 ```json
 {
   "mcp": {
@@ -628,6 +687,7 @@ mod 没适配当前版本（只有 `1.4/` 目录）时会回退到能用的最�
 ```
 
 常见注意事项：
+
 - `command` 使用 `RimSearcher.Server.exe` 的绝对路径。
 - 推荐始终配置 `RIMSEARCHER_CONFIG` 指向明确路径，避免多环境切换时误读配置。
 - 若不设置 `RIMSEARCHER_CONFIG`，才要求 `config.toml` 与 exe 在同一目录。
@@ -635,13 +695,16 @@ mod 没适配当前版本（只有 `1.4/` 目录）时会回退到能用的最�
 - 若客户端有工具白名单/权限开关，确保已允许 `RimSearcher`。
 
 ### 本地验证
+
 手动验证时：
+
 - 方式 A：设置环境变量 `RIMSEARCHER_CONFIG` 指向目标 `config.toml`。
 - 方式 B：不设置环境变量，把 `config.toml` 放到 `RimSearcher.Server.exe` 同目录。
 
 ![配置示例](Image/Snipaste_2026-02-07_23-20-57.png)
 
 然后运行 `RimSearcher.Server.exe`，若最后一条看到类似的JSON-RPC2.0日志即表示启动成功（不同版本可能看到的日志不同，但只要看到`RimSearcher MCP server started`都可视为成功启动）：
+
 - 首次构建：`Program: Cache unavailable, rebuilding index` -> `Program: Index build completed ...` -> `Program: Index cache saved`
 - 缓存命中：`Program: Index loaded from cache`
 - 服务就绪：`RimSearcher MCP server started`
@@ -649,6 +712,7 @@ mod 没适配当前版本（只有 `1.4/` 目录）时会回退到能用的最�
 ![启动成功示例](Image/Snipaste_2026-02-27_16-12-43.png)
 
 快速检查是否接入成功：
+
 - 客户端工具列表中能看到 7 个工具。支持 MCP `title` 字段的客户端显示的是短名（`locate`、`inspect`……），不支持的则显示完整名（`rimworld-searcher__locate` 这种形式）——两者是同一批工具，调用时用的始终是完整名。
 - 执行一次 `locate`（例如 `def:Apparel_ShieldBelt`）能返回结果。
 
@@ -678,6 +742,7 @@ mod 没适配当前版本（只有 `1.4/` 目录）时会回退到能用的最�
 ---
 
 ## License
+
 MIT
 
-> 如果这个项目对你有帮助，欢迎点个 Star⭐。
+> 
