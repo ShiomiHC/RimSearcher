@@ -1,0 +1,37 @@
+{
+  "name": "rimworld-searcher__list_directory",
+  "title": "list_directory",
+  "description": "List the files and subdirectories of one absolute directory; subdirectory names are suffixed with '/'. Entries come back sorted — subdirectories first, then files, each by name — so a truncated listing is the alphabetical head of the directory, and `offset` pages through the rest. The path must be one of the server's indexed source roots or a directory below one; anything outside that whitelist is refused — including the parent directory of a source root. The listing is the directory's actual contents on disk — entries are not filtered by what the index holds, so files the index never took in, and non-source assets, appear here too. Mod folders that loadFolders.xml loads only under a condition are indexed whatever is installed, and results from inside one carry a `[conditional: <folder>]` tag naming that condition; every result is checked, so one without the tag is not inside such a folder. Nothing here evaluates the condition. The roots on this server: <ROOT>/Vanilla, <ROOT>/Milira. These 2 roots are the indexed folders of the 2 configured sources listed under 'scope' — one source usually spans several roots, so this count is not a source count.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "path": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Absolute directory path to inspect. Example: '/path/to/RimWorld/Source/Core/Defs'."
+      },
+      "limit": {
+        "type": "integer",
+        "maximum": 1000,
+        "description": "Maximum entries to return (default 100, server cap 1000). 0 or a negative value means no cap below that server cap. If entries are left out, the output says so.",
+        "default": 100
+      },
+      "offset": {
+        "type": "integer",
+        "minimum": 0,
+        "default": 0,
+        "description": "How many entries to skip, for paging past the server cap. Entries are sorted (subdirectories first, then files, each by name), so paging is stable. The output prints the total entry count and the offset to pass next; without this a directory of more than 1000 entries could not be enumerated at all."
+      }
+    },
+    "required": [
+      "path"
+    ]
+  },
+  "annotations": {
+    "title": "list_directory",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+  }
+}

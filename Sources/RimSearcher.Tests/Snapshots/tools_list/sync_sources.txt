@@ -1,0 +1,79 @@
+{
+  "name": "rimworld-searcher__sync_sources",
+  "title": "sync_sources",
+  "description": "Keep the decompiled RimWorld/mod sources current. 'check' reports which assemblies changed (fast); 'sync' re-decompiles and reindexes in place (seconds to minutes); 'diff' reviews what a past sync changed (needs source_history_depth > 0).",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": [
+          "check",
+          "sync",
+          "diff"
+        ],
+        "description": "'check' (default) only reports which assemblies changed. 'sync' re-decompiles the changed sources. 'diff' reports what a past sync changed (requires source_history_depth > 0).",
+        "default": "check"
+      },
+      "sources": {
+        "type": [
+          "string",
+          "array"
+        ],
+        "items": {
+          "type": "string"
+        },
+        "description": "Optional source names to limit the operation, matching the 'name' of configured C# sources — a mod without an explicit name in config.toml takes its name from About.xml. Either a comma-separated string or an array of names. Omit to cover every followable source."
+      },
+      "granularity": {
+        "type": "string",
+        "enum": [
+          "files",
+          "members"
+        ],
+        "description": "For action='diff': 'files' (default) lists the changed file paths. 'members' also parses the listed files marked modified ('~') and reports which methods/properties/fields changed inside them — an added or removed file has no member-level diff, so a page holding only those reads identically to 'files' and says so. One syntax tree per expanded file, so narrow it down with 'sources' or a smaller 'limit'. Combined with 'file' it lists every changed member of that one file instead of its line-level diff.",
+        "default": "files"
+      },
+      "file": {
+        "type": "string",
+        "description": "For action='diff': a relative path from the diff listing (e.g. 'RimWorld\\CompShield.cs'). Given, returns the line-level unified diff for that one file instead of the file list."
+      },
+      "method": {
+        "type": "string",
+        "description": "For action='diff' together with 'file': diff only this member instead of the whole file — a method ('CompTick'), property ('Label'), constructor ('.ctor'), indexer ('this') or operator ('+'). Aliases 'methodName'/'member' are also accepted."
+      },
+      "className": {
+        "type": "string",
+        "description": "Optional companion to 'method': the declaring class, when several types in the file share the member name."
+      },
+      "version": {
+        "type": [
+          "string",
+          "integer"
+        ],
+        "description": "For action='diff': which archived version to compare the current sources against. A number counts backwards — 1 (or -1) is the most recent archived version, 2 the one before it; out-of-range clamps to the oldest kept version and says so. An explicit id such as 'v0002' also works. Defaults to the most recent."
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 2000,
+        "description": "For action='diff': max changed files to list, or max diff lines when 'file' is given. Under granularity='members' this is also the parse budget — only the files actually listed get parsed.",
+        "default": 100
+      },
+      "offset": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "For action='diff' without 'file': skip this many changed files before listing, to page through a change set larger than 'limit'. The listing prints the next offset to use.",
+        "default": 0
+      }
+    },
+    "required": []
+  },
+  "annotations": {
+    "title": "sync_sources",
+    "readOnlyHint": false,
+    "destructiveHint": true,
+    "idempotentHint": false,
+    "openWorldHint": false
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "name": "rimworld-searcher__locate",
+  "title": "locate",
+  "description": "Fuzzy name lookup: turns a partial or misspelled name into the exact C# type / member / XML def / file name that other tools require — the only tool that accepts approximate input. Results are split into C# Types, Members, XML Defs and Content Matches (defs matched on a field value rather than on their name), each section capped by limit and folded independently, plus a Files section of indexed paths — fuzzy when the other four come back empty, otherwise just the file whose name matches the query exactly. A section header reading 'N of M' means the listing was cut and M is the scope's total; a bare 'N' means the listing is that section's complete set; 'at least M' means M is a floor rather than the total, which only happens when the member search matches more name keys than the server expands in one call — a trailing note then states that cap, and narrowing the query gives an exact count. Every row in the C# Types, Members, XML Defs and Files sections carries its match score as (N%); Content Matches rows carry none and that section never reports '(K at 100%)' — a content match is a whole-word, case-insensitive hit on a field name or on one word of a field value, so every one listed is already literal, and the section is ranked by how many of the query's keywords a def matched rather than by name similarity. For a single-keyword query 100% does mean an identical name; only a query of two or more keywords can push a near-name up to 100% in the member sections, where 100% is then the top score rather than a guarantee of identical spelling. Anything below 100% is a near-name match and not the name that was asked for, so a section total counts those too — when it does, the header says how many of that total are exact, as '(K at 100%)'. This holds for method: and field: as well — they restrict the search to members, they do not make the name match exact; read the (N%) on each row to tell an exact name from a near one. Member rows are deduplicated by declaring type + member name + kind + file, so same-named overloads collapse into one row: the count is of member names, not of declarations — inspect the type to see how many overloads a row stands for. A `[source]` tag on a section header describes that section's total, not just the rows listed under it: a bare name means the whole total comes from that source, and a truncated listing whose total spans several sources carries the breakdown instead, as `[vanilla 34, Cinders 2]`. That breakdown covers the section's whole total, near-name rows included, so it does not tell you which sources the '(K at 100%)' subset comes from. Rows carry their own `[source]` tag only when the listed rows span more than one source. A `[source]` tag is a configured source name, never a namespace — the two coincide for most sources on this server but not all, so never build a qualified name out of one. Mod folders that loadFolders.xml loads only under a condition are indexed whatever is installed, and results from inside one carry a `[conditional: <folder>]` tag naming that condition; every result is checked, so one without the tag is not inside such a folder. Nothing here evaluates the condition. Filters go inside the query: type:, method:, field:, def:, and scope: as an alias for the scope parameter.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Search text or filtered query. Examples: 'Apparel_ShieldBelt', 'RimWorld.Pawn', 'def:Apparel_ShieldBelt', 'type:CompShield', 'method:CompTick', 'field:energy'."
+      },
+      "scope": {
+        "type": "string",
+        "description": "Optional search scope. sources: vanilla, milira. 'all' selects everything; prefix '-' excludes (e.g. 'all,-vanilla')"
+      },
+      "limit": {
+        "type": [
+          "integer",
+          "string"
+        ],
+        "description": "Optional result cap per section (default 10). Pass a number, or 'all' to expand up to the server cap of 200; larger numbers, 0 and negatives are all clamped to that cap. Anything else — 'many', true, an object — is rejected rather than silently replaced by the default. Score-gap folding drops results far below the top score and no limit brings them back; it only applies to fuzzy matching. method: and field: restrict the search to members but still match names by score, so their section total counts near-name matches too — the (N%) on each row is what tells them apart, and anything below 100% is not the name that was asked for."
+      }
+    },
+    "required": [
+      "query"
+    ]
+  },
+  "annotations": {
+    "title": "locate",
+    "readOnlyHint": true,
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false
+  }
+}

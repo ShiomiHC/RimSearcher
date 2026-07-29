@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -36,42 +35,11 @@ public class OutputSnapshotTests : IDisposable
     }
 
     // ---- 闸本体 ----
+    //
+    // 存哪、怎么比、缺基线时怎么办、diff 怎么印，全在 SnapshotGate 里——参数层的 tools/list
+    // 基线用的是同一套。这里只留**这一份输出特有**的那件事：哪些字随环境变。
 
-    private static bool UpdateMode =>
-        string.Equals(
-            Environment.GetEnvironmentVariable("RIMSEARCHER_SNAPSHOTS"), "update", StringComparison.OrdinalIgnoreCase);
-
-    // 基线跟着**测试源文件**放，不进构建输出：它是要被人读、被 git diff 审的东西，
-    // 拷进 bin/ 只会让「改了输出」这件事在 review 里看不见。
-    private static string SnapshotPath(string name, [CallerFilePath] string here = "")
-        => Path.Combine(Path.GetDirectoryName(here)!, "Snapshots", $"{name}.txt");
-
-    private void Verify(string name, string content)
-    {
-        var path = SnapshotPath(name);
-        var actual = Normalize(content);
-
-        if (UpdateMode)
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, actual);
-            return;
-        }
-
-        if (!File.Exists(path))
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, actual);
-            Assert.Fail(
-                $"基线 Snapshots/{name}.txt 不存在，已按本次输出生成。人工核对后重跑；"
-                + "本次判红是故意的——缺基线时判绿的闸没有判据。");
-        }
-
-        var expected = File.ReadAllText(path);
-        if (expected == actual) return;
-
-        Assert.Fail($"Snapshots/{name}.txt 与本次输出不一致：\n{Diff(expected, actual)}");
-    }
+    private void Verify(string name, string content) => SnapshotGate.Verify(name, Normalize(content));
 
     // 输出里唯一随环境变的东西是路径与耗时，两者都归一化掉；其余一律逐字比。
     private string Normalize(string content)
@@ -93,31 +61,6 @@ public class OutputSnapshotTests : IDisposable
 
         return content;
     }
-
-    // 逐行 diff。整份贴出来的话，一个空行的差异要在几十行里靠肉眼找。
-    private static string Diff(string expected, string actual)
-    {
-        var want = expected.Split('\n');
-        var got = actual.Split('\n');
-        var lines = new List<string>();
-
-        for (var i = 0; i < Math.Max(want.Length, got.Length); i++)
-        {
-            var a = i < want.Length ? want[i] : "<无此行>";
-            var b = i < got.Length ? got[i] : "<无此行>";
-            if (a == b) continue;
-
-            lines.Add($"  第 {i + 1} 行\n    基线: {Quote(a)}\n    本次: {Quote(b)}");
-            if (lines.Count >= 12) { lines.Add("  …（差异过多，只列前 12 处）"); break; }
-        }
-
-        return lines.Count == 0
-            // 逐行相同却整体不等 = 差在行尾空白或结尾换行上，那正是最该被这道闸抓住的一类
-            ? $"  逐行相同但整体不等（行尾空白或收尾差异）：基线 {expected.Length} 字符、本次 {actual.Length} 字符"
-            : string.Join("\n", lines);
-    }
-
-    private static string Quote(string s) => "\"" + s.Replace("\r", "\\r").Replace("\t", "\\t") + "\"";
 
     // ---- 语料与调用 ----
 
