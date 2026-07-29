@@ -1,0 +1,8 @@
+## Core — since v0001 (<UTC>)
+0 added, 13 modified, 0 removed (1 version kept, 0 KB archived)
+  ~ ZzChanged.cs
+  ~ ZzSync00.cs
+  ~ ZzSync01.cs
+  ~ ZzSync02.cs
+  ~ ZzSync03.cs
+  ... +8 more of 13 changed files (next page: offset=5, or raise limit, max 2000)

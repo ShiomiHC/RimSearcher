@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using RimSearcher.Core;
@@ -86,6 +87,9 @@ public class OutputSnapshotTests : IDisposable
 
         // sync_sources 的 `Source check (N ms, …)`
         content = Regex.Replace(content, @"\((?<n>\d+) ms,", "(<MS> ms,");
+
+        // sync_sources 的 diff 表头带归档时刻 `since v0001 (2026-07-29 02:37 UTC)`
+        content = Regex.Replace(content, @"\(\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC\)", "(<UTC>)");
 
         return content;
     }
@@ -943,6 +947,26 @@ public class OutputSnapshotTests : IDisposable
         Verify("inspect/type-outline", content);
     }
 
+    // Def 关联到的 C# 类型超过 10 个时的折叠行。步 5 要把它接到 Fold 上，故先立判据；
+    // 溢出恰好一条，一并钉住这一形不走全服构词（`+1 more types`，见指导文档 §7）。
+    [Fact]
+    public async Task Inspect_LinkedTypesFold()
+    {
+        // 元素名必须各不相同：Def 解析按 XML 语义合并同名子元素（后者胜），11 个 `<compClass>`
+        // 只会剩一个。认作类型引用的判据是「元素名以 Class/Worker 结尾」，故编号放在后缀之前。
+        var links = string.Concat(
+            Enumerable.Range(0, 11).Select(i => $"    <zzLink{i:D2}Class>Zz.ZzLinked{i:D2}</zzLink{i:D2}Class>\n"));
+        var (indexer, defs, catalog) = BuildIndex(
+            ("ZzWidgetDef.cs", "namespace Zz { public class ZzWidgetDef { } }"),
+            ("ZzWidgets.xml",
+                "<Defs>\n  <ZzWidgetDef>\n    <defName>ZzWidgetAlpha</defName>\n"
+                + links + "  </ZzWidgetDef>\n</Defs>\n"));
+
+        var content = await Run(new InspectTool(indexer, defs, catalog), new { name = "ZzWidgetAlpha" });
+
+        Verify("inspect/linked-types-fold", content);
+    }
+
     [Fact]
     public async Task Inspect_Def()
     {
@@ -981,5 +1005,70 @@ public class OutputSnapshotTests : IDisposable
         var content = await Run(new SyncSourcesTool(service), new { action = "check" });
 
         Verify("sync_sources/check", content);
+    }
+
+    // diff 报告里的两条折叠行——步 5 要接 Fold 的另外两处。
+    //
+    // 这两条是全服**最偏离**共用文法的：翻页那条把下一步写在破折号后面而不是括号里，
+    // 成员那条的 `+` 曾经也是缺的。故先各立一份字节级判据。
+    [Fact]
+    public async Task SyncSources_DiffPageFold()
+    {
+        var content = await Run(BuildSyncWithArchive(), new { action = "diff", limit = 5 });
+
+        Verify("sync_sources/diff-page-fold", content);
+    }
+
+    // 成员折叠行只在**列举**路径上（granularity='members' 逐文件展开），不在 `file=` 的
+    // 单文件差异报告里——后者是另一段代码，一条不折。故这里不传 file。
+    [Fact]
+    public async Task SyncSources_DiffMemberFold()
+    {
+        var content = await Run(
+            BuildSyncWithArchive(), new { action = "diff", granularity = "members", limit = 5 });
+
+        Verify("sync_sources/diff-member-fold", content);
+    }
+
+    // 13 个变更文件（limit=5 时翻页折叠行成立），其中一个删掉了 25 个成员
+    // （超过每文件成员列举上限，成员折叠行成立）。与 OutputGrammarGateTests.BuildSync 同形。
+    private SyncSourcesTool BuildSyncWithArchive()
+    {
+        var source = _workspace.Dir("src");
+        var staging = _workspace.Dir("staging");
+
+        for (var i = 0; i < 12; i++)
+        {
+            _workspace.WriteFile(Path.Combine("src", $"ZzSync{i:D2}.cs"), $"// old {i}\n");
+            _workspace.WriteFile(Path.Combine("staging", $"ZzSync{i:D2}.cs"), $"// new {i}\n");
+        }
+
+        var members = new StringBuilder("namespace Zz {\n  public class ZzChanged {\n");
+        for (var i = 0; i < 25; i++) members.Append($"    public void ZzGone{i:D2}() {{ }}\n");
+        members.Append("  }\n}");
+        _workspace.WriteFile(Path.Combine("src", "ZzChanged.cs"), members.ToString());
+        _workspace.WriteFile(Path.Combine("staging", "ZzChanged.cs"),
+            "namespace Zz {\n  public class ZzChanged { }\n}");
+
+        var config = new AppConfig { SourceHistoryDepth = 2, GameVersion = "1.6" };
+        var entry = new SourcePathEntry
+        {
+            Name = "Core",
+            Path = source,
+            AssemblyPaths = [_workspace.Dir("assemblies")],
+        };
+
+        var service = new SourceSyncService(config, new ResolvedSources([entry], []), _workspace.Dir("cache"));
+        service.History.Capture("Core", source, staging);
+
+        // 归档的是旧内容、现盘换成新内容 → diff 报出全部 13 个文件的变化
+        for (var i = 0; i < 12; i++)
+            _workspace.WriteFile(Path.Combine("src", $"ZzSync{i:D2}.cs"), $"// new {i}\n");
+        _workspace.WriteFile(
+            Path.Combine("src", "ZzChanged.cs"), "namespace Zz {\n  public class ZzChanged { }\n}");
+
+        PathSecurity.Initialize([source]);
+
+        return new SyncSourcesTool(service);
     }
 }
