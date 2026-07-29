@@ -98,6 +98,15 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
     public Report Report { get; } = new();
     public bool Json => Args.Flag("json");
 
+    /// <summary>
+    /// 跑很久的命令用来**当场**说一句话的地方。<see cref="Report"/> 是攒到命令结束才渲染的,
+    /// 而对一次十分钟的导出,攒着等于没说 —— 人正盯着一个不动的终端,那一句话要能当场到。
+    ///
+    /// 走 stderr:它不是结果,不该混进 stdout 那份有字节级闸的输出里。默认丢弃,
+    /// 于是测试里不必为它准备任何东西。
+    /// </summary>
+    public TextWriter Progress { get; init; } = TextWriter.Null;
+
     public SnapshotDb Db
     {
         get

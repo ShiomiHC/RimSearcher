@@ -110,7 +110,7 @@ The game runs headless: no window appears and nothing is written to the display 
 |---|---|---|
 | `--modlist` <name> | Which mod list to run. 'rimsearcher modlist list' shows the names. **required** | `--list`, `--mods`, `--profile` |
 | `--name` <name> | Name to register the resulting snapshot under. Defaults to the mod list's name. | `--as`, `--alias` |
-| `--timeout` <seconds> | How long to wait for the game to finish. A large mod list can take minutes to load. Default: `900`. | `--timeout-seconds`, `--wait` |
+| `--timeout` <seconds> | How long to wait for the game to finish, and the only thing that will stop it. A large mod list can take minutes to load; if a stage sits still for a while this command says so and keeps waiting, so raise this rather than trusting a stall report. Default: `900`. | `--timeout-seconds`, `--wait` |
 | `--show-window` | Start the game with its window instead of headless. Only needed if a mod in the list requires a graphics device while loading; headless is otherwise identical and faster. | `--window`, `--windowed`, `--graphics` |
 | `--keep-temp` | Keep the temporary save-data folder afterwards, for looking at what the game was given. |  |
 | `--dry-run` | Do everything except start the game: resolve the list, check every mod is installed, and report what would be run. | `--check`, `--validate` |

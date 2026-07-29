@@ -159,7 +159,11 @@ covers Core only and your game has mods enabled, `find compClass X` returning `1
 in Core, not one in your game — and the tool says so when that gap exists.
 
 Data is as of the export. If the game or its mods have been updated since, re-export:
-`rimsearcher export --modlist <name>` drives the game unattended and imports the result.
+`rimsearcher export --modlist <name>` drives the game unattended and imports the result. It runs
+the game headless, so it takes minutes on a large mod list and prints nothing while it works. If a
+loading stage sits still it says so on stderr and **keeps waiting** — that line is a report, not a
+verdict, and the only thing that stops the game is `--timeout`. Raise `--timeout` rather than
+treating a stall report as failure.
 
 ## Parameters
 

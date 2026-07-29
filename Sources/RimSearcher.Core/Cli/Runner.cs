@@ -159,7 +159,7 @@ public static class Runner
         try { config = RimConfig.Load(parsed.Value("config")); }
         catch (TomlError ex) { stderr.Write(OutputText.Finish(ex.Message)); return ExitUsage; }
 
-        var ctx = new CommandContext(config, parsed);
+        var ctx = new CommandContext(config, parsed) { Progress = stderr };
         try
         {
             var code = command.Run(ctx);

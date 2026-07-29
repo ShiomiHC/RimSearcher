@@ -119,6 +119,78 @@ public class ExportTests
         Assert.Contains("b", ids);
     }
 
+    /// <summary>
+    /// 阶段停顿是**软限制**:到点只说话,不停进程。
+    ///
+    /// 阈值注定选不准 —— 「读定义」那一段随 mod 数量放大,20 个 mod 实测 35 秒,
+    /// 上百个 mod 要几分钟是正常的。拿它杀进程就是拿一个猜出来的数毁掉一次已经付过的加载。
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("mod-classes")]
+    public void 阶段停太久只警告不停进程(string? stage)
+    {
+        Assert.Equal(ExportCommand.WaitAction.Warn,
+            ExportCommand.Decide(pastDeadline: false, stage, ExportCommand.StageStallSeconds + 1, warned: false));
+    }
+
+    /// <summary>硬停只有 --timeout 一个来源。</summary>
+    [Fact]
+    public void 只有超时才停进程()
+    {
+        Assert.Equal(ExportCommand.WaitAction.GiveUp,
+            ExportCommand.Decide(pastDeadline: true, "mod-classes", 1, warned: false));
+    }
+
+    /// <summary>同一个阶段只说一遍。每 500ms 重复同一句话是把终端刷成噪音。</summary>
+    [Fact]
+    public void 同一阶段不重复警告()
+    {
+        Assert.Equal(ExportCommand.WaitAction.KeepWaiting,
+            ExportCommand.Decide(pastDeadline: false, "mod-classes", 9999, warned: true));
+    }
+
+    /// <summary>
+    /// 导出阶段不报。那一段本来就长,而这里对它没有任何下一步可说 ——
+    /// 一句没有下文的提醒是噪音,还会把另外两句真有下文的稀释掉。
+    /// </summary>
+    [Fact]
+    public void 导出阶段不报停顿()
+    {
+        Assert.Equal(ExportCommand.WaitAction.KeepWaiting,
+            ExportCommand.Decide(pastDeadline: false, "exporting", 9999, warned: false));
+    }
+
+    /// <summary>没到点就闭嘴。</summary>
+    [Fact]
+    public void 没到阈值不说话()
+    {
+        Assert.Equal(ExportCommand.WaitAction.KeepWaiting,
+            ExportCommand.Decide(pastDeadline: false, "mod-classes", ExportCommand.StageStallSeconds - 1, false));
+    }
+
+    /// <summary>
+    /// 停在读定义之前那一步,必须点名 <c>--show-window</c> —— 那是唯一能看见对话框的路。
+    /// 一句「它卡住了」而不说去哪儿看,等于把排查从头再来一遍(实测代价:一次人工中止)。
+    /// </summary>
+    [Fact]
+    public void 停在读定义之前要指向能看见对话框的路()
+    {
+        Assert.Contains("--show-window", ExportCommand.StageDiagnosis("mod-classes"));
+    }
+
+    /// <summary>
+    /// 三种停法说三句不同的话:下一步动作完全不同,说成一句就等于什么也没说。
+    /// </summary>
+    [Fact]
+    public void 三种停法各说各的()
+    {
+        string?[] stages = [null, "mod-classes", "exporting"];
+        var said = stages.Select(ExportCommand.StageDiagnosis).ToList();
+        Assert.Equal(said.Count, said.Distinct().Count());
+        Assert.All(said, s => Assert.NotEmpty(s));
+    }
+
     private static Dictionary<string, InstalledMod> Mods(params (string Id, string[] Deps)[] mods)
         => mods.ToDictionary(m => m.Id, m => new InstalledMod(m.Id, m.Id, "/nowhere") { Dependencies = m.Deps },
                              StringComparer.OrdinalIgnoreCase);

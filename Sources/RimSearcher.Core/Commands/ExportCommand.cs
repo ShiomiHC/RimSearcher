@@ -57,7 +57,9 @@ public sealed class ExportCommand : Command
                 Name = "timeout",
                 Aliases = ["timeout-seconds", "wait"],
                 Placeholder = "<seconds>",
-                Help = "How long to wait for the game to finish. A large mod list can take minutes to load.",
+                Help = "How long to wait for the game to finish, and the only thing that will stop it. A large " +
+                       "mod list can take minutes to load; if a stage sits still for a while this command says so " +
+                       "and keeps waiting, so raise this rather than trusting a stall report.",
                 Default = "900",
             },
             new OptionSpec
@@ -151,64 +153,110 @@ public sealed class ExportCommand : Command
     public const string GameLogName = "game.log";
 
     /// <summary>
-    /// 某一个阶段停多久算卡住。给得宽是有意的:这条判据只用来把**无限期的沉默**
-    /// 变成一句有下文的话,不用来抢救几十秒的慢。24 个 mod 实测每一段都在 15 秒内走完。
+    /// 一个阶段停多久开始说话。**这是软限制** —— 到点只出一句提醒,不碰进程。
+    ///
+    /// 硬停自始至终只有 <c>--timeout</c> 一个,因为这个阈值**注定选不准**:
+    /// 「读定义」那一段随 mod 数量放大,20 个 mod 实测 35 秒,几十上百个 mod 的整备列表
+    /// 要几分钟是正常的。拿它去杀进程,就是拿一个猜出来的数去毁掉一次已经付过的加载 ——
+    /// 而误杀不可逆,误报只花一行字。所以选可逆的那一侧:到点报,不到点闭嘴,杀不杀交给
+    /// 人显式给的 --timeout。
     /// </summary>
-    private const int StageStallSeconds = 120;
+    public const int StageStallSeconds = 120;
+
+    /// <summary>等待期间每一次裁决的三种结果。</summary>
+    public enum WaitAction
+    {
+        /// <summary>继续等。</summary>
+        KeepWaiting,
+        /// <summary>说一句,然后继续等。</summary>
+        Warn,
+        /// <summary>到 --timeout 了,停掉它。</summary>
+        GiveUp,
+    }
 
     /// <summary>
-    /// 等游戏跑完。正常结束回 null,不正常回一句点名说到哪一步的话。
+    /// 等待循环里每 500ms 做一次的裁决。抽成纯函数是因为**这是本命令唯一会主动杀进程的
+    /// 地方**,而它必须判得了 —— 起一次游戏要几十秒,靠实测覆盖不到「什么时候不该杀」。
+    /// </summary>
+    public static WaitAction Decide(bool pastDeadline, string? stage, double stageSeconds, bool warned)
+    {
+        if (pastDeadline) return WaitAction.GiveUp;
+        if (warned || stageSeconds < StageStallSeconds) return WaitAction.KeepWaiting;
+        // 导出跑起来之后不提醒:那一段本来就长,而这里对它没有任何下一步可说 ——
+        // 一句没有下文的提醒只是噪音,还会把上面那两句真有下文的稀释掉。
+        if (stage == IntermediateFormat.StageExporting) return WaitAction.KeepWaiting;
+        return WaitAction.Warn;
+    }
+
+    /// <summary>
+    /// 停在某一阶段意味着什么。提醒和超时报错共用这一句 —— 两处说的是同一件事,
+    /// 分两处写迟早会各说各的。
     ///
     /// **判据是游戏侧自报的阶段,不是 CPU 占用。**曾经想用「加载完了 CPU 却贴近零」来认
     /// 卡在对话框上的样子 —— 那是代理指标,而代理会撒谎:一段真的很慢的 I/O 会被判成卡死,
     /// 一个空转的 mod 又会把真卡死盖过去。改由 DataMod 在两个分界点写进度文件,
-    /// 这里读它,于是「停在哪一步」是**事实**而不是推测。
-    ///
-    /// 三种停法要说成三句不同的话,因为下一步动作完全不同:
-    ///   没有进度文件  —— 连 Mod 子类都没构造出来:导出器没装上,或者更早就被挡住了
-    ///   停在 mod-classes —— 程序集加载完了却没开始读定义:对话框就卡在这一段
-    ///   停在 exporting   —— 导出本身在跑,不判它卡死,交给 --timeout 兜底
+    /// 于是「停在哪一步」是**事实**,只有「这一步为什么久」才是推测。
     /// </summary>
-    private static string? WaitForGame(Process proc, TimeSpan timeout, string outFile, string progressFile)
+    public static string StageDiagnosis(string? stage) => stage switch
+    {
+        null =>
+            "The exporter has not reported in at all, so the game never got as far as constructing mod classes. " +
+            "Either the exporter mod is not loading, or something stopped the game before that.",
+        IntermediateFormat.StageModClasses =>
+            "The game has loaded its assemblies but has not started reading defs. A big mod list genuinely takes " +
+            "a while here. But this is also where a dialog waiting for a click sits — and with no window there is " +
+            "nothing to click, so it would wait forever. A mod dependency that no mod declares is the usual cause: " +
+            "this command already adds the declared ones. Re-run with --show-window to see the dialog if there is one.",
+        IntermediateFormat.StageExporting =>
+            "The game has loaded everything and is writing the export. Time here scales with how much is loaded.",
+        _ => $"The game reports stage '{stage}'.",
+    };
+
+    /// <summary>
+    /// 等游戏跑完。正常结束回 null;只有 <c>--timeout</c> 到了才回一句话(并由调用方停掉它)。
+    /// 中途的阶段停顿只经 <paramref name="warn"/> 说出去,进程照跑。
+    /// </summary>
+    private static string? WaitForGame(
+        Process proc, TimeSpan timeout, string outFile, string progressFile, Action<string> warn)
     {
         var deadline = DateTime.UtcNow + timeout;
         var stageSince = DateTime.UtcNow;
         string? stage = null;
+        var warned = false;
 
         while (!proc.WaitForExit(500))
         {
             var now = DateTime.UtcNow;
-            if (now >= deadline)
-                return $"The game was still running after {timeout.TotalSeconds:0} seconds and was stopped. " +
-                       "A larger mod list may simply need longer: raise --timeout. " +
-                       (File.Exists(outFile)
-                           ? "An export file was written before the timeout; import it with 'snapshot import'."
-                           : "No export file was written.");
 
             // 只认往前走的阶段。游戏正在写那个文件的一瞬间会读到 null,而那不是「退回到没有
             // 阶段」—— 把它当成变化会白白重置计时器,把真卡住的那一次拖成超时。
             var seen = ReadStage(progressFile);
-            if (seen is not null && seen != stage) { stage = seen; stageSince = now; }
+            if (seen is not null && seen != stage) { stage = seen; stageSince = now; warned = false; }
 
-            if ((now - stageSince).TotalSeconds < StageStallSeconds) continue;
-            // 导出跑起来之后不再判卡死:那一段是一个长动作,打断它只会毁掉一次已经付过的加载。
-            if (stage == IntermediateFormat.StageExporting) continue;
-
-            return stage switch
+            var stageSeconds = (now - stageSince).TotalSeconds;
+            switch (Decide(now >= deadline, stage, stageSeconds, warned))
             {
-                null =>
-                    $"The game ran for {StageStallSeconds} seconds without the exporter reporting in, so it never " +
-                    "got as far as constructing mod classes. Either the exporter mod failed to load, or something " +
-                    "stopped the game before that. It was stopped.",
-                IntermediateFormat.StageModClasses =>
-                    $"The game loaded its assemblies but then spent {StageStallSeconds} seconds without starting " +
-                    "to read defs. That is where a dialog waiting for a click sits — and with no window there is " +
-                    "nothing to click. A mod dependency that no mod declares is the usual cause: this command " +
-                    "already adds the declared ones. Re-run with --show-window to see the dialog. It was stopped.",
-                _ =>
-                    $"The game reported stage '{stage}' and stayed there for {StageStallSeconds} seconds. " +
-                    "It was stopped.",
-            };
+                case WaitAction.KeepWaiting:
+                    continue;
+
+                case WaitAction.Warn:
+                    warned = true;
+                    // 措辞不许把「还没走完」说成「卡死了」:这个阈值选不准,而一句断言错了
+                    // 就会教人去中止一次本来能成的导出。说事实(停在哪一步、多久),
+                    // 说下一步(要看对话框就 --show-window),然后明说还在等。
+                    warn($"still at stage '{stage ?? "none"}' after {stageSeconds:0} seconds. " +
+                         StageDiagnosis(stage) +
+                         $" Still waiting — nothing is stopped until --timeout ({timeout.TotalSeconds:0}s).");
+                    continue;
+
+                case WaitAction.GiveUp:
+                    return $"The game was still running after {timeout.TotalSeconds:0} seconds and was stopped, " +
+                           $"at stage '{stage ?? "none"}'. " + StageDiagnosis(stage) +
+                           " A larger mod list may simply need longer: raise --timeout. " +
+                           (File.Exists(outFile)
+                               ? "An export file was written before the timeout; import it with 'snapshot import'."
+                               : "No export file was written.");
+            }
         }
         return null;
     }
@@ -384,7 +432,14 @@ public sealed class ExportCommand : Command
             proc.BeginOutputReadLine();
             proc.BeginErrorReadLine();
 
-            var stall = WaitForGame(proc, timeout, outFile, progressFile);
+            var stall = WaitForGame(proc, timeout, outFile, progressFile,
+                // 当场刷出去。攒在缓冲里等命令结束才吐,就跟把它放进 Report 里一样没用 ——
+                // 这句话的全部价值就在于人还在等的时候能看见。
+                warn: line =>
+                {
+                    ctx.Progress.Write(OutputText.Finish($"{CommandRegistry.ExeName}: {line}"));
+                    ctx.Progress.Flush();
+                });
             if (stall is not null)
             {
                 try { proc.Kill(entireProcessTree: true); } catch { /* 已经退了 */ }
