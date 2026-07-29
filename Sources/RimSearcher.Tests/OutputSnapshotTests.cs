@@ -975,6 +975,28 @@ public class OutputSnapshotTests : IDisposable
         Verify("inspect/type-outline", content);
     }
 
+    // 成员大纲的折叠行。它是全服唯一一条不从 Fold 出的折叠行——文本整段由
+    // RimSearcher.Core 的 RoslynHelper 拼，够不到 Server 侧的 Output/（见指导文档 §5 末行），
+    // 而此前一份字节级基线都没有：Contains 断言只钉住了 `+N more properties` 那半截，
+    // 缩进、名词槽的构词、括号里那句下一步全无判据。
+    //
+    // 溢出数一单一复：属性溢 1（`+1 more property`）、方法溢 2，一份基线钉住两形。
+    [Fact]
+    public async Task Inspect_OutlineFold()
+    {
+        var (indexer, defs, catalog) = BuildIndex(
+            ("ZzHuge.cs",
+                "namespace Zz { public class ZzHuge { "
+                + "public int ZzA { get; set; } public int ZzB { get; set; } public int ZzC { get; set; } "
+                + "public void ZzOne() { } public void ZzTwo() { } "
+                + "public void ZzThree() { } public void ZzFour() { } } }"));
+
+        var content = await Run(
+            new InspectTool(indexer, defs, catalog), new { name = "ZzHuge", limit = 2 });
+
+        Verify("inspect/outline-fold", content);
+    }
+
     // Def 关联到的 C# 类型超过 10 个时的折叠行。步 5 要把它接到 Fold 上，故先立判据；
     // 溢出恰好一条，一并钉住这一形不走全服构词（`+1 more types`，见指导文档 §7）。
     [Fact]

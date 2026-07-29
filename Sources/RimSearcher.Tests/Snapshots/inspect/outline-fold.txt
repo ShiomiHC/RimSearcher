@@ -1,0 +1,12 @@
+## C# Type: ZzHuge
+
+**Outline** (`<ROOT>/Core/ZzHuge.cs`):
+Class: Zz.ZzHuge
+  Properties:
+    public int ZzA
+    public int ZzB
+    ... +1 more property (pass limit:'all' to expand, or read one with read_code methodName)
+  Methods:
+    public void ZzOne()
+    public void ZzTwo()
+    ... +2 more methods (pass limit:'all' to expand, or read one with read_code methodName)
