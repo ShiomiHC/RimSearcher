@@ -11,14 +11,18 @@
         "description": "Absolute directory path to inspect. Example: '/path/to/RimWorld/Source/Core/Defs'."
       },
       "limit": {
-        "type": "integer",
-        "maximum": 1000,
-        "description": "Maximum entries to return (default 100, server cap 1000). 0 or a negative value means no cap below that server cap. If entries are left out, the output says so.",
+        "type": [
+          "integer",
+          "string"
+        ],
+        "description": "Maximum entries to return (default 100, server cap of 1000). 0 or a negative value means no cap below that server cap. If entries are left out, the output says so.",
         "default": 100
       },
       "offset": {
-        "type": "integer",
-        "minimum": 0,
+        "type": [
+          "integer",
+          "string"
+        ],
         "default": 0,
         "description": "How many entries to skip, for paging past the server cap. Entries are sorted (subdirectories first, then files, each by name), so paging is stable. The output prints the total entry count and the offset to pass next; without this a directory of more than 1000 entries could not be enumerated at all."
       }

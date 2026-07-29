@@ -147,6 +147,13 @@ public static class ScopeAndLimitArgs
     public static object LimitSchemaProperty(int defaultLimit = DefaultDisplayLimit, bool fuzzy = true) => new
     {
         type = new[] { "integer", "string" },
+        // 丙-1：这里此前只发 type 与 description，`default` 一个都不发——于是校验型客户端对
+        // 「省略 limit 会拿到几条」一无所知，而那正是它唯一预判得了的东西。
+        //
+        // `maximum` 仍然不发，且这是**有意的**：HardLimit 之上服务端是夹紧不是拒绝，
+        // 声明 maximum 会挡下一个完全跑得通的请求。那个数在下面的 description 里插值。
+        // `minimum` 同理——0 与负数都被夹到 cap，是合法输入。见 ToolArgs.cs 顶部那条政策。
+        @default = defaultLimit,
         description =
             (fuzzy ? $"Optional result cap per section (default {defaultLimit}). " : $"Optional result cap (default {defaultLimit}). ")
             + $"Pass a number, or 'all' to expand up to the server cap of {HardLimit}; larger numbers, 0 and "

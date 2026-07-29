@@ -8,6 +8,7 @@
       "symbol": {
         "type": "string",
         "minLength": 1,
+        "maxLength": 256,
         "description": "Class or member to trace. Examples: 'ThingComp', 'CompShield', 'TakeDamage'. In mode 'usages' it is matched as a case-insensitive whole word, not resolved as a symbol."
       },
       "mode": {
@@ -27,6 +28,7 @@
           "integer",
           "string"
         ],
+        "default": 50,
         "description": "Optional result cap (default 50). Pass a number, or 'all' to expand up to the server cap of 200; larger numbers, 0 and negatives are all clamped to that cap. Anything else — 'many', true, an object — is rejected rather than silently replaced by the default."
       }
     },

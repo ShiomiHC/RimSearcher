@@ -8,6 +8,7 @@
       "name": {
         "type": "string",
         "minLength": 1,
+        "maxLength": 256,
         "description": "Complete DefName or C# type name. Examples: 'Apparel_ShieldBelt', 'CompShield'. Matching ignores case — the response echoes the index's canonical spelling — but partial names and typos do not resolve. Aliases 'query'/'defName'/'typeName' are also accepted; a 'def:'/'type:' prefix is stripped."
       },
       "defType": {
@@ -16,11 +17,17 @@
         "description": "Optional: which def type to show when several defs share the name — 'Human' is a ThingDef, a BodyDef and a HediffGiverSetDef at once. The response names every type sharing the name, so a first call without this parameter tells you what to pass. Alias 'defTypeName' is also accepted. This is a def type, not a C# type name — it does not narrow type mode."
       },
       "xmlStartLine": {
-        "type": "integer",
-        "minimum": 1,
+        "type": [
+          "integer",
+          "string"
+        ],
         "description": "Def mode only. 1-based line to continue the merged XML from when it was truncated; the response reads 250 lines from there and tells you the next value to pass. Needed because the merged XML is the whole ParentName chain combined and therefore is not the content of any file — read_code on the `File:` path returns only the def's own un-merged lines, without the inherited ones. Ignored in type mode."
       },
       "limit": {
+        "type": [
+          "integer",
+          "string"
+        ],
         "description": "Type mode only. How many members of each kind (properties, fields, methods) the outline lists before folding the rest away. Default 40; pass a number, or 'all' to list every member. 'all' is the only way to see the folded ones — read_code extractClass truncates at 2000 lines and will not show them all on a large file. Ignored in def mode."
       },
       "scope": {

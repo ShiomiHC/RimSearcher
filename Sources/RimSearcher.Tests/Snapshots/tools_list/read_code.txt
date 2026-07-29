@@ -26,17 +26,21 @@
         "description": "Optional: Extract the entire class/struct/interface/record body by name — an enum or delegate declaration works too. Example: 'CompShield'."
       },
       "startLine": {
-        "type": "integer",
-        "minimum": 0,
+        "type": [
+          "integer",
+          "string"
+        ],
         "default": 0,
         "description": "Optional 0-based start line for raw read mode (used when methodName/extractClass is not set)."
       },
       "lineCount": {
-        "type": "integer",
+        "type": [
+          "integer",
+          "string"
+        ],
         "minimum": 1,
-        "maximum": 2000,
         "default": 150,
-        "description": "Optional number of lines for raw read mode. Default is 150, values above 2000 are clamped to it."
+        "description": "Optional number of lines for raw read mode. Default is 150, values above the server cap of 2000 are clamped to it."
       },
       "scope": {
         "type": "string",

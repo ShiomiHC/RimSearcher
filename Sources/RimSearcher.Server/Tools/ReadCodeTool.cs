@@ -117,20 +117,23 @@ public class ReadCodeTool : ITool
             },
             startLine = new
             {
-                type = "integer",
-                minimum = 0,
+                // 负值走 Math.Max(0, …) 夹到 0，不是拒绝，故不声明 minimum；
+                // 字符串形的数字 GetInt 收得下。见 ToolArgs.cs 顶部那条政策。
+                type = new[] { "integer", "string" },
                 @default = 0,
                 description = "Optional 0-based start line for raw read mode (used when methodName/extractClass is not set)."
             },
             lineCount = new
             {
-                type = "integer",
+                type = new[] { "integer", "string" },
+                // minimum 留着：`lineCount <= 0` 是**返回 isError**，不是夹紧——那是真拒绝，
+                // 声明出来调用方才不必发一轮才知道。而 maximum 撤掉，超出的值是 Math.Min 夹紧。
                 minimum = 1,
-                maximum = MaxLineCount,
                 @default = DefaultLineCount,
                 description =
+                    // 同 list_directory：统一成 `server cap of N`，见那一格的注释。
                     $"Optional number of lines for raw read mode. Default is {DefaultLineCount}, " +
-                    $"values above {MaxLineCount} are clamped to it."
+                    $"values above the server cap of {MaxLineCount} are clamped to it."
             },
             scope = ScopeAndLimitArgs.ScopeSchemaProperty(_scopeCatalog)
         },

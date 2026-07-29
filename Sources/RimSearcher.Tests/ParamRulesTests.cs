@@ -120,14 +120,18 @@ public class ParamRulesTests : IDisposable
     // 1000 写了三遍；而现有的三条夹紧测试验的都是「服务端确实夹了」，**没有一条验
     // 「夹到了 schema 广告的那个数」**——服务端夹到 999 而 schema 广告 1000，一条都不会红。
     //
-    // 只覆盖这两个工具，因为只有它们的 schema 真的发了 default / maximum 这两个键。
-    // 走 LimitSchemaProperty 的那三个（locate / trace / search_regex）一个都不发（丙-1），
-    // 无从比对——那不是这条闸照不到，是**没有东西可照**，属于 P7 那条政策要定的事。
+    // 只覆盖这两个工具，因为造一份「刚好越过上限一条」的语料要按工具的输出形态各写一次，
+    // 而分段折叠的那三个（locate / trace / search_regex）成本高出一个量级。这是覆盖面的
+    // 取舍，不是判据的边界——写在这里免得下次误读成「那三个照不到」。
+    //
+    // P7 之后上限不再声明成 `maximum`（服务端是夹紧不是拒绝，声明 maximum 会挡下一个跑得通的
+    // 请求，见 ToolArgs.cs 顶部那条政策），故这里的名单侧改从 description 里那句
+    // `server cap of N` 取——撤掉 maximum 之后它是上限唯一的对外广告。
 
     [Fact]
-    public async Task ListDirectory_ClampsToTheMaximumItAdvertises()
+    public async Task ListDirectory_ClampsToTheCapItAdvertises()
     {
-        var advertised = SchemaNumber("rimworld-searcher__list_directory", "limit", "maximum");
+        var advertised = AdvertisedCap("rimworld-searcher__list_directory", "limit");
 
         var (tool, directory) = ListDirectoryOver(advertised);
         var content = await Run(tool, new { path = directory, limit = advertised * 10 });
@@ -147,9 +151,9 @@ public class ParamRulesTests : IDisposable
     }
 
     [Fact]
-    public async Task ReadCode_ClampsToTheMaximumItAdvertises()
+    public async Task ReadCode_ClampsToTheCapItAdvertises()
     {
-        var advertised = SchemaNumber("rimworld-searcher__read_code", "lineCount", "maximum");
+        var advertised = AdvertisedCap("rimworld-searcher__read_code", "lineCount");
 
         var (tool, file) = ReadCodeFileOver(advertised);
         var content = await Run(tool, new { path = file, startLine = 0, lineCount = advertised * 10 });
@@ -323,6 +327,21 @@ public class ParamRulesTests : IDisposable
 
         Assert.True(found, $"{toolName} 的 schema 没给 '{property}' 声明 '{key}'，这条判据无从比对。");
         return value.GetInt32();
+    }
+
+    // description 里那句 `server cap of N`。取不到就判红：这条闸的全部内容就是拿这个数去对
+    // 行为，措辞被改掉而闸静默跳过的话，它绿的时候没人知道那是「对上了」还是「没东西可对」。
+    private int AdvertisedCap(string toolName, string property)
+    {
+        var tool = Assert.Single(EveryTool(), t => t.Name == toolName);
+        var description = ParamRules.SchemaOf(tool).Descriptions[property];
+
+        var cap = Regex.Match(description, @"server cap of (?<n>\d+)");
+        Assert.True(cap.Success,
+            $"{toolName} 的 '{property}' 说明里没有 `server cap of N` 这句话——那是撤掉 maximum "
+            + "之后上限唯一的对外广告，也是这条闸唯一的名单侧。改措辞要一并改这里。");
+
+        return int.Parse(cap.Groups["n"].Value);
     }
 
     // 刚好越过那个数一条的目录。多一条就够：要验的是「夹到了广告的那个数」，不是「夹住了」。

@@ -54,15 +54,18 @@
         "description": "For action='diff': which archived version to compare the current sources against. A number counts backwards — 1 (or -1) is the most recent archived version, 2 the one before it; out-of-range clamps to the oldest kept version and says so. An explicit id such as 'v0002' also works. Defaults to the most recent."
       },
       "limit": {
-        "type": "integer",
-        "minimum": 1,
-        "maximum": 2000,
-        "description": "For action='diff': max changed files to list, or max diff lines when 'file' is given. Under granularity='members' this is also the parse budget — only the files actually listed get parsed.",
+        "type": [
+          "integer",
+          "string"
+        ],
+        "description": "For action='diff': max changed files to list, or max diff lines when 'file' is given. Under granularity='members' this is also the parse budget — only the files actually listed get parsed. Clamped to the server cap of 2000.",
         "default": 100
       },
       "offset": {
-        "type": "integer",
-        "minimum": 0,
+        "type": [
+          "integer",
+          "string"
+        ],
         "description": "For action='diff' without 'file': skip this many changed files before listing, to page through a change set larger than 'limit'. The listing prints the next offset to use.",
         "default": 0
       }

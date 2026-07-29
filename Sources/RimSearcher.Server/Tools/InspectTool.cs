@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
 using RimSearcher.Core;
 using RimSearcher.Server.Tools.Output;
@@ -103,6 +103,10 @@ public class InspectTool : ITool
             {
                 type = "string",
                 minLength = 1,
+                // 丙-2：MaxFuzzyQueryLength 是本层唯一一个**服务端会拒绝**的长度约束
+                // （超了抛 ToolArgumentException，不是截断），而三处模糊槽此前一个都没声明。
+                // 见 ToolArgs.cs 顶部那条政策。
+                maxLength = ToolArgs.MaxFuzzyQueryLength,
                 description = "Complete DefName or C# type name. Examples: 'Apparel_ShieldBelt', 'CompShield'. Matching ignores case — the response echoes the index's canonical spelling — but partial names and typos do not resolve. Aliases 'query'/'defName'/'typeName' are also accepted; a 'def:'/'type:' prefix is stripped."
             },
             defType = new
@@ -117,8 +121,10 @@ public class InspectTool : ITool
             },
             xmlStartLine = new
             {
-                type = "integer",
-                minimum = 1,
+                // minimum 撤掉：服务端把一切 `<= 0` 映射成 0，不是拒绝。声明 minimum=1 的后果是
+                // **有效默认值（0）被自己的声明禁掉**——校验型客户端发不出那个值。
+                // 见 ToolArgs.cs 顶部那条政策。
+                type = new[] { "integer", "string" },
                 description =
                     "Def mode only. 1-based line to continue the merged XML from when it was truncated; the "
                     + $"response reads {XmlWindowLines} lines from there and tells you the next value to pass. "
@@ -128,6 +134,9 @@ public class InspectTool : ITool
             },
             limit = new
             {
+                // 这一格此前连 type 都没有，而它恰恰是全服唯一一个说明里写着「'all' 是取回折叠
+                // 成员的唯一途径」的地方——字符串形是它的要害用法，schema 里却推不出它收字符串。
+                type = new[] { "integer", "string" },
                 description =
                     "Type mode only. How many members of each kind (properties, fields, methods) the outline lists "
                     + $"before folding the rest away. Default {RoslynHelper.DefaultMaxOutlineMembersPerKind}; pass a "

@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
 using RimSearcher.Core;
 using RimSearcher.Server.Tools.Output;
@@ -95,6 +95,10 @@ public class LocateTool : ITool
             {
                 type = "string",
                 minLength = 1,
+                // 丙-2：MaxFuzzyQueryLength 是本层唯一一个**服务端会拒绝**的长度约束
+                // （超了抛 ToolArgumentException，不是截断），而三处模糊槽此前一个都没声明。
+                // 见 ToolArgs.cs 顶部那条政策。
+                maxLength = ToolArgs.MaxFuzzyQueryLength,
                 description =
                     // 四个过滤前缀在参数说明里各出一次。原先只举了 def: 与 method:，于是 type:
                     // 只活在长描述靠后的一句里——第十三轮盲测里被测方写下「'type:' 是我照猫画虎

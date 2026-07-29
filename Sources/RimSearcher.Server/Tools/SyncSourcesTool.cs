@@ -121,18 +121,19 @@ public class SyncSourcesTool : ITool
             },
             limit = new
             {
-                type = "integer",
-                minimum = 1,
-                maximum = MaxLimit,
+                // minimum / maximum 都撤：服务端走 Math.Clamp(…, 1, MaxLimit)，两头都是夹紧
+                // 不是拒绝。见 ToolArgs.cs 顶部那条政策。
+                type = new[] { "integer", "string" },
                 description =
                     "For action='diff': max changed files to list, or max diff lines when 'file' is given. Under "
-                    + "granularity='members' this is also the parse budget — only the files actually listed get parsed.",
+                    + "granularity='members' this is also the parse budget — only the files actually listed get parsed. "
+                    // maximum 撤掉之后这个数只剩这一处广告，措辞与其余 limit 一致。
+                    + $"Clamped to the server cap of {MaxLimit}.",
                 @default = DefaultLimit
             },
             offset = new
             {
-                type = "integer",
-                minimum = 0,
+                type = new[] { "integer", "string" },
                 description =
                     "For action='diff' without 'file': skip this many changed files before listing, to page through "
                     + "a change set larger than 'limit'. The listing prints the next offset to use.",

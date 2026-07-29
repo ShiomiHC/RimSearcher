@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Collections.Concurrent;
 using RimSearcher.Core;
 using RimSearcher.Server.Tools.Output;
@@ -81,6 +81,10 @@ public class TraceTool : ITool
             {
                 type = "string",
                 minLength = 1,
+                // 丙-2：MaxFuzzyQueryLength 是本层唯一一个**服务端会拒绝**的长度约束
+                // （超了抛 ToolArgumentException，不是截断），而三处模糊槽此前一个都没声明。
+                // 见 ToolArgs.cs 顶部那条政策。
+                maxLength = ToolArgs.MaxFuzzyQueryLength,
                 description =
                     "Class or member to trace. Examples: 'ThingComp', 'CompShield', 'TakeDamage'. In mode " +
                     "'usages' it is matched as a case-insensitive whole word, not resolved as a symbol."

@@ -9,6 +9,41 @@ namespace RimSearcher.Server.Tools;
 // 后者会被调用方读成「服务器坏了」，从而整体放弃本工具集。
 public sealed class ToolArgumentException(string message) : Exception(message);
 
+// ============================ schema 声明什么，不声明什么 ============================
+//
+// 本层长期两种做法并存：有的地方「服务端认得比 schema 多」（sync_sources 的 action 分支认 9
+// 个拼法而 enum 只有 3 个），有的地方「schema 比服务端严」（limit 声明 maximum，而服务端对
+// 超出的值是夹紧不是拒绝）。区别只是当时谁写的。这里定一条，此后处处照它。
+//
+// **判据只有一个问题：一个严格照 schema 生成请求的调用方，会不会因为这处声明（或不声明）
+// 而吃亏？**
+//
+//   - 服务端会**拒绝**某类输入而 schema 不说 → 调用方发出去才知道，白跑一轮。**补声明。**
+//     （`maxLength = MaxFuzzyQueryLength`：超长的 query 是抛异常，不是截断。
+//      `read_code.lineCount` 的 `minimum = 1`：`<= 0` 返回 isError，不是夹紧。）
+//
+//   - 服务端会**接受**某类输入而 schema 不许 → 校验型客户端在发出之前就把一个完全能跑的请求
+//     挡下了。**放宽声明。**（所有 integer 属性写成 `["integer","string"]`：GetInt 收字符串，
+//     而 LLM 调用方实测常把 `limit` 写成 `"5"`。浮点不列进去——服务端确实收 `50.5` 并截断，
+//     但声明 `number` 是在鼓励一种没人该传的输入，而不传它的调用方一点不吃亏。）
+//
+//   - 服务端**夹紧**而不是拒绝 → 声明成 `maximum` / `minimum` 就是在撒一个会伤人的谎：
+//     JSON Schema 的 `maximum` 意思是「大于它非法」，而这里的意思是「大于它给你夹到它」。
+//     **不声明成硬约束，把那个数写进 description**（那边是插值的，人和 LLM 读得到，
+//     而校验器本来就不该拦）。这条不是新定的——`list_directory.limit` 那格早就写着
+//     「不声明 minimum：……声明 minimum=0 会让照着描述传 -1 的调用在 client 侧就被校验挡下」，
+//     P7 只是把同一句理由贯彻到同一格里的 maximum，以及另外几个工具。
+//
+//   - 服务端多认几个**同义拼法**（`action:'update'` 之于 `'sync'`，locate 的 `m:` 之于
+//     `method:`）→ **不补进 enum。**这一类的受益者按定义就是「没照 schema 走的调用方」；
+//     照 schema 走的那些用的是规范拼法，一点不吃亏，而把 9 个拼法塞进 enum 只会让 tools/list
+//     多出一堆噪音，还暗示存在 9 种语义。要写下来的不是拼法清单，是**这条政策本身**——
+//     否则下一个人看见 switch 认 9 个而 enum 声明 3 个，会当成 bug 去「修」，
+//     从而掐掉唯一受益的那批调用方。故那两处 switch 各留一句指回这里。
+//
+// 一句话：**schema 声明的是调用方需要预判的东西，不是服务端代码的镜像。**
+// ====================================================================================
+
 // 各工具主参数名互不相同（locate=query / inspect=name / read_code=path / search_regex=pattern /
 // trace=symbol），调用方极易从一个工具类推到另一个。这里统一吸收别名与标量类型漂移。
 public static class ToolArgs

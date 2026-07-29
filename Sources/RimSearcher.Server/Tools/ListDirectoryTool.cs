@@ -130,20 +130,25 @@ public class ListDirectoryTool : ITool
             },
             limit = new
             {
-                type = "integer",
                 // 不声明 minimum：服务端认的是 `<= 0`（与 ScopeAndLimitArgs 的同类参数一致），
                 // 声明 minimum=0 会让照着描述传 -1 的调用在 client 侧就被校验挡下。
-                maximum = MaxEntries,
+                // 同一句理由也否掉 maximum：超出 MaxEntries 的值服务端是**夹紧**不是拒绝，
+                // 声明 maximum 会挡下一个完全跑得通的请求。那个数写在下面的 description 里。
+                // 见 ToolArgs.cs 顶部那条政策。
+                type = new[] { "integer", "string" },
                 description =
-                    $"Maximum entries to return (default {DefaultEntryLimit}, server cap {MaxEntries}). "
+                    // `server cap of N` 是这份 schema 里说上限的**统一措辞**（ScopeAndLimitArgs
+                    // 的 limit 一直是这么写的）。maximum 撤掉之后，description 是上限唯一的
+                    // 对外广告，故措辞要一致到闸能从这一句里把数取出来对行为。
+                    $"Maximum entries to return (default {DefaultEntryLimit}, server cap of {MaxEntries}). "
                     + "0 or a negative value means "
                     + "no cap below that server cap. If entries are left out, the output says so.",
                 @default = DefaultEntryLimit
             },
             offset = new
             {
-                type = "integer",
-                minimum = 0,
+                // minimum 同理撤掉：负 offset 走 Math.Max(0, …) 夹到 0，不是拒绝。
+                type = new[] { "integer", "string" },
                 @default = 0,
                 description =
                     "How many entries to skip, for paging past the server cap. Entries are sorted (subdirectories "

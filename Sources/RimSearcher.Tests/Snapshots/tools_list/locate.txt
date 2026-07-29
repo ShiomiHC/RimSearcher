@@ -8,6 +8,7 @@
       "query": {
         "type": "string",
         "minLength": 1,
+        "maxLength": 256,
         "description": "Search text or filtered query. Examples: 'Apparel_ShieldBelt', 'RimWorld.Pawn', 'def:Apparel_ShieldBelt', 'type:CompShield', 'method:CompTick', 'field:energy'."
       },
       "scope": {
@@ -19,6 +20,7 @@
           "integer",
           "string"
         ],
+        "default": 10,
         "description": "Optional result cap per section (default 10). Pass a number, or 'all' to expand up to the server cap of 200; larger numbers, 0 and negatives are all clamped to that cap. Anything else — 'many', true, an object — is rejected rather than silently replaced by the default. Score-gap folding drops results far below the top score and no limit brings them back; it only applies to fuzzy matching. method: and field: restrict the search to members but still match names by score, so their section total counts near-name matches too — the (N%) on each row is what tells them apart, and anything below 100% is not the name that was asked for."
       }
     },
