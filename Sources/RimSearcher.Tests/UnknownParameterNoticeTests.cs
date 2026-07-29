@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -102,7 +103,7 @@ public class UnknownParameterNoticeTests : IDisposable
         {
             var text = File.ReadAllText(source);
 
-            var keys = KeyLiteralsIn(text);
+            var keys = KeyLiteralsIn(text, tool.GetType());
 
             // scope / limit 两族的读取点住在 ScopeAndLimitArgs 里，故按名单取——不在闸这边重列一遍
             if (text.Contains("ScopeAndLimitArgs.Resolve", StringComparison.Ordinal))
@@ -137,7 +138,7 @@ public class UnknownParameterNoticeTests : IDisposable
         {
             var text = File.ReadAllText(source);
 
-            var read = KeyLiteralsIn(text);
+            var read = KeyLiteralsIn(text, tool.GetType());
             if (text.Contains("ScopeAndLimitArgs.Resolve", StringComparison.Ordinal))
                 read.UnionWith(ScopeAndLimitArgs.ScopeKeys);
             if (text.Contains("ScopeAndLimitArgs.GetDisplayLimit", StringComparison.Ordinal))
@@ -154,21 +155,55 @@ public class UnknownParameterNoticeTests : IDisposable
             + string.Join("\n", unread));
     }
 
-    // 传给 ToolArgs 读取函数的键字面量。带空格的那些不是键（GetOptionalName 的
-    // whatItNames 槽收的是 "a member name" 这类说明文字，用来拼缺参提示）。
-    private static ISet<string> KeyLiteralsIn(string text)
+    // 传给 ToolArgs 读取函数的键。两种形态都要认：
+    //
+    //   1. **字面量** `ToolArgs.GetInt(args, 0, "startLine", "start")`。带空格的那些不是键
+    //      （GetOptionalName 的 whatItNames 槽收的是 "a member name" 这类说明文字）。
+    //   2. **名单常量** `ToolArgs.GetInt(args, 0, StartLineKeys)`。一族别名被收进一个 static
+    //      数组之后，字面量就不在调用点上了——只刮字面量的话这个键族整片扫不到，而**扫不到的
+    //      表现是键集变小，即判据变松，绿**。这一条是收 read_code 那两族别名时补上的：
+    //      收口本身修的是缺陷，若顺带把守着它的闸放松了，下一次同型的漂移就没人喊了。
+    //
+    // 认不出的名单标识符**判红**而不是跳过，理由同上：跳过就是静默变松。
+    private static ISet<string> KeyLiteralsIn(string text, Type toolType)
     {
         var keys = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (Match call in Regex.Matches(
                      text, @"ToolArgs\.(?:Get\w+|TryGetElement)\((?:[^()]|\([^()]*\))*\)"))
-        foreach (Match literal in Regex.Matches(call.Value, "\"(?<key>[^\"]*)\""))
         {
-            var key = literal.Groups["key"].Value;
-            if (key.Length > 0 && !key.Contains(' ')) keys.Add(key);
+            foreach (Match literal in Regex.Matches(call.Value, "\"(?<key>[^\"]*)\""))
+            {
+                var key = literal.Groups["key"].Value;
+                if (key.Length > 0 && !key.Contains(' ')) keys.Add(key);
+            }
+
+            foreach (Match list in Regex.Matches(
+                         call.Value, @"\b(?:(?<owner>\w+)\.)?(?<field>\w+Keys)\b"))
+                keys.UnionWith(ResolveKeyList(list.Groups["owner"].Value, list.Groups["field"].Value, toolType));
         }
 
         return keys;
+    }
+
+    // 名单常量 → 它的值。owner 为空时是工具类自己的字段（read_code 的 StartLineKeys /
+    // LineCountKeys），否则按类名在 Server 程序集里找（ScopeAndLimitArgs.LimitKeys）。
+    private static string[] ResolveKeyList(string owner, string field, Type toolType)
+    {
+        var declaring = owner.Length == 0
+            ? toolType
+            : toolType.Assembly.GetTypes().FirstOrDefault(t => t.Name == owner);
+
+        var value = declaring
+            ?.GetField(field, BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)
+            ?.GetValue(null);
+
+        Assert.True(value is string[],
+            $"读取点用了名单 '{(owner.Length == 0 ? field : $"{owner}.{field}")}'，但闸反射不到它的值。"
+            + "扫不到的表现是键集变小、判据变松、照绿，故这里判红——要么它不是 public static string[]，"
+            + "要么它住在别的程序集里。");
+
+        return (string[])value!;
     }
 
     private IEnumerable<(ITool Tool, string Source)> EveryToolWithItsSource(

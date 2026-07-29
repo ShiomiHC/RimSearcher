@@ -422,7 +422,11 @@ public class InspectTool : ITool
             // `Ignored in def mode.`，返回里此前零字——而调用方传它时指望的正是「别截断」，
             // 且 def 模式**确实会截断**，只是换了个参数（xmlStartLine）。指望的那件事恰好是
             // 本次任务的成败关键，故值得加字；只在真传了 limit 时印。
-            if (ToolArgs.TryGetElement(args, out _, "limit", "maxResults"))
+            // 探的是 GetDisplayLimit 认的**那一份**名单，不在这里手抄一份缩短版：抄的那份
+            // 漏了 max / count / top，于是 `max:5` 一个字不印而 `limit:5` 会印——同一个意图
+            // 两种披露，而调用方分不出自己碰到的是哪一种。这与 8ca8ed6 在取值 ↔
+            // ExtraAcceptedKeys 之间收掉的是同一件事，当时没往「探测」这第三处看。
+            if (ToolArgs.TryGetElement(args, out _, ScopeAndLimitArgs.LimitKeys))
             {
                 sb.AppendLine(
                     "_Note: 'limit' applies to the C# type outline only and was ignored here; "

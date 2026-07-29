@@ -1,4 +1,5 @@
 ```csharp
+// note: 'extractClass' takes precedence — startLine/lineCount was not applied
 // Class Zz.ZzWidget — <ROOT>/Core/ZzWidget.cs:3
     public class ZzWidget
     {

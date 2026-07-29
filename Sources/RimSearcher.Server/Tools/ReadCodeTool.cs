@@ -16,6 +16,20 @@ public class ReadCodeTool : ITool
     // 两个工具会对同一道闸报两个数——同一个数字在两处各写一遍，本仓反复清理的那类缺陷。
     public const int MaxLineCount = 2000;
 
+    // 行区间那两个参数的别名各自只写一遍：读取点用它、择一提示的探测用它、ExtraAcceptedKeys
+    // 也用它。
+    //
+    // 此前探测那一处手抄了一份缩短版（漏掉 limit 与 maxResults），于是
+    // `extractClass:'Pawn' + limit:50` 走进择一分支时，Overridden 判定「没传过行数参数」，
+    // 一个字都不印——而写着那条择一契约的注释就在它上面几行。修的时候修的是**判断**，
+    // 没修名单：名单在两处各写一遍，改一处不影响另一处。
+    //
+    // limit 一族**不**取 ScopeAndLimitArgs.LimitKeys：这里的 limit 数的是行数、走的是本工具
+    // 自己的读取点，与那份「结果条数」不是同一件事，共用名单会把 max / top 声明成认得而实际
+    // 读不到——那是这里要防的缺陷的镜像。
+    public static readonly string[] StartLineKeys = ["startLine", "start", "offset"];
+    public static readonly string[] LineCountKeys = ["lineCount", "lines", "count", "limit", "maxResults"];
+
     private readonly SourceIndexer _sourceIndexer;
     private readonly ScopeCatalog _scopeCatalog;
     private readonly ConditionalFolders _conditional;
@@ -30,14 +44,13 @@ public class ReadCodeTool : ITool
 
     public string Name => "rimworld-searcher__read_code";
 
-    // scope 一族取 ScopeAndLimitArgs 的名单。limit 一族**不**取：这里的 limit 数的是行数、走的是
-    // 本工具自己的读取点，与 ScopeAndLimitArgs 那份「结果条数」不是同一件事，共用名单会把 max / top
-    // 声明成认得而实际读不到——那是本条要防的缺陷的镜像。
+    // scope 一族取 ScopeAndLimitArgs 的名单，行区间两族取上面那两份——三处都不在这里重列。
+    // startLine / lineCount 本身是 schema 属性（正式参数，本来就认得），跟着名单一起进来只是
+    // 与已有的那份取并集，不多认任何东西。
     public IEnumerable<string> ExtraAcceptedKeys =>
-        [.. ScopeAndLimitArgs.ScopeKeys,
+        [.. ScopeAndLimitArgs.ScopeKeys, .. StartLineKeys, .. LineCountKeys,
          "query", "file", "filePath", "fileName", "method", "methodName", "member", "memberName",
-         "class", "extractClass", "type", "typeName", "start", "offset", "lines", "count",
-         "limit", "maxResults"];
+         "class", "extractClass", "type", "typeName"];
 
     // 三种模式的优先级此前只写在下面几个 if 的先后顺序里，调用方同时传 extractClass 和
     // methodName 时无从知道哪个生效，只能从返回内容倒推。契约就得写在 description 里。
@@ -232,8 +245,9 @@ public class ReadCodeTool : ITool
                       + $"{(dropped.Count == 1 ? "was" : "were")} not applied" + "\n";
             }
 
-            var linesPassed = ToolArgs.TryGetElement(args, out _, "startLine", "start", "offset")
-                              || ToolArgs.TryGetElement(args, out _, "lineCount", "lines", "count");
+            // 探的是下面读取点认的**那两份**名单，不在这里手抄缩短版——见 LineCountKeys 上的注释。
+            var linesPassed = ToolArgs.TryGetElement(args, out _, StartLineKeys)
+                              || ToolArgs.TryGetElement(args, out _, LineCountKeys);
 
             if (!string.IsNullOrEmpty(extractClass))
             {
@@ -320,8 +334,8 @@ public class ReadCodeTool : ITool
                     new ToolResult($"```{Fence(path)}\n{scopeNotice}{memberOverride}{body.Content}\n```"));
             }
 
-            int startLine = Math.Max(0, ToolArgs.GetInt(args, 0, "startLine", "start", "offset"));
-            int lineCount = ToolArgs.GetInt(args, DefaultLineCount, "lineCount", "lines", "count", "limit", "maxResults");
+            int startLine = Math.Max(0, ToolArgs.GetInt(args, 0, StartLineKeys));
+            int lineCount = ToolArgs.GetInt(args, DefaultLineCount, LineCountKeys);
             if (lineCount <= 0)
                 return WithUnresolvedScopeNotice(scope, new ToolResult("lineCount must be greater than 0.", true));
             lineCount = Math.Min(lineCount, MaxLineCount);
