@@ -35,6 +35,11 @@ public class InspectTool : ITool
     // 几份大纲通常高度重合，而体积是实打实地翻倍。
     private const int MaxOutlinedFiles = 1;
 
+    // Linked C# Types 一次最多列几条。定长上限，不经过 ScopeFilter：没有任何参数放得宽它。
+    // 此前这个数在同一段里手写了三遍（Take、判断、折叠行的减数），改一处漏一处时折叠行
+    // 报的「还有几条」就与实际列出的条数对不上，而那是个纯算术错误、任何一道闸都不看。
+    private const int MaxLinkedTypes = 10;
+
     private readonly ConditionalFolders _conditional;
 
     public InspectTool(
@@ -67,7 +72,8 @@ public class InspectTool : ITool
         "Type mode returns the base-class chain (interfaces are not on it — use trace mode:'inheritors' for those) "
         + "and a member outline of fields, properties and methods; constructors, indexers and operators are not "
         + "outlined but read_code can still read them by name. Enums are outlined as their values, delegates as "
-        + "their signature. The outline lists at most 40 members per kind, and when several sources declare the "
+        + $"their signature. The outline lists at most {RoslynHelper.DefaultMaxOutlineMembersPerKind} members per "
+        + "kind, and when several sources declare the "
         + "same type only the highest-priority one is outlined; both cuts are stated inline where they happen. "
         + "Method bodies come from read_code. "
         // 「PatchOperation 从不被应用」上面已经说了，而条件目录是它的姊妹缺口：那一条说的是
@@ -118,7 +124,8 @@ public class InspectTool : ITool
                     "Type mode only. How many members of each kind (properties, fields, methods) the outline lists "
                     + $"before folding the rest away. Default {RoslynHelper.DefaultMaxOutlineMembersPerKind}; pass a "
                     + "number, or 'all' to list every member. 'all' is the only way to see the folded ones — "
-                    + "read_code extractClass truncates at 2000 lines and will not show them all on a large file. "
+                    + $"read_code extractClass truncates at {ReadCodeTool.MaxLineCount} lines and will not show them all "
+                    + "on a large file. "
                     + "Ignored in def mode."
             },
             scope = ScopeArgs.ScopeSchemaProperty(_scopeCatalog)
@@ -135,8 +142,6 @@ public class InspectTool : ITool
         return limit.Unlimited ? int.MaxValue : limit.Count;
     }
 
-    // 大纲取不到时说清是哪一种取不到：文件没了 / 文件太大不解析 / 文件里确实没这个类型
-    // （最后一种通常意味着索引落后于磁盘，比如源刚被重新同步过）。
     // 译文描述里换行是常态（多段落说明），单行摆进头部区域会把格式冲散
     private static string Truncate(string text, int limit)
     {
@@ -144,6 +149,8 @@ public class InspectTool : ITool
         return single.Length <= limit ? single : single[..limit] + "…";
     }
 
+    // 大纲取不到时说清是哪一种取不到：文件没了 / 文件太大不解析 / 文件里确实没这个类型
+    // （最后一种通常意味着索引落后于磁盘，比如源刚被重新同步过）。
     private static string DescribeOutlineFailure(SourceLookupStatus status, string typeName) => status switch
     {
         SourceLookupStatus.FileNotFound =>
@@ -459,7 +466,7 @@ public class InspectTool : ITool
                 if (foundTypes.Count > 0)
                 {
                     sb.AppendLine("\n**Linked C# Types:**");
-                    var typesArray = foundTypes.Take(10).ToArray();
+                    var typesArray = foundTypes.Take(MaxLinkedTypes).ToArray();
                     foreach (var cls in typesArray)
                     {
                         var paths = _sourceIndexer.GetPathsByType(cls);
@@ -467,9 +474,9 @@ public class InspectTool : ITool
                     }
                     // 定长上限，不经过 ScopeFilter：没有任何参数放得宽这个 10，故下一步是换工具
                     // 而不是调 limit——落不进 Fold.Line 的三分支，走显式那一形。
-                    if (foundTypes.Count > 10)
+                    if (foundTypes.Count > MaxLinkedTypes)
                         sb.AppendLine(Fold.Explicit(
-                            foundTypes.Count - 10, CountedNoun.Types, "use locate to find them"));
+                            foundTypes.Count - MaxLinkedTypes, CountedNoun.Types, "use locate to find them"));
                 }
             }
             catch (OperationCanceledException) { throw; }
@@ -601,11 +608,6 @@ public class InspectTool : ITool
         return true;
     }
 
-    // 索引查找一律 OrdinalIgnoreCase，于是 inspect('compshield') 命中 CompShield 却把标题写成
-    // 'compshield'——调用方会拿这个错拼当真实类型名继续喂给 read_code / trace。索引没有「按名
-    // 取规范拼写」的入口，只能借模糊搜索：完全一致（忽略大小写）恒为满分，必在最前几条。
-    // 这里只是纠正拼写、不换名字形态，与 scope 无关，故用全域查，免得类型在别的源里
-    // 也有定义时被 scope 过滤掉、白白退回原样。取不到就原样返回，宁可不改也不改错。
     // GetInheritanceChain 给的是自下而上的 (child, parent) 对，且 child 全限定、parent 短名，
     // 直接 join 会把每个中间类型印两遍。取首个 child 再顺次取各 parent 即还原成一条线。
     // 命名空间在标题行已经给过，链上一律用短名——链读的是形状，短名也正是调用方转手
@@ -630,6 +632,11 @@ public class InspectTool : ITool
         return dot >= 0 && dot < name.Length - 1 ? name[(dot + 1)..] : name;
     }
 
+    // 索引查找一律 OrdinalIgnoreCase，于是 inspect('compshield') 命中 CompShield 却把标题写成
+    // 'compshield'——调用方会拿这个错拼当真实类型名继续喂给 read_code / trace。索引没有「按名
+    // 取规范拼写」的入口，只能借模糊搜索：完全一致（忽略大小写）恒为满分，必在最前几条。
+    // 这里只是纠正拼写、不换名字形态，与 scope 无关，故用全域查，免得类型在别的源里
+    // 也有定义时被 scope 过滤掉、白白退回原样。取不到就原样返回，宁可不改也不改错。
     private string CanonicalTypeName(string name)
     {
         var matches = _sourceIndexer.FuzzySearchTypes(name, _scopeCatalog.Everything, limit: 5);

@@ -10,7 +10,11 @@ public class ReadCodeTool : ITool
     // 裸行读取的缺省与硬上限。schema 里的 maximum 只是给 client 的提示，client 照样能传
     // lineCount:100000，所以夹紧必须在服务端做一次（见下面的 Math.Min）。
     private const int DefaultLineCount = 150;
-    private const int MaxLineCount = 2000;
+
+    // public：inspect 的 limit 说明里要引它（「'all' 是看到被折叠成员的唯一途径，因为
+    // read_code extractClass 到这个数就截」）。那句话此前手写着 2000，改这里漏那里时
+    // 两个工具会对同一道闸报两个数——同一个数字在两处各写一遍，本仓反复清理的那类缺陷。
+    public const int MaxLineCount = 2000;
 
     private readonly SourceIndexer _sourceIndexer;
     private readonly ScopeCatalog _scopeCatalog;
