@@ -56,7 +56,13 @@ public class ReadCodeTool : ITool
     // methodName 时无从知道哪个生效，只能从返回内容倒推。契约就得写在 description 里。
     public string Description =>
         "Read C# or XML source out of one specific file — an indexed file name or an absolute path, not a search term. "
-        + "Three exclusive modes: extractClass (the whole type), methodName (one member), or startLine/lineCount "
+        // `one member` 是被代码证伪的：RoslynHelper 命中多个同名成员时**全部**返回，每条带
+        // `[i/n]` 头。同一个工具的 schema 那一格写的是对的（`Every member of that name in the
+        // file is returned — pass className to get just one`），此处照它改口。
+        // 骗的是「这个工具能做什么」：读到 `one member` 的调用方会为了拿另一个重载白跑一次
+        // className，而它本来一次就全拿到了。
+        + "Three exclusive modes: extractClass (the whole type), methodName (every member of that name), "
+        + "or startLine/lineCount "
         + "(raw lines). If more than one is passed, extractClass wins over methodName, which wins over the line range. "
         + "The first two parse C#; on an XML file only the line range applies. extractClass output is capped at "
         + $"{MaxLineCount} lines — the same cap the line range has — and says so when it truncates. "

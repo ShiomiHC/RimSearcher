@@ -64,10 +64,14 @@ public class ListDirectoryTool : ITool
         // 各自撞上这道粒度差：一条据此写下「scope:'all' 可能有盲区」的假 unanswerable，
         // 一条为反查覆盖面多跑一整轮。真值（PathSecurity 与 ScopeCatalog 是同一份 resolvedSources
         // 的两个投影：前者取路径、后者取名字）只写在 ScopeCatalog 的注释里，注释不进输出。
+        // `listed under 'scope'` 没指明是**谁的** scope，而这个工具的 schema 里只有 path /
+        // limit / offset——真传 `scope:` 会吃到一句未知参数提示。对照组就在隔壁：inspect 的
+        // limit 说明引用 read_code 的上限时是指名道姓的（`read_code extractClass truncates
+        // at …`）。这一处是同一件事没做对，故照那个写法把工具点出来。
         var attribution = catalog is { HasSources: true }
             ? $" These {roots.Count} roots are the indexed folders of the {catalog.Sources.Count} configured "
-              + "sources listed under 'scope' — one source usually spans several roots, so this count is not "
-              + "a source count."
+              + "sources that the query tools list under their own 'scope' parameter (this tool takes none) — "
+              + "one source usually spans several roots, so this count is not a source count."
             : string.Empty;
 
         return $"The roots on this server: {shown}"

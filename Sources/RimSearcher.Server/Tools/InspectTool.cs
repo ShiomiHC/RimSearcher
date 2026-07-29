@@ -76,8 +76,12 @@ public class InspectTool : ITool
         "Type mode returns the base-class chain (interfaces are not on it — use trace mode:'inheritors' for those) "
         + "and a member outline of fields, properties and methods; constructors, indexers and operators are not "
         + "outlined but read_code can still read them by name. Enums are outlined as their values, delegates as "
-        + $"their signature. The outline lists at most {RoslynHelper.DefaultMaxOutlineMembersPerKind} members per "
-        + "kind, and when several sources declare the "
+        // `at most {N}` 是被代码证伪的：40 是**默认**不是上限，limit:'all' 走 OutlineLimit 返回
+        // int.MaxValue。同一个工具的 schema 那一格写的是对的（`Default 40; pass a number, or
+        // 'all' to list every member`），此处照它改口。骗的是「这个工具能做什么」：`at most`
+        // 把 'all' 读没了，而那一格里点名说 'all' 是取回折叠成员的唯一途径。
+        + $"their signature. The outline lists {RoslynHelper.DefaultMaxOutlineMembersPerKind} members per "
+        + "kind by default — pass limit:'all' to list every one — and when several sources declare the "
         + "same type only the highest-priority one is outlined; both cuts are stated inline where they happen. "
         + "Method bodies come from read_code. "
         // 「PatchOperation 从不被应用」上面已经说了，而条件目录是它的姊妹缺口：那一条说的是
