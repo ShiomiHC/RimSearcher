@@ -1,8 +1,9 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
 using RimSearcher.Core;
 using RimSearcher.Server;
 using RimSearcher.Server.Tools;
+using RimSearcher.Server.Tools.Output;
 
 namespace RimSearcher.Tests;
 
@@ -76,6 +77,9 @@ public class OutputGrammarGateTests : IDisposable
     private readonly ListDirectoryTool _listDirectory = new();
     private readonly SyncSourcesTool _sync;
     private readonly LocateTool _locateOverCap;
+    private readonly SearchRegexTool _searchRegexOverBacktracking;
+    private readonly TraceTool _traceOverALockedFile;
+    private readonly string _lockedFile;
 
     // 210 > 服务端硬上限 200，故 limit:'all' 这一格真的会撞到上限而不是只撞到 limit
     private const int BulkCount = 210;
@@ -177,6 +181,8 @@ public class OutputGrammarGateTests : IDisposable
         _trace = new TraceTool(indexer, catalog);
         _searchRegex = new SearchRegexTool(indexer, catalog);
         _locateOverCap = BuildOverCapLocate();
+        _searchRegexOverBacktracking = BuildBacktrackingScan();
+        (_traceOverALockedFile, _lockedFile) = BuildTraceOverALockedFile();
         _sync = BuildSync();
 
         PathSecurity.ResetForTests();
@@ -202,6 +208,67 @@ public class OutputGrammarGateTests : IDisposable
         defs.FreezeIndex();
 
         return new LocateTool(indexer, defs, ScopeCatalog.Build([("vanilla", root)], null, null));
+    }
+
+    // 「有文件没扫全 → 总数只是下界」那一形。语料单独一份，不掺进 Core：那 40 个 a 是喂给
+    // 一条灾难性回溯的 pattern 的，混进主语料会让别的格子多出一个莫名其妙的文件。做法与
+    // BuildOverCapLocate 同型。
+    //
+    // 这一格当年记的是「不适用」，理由写着「读不开 / 撞行闸两条成因都要靠真实磁盘故障或超大
+    // 文件才触发，合成语料造不出来」——那条理由被同仓另一处证伪：OutputSnapshotTests 的三份
+    // 基线分别用 FileShare.None 的锁、25000 行的文件、和这里这条 pattern，把全部三种成因都
+    // 合成了出来。漏掉这一格的代价不是少一条断言，是这一形从来没进过闸：它真正现身只发生在
+    // 全量跑时某个文件偶发超时的那几次，于是闸不是「常绿」而是「时红时绿」。
+    //
+    // 两个文件缺一不可：40 个 a 对 `(a+)+b` 是指数级，必中索引层那道 1 秒超时；另一个是真命中，
+    // 有它才走得到**表头**那一路（`at least` + 就地成因引用）。只留超时那个的话返回退化成零命中
+    // 形，那是另一件事——它没有表头可降格，由 GrammarRulesTests.ZeroHitsHasNoTotalToDemote 与
+    // 字节级基线 search_regex/zero-hits-names-timeout 各守一头。
+    private SearchRegexTool BuildBacktrackingScan()
+    {
+        var root = _workspace.Dir("Backtrack");
+        _workspace.WriteFile(Path.Combine("Backtrack", "ZzBacktrack.cs"), new string('a', 40) + "\n");
+        _workspace.WriteFile(Path.Combine("Backtrack", "ZzQuick.cs"), "aaab\n");
+
+        var indexer = new SourceIndexer();
+        indexer.Scan(root);
+        indexer.FreezeIndex();
+
+        return new SearchRegexTool(indexer, ScopeCatalog.Build([("vanilla", root)], null, null));
+    }
+
+    // trace usages 的同一形。它与 search_regex 那格取的是**不同的成因**（读不开 vs 正则超时），
+    // 不是为了多样：trace usages 的 pattern 由符号名加词边界生成，回溯不起来，超时那条成因在
+    // 这个工具上不可达。三条成因里行闸要 25000 行的语料，读不开只要一把锁，故取后者。
+    //
+    // 锁在**查询时**才上：索引在构造期扫，那时文件必须读得开。
+    //
+    // 这一格此前跑的是 `usages limit:'all'`，而实测它产出的是 `first 200 preview lines`——
+    // 撞的是预览上限，与「总数是下界」根本不是一形，且与隔壁 ScanStopped 那格重了。Expect
+    // 为 null 时这种退化正好落在 EveryCellStillProducesTheShapeItWasWrittenFor 的射程外：
+    // 那道闸只查填了 Expect 的格子，于是一格挂着名字却照不到任何东西，谁也不会发现。
+    private (TraceTool Tool, string Locked) BuildTraceOverALockedFile()
+    {
+        var root = _workspace.Dir("Locked");
+        _workspace.WriteFile(Path.Combine("Locked", "ZzTraceOpen.cs"),
+            "namespace Zz { public class ZzTraceOpen { public void ZzTraceMark() { } } }");
+        var locked = _workspace.WriteFile(Path.Combine("Locked", "ZzTraceLocked.cs"),
+            "namespace Zz { public class ZzTraceLocked { public void ZzTraceMark() { } } }");
+
+        var indexer = new SourceIndexer();
+        indexer.Scan(root);
+        indexer.FreezeIndex();
+
+        return (new TraceTool(indexer, ScopeCatalog.Build([("vanilla", root)], null, null)), locked);
+    }
+
+    // 上面那一格的调用：查询期间把一个文件独占住，索引层读它时拿到 IOException，
+    // 于是 Completeness 报「有文件没扫全」，表头跟着降格。手法与 OutputSnapshotTests 的
+    // SearchRegex_AtLeastHeader_WithUnreadableFile 同源。
+    private static async Task<string> RunWhileHolding(string path, ITool tool, object payload)
+    {
+        using var hold = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None);
+        return await Run(tool, payload);
     }
 
     private SyncSourcesTool BuildSync()
@@ -343,7 +410,7 @@ public class OutputGrammarGateTests : IDisposable
             new("trace", OverServerCap, () => Run(_trace, new { symbol = "ZzBase", mode = "inheritors", limit = "all" }), Expect: "server cap"),
             new("trace", ScoreGap, null, "trace 收的是精确符号名，两种模式都不打分"),
             new("trace", ScanStopped, () => Run(_trace, new { symbol = "ZzNeedleMark", mode = "usages", limit = 4 }), Expect: "more matches exist"),
-            new("trace", TotalIsFloor, () => Run(_trace, new { symbol = "ZzNeedleMark", mode = "usages", limit = "all" })),
+            new("trace", TotalIsFloor, () => RunWhileHolding(_lockedFile, _traceOverALockedFile, new { symbol = "ZzTraceMark", mode = "usages" }), Expect: ScanReport.FloorMark),
             new("trace", MultiSource, () => Run(_trace, new { symbol = "ZzNeedleMark", mode = "usages", scope = "all", limit = 5 })),
             new("trace", PinnedSource, () => Run(_trace, new { symbol = "ZzNeedleMark", mode = "usages", scope = "vanilla", limit = 5 })),
             new("trace", OutOfScope, () => Run(_trace, new { symbol = "ZzBase", mode = "inheritors", limit = 5 })),
@@ -361,7 +428,7 @@ public class OutputGrammarGateTests : IDisposable
             new("search_regex", OverServerCap, () => Run(_searchRegex, new { pattern = "ZzNeedleMark", limit = "all" }), Expect: "server cap"),
             new("search_regex", ScoreGap, null, "search_regex 是正则命中，不打分"),
             new("search_regex", ScanStopped, () => Run(_searchRegex, new { pattern = "ZzNeedleMark", limit = 4 }), Expect: "more matches exist"),
-            new("search_regex", TotalIsFloor, null, "下界形态的成因是『有文件没扫全』（读不开 / 撞到 20000 行闸），两者都要靠真实磁盘故障或超大文件才触发，合成语料造不出来——这一格由 SearchRegexHonestyTests 用注入的诊断计数覆盖"),
+            new("search_regex", TotalIsFloor, () => Run(_searchRegexOverBacktracking, new { pattern = "(a+)+b" }), Expect: ScanReport.FloorMark),
             new("search_regex", MultiSource, () => Run(_searchRegex, new { pattern = "ZzNeedleMark", scope = "all", limit = 6 })),
             new("search_regex", PinnedSource, () => Run(_searchRegex, new { pattern = "ZzNeedleMark", scope = "vanilla", limit = 6 })),
             new("search_regex", OutOfScope, () => Run(_searchRegex, new { pattern = "ZzNeedleMark", limit = 6 }), Expect: "never opened"),
