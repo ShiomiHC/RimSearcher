@@ -39,10 +39,22 @@ public class OutputGrammarGateTests : IDisposable
     private const string NoSuchPath = "路径不存在";
     private const string BadLimit = "非法 limit";
 
+    // 与上面的 Single 分界要写死，否则这两维迟早被读成同一件事，而它们照的不是同一批槽：
+    // **Single 管主计数**——结果集只有一条，走的是没有截断那条路（`1 XML def` / `1 entry`）；
+    // **这一维管主计数之外的槽取到 1**——折叠增量、预览行配额、属格里的总数。
+    //
+    // 历史缺陷全部落在后者：R30 那条 `... +1 more C# types` 是折叠增量，`first 1 preview lines`
+    // 是预览配额，两者都不是「结果只有一条」，故 Single 那一列从来照不到它们。要紧的是
+    // **闸的规则本来就抓得住**——规则二甲是纯结构判定（`1 preview lines` 里 lines 以 s 结尾又不在
+    // NotNouns 里 → 判违规），压根不查词表。缺的从来只是喂给它的 fixture：两个 ScanStopped 格
+    // 用的都是 limit = 4，十五个维度里没有一个把计数逼到 1。
+    private const string SingleCount = "折叠/配额侧的计数恰好为 1";
+
     private static readonly string[] AllBranches =
     [
-        Empty, Single, AtLimit, OverLimit, OverServerCap, ScoreGap, ScanStopped, TotalIsFloor,
-        MultiSource, PinnedSource, OutOfScope, MissingArg, UnknownArg, NoSuchPath, BadLimit,
+        Empty, Single, SingleCount, AtLimit, OverLimit, OverServerCap, ScoreGap, ScanStopped,
+        TotalIsFloor, MultiSource, PinnedSource, OutOfScope, MissingArg, UnknownArg, NoSuchPath,
+        BadLimit,
     ];
 
     private static readonly string[] AllTools =
@@ -122,6 +134,20 @@ public class OutputGrammarGateTests : IDisposable
         // 名字与那 12 条都拉开距离，故「单条」这一格真的只回一条——ZzThing000 不行，
         // 它与 ZzThing001 只差一个字符，整批都够得上拼写容错那一支
         defs.Append("  <ThingDef><defName>ZzSolitaryBeacon</defName><label>lone</label></ThingDef>\n");
+
+        // inspect 的「计数恰好为 1」那一格用的：Linked C# Types 段的上限写死在 10，故 11 个链接
+        // 恰好溢出 1 个。**这是 inspect 唯一一个能取到 1 的计数槽**——大纲折叠取不到，因为
+        // ScopeArgs.GetDisplayLimit 在 limit >= 200 时直接返回 Unlimited（不折叠），而 ZzWide 有
+        // 210 个成员，limit 只能取到 199，溢出至少 11 个。
+        //
+        // 元素名各不相同：Def 解析按 XML 语义合并同名子元素（后者胜），11 个同名 Class 元素只会
+        // 剩一个。认作类型引用的判据是「元素名以 Class/Worker 结尾」，故编号放在后缀之前。
+        // 名字与那 12 个 ZzThing 拉开距离，免得挤进 `def:ZzThing` 那两格的计数里。
+        defs.Append("  <ThingDef><defName>ZzLinkHub</defName><label>hub</label>\n");
+        for (var i = 0; i < 11; i++)
+            defs.Append($"    <zzLink{i:D2}Class>Zz.ZzLinked{i:D2}</zzLink{i:D2}Class>\n");
+        defs.Append("  </ThingDef>\n");
+
         defs.Append("</Defs>");
         _workspace.WriteFile(Path.Combine("Core", "Defs", "ZzThings.xml"), defs.ToString());
 
@@ -257,6 +283,7 @@ public class OutputGrammarGateTests : IDisposable
             // ---- locate ----
             new("locate", Empty, () => Run(_locate, new { query = "ZzNothingAnywhere" }), Expect: "No results"),
             new("locate", Single, () => Run(_locate, new { query = "def:ZzSolitaryBeacon" }), Expect: "1 XML def"),
+            new("locate", SingleCount, () => Run(_locate, new { query = "def:ZzThing", limit = 11 }), Expect: "+1 more"),
             new("locate", AtLimit, () => Run(_locate, new { query = "def:ZzThing", limit = 12 }), Expect: "12 XML defs"),
             new("locate", OverLimit, () => Run(_locate, new { query = "type:ZzBulk", limit = 5 }), Expect: "... +"),
             new("locate", OverServerCap, () => Run(_locate, new { query = "type:ZzBulk", limit = "all" }), Expect: "server cap 200 reached"),
@@ -274,6 +301,7 @@ public class OutputGrammarGateTests : IDisposable
             // ---- inspect ----
             new("inspect", Empty, () => Run(_inspect, new { name = "ZzNothingAnywhere" })),
             new("inspect", Single, () => Run(_inspect, new { name = "ZzWidget" })),
+            new("inspect", SingleCount, () => Run(_inspect, new { name = "ZzLinkHub" }), Expect: "+1 more type"),
             new("inspect", AtLimit, () => Run(_inspect, new { name = "ZzWide", limit = BulkCount })),
             new("inspect", OverLimit, () => Run(_inspect, new { name = "ZzWide", limit = 5 }), Expect: "... +"),
             new("inspect", OverServerCap, () => Run(_inspect, new { name = "ZzWide", limit = "all" })),
@@ -291,6 +319,7 @@ public class OutputGrammarGateTests : IDisposable
             // ---- read_code ----
             new("read_code", Empty, () => Run(_readCode, new { path = "ZzWidget", methodName = "ZzNoSuchMethod" })),
             new("read_code", Single, () => Run(_readCode, new { path = "ZzWidget", methodName = "ZzWidgetTick" })),
+            new("read_code", SingleCount, () => Run(_readCode, new { path = "ZzNeedle", startLine = 0, lineCount = 29 }), Expect: "+1 more"),
             new("read_code", AtLimit, () => Run(_readCode, new { path = "ZzNeedle", startLine = 1, lineCount = 30 })),
             new("read_code", OverLimit, () => Run(_readCode, new { path = "ZzNeedle", startLine = 1, lineCount = 5 }), Expect: "... +"),
             new("read_code", OverServerCap, null, "读取上限就是 lineCount 自己（封顶 2000），没有第二道服务端上限——故不存在『limit 已给足仍被截』这一形"),
@@ -308,6 +337,7 @@ public class OutputGrammarGateTests : IDisposable
             // ---- trace ----
             new("trace", Empty, () => Run(_trace, new { symbol = "ZzNothingAnywhere", mode = "usages" })),
             new("trace", Single, () => Run(_trace, new { symbol = "ZzWidgetTick", mode = "usages" })),
+            new("trace", SingleCount, () => Run(_trace, new { symbol = "ZzNeedleMark", mode = "usages", limit = 1 }), Expect: "first 1 preview line in scope"),
             new("trace", AtLimit, () => Run(_trace, new { symbol = "ZzBase", mode = "inheritors", limit = BulkCount })),
             new("trace", OverLimit, () => Run(_trace, new { symbol = "ZzBase", mode = "inheritors", limit = 5 }), Expect: "... +"),
             new("trace", OverServerCap, () => Run(_trace, new { symbol = "ZzBase", mode = "inheritors", limit = "all" }), Expect: "server cap"),
@@ -325,6 +355,7 @@ public class OutputGrammarGateTests : IDisposable
             // ---- search_regex ----
             new("search_regex", Empty, () => Run(_searchRegex, new { pattern = "ZzNothingAnywhere" }), Expect: "No matches"),
             new("search_regex", Single, () => Run(_searchRegex, new { pattern = "ZzWidgetField" })),
+            new("search_regex", SingleCount, () => Run(_searchRegex, new { pattern = "ZzNeedleMark", limit = 1 }), Expect: "first 1 preview line in scope"),
             new("search_regex", AtLimit, () => Run(_searchRegex, new { pattern = "ZzWidgetField", limit = 1 })),
             new("search_regex", OverLimit, () => Run(_searchRegex, new { pattern = "ZzNeedleMark", limit = 200 }), Expect: "... +"),
             new("search_regex", OverServerCap, () => Run(_searchRegex, new { pattern = "ZzNeedleMark", limit = "all" }), Expect: "server cap"),
@@ -342,6 +373,7 @@ public class OutputGrammarGateTests : IDisposable
             // ---- list_directory ----
             new("list_directory", Empty, () => Run(_listDirectory, new { path = Path.Combine(_workspace.Dir("Core"), "Defs"), offset = 999 }), Expect: "past the end"),
             new("list_directory", Single, () => Run(_listDirectory, new { path = Path.Combine(core, "Defs") }), Expect: "1 entry"),
+            new("list_directory", SingleCount, () => Run(_listDirectory, new { path = _workspace.Dir("Mods"), limit = 1 }), Expect: "+1 more"),
             new("list_directory", AtLimit, () => Run(_listDirectory, new { path = Path.Combine(core, "Defs"), limit = 1 })),
             new("list_directory", OverLimit, () => Run(_listDirectory, new { path = core, limit = 5 }), Expect: "... +"),
             new("list_directory", OverServerCap, null, "服务端上限是每页 1000 条，而它与 limit 是同一道闸（limit 夹到 1000），撞上时走的仍是『超过 limit』那一形，括号里换一句 server cap 而已"),
@@ -359,6 +391,7 @@ public class OutputGrammarGateTests : IDisposable
             // ---- sync_sources ----
             new("sync_sources", Empty, () => Run(_sync, new { action = "diff", file = "ZzSync00.cs", version = "ZzNoSuchVersion" })),
             new("sync_sources", Single, () => Run(_sync, new { action = "diff", file = "ZzSync00.cs" })),
+            new("sync_sources", SingleCount, () => Run(_sync, new { action = "diff", limit = 12 }), Expect: "+1 more"),
             new("sync_sources", AtLimit, () => Run(_sync, new { action = "diff", limit = 13 })),
             new("sync_sources", OverLimit, () => Run(_sync, new { action = "diff", limit = 5 }), Expect: "... +"),
             new("sync_sources", OverServerCap, null, "limit 的服务端封顶是 2000，而一次 sync 的变更文件数远达不到；撞上时走的仍是『超过 limit』那一形"),
@@ -376,7 +409,7 @@ public class OutputGrammarGateTests : IDisposable
     }
 
     // 遍历器。失败时报 `(工具, 分支, 断言, 原文行)` 四元组——四个都要有：只报断言名，
-    // 下一个人得把 105 格重跑一遍才知道是哪一格红的。
+    // 下一个人得把 112 格重跑一遍才知道是哪一格红的。
     [Fact]
     public async Task EveryShapeInTheMatrix_ObeysTheSharedGrammar()
     {

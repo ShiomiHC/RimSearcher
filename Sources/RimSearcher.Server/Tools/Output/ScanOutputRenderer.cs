@@ -91,8 +91,11 @@ public static class ScanOutputRenderer
         var echoes = string.Concat(output.ParameterEchoes.Select(e => $", {e}"));
         var where = $"in scope '{output.Scope.Expression}'{echoes}";
 
+        // 名词走全服构词，不在这里手拼。这一处是全服最后一条把复数式直接写死在插值里的表头，
+        // 于是 limit = 1 时线上输出的是 `first 1 preview lines`——闸的规则二甲本来就判得出它，
+        // 缺的只是把计数逼到 1 的那一维 fixture（见 OutputGrammarGateTests 的 SingleCount）。
         if (output.ScanStopped)
-            return $"first {PreviewLinesCollected(output)} preview lines {where}";
+            return $"first {OutputText.Quantity(PreviewLinesCollected(output), "preview lines")} {where}";
 
         var incomplete = output.Completeness.AnyIncomplete;
         return $"{ScanReport.FoundCount(output.TotalMatchingLines, incomplete)} {where}"

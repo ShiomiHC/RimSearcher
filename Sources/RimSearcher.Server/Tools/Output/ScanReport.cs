@@ -51,8 +51,12 @@ public static class ScanReport
     {
         // 已经顶到硬上限时别再劝 limit:'all'，那只会原地重试；此时把「这就是服务端上限」
         // 说出来，否则调用方只会看见一个数，不知道它已经是天花板。
+        // 同一条修法的潜伏形：这一支要 previewCap 取 1 才写错，而它只在 limit:'all' 时走到，
+        // 那时 previewCap 恒等于 HardLimit（200），故当前语料到不了。仍然改——名词槽一律走构词，
+        // 「现在到不了」不是让一处产地留在名单外的理由。另一支 `{previewCap}-preview cap` 是
+        // 定语复合词，英语里本就不带复数，不动。
         var cap = limit.Unlimited
-            ? $"scan stopped at the server cap of {previewCap} preview lines"
+            ? $"scan stopped at the server cap of {OutputText.Quantity(previewCap, "preview lines")}"
             : $"scan stopped at the {previewCap}-preview cap";
         var route = limit.Unlimited
             ? "narrow the query or the scope"

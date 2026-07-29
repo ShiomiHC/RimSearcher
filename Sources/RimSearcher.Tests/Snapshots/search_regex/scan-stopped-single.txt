@@ -1,4 +1,4 @@
-Regex matches for 'ZzNeedle' (first 1 preview lines in scope 'all', case-insensitive):
+Regex matches for 'ZzNeedle' (first 1 preview line in scope 'all', case-insensitive):
 
 `ZzFile000.cs`
   L1: // ZzNeedle
