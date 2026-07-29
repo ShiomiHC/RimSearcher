@@ -248,7 +248,7 @@ public class OutputSnapshotTests : IDisposable
 
     // 第三种成因的最后一支：pattern 在某个文件上灾难性回溯、该文件被中途放弃。
     // `(a+)+b` 对一行纯 a 是指数级，索引层的 1 秒超时必中；另给一个真命中的文件，
-    // 否则整份返回走零命中路径，而那条路径**一个字都不提**被放弃的文件（见 §7 的第一条）。
+    // 才走得到表头那一路（`at least` + 就地成因）。零命中那一形是下一个用例。
     [Fact]
     public async Task SearchRegex_AtLeastHeader_WithTimedOutFile()
     {
@@ -261,8 +261,9 @@ public class OutputSnapshotTests : IDisposable
         Verify("search_regex/at-least-timed-out", content);
     }
 
-    // 同一个 pattern、只是没有任何文件命中：整份返回退化成一句 "No matches"，而扫描确实
-    // 在一个文件上被放弃了。这份基线钉的是**现状**，§7 第一条修好之后它会作为 diff 出现。
+    // 同一个 pattern、只是没有任何文件命中。这一路此前退化成一句 "No matches"，而扫描确实
+    // 在一个文件上被放弃了——一个字都不提（§7 第一条）。已修（e388328），此处钉的是修好那一形：
+    // 表头那半边在这一路无处可挂（没有表头，也没有要降格的总数），故成因整句落在尾注上。
     [Fact]
     public async Task SearchRegex_ZeroHits_SwallowsTheTimedOutFile()
     {
@@ -538,7 +539,8 @@ public class OutputSnapshotTests : IDisposable
     }
 
     // 零命中 + 有文件撞了行闸。§7 第一条同型的另一半：那条尾注此前只挂在有结果那一路，
-    // 而两个扫盘工具共用同一个 renderer，故这一份钉的是「修好之后 trace 这边也跟着说」。
+    // 而两个扫盘工具共用同一个 renderer，故修在 ScanOutputRenderer.Empty 一处、trace 这边跟着好，
+    // 这一份钉的就是「跟着好了」。
     [Fact]
     public async Task TraceUsages_ZeroHitsWithLineCappedFile()
     {
@@ -930,7 +932,7 @@ public class OutputSnapshotTests : IDisposable
         Verify("list_directory/plain-listing", content);
     }
 
-    // 分页折叠行：下一步是 `pass offset=N`，落不进 FoldLine 现有三分支（步 4 要加的那一形）
+    // 分页折叠行：下一步是 `pass offset=N`，落不进 Fold.Line 的三分支，故走 Fold.Explicit
     [Fact]
     public async Task ListDirectory_PageFold()
     {
@@ -997,8 +999,8 @@ public class OutputSnapshotTests : IDisposable
         Verify("inspect/outline-fold", content);
     }
 
-    // Def 关联到的 C# 类型超过 10 个时的折叠行。步 5 要把它接到 Fold 上，故先立判据；
-    // 溢出恰好一条，一并钉住这一形不走全服构词（`+1 more types`，见指导文档 §7）。
+    // Def 关联到的 C# 类型超过 10 个时的折叠行。这份判据立在接上 Fold.Explicit 之前，
+    // 接的那一步才有字节级的闸可对；溢出恰好一条，一并钉住单复数走全服构词（见指导文档 §7）。
     [Fact]
     public async Task Inspect_LinkedTypesFold()
     {
@@ -1057,7 +1059,7 @@ public class OutputSnapshotTests : IDisposable
         Verify("sync_sources/check", content);
     }
 
-    // diff 报告里的两条折叠行——步 5 要接 Fold 的另外两处。
+    // diff 报告里的两条折叠行——接上 Fold.Explicit 的另外两处。
     //
     // 这两条是全服**最偏离**共用文法的：翻页那条把下一步写在破折号后面而不是括号里，
     // 成员那条的 `+` 曾经也是缺的。故先各立一份字节级判据。

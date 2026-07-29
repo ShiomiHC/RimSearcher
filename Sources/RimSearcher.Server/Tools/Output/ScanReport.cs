@@ -9,7 +9,7 @@ namespace RimSearcher.Server.Tools.Output;
 // （LowerBoundReason）**且**尾注点名是哪些文件（NotScannedInFull + NameSample）。
 // 三者少任何一个，`at least` 就会被读者就近拿一个别的上限去解释——第九轮盲测三条互不相干的
 // 任务链正是这么各自独立误读了同一个 `at least 105`。散在三个文件里，这条耦合就没有一处
-// 看得见；步 1 要把它建模成一个整体，先让它们同居。
+// 看得见；这里把它建模成一个整体，三条句子同居于此。
 public static class ScanReport
 {
     // 有文件没扫全时，命中总数就不再是确定值而是下界。表头与下面那行尾注必须同时改口，
