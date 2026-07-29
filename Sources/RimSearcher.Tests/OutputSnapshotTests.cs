@@ -285,6 +285,25 @@ public class OutputSnapshotTests : IDisposable
         Verify("search_regex/first-n-preview-lines", content);
     }
 
+    // 同一形的 **N==1** 那一侧。分开立一份是因为它是全服唯一一处「计数恰好为 1」还没有判据的
+    // 表头：`first 1 preview lines` 是线上正在输出的话，而它本该是 `first 1 preview line`。
+    //
+    // 要紧的是抓不到它的原因**不在闸的规则**——OutputGrammarGateTests 的规则二甲是纯结构判定
+    // （`1 preview lines` 里 lines 以 s 结尾、不在 NotNouns 里 → 判违规），压根不查词表，本来
+    // 就抓得住。漏掉它的是矩阵少了「计数恰好为 1」这一维：两个 ScanStopped 格用的都是 limit = 4。
+    //
+    // 这份基线钉的是**现状**（表头由 ScanOutputRenderer 手拼、不走 NounFor 构词），
+    // 下一个 commit 补维度并改产地，届时它会作为 diff 出现。
+    [Fact]
+    public async Task SearchRegex_FirstOnePreviewLineHeader()
+    {
+        var (indexer, _, catalog) = BuildIndex(ManyFiles(400));
+        var content = await Run(
+            new SearchRegexTool(indexer, catalog), new { pattern = "ZzNeedle", limit = 1 });
+
+        Verify("search_regex/scan-stopped-single", content);
+    }
+
     // 每文件折叠（`+N more of M matching lines in this file`）+ preview-cap 脚注整份一次
     [Fact]
     public async Task SearchRegex_PerFileFold_AndPreviewCapFootnote()
