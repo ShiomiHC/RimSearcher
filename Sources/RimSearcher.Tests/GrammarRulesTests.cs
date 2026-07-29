@@ -163,12 +163,18 @@ public class GrammarRulesTests
     }
 
     // 反向那一支：有文件没扫全时总数只是下界，表头必须跟着改口。
+    //
+    // 表头逐字取 ScanReport.FoundCount 的**没降格**那一形，不手写：此前这里写的是
+    // `Found 7 matching files in scope 'all'`——产品一处都不产出的一句话，与本文件下面那条
+    // 「此前第一条写作…一句产品从没产出过的话」是同一个毛病。判据后来收窄成「表头那个总数
+    // 在场时才判」（见 GrammarRules 里的 hasATotalToDemote），手写的那句因为名词不对
+    // （matching files ≠ 表头的 matching lines）会连带把这条反面用例判成常绿。
     [Fact]
     public void UnscannedFilesWithADefiniteHeader_IsCaught()
     {
         Assert.Contains("at least 的读法", Rules(
-            "Found 7 matching files in scope 'all'\n"
-            + "... some files were not scanned in full (2 hit the time budget)"));
+            $"Regex matches for 'Zz' ({ScanReport.FoundCount(7, false)} in scope 'all')\n"
+            + ScanReport.NotScannedInFull(["2 hit the time budget"])));
     }
 
     // 例外：表头换了量纲的那一支数的是**印出来的**预览行，那个数是确定的，不该也不能改口。
@@ -178,6 +184,22 @@ public class GrammarRulesTests
         Assert.DoesNotContain("at least 的读法", Rules(
             "Regex matches for 'Zz' (first 3 preview lines in scope 'all')\n"
             + "... some files were not scanned in full (2 hit the time budget)"));
+    }
+
+    // 另一条例外，也是这条判据当年时红时绿的那个成因：零命中形没有表头、也没有一个要被降格的
+    // 总数（ScanOutputRenderer.Empty 明写「表头那半边在这一路无处可挂」），成因整句落在尾注上。
+    //
+    // 喂的是**产品真输出**的逐字复本——字节级基线 search_regex/zero-hits-names-timeout 与
+    // trace/usages-zero-hits-line-capped 就是这两行。手写一段近似的话，这条豁免会宽到连
+    // 「有总数却没降格」都一起放过；照抄基线则豁免只覆盖它该覆盖的那一形。
+    [Theory]
+    [InlineData("No matches for pattern '(a+)+b' in scope 'all', case-insensitive.")]
+    [InlineData("No text matches for 'ZzAbsent' in scope 'all' (whole word, case-insensitive).")]
+    public void ZeroHitsHasNoTotalToDemote(string emptyLine)
+    {
+        Assert.DoesNotContain("at least 的读法", Rules(
+            emptyLine + "\n\n"
+            + ScanReport.NotScannedInFull(["1 file could not be read and was skipped entirely (ZzLocked.cs)"])));
     }
 
     // ---- 来源标签（规则六） ----
@@ -239,12 +261,55 @@ public class GrammarRulesTests
 
     // ---- 下一步（规则九） ----
 
+    // 正面：折叠行的槽真空着时这条还能红。**这是本条判据唯一的反面用例**——它管的是「说不说」，
+    // 而全服折叠行没有一条是空槽的，故正常语料下它恒绿，写坏了也看不出来。
+    //
+    // 空槽由产地自己渲染（nextStep 传空串），不是把渲染好的一行做字符串替换：替换会同时改掉
+    // 括号的排版，那样红的就不再是「槽空了」而是「整行配不上产地」（规则一）。
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void AFoldLineWithAnEmptyNextStepSlot_IsCaught(string nextStep)
+    {
+        Assert.Contains("下一步", Rules(OutputText.FoldLine(7, CountedNoun.Files, nextStep, null, "  ")!));
+    }
+
     // 中段省略两侧的行都印着，翻页参数写在紧邻的续读提示里，故这一形本来就不带下一步。
-    // 此前它靠这里一句手写的 `StartsWith("... [Truncated ")` 豁免。
+    // 此前它靠这里一句手写的 `StartsWith("... [Truncated ")` 豁免，后来靠 ClassifyDotLine 的
+    // kind 豁免，现在靠「这条规则只管折叠行一形」——三代都要它钉着。
     [Fact]
     public void TheElisionMarker_DoesNotNeedANextStep()
     {
         Assert.DoesNotContain("下一步", Rules(Fold.Elision(73, 201, 273)));
+    }
+
+    // 「有文件没扫全」同样不带下一步：它是事故报告，不是截断提示——三条成因没有一个参数放得宽。
+    //
+    // 三条成因各喂一遍，因为这一形此前**只有一条是绿的**，且绿得纯属偶然：超时那一句里
+    // `beCAUSE the pattern` 含子串 `use `，恰好落进当年那张 actionable 词表。读不开与行闸两句
+    // 没有这个巧合，当场判红。判据改成问产地那个槽之后，三条同为非折叠行，一起放行——这个
+    // Theory 钉的正是「三条现在同进同出」。措辞逐字取自三份基线，产品改一个词这里就会跟着变。
+    [Theory]
+    [InlineData("1 file could not be read and was skipped entirely (ZzLocked.cs)")]
+    [InlineData("1 file was only scanned to line 20000 (ZzHuge.cs)")]
+    [InlineData("1 file was abandoned mid-scan because the pattern timed out on it "
+                + "(catastrophic backtracking) — its per-file match count is missing (ZzBacktrack.cs)")]
+    public void NotScannedInFull_DoesNotNeedANextStep(string reason)
+    {
+        Assert.DoesNotContain("下一步", Rules(ScanReport.NotScannedInFull([reason])));
+    }
+
+    // 反过来：槽里**有东西**就够了，这条不管那句话该怎么写。
+    //
+    // 旧判据管——它拿一张十五个词的手抄表要求下一步里必须出现其中之一，于是这条判据把
+    // 「下一步该长什么样」重新声明了一遍：产品换个说法就是一次误报，而那张表还得跟着每个新
+    // 工具的新措辞长。本条规则标的是「管『说不说』」（见 GrammarRules 类头：README 明写共享的
+    // 是什么时候印，不是怎么排版），「怎么说」归 OutputReadabilityTests。
+    [Fact]
+    public void ANextStepOutsideTheOldVocabulary_IsClean()
+    {
+        Assert.DoesNotContain("下一步", Rules(
+            OutputText.FoldLine(7, CountedNoun.Files, "the rest is in the file list above", null, "  ")!));
     }
 
     // 乙：顶到服务端上限了还劝 `limit:'all'`，照做是原地重试。Fold.Line 的三分支本就把这两句写成
