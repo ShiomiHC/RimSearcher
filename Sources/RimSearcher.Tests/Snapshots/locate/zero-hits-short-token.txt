@@ -1,0 +1,5 @@
+No results for 'ZzAbsentThing 20' in scope 'all'.
+
+_'20' is shorter than 3 characters, and the field-value index only holds tokens of that length or more — no def field was searched for it. A missing Content Matches section here means 'not searched', not 'not present'; search_regex matches short literals._
+
+Try: partial names, query filters (type:, method:, field:, def:), or search_regex for patterns.

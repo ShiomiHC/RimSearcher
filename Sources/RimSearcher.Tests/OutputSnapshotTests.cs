@@ -823,6 +823,20 @@ public class OutputSnapshotTests : IDisposable
         Verify("locate/conditional-folder", content);
     }
 
+    // 零命中 + 查询里带短词。这一形最要紧：有结果时读者至少还能看到别的段落，零命中时整份
+    // 返回只有「No results」一句，而「短词根本没被查过」这件事恰恰在这时最容易被读成
+    // 「索引里没有」（见指导文档 §7）。
+    [Fact]
+    public async Task Locate_ZeroHitsWithShortToken()
+    {
+        var (indexer, defs, catalog) = BuildIndex(("ZzWidget.cs", "namespace Zz { public class ZzWidget { } }"));
+
+        var content = await Run(
+            new LocateTool(indexer, defs, catalog), new { query = "ZzAbsentThing 20" });
+
+        Verify("locate/zero-hits-short-token", content);
+    }
+
     // ================= read_code =================
 
     // 行区间形 + 折叠行（`+N more of M lines (pass startLine=N)`）
