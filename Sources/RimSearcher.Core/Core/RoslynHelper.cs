@@ -307,16 +307,16 @@ public static class RoslynHelper
             // `Property: ` / `Field: ` / `Method: `——那是把表头说过的话在下面每一行再说一遍
             // （同一条判据见 enum 分支）。locate 的 Members 段一直就是这么排的，两处至此同形。
             var properties = type.Members.OfType<PropertyDeclarationSyntax>().ToList();
-            AppendOutlineGroup(sb, properties, maxMembersPerKind, "Properties", CountedNoun.Properties,
+            AppendOutlineGroup(sb, properties, maxMembersPerKind, CountedNoun.Properties,
                 prop => $"{Modifiers(prop.Modifiers)}{prop.Type} {prop.Identifier.Text}");
 
             var fields = type.Members.OfType<FieldDeclarationSyntax>().ToList();
-            AppendOutlineGroup(sb, fields, maxMembersPerKind, "Fields", CountedNoun.Fields,
+            AppendOutlineGroup(sb, fields, maxMembersPerKind, CountedNoun.Fields,
                 field => $"{Modifiers(field.Modifiers)}{field.Declaration.Type} "
                          + string.Join(", ", field.Declaration.Variables.Select(v => v.Identifier.Text)));
 
             var methods = type.Members.OfType<MethodDeclarationSyntax>().ToList();
-            AppendOutlineGroup(sb, methods, maxMembersPerKind, "Methods", CountedNoun.Methods,
+            AppendOutlineGroup(sb, methods, maxMembersPerKind, CountedNoun.Methods,
                 method => $"{Modifiers(method.Modifiers)}{method.ReturnType} {method.Identifier.Text}"
                           + $"({string.Join(", ", method.ParameterList.Parameters.Select(FormatParameter))})");
 
@@ -355,16 +355,25 @@ public static class RoslynHelper
 
     // 一类成员一块：表头 + 各行签名 + 折叠行。空的那类整块不出现——「没有这个表头」即
     // 「这个类型没有这类成员」，比印一个空表头少一行且同样说得清。
+    //
+    // 表头与折叠行里的名词是**同一个词**，故只收一个 CountedNoun：此前调用点要把
+    // `"Properties"` 与 `CountedNoun.Properties` 各写一遍，改一处漏一处时表头与它下面
+    // 那条 `+N more properties` 就会说两个词，而没有任何一道闸看得出来。
     private static void AppendOutlineGroup<T>(
         StringBuilder sb, List<T> members, int maxMembersPerKind,
-        string headerPlural, CountedNoun foldPlural, Func<T, string> render)
+        CountedNoun kind, Func<T, string> render)
     {
         if (members.Count == 0) return;
-        sb.AppendLine($"  {headerPlural}:");
+        sb.AppendLine($"  {SentenceCase(kind.Plural)}:");
         foreach (var member in members.Take(maxMembersPerKind))
             sb.AppendLine($"    {render(member)}");
-        AppendOutlineFold(sb, members.Count, maxMembersPerKind, foldPlural);
+        AppendOutlineFold(sb, members.Count, maxMembersPerKind, kind);
     }
+
+    // 计数名词一律小写（它们要嵌进句子），而大纲的分组表头是行首，故首字母大写。
+    // 只动首字母：`C# types` 这类本就带大写的词不能整体改。
+    private static string SentenceCase(string plural) =>
+        plural.Length == 0 ? plural : char.ToUpperInvariant(plural[0]) + plural[1..];
 
     // 与 FormatParameter 同一条判据：大纲是「照着它写调用或写 Harmony patch」的抄写样本，
     // 丢掉修饰符就等于给出错的样本。private 与 public、static 与实例、const 与可写字段
