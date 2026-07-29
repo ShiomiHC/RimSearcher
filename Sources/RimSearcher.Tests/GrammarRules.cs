@@ -199,8 +199,16 @@ public static class GrammarRules
             ScanReport.ScanStopped(1, new ResultLimit(1, true)))),
     ];
 
-    // 这一行是哪个产地渲染出来的。null = 它压根不以 `... ` 开头，不归规则一与规则九管。
-    private static DotLine? ClassifyDotLine(string line)
+    // 这一行归哪个产地，以及——折叠行的话——调用方填进 `(<下一步>)` 那个槽里的是什么。
+    //
+    // 两件事一起返回而不是各判一遍：规则九甲问的正是这个槽，而它此前够不着，只好退而问
+    // 「这一行里有没有出现某个**像**下一步的词」。那张词表用 Contains 匹配 `use `/`limit`
+    // 这类短子串，于是 `beCAUSE `、`unLIMITed`、`alLOCATE` 都能替一行本来没给下一步的字
+    // 蒙混过关——判据松成了「行里有没有这几个字母」。槽自己就在产地的框架里，切出来即可。
+    private readonly record struct DotLineOrigin(DotLine Kind, string NextStep);
+
+    // null = 它压根不以 `... ` 开头，不归规则一与规则九管。
+    private static DotLineOrigin? ClassifyDotLine(string line)
     {
         var trimmed = line.TrimStart();
         if (!trimmed.StartsWith("... ", StringComparison.Ordinal)) return null;
@@ -221,18 +229,20 @@ public static class GrammarRules
             if (line.Length >= head.Length + tail.Length
                 && line.StartsWith(head, StringComparison.Ordinal)
                 && line.EndsWith(tail, StringComparison.Ordinal))
-                return DotLine.Fold;
+                return new DotLineOrigin(DotLine.Fold, line[head.Length..^tail.Length]);
         }
 
         // 每文件折叠行没有调用方填的槽，整行逐字相等。
         foreach (var hidden in numbers)
         foreach (var totalInFile in numbers)
-            if (line == Fold.PerFile(hidden, totalInFile, indent)) return DotLine.PerFileFold;
+            if (line == Fold.PerFile(hidden, totalInFile, indent))
+                return new DotLineOrigin(DotLine.PerFileFold, string.Empty);
 
         foreach (var (kind, frame) in NonFoldFrames)
-            if (trimmed.StartsWith(frame, StringComparison.Ordinal)) return kind;
+            if (trimmed.StartsWith(frame, StringComparison.Ordinal))
+                return new DotLineOrigin(kind, string.Empty);
 
-        return DotLine.Unknown;
+        return new DotLineOrigin(DotLine.Unknown, string.Empty);
     }
 
     public static IReadOnlyList<GrammarViolation> Check(string text)
@@ -278,10 +288,11 @@ public static class GrammarRules
     //
     // 名词槽的两条判据一并由此得出，不再单独判：产地的名词参数取自 CountedNoun，故渲染得出来的
     // 行，名词必然登记在案。渲染不出来时下面再问一次「是不是只有名词槽不对」——那只影响措辞。
-    private static void FoldLineShape(string[] lines, DotLine?[] kinds, List<GrammarViolation> found)
+    private static void FoldLineShape(
+        string[] lines, DotLineOrigin?[] kinds, List<GrammarViolation> found)
     {
         for (var i = 0; i < lines.Length; i++)
-            if (kinds[i] == DotLine.Unknown)
+            if (kinds[i] is { Kind: DotLine.Unknown })
                 found.Add(Diagnose(lines[i]));
     }
 
@@ -456,6 +467,7 @@ public static class GrammarRules
     //     「有文件没扫全」，调用方无从判断该信哪个。
     //     例外是表头已经换了量纲的那一支：扫描停在预览上限时表头数的是**印出来的**预览行
     //     （ScanReport.PreviewLineCount），那个数是确定的，不该也不能改口。
+    //     射程也只到「有一个总数在场」为止，见下面 hasATotalToDemote。
     //
     // 四张手抄字符串表（成因 / 诱饵 / 引用 / 记号）全部由产地渲染取代：
     //   - 记号取 ScanReport.FloorMark（Tally.Cell 也取它，两侧不会各写一个词）；
@@ -494,7 +506,27 @@ public static class GrammarRules
         var switchedUnit = IntegersIn(text)
             .Any(n => text.Contains(ScanReport.PreviewLineCount(n), StringComparison.Ordinal));
 
-        if (text.Contains(scanCause, StringComparison.Ordinal) && !hasFloor && !switchedUnit)
+        // 丙的前提：**得先有一个总数可降格**。零命中那一形没有表头、也没有那个数——成因整句
+        // 落在尾注上，那正是它该有的样子（ScanOutputRenderer.Empty 明写「表头那半边在这一路
+        // 无处可挂」；两份字节级基线 search_regex/zero-hits-names-timeout 与
+        // trace/usages-zero-hits-line-capped 钉的就是这一形）。此前这一支不问这个前提，于是
+        // **产品照着已审基线输出的东西**被闸判违规。
+        //
+        // 它一直没被发现，是因为矩阵里 search_regex / 总数是下界 那格当年记成不适用，这一形
+        // 从没进过闸；只有全量 dotnet test 时某个文件偶发被放弃，而它又**恰好是唯一带命中的
+        // 那个**，`单条` 与 `恰好等于 limit` 两格（pattern 都是 ZzWidgetField，全语料只有
+        // ZzWidget.cs 一处命中）才一起退化成零命中形、一起变红——一道时红时绿的闸比没有闸更糟。
+        // 偶发的那一下是 SourceIndexer 那道 1 秒正则超时：ZzWidgetField 是纯字面量、不回溯，
+        // 故它只可能来自满负载下的线程停摆，而不是语料。
+        //
+        // 前提按手法乙从产地问：表头那个数是 ScanReport.FoundCount 渲染的。**判据一点没松**——
+        // 有正文时每文件折叠行（Fold.PerFile）用的是同一个名词，故前提在那时恒为真，
+        // hasFloor / switchedUnit 两道照旧；被筛掉的只有「一个总数都印不出来」的零命中一形。
+        var hasATotalToDemote = IntegersIn(text)
+            .Any(n => text.Contains(ScanReport.FoundCount(n, false), StringComparison.Ordinal));
+
+        if (text.Contains(scanCause, StringComparison.Ordinal)
+            && hasATotalToDemote && !hasFloor && !switchedUnit)
             found.Add(new GrammarViolation("at least 的读法", string.Empty,
                 "有文件没扫全（总数只是下界）而表头仍写成确定值"));
     }
@@ -569,35 +601,40 @@ public static class GrammarRules
 
     // ---- 九、下一步（管「说不说」；FoldLine 三分支那一条） ----
     //
-    // 甲：每条 `... ` 开头的截断提示都要给出可执行的下一步。只说「被截了」而不说怎么拿到，
-    //     调用方只能把它读成服务端在敷衍。
+    // 甲：折叠行的 `(<下一步>)` 那个槽不许空。只说「被截了」而不说怎么拿到，调用方只能把它
+    //     读成服务端在敷衍。
+    //
+    //     判的是**那个槽**，不是「这一行里有没有出现某个像下一步的词」。此前是后者：一张
+    //     十五个词的手抄表加 Contains，于是 `use `/`limit`/`locate` 这几个短子串把
+    //     `beCAUSE `、`unLIMITed`、`alLOCATE` 一并放行——判据松成了「行里有没有这几个字母」，
+    //     且松得静默。实测代价有两笔：`... some files were not scanned in full` 这一句在
+    //     超时那一形上恰好含 `beCAUSE `（绿）、在读不开与行闸两形上不含（红），同一句话红不红
+    //     取决于成因措辞；而反过来，一条真的把槽写空了的折叠行，只要名词是 `matching lines`，
+    //     `limit` 之外随便哪个词都能替它蒙混。
+    //
+    //     槽的位置由产地自己给：OutputText.FoldLine 的框架是 `... +N more <名词> (<下一步>)`，
+    //     ClassifyDotLine 认这一形时本来就要把框架切成前后两截，中间那段即是槽。
+    //
+    //     只管折叠行一形。另外三条带 `... ` 的句子（ScanStopped / PreviewCapNotice /
+    //     NotScannedInFull）没有调用方填的槽：前两句的下一步写死在产地的框架里，改了它就是
+    //     改全服文法，那是有意的、不该由这条规则再问一遍；第三句压根不是截断提示而是**事故
+    //     报告**——文件读不开、正则在单个文件上超时、单文件撞到 20000 行闸，三条成因没有任何
+    //     参数放得宽，能给的「换个 pattern 或 scope」与它说的那件事无关，写上去才是敷衍。
+    //     中段省略与每文件折叠行同理（两侧都印着 / 下一步整份返回里只说一次，那一句自己就是
+    //     PreviewCapNotice）。
     // 乙：`limit` 已经顶到硬上限时不许再劝 `limit:'all'`——照做是原地重试。Fold.Line 的三分支
     //     本就把这两句写成互斥的，故这里判的是「同一份返回里两支同时出现」，即有人绕开了那三分支
     //     另拼了一句。两句提示语都从 Fold.Line 渲染回来（见 ServerCapReached / AdvisesLimitAll），
     //     不在闸这边抄。
     private static void TruncationGivesANextStep(
-        string text, string[] lines, DotLine?[] kinds, List<GrammarViolation> found)
+        string text, string[] lines, DotLineOrigin?[] kinds, List<GrammarViolation> found)
     {
-        string[] actionable =
-        [
-            "pass ", "use ", "raise ", "narrow", "broaden", "reword", "offset=", "shorter",
-            "limit", "scope", "next page", "read_code", "search_regex", "locate", "trace",
-        ];
-
         for (var i = 0; i < lines.Length; i++)
         {
-            if (kinds[i] is not { } kind) continue;
+            if (kinds[i] is not { Kind: DotLine.Fold } fold) continue;
+            if (fold.NextStep.Trim().Length > 0) continue;
 
-            // 两形本来就不带下一步，各有各的理由：每文件折叠行的下一步整份返回里只说一次
-            // （那一句自己就是 PreviewCapNotice），中段省略两侧都印着、翻页参数写在紧邻的续读
-            // 提示里。此前这两条豁免是这里两句手写的 StartsWith / IsPerFileFold，与规则一那边
-            // 各判各的；现在同取 ClassifyDotLine 的结论，一处改动两处同步。
-            if (kind is DotLine.PerFileFold or DotLine.Elision) continue;
-
-            var trimmed = lines[i].TrimStart();
-            if (actionable.Any(a => trimmed.Contains(a, StringComparison.OrdinalIgnoreCase))) continue;
-
-            found.Add(new GrammarViolation("下一步", lines[i], "截断提示没给出可执行的下一步"));
+            found.Add(new GrammarViolation("下一步", lines[i], "折叠行的下一步那个槽是空的"));
         }
 
         if (text.Contains(ServerCapReached, StringComparison.Ordinal)
