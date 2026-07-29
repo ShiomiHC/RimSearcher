@@ -255,14 +255,14 @@ public class SyncSourcesTool : ITool
                 "sync" => await RunSyncAsync(only, cancellationToken),
                 "diff" => RunDiff(new DiffRequest(
                     only,
+                    wantsMembers,
                     // schema 里的 minimum/maximum 是给调用方看的，不是被强制执行的——服务端自己夹
                     Math.Clamp(ToolArgs.GetInt(args, DefaultLimit, "limit", "maxResults"), 1, MaxLimit),
                     Math.Max(0, ToolArgs.GetInt(args, 0, "offset", "skip", "start")),
                     ToolArgs.GetOptionalString(args, "file", "path", "filePath"),
                     ToolArgs.GetOptionalString(args, "method", "methodName", "member", "memberName"),
                     ToolArgs.GetOptionalString(args, "className", "class", "type", "typeName"),
-                    ToolArgs.GetOptionalString(args, "version", "versionId"),
-                    ToolArgs.GetOptionalString(args, "granularity", "detail", "level"))),
+                    ToolArgs.GetOptionalString(args, "version", "versionId"))),
                 _ => RunCheck(only)
             };
 
@@ -346,13 +346,17 @@ public class SyncSourcesTool : ITool
 
     private sealed record DiffRequest(
         string[]? Only,
+        // 判完的布尔，而不是原始串。「什么算成员粒度」此前在三处各判一遍（入口校验、列表模式、
+        // 单文件模式），且第三处只认 'members'——于是 granularity='member' 配上 file 时，
+        // 入口放行、列表模式认它、单文件模式不认，回的是一份逐字正常的整文件行级 diff，
+        // 调用方看不出自己要的成员清单压根没被识别。别名的口径只许有一个产地。
+        bool WantsMembers,
         int Limit,
         int Offset,
         string? FilePath,
         string? Method,
         string? ClassName,
-        string? Version,
-        string? Granularity);
+        string? Version);
 
     // 概览里单个文件最多列出的成员变化条数。这一条纯粹是防单文件淹没整份概览：
     // 一个被大改的文件能有上百个成员变动，摊在文件列表里没人读得下去。
@@ -382,9 +386,6 @@ public class SyncSourcesTool : ITool
                 $"'method' needs a 'file' to look in — pass the path of the file that contains '{request.Method}', "
                 + "as printed by action='diff' without 'file'.", true);
         }
-
-        var wantMembers = string.Equals(request.Granularity, "members", StringComparison.OrdinalIgnoreCase)
-                          || string.Equals(request.Granularity, "member", StringComparison.OrdinalIgnoreCase);
 
         var builder = new StringBuilder();
         var any = false;
@@ -430,7 +431,7 @@ public class SyncSourcesTool : ITool
                 builder.AppendLine($"  {mark} {change.RelativePath}");
 
                 if (change.Kind == FileChangeKind.Modified) listedModified++;
-                if (wantMembers && change.Kind == FileChangeKind.Modified)
+                if (request.WantsMembers && change.Kind == FileChangeKind.Modified)
                     AppendMemberChanges(builder, entry, versionId, change.RelativePath);
             }
 
@@ -440,7 +441,7 @@ public class SyncSourcesTool : ITool
             // 成员粒度只对 Modified 展开，故这一页全是新增/删除时它逐字等同于 granularity='files'。
             // 一句不说的话，这份返回读起来是「这些文件里没有成员变化」——而真相是这些文件整份都是
             // 新增的，成员级差异对它们不存在。首次 sync 之后的第一次 diff 必然走到这里。
-            if (wantMembers && shown > 0 && listedModified == 0)
+            if (request.WantsMembers && shown > 0 && listedModified == 0)
             {
                 builder.AppendLine(diff.Modified > 0
                     ? $"  (granularity='members' expands modified files only; none on this page — "
@@ -713,8 +714,7 @@ public class SyncSourcesTool : ITool
 
             // 已经收窄到一个文件了，成员清单就没有再截断的理由——概览里的那道上限
             // 是为了不让单个文件淹没整份列表，这里没有别的文件要保护
-            if (string.IsNullOrWhiteSpace(member)
-                && string.Equals(request.Granularity, "members", StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrWhiteSpace(member) && request.WantsMembers)
             {
                 var members = DiffMembers(archived, current);
 

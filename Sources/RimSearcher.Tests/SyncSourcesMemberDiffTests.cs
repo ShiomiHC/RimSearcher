@@ -257,6 +257,20 @@ public class SyncSourcesMemberDiffTests : IDisposable
         Assert.DoesNotContain("energy = 3", result.Content);
     }
 
+    // 缺陷回归：「什么算成员粒度」此前在三处各判一遍，而单文件那处只认 'members'。于是
+    // granularity='member' 配上 file 时，入口校验放行、列表模式认它、这一处不认，回的是一份
+    // 逐字正常的整文件行级 diff——调用方看不出自己要的成员清单压根没被识别。两种写法只许有
+    // 一份输出。
+    [Fact]
+    public async Task FileWithSingularGranularityAlias_ReadsTheSameAsThePluralOne()
+    {
+        var plural = await Run(new { action = "diff", file = RelativeFile, granularity = "members" });
+        var singular = await Run(new { action = "diff", file = RelativeFile, granularity = "member" });
+
+        Assert.False(singular.IsError);
+        Assert.Equal(plural.Content, singular.Content);
+    }
+
     // limit 小于变更总数时，剩下的必须可达——否则「全量查」根本没有出口
     [Fact]
     public async Task Offset_PagesThroughChangesBeyondLimit()
