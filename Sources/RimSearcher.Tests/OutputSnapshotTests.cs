@@ -537,6 +537,20 @@ public class OutputSnapshotTests : IDisposable
         Verify("trace/usages-zero-hits", content);
     }
 
+    // 零命中 + 有文件撞了行闸。§7 第一条同型的另一半：那条尾注此前只挂在有结果那一路，
+    // 而两个扫盘工具共用同一个 renderer，故这一份钉的是「修好之后 trace 这边也跟着说」。
+    [Fact]
+    public async Task TraceUsages_ZeroHitsWithLineCappedFile()
+    {
+        var lines = Enumerable.Range(0, 25_000).Select(_ => "// filler");
+        var (indexer, _, catalog) = BuildIndex(("ZzHuge.cs", string.Join("\n", lines)));
+
+        var content = await Run(
+            new TraceTool(indexer, catalog), new { symbol = "ZzAbsent", mode = "usages" });
+
+        Verify("trace/usages-zero-hits-line-capped", content);
+    }
+
     // ---- 条件目录：行内的键与整份的成因脚注 ----
     //
     // 这两形此前一份基线都没有，而行内标记与尾注是**同一个持有者**（ConditionalReport）在正文

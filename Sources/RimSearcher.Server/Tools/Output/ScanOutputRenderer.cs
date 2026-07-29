@@ -32,9 +32,25 @@ public static class ScanOutputRenderer
     // 两条不同的提示。也不挂 conditional 脚注——零命中时一个行内标记都没打，那条脚注会是
     // 一段兑换不到东西的说明。
     private static string Empty(ScanOutput output)
-        => output.EmptyLine
-           + ScopeNotices.RetryWider(output.Scope)
-           + output.ScopeNotice;
+        => FootnoteBlock.After(
+            output.EmptyLine + ScopeNotices.RetryWider(output.Scope),
+
+            // 完整性那条**必须**挂在这一路。此前它只挂在有结果那一路，于是「有文件超时/读不开/
+            // 撞行闸，而恰好一条命中都没有」这一支整份返回退化成一句 `No matches for pattern 'X'
+            // in scope 'all', case-insensitive.`——扫描确实没扫全，返回里一个字都不提。
+            //
+            // 那正是本工具 Description 里那条契约（「三刀都写进尾注」）唯一不成立的分支，
+            // 且零命中是全部形态里最容易被读成「不存在」的一形：有结果时读者手上至少还有一批
+            // 命中，零命中时这一句就是全部信息，而它读起来是个确定的否定判断。
+            //
+            // 表头那半边（`at least` + 就地成因引用）在这一路无处可挂——没有表头，也没有一个
+            // 要被降格的总数。两半此前同居一个 Completeness 正是为了「不可能只改一半」，
+            // 这一路的形状本身只容得下后一半。
+            output.Completeness.AnyIncomplete
+                ? ScanReport.NotScannedInFull(output.Completeness.Reasons())
+                : null,
+
+            output.ScopeNotice);
 
     private static string Matches(ScanOutput output)
     {

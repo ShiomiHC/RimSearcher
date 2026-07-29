@@ -1,1 +1,3 @@
 No matches for pattern '(a+)+b' in scope 'all', case-insensitive.
+
+... some files were not scanned in full (1 file was abandoned mid-scan because the pattern timed out on it (catastrophic backtracking) — its per-file match count is missing (ZzBacktrack.cs); matches in the unscanned parts would not be listed)

@@ -1,2 +1,3 @@
 No matches for pattern 'ZzAbsent' in scope 'all', case-insensitive.
+
 _Scope 'nosuchmod' matched no configured group or source and was ignored — searched everything instead. Available — sources: vanilla. 'all' selects everything; prefix '-' excludes (e.g. 'all,-vanilla')._

@@ -1,0 +1,3 @@
+No text matches for 'ZzAbsent' in scope 'all' (whole word, case-insensitive).
+
+... some files were not scanned in full (1 file was only scanned to line 20000 (ZzHuge.cs); matches in the unscanned parts would not be listed)
