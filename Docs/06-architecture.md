@@ -189,6 +189,9 @@ SQLite 建库、FTS、噪声过滤全部在 CLI `snapshot import` 侧。论据:
   基线的同一纪律,判据零新写)。
 - 声明什么,沿 ToolArgs.cs 政策原文(01):拒绝的必须声明、接受的不许禁、
   夹紧的不声明成硬约束(数写进散文)。
+- **别名与取值 [实证,07-②]**:参数名发明是常态(fileFilter 一个意图 9 种拼法),
+  高频拼写变体(下划线/驼峰/同义词)有意接受、别名收一个产地;未知 flag 报错必须
+  带近似候选;`--limit all` 为正式取值。pattern 含 `&lt;`/`&gt;` 时提示转义误用(07-⑥)。
 - 上游反面对照:三份声明零同步(贫瘠 `--help` + SKILL.md 速查表 + 手写 cli-reference)。
 
 ### scope 与快照(两层,语法分家)
@@ -223,6 +226,9 @@ modlist 别名、scope 组。**不放**:指纹事实(产地在 db meta)、任何
 ## 层 4 · skill
 
 - `SKILL.md` **手写**:命令决策树、pipeline、何时转 DecompilerServer、恢复策略。
+  决策树须显式承接旧习惯迁移(07-④):三成正则流量曾搜 Defs XML,新形态下该意图
+  归 db 查询(名字前缀 / `find` / `values`),不引导则调用方会拿 code-search
+  搜已不存在的 XML。
   **不复述参数**(指路 cli-reference),**不教绕路**(04 验收条款;上游
   「Always prefix-search」是反例,修的是 CLI)。上游「Never fall back to shell tools」
   一条不继承 —— 本形态下 CLI 自身就是 shell 工具,该 guardrail 改写为
@@ -243,6 +249,8 @@ modlist 别名、scope 组。**不放**:指纹事实(产地在 db meta)、任何
   FuzzyMatcher 复用(与 def_name 同一实现两个数据集),scope = 选根目录。
   符号级工作流两段式:树上跨源模糊定位类型 → DecompilerServer 对该类型精查
   (`list_members`/单成员/调用图)。master `locate→inspect→read_code` 链路的新对应物。
+  **实证权重(07-①)**:read_code 占真实消费流量 52%,此两段式是主干道非旁支,
+  skill 教学与盲测覆盖列最高优先级;类型定位模式纳入 kind 前缀语法(07-⑤)。
   残余损失仅两样且可近似:跨源成员级模糊搜索(正则近似)、跨源成员大纲一次视图
   (两段式多一跳,非丢能力);「类型↔def」方向反而升级为精确反查(05-8)。
 - **继承图洞 [已知洞]**:master `trace inheritors` 的 InheritorsMap 无 DecompilerServer
@@ -256,7 +264,10 @@ modlist 别名、scope 组。**不放**:指纹事实(产地在 db meta)、任何
 
 04 建议顺序继续有效,本篇只加两条修订:
 
-1. 步骤 1(上游输出建基线)按「测试」一节的适用条件收窄:沿用上游输出的命令才固化现状。
+1. 步骤 1(上游输出建基线)适用面经再评估**实际趋零,裁定跳过**:输出契约全面更新
+   (散文声明区+结构主体+收口纪律),「沿用上游实际输出」的环节不存在;且跑上游 CLI
+   本身需要一份 db(又依赖进游戏导出),为一批注定作废的基线烧一轮游戏启动不值。
+   全部输出直接按新契约「文法闸+快照建绿」施工。
 2. 新增环节的插入位置:声明层 + docs 渲染器宜早(步骤 2 输出改造时一并立),
    `code-search` 与 `snapshot` 族独立于 1-8,随时可插;skill 生成闸随 docs 渲染器落地。
 
@@ -268,6 +279,6 @@ modlist 别名、scope 组。**不放**:指纹事实(产地在 db meta)、任何
   前定稿即可,倾向 stdout 顶部(stderr 在管道场景会被 LLM 调用方漏读)。
 - mod 设置是否进快照指纹:设置变化会改 patch 结果(03 甲),严格说影响数据身份;
   第一批只在 meta 存设置文件哈希留缝,不参与寻址比对。
-- 继承图是否自建:过渡用 code-search 文本近似(旁路一节);盲测若显示痛感,
-  搬 master InheritorsMap(输入=落盘目录,实现现成),作为 `code-search` 或独立
-  命令的 mode 落地。
+- 继承图是否自建:过渡用 code-search 文本近似(旁路一节);**优先级已按实证下调**
+  (07-③:消费方几乎不用 trace,且已在用正则手搓继承查询)。盲测若显示痛感,
+  搬 master InheritorsMap(输入=落盘目录,实现现成)。
