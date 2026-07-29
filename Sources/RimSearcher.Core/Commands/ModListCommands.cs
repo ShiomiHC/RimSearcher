@@ -1,0 +1,288 @@
+using System.Xml.Linq;
+using RimSearcher.Cli;
+using RimSearcher.Config;
+using RimSearcher.Output;
+
+namespace RimSearcher.Commands;
+
+/// <summary>
+/// 游戏原生的 <c>.rml</c> 模组列表。不发明新格式(第二轮裁决 7)。
+///
+/// 结构三块:meta 存档头(仅告警用)/ **有序 ids(唯一效力载体)** / names(展示糖)。
+/// 合法生产者三个:游戏界面、<c>modlist save</c>、**手写(含 LLM)**。
+///
+/// **宽读严写**:读只要求 ids —— 手写门槛就是一列 packageId,不得强制依赖游戏内操作
+/// (用户裁决);写时补全 names 与 meta 头,保证游戏自己的载入对话框认得。
+/// </summary>
+public sealed record ModListFile(string Name, string Path, IReadOnlyList<string> Ids, IReadOnlyList<string> Names, string? GameVersion);
+
+public static class ModListIo
+{
+    public const string Extension = ".rml";
+
+    public static string DefaultDirectory()
+        => System.IO.Path.GetFullPath(System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "..", "LocalLow", "Ludeon Studios", "RimWorld by Ludeon Studios", "ModLists"));
+
+    public static IReadOnlyList<string> Directories(RimConfig config)
+    {
+        var dirs = new List<string> { DefaultDirectory() };
+        var local = System.IO.Path.Combine(
+            System.IO.Path.GetDirectoryName(config.Path) is { Length: > 0 } d ? d : ".", "modlists");
+        dirs.Add(local);
+        return dirs;
+    }
+
+    public static IReadOnlyList<ModListFile> Enumerate(RimConfig config)
+    {
+        var result = new List<ModListFile>();
+        foreach (var dir in Directories(config))
+        {
+            if (!Directory.Exists(dir)) continue;
+            foreach (var file in Directory.EnumerateFiles(dir, "*" + Extension))
+            {
+                try { result.Add(Read(file)); }
+                catch (CliUsageException) { /* 坏文件不该让列表整个失败 */ }
+            }
+        }
+        return result;
+    }
+
+    public static ModListFile Resolve(RimConfig config, string nameOrPath)
+    {
+        if (File.Exists(nameOrPath)) return Read(nameOrPath);
+        foreach (var dir in Directories(config))
+        {
+            var candidate = System.IO.Path.Combine(dir, nameOrPath + Extension);
+            if (File.Exists(candidate)) return Read(candidate);
+        }
+        var known = Enumerate(config).Select(m => m.Name).ToList();
+        throw new CliUsageException(
+            $"No mod list named '{nameOrPath}'." +
+            (known.Count > 0
+                ? $" Known lists: {string.Join(", ", known)}."
+                : $" Save one from the game's mod screen, or write a {Extension} file by hand — " +
+                  "a list of packageId entries is enough."));
+    }
+
+    /// <summary>宽读:只要文档里有一串 li 的 ids(或 meta 的 modIds),就认。</summary>
+    public static ModListFile Read(string path)
+    {
+        XDocument doc;
+        try { doc = XDocument.Load(path); }
+        catch (Exception ex)
+        {
+            throw new CliUsageException($"'{System.IO.Path.GetFileName(path)}' is not readable XML: {ex.Message}");
+        }
+
+        var root = doc.Root ?? throw new CliUsageException($"'{System.IO.Path.GetFileName(path)}' is empty.");
+
+        var ids = Items(root, "ids") ?? Items(root, "modIds");
+        if (ids is null || ids.Count == 0)
+            throw new CliUsageException(
+                $"'{System.IO.Path.GetFileName(path)}' has no <ids> list, which is the only part that decides " +
+                "which mods load. The minimum a hand-written file needs is:\n" +
+                "  <savedModList><modList><ids><li>ludeon.rimworld</li></ids></modList></savedModList>");
+
+        var names = Items(root, "names") ?? Items(root, "modNames") ?? [];
+        var version = root.Descendants("gameVersion").FirstOrDefault()?.Value.Trim();
+
+        return new ModListFile(System.IO.Path.GetFileNameWithoutExtension(path), path, ids, names, version);
+    }
+
+    private static List<string>? Items(XElement root, string name)
+    {
+        var el = root.Name.LocalName == name ? root : root.Descendants(name).FirstOrDefault();
+        if (el is null) return null;
+        var items = el.Elements("li").Select(e => e.Value.Trim()).Where(s => s.Length > 0).ToList();
+        return items.Count == 0 ? null : items;
+    }
+
+    /// <summary>严写:补全 names 与 meta 头,产物游戏自己认得。</summary>
+    public static void Write(string path, IReadOnlyList<string> ids, IReadOnlyList<string> names, string? gameVersion)
+    {
+        var doc = new XDocument(
+            new XDeclaration("1.0", "utf-8", null),
+            new XElement("savedModList",
+                new XElement("meta",
+                    new XElement("gameVersion", gameVersion ?? "unknown"),
+                    new XElement("modIds", ids.Select(i => new XElement("li", i))),
+                    new XElement("modNames", names.Select(n => new XElement("li", n)))),
+                new XElement("modList",
+                    new XElement("ids", ids.Select(i => new XElement("li", i))),
+                    new XElement("names", names.Select(n => new XElement("li", n))))));
+
+        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(path))!);
+        doc.Save(path);
+    }
+}
+
+public sealed class ModListListCommand : Command
+{
+    public override CommandSpec Spec => new()
+    {
+        Name = "modlist list",
+        Summary = "List the mod lists available on this machine.",
+        Remarks = "Mod lists are the game's own .rml files. Anything that produces one — the game's mod screen, " +
+                  "'modlist save', or a text editor — is equally valid input.",
+        Options = [],
+        Examples = ["rimsearcher modlist list"],
+    };
+
+    public override int Run(CommandContext ctx)
+    {
+        var lists = ModListIo.Enumerate(ctx.Config);
+        if (lists.Count == 0)
+        {
+            ctx.Report.Notice(NoticeKind.NextStep,
+                "No mod lists found. Save one from the game's mod screen, or write a .rml file by hand: " +
+                "a <savedModList><modList><ids> block listing packageId entries in load order is enough.");
+            return 1;
+        }
+
+        ctx.Report.Table("modlists", ["name", "mods", "game_version", "path"],
+            lists.Select(m => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+            {
+                ["name"] = m.Name,
+                ["mods"] = m.Ids.Count,
+                ["game_version"] = m.GameVersion,
+                ["path"] = m.Path,
+            }).ToList());
+        return 0;
+    }
+}
+
+public sealed class ModListShowCommand : Command
+{
+    public override CommandSpec Spec => new()
+    {
+        Name = "modlist show",
+        Summary = "Show the mods in one list, in load order.",
+        Positionals = [new PositionalSpec { Name = "name", Help = "A name from 'modlist list', or a path to a .rml file." }],
+        Options = [],
+        Examples = ["rimsearcher modlist show vanilla"],
+    };
+
+    public override int Run(CommandContext ctx)
+    {
+        var list = ModListIo.Resolve(ctx.Config, ctx.Args.Positional(0)!);
+        ctx.Report.Table("mods", ["order", "package_id", "name"],
+            list.Ids.Select((id, i) => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+            {
+                ["order"] = i,
+                ["package_id"] = id,
+                ["name"] = i < list.Names.Count ? list.Names[i] : null,
+            }).ToList());
+
+        if (list.Names.Count == 0)
+            ctx.Report.Notice(NoticeKind.Boundary,
+                "This list carries no display names, which is normal for a hand-written file. " +
+                "Load order comes from the ids alone, so nothing is missing.");
+        return 0;
+    }
+}
+
+public sealed class ModListSaveCommand : Command
+{
+    public override CommandSpec Spec => new()
+    {
+        Name = "modlist save",
+        Summary = "Capture the mods currently enabled in the game as a named list.",
+        Remarks = "Also works as a tidy-up pass on a hand-written file: read it back with --from and it is " +
+                  "rewritten with display names and a meta header, which is what the game's own load dialog expects.",
+        Positionals = [new PositionalSpec { Name = "name", Help = "Name for the new list." }],
+        Options =
+        [
+            new OptionSpec
+            {
+                Name = "from",
+                Aliases = ["source", "input"],
+                Placeholder = "<name|path>",
+                Help = "Read the ids from this list instead of from the game's current configuration.",
+            },
+        ],
+        Examples = ["rimsearcher modlist save current", "rimsearcher modlist save tidy --from scratch.rml"],
+    };
+
+    public override int Run(CommandContext ctx)
+    {
+        var name = ctx.Args.Positional(0)!;
+        IReadOnlyList<string> ids;
+        string? gameVersion;
+
+        if (ctx.Args.Value("from") is { Length: > 0 } from)
+        {
+            var src = ModListIo.Resolve(ctx.Config, from);
+            ids = src.Ids;
+            gameVersion = src.GameVersion;
+        }
+        else
+        {
+            var env = Snapshot.SnapshotCatalog.ReadActiveMods(ctx.Config);
+            if (env.ActiveMods.Count == 0)
+                throw new CliUsageException(
+                    "The game's ModsConfig.xml could not be read, so there is nothing to capture. " +
+                    "Pass --from to build the list out of another file instead.");
+            ids = env.ActiveMods;
+            gameVersion = env.GameVersion;
+        }
+
+        var installed = InstalledMods.Scan(ctx.Config);
+        var names = ids.Select(id => installed.TryGetValue(id, out var m) ? m.Name : id).ToList();
+
+        var path = Path.Combine(ModListIo.Directories(ctx.Config)[0], name + ModListIo.Extension);
+        ModListIo.Write(path, ids, names, gameVersion);
+
+        ctx.Report.Detail("saved", [new("name", name), new("path", path), new("mods", ids.Count)]);
+
+        var missing = ids.Where(id => !installed.ContainsKey(id)).ToList();
+        if (missing.Count > 0)
+            ctx.Report.Notice(NoticeKind.Boundary,
+                $"{Tally.Complete(missing.Count).Render("mod")} in the list are not installed on this machine " +
+                $"({string.Join(", ", missing.Take(5))}{(missing.Count > 5 ? ", …" : "")}). " +
+                "The file is written as asked; 'export' will refuse to start the game until they are present.");
+        return 0;
+    }
+}
+
+public sealed record InstalledMod(string PackageId, string Name, string Directory);
+
+public static class InstalledMods
+{
+    /// <summary>扫本机三处 mod 目录,建 packageId → 目录 的表。启动前验证靠它。</summary>
+    public static Dictionary<string, InstalledMod> Scan(RimConfig config)
+    {
+        var result = new Dictionary<string, InstalledMod>(StringComparer.OrdinalIgnoreCase);
+        foreach (var root in Roots(config))
+        {
+            if (!Directory.Exists(root)) continue;
+            foreach (var dir in Directory.EnumerateDirectories(root))
+            {
+                var about = Path.Combine(dir, "About", "About.xml");
+                if (!File.Exists(about)) continue;
+                try
+                {
+                    var doc = XDocument.Load(about);
+                    var id = Find(doc, "packageId");
+                    if (string.IsNullOrWhiteSpace(id)) continue;
+                    result.TryAdd(id.Trim(), new InstalledMod(id.Trim(), Find(doc, "name") ?? Path.GetFileName(dir), dir));
+                }
+                catch { /* 坏 About.xml 跳过 */ }
+            }
+        }
+        return result;
+    }
+
+    public static IReadOnlyList<string> Roots(RimConfig config)
+    {
+        if (config.ModRoots.Count > 0) return config.ModRoots;
+        if (config.GameDir is { Length: > 0 } g)
+            return [Path.Combine(g, "Data"), Path.Combine(g, "Mods")];
+        return [];
+    }
+
+    private static string? Find(XDocument doc, string element)
+        => doc.Root?.Elements().FirstOrDefault(e =>
+               string.Equals(e.Name.LocalName, element, StringComparison.OrdinalIgnoreCase))?.Value;
+}

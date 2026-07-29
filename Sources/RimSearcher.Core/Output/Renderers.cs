@@ -1,0 +1,150 @@
+using System.Text;
+using System.Text.Json;
+
+namespace RimSearcher.Output;
+
+/// <summary>
+/// 默认渲染器:紧凑文本。
+///
+/// 为什么默认不是裸 JSON(06「与 JSON 主体的缝合格式」开放点的定稿):这条管线的实际消费方
+/// 是读 stdout 的 LLM,而不是 jq。同一批数据渲染成对齐表比 JSON 省一半以上的字节,这直接
+/// 服务于上下文预算硬约束;散文声明区也需要一个不破坏结构的落点。要机器可组合的那一份用
+/// <c>--json</c>,那时声明区搬进 <c>notes</c> 数组,一个字都不丢。
+/// stderr 不用于声明 —— 管道场景下 LLM 调用方会漏读。
+/// </summary>
+public static class TextRenderer
+{
+    public const int MaxCellWidth = 72;
+
+    public static string Render(Report report)
+    {
+        var sb = new StringBuilder();
+
+        foreach (var n in report.Notices.Where(n => !n.Footnote))
+            sb.Append(n.Text).Append(OutputText.Newline);
+
+        var first = true;
+        foreach (var block in report.Blocks)
+        {
+            if (sb.Length > 0 && !first) sb.Append(OutputText.Newline);
+            if (sb.Length > 0 && first && report.Notices.Any(n => !n.Footnote)) sb.Append(OutputText.Newline);
+            first = false;
+            RenderBlock(sb, block);
+        }
+
+        var footnotes = report.Notices.Where(n => n.Footnote).ToList();
+        if (footnotes.Count > 0)
+        {
+            if (sb.Length > 0) sb.Append(OutputText.Newline);
+            foreach (var n in footnotes) sb.Append(n.Text).Append(OutputText.Newline);
+        }
+
+        return OutputText.Finish(sb.ToString());
+    }
+
+    private static void RenderBlock(StringBuilder sb, Block block)
+    {
+        switch (block)
+        {
+            case TableBlock t:
+                if (t.Caption is { Length: > 0 }) sb.Append(t.Caption).Append(OutputText.Newline);
+                RenderTable(sb, t);
+                break;
+            case DetailBlock d:
+                var width = d.Pairs.Count == 0 ? 0 : d.Pairs.Max(p => p.Key.Length);
+                foreach (var (k, v) in d.Pairs)
+                {
+                    var cell = OutputText.Cell(v);
+                    if (cell.Length == 0) continue;
+                    sb.Append(k.PadRight(width)).Append("  ").Append(cell).Append(OutputText.Newline);
+                }
+                break;
+            case TextBlock x:
+                foreach (var line in x.Lines) sb.Append(line).Append(OutputText.Newline);
+                break;
+        }
+    }
+
+    private static void RenderTable(StringBuilder sb, TableBlock t)
+    {
+        if (t.Rows.Count == 0) return;
+
+        var cells = new string[t.Rows.Count][];
+        for (var r = 0; r < t.Rows.Count; r++)
+        {
+            cells[r] = new string[t.Columns.Count];
+            for (var c = 0; c < t.Columns.Count; c++)
+                cells[r][c] = OutputText.Truncate(
+                    OutputText.Cell(t.Rows[r].GetValueOrDefault(t.Columns[c])), MaxCellWidth);
+        }
+
+        var widths = new int[t.Columns.Count];
+        for (var c = 0; c < t.Columns.Count; c++)
+        {
+            widths[c] = t.Columns[c].Length;
+            for (var r = 0; r < cells.Length; r++) widths[c] = Math.Max(widths[c], cells[r][c].Length);
+        }
+
+        AppendRow(sb, t.Columns.ToArray(), widths);
+        for (var r = 0; r < cells.Length; r++) AppendRow(sb, cells[r], widths);
+    }
+
+    private static void AppendRow(StringBuilder sb, string[] cells, int[] widths)
+    {
+        for (var c = 0; c < cells.Length; c++)
+        {
+            if (c > 0) sb.Append("  ");
+            sb.Append(c == cells.Length - 1 ? cells[c] : cells[c].PadRight(widths[c]));
+        }
+        sb.Append(OutputText.Newline);
+    }
+}
+
+/// <summary>
+/// <c>--json</c> 渲染器。声明区不丢:全部搬进 <c>notes</c>,每条带 kind,机器侧可判类别。
+/// </summary>
+public static class JsonRenderer
+{
+    private static readonly JsonSerializerOptions Options = new()
+    {
+        WriteIndented = true,
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
+    public static string Render(Report report)
+    {
+        var root = new Dictionary<string, object?>();
+
+        if (report.Notices.Count > 0)
+            root["notes"] = report.Notices
+                .Select(n => new Dictionary<string, object?>
+                {
+                    ["kind"] = SnakeCase(n.Kind.ToString()),
+                    ["text"] = n.Text,
+                })
+                .ToList();
+
+        foreach (var block in report.Blocks)
+        {
+            switch (block)
+            {
+                case TableBlock t: root[t.Name] = t.Rows; break;
+                case DetailBlock d: root[d.Name] = d.Pairs.ToDictionary(p => p.Key, p => p.Value); break;
+                case TextBlock x: root[x.Name] = x.Lines; break;
+            }
+        }
+
+        return OutputText.Finish(JsonSerializer.Serialize(root, Options));
+    }
+
+    private static string SnakeCase(string s)
+    {
+        var sb = new StringBuilder();
+        foreach (var c in s)
+        {
+            if (char.IsUpper(c) && sb.Length > 0) sb.Append('_');
+            sb.Append(char.ToLowerInvariant(c));
+        }
+        return sb.ToString();
+    }
+}

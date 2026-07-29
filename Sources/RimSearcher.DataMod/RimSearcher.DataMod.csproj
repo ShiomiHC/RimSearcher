@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>RimSearcher.DataMod</AssemblyName>
+    <RootNamespace>RimSearcher.DataMod</RootNamespace>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <!-- 02-8:编译产物不进库。输出直接落到本机 Mods 目录下的 mod 结构里。 -->
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- CLAUDE.local.md 机器事实:不需要本地游戏 DLL -->
+    <!-- Harmony 不引:主导出路径不打补丁。patch 溯源(03 拦截点)若兑现,它进独立源文件位,
+         不把 Harmony 依赖搅进这条路径 —— 06 层 1 的「patch 溯源拦截」条目记着这个边界。 -->
+    <PackageReference Include="Krafs.Rimworld.Ref" Version="1.6.4535" PrivateAssets="all" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 中间格式契约:与 CLI 侧共享同一份源文件(产地唯一跨进程边界) -->
+    <Compile Include="..\RimSearcher.Core\Contract\*.cs" LinkBase="Contract" />
+  </ItemGroup>
+
+</Project>

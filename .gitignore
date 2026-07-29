@@ -1,3 +1,10 @@
 CLAUDE.local.md
 /.idea/
 /tools/
+/.claude/
+bin/
+obj/
+*.user
+/.junie/
+.build/
+ModStaging/

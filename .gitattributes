@@ -1,0 +1,7 @@
+# 行尾一律 LF。这不是风格偏好:输出收口纪律要求 LF(01 ToolResult 条目),
+# 而 cli-reference.md 是字节级闸的对照物 —— 让 git 在 checkout 时改行尾,
+# 等于每次拉代码都把基线弄脏一次。
+* text=auto eol=lf
+*.png binary
+*.db binary
+*.gz binary
