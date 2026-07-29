@@ -108,8 +108,13 @@ public static class Fold
         // 名词槽不留空。locate 的 Members 段是分种类子组印的，折叠行又与组内条目同缩进，
         // 于是 `... +1938 more` 紧跟在 Properties 组末尾时读起来像「还有 1938 个 property」，
         // 而它数的是三类之和。全服文法（README「低 Token 消耗」一节）本就要求这个槽有名词。
+        //
+        // 排版交给 OutputText.FoldLine，这里只算「下一步那句话怎么写」。此前这一行是同一套
+        // 文法的第二次插值——与 Explicit 转发过去的那一次逐字相同，靠的是两处各写一遍恰好没写岔。
+        // 于是 M2 想把闸的折叠行正则换成产地断言时，「产地」有两个，闸得挑一个信；改成转发之后
+        // 全服折叠行只剩两个产地（这一条与 PerFile），闸问得完。
         var batch = hiddenBatch is { Length: > 0 } b ? $"{b}, " : string.Empty;
-        return $"{indent}... +{hiddenCount} more {noun.For(hiddenCount)} ({batch}{hint})";
+        return OutputText.FoldLine(hiddenCount, noun, $"{batch}{hint}", null, indent);
     }
 
     // 下一步由调用方**显式给出**的那一形。
@@ -160,4 +165,13 @@ public static class Fold
     public static string PerFilePreviewCap(int previewsPerFile)
         => $"... previews are capped at {previewsPerFile} lines per file and no parameter widens that; "
            + "use read_code on a file to see the rest";
+
+    // 中段省略记号。inspect 的 XML 窗口是头 200 + 尾 50，被跳过的那一段在原地留这一行。
+    //
+    // 它以 `... ` 开头却**不是**折叠行：两侧的行都印着，没有「还剩多少没拿到」这件事要说，
+    // 下一步（`xmlStartLine`）写在紧邻的续读提示里。此前它是 InspectTool 里一行裸插值，
+    // 于是闸只能靠 `StartsWith("... [Truncated ")` 一条手抄前缀把它从折叠行文法里摘出去——
+    // 名字与产地都在闸这边，产品那边改一个字，闸照旧绿。给它一个产地，闸就改问产地。
+    public static string Elision(int elidedLines, int fromLine, int toLine)
+        => $"... [Truncated {CountedNoun.Lines.Quantity(elidedLines)}: {fromLine}-{toLine}] ...";
 }

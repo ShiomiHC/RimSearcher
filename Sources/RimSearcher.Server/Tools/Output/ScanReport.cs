@@ -12,6 +12,11 @@ namespace RimSearcher.Server.Tools.Output;
 // 看得见；这里把它建模成一个整体，三条句子同居于此。
 public static class ScanReport
 {
+    // 「这个数只是地板」的记号本身。两处下界（扫描没扫全、候选池装不下）共用同一个词，
+    // 因为调用方要学的读法只有一条。此前它是两个文件里的两个字面量（这里与 Tally.Cell），
+    // 「共用」只写在注释里。
+    public const string FloorMark = "at least ";
+
     // 有文件没扫全时，命中总数就不再是确定值而是下界。表头与下面那行尾注必须同时改口，
     // 否则一句说「7 found」、一句说「有文件没扫全」，调用方无从判断该信哪个。
     //
@@ -20,8 +25,17 @@ public static class ScanReport
     // "References to"——读者按「743 处命中」读，在一行多处的 pattern 上这个数直接是错的。
     public static string FoundCount(int total, bool anyFileIncomplete)
         => anyFileIncomplete
-            ? $"at least {CountedNoun.MatchingLines.Quantity(total)}"
+            ? $"{FloorMark}{CountedNoun.MatchingLines.Quantity(total)}"
             : CountedNoun.MatchingLines.Quantity(total);
+
+    // 表头三态里换了量纲的那一支：扫描停在预览上限时，数的是**印出来的**预览行。
+    //
+    // 这个数是确定的，故它不带下界记号，也不该带——但正因为不带，「有文件没扫全却没有 at least」
+    // 这条判据必须认得出它，否则那一支恒红。判据认的是这一形，所以这一形要有产地：此前它写在
+    // ScanOutputRenderer.Headline 的分支里，而三态的另外两支（FoundCount / LowerBoundReason）
+    // 都在这个类里——一套三态分居两处，闸只好照着文本手抄一句 "preview lines in scope" 来认它。
+    public static string PreviewLineCount(int previewLinesCollected)
+        => $"first {CountedNoun.PreviewLines.Quantity(previewLinesCollected)}";
 
     // 下界记号自己不带成因引用时，读者会就近找一个上限来解释它。search_regex 的 schema 里唯一
     // 带上限语义的东西是 `limit` 的 default 100，而 `at least 105` 与它只差 5——第九轮盲测三条

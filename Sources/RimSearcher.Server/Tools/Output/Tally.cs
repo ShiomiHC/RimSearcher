@@ -43,7 +43,10 @@ public static class Tally
     public static string Cell(
         int shown, int total, CountedNoun plural, bool totalIsLowerBound = false, int fullScore = -1)
     {
-        var floor = totalIsLowerBound ? "at least " : string.Empty;
+        // 记号取 ScanReport 那一处，不在这里再写一遍字面量。上面那段注释本就写着「文法与
+        // search_regex / trace 的表头共用（见 ScanReport.FoundCount）」，而共用此前只是两处
+        // 各写一个 "at least " 恰好写成了同一个词——注释说的是事实，不是构造。
+        var floor = totalIsLowerBound ? ScanReport.FloorMark : string.Empty;
         var head = total > shown
             ? $"{shown} of {floor}{plural.Quantity(total)}"
             : $"{floor}{plural.Quantity(shown)}";
@@ -54,4 +57,18 @@ public static class Tally
             ? $"{head} ({fullScore} at 100%)"
             : head;
     }
+
+    // 区间形：**取的是哪一段，以及一共有多少**。`lines 2-30 of 30`。
+    //
+    // 与上面那格长得像而读法相反：这里的 of 说的是「取自」，`30 of 30` 完全正常（第 2 到第 30
+    // 行、全文共 30 行）；Cell 的 of 说的是「没给全」，`30 of 30` 在那边是自相矛盾。名词按英文
+    // 语序落在区间**前面**，两形只在这一点上分得开。
+    //
+    // 此前两个工具各手拼一遍同一句（ReadCodeTool 的位置行、InspectTool 的 XML 表头），
+    // 谁也不是产地。代价直接落在闸上：GrammarRules 的 `N of M` 只好挂一条 `(?<![-\d])` 的
+    // 区间豁免，而那条豁免认的是「N 前面有没有连字符」这个**文本特征**，不是「这一形出自哪里」
+    // ——read_code 哪天把 `lines 2-30` 改成 `L2–L30`，豁免立刻失效，闸会把一条正常的行判红。
+    // 有了产地，闸问产地，豁免整条不必存在。
+    public static string Window(CountedNoun noun, int from, int to, int total)
+        => $"{noun.Plural} {from}-{to} of {total}";
 }

@@ -346,7 +346,7 @@ public class ReadCodeTool : ITool
             // 三种模式都以恰好一行「读的是哪个文件的哪一段」开头。只印基名时，path 传的是
             // 基名、而索引里有多份同名文件的那种情形在返回里不留痕迹。
             sb.AppendLine(Comment(path,
-                $"{path} (lines {startLine + 1}-{Math.Min(startLine + lineCount, totalLines)} of {totalLines})"));
+                $"{path} ({Tally.Window(CountedNoun.Lines, startLine + 1, Math.Min(startLine + lineCount, totalLines), totalLines)})"));
             foreach (var line in resultLines) sb.AppendLine(line);
             sb.AppendLine("```");
 

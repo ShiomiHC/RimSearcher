@@ -91,11 +91,11 @@ public static class ScanOutputRenderer
         var echoes = string.Concat(output.ParameterEchoes.Select(e => $", {e}"));
         var where = $"in scope '{output.Scope.Expression}'{echoes}";
 
-        // 名词走全服构词，不在这里手拼。这一处是全服最后一条把复数式直接写死在插值里的表头，
-        // 于是 limit = 1 时线上输出的是 `first 1 preview lines`——闸的规则二甲本来就判得出它，
-        // 缺的只是把计数逼到 1 的那一维 fixture（见 OutputGrammarGateTests 的 SingleCount）。
+        // 三支全在 ScanReport：那一处把「记号 / 成因引用 / 换量纲」建模成一个整体，分支条件留在
+        // 这里（只有本渲染器知道 output 的状态）。名词走全服构词，不在这里手拼——这一处曾是全服
+        // 最后一条把复数式写死在插值里的表头，于是 limit = 1 时线上输出的是 `first 1 preview lines`。
         if (output.ScanStopped)
-            return $"first {CountedNoun.PreviewLines.Quantity(PreviewLinesCollected(output))} {where}";
+            return $"{ScanReport.PreviewLineCount(PreviewLinesCollected(output))} {where}";
 
         var incomplete = output.Completeness.AnyIncomplete;
         return $"{ScanReport.FoundCount(output.TotalMatchingLines, incomplete)} {where}"

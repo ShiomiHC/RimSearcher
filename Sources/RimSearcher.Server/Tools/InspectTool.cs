@@ -244,10 +244,15 @@ public class InspectTool : ITool
         // 改用 F30 已经立起来的三态文法：裸 N = 完整集，N of M = 被截了，M 是范围总数。
         // 不新造记号，只是把这一处补进那套文法里。
         var firstCallTruncated = startLine <= 0 && xmlLines.Length > XmlWindowLines + XmlTailLines;
+        // 三态都走计数记号的产地：区间形 Tally.Window（of = 取自）、截断形 Tally.Cell
+        // （of = 没给全）、完整形直接构词。此前前两支是这里的两行裸插值，与 read_code 的位置行、
+        // locate 的段头各自长得一样却互不相干。
         var extent = startLine > 0
-            ? $"lines {startLine}-{Math.Min(startLine + XmlWindowLines - 1, xmlLines.Length)} of {xmlLines.Length}"
+            ? Tally.Window(
+                CountedNoun.Lines, startLine, Math.Min(startLine + XmlWindowLines - 1, xmlLines.Length),
+                xmlLines.Length)
             : firstCallTruncated
-                ? $"{XmlWindowLines} of {xmlLines.Length} lines"
+                ? Tally.Cell(XmlWindowLines, xmlLines.Length, CountedNoun.Lines)
                 : CountedNoun.Lines.Quantity(xmlLines.Length);
         sb.AppendLine($"\n**Resolved XML** ({extent}; {PatchNote}):");
 
@@ -282,7 +287,9 @@ public class InspectTool : ITool
 
         sb.AppendLine("```xml");
         for (int i = 0; i < XmlHeadLines; i++) sb.AppendLine(xmlLines[i]);
-        sb.AppendLine($"\n... [Truncated {xmlLines.Length - XmlWindowLines} lines: {XmlHeadLines + 1}-{xmlLines.Length - XmlTailLines}] ...\n");
+        sb.AppendLine(
+            "\n" + Fold.Elision(
+                xmlLines.Length - XmlWindowLines, XmlHeadLines + 1, xmlLines.Length - XmlTailLines) + "\n");
         for (int i = xmlLines.Length - XmlTailLines; i < xmlLines.Length; i++) sb.AppendLine(xmlLines[i]);
         sb.AppendLine("```");
         sb.AppendLine(ContinueHint(XmlHeadLines + 1));

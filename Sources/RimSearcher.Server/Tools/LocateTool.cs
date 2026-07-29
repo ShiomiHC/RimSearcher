@@ -229,10 +229,7 @@ public class LocateTool : ITool
                     Shown = shownGroups.Sum(g => g.Items.Count),
                     Total = members.TotalInScope,
                     TotalIsLowerBound = members.TotalIsLowerBound,
-                    LowerBoundNotice =
-                        $"\n\n_The member search matched more than {SourceIndexer.MemberQualifiedKeyCap} name keys and "
-                        + "expanded only that many, so the member total above is a floor rather than the total "
-                        + "(server expansion cap; no parameter widens it). Narrow the query for an exact count._",
+                    LowerBoundNotice = MemberFloorNotice(SourceIndexer.MemberQualifiedKeyCap),
                     FullScoreCount = memberFullScore,
                     SourcesInScope = members.SourcesInScope,
                     TruncatedByScoreGap = members.TruncatedByScoreGap,
@@ -479,6 +476,20 @@ public class LocateTool : ITool
             ScopeNotice = ScopeNotices.Unresolved(_scopeCatalog, scope),
         })));
     }
+
+    // 成员段下界记号的成因。全服 `at least` 有两处出处：扫盘两工具是「有文件没扫全」
+    // （ScanReport 把记号、成因引用、点名三句建模成一个整体），这里是「候选池装不下」。
+    //
+    // 两处成因不同，而调用方要学的读法是同一条——故记号旁边必须就地说清成因在哪，否则读者会
+    // 就近拿另一个上限说明去解释它（第九轮盲测三条任务链各自独立踩过一次）。
+    //
+    // 从对象初始化器里的一段裸插值提上来成一个具名产地：那一段既是成因又是指向成因的引用，
+    // 而闸此前只能拿 "expansion cap" / "so the member total above is a floor" 两个手抄片段去认它
+    // ——名单在闸这边，产品改一个词，闸照旧绿。
+    public static string MemberFloorNotice(int nameKeyCap)
+        => $"\n\n_The member search matched more than {nameKeyCap} name keys and "
+           + "expanded only that many, so the member total above is a floor rather than the total "
+           + "(server expansion cap; no parameter widens it). Narrow the query for an exact count._";
 
     // 五段里有四段的形状是一样的：显示数、总数、满分数、来源构成、两种截断标记全取自
     // 同一份 ScopedResult。只有 Members（两层截断）与 Files（两支不同的总数算法）要自己拼。
