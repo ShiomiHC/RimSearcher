@@ -1,4 +1,4 @@
-Subclasses of 'ZzBase' (4 in scope 'all', transitive — indirect descendants included; 3 direct, deepest 2 levels down). Listed below: 2:
+## 'ZzBase' — 2 of 4 subclasses (in scope 'all', transitive — indirect descendants included; 3 direct, deepest 2 levels down):
 - `Zz.ZzA`
 - `Zz.ZzB`
 ... +2 more subclasses (nothing deeper than depth 1 is listed, pass limit:'all' to expand)

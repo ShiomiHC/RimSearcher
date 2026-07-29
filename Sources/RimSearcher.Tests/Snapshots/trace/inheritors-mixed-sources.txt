@@ -1,3 +1,3 @@
-Subclasses of 'ZzBase' (2 in scope 'all', transitive — indirect descendants included; 2 direct, deepest 1 level down):
+## 'ZzBase' — 2 subclasses (in scope 'all', transitive — indirect descendants included; 2 direct, deepest 1 level down):
 - `Zz.ZzGuest` [milira]
 - `Zz.ZzHome` [vanilla]

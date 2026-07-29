@@ -173,7 +173,7 @@ public class CrossReferenceTests : IDisposable
     {
         var content = await Run(BuildDeepTree(250), new { symbol = "ZzBase", mode = "inheritors" });
 
-        Assert.Contains("Listed below: 200", content);
+        Assert.Contains("200 of 253 subclasses", content);
         // `below depth N` 的方向要靠读者自己定（数值越大越深，而版面上「below」指下面那些行），
         // 第十三轮盲测里被测方当场读反了一次。
         Assert.Contains("nothing deeper than depth 1 is listed", content);
@@ -196,7 +196,7 @@ public class CrossReferenceTests : IDisposable
     {
         var content = await Run(BuildDeepTree(3), new { symbol = "ZzBase", mode = "inheritors" });
 
-        Assert.DoesNotContain("Listed below", content);
+        Assert.DoesNotContain(" of 3 subclasses", content);
         Assert.DoesNotContain("shallowest first", content);
     }
 

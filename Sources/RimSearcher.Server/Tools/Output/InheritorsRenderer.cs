@@ -93,9 +93,19 @@ public static class InheritorsRenderer
     }
 
     // 表头。三组数并排，每组各自说清数的是哪一批：
-    //   TotalInScope              → scope 内的整棵树；
+    //   Tally.Cell                → 「列了几条 / 这个 scope 里一共几条」，与 locate 同一格；
     //   Shape.Direct / .Deepest   → 同一棵树的形状（不是切片的！见 R42）；
-    //   Listed below              → 展示切片，且只在真被截断时出现。
+    //   labels.Header             → 那个总数的来源构成（见 SourceLabeling）。
+    //
+    // 这一行此前是自己一套写法：`Subclasses of 'X' (12 in scope 'all', …). Listed below: 5`。
+    // 同一对数（总数 / 显示数）在这套工具里有四个表头各说一遍，而这一个是唯一把两者拆到句子
+    // 两端、中间隔着整棵树形状的——`12` 在最前、`5` 在句末，读者要跨过一整段限定语才拼得起来，
+    // 且「Listed below」在版面上还很像「下面就是那 5 个」的引导语而不是一个计数。
+    //
+    // 改走 Tally.Cell 之后三件事一起归位：`N of M` 那条读法（没被截时不写 of，见 GrammarRules
+    // 规则三）不必在这里重写一遍；`at least` 改口与 `(K at 100%)` 这两个槽将来接上时是共用的；
+    // 「表头 N of M 与折叠行 +K 必须自洽」那条常驻判据（规则八按名词配对）在这个工具上从此
+    // 真的生效——此前它因为表头没有 `N of M subclasses` 而整条落空。
     private static string Headline(InheritorsOutput output, SourceLabeling labels)
     {
         // 深度标记的约定只在**这次真的印出了标记**时才需要说明；一个标记都没有时讲解一套不存在
@@ -107,11 +117,15 @@ public static class InheritorsRenderer
         var shownDeepest = ShownDeepest(output);
         var depthLegend = shownDeepest > 1 ? ", untagged = direct (depth 1)" : "";
 
-        return $"Subclasses of '{output.Symbol}' ({output.Inheritors.TotalInScope} in scope "
-               + $"'{output.Scope.Expression}', transitive — indirect descendants included; "
-               + $"{output.Shape.Direct} direct, deepest "
-               + $"{OutputText.Quantity(output.Shape.Deepest, "levels")} down{depthLegend})"
-               + $"{Listed(output)}{labels.Header}:";
+        // 构成紧跟在它限定的那个总数后面。方括号描述的是**全集**的来源构成，而括号里那串是树的
+        // 形状——中间隔着一整段形状描述时，`[vanilla 6, milira 1]` 会被读成「列出来这几行的来源」。
+        var cell = Tally.Cell(
+            output.Inheritors.Items.Count, output.Inheritors.TotalInScope, "subclasses");
+
+        return $"## '{output.Symbol}' — {cell}{labels.Header} "
+               + $"(in scope '{output.Scope.Expression}', transitive — indirect descendants "
+               + $"included; {output.Shape.Direct} direct, deepest "
+               + $"{OutputText.Quantity(output.Shape.Deepest, "levels")} down{depthLegend}):";
     }
 
     // 切片里最深的那一层。表头的图例与覆盖说明都从它派生，故只数一次。
@@ -119,17 +133,6 @@ public static class InheritorsRenderer
         => output.Inheritors.Items
             .Select(e => output.Depths.TryGetValue(e.Item, out var d) ? d : 1)
             .DefaultIfEmpty(1).Max();
-
-    // 「列了几个」这一格。判据与折叠行是同一个（`HiddenCount > 0`）：没被截断就不写它——那时它
-    // 逐字等于前面那个总数。沿用 R33 的读法：出现「列了多少」这一格本身就是「被截了」的信号。
-    //
-    // 「藏起来的是哪一批」此前也挤在这一格里（`, shallowest first — nothing deeper than …`），
-    // 现已移进折叠行的 HiddenBatch 槽——那是全服说这件事的地方，见 Fold.HiddenBatch。
-    // 这一格于是只剩它本来的那一个量：这次列了几个。
-    private static string Listed(InheritorsOutput output)
-        => output.Inheritors.HiddenCount > 0
-            ? $". Listed below: {output.Inheritors.Items.Count}"
-            : string.Empty;
 
     // 「藏起来的是哪一批」。截断留下的**恒是最浅的那一批**（GetInheritors 按 depth 升序排候选），
     // 而返回里此前只在表头顺带提了一句。默认读法是「列表是这棵树的一个样本」，于是「样本里最深的

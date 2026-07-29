@@ -1,4 +1,4 @@
-Subclasses of 'ZzBase' (12 in scope 'all', transitive — indirect descendants included; 12 direct, deepest 1 level down). Listed below: 5:
+## 'ZzBase' — 5 of 12 subclasses (in scope 'all', transitive — indirect descendants included; 12 direct, deepest 1 level down):
 - `Zz.ZzSub00`
 - `Zz.ZzSub01`
 - `Zz.ZzSub02`

@@ -7,15 +7,16 @@ namespace RimSearcher.Server.Tools.Output;
 // 与 ScanOutput 同一条分界（说「有什么」，不说「怎么印」），但这里的耦合是另外三条，且都在
 // 第九、十三轮盲测上各自出过事：
 //
-//   1. **表头的每个数各自说清数的是哪一批**。`381 in scope 'all'` 描述整棵树，
-//      `Listed below: 200` 描述展示切片，`306 direct, deepest 4 levels down` 又回到整棵树——
-//      三个口径句法对称地并排。R42 修的是「切片的 direct/deepest 排在描述全树的总数之后」。
+//   1. **表头的每个数各自说清数的是哪一批**。`200 of 381 subclasses` 里前一个数是展示切片、
+//      后一个是整棵树，`306 direct, deepest 4 levels down` 又回到整棵树——三个口径句法对称地
+//      并排。R42 修的是「切片的 direct/deepest 排在描述全树的总数之后」。
 //      故模型里 Shape（域内整树）与 Items（切片）是两个字段，切片的深度由 renderer 自己数，
 //      工具没有机会把它们混起来。
-//   2. **「列了几个」与折叠行是同一件事的两半**。出现「列了多少」本身就是「被截了」的信号
-//      （R33），而折叠行是那个信号的收尾；两处此前是两个独立的 if，判据各写一遍
+//   2. **「列了几个」与折叠行是同一件事的两半**。出现 `N of M` 这个记号本身就是「被截了」的
+//      信号（R33），而折叠行是那个信号的收尾；两处此前是两个独立的 if，判据各写一遍
 //      （`Items.Count < TotalInScope` 与 `Fold.Line` 内部的 `HiddenCount <= 0`）。
-//      现在只判一次，见 InheritorsRenderer。
+//      现在只判一次：`Tally.Cell` 的 `total > shown` 与 `Fold.Line` 的 `hidden > 0` 是同一件事，
+//      而 hidden 就是 total - shown（见 InheritorsRenderer，与 LocateRenderer 同一条）。
 //   3. **深度标记的图例与覆盖说明只在真印了标记时才说**。一个 `[depth N]` 都没有时讲解一套
 //      不存在的记法，反而会让读者去找它（同 R9）；而切片浅于整树时必须说清「更深的没列出来」
 //      ——第十三轮盲测里 depth 4 的那批名字被读成了 depth 6 的成员。两句都从「切片里最深的

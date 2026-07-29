@@ -62,8 +62,8 @@ public static class Fold
         int shownCount,
         // 「藏起来的是哪一批」。null = 这一形说不出（也就不硬说）。取值见 HiddenBatch。
         // 此前这里是个 bool，只答得出「是不是断层收口」——于是 inheritors 那条同样有系统偏向的
-        // 截断（留下的恒是最浅的那批）在折叠行上无处可说，只能挂在表头 `Listed below` 后面，
-        // 与「这次列了几个」挤成一句。
+        // 截断（留下的恒是最浅的那批）在折叠行上无处可说，只能挂在表头「这次列了几个」那一格
+        // 后面，与它挤成一句。
         string? hiddenBatch,
         bool truncatedByLimit,
         string noun,

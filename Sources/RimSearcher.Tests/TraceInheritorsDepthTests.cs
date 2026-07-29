@@ -105,33 +105,34 @@ public class TraceInheritorsDepthTests : IDisposable
     //
     // 这条推翻了上一轮的写法（当时断言的是「两个数只描述列出来的这些」）。理由：那两个数
     // 紧跟在描述全树的总数后面、句法完全对称，读者不会把它们分开当两批。实测 ThingComp 的
-    // 前 200 条恰好全是直接子类，于是表头写出「381 … Listed below: 200 (200 direct,
-    // deepest 1 level down)」——调用方据此断定这棵树只有一层，而它真有四层。两个数各自
-    // 都没算错，错在它们描述的是切片。现在只剩「Listed below」一格描述切片。
+    // 前 200 条恰好全是直接子类，于是表头写出「381 … 200 direct, deepest 1 level down」
+    // ——调用方据此断定这棵树只有一层，而它真有四层。两个数各自都没算错，错在它们描述的是切片。
+    //
+    // N5 之后描述切片的只剩 Tally 那一格的前半个数（`2 of 4 subclasses` 里的 2），
+    // 与 locate 同一个写法。
     [Fact]
     public async Task HeaderCounts_DescribeTheWholeTree_NotTheListedSlice()
     {
         var content = await Run(BuildTool(), """{"symbol":"ZzBase","mode":"inheritors","limit":2}""");
 
-        Assert.Contains("4 in scope", content);            // 树的总量
+        Assert.Contains("2 of 4 subclasses", content);     // 切片 / 树的总量，一格里说完
         Assert.Contains("2 direct", content);              // 整棵树的直接子类数
         Assert.Contains("deepest 3 levels down", content); // 整棵树的深度
-        Assert.Contains("Listed below: 2", content);       // 只有这一格描述切片
 
         // 切片里两条都是直接子类，旧写法会据此报 1 层——那正是要挡住的假数字
         Assert.DoesNotContain("deepest 1 level down", content);
     }
 
-    // 反面：没被截断时不印「列了多少」——那时它逐字等于前面那个总数。
-    // 沿用 R33 的读法：出现「列了多少」这一格本身就是「被截了」的信号。
+    // 反面：没被截断时不印「列了多少」——那时它逐字等于总数。沿用 R33 的读法：
+    // 出现 `N of M` 这个记号本身就是「被截了」的信号，故没被截时整个 `of M` 不写。
     [Fact]
     public async Task Header_OmitsTheListedCount_WhenNothingWasCutOff()
     {
         var content = await Run(BuildTool(), """{"symbol":"ZzBase","mode":"inheritors"}""");
 
-        Assert.Contains("4 in scope", content);
+        Assert.Contains("4 subclasses", content);
         Assert.Contains("2 direct", content);
-        Assert.DoesNotContain("Listed below", content);
+        Assert.DoesNotContain(" of 4 subclasses", content);
     }
 
     // 「索引里没有这个名字」与「有，但没人继承它」下一步完全不同：前者要去核对拼写，

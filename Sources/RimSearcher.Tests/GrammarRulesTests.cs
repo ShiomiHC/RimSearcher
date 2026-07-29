@@ -35,12 +35,12 @@ public class GrammarRulesTests
 
     // ---- 名词槽不空（规则五的 `N of M` 侧） ----
 
-    // 旧判据只验「下一个字符是字母」，于是 `in` 当了那个名词。这一形正是 N5 要改掉的写法，
-    // 在它被改掉之前，闸得先看得见它。
+    // 旧判据只验「下一个字符是字母」，于是 `in` 当了那个名词。这一形是 N5 改掉的那条表头的
+    // 一个近似写法——它先要看得见，那一步才有判据。
     [Fact]
     public void CountOfTotal_FollowedByAPreposition_IsCaught()
     {
-        Assert.Contains("名词槽不空", Rules("Subclasses of 'ZzBase' (5 of 12 in scope 'all')"));
+        Assert.Contains("名词槽不空", Rules("## 'ZzBase' — 5 of 12 in scope 'all'"));
     }
 
     [Fact]
@@ -67,11 +67,12 @@ public class GrammarRulesTests
         Assert.Contains("of 的读法", Rules("## 'Zz' — 12 of 12 subclasses"));
     }
 
-    // 普通英文介词不归这条管——全语料里一半的 `of` 是这一种。
+    // 普通英文介词不归这条管——语料里三种 `of` 并存，这是其中一种。
     [Fact]
     public void OfAsAnOrdinaryPreposition_IsClean()
     {
-        Assert.DoesNotContain("of 的读法", Rules("Subclasses of 'ThingComp' (depth 1)"));
+        Assert.DoesNotContain("of 的读法",
+            Rules("'ZzHuge' is 2001 lines of a 2003-line file and the cap is 2000"));
     }
 
     // ---- 单复数（规则二） ----

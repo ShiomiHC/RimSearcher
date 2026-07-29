@@ -20,8 +20,12 @@ public static class Tally
     // locate 给的是**显示数**，句式却一样——两个口径撞在同一个位置上，这才是要害。故这里改成
     // 两个数都给，且沿用 `<数> of <数>` 那条读法：没被截时不写 `of N`，那时显示即全部。
     //
-    // 读法的辖域是这**一个计数惯用法**，不是 `of` 这个词——全语料里一半的 `of` 是改不掉的普通
-    // 介词（`Subclasses of 'X'`、`lines of a N-line file`）。判据见 GrammarRules 规则三。
+    // 那次只改了 locate 一边，碰撞从「一边缺一个数」降级成「两边顺序相反」而没有消掉。
+    // N5 之后 trace inheritors 的表头也走这一格（见 InheritorsRenderer.Headline），两个工具
+    // 说同一对数用的是同一个写法，这条才算完。
+    //
+    // 读法的辖域是这**一个计数惯用法**，不是 `of` 这个词——语料里还有改不掉的普通介词
+    // （`lines of a N-line file`、`tokens of that length`）。判据见 GrammarRules 规则三。
     //
     // 名词跟总数走（"1 of 768 C# types" 是属格复数，"5 C# types" 跟 5），与 R30 判据一致。
     //

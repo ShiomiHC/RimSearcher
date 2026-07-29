@@ -311,10 +311,13 @@ public static class GrammarRules
     //
     // 这条读法的辖域是**一个计数惯用法**，不是 `of` 这个词：`<数> of <数>` 里的 of 表示没给全。
     //
-    // 说清辖域不是咬文嚼字。全语料 24 处 `of` 里只有 11 处是截断记号，另外 11 处是改不掉的普通
-    // 英文介词（`Subclasses of 'X'` 7 处、`lines of a N-line file`、`tokens of that length`），
-    // 还有 2 处是 read_code 的区间形（`lines 2-30 of 30`）。故「看到 of 就是被截了」当作一条
-    // 关于这个词的规则来读时是**假陈述**——照它读，`Subclasses of 'ThingComp'` 会被读成截断记号。
+    // 说清辖域不是咬文嚼字。基线语料里的 `of` 有三种用法并存：截断记号、改不掉的普通英文介词
+    // （`lines of a N-line file`、`tokens of that length`、`the total number of matching files`）、
+    // 以及 read_code 的区间形（`lines 2-30 of 30`）。故「看到 of 就是被截了」当作一条关于这个词
+    // 的规则来读时是**假陈述**——照它读，`2001 lines of a 2003-line file` 会被读成截断记号。
+    //
+    // 处数会随输出改动而变（N5 把 inheritors 的 `Subclasses of 'X'` 那 7 处普通介词整批换掉了），
+    // 故这里不再钉具体计数——要钉的是**三类并存**这件事，那才是辖域必须写窄的理由。
     // 闸这边执行的从来就是窄的那条（下面的 NofM 只认 `\d+ of \d+`，还专门豁免了区间形），
     // 与这句话本来就不是一回事；此处只是把注释改回它实际在做的事。
     //
