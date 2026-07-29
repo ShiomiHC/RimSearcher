@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using RimSearcher.Server;
 using RimSearcher.Server.Tools;
@@ -199,9 +200,32 @@ public class IndexGateTests
         Assert.Equal(before + 1, IndexGate.Generation);
     }
 
-    // 真的会在 await 之后换线程的工具。线上的挂起点是 Parallel.ForEachAsync / ReadToEndAsync，
-    // 这里用专用线程完成 TaskCompletionSource 把换线程做成确定的：TCS 默认就地跑续体，
-    // 于是 SetResult 那个线程接着往下执行。Sleep 是为了保证 await 先注册上。
+    // 「一定会挂起、且一定在别的线程上恢复」的等待点。
+    //
+    // 自己实现 awaiter 而不是用 TaskCompletionSource，是因为 TCS 那种写法是**有竞态的**：
+    // `await` 先看 `IsCompleted`，任务已完成就压根不挂起、续体就地跑完——于是「换线程」这件事
+    // 取决于后台线程能不能慢过主线程走到 await，而那是调度器说了算。原先靠 `Thread.Sleep(50)`
+    // 押这一头，主线程被挤走超过 50ms 时 `EnterThread == ExitThread`，用例的前提断言当场翻。
+    // 实测过：把 SetResult 提到 await 之前，红的正是那一条（`Assert.NotEqual() Failure`）。
+    //
+    // 这里 `IsCompleted` 恒 false，故 await 一定走 `OnCompleted`；续体交给一条新线程跑，
+    // 故一定换线程。两件事都不再与时序有关。
+    //
+    // 也不捕获同步上下文（`INotifyCompletion` 由我们自己实现，续体去哪儿由 OnCompleted 说了算），
+    // 故不需要、也不能再挂 `ConfigureAwait(false)`。
+    private readonly struct HopsToAnotherThread : INotifyCompletion
+    {
+        public HopsToAnotherThread GetAwaiter() => this;
+
+        public bool IsCompleted => false;
+
+        public void OnCompleted(Action continuation)
+            => new Thread(() => continuation()) { IsBackground = true }.Start();
+
+        public void GetResult() { }
+    }
+
+    // 真的会在 await 之后换线程的工具。线上的挂起点是 Parallel.ForEachAsync / ReadToEndAsync。
     private sealed class ThreadHoppingTool : ITool
     {
         public int EnterThread;
@@ -215,14 +239,7 @@ public class IndexGateTests
         {
             EnterThread = Environment.CurrentManagedThreadId;
 
-            var hop = new TaskCompletionSource();
-            new Thread(() =>
-            {
-                Thread.Sleep(50);
-                hop.SetResult();
-            }) { IsBackground = true }.Start();
-
-            await hop.Task.ConfigureAwait(false);
+            await new HopsToAnotherThread();
 
             ExitThread = Environment.CurrentManagedThreadId;
             return new ToolResult("hopped");
