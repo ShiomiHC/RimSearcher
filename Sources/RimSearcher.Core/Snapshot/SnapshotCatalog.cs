@@ -138,20 +138,30 @@ public static class SnapshotCatalog
         }
     }
 
+    private static List<string> WithoutExporter(IEnumerable<string> ids)
+        => ids.Where(id => !string.Equals(id, Contract.IntermediateFormat.ExporterPackageId,
+                                          StringComparison.OrdinalIgnoreCase))
+              .ToList();
+
     /// <summary>寻址与过期自证的共同产出:所用快照 ↔ 当前 ModsConfig 的比对。</summary>
     public static EnvironmentReport Compare(SnapshotDb db, RimConfig config)
     {
         var env = ReadActiveMods(config);
         if (env.ActiveMods.Count == 0) return env with { Match = EnvironmentMatch.Unknown };
 
-        var snapshotIds = db.Mods.Select(m => m.PackageId).ToList();
+        // 导出器两侧都不算数。它是导出时临时塞进去的工具,快照里有、玩家的 ModsConfig 里
+        // 通常没有 —— 拿它参与比对,每一次导出都会给自己造出一条「有 1 个 mod 不再启用」的
+        // 假过期。声明必须描述**内容**的差异,不能把工具自己的脚印算进去。
+        var snapshotIds = WithoutExporter(db.Mods.Select(m => m.PackageId));
+        var activeIds = WithoutExporter(env.ActiveMods);
+
         var sameList = ExportMeta.ComputeModlistFingerprint(snapshotIds) ==
-                       ExportMeta.ComputeModlistFingerprint(env.ActiveMods);
+                       ExportMeta.ComputeModlistFingerprint(activeIds);
 
         if (!sameList)
         {
             var snapSet = snapshotIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var envSet = env.ActiveMods.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var envSet = activeIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
             return env with
             {
                 Match = EnvironmentMatch.DifferentModlist,

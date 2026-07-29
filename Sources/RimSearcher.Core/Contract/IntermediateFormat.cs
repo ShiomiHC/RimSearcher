@@ -25,6 +25,12 @@ namespace RimSearcher.Contract
         /// <summary>无人值守导出的命令行开关(GenCommandLine.TryGetCommandLineArg 读取)。</summary>
         public const string CommandLineSwitch = "rimsearcher-export";
 
+        /// <summary>
+        /// 导出器自己的 packageId。它必须与 About.xml 一致 —— 两侧都要认这个名字:
+        /// 游戏侧靠它被启用才跑得起来,CLI 侧靠它判断「这份 mod 列表能不能用来导出」。
+        /// </summary>
+        public const string ExporterPackageId = "rimsearcher.datamod";
+
         // 行类型标记
         public const string KindMeta = "meta";
         public const string KindDef = "def";

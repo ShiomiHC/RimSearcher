@@ -124,6 +124,28 @@ public sealed class ExportCommand : Command
                     ? "No mod directories are configured either; set 'mod_roots' in the config file."
                     : $"Searched: {string.Join(", ", InstalledMods.Roots(ctx.Config))}."));
 
+        // 导出器不在列表里,游戏会照常起来、走到主菜单,然后**什么也不做** —— 没有人处理
+        // 那个命令行开关。这件事在启动前一毫秒就能知道,原来却要等到超时(实测:23 个 mod
+        // 的列表挂了二十分钟)才由一条事后消息告诉你。发射前就该拦住。
+        //
+        // 拦住之后是补上而不是拒绝:导出器是工具而不是内容,跟 Harmony 一样属于基础设施。
+        // 让每一份 mod 列表都记得带上它,只是把工具的实现细节摊派给了使用者 ——
+        // 而 `modlist save` 从游戏里捕获的列表天然就不会有它。
+        var launchIds = list.Ids.ToList();
+        if (!launchIds.Contains(IntermediateFormat.ExporterPackageId, StringComparer.OrdinalIgnoreCase))
+        {
+            if (!installed.ContainsKey(IntermediateFormat.ExporterPackageId))
+                throw new CliUsageException(
+                    $"The exporter mod '{IntermediateFormat.ExporterPackageId}' is not installed, so the game has " +
+                    "no way to write an export. Build Sources/RimSearcher.DataMod and put its output in the game's " +
+                    "Mods folder. The game was not started.");
+
+            launchIds.Add(IntermediateFormat.ExporterPackageId);
+            ctx.Report.Notice(NoticeKind.Advisory,
+                $"'{list.Name}' does not list the exporter mod, so it was added for this run. " +
+                "It is not part of the snapshot's mod list.");
+        }
+
         var exportDir = ctx.Config.ExportDir ?? Path.Combine(ctx.Config.ResolveSnapshotDir(), "..", "exports");
         Directory.CreateDirectory(Path.GetFullPath(exportDir));
         var outFile = Path.GetFullPath(Path.Combine(exportDir, snapshotName + IntermediateFormat.FileExtension));
@@ -135,7 +157,7 @@ public sealed class ExportCommand : Command
             ctx.Report.Detail("would_run",
             [
                 new("modlist", list.Name),
-                new("mods", list.Ids.Count),
+                new("mods", launchIds.Count),
                 new("executable", exe),
                 new("export_file", outFile),
                 new("snapshot", snapshotName),
@@ -145,7 +167,7 @@ public sealed class ExportCommand : Command
             return 0;
         }
 
-        PrepareSaveDataFolder(ctx, temp, list.Ids);
+        PrepareSaveDataFolder(ctx, temp, launchIds);
 
         if (File.Exists(outFile)) File.Delete(outFile);
 
@@ -204,10 +226,13 @@ public sealed class ExportCommand : Command
 
         // 步骤 6:指纹自校 —— 请求的 ids 序列必须等于产出 meta 的 ids 序列。
         // 期望环境由 CLI 主动制造并验证过,自动检测就只剩「手动导出归属谁」一个用途了。
+        //
+        // 比的是**发射用的**列表,不是原始列表:导出器是这一轮临时加进去的基础设施,
+        // 拿原始列表去比,每一次自动补全都会报一条假的「游戏加载的和要求的不一样」。
         var produced = stats.Meta.Mods.Select(m => m.PackageId).ToList();
-        if (ExportMeta.ComputeModlistFingerprint(list.Ids) != ExportMeta.ComputeModlistFingerprint(produced))
+        if (ExportMeta.ComputeModlistFingerprint(launchIds) != ExportMeta.ComputeModlistFingerprint(produced))
             ctx.Report.Notice(NoticeKind.Staleness,
-                $"The game reported a different mod list than the one it was given: asked for {list.Ids.Count}, " +
+                $"The game reported a different mod list than the one it was given: asked for {launchIds.Count}, " +
                 $"got {produced.Count}. The snapshot describes what the game actually loaded, not what was requested. " +
                 "A mod that fails its own load check is the usual cause.");
 

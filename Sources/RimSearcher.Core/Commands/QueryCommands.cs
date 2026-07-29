@@ -595,16 +595,21 @@ public sealed class ModsCommand : Command
         Name = "mods",
         Summary = "List the mods that were active when the snapshot was taken, in load order.",
         Remarks = "Load order matters: it is the order in which PatchOperations were applied, so it is part of the snapshot's identity.",
-        Options = [],
+        // 默认全出:装了什么 mod 是快照身份的一部分,截一半没有意义。但 --limit 还是收 ——
+        // 07 实证里它是被发明得最多的参数,而对一条列举命令拒绝它,读起来像「这里不能限量」,
+        // 实际只是「这里不需要」。严格模式该拦的是拼错的名字,不是合理的期待。
+        Options = [CommonOptions.Limit("mods") with { Default = "all" }],
         Examples = ["rimsearcher mods"],
     };
 
     public override int Run(CommandContext ctx)
     {
-        var mods = ctx.Db.Mods;
-        var counts = ctx.Db.Types(Snapshot.ScopeFilter.Parse("all", ctx.Db.PackageIds(), ctx.Config));
-        _ = counts;
+        var all = ctx.Db.Mods;
+        var limit = ctx.Args.Value("limit") is null ? LimitValue.All : ctx.Args.Limit();
+        var mods = limit.IsAll ? all : all.Take(limit.Effective).ToList();
 
+        ctx.Report.TruncationNotice(Tally.Of(mods.Count, all.Count), "mod",
+            "pass --limit all to see the whole load order.");
         ctx.Report.Table("mods", ["order", "package_id", "name", "version"],
             mods.Select((m, i) => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {

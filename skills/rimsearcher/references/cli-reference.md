@@ -291,10 +291,14 @@ rimsearcher modlist show vanilla
 List the mods that were active when the snapshot was taken, in load order.
 
 ```
-rimsearcher mods
+rimsearcher mods [options]
 ```
 
 Load order matters: it is the order in which PatchOperations were applied, so it is part of the snapshot's identity.
+
+| Option | Meaning | Also accepted |
+|---|---|---|
+| `-n`, `--limit` <n|all> | How many mods to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `all`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 
 Examples:
 
