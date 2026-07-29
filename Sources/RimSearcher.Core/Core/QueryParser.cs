@@ -67,6 +67,14 @@ public static class QueryParser
                         }
                     }
 
+                    // 这里认 16 个拼法而 locate 的 Description 只举 5 个（己-4）。**有意，不要
+                    // 「修」它**：缩写与近义词（m: / c: / p: / in:）救的是没照说明写的调用方，
+                    // 而照说明写的那些用的就是那 5 个规范前缀，一点不吃亏；把 16 个列进说明只是
+                    // 把一段本来读得完的话变成一张表。判据与理由见 ToolArgs.cs 顶部那条政策。
+                    //
+                    // 与 ToolArgs.LocateFilterPrefixes 不必相等：那份名单干的是另一件事
+                    // （把调用方带到只认裸名的工具上的前缀剥掉），故它宽到含 locate 自己不认的
+                    // `member:` 是对的——意图明显，剥了正好。
                     switch (prefix)
                     {
                         case "method" or "m":

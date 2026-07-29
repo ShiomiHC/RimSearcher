@@ -157,6 +157,12 @@ public class SyncSourcesTool : ITool
         // action 的合法性必须先判，再判「有没有可跟随的源」。反过来的话 action='typo' 会被
         // 下面那条早退吃掉：调用方拿到一份 config.toml 配置示例、isError=false，看不出自己
         // 请求的 diff 压根没被识别。这与「拼错的 action 不许静默落到 check」是同一个坑的两个入口。
+        // 这里认 9 个拼法而 schema 的 enum 只声明 3 个（乙-2），**这是有意的，不要「修」它**：
+        // 多认的那几个的受益者按定义就是「没照 schema 走的调用方」——会校验的客户端本来就只发
+        // 规范拼法，一点不吃亏。把 9 个塞进 enum 只会让 tools/list 多出一堆噪音，还暗示存在
+        // 9 种语义。判据与理由见 ToolArgs.cs 顶部那条政策。
+        //
+        // 容错不等于静默：认不出的 action 走下面那条明确错误，不会落到 check。
         string? resolved = action switch
         {
             "sync" or "update" or "run" => "sync",
@@ -178,6 +184,7 @@ public class SyncSourcesTool : ITool
                 true);
         }
 
+        // 单数形 file/member 不进 enum，理由同上面 action 那段（乙-3）。
         // granularity 与 action 是同一个坑的另一个入口：schema 声明了 enum，但 client 不一定校验，
         // 而服务端此前只认 'members'，其余一律当 'files' 走。于是 granularity='typo' 返回的是一份
         // 逐字正常的文件列表，调用方看不出自己要的成员粒度压根没被识别。

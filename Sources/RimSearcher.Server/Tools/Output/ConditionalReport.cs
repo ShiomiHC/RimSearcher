@@ -30,6 +30,12 @@ public sealed class ConditionalReport
         "Mod folders that loadFolders.xml loads only under a condition are indexed whatever is installed, "
         + "and results from inside one carry a `[conditional: <folder>]` tag naming that condition; "
         + "every result is checked, so one without the tag is not inside such a folder. "
+        // 这句原先到上一行为止，而 OfAll 把它说绝了（己-3）：一个散在多份文件里的符号，只有
+        // **每一处**声明都落在条件目录里才打标。代码是有意的（有一处是无条件的，那这个符号在
+        // 任何实机上都在，打标反而是假警报），错的是契约漏了这半句——照上一句读，一个半数声明
+        // 在条件目录里的类型会被当成「查过了、不在」。
+        + "A symbol declared in several files is tagged only when every one of them is inside such a folder: "
+        + "one unconditional declaration means the symbol is present on any install. "
         + "Nothing here evaluates the condition.";
 
     // 一条路径的行内标记。落在条件目录外（或者根本没有条件目录）时返回空串。

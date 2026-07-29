@@ -518,7 +518,11 @@ public class SourceIndexer
     // 这个数管的是另一件事：链**很深但不成环**时不要一路走到底。RimWorld 里最深的链也就
     // 个位数，故它在真实语料上摸不到——真摸到时它是静默截断（更深的子类既不进结果也不进
     // shape.Deepest），所以别把它当成一道会说话的闸。
-    private const int MaxInheritorDepth = 24;
+    //
+    // public：trace 的 Description 此前写着 `every descendant, not just direct ones`，那句被
+    // 这个常量证伪（己-2）。改口要把这个数说出来，故它得插值得到——手打一遍就又是一处散文
+    // 与代码各写一份的数。
+    public const int MaxInheritorDepth = 24;
 
     private string? FirstPathOfType(string typeName)
     {

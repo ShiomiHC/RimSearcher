@@ -48,7 +48,13 @@ public class TraceTool : ITool
 
     public string Description =>
         "Cross-reference analysis for C# and XML. 'inheritors' lists the transitive subclass/implementor tree — " +
-        "every descendant, not just direct ones, indirect ones tagged '[depth N]' and direct ones left untagged " +
+        // `every descendant` 被 SourceIndexer.MaxInheritorDepth 证伪（己-2）：BFS 到那个深度
+        // 就停，更深的既不进结果也不进 shape，故下一句那个 `true total` 在这时同样不成立。
+        // 常量自己的注释早就认了这一条（「真摸到时它是静默截断……别把它当成一道会说话的闸」）
+        // ——认在实现里而没认在契约里。数字插值，不手打。
+        $"every descendant down to {SourceIndexer.MaxInheritorDepth} levels below it — deeper ones are dropped " +
+        "silently and do not reach the header's total either, though RimWorld's deepest chains are single-digit " +
+        "— not just direct ones, indirect ones tagged '[depth N]' and direct ones left untagged " +
         // 这三个数此前是手打的，而**同一个文件**下面 mode 那格的说明写的就是
         // `{ScopeAndLimitArgs.HardLimit}` 的插值形——同一个 200，一句改得动一句改不动。
         $"— up to the server cap of {ScopeAndLimitArgs.HardLimit}; a tree larger than that comes back truncated, " +
