@@ -1,0 +1,7 @@
+$ rimsearcher find compClass RimWorld.CompShield
+exit 0
+--- stdout ---
+def_name            def_type  path                value                mod
+Apparel_ShieldBelt  ThingDef  comps[0].compClass  RimWorld.CompShield  ludeon.rimworld
+TestModGun          ThingDef  comps[0].compClass  RimWorld.CompShield  test.mod
+--- stderr ---

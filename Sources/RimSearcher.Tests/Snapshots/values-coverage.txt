@@ -1,0 +1,10 @@
+$ rimsearcher values compClass
+exit 0
+--- stdout ---
+matched_paths    comps[0].compClass (2)
+def_types        ThingDef (2 of 4)
+defs_with_field  2
+
+value                defs
+RimWorld.CompShield  2
+--- stderr ---

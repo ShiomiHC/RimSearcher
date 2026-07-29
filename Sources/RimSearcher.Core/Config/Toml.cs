@@ -93,7 +93,9 @@ public static class Toml
         if (v[0] == '[')
         {
             if (v[^1] != ']')
-                throw new TomlError($"{origin}:{lineNo}: arrays must be written on one line and end with ']'.");
+                // 跨行数组是支持的(上面已经把续行接了起来),所以这里**不能**说
+                // 「数组必须写在一行」—— 那条规则早就不存在了,照着改只会更糊涂。
+                throw new TomlError($"{origin}:{lineNo}: there is text after the array's closing ']'.");
             var items = new List<string>();
             foreach (var part in SplitTopLevel(v[1..^1]))
             {
@@ -106,7 +108,17 @@ public static class Toml
 
         if (v is "true" or "false") return v == "true";
         if (long.TryParse(v, out var n)) return n;
-        if (v[0] is '"' or '\'') return Unquote(v);
+        if (v[0] is '"' or '\'')
+        {
+            // 引号没闭合过去是静默接受的:Unquote 只剥掉开头那个引号,于是
+            // `a = "D:/games` 会被当成合法值 D:/games 存下来。用户手误漏一个引号,
+            // 得到的不是报错而是一个**看起来对**的配置,后面所有找不到目录都指着它。
+            // 引号必须成对,而且要在同一行 —— 本子集不支持多行字符串,不如直接说破。
+            if (v.Length < 2 || v[^1] != v[0])
+                throw new TomlError(
+                    $"{origin}:{lineNo}: the string opened with {v[0]} is never closed on this line.");
+            return Unquote(v);
+        }
 
         throw new TomlError($"{origin}:{lineNo}: value '{v}' is not a quoted string, number, boolean, or array. " +
                             "Quote it if it is meant to be text.");

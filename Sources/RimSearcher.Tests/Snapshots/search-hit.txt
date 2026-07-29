@@ -1,0 +1,6 @@
+$ rimsearcher search shield
+exit 0
+--- stdout ---
+def_name            def_type  label        mod
+Apparel_ShieldBelt  ThingDef  shield belt  ludeon.rimworld
+--- stderr ---

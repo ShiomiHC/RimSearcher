@@ -1,0 +1,7 @@
+$ rimsearcher mods
+exit 0
+--- stdout ---
+order  package_id       name      version
+0      ludeon.rimworld  Core      1.6
+1      test.mod         Test Mod  0.1
+--- stderr ---

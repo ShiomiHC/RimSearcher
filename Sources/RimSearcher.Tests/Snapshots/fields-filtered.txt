@@ -1,0 +1,7 @@
+$ rimsearcher fields ThingDef --path comps
+exit 0
+--- stdout ---
+path                      defs
+comps[0].compClass        2
+comps[0].props.energyMax  1
+--- stderr ---

@@ -1,0 +1,14 @@
+$ rimsearcher get Meat_Muffalo
+exit 0
+--- stdout ---
+def_name     Meat_Muffalo
+def_type     ThingDef
+label        muffalo meat
+class        Verse.ThingDef
+mod          ludeon.rimworld
+source       ImpliedDefs (created in code, not from an XML file)
+
+path                 value
+thingClass           Verse.ThingWithComps
+ingestible.foodType  Meat
+--- stderr ---

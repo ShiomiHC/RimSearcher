@@ -1,0 +1,5 @@
+$ rimsearcher get NoSuchDef
+exit 1
+--- stdout ---
+No def is named 'NoSuchDef' in this snapshot. Try 'rimsearcher search' instead.
+--- stderr ---

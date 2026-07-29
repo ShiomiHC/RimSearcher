@@ -1,0 +1,33 @@
+$ rimsearcher get --help
+exit 0
+--- stdout ---
+Usage: rimsearcher get <defName> [options]
+
+Show one def in full: its identity, its fields, and any translations of it.
+
+Field paths are the merged, post-patch shape the game actually had in memory when the snapshot was taken, so PatchOperations and inheritance are already applied. A def created in code rather than XML says so on its source line.
+
+Arguments:
+  <defName>  The exact def name. 'search' finds it if you only know part of it.
+
+Options:
+  -n, --limit <n|all>  How many fields to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: 60.
+                       Also accepted: --max-results, --count, --top, --rows, --num, --head.
+      --path <text>    Only show field paths containing this text. Repeat it to widen the selection.
+                       Also accepted: --paths, --field, --field-path, --only, --filter, --grep.
+      --fields         Deprecated no-op: fields are always shown. Kept so that scripts that pass it keep working.
+                       Also accepted: --with-fields, --show-fields.
+
+Global options:
+      --snapshot <name>  Query this named snapshot instead of the one that would be picked automatically. An explicit choice always wins over auto-detection.
+                         Also accepted: --snap, --env.
+      --db <path>        Query the snapshot database at this path directly, bypassing the registry.
+                         Also accepted: --database, --snapshot-path.
+      --json             Emit machine-readable JSON. Anything the text output would have said in prose moves into a 'notes' array, so nothing is lost.
+      --config <path>    Use this config file instead of the default one.
+
+Examples:
+  rimsearcher get Apparel_ShieldBelt
+  rimsearcher get Apparel_ShieldBelt --path statBases
+  rimsearcher get Bullet_Revolver --limit all
+--- stderr ---

@@ -1,0 +1,7 @@
+$ rimsearcher types
+exit 0
+--- stdout ---
+def_type   defs
+ThingDef   4
+HediffDef  1
+--- stderr ---

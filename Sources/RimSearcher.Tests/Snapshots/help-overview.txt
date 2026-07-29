@@ -1,0 +1,6 @@
+$ rimsearcher --help
+exit 2
+--- stdout ---
+--- stderr ---
+Unknown command '--help'.
+Run 'rimsearcher --help' for the full list.

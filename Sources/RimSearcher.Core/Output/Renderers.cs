@@ -26,6 +26,10 @@ public static class TextRenderer
         var first = true;
         foreach (var block in report.Blocks)
         {
+            // 空块直接跳过,连分隔空行都不留。分隔符原本写在渲染**之前**,于是一个空表
+            // 会留下两个连着的空行 —— 而空行会被读成「后面还有,被截断了」,正是文法闸
+            // 明令要躲开的那个误读。空块不是「渲染成空」,是根本不存在。
+            if (IsEmpty(block)) continue;
             if (sb.Length > 0 && !first) sb.Append(OutputText.Newline);
             if (sb.Length > 0 && first && report.Notices.Any(n => !n.Footnote)) sb.Append(OutputText.Newline);
             first = false;
@@ -41,6 +45,18 @@ public static class TextRenderer
 
         return OutputText.Finish(sb.ToString());
     }
+
+    /// <summary>
+    /// 一个块渲染出来会不会是零字节。判据要与 <see cref="RenderBlock"/> 的跳过规则一致 ——
+    /// DetailBlock 会逐条跳过空值,所以「有 pairs」不等于「有输出」。
+    /// </summary>
+    private static bool IsEmpty(Block block) => block switch
+    {
+        TableBlock t => t.Rows.Count == 0 && string.IsNullOrEmpty(t.Caption),
+        DetailBlock d => d.Pairs.All(p => OutputText.Cell(p.Value).Length == 0),
+        TextBlock x => x.Lines.Count == 0,
+        _ => false,
+    };
 
     private static void RenderBlock(StringBuilder sb, Block block)
     {

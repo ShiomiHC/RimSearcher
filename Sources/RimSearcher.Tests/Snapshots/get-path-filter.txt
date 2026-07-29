@@ -1,0 +1,19 @@
+$ rimsearcher get Apparel_ShieldBelt --path comps
+exit 0
+--- stdout ---
+2 fields match 'comps', out of 4 on the def.
+
+def_name     Apparel_ShieldBelt
+def_type     ThingDef
+label        shield belt
+class        Verse.ThingDef
+mod          ludeon.rimworld
+source       Apparel_Belts.xml
+
+path                      value
+comps[0].compClass        RimWorld.CompShield
+comps[0].props.energyMax  0.5
+
+path   translated  original     language           origin
+label  护盾腰带        shield belt  ChineseSimplified  in effect
+--- stderr ---

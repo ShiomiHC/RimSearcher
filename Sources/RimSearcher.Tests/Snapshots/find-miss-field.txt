@@ -1,0 +1,5 @@
+$ rimsearcher find noSuchField x
+exit 1
+--- stdout ---
+No def has 'noSuchField' set to 'x'. 'rimsearcher values noSuchField --limit all' lists them.
+--- stderr ---
