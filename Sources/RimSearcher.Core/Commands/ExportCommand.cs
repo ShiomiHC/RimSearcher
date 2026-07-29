@@ -95,6 +95,38 @@ public sealed class ExportCommand : Command
     };
 
     /// <summary>
+    /// 把每个 mod 声明的硬依赖补进发射列表,返回补了哪些。就地改 <paramref name="ids"/>。
+    ///
+    /// 依赖插在**第一个需要它的 mod 之前** —— 前置必须先加载,否则补了等于没补。
+    /// 依赖自己还有依赖(AncotLibrary 要 Harmony),所以反复扫到不动为止。
+    ///
+    /// 没装的依赖不在这里报错:那由调用方那段「缺 mod」的检查统一报,消息里能一并列出。
+    /// </summary>
+    public static List<string> ResolveDependencies(List<string> ids, IReadOnlyDictionary<string, InstalledMod> installed)
+    {
+        var added = new List<string>();
+        for (var pass = 0; pass < 16; pass++)
+        {
+            var inserted = false;
+            for (var i = 0; i < ids.Count; i++)
+            {
+                if (!installed.TryGetValue(ids[i], out var mod)) continue;
+                foreach (var dep in mod.Dependencies)
+                {
+                    if (ids.Contains(dep, StringComparer.OrdinalIgnoreCase)) continue;
+                    if (!installed.ContainsKey(dep)) continue;   // 没装的留给缺失检查去报
+                    ids.Insert(i, dep);
+                    added.Add(dep);
+                    inserted = true;
+                    i++;   // 刚插在当前项之前,当前项后移了一位
+                }
+            }
+            if (!inserted) break;
+        }
+        return added;
+    }
+
+    /// <summary>
     /// 起游戏的命令行。**唯一产地** —— <c>--dry-run</c> 报的和真跑用的是同一份,
     /// 否则 dry-run 就成了「报告一件与实际不同的事」,而它存在的全部意义就是先看清楚。
     ///
@@ -106,9 +138,86 @@ public sealed class ExportCommand : Command
         {
             $"-savedatafolder={temp}",
             $"-{IntermediateFormat.CommandLineSwitch}={outFile}",
+            // 日志必须落在我们指定的地方。Unity 默认写 LocalLow 那份 Player.log,而**这次跑
+            // 有可能一个字都不写进去**(实测:一次挂死的导出,那个文件的时间戳停在半小时前)。
+            // 没有日志,「游戏卡住了」就只剩一句没有下文的话。
+            $"-logfile={Path.Combine(temp, GameLogName)}",
         };
         if (!showWindow) { argv.Add("-batchmode"); argv.Add("-nographics"); }
         return argv;
+    }
+
+    /// <summary>游戏日志在临时 savedata 目录里的文件名。失败时留着不删。</summary>
+    public const string GameLogName = "game.log";
+
+    /// <summary>
+    /// 某一个阶段停多久算卡住。给得宽是有意的:这条判据只用来把**无限期的沉默**
+    /// 变成一句有下文的话,不用来抢救几十秒的慢。24 个 mod 实测每一段都在 15 秒内走完。
+    /// </summary>
+    private const int StageStallSeconds = 120;
+
+    /// <summary>
+    /// 等游戏跑完。正常结束回 null,不正常回一句点名说到哪一步的话。
+    ///
+    /// **判据是游戏侧自报的阶段,不是 CPU 占用。**曾经想用「加载完了 CPU 却贴近零」来认
+    /// 卡在对话框上的样子 —— 那是代理指标,而代理会撒谎:一段真的很慢的 I/O 会被判成卡死,
+    /// 一个空转的 mod 又会把真卡死盖过去。改由 DataMod 在两个分界点写进度文件,
+    /// 这里读它,于是「停在哪一步」是**事实**而不是推测。
+    ///
+    /// 三种停法要说成三句不同的话,因为下一步动作完全不同:
+    ///   没有进度文件  —— 连 Mod 子类都没构造出来:导出器没装上,或者更早就被挡住了
+    ///   停在 mod-classes —— 程序集加载完了却没开始读定义:对话框就卡在这一段
+    ///   停在 exporting   —— 导出本身在跑,不判它卡死,交给 --timeout 兜底
+    /// </summary>
+    private static string? WaitForGame(Process proc, TimeSpan timeout, string outFile, string progressFile)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        var stageSince = DateTime.UtcNow;
+        string? stage = null;
+
+        while (!proc.WaitForExit(500))
+        {
+            var now = DateTime.UtcNow;
+            if (now >= deadline)
+                return $"The game was still running after {timeout.TotalSeconds:0} seconds and was stopped. " +
+                       "A larger mod list may simply need longer: raise --timeout. " +
+                       (File.Exists(outFile)
+                           ? "An export file was written before the timeout; import it with 'snapshot import'."
+                           : "No export file was written.");
+
+            // 只认往前走的阶段。游戏正在写那个文件的一瞬间会读到 null,而那不是「退回到没有
+            // 阶段」—— 把它当成变化会白白重置计时器,把真卡住的那一次拖成超时。
+            var seen = ReadStage(progressFile);
+            if (seen is not null && seen != stage) { stage = seen; stageSince = now; }
+
+            if ((now - stageSince).TotalSeconds < StageStallSeconds) continue;
+            // 导出跑起来之后不再判卡死:那一段是一个长动作,打断它只会毁掉一次已经付过的加载。
+            if (stage == IntermediateFormat.StageExporting) continue;
+
+            return stage switch
+            {
+                null =>
+                    $"The game ran for {StageStallSeconds} seconds without the exporter reporting in, so it never " +
+                    "got as far as constructing mod classes. Either the exporter mod failed to load, or something " +
+                    "stopped the game before that. It was stopped.",
+                IntermediateFormat.StageModClasses =>
+                    $"The game loaded its assemblies but then spent {StageStallSeconds} seconds without starting " +
+                    "to read defs. That is where a dialog waiting for a click sits — and with no window there is " +
+                    "nothing to click. A mod dependency that no mod declares is the usual cause: this command " +
+                    "already adds the declared ones. Re-run with --show-window to see the dialog. It was stopped.",
+                _ =>
+                    $"The game reported stage '{stage}' and stayed there for {StageStallSeconds} seconds. " +
+                    "It was stopped.",
+            };
+        }
+        return null;
+    }
+
+    /// <summary>读一次进度文件。游戏正在写它的一瞬间读不到 —— 那不是「回退到没有阶段」。</summary>
+    private static string? ReadStage(string progressFile)
+    {
+        try { return File.Exists(progressFile) ? File.ReadAllText(progressFile).Trim() : null; }
+        catch { return null; }
     }
 
     /// <summary>
@@ -144,10 +253,29 @@ public sealed class ExportCommand : Command
         // 步骤 2:启动前验证。缺一个 mod 就失败并报候选,不烧一轮游戏启动。
         var installed = InstalledMods.Scan(ctx.Config);
         var missing = list.Ids.Where(id => !installed.ContainsKey(id)).ToList();
-        if (missing.Count > 0)
+
+        // 声明了却没装的**依赖**和列表里没装的 mod 是一回事:两者都让游戏在加载定义之前
+        // 弹一个点不掉的对话框。分成两条消息报,第二条就会在第一条通过之后才出现 ——
+        // 那等于让人白跑一次几十秒的加载。
+        var uninstalledDeps = list.Ids
+            .Where(installed.ContainsKey)
+            .SelectMany(id => installed[id].Dependencies.Select(d => (Needs: id, Dep: d)))
+            .Where(t => !installed.ContainsKey(t.Dep) && !list.Ids.Contains(t.Dep, StringComparer.OrdinalIgnoreCase))
+            .DistinctBy(t => t.Dep, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (missing.Count > 0 || uninstalledDeps.Count > 0)
             throw new CliUsageException(
-                $"{Tally.Complete(missing.Count).Render("mod")} in '{list.Name}' are not installed: " +
-                $"{string.Join(", ", missing)}. The game was not started. " +
+                (missing.Count > 0
+                    ? $"{Tally.Complete(missing.Count).Render("mod")} in '{list.Name}' are not installed: " +
+                      $"{string.Join(", ", missing)}. "
+                    : "") +
+                (uninstalledDeps.Count > 0
+                    ? $"{Tally.Complete(uninstalledDeps.Count).Render("mod")} declared as a dependency are not " +
+                      "installed: " +
+                      string.Join(", ", uninstalledDeps.Select(t => $"{t.Dep} (needed by {t.Needs})")) + ". "
+                    : "") +
+                "The game was not started. " +
                 (InstalledMods.Roots(ctx.Config).Count == 0
                     ? "No mod directories are configured either; set 'mod_roots' in the config file."
                     : $"Searched: {string.Join(", ", InstalledMods.Roots(ctx.Config))}."));
@@ -160,6 +288,20 @@ public sealed class ExportCommand : Command
         // 让每一份 mod 列表都记得带上它,只是把工具的实现细节摊派给了使用者 ——
         // 而 `modlist save` 从游戏里捕获的列表天然就不会有它。
         var launchIds = list.Ids.ToList();
+
+        // 依赖补全。缺一个硬依赖,游戏会在**加载定义之前**弹一个「缺少前置」的对话框 ——
+        // 无头模式下它既看不见也点不掉,于是加载完就永久等待。实测:手写的 races 列表漏了
+        // Ancot.AncotLibrary,挂到超时才收场。这与「导出器不在列表里」是同一个缺陷的同一种
+        // 形状,当时只堵了那一个具体条目而没有推广,于是换个条目又踩一遍。
+        //
+        // 补而不是拒:依赖是列表作者的疏漏,不是意图。`modlist save` 从游戏里捕获的列表
+        // 天然是全的,手写的才会漏,而手写正是这条路存在的理由。
+        var added = ResolveDependencies(launchIds, installed);
+        if (added.Count > 0)
+            ctx.Report.Notice(NoticeKind.Advisory,
+                $"'{list.Name}' does not list {Tally.Complete(added.Count).Render("mod")} that mods in it " +
+                $"declare as dependencies; they were added for this run: {string.Join(", ", added)}.");
+
         if (!launchIds.Contains(IntermediateFormat.ExporterPackageId, StringComparer.OrdinalIgnoreCase))
         {
             if (!installed.ContainsKey(IntermediateFormat.ExporterPackageId))
@@ -201,6 +343,11 @@ public sealed class ExportCommand : Command
 
         if (File.Exists(outFile)) File.Delete(outFile);
 
+        // 进度文件也要先删。留着上一次的,这一次就会带着一个陈旧的阶段开跑 ——
+        // 与探针那次「读到上一轮的日志签名、把上次的失败当成这次的结论」是同一个错。
+        var progressFile = outFile + IntermediateFormat.ProgressFileSuffix;
+        if (File.Exists(progressFile)) File.Delete(progressFile);
+
         var psi = new ProcessStartInfo(exe)
         {
             WorkingDirectory = gameDir,
@@ -237,15 +384,15 @@ public sealed class ExportCommand : Command
             proc.BeginOutputReadLine();
             proc.BeginErrorReadLine();
 
-            if (!proc.WaitForExit((int)timeout.TotalMilliseconds))
+            var stall = WaitForGame(proc, timeout, outFile, progressFile);
+            if (stall is not null)
             {
                 try { proc.Kill(entireProcessTree: true); } catch { /* 已经退了 */ }
-                throw new CliUsageException(
-                    $"The game was still running after {timeout.TotalSeconds:0} seconds and was stopped. " +
-                    "A larger mod list may simply need longer: raise --timeout. " +
-                    (File.Exists(outFile)
-                        ? "An export file was written before the timeout; import it with 'snapshot import'."
-                        : "No export file was written."));
+
+                // 失败时临时目录留着 —— 抛异常就走不到末尾那段清理,而游戏日志在里面,
+                // 是唯一的现场。出了事还清理证物,等于让下一次调查从零开始。
+                throw new CliUsageException(stall + LastLines(gameLog) +
+                    $" The game's own log was kept at {Path.Combine(temp, GameLogName)}.");
             }
         }
 
@@ -260,7 +407,8 @@ public sealed class ExportCommand : Command
                     ? ""
                     : " If it is enabled, a mod in the list may need a graphics device while loading: " +
                       "retry with --show-window.") +
-                LastLines(gameLog));
+                LastLines(gameLog) +
+                $" The game's own log was kept at {Path.Combine(temp, GameLogName)}.");
 
         var importer = new SnapshotImporter
         {
@@ -290,6 +438,8 @@ public sealed class ExportCommand : Command
             new("game_version", stats.Meta.GameVersion),
             new("seconds", (int)sw.Elapsed.TotalSeconds),
         ]);
+
+        try { File.Delete(progressFile); } catch { /* 留着也无害 */ }
 
         if (!ctx.Args.Flag("keep-temp"))
             try { Directory.Delete(temp, recursive: true); } catch { /* 留着也无害 */ }

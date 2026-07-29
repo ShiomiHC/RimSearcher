@@ -89,6 +89,24 @@ namespace RimSearcher.Contract
 
         /// <summary>ImpliedDefs 批次在 source_file 上留的事实值(03 甲:来源标记是字符串而非文件)。</summary>
         public const string ImpliedDefsSourceFile = "ImpliedDefs";
+
+        // ---- 进度回报(编排侧判「卡住了」的唯一硬判据)----
+        //
+        // 起因:无头跑时游戏若在加载定义**之前**弹一个对话框(缺前置、循环依赖、版本警告),
+        // 它既看不见也点不掉,进程就活着不动。从编排侧看,这与「正在慢慢加载」长得一模一样。
+        // 拿 CPU 占用去猜是**代理指标**,而代理会撒谎 —— 一个真的很慢的 I/O 段会被判成卡死。
+        //
+        // 所以改由游戏侧自己报到哪一步了。判据从「猜它在不在干活」变成
+        // 「它说自己到了哪一步,以及这一步停了多久」。
+
+        /// <summary>进度文件的后缀,贴着导出目标放 —— 编排侧本来就知道那个路径。</summary>
+        public const string ProgressFileSuffix = ".progress";
+
+        /// <summary>Mod 子类构造完成。此时程序集已加载,但**定义还没开始读**。</summary>
+        public const string StageModClasses = "mod-classes";
+
+        /// <summary>定义全部就位,导出开始。到这一步之后再慢就是真在写数据了。</summary>
+        public const string StageExporting = "exporting";
     }
 
     /// <summary>

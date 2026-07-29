@@ -327,7 +327,17 @@ public sealed class ModListSaveCommand : Command
     }
 }
 
-public sealed record InstalledMod(string PackageId, string Name, string Directory);
+public sealed record InstalledMod(string PackageId, string Name, string Directory)
+{
+    /// <summary>
+    /// About.xml 里 <c>modDependencies</c> 声明的硬依赖(含 <c>modDependenciesByVersion</c>)。
+    ///
+    /// 只取这一节。<c>loadAfter</c> / <c>loadBefore</c> 是排序提示,<c>incompatibleWith</c>
+    /// 是反向关系 —— 三者的元素形状跟依赖一模一样,粗暴地全收会把「不兼容」当成「必需」,
+    /// 于是自动补进去一个游戏明确说了不能同时开的 mod。
+    /// </summary>
+    public IReadOnlyList<string> Dependencies { get; init; } = [];
+}
 
 public static class InstalledMods
 {
@@ -347,7 +357,10 @@ public static class InstalledMods
                     var doc = XDocument.Load(about);
                     var id = Find(doc, "packageId");
                     if (string.IsNullOrWhiteSpace(id)) continue;
-                    result.TryAdd(id.Trim(), new InstalledMod(id.Trim(), Find(doc, "name") ?? Path.GetFileName(dir), dir));
+                    result.TryAdd(id.Trim(), new InstalledMod(id.Trim(), Find(doc, "name") ?? Path.GetFileName(dir), dir)
+                    {
+                        Dependencies = ReadDependencies(doc),
+                    });
                 }
                 catch { /* 坏 About.xml 跳过 */ }
             }
@@ -361,6 +374,28 @@ public static class InstalledMods
         if (config.GameDir is { Length: > 0 } g)
             return [Path.Combine(g, "Data"), Path.Combine(g, "Mods")];
         return [];
+    }
+
+    /// <summary>
+    /// <c>modDependencies</c> 与 <c>modDependenciesByVersion</c> 下的每个 <c>&lt;packageId&gt;</c>。
+    /// 后者按游戏版本分组(<c>&lt;v1.6&gt;</c>),这里不挑版本全收 —— 少报一个依赖的代价是
+    /// 一次几十秒的空转加载,多报一个的代价只是列表里多一个本来就装着的 mod。
+    /// </summary>
+    private static List<string> ReadDependencies(XDocument doc)
+    {
+        var ids = new List<string>();
+        foreach (var section in doc.Root?.Elements() ?? [])
+        {
+            var n = section.Name.LocalName;
+            if (!n.Equals("modDependencies", StringComparison.OrdinalIgnoreCase) &&
+                !n.Equals("modDependenciesByVersion", StringComparison.OrdinalIgnoreCase)) continue;
+
+            foreach (var el in section.Descendants())
+                if (el.Name.LocalName.Equals("packageId", StringComparison.OrdinalIgnoreCase) &&
+                    el.Value.Trim() is { Length: > 0 } id)
+                    ids.Add(id.Trim());
+        }
+        return ids;
     }
 
     private static string? Find(XDocument doc, string element)

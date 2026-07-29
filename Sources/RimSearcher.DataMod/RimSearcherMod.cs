@@ -16,6 +16,32 @@ namespace RimSearcher.DataMod
     /// 都已生成(00 论据 1),PatchOperation 也早已应用完 —— 这正是运行时导出相对静态方案的
     /// 全部优势所在的那一刻。
     /// </summary>
+    /// <summary>
+    /// 进度回报。编排侧判「卡住了」全靠这个文件。
+    ///
+    /// 为什么不留给编排侧去猜:无头跑时游戏若在读定义**之前**弹一个点不掉的对话框
+    /// (缺前置、循环依赖、版本警告),进程活着不动,从外面看跟「正在慢慢加载」一模一样。
+    /// 拿 CPU 占用当判据是代理指标,而代理会撒谎。这里由游戏侧直说到了哪一步。
+    ///
+    /// 写不出去就算了 —— 进度回报失败不该让一次导出失败。
+    /// </summary>
+    internal static class Progress
+    {
+        public static void Report(string stage)
+        {
+            string target;
+            if (!GenCommandLine.TryGetCommandLineArg(IntermediateFormat.CommandLineSwitch, out target)) return;
+            if (string.IsNullOrEmpty(target)) return;
+            try
+            {
+                var dir = Path.GetDirectoryName(Path.GetFullPath(target));
+                if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+                File.WriteAllText(target + IntermediateFormat.ProgressFileSuffix, stage);
+            }
+            catch { /* 报不了进度不是失败 */ }
+        }
+    }
+
     [StaticConstructorOnStartup]
     public static class UnattendedExport
     {
@@ -24,6 +50,11 @@ namespace RimSearcher.DataMod
             string target;
             if (!GenCommandLine.TryGetCommandLineArg(IntermediateFormat.CommandLineSwitch, out target))
                 return;
+
+            // 到这一步说明定义已经全部就位 —— 中间那段「加载定义」是对话框最容易卡住的地方,
+            // 走过去了编排侧就该换一套耐心:后面再慢是真在写数据。
+            Progress.Report(IntermediateFormat.StageExporting);
+
             if (string.IsNullOrEmpty(target))
             {
                 Log.Error("[RimSearcher] -" + IntermediateFormat.CommandLineSwitch + " was passed without a path.");
@@ -66,6 +97,10 @@ namespace RimSearcher.DataMod
 
         public RimSearcherMod(ModContentPack content) : base(content)
         {
+            // 这个构造函数跑在 LoadedModManager.CreateModClasses(),而那在 LoadModXML() 之前 ——
+            // 也就是**读定义之前**。编排侧要的正是这个分界点:停在这一步说明连定义都没开始读,
+            // 而那正是缺前置那类对话框卡住的位置;走过去了才轮到导出本身。
+            Progress.Report(IntermediateFormat.StageModClasses);
             _settings = GetSettings<RimSearcherSettings>();
         }
 
