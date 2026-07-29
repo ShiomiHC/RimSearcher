@@ -848,6 +848,28 @@ public class OutputSnapshotTests : IDisposable
         Verify("read_code/single-member", content);
     }
 
+    // extractClass 的类体上限折叠行（`+N more lines ('X' is M lines of a K-line file and the cap
+    // is 2000; ...)`）。全服六处折叠行里唯一没有字节级基线的一形，而它同时是唯一一处「下一步」
+    // 分两支的：这里取的是没传 methodName 那支。
+    //
+    // 类体故意做到恰好越过上限一行：那一行同时钉住 `+1 more lines` ——这一形不走全服共用的
+    // 构词（表头的 entries / lines 都走），见指导文档 §7。
+    [Fact]
+    public async Task ReadCode_ClassCapFold()
+    {
+        // 上限 2000 数的是 classBody.Body 的行数（含类声明行、结尾的 `}` 与尾部空行），
+        // 1997 条填充行恰好把它顶到 2001。
+        var filler = string.Join("\n", Enumerable.Repeat("        // x", 1997));
+        var body = $"namespace Zz\n{{\n    public class ZzHuge\n    {{\n{filler}\n    }}\n}}\n";
+        var (indexer, _, catalog) = BuildIndex(("ZzHuge.cs", body));
+        PathSecurity.Initialize([Path.Combine(_workspace.Root, "Core")]);
+
+        var content = await Run(
+            new ReadCodeTool(indexer, catalog), new { fileName = "ZzHuge.cs", extractClass = "ZzHuge" });
+
+        Verify("read_code/class-cap-fold", content);
+    }
+
     // XML 不该被套进 csharp 围栏
     [Fact]
     public async Task ReadCode_XmlFence()
@@ -888,6 +910,21 @@ public class OutputSnapshotTests : IDisposable
         var content = await Run(new ListDirectoryTool(catalog), new { path = core, limit = 5 });
 
         Verify("list_directory/page-fold", content);
+    }
+
+    // 只剩一项时的分页折叠行。表头那个 `12 entries` 走全服构词、同一份输出里四行之下的
+    // `+1 more entries` 不走——两处数的是同一批东西，见指导文档 §7。
+    [Fact]
+    public async Task ListDirectory_PageFoldSingleRemaining()
+    {
+        var files = Enumerable.Range(0, 12).Select(i => ($"ZzEntry{i:D2}.cs", "// x\n")).ToArray();
+        var (_, _, catalog) = BuildIndex(files);
+        var core = Path.Combine(_workspace.Root, "Core");
+        PathSecurity.Initialize([core]);
+
+        var content = await Run(new ListDirectoryTool(catalog), new { path = core, limit = 11 });
+
+        Verify("list_directory/page-fold-single", content);
     }
 
     // ================= inspect =================
