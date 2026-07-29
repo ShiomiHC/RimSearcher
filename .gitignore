@@ -28,6 +28,4 @@ Thumbs.db
 *.log
 /config.toml
 # 三份「指导」是活的施工文档，进仓；输出审计那批历史记录不进（cdc4aa6 删过一次）。
-/Docs/*
-!/Docs/*指导.md
-!/Docs/注释语义偏离排查.md
+/Docs/
