@@ -915,6 +915,81 @@ public sealed class SnapshotDb : IDisposable
                      new Dictionary<string, object?> { ["@p"] = parentName });
 
     /// <summary>
+    /// 一个具名节点底下,**别的**后代 def 里有多少条带着某个字段路径、其中多少条的值
+    /// 与给定值逐字相同。
+    ///
+    /// 起因(第六轮 C31,「这个值是哪一层写的」完全无解):<c>get</c> 给的是合并后的值,
+    /// <c>inherit</c> 明说抽象节点在快照里没有自己的字段表 —— 两条命令各自诚实,
+    /// 拼起来正面答不了「Mass 是 BuildingBase 写的还是这个 def 自己写的」。而这是抄
+    /// vanilla 的人最常问的一件事。
+    ///
+    /// 快照里没有「哪一层声明了它」这条事实(游戏在 <c>LoadAllActiveMods</c> 末尾就把继承
+    /// 解完丢了),但它**推得出来**:某一层若真声明了这个字段,它的后代应当**都**带着;
+    /// 后代里有一条不带,那一层就没声明。这里只出数,推论留给读的人 —— 工具替读的人
+    /// 下结论,读的人就没法判断这个结论有多硬。
+    ///
+    /// <paramref name="pathFilter"/> 用子串语义,与 <c>get --path</c> 同一套:同一个词
+    /// 在两条命令里选中同一批字段,否则两边的数对不上账而没人看得出为什么。
+    /// </summary>
+    /// <param name="exclude">排除掉的那个 def(问的就是它,算进分母会把每一层都撑成非零)。</param>
+    /// <remarks>
+    /// 回传的 <c>Truncated</c> 是分母里有几条的字段表在导出时被截过 —— 那种 def 会
+    /// 「没有这条路径」而其实有,正好是让一层被误判成「没声明」的那个方向。整库的截断数
+    /// (<see cref="TruncatedDefCount"/>)在这里没用:它恒为非零,而恒真的免责声明会被学着跳过。
+    /// </remarks>
+    public (int Descendants, int WithPath, int SameValue, int Truncated) Witnesses(
+        string ancestorName, string pathFilter, string? value, (string DefName, string DefType)? exclude)
+    {
+        var p = new Dictionary<string, object?>
+        {
+            ["@root"] = ancestorName,
+            ["@f"] = "%" + Escape(pathFilter) + "%",
+        };
+
+        // 自环与 XML 里写得出的环由 UNION(而非 UNION ALL)吃掉:去重之后递归自然收敛。
+        var cte =
+            "WITH RECURSIVE anc(name) AS ( " +
+            "  SELECT @root " +
+            "  UNION " +
+            "  SELECT n.name FROM xml_nodes n JOIN anc a ON n.parent_name = a.name COLLATE NOCASE " +
+            "   WHERE n.name IS NOT NULL AND n.name <> '' " +
+            "), kin(id) AS ( " +
+            "  SELECT DISTINCT d.id FROM xml_nodes x " +
+            "    JOIN defs d ON d.def_name = x.def_name COLLATE NOCASE " +
+            "   WHERE x.def_name IS NOT NULL AND x.def_name <> '' " +
+            "     AND x.parent_name COLLATE NOCASE IN (SELECT name FROM anc) " +
+            // 关联口径与 get 的 inherits_from 同源:`xml_nodes.def_type` 是 XML 根元素名,
+            // `defs.def_type` 是桶名,两者会不一致(异构桶)。硬要求相等会把整批异构桶的
+            // 后代丢出分母 —— 分母小了,每一层都更容易看着「全都带」。先要相等的,
+            // 名字没有歧义时才回退到唯一候选;有歧义又对不上,宁可不算(算错的比不算更坏)。
+            "     AND (d.def_type = x.def_type COLLATE NOCASE " +
+            "          OR (SELECT COUNT(*) FROM defs d2 WHERE d2.def_name = x.def_name COLLATE NOCASE) = 1) ";
+        if (exclude is { } ex)
+        {
+            p["@xn"] = ex.DefName; p["@xt"] = ex.DefType;
+            cte += "     AND NOT (d.def_name = @xn COLLATE NOCASE AND d.def_type = @xt) ";
+        }
+        cte += ") ";
+
+        // 三个数一趟取回:分母、带这条路径的、值也一样的。分开跑三趟的话递归 CTE 也跑三趟,
+        // 而 BuildingBase 这种量级的后代集是这条命令里最贵的一件事。
+        var same = value is null
+            ? "0"
+            : "(SELECT COUNT(DISTINCT fv.def_id) FROM field_values fv JOIN kin k ON k.id = fv.def_id " +
+              "  WHERE fv.path LIKE @f ESCAPE '\\' AND fv.value = @v COLLATE NOCASE)";
+        if (value is not null) p["@v"] = value;
+
+        using var rd = Query(
+            cte + "SELECT (SELECT COUNT(*) FROM kin), " +
+            "(SELECT COUNT(DISTINCT fv.def_id) FROM field_values fv JOIN kin k ON k.id = fv.def_id " +
+            $" WHERE fv.path LIKE @f ESCAPE '\\'), {same}, " +
+            "(SELECT COUNT(*) FROM kin k JOIN defs d ON d.id = k.id WHERE d.fields_truncated > 0)", p);
+        return rd.Read()
+            ? (rd.GetInt32(0), rd.GetInt32(1), rd.GetInt32(2), rd.GetInt32(3))
+            : (0, 0, 0, 0);
+    }
+
+    /// <summary>
     /// 具名节点的模糊候选池。零结果时用它分流:名字打错了,还是这个环境里真没有。
     /// </summary>
     public IReadOnlyList<string> AllXmlNodeNames()

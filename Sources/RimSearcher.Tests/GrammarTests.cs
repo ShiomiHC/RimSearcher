@@ -1819,4 +1819,107 @@ public class GrammarTests
         Assert.Equal(2, code);
         Assert.Contains("... --json'.", err, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// 第六轮 C31:「这个值是哪一层写的」完全无解 —— <c>get</c> 给合并后的值,<c>inherit</c>
+    /// 明说抽象节点在快照里没有自己的字段表,两条命令各自诚实、拼起来正面答不了。绕法
+    /// (证人兄弟法)可靠但要自己发明。<c>inherit --path</c> 把那个绕法收进命令,而它的
+    /// 全部价值就在**分母**上:分母算错,每一层都看着「后代全都带」,于是每一层都像声明者。
+    ///
+    /// 两个方向各有各的错法,红法也不同:
+    ///   ① 被问的那个 def 算进自己的分母 —— 它当然带着这条路径,于是最近那一层
+    ///      恒为「1 of 1」,而那正是读的人最想拿来定罪的一行。
+    ///   ② 异构桶的后代掉出分母 —— <c>xml_nodes.def_type</c> 是 XML 根元素名,
+    ///      <c>defs.def_type</c> 是桶名,硬要求相等会把整批异构桶的后代丢掉(R2 已经
+    ///      为 inherits_from 踩过同一脚)。分母小了,结论就往「是这一层」偏。
+    /// </summary>
+    [Fact]
+    public void 证人的分母既不算上自己也不许漏掉异构桶的后代()
+    {
+        var (json, _, _) = Fixture.Run("inherit", "Bullet_Revolver", "--path", "thingClass", "--json");
+        var rows = System.Text.Json.JsonDocument.Parse(json).RootElement
+                      .GetProperty("nodes")[0].GetProperty("witnesses");
+
+        static (int Others, int WithPath) Row(System.Text.Json.JsonElement rows, string layer)
+        {
+            foreach (var r in rows.EnumerateArray())
+                if (r.GetProperty("layer").GetString() == layer)
+                    return (r.GetProperty("other_defs").GetInt32(), r.GetProperty("with_path").GetInt32());
+            throw new Xunit.Sdk.XunitException($"witnesses 表里没有 '{layer}' 这一层");
+        }
+
+        // BaseBullet 名下只有 Bullet_Revolver 一个后代,而它就是被问的那个 —— 分母是 0,
+        // 不是 1。是 1 的话这一层看着「1 of 1 全都带」,读的人当场把它当成声明者。
+        Assert.Equal((0, 0), Row(rows, "BaseBullet"));
+
+        // BaseProjectile 名下除 Bullet_Revolver 外还有两个:ThingDef 的 Firefoam,以及
+        // VariantOne —— 后者的 XML 根元素是 TestVariantDef 而 def 落在 TestBaseDef 桶。
+        // 少了它就是 (1, 1),一个「全都带」的假证词。
+        Assert.Equal((2, 1), Row(rows, "BaseProjectile"));
+    }
+
+    /// <summary>
+    /// 参照值不在场时,<c>same_value</c> 这一列整个不出。
+    ///
+    /// 抽象节点自己没有字段表,于是没有「这个 def 上的那个值」可比。照印一列恒为 0 的数,
+    /// 读起来是「一个兄弟都不同意」—— 一个比不印强烈得多的结论,而它是凭空的。
+    /// 这是「错的输出与对的输出同形」的又一例:0 既可以是量过为零,也可以是没量。
+    /// </summary>
+    [Fact]
+    public void 没有参照值时证人表不许印一列恒零的同值数()
+    {
+        static System.Text.Json.JsonElement Witnesses(string json)
+            => System.Text.Json.JsonDocument.Parse(json).RootElement
+                  .GetProperty("nodes")[0].GetProperty("witnesses");
+
+        var (abstractNode, _, _) = Fixture.Run("inherit", "BaseBullet", "--path", "thingClass", "--json");
+        foreach (var r in Witnesses(abstractNode).EnumerateArray())
+            Assert.False(r.TryGetProperty("same_value", out _),
+                "抽象节点没有自己的值可比,same_value 不该在场");
+
+        // 反向:有参照值的那一侧必须有这一列,否则上面那条断言换成「永远不印」也照样绿。
+        var (concrete, _, _) = Fixture.Run("inherit", "Bullet_Revolver", "--path", "thingClass", "--json");
+        foreach (var r in Witnesses(concrete).EnumerateArray())
+            Assert.True(r.TryGetProperty("same_value", out _), "有参照值时 same_value 必须在场");
+    }
+
+    /// <summary>
+    /// 截断那条免责说的是**这个分母里**有几条被截,不是整库有几条。
+    ///
+    /// 字段表在导出时被截过的 def 会「没有这条路径」而其实有 —— 正好是让一层被误判成
+    /// 「没声明」的那个方向,所以这句话非说不可。但拿整库的数来说就恒为非零,而恒真的
+    /// 免责声明会被学着跳过(00 论据 3),那句话也就等于没说。
+    /// </summary>
+    [Fact]
+    public void 截断免责只在这次的分母真被截时才说()
+    {
+        const string Caveat = "counted in other_defs had the field list cut short";
+
+        // Bullet_Revolver 的字段表被截过(fields_truncated = 3),而 BaseBullet 名下的
+        // 分母里正好有它 —— 这一句要出。
+        var (withTruncated, _, _) = Fixture.Run("inherit", "BaseBullet", "--path", "thingClass");
+        Assert.Contains(Caveat, withTruncated, StringComparison.Ordinal);
+
+        // 换成问 Bullet_Revolver 自己,它被排除在分母外,剩下的两条都没被截 —— 不许出。
+        // 整库照旧有被截的 def,所以拿整库计数的实现在这一格就是红的。
+        var (clean, _, _) = Fixture.Run("inherit", "Bullet_Revolver", "--path", "thingClass");
+        Assert.DoesNotContain(Caveat, clean, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 证人表必须自己说破逆命题不成立。
+    ///
+    /// 「with_path 追平 other_defs」只与「这一层声明了它」相容,并不蕴含它 —— 每个后代
+    /// 各写各的一份,印出来逐字相同。实测 vanilla 的 <c>BaseBullet --path damageAmountBase</c>
+    /// 就是 61 of 61,而 61 个子弹各写各的伤害;same_value 只有 9 才是那句话的证据。
+    /// 一张只出数不说读法的表,读的人默认会往强的那边读。
+    /// </summary>
+    [Fact]
+    public void 证人表要说破全都带着并不等于这一层写的()
+    {
+        var (text, _, _) = Fixture.Run("inherit", "Bullet_Revolver", "--path", "thingClass");
+        Assert.Contains("The converse does not hold", text, StringComparison.Ordinal);
+        Assert.Contains("every descendant writing the field separately", text, StringComparison.Ordinal);
+    }
+
 }

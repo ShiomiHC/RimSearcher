@@ -42,12 +42,26 @@ public sealed class InheritCommand : Command
                 Help = "A Name= of an XML node, or the defName of a def. Both are looked up.",
             },
         ],
-        Options = [CommonOptions.Limit("children")],
+        Options =
+        [
+            CommonOptions.Limit("children"),
+            new OptionSpec
+            {
+                Name = "path",
+                Aliases = ["field", "fieldPath"],
+                Placeholder = "<text>",
+                Help = "Ask which layer a field comes from. For every layer in the chain, count the other defs " +
+                       "descending from it that carry a field path containing this text, and how many of those " +
+                       "carry the same value. Matching is the substring match 'get --path' uses, so the same " +
+                       "word selects the same fields in both commands.",
+            },
+        ],
         Examples =
         [
             "rimsearcher inherit BaseBullet",
             "rimsearcher inherit Bullet_Revolver",
             "rimsearcher inherit BaseHumanlike --limit all",
+            "rimsearcher inherit Bullet_Revolver --path damageAmountBase",
         ],
         JsonKeys =
         [
@@ -55,7 +69,7 @@ public sealed class InheritCommand : Command
             {
                 Key = "nodes",
                 What = "one object per XML node answering to the name — each with 'node' (identity and patch " +
-                       "count), 'ancestors' and, when it has any, 'children'.",
+                       "count), 'ancestors', 'children' when it has any, and 'witnesses' when --path is given.",
             },
         ],
     };
@@ -105,6 +119,7 @@ public sealed class InheritCommand : Command
         }
 
         var limit = ctx.Limit();
+        var pathFilter = ctx.Args.Value("path");
 
         foreach (var node in nodes)
         {
@@ -171,6 +186,8 @@ public sealed class InheritCommand : Command
                     "The mod that defines it was not enabled when the snapshot was taken, so what it " +
                     "contributed is not visible here.");
 
+            if (pathFilter is { Length: > 0 }) Witnesses(ctx, node, chain, pathFilter);
+
             if (node.Name is { Length: > 0 })
             {
                 var children = ctx.Db.NodesInheritingFrom(node.Name);
@@ -226,4 +243,130 @@ public sealed class InheritCommand : Command
 
         return 0;
     }
+
+    /// <summary>
+    /// 「这个值是哪一层写的」—— 证人兄弟法。
+    ///
+    /// 第六轮 C31:<c>get</c> 给合并后的值,本命令明说抽象节点在快照里没有自己的字段表,
+    /// 两条命令各自诚实、拼起来正面答不了这个问题。而抄 vanilla 的人最常问的就是它。
+    ///
+    /// 快照里确实没有「哪一层声明了它」这条事实,但它推得出来:某一层若真声明了这个字段,
+    /// 它的后代应当**都**带着;后代里有一条不带,那一层就没声明。这里出数,不下结论 ——
+    /// 工具替读的人下结论,读的人就没法判断这个结论有多硬,而这条推论恰恰是有洞的
+    /// (子节点可以覆写,导出时字段表可能被截)。洞逐条说破,判断权留在外面。
+    /// </summary>
+    private static void Witnesses(CommandContext ctx, XmlNodeRow node,
+                                  IReadOnlyList<XmlNodeRow> chain, string pathFilter)
+    {
+        // 只有具名节点才有「后代」这回事 —— 无 Name= 的节点谁也继承不了它。
+        var layers = new List<XmlNodeRow>();
+        if (node.Name is { Length: > 0 }) layers.Add(node);
+        layers.AddRange(chain.Where(n => n.Name is { Length: > 0 }));
+
+        if (layers.Count == 0)
+        {
+            ctx.Report.Notice(NoticeKind.Boundary,
+                $"'{node.DefName ?? node.Name}' declares no Name= and inherits from no node that does, so there " +
+                "is no layer above it to test: whatever it carries, it carries by itself.");
+            return;
+        }
+
+        // 参照值 —— 问的那个 def 自己在这条路径上装着什么。没有参照值时 same_value 这一列
+        // 整个不出:印一列恒为 0 的数比不印更坏,它看起来像「一个兄弟都不同意」。
+        string? reference = null;
+        (string DefName, string DefType)? exclude = null;
+        if (node.DefName is { Length: > 0 })
+        {
+            var self = ctx.Db.GetDefsNamed(node.DefName)
+                          .FirstOrDefault(d => string.Equals(d.DefType, node.DefType, StringComparison.OrdinalIgnoreCase));
+            if (self is not null)
+            {
+                exclude = (self.DefName, self.DefType);
+                var fields = ctx.Db.Fields(self.Id, int.MaxValue, [pathFilter]);
+                var values = fields.Rows.Select(r => r.Value ?? "").Distinct(StringComparer.Ordinal).ToList();
+
+                if (values.Count == 1)
+                {
+                    reference = values[0];
+                    ctx.Report.Notice(NoticeKind.Filter,
+                        $"'{self.DefName}' carries {Tally.Complete(fields.Rows.Count).Render("field")} matching " +
+                        $"'{pathFilter}', all reading {Quote(reference)} — that is the value the counts below " +
+                        "are compared against.");
+                }
+                else if (values.Count == 0)
+                {
+                    ctx.Report.Notice(NoticeKind.Boundary,
+                        $"'{self.DefName}' itself carries no field path containing '{pathFilter}', so there is no " +
+                        "value of its own to compare against; the counts below say which layers' descendants " +
+                        "carry one at all.");
+                }
+                else
+                {
+                    ctx.Report.Notice(NoticeKind.Boundary,
+                        $"'{self.DefName}' carries {Tally.Complete(values.Count).Render("value")} matching " +
+                        $"'{pathFilter}' ({NameList.Render(values.Select(Quote).ToList(), 4)}), so there is no " +
+                        "single value to compare against. Narrow --path until one is left.");
+                }
+            }
+        }
+
+        var columns = reference is null
+            ? new List<string> { "layer", "other_defs", "with_path" }
+            : ["layer", "other_defs", "with_path", "same_value"];
+
+        var rows = new List<IReadOnlyDictionary<string, object?>>();
+        var truncated = 0;
+        foreach (var layer in layers)
+        {
+            var w = ctx.Db.Witnesses(layer.Name!, pathFilter, reference, exclude);
+            truncated = Math.Max(truncated, w.Truncated);
+            var row = new Dictionary<string, object?>
+            {
+                ["layer"] = layer.Name,
+                ["other_defs"] = w.Descendants,
+                ["with_path"] = w.WithPath,
+            };
+            if (reference is not null) row["same_value"] = w.SameValue;
+            rows.Add(row);
+        }
+
+        ctx.Report.Table("witnesses", columns, rows);
+
+        // 数怎么读,说一次。不说的话这张表就是三四列没有单位的整数。
+        ctx.Report.Notice(NoticeKind.NextStep,
+            $"Each row counts the other defs descending from that layer: how many carry a field path containing " +
+            $"'{pathFilter}'" + (reference is null ? "" : ", and how many of those read the same value") +
+            ". A layer that declares a field passes it to every descendant, so a layer whose with_path falls " +
+            "short of other_defs is not the one declaring this field. The snapshot stores no 'declared here' " +
+            "fact — the game resolves inheritance while loading and then discards it — so these counts are what " +
+            "the answer has to be read off.");
+
+        // 逆命题不成立,而这张表长得很像在给逆命题作证 —— 不说破的话,「61 of 61」会被
+        // 直接读成「这一层写的」,而每个后代各写各的一份长得一模一样。
+        ctx.Report.Notice(NoticeKind.Boundary,
+            "The converse does not hold: with_path reaching other_defs is equally consistent with every " +
+            "descendant writing the field separately" +
+            (reference is null
+                ? ", which no count here tells apart. Give a def rather than an abstract node to get the " +
+                  "same_value column, which does."
+                : ". The same_value column is what tells the two apart — one shared value points at the layer, " +
+                  "a spread of values points at each def writing its own."));
+
+        ctx.Report.Notice(NoticeKind.Boundary,
+            "A descendant that overrides the field still counts in with_path" +
+            (reference is null ? "" : " but not in same_value") + ", so the columns differing means overriding, " +
+            "not absence. And field values here are the merged, post-patch ones, so a PatchOperation that added " +
+            "this field to many defs is indistinguishable from a layer declaring it.");
+
+        // 导出时被截字段表的 def 会「没有这条路径」而其实有 —— 那正好是让一层被误判成
+        // 「没声明」的方向。数的是分母里的那些,不是整库:整库的数恒为非零,而恒真的
+        // 免责声明会被学着跳过。
+        if (truncated > 0)
+            ctx.Report.Notice(NoticeKind.Boundary,
+                $"{Tally.Complete(truncated).Render("def")} counted in other_defs had the field list cut short " +
+                "at export, so any of those can miss with_path for that reason alone — the direction that makes " +
+                "a layer look innocent.");
+    }
+
+    private static string Quote(string v) => v.Length == 0 ? "an empty value" : $"'{v}'";
 }

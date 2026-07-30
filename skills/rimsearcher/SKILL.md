@@ -27,6 +27,7 @@ is the only command that reads it, and it says so.
 | What fields does this def type have? | `rimsearcher fields <DefType>` |
 | Everything of one kind | `rimsearcher list <DefType>` |
 | What does this inherit from / what inherits from it? | `rimsearcher inherit <name>` |
+| Which layer of the chain writes this field? | `rimsearcher inherit <def> --path <field>` |
 | What does this method do? | `mcp__decompiler__get_decompiled_source` |
 | Who calls it / what does it override / what derives from it? | `mcp__decompiler__find_callers`, `get_overrides`, `find_derived_types` |
 | Where is this type? | `mcp__decompiler__search_types` |
@@ -270,7 +271,7 @@ the tool instead, where the counts stay honest:
 | `values` | `--type`, `--scope`, `--offset`, `--limit` |
 | `search` | `--type`, `--scope`, `--offset`, `--limit` |
 | `list` | `--class`, `--scope`, `--offset`, `--limit` |
-| `inherit` | `--limit` |
+| `inherit` | `--path`, `--limit` |
 | `find` | `--scope`, `--exact`, `--offset`, `--limit` |
 | `code-search` | `--source`, `--files`, `--max-files`, `--max-per-file`, `--limit` |
 | `read` | `--member`, `--type`, `--lines`, `--outline`, `--limit` |
@@ -351,5 +352,13 @@ resolved to whenever it is more than one mod.
   inheritance layer instead, which is read from the mods' XML. `get` recognises a name that
   lives only there and says so rather than reporting it absent.
   For the C# side of a hierarchy, `mcp__decompiler__find_derived_types`.
+- **You want to know which layer a value came from.** `get` gives the merged value and the
+  inheritance layer has no field table of its own, so neither command answers it head-on — the
+  snapshot does not record where a field was declared. `rimsearcher inherit <def> --path <field>`
+  computes the evidence instead: for each layer in the chain it counts the *other* defs
+  descending from it, how many carry that field, and how many carry the same value. A layer whose
+  `with_path` falls short of `other_defs` is not the one declaring it. The reverse does not
+  follow — every descendant writing the field separately looks the same — which is what the
+  `same_value` column tells apart.
 - **Use text search last, not first.** `find` and `values` answer from resolved data and are
   exact; `code-search` is text and matches identically-named things from unrelated types.

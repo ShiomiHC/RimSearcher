@@ -364,12 +364,13 @@ What is shown is the XML before PatchOperations are applied. Each node that decl
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n|all> | How many children to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+| `--path` <text> | Ask which layer a field comes from. For every layer in the chain, count the other defs descending from it that carry a field path containing this text, and how many of those carry the same value. Matching is the substring match 'get --path' uses, so the same word selects the same fields in both commands. | `--field`, `--fieldPath` |
 
 `--json` keys, besides the global `notes`:
 
 | Key | Holds |
 |---|---|
-| `nodes` | one object per XML node answering to the name — each with 'node' (identity and patch count), 'ancestors' and, when it has any, 'children'. |
+| `nodes` | one object per XML node answering to the name — each with 'node' (identity and patch count), 'ancestors', 'children' when it has any, and 'witnesses' when --path is given. |
 
 Examples:
 
@@ -377,6 +378,7 @@ Examples:
 rimsearcher inherit BaseBullet
 rimsearcher inherit Bullet_Revolver
 rimsearcher inherit BaseHumanlike --limit all
+rimsearcher inherit Bullet_Revolver --path damageAmountBase
 ```
 
 ## `list`
