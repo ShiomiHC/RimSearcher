@@ -658,6 +658,34 @@ public sealed class SnapshotDb : IDisposable
         return (paths, pathTotal, types, covered);
     }
 
+    /// <summary>
+    /// 这些 (路径, 值) 里,哪些在同类型的 def 上是**大多数都有的那个值**,以及有多少个。
+    ///
+    /// 答的是 <c>code_default</c> 那一列答不了的问题:<c>no</c> 只证得了「与刚 new 出来的
+    /// 实例不同」,读的人却一律读成「有人给这个 def 挑了这个值」。3538 分之 2658 是可核对的
+    /// 事实,而「谁挑的」在这份快照里没有产地(见 shared_values 的建表注释)。
+    ///
+    /// 走预计算表 —— 现算要 0.5s,而 <c>get</c> 整条现在是 0.156s。
+    /// </summary>
+    public IReadOnlyDictionary<(string Path, string Value), int> SharedValues(
+        string defType, IEnumerable<(string Path, string? Value)> rows)
+    {
+        var want = new HashSet<(string, string)>();
+        foreach (var (path, value) in rows)
+            if (value is not null) want.Add((path, value));
+        var found = new Dictionary<(string, string), int>();
+        if (want.Count == 0) return found;
+
+        using var rd = Query("SELECT path, value, defs FROM shared_values WHERE def_type = @t COLLATE NOCASE",
+                             new Dictionary<string, object?> { ["@t"] = defType });
+        while (rd.Read())
+        {
+            var key = (rd.GetString(0), rd.IsDBNull(1) ? "" : rd.GetString(1));
+            if (want.Contains(key)) found[key] = rd.GetInt32(2);
+        }
+        return found;
+    }
+
     /// <summary>某个 def 类型在本作用域下的 def 总数 —— 覆盖率的分母。</summary>
     public int CountDefsOfType(string defType, ScopeFilter scope)
     {

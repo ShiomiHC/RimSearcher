@@ -13,8 +13,9 @@ public static class SnapshotSchema
     /// 3:加了 xml_nodes 继承层。
     /// 4:field_values 加了 is_default —— 一条值与 C# 声明默认值的关系(R1)。
     /// 5:加了 keyed 表 —— 界面文案那一层译文。
+    /// 6:加了 shared_values —— 一条值在同类型里有多普遍(第八轮 ep34)。
     /// </remarks>
-    public const int Version = 5;
+    public const int Version = 6;
 
     public const string MetaKeySchemaVersion = "schema_version";
     public const string MetaKeyRaw = "export_meta_json";
@@ -104,6 +105,29 @@ public static class SnapshotSchema
             patch_ops   INTEGER NOT NULL DEFAULT 0
         );
 
+        -- 一条「与新实例不同」的值,在同类型的 def 里有多普遍。
+        --
+        -- 非有它不可:code_default 那一列能证的只有「与刚 new 出来的实例不同」,而读的人
+        -- 一律读成「有人给这个 def 挑了这个值」。第八轮 ep34 就栽在这:
+        -- `soundImpactDefault  BulletImpact_Ground  no` —— 四条线索全指向「这就是命中音的
+        -- 挂点」,而真相是 ThingDef.ResolveReferences 给**每一个** ThingDef 都塞了这个值。
+        -- 那是本轮最贵的一次险出错(cost 3)。
+        --
+        -- 为什么是这张表而不是导出侧多采一次:要分辨「XML 写的」与「引擎事后填的」得在
+        -- ResolveReferences 前后各取一次值,而导出跑在 StaticConstructorOnStartup,那时
+        -- resolve 早已做完;要插进去只能上 Harmony,而 DataMod 是刻意无依赖的
+        -- (vanilla 快照只有 2 个 mod,里面没有 Harmony)。所以不猜成因,只报**可核对的
+        -- 事实**:这个值同类型里有多少个 def 也是它。3538 分之 2658,读的人自己判。
+        --
+        -- 只收「过半且不少于 8 个」的组 —— 类型只有三五个 def 时「大多数」不成话。
+        -- 实测全库 1303 行,一次扫 1.0s。
+        CREATE TABLE shared_values (
+            def_type TEXT NOT NULL,
+            path     TEXT NOT NULL,
+            value    TEXT,
+            defs     INTEGER NOT NULL
+        );
+
         CREATE TABLE mods (
             ordinal    INTEGER PRIMARY KEY,
             package_id TEXT NOT NULL,
@@ -137,6 +161,7 @@ public static class SnapshotSchema
         CREATE INDEX idx_xn_name    ON xml_nodes(name);
         CREATE INDEX idx_xn_parent  ON xml_nodes(parent_name);
         CREATE INDEX idx_xn_defname ON xml_nodes(def_name);
+        CREATE INDEX idx_sv_type    ON shared_values(def_type);
         """;
 
     public static void Create(SqliteConnection db)

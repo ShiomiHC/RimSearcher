@@ -1,7 +1,8 @@
 $ rimsearcher get Apparel_ShieldBelt --path comps
 exit 0
 --- stdout ---
-Matching 'comps': 3 fields, out of 6 fields on the def.
+Matching 'comps': 3 fields, out of 10 fields on the def.
+No value above is one that most of the 9 ThingDefs in this snapshot also carry, so none of them is a class-wide default showing through 'code_default'.
 
 def_name     Apparel_ShieldBelt
 def_type     ThingDef

@@ -192,6 +192,13 @@ public static class Fixture
         //   没有任何人在 XML 里挑过它;而 energyMax 是作者写的。两条挨在一起、在旧输出里
         //   逐字同形,正是四个错结论的产地。
         Def("ThingDef", "Apparel_ShieldBelt", "shield belt", "ludeon.rimworld", "Apparel_Belts.xml", false, 0,
+            // 引擎级默认:ThingDef.ResolveReferences 给**每一个** ThingDef 都塞这个值,
+            // 于是 code_default 印 no 而没有任何人挑过它。第八轮 ep34 全场最贵的一次
+            // 险出错就在这上面 —— 九个 ThingDef 全都带着它,shared_values 才有落点。
+            ("soundImpactDefault", "BulletImpact_Ground", DefaultState.Differs),
+            ("soundDrop", "Standard_Drop", DefaultState.Differs),
+            ("soundPickup", "Standard_Pickup", DefaultState.Differs),
+            ("soundInteract", "Standard_Pickup", DefaultState.Differs),
             ("thingClass", "RimWorld.Apparel", DefaultState.Differs),
             ("comps[0].compClass", "RimWorld.CompShield", DefaultState.Same),
             ("comps[0].props.energyMax", "0.5", DefaultState.Differs),
@@ -212,6 +219,10 @@ public static class Fixture
         // 它必须在语料里,否则「--path 点了名的东西不许被过滤掉」那道闸没有落点。
         // speed 取 Unknown —— 三态里最容易被顺手并进某一边的那个。
         Def("ThingDef", "Bullet_Revolver", "revolver bullet", "ludeon.rimworld", "Projectiles_Guns.xml", false, 3,
+            ("soundImpactDefault", "BulletImpact_Ground", DefaultState.Differs),
+            ("soundDrop", "Standard_Drop", DefaultState.Differs),
+            ("soundPickup", "Standard_Pickup", DefaultState.Differs),
+            ("soundInteract", "Standard_Pickup", DefaultState.Differs),
             ("thingClass", "RimWorld.Bullet", DefaultState.Differs),
             ("projectile.damageAmountBase", "12", DefaultState.Differs),
             ("projectile.burstCount", "1", DefaultState.Same),
@@ -219,6 +230,10 @@ public static class Fixture
 
         Def("ThingDef", "Meat_Muffalo", "muffalo meat", "ludeon.rimworld",
             IntermediateFormat.ImpliedDefsSourceFile, true, 0,
+            ("soundImpactDefault", "BulletImpact_Ground", DefaultState.Differs),
+            ("soundDrop", "Standard_Drop", DefaultState.Differs),
+            ("soundPickup", "Standard_Pickup", DefaultState.Differs),
+            ("soundInteract", "Standard_Pickup", DefaultState.Differs),
             ("thingClass", "Verse.ThingWithComps", DefaultState.Differs),
             ("ingestible.foodType", "Meat", DefaultState.Differs));
 
@@ -230,6 +245,10 @@ public static class Fixture
             ("comps[0].compClass", "Verse.HediffComp_Disappears", DefaultState.Differs));
 
         Def("ThingDef", "TestModGun", "test gun", "test.mod", "Guns.xml", false, 0,
+            ("soundImpactDefault", "BulletImpact_Ground", DefaultState.Differs),
+            ("soundDrop", "Standard_Drop", DefaultState.Differs),
+            ("soundPickup", "Standard_Pickup", DefaultState.Differs),
+            ("soundInteract", "Standard_Pickup", DefaultState.Differs),
             ("thingClass", "RimWorld.Apparel", DefaultState.Differs),
             // 列表元素的运行时类型(导出器 0.2.0 起发的那一维,第七轮 T1)。这是主快照里
             // 唯一一条 `.Class`,而 other 那份标着 0.1.0 —— 于是「量过了、没人用」与
@@ -249,6 +268,10 @@ public static class Fixture
         // 导入侧原先按 defName 建「名字 → 单个 id」的表,后写的顶掉先写的,于是译文会绑到
         // 后写的 StatDef 上 —— 反过来写,同一份错代码就碰巧绑对了,闸也就白立了。
         Def("ThingDef", "Firefoam", "firefoam", "ludeon.rimworld", "Buildings_Special.xml", false, 0,
+            ("soundImpactDefault", "BulletImpact_Ground", DefaultState.Differs),
+            ("soundDrop", "Standard_Drop", DefaultState.Differs),
+            ("soundPickup", "Standard_Pickup", DefaultState.Differs),
+            ("soundInteract", "Standard_Pickup", DefaultState.Differs),
             ("thingClass", "RimWorld.Building", DefaultState.Differs),
             ("statBases[0].stat", "MarketValue", DefaultState.Differs));
 
@@ -262,15 +285,31 @@ public static class Fixture
         // ② statFactors 这一条让 `find stat MarketValue` 横跨两种路径形状 —— C31 的
         //    静默假阴性:1229 行里混着 1 行 statFactors,而拿它做集合差的人不会逐行核对 path。
         Def("ThingDef", "FoamPopper", "firefoam", "ludeon.rimworld", "Buildings_Special.xml", false, 0,
+            ("soundImpactDefault", "BulletImpact_Ground", DefaultState.Differs),
+            ("soundDrop", "Standard_Drop", DefaultState.Differs),
+            ("soundPickup", "Standard_Pickup", DefaultState.Differs),
+            ("soundInteract", "Standard_Pickup", DefaultState.Differs),
             ("thingClass", "RimWorld.Building", DefaultState.Differs),
             ("statFactors[0].stat", "MarketValue", DefaultState.Differs));
 
         // 三级匹配的语料:查 "VoidNode" 时 FTS 命中前两个(词首对齐),第三个只有子串扫描找得到。
         // 混合命中是「N of M 的 M 不许随 --limit 变」那道闸唯一的落点 —— 少了它,
         // 「把没显示出来的 FTS 命中当成新增」与「先截断再累加」两个方向的错都没人守。
-        Def("ThingDef", "VoidNode", "void node", "test.mod", "Anomaly.xml", false, 0);
-        Def("ThingDef", "VoidNodeShard", "void node shard", "test.mod", "Anomaly.xml", false, 0);
-        Def("ThingDef", "GleamingVoidNode", "gleaming void node", "test.mod", "Anomaly.xml", false, 0);
+        Def("ThingDef", "VoidNode", "void node", "test.mod", "Anomaly.xml", false, 0,
+            ("soundImpactDefault", "BulletImpact_Ground", DefaultState.Differs),
+            ("soundDrop", "Standard_Drop", DefaultState.Differs),
+            ("soundPickup", "Standard_Pickup", DefaultState.Differs),
+            ("soundInteract", "Standard_Pickup", DefaultState.Differs));
+        Def("ThingDef", "VoidNodeShard", "void node shard", "test.mod", "Anomaly.xml", false, 0,
+            ("soundImpactDefault", "BulletImpact_Ground", DefaultState.Differs),
+            ("soundDrop", "Standard_Drop", DefaultState.Differs),
+            ("soundPickup", "Standard_Pickup", DefaultState.Differs),
+            ("soundInteract", "Standard_Pickup", DefaultState.Differs));
+        Def("ThingDef", "GleamingVoidNode", "gleaming void node", "test.mod", "Anomaly.xml", false, 0,
+            ("soundImpactDefault", "BulletImpact_Ground", DefaultState.Differs),
+            ("soundDrop", "Standard_Drop", DefaultState.Differs),
+            ("soundPickup", "Standard_Pickup", DefaultState.Differs),
+            ("soundInteract", "Standard_Pickup", DefaultState.Differs));
 
         // 异构桶:两个 def 的 def_type 都是 TestBaseDef,运行时 class 却不同。
         DefAs("TestBaseDef", "Verse.TestVariantDef", "VariantOne", "variant one", "test.mod", "Variants.xml", false, 0,

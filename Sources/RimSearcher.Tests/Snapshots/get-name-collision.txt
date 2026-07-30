@@ -1,7 +1,8 @@
 $ rimsearcher get Firefoam
 exit 0
 --- stdout ---
-2 fields.
+6 fields.
+'code_default' says a value differs from what a fresh instance of the class carries — not that this def chose it. These hold what most of the 9 ThingDefs hold, the count in brackets: soundDrop (9), soundImpactDefault (9), soundInteract (9), soundPickup (9).
 2 translations.
 0 fields.
 2 defs share the name 'Firefoam' across different def types; all of them are shown. Pass --type <DefType> for just one.
@@ -14,9 +15,13 @@ mod            ludeon.rimworld
 source         Buildings_Special.xml
 inherits_from  BaseProjectile (see 'rimsearcher inherit Firefoam')
 
-path               value              code_default
-thingClass         RimWorld.Building  no
-statBases[0].stat  MarketValue        no
+path                value                code_default
+soundImpactDefault  BulletImpact_Ground  no
+soundDrop           Standard_Drop        no
+soundPickup         Standard_Pickup      no
+soundInteract       Standard_Pickup      no
+thingClass          RimWorld.Building    no
+statBases[0].stat   MarketValue          no
 
 path         translated  original             language           origin
 description  一团灭火泡沫。     A blob of firefoam.  ChineseSimplified  in effect

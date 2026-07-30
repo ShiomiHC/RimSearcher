@@ -548,6 +548,10 @@ public sealed class GetCommand : Command
                 }
             }
 
+            // --path 那条分支同样要说 —— 按 path 收窄恰恰是最容易只盯着一行读的用法,
+            // 而这句话的全部用处就是让那一行读得对。
+            Completeness.NoteWidelySharedValues(ctx, def, fields);
+
             // 02-3:「字段被截」与「没有该字段」必须可区分。上游把这件事整个略过了,
             // 于是深层字段查不到时调用方会得出「没有这个字段」的错误结论。
             if (def.FieldsTruncated > 0)
@@ -1480,6 +1484,50 @@ internal static class Completeness
             NestedClassLine(ctx) +
             " So this says no indexed value sits at that path — not that no such field exists. " +
             "'rimsearcher code-search' reads the class declaration, which does say.");
+
+    /// <summary>
+    /// 上面这些行里,哪些的值是**同类型大多数 def 都有的那个**。
+    ///
+    /// 第八轮 ep34 是全场最贵的一次险出错(cost 3):
+    /// <c>soundImpactDefault  BulletImpact_Ground  no</c> —— 字段名带 Impact、值叫
+    /// BulletImpact_Ground、官方光束有、用户自己的光束也一模一样,四条线索全指向
+    /// 「这就是命中音的挂点」。真相是 <c>ThingDef.ResolveReferences</c> 给**每一个**
+    /// ThingDef 都塞了这个值,而且字段语义还是反的。
+    ///
+    /// 这一列能证的只有「与刚 new 出来的实例不同」,读的人却一律读成「有人挑了它」。
+    /// 分辨「XML 写的」与「引擎填的」在这份快照里没有产地(见 shared_values 建表注释),
+    /// 所以**不猜成因,只报可核对的事实**:3538 分之 2658,读的人自己判。
+    ///
+    /// 两边都说 —— 靠沉默承载「都是这个 def 自己的」正是这套输出一直在清的东西。
+    /// </summary>
+    public static void NoteWidelySharedValues(
+        CommandContext ctx, DefRow def, IReadOnlyList<FieldRow> fields)
+    {
+        if (fields.Count == 0) return;
+        var shared = ctx.Db.SharedValues(def.DefType, fields.Select(f => (f.Path, f.Value)));
+        // 这张名单**不许截**。读的人是拿着某一行来对的,而「不在名单里」必须只有一个意思。
+        // 截了之后「没共享」与「被 and N more 吃掉了」在这一行上完全同形 —— 实测第一版就把
+        // ep34 的 soundImpactDefault (2658) 截进了 and 2 more 里,把这句话的用处整个吃掉。
+        // 共享数大的排前面:越接近全类型,越像引擎填的。
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var listed = fields
+            .Where(f => f.Value is not null && shared.ContainsKey((f.Path, f.Value)) && seen.Add(f.Path))
+            .Select(f => (f.Path, N: shared[(f.Path, f.Value!)]))
+            .OrderByDescending(x => x.N).ThenBy(x => x.Path, StringComparer.Ordinal)
+            .Select(x => $"{x.Path} ({x.N})")
+            .ToList();
+        // 分母必须与 shared_values 同口径 —— 那张表是全库算的。get 不收 --scope(收了就会
+        // 印出「3 分之 9」这种加不起来的账),所以这里写死 all 是唯一正确的口径,不是偷懒。
+        var total = ctx.Db.CountDefsOfType(
+            def.DefType, Snapshot.ScopeFilter.Parse("all", ctx.Db.PackageIds(), ctx.Config));
+
+        ctx.Report.Notice(NoticeKind.Advisory, listed.Count > 0
+            ? $"'{FieldDefault.Column}' says a value differs from what a fresh instance of the class carries — " +
+              $"not that this def chose it. These hold what most of the {total} {def.DefType}s hold, " +
+              $"the count in brackets: {NameList.Render(listed, listed.Count)}."
+            : $"No value above is one that most of the {total} {def.DefType}s in this snapshot also carry, " +
+              $"so none of them is a class-wide default showing through '{FieldDefault.Column}'.");
+    }
 
     /// <summary>
     /// 嵌套 <c>&lt;li Class="…"&gt;</c> 的运行时类型这一维,手上这份快照量没量过。

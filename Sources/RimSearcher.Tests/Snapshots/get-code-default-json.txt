@@ -5,7 +5,11 @@ exit 0
   "notes": [
     {
       "kind": "count",
-      "text": "4 fields."
+      "text": "8 fields."
+    },
+    {
+      "kind": "advisory",
+      "text": "'code_default' says a value differs from what a fresh instance of the class carries — not that this def chose it. These hold what most of the 9 ThingDefs hold, the count in brackets: soundDrop (9), soundImpactDefault (9), soundInteract (9), soundPickup (9)."
     },
     {
       "kind": "boundary",
@@ -25,6 +29,26 @@ exit 0
         "inherits_from": "BaseBullet (see 'rimsearcher inherit Bullet_Revolver')"
       },
       "fields": [
+        {
+          "path": "soundImpactDefault",
+          "value": "BulletImpact_Ground",
+          "code_default": "no"
+        },
+        {
+          "path": "soundDrop",
+          "value": "Standard_Drop",
+          "code_default": "no"
+        },
+        {
+          "path": "soundPickup",
+          "value": "Standard_Pickup",
+          "code_default": "no"
+        },
+        {
+          "path": "soundInteract",
+          "value": "Standard_Pickup",
+          "code_default": "no"
+        },
         {
           "path": "thingClass",
           "value": "RimWorld.Bullet",

@@ -312,6 +312,24 @@ public sealed class SnapshotImporter
 
             tx.Commit();
 
+            // shared_values 的一次扫。放在 commit 之后、建索引之前:它只读刚写完的两张表,
+            // 而 GROUP BY 全表在事务里做会把 journal 撑大一圈,没有必要。
+            //
+            // 「不少于 8 个」不是调出来的阈值,是「大多数」这个词成不成话的下限 —— 类型只有
+            // 三五个 def 时,「其中两个也是这个值」不构成任何提示。过半是同一个词的另一半。
+            using (var fill = db.CreateCommand())
+            {
+                fill.CommandText =
+                    "INSERT INTO shared_values (def_type, path, value, defs) " +
+                    "SELECT d.def_type, fv.path, fv.value, COUNT(DISTINCT fv.def_id) n " +
+                    "  FROM field_values fv JOIN defs d ON d.id = fv.def_id " +
+                    $" WHERE fv.is_default <> {Contract.DefaultState.Same} " +
+                    " GROUP BY d.def_type, fv.path, fv.value " +
+                    "HAVING n >= 8 " +
+                    "   AND n * 2 > (SELECT COUNT(*) FROM defs d2 WHERE d2.def_type = d.def_type)";
+                fill.ExecuteNonQuery();
+            }
+
             SnapshotSchema.CreateIndexes(db);
             using (var vac = db.CreateCommand()) { vac.CommandText = "PRAGMA optimize;"; vac.ExecuteNonQuery(); }
 

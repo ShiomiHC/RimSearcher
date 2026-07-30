@@ -1,7 +1,8 @@
 $ rimsearcher get Meat_Muffalo
 exit 0
 --- stdout ---
-2 fields.
+6 fields.
+'code_default' says a value differs from what a fresh instance of the class carries — not that this def chose it. These hold what most of the 9 ThingDefs hold, the count in brackets: soundDrop (9), soundImpactDefault (9), soundInteract (9), soundPickup (9).
 
 def_name     Meat_Muffalo
 def_type     ThingDef
@@ -11,6 +12,10 @@ mod          ludeon.rimworld
 source       ImpliedDefs (created in code, not from an XML file)
 
 path                 value                 code_default
+soundImpactDefault   BulletImpact_Ground   no
+soundDrop            Standard_Drop         no
+soundPickup          Standard_Pickup       no
+soundInteract        Standard_Pickup       no
 thingClass           Verse.ThingWithComps  no
 ingestible.foodType  Meat                  no
 --- stderr ---

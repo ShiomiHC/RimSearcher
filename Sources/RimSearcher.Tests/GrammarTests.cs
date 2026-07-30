@@ -2103,4 +2103,40 @@ public class GrammarTests
         Assert.DoesNotContain("indexed as '<path>.Class'", old, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// 第八轮 ep34,全场最贵的一次险出错(cost 3)。
+    ///
+    /// <c>get Bullet_BeamRepeater</c> 打出 <c>soundImpactDefault  BulletImpact_Ground  no</c>,
+    /// 四条线索(字段名带 Impact、值叫 BulletImpact_Ground、官方光束有、用户自己的光束
+    /// 一模一样)全指向「这就是命中音的挂点」,而真相是 <c>ThingDef.ResolveReferences</c>
+    /// 给**每一个** ThingDef 都塞了这个值,字段语义还是反的。
+    ///
+    /// <c>code_default</c> 那一列能证的只有「与刚 new 出来的实例不同」,读的人一律读成
+    /// 「有人挑了它」。分辨「XML 写的」与「引擎填的」在这份快照里没有产地 —— 导出跑在
+    /// <c>StaticConstructorOnStartup</c>,resolve 早已做完,要插进去只能上 Harmony,
+    /// 而 DataMod 是刻意无依赖的。所以不猜成因,**只报可核对的事实**:同类型里有几个
+    /// def 也是这个值。
+    ///
+    /// 两边都判。少了负面那半,「没说」就成了「都是这个 def 自己的」的沉默担保 ——
+    /// 那正是这套输出一直在清的东西。
+    /// </summary>
+    [Fact]
+    public void 同类型大多数都有的值要当场说破而不是让人读成有人挑过()
+    {
+        // fixture 的九个 ThingDef 全带 soundImpactDefault —— 与真实的引擎级默认同形。
+        var (shared, _, _) = Fixture.Run("get", "Apparel_ShieldBelt");
+        Assert.Contains("not that this def chose it", shared, StringComparison.Ordinal);
+        Assert.Contains("soundImpactDefault (9)", shared, StringComparison.Ordinal);
+        // 名单不许截:实测第一版把 ep34 那一条(2658)截进了「and 2 more」,
+        // 于是「不在名单里」同时意味着两件事。这一条守的就是那个。
+        var brackets = shared.Split("the count in brackets:")[1].Split('\n')[0];
+        Assert.DoesNotContain("more", brackets, StringComparison.Ordinal);
+
+        // 另一个类型上没有这种值 —— 这时候要明说没有,不能靠沉默。
+        var (own, _, _) = Fixture.Run("get", "VariantOne");
+        Assert.Contains("No value above is one that most of the", own, StringComparison.Ordinal);
+        Assert.DoesNotContain("not that this def chose it", own, StringComparison.Ordinal);
+    }
+
+
 }
