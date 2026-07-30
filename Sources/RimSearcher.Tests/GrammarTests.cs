@@ -1401,4 +1401,57 @@ public class GrammarTests
         if (!blob.Contains("Firefoam", StringComparison.Ordinal))
             Assert.DoesNotContain("translations", stdout, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// 「别的命令认这个参数」那句话原先只列前三条就收尾。`--limit` 挂在十一条命令上,
+    /// 而 `snapshot list --limit 5` 吃到的回话是
+    /// 「It is accepted by 'search' and 'get' and 'find'」—— 与「一共就这三条认」逐字同形,
+    /// 而真相是「几乎每条都认,不认的偏偏是你敲的这条」。后半句才是让人改对的那半句,
+    /// 也正好是被省略号吃掉的那个数量,与 <see cref="NameList"/> 那一轮清的是同一个形状。
+    /// </summary>
+    [Fact]
+    public void 别处认这个参数的名单不许悄悄截断()
+    {
+        var (_, err, code) = Fixture.Run("snapshot", "list", "--limit", "5");
+        Assert.Equal(2, code);
+        Assert.Contains("It is accepted by", err, StringComparison.Ordinal);
+        Assert.Matches(@"and \d+ more, but not by 'snapshot list'", err);
+
+        // 只有一两条认的时候不许凭空长出尾巴。
+        var (_, one, _) = Fixture.Run("snapshot", "list", "--member", "x");
+        Assert.Contains("It is accepted by 'read', but not by", one, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 零行就是 exit 1,`types` 也不例外。R12 的退出码约定被四条命令守着、被这一条破着:
+    /// `types --scope brrainz.harmony` 印「0 def types.」然后 exit 0 —— 脚本按退出码分流
+    /// 会把它当成「查到了」,而唯一能纠正的信息在那一行散文里。
+    ///
+    /// 顺带:那句话也不许把 scope 造成的空说成快照的空。`values` 原先回
+    /// 「No def in this snapshot has a field path ending in 'defName'」——
+    /// 而不带 scope 时 defName 每个 def 都有。
+    /// </summary>
+    [Fact]
+    public void 零行一律exit1且不把scope的空说成快照的空()
+    {
+        var empty = new[] { "--scope", "all,-ludeon.rimworld,-test.mod" };
+
+        var (types, _, tcode) = Fixture.Run(["types", .. empty]);
+        Assert.Equal(1, tcode);
+        Assert.Contains("--scope all,-ludeon.rimworld,-test.mod", types, StringComparison.Ordinal);
+        Assert.Matches(@"Snapshot-wide the figure is \d+ def types?\.", types);
+
+        var (values, _, vcode) = Fixture.Run(["values", "defName", .. empty]);
+        Assert.Equal(1, vcode);
+        // 快照里明明每个 def 都有 defName —— 空是 scope 造的,句子得这么说。
+        Assert.DoesNotContain("No def in this snapshot has a field path ending in 'defName'.",
+                              values, StringComparison.Ordinal);
+        Assert.Contains("--scope all,-ludeon.rimworld,-test.mod", values, StringComparison.Ordinal);
+
+        // 真不存在的路径照旧说「这快照里没有」,不许被上面那一改冲掉。
+        var (gone, _, gcode) = Fixture.Run("values", "zzznotafield");
+        Assert.Equal(1, gcode);
+        Assert.Contains("No def in this snapshot has a field path ending in 'zzznotafield'",
+                        gone, StringComparison.Ordinal);
+    }
 }

@@ -1,6 +1,7 @@
 ﻿using RimSearcher.Cli;
 using RimSearcher.Output;
 using RimSearcher.Search;
+using RimSearcher.Snapshot;
 using RimSearcher.Storage;
 
 namespace RimSearcher.Commands;
@@ -1205,13 +1206,23 @@ public sealed class ValuesCommand : Command
                 return 1;
             }
 
+            // 三种成因,要的下一步不同 —— 与 `find` 的分流同形。原先只分了 --type 那一档,
+            // 于是 `values defName --scope <没有 def 的 mod>` 回「本快照没有 defName」,
+            // 而不带 scope 时每个 def 都有它:空是 scope 造的,句子却记在了快照头上。
             var withoutType = type is not null && ctx.Db.FieldPathExists(path, scope);
+            var wideScope = ScopeFilter.Parse("all", ctx.Db.PackageIds(), ctx.Config);
+            var outsideScope = !withoutType && !scope.IsAll && ctx.Db.FieldPathExists(path, wideScope);
+
             ctx.Report.Notice(NoticeKind.NextStep,
                 withoutType
                     ? $"'{path}' exists in this snapshot but not on any {type}. Drop --type to see which def types have it."
-                    : $"No def in this snapshot has a field path ending in '{path}'. " +
-                      $"'rimsearcher fields <DefType>' lists the paths a type actually has, and " +
-                      $"'rimsearcher find --value <text>' finds which path holds a value you already know.");
+                    : outsideScope
+                        ? $"'{path}' exists in this snapshot but no def has it within --scope {scope.Expression}. " +
+                          "Widen the scope, or run 'rimsearcher mods' to see what this scope could have matched."
+                        : $"No def in this snapshot has a field path ending in '{path}'" +
+                          (scope.IsAll ? "" : $" (nor anywhere outside --scope {scope.Expression})") + ". " +
+                          $"'rimsearcher fields <DefType>' lists the paths a type actually has, and " +
+                          $"'rimsearcher find --value <text>' finds which path holds a value you already know.");
             return 1;
         }
 
@@ -1263,6 +1274,24 @@ public sealed class TypesCommand : Command
     {
         var scope = ctx.Scope();
         var all = ctx.Db.Types(scope);
+
+        // 零行是 exit 1(R12 约定),`types` 原先无条件 return 0 —— 按退出码分流的脚本
+        // 会把「0 def types.」读成「查到了」。而那句话本身也不许把 scope 造成的空
+        // 说成快照的空:整份快照的数就在手边,算一次比让人再跑一趟便宜。
+        if (all.Count == 0)
+        {
+            if (scope.IsAll)
+                ctx.Report.Notice(NoticeKind.NextStep,
+                    "This snapshot holds no defs at all. 'rimsearcher snapshot list' shows when it was taken, " +
+                    "and 'rimsearcher export' rebuilds it.");
+            else
+                ctx.Report.Notice(NoticeKind.NextStep,
+                    $"No def in this snapshot comes from --scope {scope.Expression}. Snapshot-wide the figure is " +
+                    Tally.Complete(ctx.Db.Types(ScopeFilter.Parse("all", ctx.Db.PackageIds(), ctx.Config)).Count)
+                         .Render("def type") + ". 'rimsearcher mods' lists what this snapshot actually has.");
+            return 1;
+        }
+
         var limit = ctx.LimitOrAll();
         var rows = limit.IsAll ? all : all.Take(limit.Effective).ToList();
 

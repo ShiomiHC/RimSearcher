@@ -1,4 +1,5 @@
 using System.Text;
+using RimSearcher.Output;
 
 namespace RimSearcher.Cli;
 
@@ -156,12 +157,14 @@ public static class ArgParser
         var elsewhere = (siblings ?? [])
             .Where(s => !string.Equals(s.Name, spec.Name, StringComparison.Ordinal))
             .Where(s => s.Options.Any(o => Normalize(o.Name) == n || o.Aliases.Any(a => Normalize(a) == n)))
-            .Select(s => s.Name)
-            .Take(Limits.MaxSuggestions)
+            .Select(s => $"'{s.Name}'")
             .ToList();
         if (elsewhere.Count > 0)
+            // 截断经由 NameList,不在这里自己 Take:`--limit` 挂在十一条命令上,而只列前三条
+            // 的那句话与「一共就这三条认」逐字同形 —— 被省掉的数量正是「几乎每条都认,
+            // 不认的偏偏是你敲的这条」这半句,也正是让人改对的那半句。
             return $"Unknown option '{raw}'. It is accepted by " +
-                   string.Join(" and ", elsewhere.Select(c => $"'{c}'")) + $", but not by '{spec.Name}'.";
+                   NameList.Render(elsewhere, Limits.MaxSuggestions) + $", but not by '{spec.Name}'.";
 
         var candidates = Suggest(body, options);
         var msg = $"Unknown option '{raw}'.";
