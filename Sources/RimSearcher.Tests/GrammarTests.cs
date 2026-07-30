@@ -479,6 +479,18 @@ public class GrammarTests
         Assert.Contains("sources sync", bare);
         Assert.DoesNotContain("No file matched", bare);   // 不许再赖到 glob 头上
         Assert.DoesNotContain("rimsearcher search", bare);
+
+        // glob 那条的子形状:别名 --file-extension 收下裸扩展名,值却按 glob 解。
+        // 「这里没有 .cs 文件」与「你的值不是 glob」此前逐字同形。
+        var (ext, _, extCode) = Fixture.Run("code-search", "public", "--file-extension", "cs");
+        Assert.Equal(1, extCode);
+        Assert.Contains("no wildcard", ext);
+        Assert.Contains("'*.cs'", ext);
+
+        // 反向:带通配符的 glob 打不中时,不许再教人加通配符。
+        var (starred, _, _) = Fixture.Run("code-search", "public", "--files", "*.zzz");
+        Assert.Contains("No file matched", starred);
+        Assert.DoesNotContain("no wildcard", starred);
     }
 
     // ---- 零结果的成因分流(三轮 R8 四种误诊 + R10 fatal)----

@@ -288,7 +288,14 @@ public sealed class CodeSearchCommand : Command
                         ? " A glob containing '/' is matched against the whole path relative to the decompiled " +
                           "root, which begins with the source tree's name: 'vanilla/**/Widgets.cs', not " +
                           "'Verse/Widgets.cs'. Without a '/' it matches the file name alone at any depth."
-                        : "") +
+                        // 第四轮回归实测:`--file-extension cs` —— 别名收下了,值却按 glob 解,
+                        // 于是 'cs' 要求整个文件名就叫 cs。别名叫 extension 而值的文法是 glob,
+                        // 两种文法的零结果逐字同形,读的人会读成「这里没有 .cs 文件」。
+                        : glob.Contains('*') || glob.Contains('?')
+                            ? ""
+                            : $" The value carries no wildcard, so it had to equal a whole file name: '{glob}' " +
+                              $"matches a file literally named that. For an extension write '*.{glob.TrimStart('.')}', " +
+                              $"for a name fragment write '*{glob}*'.") +
                     " 'rimsearcher sources list' names the trees.");
             else if (incomplete)
                 ctx.Report.Notice(NoticeKind.Truncation,

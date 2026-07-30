@@ -1,0 +1,5 @@
+$ rimsearcher code-search public --file-extension cs
+exit 1
+--- stdout ---
+No file matched --files 'cs', so nothing was read at all. The value carries no wildcard, so it had to equal a whole file name: 'cs' matches a file literally named that. For an extension write '*.cs', for a name fragment write '*cs*'. 'rimsearcher sources list' names the trees.
+--- stderr ---

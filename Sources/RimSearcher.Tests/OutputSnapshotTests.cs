@@ -121,6 +121,8 @@ public class OutputSnapshotTests
         // 第四种零结果,第四轮回归实测撞到的:树在名单里、目录也在,里面一个文件都没有。
         // 与上一条逐字同形过 —— 于是答案变成「改 glob」,而真因是这棵树该 sync 一遍。
         { "code-search-empty-tree", ["code-search", "public", "--source", "zz.emptytree"] },
+        // 别名 --file-extension 收下 'cs',值却按 glob 解 —— 两种文法的零结果曾逐字同形。
+        { "code-search-bare-ext",  ["code-search", "public", "--file-extension", "cs"] },
         // --source 已经给出时,补救措施里不许再列 --source(R3)。
         { "code-search-source-cap", ["code-search", "public", "--source", "vanilla", "--max-files", "1"] },
         { "code-search-no-tree",   ["code-search", "public", "--source", "HAR"] },
