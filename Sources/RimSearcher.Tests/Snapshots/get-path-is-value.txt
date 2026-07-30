@@ -1,0 +1,12 @@
+$ rimsearcher get Apparel_ShieldBelt --path MarketValue
+exit 0
+--- stdout ---
+No field path contains 'MarketValue'; the def does have 4 fields. Drop --path to see them. Found on this def as a field's value rather than anywhere in a path: 'MarketValue'. 'rimsearcher find --value MarketValue' names every path holding it.
+
+def_name     Apparel_ShieldBelt
+def_type     ThingDef
+label        shield belt
+class        Verse.ThingDef
+mod          ludeon.rimworld
+source       Apparel_Belts.xml
+--- stderr ---

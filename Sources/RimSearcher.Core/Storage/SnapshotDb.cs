@@ -282,6 +282,17 @@ public sealed class SnapshotDb : IDisposable
         return (rows, matched, total, defaulted);
     }
 
+    /// <summary>
+    /// 这个 def 上有几个字段**把这段文本当值**装着。只服务一句话:<c>--path</c> 筛空时,
+    /// 「路径里没有它」与「它其实是个值」是两种成因,而后者是可以当场算出来的 ——
+    /// 猜出来的下一步正是 R8 那批误诊的来源。
+    /// </summary>
+    public int ValueHits(long defId, string text)
+    {
+        var p = new Dictionary<string, object?> { ["@id"] = defId, ["@v"] = "%" + Escape(text) + "%" };
+        return Scalar("SELECT COUNT(*) FROM field_values WHERE def_id = @id AND value LIKE @v ESCAPE '\\'", p);
+    }
+
     /// <summary>LIKE 的通配符转义。用户给的过滤串里出现 <c>_</c> 是常事(field_path 之类)。</summary>
     private static string Escape(string s)
         => s.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");

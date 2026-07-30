@@ -123,6 +123,9 @@ public class OutputSnapshotTests
         { "code-search-empty-tree", ["code-search", "public", "--source", "zz.emptytree"] },
         // 别名 --file-extension 收下 'cs',值却按 glob 解 —— 两种文法的零结果曾逐字同形。
         { "code-search-bare-ext",  ["code-search", "public", "--file-extension", "cs"] },
+        // --path 筛空的两种成因:真没有这条路径 vs 给进来的文本其实是个**值**(B5 的形状,
+        // stat 名装在 statBases[N].stat 里)。此前两种输出逐字同形。
+        { "get-path-is-value",     ["get", "Apparel_ShieldBelt", "--path", "MarketValue"] },
         // --source 已经给出时,补救措施里不许再列 --source(R3)。
         { "code-search-source-cap", ["code-search", "public", "--source", "vanilla", "--max-files", "1"] },
         { "code-search-no-tree",   ["code-search", "public", "--source", "HAR"] },

@@ -827,6 +827,26 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// <c>--path</c> 筛空的两种成因不许同形:def 真没有这条路径,与**给进来的文本是个值**。
+    /// 第四轮回归实测的形状(B5):stat 名装在 <c>statBases[N].stat</c> 里,按它筛路径必空,
+    /// 而「值在不在这个 def 上」是算得出来的 —— 算出来再说,不猜。
+    /// </summary>
+    [Fact]
+    public void 把值当成路径筛时说破它是个值()
+    {
+        var (asValue, _, code) = Fixture.Run("get", "Apparel_ShieldBelt", "--path", "MarketValue");
+        Assert.Equal(0, code);
+        Assert.Contains("No field path", asValue, StringComparison.Ordinal);
+        Assert.Contains("as a field's value", asValue, StringComparison.Ordinal);
+        Assert.Contains("find --value MarketValue", asValue, StringComparison.Ordinal);
+
+        // 反向:真的哪儿都没有时,不许无中生有地指路去 find --value。
+        var (nowhere, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--path", "zzzznothing");
+        Assert.Contains("No field path", nowhere, StringComparison.Ordinal);
+        Assert.DoesNotContain("as a field's value", nowhere, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 不点名时默认值行不列,但**不许静默**:少了多少条、为什么、怎么看回来,都要在场。
     /// 机器侧靠 kind 分类(这是过滤不是截断,混用会让扫 notes 的下一位读成「结果不完整」)。
     /// </summary>

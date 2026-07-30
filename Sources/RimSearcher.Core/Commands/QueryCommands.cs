@@ -378,9 +378,22 @@ public sealed class GetCommand : Command
                 // 过滤后为空**不等于** def 没有这些字段,只等于没有路径含这段文本。
                 // 这两件事在输出上长得一样,所以必须由声明区把它们分开。
                 if (matched == 0)
+                {
+                    // 第二种成因,第四轮回归实测撞到的:给进来的文本不是路径,是**值**
+                    // (`--path TrapSpringChance` —— 它是 statBases[6].stat 装着的那个值)。
+                    // 「这个 def 没有这条路径」与「你把值当成了路径」的输出此前逐字同形,
+                    // 而后者算得出来,所以算出来再说 —— 猜出来的下一步正是 R8 那批误诊。
+                    var asValue = paths.Where(t => ctx.Db.ValueHits(def.Id, t) > 0).ToList();
                     ctx.Report.Notice(NoticeKind.Boundary,
                         $"No field path{whose} contains {Join(paths)}; the def does have " +
-                        $"{Tally.Complete(total).Render("field")}. Drop --path to see them.");
+                        $"{Tally.Complete(total).Render("field")}. Drop --path to see them." +
+                        // 动词不进登记处,所以句子里不能有随 asValue 数量变形的成分 ——
+                        // 冒号在前、名单在后,主句就没有跟着计数走的动词(R6 的同一条教训)。
+                        (asValue.Count > 0
+                            ? " Found on this def as a field's value rather than anywhere in a path: " +
+                              $"{Join(asValue)}. 'rimsearcher find --value {asValue[0]}' names every path holding it."
+                            : ""));
+                }
                 else
                 {
                     // 这是调用方自己要的过滤,不是截断。机器侧靠 kind 分类,混用会让
