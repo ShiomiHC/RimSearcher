@@ -148,8 +148,7 @@ public sealed class SearchCommand : Command
             // 否则指向 types。两条猜法各自造出一种误诊,而名字的真实落点是可以当场算的。
             // 算得出来就说算出来的那一条,算不出来才退回猜(而猜也只在真像类名时才猜)。
             var sighting = NameLookup.Locate(ctx, query, scope);
-            var looksLikeClass = query.Contains('.') ||
-                                 (query.Length > 2 && char.IsUpper(query[0]) && query.Skip(1).Any(char.IsUpper));
+            var looksLikeClass = ClassNameShape.Looks(query);
             ctx.Report.Notice(NoticeKind.NextStep,
                 sighting?.Sentence
                 ?? (looksLikeClass
@@ -793,9 +792,17 @@ public sealed class FindCommand : Command
                           // 有近似项时原先就到此为止,而没有近似项的那一支反倒指了路 ——
                           // 「给了个名字」不等于「说了下一步」:那三条只是最近的,真值域没看过。
                           : $" 'rimsearcher values {path} --limit all' lists the whole value domain.")
-                    : $" 'rimsearcher values {path} --limit all' lists them. If '{value}' is an abstract base " +
-                      "class, no def names it directly: get its subclasses from the decompiler first, then " +
-                      "look each one up."));
+                    // 「如果 X 是抽象基类」原先无条件说,而它是一句**未经验证的猜测摆在
+                    // 输出位置**,读的人会当结论用。判据从严(ClassNameShape:`True`、
+                    // `.ogg`、`1.5` 全挡在外面),而且指的路换成本工具自己那条 ——
+                    // 一条 code-search 就能证实或证伪,不必外包给别的东西。
+                    : $" 'rimsearcher values {path} --limit all' lists them." +
+                      (ClassNameShape.Looks(value)
+                          ? $" If '{value}' is an abstract base class, no def names it directly, and its " +
+                            "subclasses are what to look up instead: " +
+                            $"'rimsearcher code-search \"class \\w+ : {ClassNameShape.Tail(value)}\\b\"' " +
+                            "names them, and settles whether such a class exists at all."
+                          : "")));
             NoteElsewhere();
             return 1;
         }
@@ -845,8 +852,9 @@ public sealed class FindCommand : Command
             // paramMappings[0].inParam 的 Class=)。于是「类真实存在且正在被这个 def 使用」
             // 与「这个类根本不存在」在输出上完全一样,而它只报了后者。
             // 类名形状的查询词最容易撞这一条,所以这时候必须把索引边界说出来。
-            var looksLikeType = value.Length > 2 && !value.Any(char.IsWhiteSpace) &&
-                                (char.IsUpper(value[0]) || value.Contains('.'));
+            // 判据归一到 ClassNameShape:旧写法 `IsUpper(v[0]) || Contains('.')` 会把
+            // `True`、`.ogg`、`1.5` 一并算成类名,于是这段索引边界跑到值查询上去说。
+            var looksLikeType = ClassNameShape.Looks(value);
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"No field in this snapshot holds a value {(exact ? "equal to" : "containing")} '{value}'" +
                 (scope.IsAll ? "" : $" within --scope {scope.Expression}") + "." +
@@ -855,7 +863,7 @@ public sealed class FindCommand : Command
                     ? " If that is a class name: the snapshot indexes leaf scalars and a comp's compClass, but " +
                       "not the runtime type of nested <li Class=\"...\"> objects (modExtensions, sub-object " +
                       "parameters), so a class can be in use by a def and still be absent here. " +
-                      "'rimsearcher code-search' finds the class itself."
+                      $"'rimsearcher code-search \"class {ClassNameShape.Tail(value)}\\b\"' finds the class itself."
                     : ""));
 
             // 叠加不替换:上面那句说的是「这份快照里没有」,而别的快照里有没有算得出来。

@@ -1236,6 +1236,45 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 「像不像类名」这个判据决定要不要说一句**猜测**,而猜错的代价是把未经验证的
+    /// 「如果 X 是抽象基类……」摆在输出位置,读的人当结论用。
+    ///
+    /// 旧判据三处各写各的,`IsUpper(v[0]) || Contains('.')` 会把 XML 里最常见的两种值
+    /// 一并算进来:`True`(首字母大写)、`Sounds/Foo.ogg`(含点)。
+    /// </summary>
+    [Fact]
+    public void 像不像类名的判据挡得住字面量与资源路径()
+    {
+        Assert.True(ClassNameShape.Looks("CompShield"));
+        Assert.True(ClassNameShape.Looks("RimWorld.Bullet"));
+        Assert.True(ClassNameShape.Looks("MapPortal"));
+
+        Assert.False(ClassNameShape.Looks("True"));
+        Assert.False(ClassNameShape.Looks("False"));
+        Assert.False(ClassNameShape.Looks(".ogg"));
+        Assert.False(ClassNameShape.Looks("Foo.ogg"));
+        Assert.False(ClassNameShape.Looks("Sounds/Impact"));
+        Assert.False(ClassNameShape.Looks("Comp Shield"));
+        Assert.False(ClassNameShape.Looks("1.5"));
+        Assert.False(ClassNameShape.Looks("12"));
+        Assert.False(ClassNameShape.Looks("Steel"));
+        Assert.False(ClassNameShape.Looks("AB"));
+
+        Assert.Equal("Bullet", ClassNameShape.Tail("RimWorld.Bullet"));
+        Assert.Equal("MapPortal", ClassNameShape.Tail("MapPortal"));
+
+        // 落到输出上:值是 True 时不许出现那段索引边界,值是类名形状时必须出现。
+        var (literal, _, _) = Fixture.Run("find", "--value", "True");
+        Assert.DoesNotContain("If that is a class name", literal, StringComparison.Ordinal);
+
+        var (cls, _, _) = Fixture.Run("find", "--value", "NoSuchCompClass");
+        Assert.Contains("If that is a class name", cls, StringComparison.Ordinal);
+        // 指的路是本工具自己那条,而且带上要搜的符号 —— 光说「用 code-search」
+        // 等于把拼命令行这一步扔回给读的人。
+        Assert.Contains("code-search \"class NoSuchCompClass", cls, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 落空那句话报的值域不许超发。它说 covers 什么,就得真覆盖到什么。
     /// </summary>
     [Fact]
