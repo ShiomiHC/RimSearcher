@@ -161,8 +161,10 @@ and it is the only way to see a specific file when that MCP is not available.
 `--json` gives machine-readable output: the root is an object, every prose sentence moves into
 `notes` as `{kind, text}`, and the data sits beside it under a key that depends on the command —
 `defs` for `search`/`list`/`get`, `matches` for `code-search` and for `find` with a field path,
-`paths` for `find --value`, `values`, `fields`, `types`, `mods`, `nodes` for `inherit`, `source`
-and `declarations` for `read`. Do not guess: `<command> --help` lists that command's keys, as does
+`paths` for `find --value`, `nodes` for `inherit`, `source` and `declarations` for `read`, and a
+key named after the command itself for `values`, `fields`, `types` and `mods`. `values` carries a
+second key, `field`, saying which full paths and def types its value space was drawn from.
+Do not guess: `<command> --help` lists that command's keys, as does
 [references/cli-reference.md](references/cli-reference.md). Reading a key the command does not
 produce gives you nothing, which is indistinguishable from an empty result. Code output is rows
 too — `code-search` gives `{file, line, is_match, group, text}` and `read` gives `{file, line,
