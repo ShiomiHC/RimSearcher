@@ -498,6 +498,45 @@ public class GateTests
             "These end with 'there is none' and no way forward:\n  " + string.Join("\n  ", deadEnds));
     }
 
+    /// <summary>
+    /// 「没量过」不许印成一个数。
+    ///
+    /// 五轮 F0 的形状:导出器对无 <c>Name=</c> 的节点把 patch_ops 硬写 0(XmlNodeExporter:66,
+    /// 计数正则只认 <c>@Name=</c>),于是「量过了、确实没人 patch」与「这一格根本没量」
+    /// **逐字相同**,四份盲测轨迹独立栽在这里。这是 R6 与二轮 F2 之后**第三次**同一形状。
+    ///
+    /// 字节基线单独挡不住它:改了代码顺手重生成基线,红就没了。所以这道闸读的是基线的
+    /// **结构** —— identity 块里印出数字的 patch_ops,同一块里必须有 name 行(名字为空时
+    /// Renderers 会整行跳过,所以「有 name 行」正好等价于「这个节点声明了 Name=」)。
+    ///
+    /// 红不红验过:把 <c>named ? node.PatchOps : "n/a"</c> 改回裸 <c>node.PatchOps</c>
+    /// 并重生成基线,inherit-def / inherit-broken-chain 两份当场进名单。
+    /// </summary>
+    [Fact]
+    public void 没量过的计数不许印成一个数()
+    {
+        var unmeasured = new List<string>();
+        foreach (var file in Directory.EnumerateFiles(OutputSnapshotTests.SnapshotDir, "*.txt"))
+        {
+            var lines = File.ReadAllText(file).Split('\n');
+            // 块之间以空行分隔;name/patch_ops 是同一个 identity 块里的两行。
+            var blockHasName = false;
+            foreach (var line in lines)
+            {
+                if (line.Length == 0) { blockHasName = false; continue; }
+                if (line.StartsWith("name ", StringComparison.Ordinal)) blockHasName = true;
+                if (!line.StartsWith("patch_ops ", StringComparison.Ordinal)) continue;
+                var cell = line["patch_ops ".Length..].Trim();
+                if (cell.Length > 0 && char.IsAsciiDigit(cell[0]) && !blockHasName)
+                    unmeasured.Add($"{Path.GetFileName(file)}: '{line.Trim()}' on a node with no Name=");
+            }
+        }
+
+        Assert.True(unmeasured.Count == 0,
+            "A count that was never taken is printed as a number, so it reads exactly like a measured zero:\n  " +
+            string.Join("\n  ", unmeasured));
+    }
+
     /// <summary>输出契约在基线上的落点:不许有行尾空格,不许有 CR。</summary>
     [Fact]
     public void 基线里没有行尾空格也没有CR()

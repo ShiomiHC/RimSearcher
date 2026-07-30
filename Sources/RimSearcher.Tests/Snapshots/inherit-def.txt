@@ -1,13 +1,15 @@
 $ rimsearcher inherit Bullet_Revolver
 exit 0
 --- stdout ---
+'Bullet_Revolver' declares no Name=, so patch_ops is not measured for it: only xpaths naming a node with @Name= are counted, and a patch that reaches this def by defName leaves no trace here.
+
 def_name       Bullet_Revolver
 def_type       ThingDef
 abstract       no
 inherits_from  BaseBullet
 mod            ludeon.rimworld
 source         Projectiles_Guns.xml
-patch_ops      0
+patch_ops      n/a
 
 name            def_type  abstract  mod              source
 BaseBullet      ThingDef  yes       ludeon.rimworld  Projectiles_Guns.xml

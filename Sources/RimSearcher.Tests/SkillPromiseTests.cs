@@ -32,7 +32,12 @@ public class SkillPromiseTests
         // ---- 数据边界 ----
         new("`inherit` is the only command that reads it, and it says so",
             nameof(继承层的来路与补丁时间差写在inherit自己的说明里)),
-        new("each named node reports how many patch operations target it by name — zero means what you see is what the game read",
+        // 五轮:原承诺是「each named node reports … zero means what you see is what the game read」,
+        // 而无 Name= 的节点拿到的是导出器硬写的 0 —— 承诺照字面读在那些 def 上是假的。
+        // 收窄成「声明了 Name= 的才报数」并把另一半明说成 n/a,两半各由那道闸的两组断言证。
+        new("reports how many patch operations target it by name — zero means what you see is what\n   the game read",
+            "inherit的patch计数在干净节点也在场"),
+        new("A node without a `Name=` reports `n/a`, not zero",
             "inherit的patch计数在干净节点也在场"),
         new("an abstract node has no field values of its own here",
             "抽象节点不在defs里但在继承层里"),

@@ -28,8 +28,10 @@ public sealed class InheritCommand : Command
             "This is the one part of a snapshot that is read from the mods' XML rather than from the objects the " +
             "game had in memory, because the game resolves inheritance while loading and then discards it. " +
             "Abstract parents exist only here: they never become defs, so 'get' will not find them.\n\n" +
-            "What is shown is the XML before PatchOperations are applied. Each named node reports how many patch " +
-            "operations target it by name, so a node with 0 of them is exactly what the game read. " +
+            "What is shown is the XML before PatchOperations are applied. Each node that declares Name= reports how " +
+            "many patch operations target it by name, so 0 there means what you see is exactly what the game read. " +
+            "A node without a Name= reports 'n/a' rather than 0: patches that reach a def by defName are counted " +
+            "nowhere in this layer, so for those defs the question stays unanswered. " +
             "For the merged, post-patch values, read any concrete child with 'get' — everything a parent " +
             "contributes is already in each of its children.",
         Positionals =
@@ -75,6 +77,12 @@ public sealed class InheritCommand : Command
                 ctx.Report.Notice(NoticeKind.NextStep,
                     $"'{name}' is a def in this snapshot but its XML declares no Name=, ParentName= or " +
                     "Abstract=, so it takes part in no inheritance. 'rimsearcher get " + name + "' shows it.");
+                // 「有没有 mod 用 PatchOperation 改过这个 def」是另一个问题,而读的人很容易把
+                // 上面那句「不参与继承」当成把它一起答了 —— 本命令别处报的 patch 计数只盖得住
+                // 声明了 Name= 的节点。不说破,这一格就是空着而看起来像填了。
+                ctx.Report.Notice(NoticeKind.Boundary,
+                    "Whether a PatchOperation edits it is a separate question this snapshot does not answer: " +
+                    "the patch counts reported elsewhere here cover only nodes that declare Name=.");
                 return 1;
             }
 
@@ -102,7 +110,8 @@ public sealed class InheritCommand : Command
         {
             ctx.Report.Item("nodes");
 
-            var label = node.Name is { Length: > 0 } ? node.Name : node.DefName ?? "";
+            var named = node.Name is { Length: > 0 };
+            var label = named ? node.Name : node.DefName ?? "";
             ctx.Report.Detail("node",
             [
                 new("name", node.Name),
@@ -118,7 +127,13 @@ public sealed class InheritCommand : Command
                 // 二轮 F2(三态文法的裸 N 从未渲染出来过)是同一个形状,**这是第二次犯**。
                 // 放进 identity 块而不是补一句散文:数字每次都在场且可机读,占一行;
                 // 需要警示的后果仍由下面那句边界话说,只在非零时出现。
-                new("patch_ops", node.PatchOps),
+                //
+                // 五轮:上面那个「0」是**第三次**同一形状 —— 导出器 (XmlNodeExporter:66)
+                // 对无 Name= 的节点硬写 0,而计数正则只认 `@Name=`。于是「量过了、确实没人
+                // patch」与「这一格根本没量」印出来逐字相同,四份盲测轨迹独立栽在这里。
+                // 印 n/a 而不是留空:留空会让整行在文本面消失(Renderers 跳过空值),
+                // 那就退回 R6 修掉的那个形状了。口径由下面那句边界话说破。
+                new("patch_ops", named ? node.PatchOps : "n/a"),
             ]);
 
             // 往上走到根。带环保护不是防御性编程 —— XML 里写出环是可能的,而游戏自己
@@ -188,7 +203,12 @@ public sealed class InheritCommand : Command
 
             // 逐条申报,不是一句总的免责声明。计数本身现在恒在 identity 块的 patch_ops 上
             // (R6),这里只在非零时补说后果 —— 0 的那一条不需要解释,它就是游戏读到的原样。
-            if (node.PatchOps > 0)
+            if (!named)
+                ctx.Report.Notice(NoticeKind.Boundary,
+                    $"'{label}' declares no Name=, so patch_ops is not measured for it: only xpaths naming a " +
+                    "node with @Name= are counted, and a patch that reaches this def by defName leaves no " +
+                    "trace here.");
+            else if (node.PatchOps > 0)
                 // 主语放到句尾,免得动词跟着计数变单复数 —— NounRegistry 管名词,不管动词,
                 // 「1 patch operation … target」这种主谓不一致靠加登记项是修不掉的。
                 ctx.Report.Notice(NoticeKind.Boundary,

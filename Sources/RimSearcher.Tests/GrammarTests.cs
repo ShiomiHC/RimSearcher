@@ -355,29 +355,46 @@ public class GrammarTests
     /// 文档承诺「a node with 0 of them is exactly what the game read」—— 读者据此以为会看到
     /// 一个数字,零就放心。实现原先只在非零时打印一句散文,于是「零」和「这件事没做」分不开,
     /// 那个保证在实现里根本不存在。二轮 F2(三态文法的裸 N 从未渲染出来过)是同一个形状。
+    ///
+    /// 五轮修正:这道闸原先拿 <c>Bullet_Revolver</c> 当「测得零」的样本,**而那个节点根本
+    /// 没有 Name=** —— 导出器对它硬写 0(XmlNodeExporter:66,计数正则只认 <c>@Name=</c>)。
+    /// 于是闸自己把假零当成了真零去守,四份盲测轨迹独立栽在这一格上。真正的测得零在
+    /// <c>BaseProjectile</c>(有 Name=、零条 patch 点名),无名那一侧另立断言:
+    /// 必须印出一个**非数字**,并说破计数口径。
     /// </summary>
     [Fact]
     public void inherit的patch计数在干净节点也在场()
     {
-        // BaseBullet 被两条 patch 点名,Bullet_Revolver 一条都没有 —— 两边都要报出数字。
+        // BaseBullet 被两条 patch 点名,BaseProjectile 有 Name= 而一条都没有 —— 两边都是数字。
         var (patched, _, _) = Fixture.Run("inherit", "BaseBullet", "--json");
-        var (clean, _, _) = Fixture.Run("inherit", "Bullet_Revolver", "--json");
+        var (clean, _, _) = Fixture.Run("inherit", "BaseProjectile", "--json");
+        // Bullet_Revolver 只有 ParentName=,这一格从来没量过。
+        var (unnamed, _, _) = Fixture.Run("inherit", "Bullet_Revolver", "--json");
 
-        static int PatchOps(string json)
+        static System.Text.Json.JsonElement PatchOps(string json)
         {
-            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var doc = System.Text.Json.JsonDocument.Parse(json);
             return doc.RootElement.GetProperty("nodes")[0].GetProperty("node")
-                      .GetProperty("patch_ops").GetInt32();
+                      .GetProperty("patch_ops").Clone();
         }
 
-        Assert.Equal(2, PatchOps(patched));
-        Assert.Equal(0, PatchOps(clean));
+        Assert.Equal(2, PatchOps(patched).GetInt32());
+        Assert.Equal(0, PatchOps(clean).GetInt32());
 
-        // 后果那句散文只在非零时说 —— 0 的那一条不需要解释,而常驻声明是 00 论据 3 淘汰掉的。
+        // 没量过的那一格不许是数字 —— 是数字就与「量过了、确实没人 patch」逐字同形。
+        var unmeasured = PatchOps(unnamed);
+        Assert.Equal(System.Text.Json.JsonValueKind.String, unmeasured.ValueKind);
+        Assert.Equal("n/a", unmeasured.GetString());
+
+        // 后果那句散文只在非零时说 —— 真的 0 不需要解释,而常驻声明是 00 论据 3 淘汰掉的。
+        // 无名那一条要的是另一句话:说破口径,不是说后果。
         var (patchedText, _, _) = Fixture.Run("inherit", "BaseBullet");
-        var (cleanText, _, _) = Fixture.Run("inherit", "Bullet_Revolver");
+        var (cleanText, _, _) = Fixture.Run("inherit", "BaseProjectile");
+        var (unnamedText, _, _) = Fixture.Run("inherit", "Bullet_Revolver");
         Assert.Contains("is targeted by name by", patchedText);
         Assert.DoesNotContain("is targeted by name by", cleanText);
+        Assert.DoesNotContain("patch_ops is not measured", cleanText);
+        Assert.Contains("patch_ops is not measured", unnamedText);
     }
 
     /// <summary>

@@ -111,8 +111,10 @@ stays local.
 5. **Inheritance.** Every other command answers from the objects the game had in memory, where
    inheritance is already resolved and invisible. `inherit` is the one exception: it reads the
    mods' XML, so it can show abstract parents, `ParentName` chains, and what inherits from a
-   node. Two consequences. It is the XML **before** PatchOperations, and each named node reports
-   how many patch operations target it by name — zero means what you see is what the game read.
+   node. Two consequences. It is the XML **before** PatchOperations, and each node that declares
+   `Name=` reports how many patch operations target it by name — zero means what you see is what
+   the game read. A node without a `Name=` reports `n/a`, not zero: patches that reach a def by
+   its defName are counted nowhere, so for those defs "has a mod patched it?" stays unanswered.
    And an abstract node has no field values of its own here; everything it declares is already
    merged, post-patch, into each child, so read a concrete child with `get`.
 6. **Moving into the code.** Once you have a class name from a def, hand it to
