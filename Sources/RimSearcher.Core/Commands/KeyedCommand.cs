@@ -91,8 +91,10 @@ public sealed class KeyedCommand : Command
         {
             ctx.Report.Notice(NoticeKind.Boundary,
                 "This snapshot has no keyed translations at all, so nothing here can be looked up — that is a " +
-                "property of the snapshot, not an answer about '" + query + "'. Export again from a game that " +
-                "has its language data loaded; 'rimsearcher snapshot status' names the snapshot in use.");
+                "property of the snapshot, not an answer about '" + query + "'. Two exports look like this and " +
+                "this line cannot tell them apart: one written before this layer was measured at all, and one " +
+                "written from a game whose language data was not loaded. The fix is the same either way — export " +
+                "again; 'rimsearcher snapshot status' names the snapshot in use.");
             return 1;
         }
 

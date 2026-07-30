@@ -2035,7 +2035,7 @@ public class GrammarTests
     [Fact]
     public void 反查落空要说破索引里装的只是值()
     {
-        const string Line = "never entered this index";
+        const string Line = "keep a field out of this index without any sign here";
 
         var (find, _, _) = Fixture.Run("find", "noSuchField", "x");
         Assert.Contains(Line, find, StringComparison.Ordinal);

@@ -1465,10 +1465,18 @@ internal static class Completeness
     /// <c>get</c> 早就为**单个 def** 说过这句话(五轮 F4),而 find / values / fields
     /// 三条反查路一直没说 —— 第七轮六份轨迹独立踩,其中三次差点交出反向结论。
     /// 一件事一个产地:三处调同一份措辞,不各写各的。
+    ///
+    /// **第八轮修正:原先这句话只说了 null 一种成因,而它把成因说错过。** ep118 问
+    /// <c>fields CreepJoinerBaseDef --path weight</c>,拿到的是「每个 def 上都是 null」——
+    /// 真因是 <c>weight = 1f</c> 声明在基类上而 def 的运行时类是子类,反射默认拿不到
+    /// (见 <c>FieldWalk</c>)。成因既然有好几种,就把它们列全:这句话本身就是「为什么是零」
+    /// 的答案,列全才是精确,不是啰嗦。
     /// </summary>
     public static void NoteIndexHoldsValuesOnly(CommandContext ctx)
         => ctx.Report.Notice(NoticeKind.Boundary,
-            "A field whose value is null on every def never entered this index. " +
+            "Two things keep a field out of this index without any sign here: a value that was null " +
+            "on every def, and a field the game marks as an unsaved runtime cache. A third, hitting " +
+            "the per-def field cap, does leave a sign — 'rimsearcher snapshot truncated' lists those defs. " +
             NestedClassLine(ctx) +
             " So this says no indexed value sits at that path — not that no such field exists. " +
             "'rimsearcher code-search' reads the class declaration, which does say.");

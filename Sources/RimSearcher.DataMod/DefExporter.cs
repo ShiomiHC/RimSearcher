@@ -242,11 +242,8 @@ namespace RimSearcher.DataMod
             // 换成新 new 的那个 CompProperties 子类,于是 props.energyMax 比的是它自己的初始值,
             // 而不是「ThingDef 上有没有 comps」。
             var pristine = Pristine(type);
-            foreach (var field in type.GetFields(
-                         BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+            foreach (var field in FieldWalk.InstanceFields(type))
             {
-                if (field.IsStatic) continue;
-                if (field.Name.IndexOf('<') >= 0) continue;
                 if (Attribute.IsDefined(field, typeof(UnsavedAttribute))) continue;
                 object value;
                 try { value = field.GetValue(obj); }
