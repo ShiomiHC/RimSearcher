@@ -111,6 +111,7 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
 {
     private SnapshotDb? _db;
     private bool _snapshotNoticed;
+    private bool _scopeNoticed;
 
     public RimConfig Config { get; } = config;
     public ParseResult Args { get; } = args;
@@ -181,7 +182,32 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
                 // 没举出来的有多少(产地在 NameList)。
                 $"This snapshot contains: {NameList.Render(Db.PackageIds(), 8)}" +
                 ". 'rimsearcher mods' lists them all.");
+        AnnounceScope(filter);
         return filter;
+    }
+
+    /// <summary>
+    /// 一个 scope 词展开成了什么,在**有结果时**也要说。
+    ///
+    /// 文档两处白纸黑字承诺过(SKILL《Parameters》与 cli-reference 每个 --scope 条目:
+    /// 「the output spells out what a scope resolved to whenever it is more than one mod」),
+    /// 而 <see cref="ScopeFilter.Describe"/> 的七个调用点全嵌在零结果句里 ——
+    /// **查到东西时不告诉你范围,查不到时才告诉你**,承诺与实现正好反了向。
+    /// 四份轨迹撞上,其中一份连着五次 --scope vanilla 零次播报,而那个词的口径直接
+    /// 决定答案怎么写(它实际展开成六个 Ludeon 模块,含 DLC)。
+    ///
+    /// 判据取「展开与你输入的字面不同」而不是「多于一个 mod」:后者对
+    /// <c>--scope ludeon.rimworld</c> 这种写死 packageId 的调用也要发声,而那种调用
+    /// 一个字都不需要 —— 你写的就是你得到的。前者覆盖了全部已举证的用例而不收那份税。
+    /// 相应地文档那句「whenever it is more than one mod」要跟着改。
+    /// </summary>
+    private void AnnounceScope(ScopeFilter filter)
+    {
+        if (_scopeNoticed || filter.IsAll) return;
+        var described = filter.Describe();
+        if (string.Equals(described, filter.Expression, StringComparison.Ordinal)) return;
+        _scopeNoticed = true;
+        Report.Notice(NoticeKind.Filter, $"--scope {described}.");
     }
 
     /// <summary>
@@ -217,6 +243,24 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
                     $"Using snapshot '{name}' ({(selection.Source == SelectionSource.Pinned ? "pinned" : "auto-detected")}); " +
                     $"also registered: {string.Join(", ", others)}.");
             }
+        }
+
+        // 一词两义,而两义都在这一次调用里活着:快照叫 vanilla,--scope vanilla 是另一回事,
+        // 提问者嘴里的「原版」是第三回事。实测代价 22 倍 —— 机器上恰好有个叫 vanilla 的
+        // 快照(Core + 导出器,两个 mod),而问的是原版行为,顺手 --snapshot vanilla,
+        // 于是唯一烧油的那个穿梭机(来自 Odyssey)整个不在射程里,输出一个字不提。
+        //
+        // 「显式指定就闭嘴,因为你已经说了要哪个环境」这条原则在这里恰好不成立:
+        // 前提是调用方知道自己选的环境是什么,而这一格正是他以为自己知道其实不知道的。
+        // 只在**撞名**时说,所以这句话平常一次都不出现。
+        if (ScopeFilter.IsGroupName(name, Config))
+        {
+            var ids = Db.PackageIds();
+            Report.Notice(NoticeKind.Boundary,
+                $"'{name}' is both this snapshot's name and a --scope group name, and the two cover " +
+                $"different things. This snapshot holds {Tally.Complete(ids.Count).Render("mod")}: " +
+                $"{NameList.Render(ids, 6)}. Anything outside them — another mod, or a DLC this export " +
+                $"did not have enabled — is absent from every answer below, not reported as missing.");
         }
 
         switch (report.Match)

@@ -31,6 +31,10 @@ public class OutputSnapshotTests
         { "search-miss-mod",       ["search", "ludeon.rimworld"] },
         // 被自己的 --scope 挡住 —— 「过滤掉了」被说成「没有」是最贵的那种。
         { "search-miss-scoped",    ["search", "TestModGun", "--scope", "ludeon.rimworld"] },
+        // 五轮 F2:scope 展开在**有结果时**也要说。这两份是那道闸的字节落点 ——
+        // 组名那份必须带展开句,写死 packageId 那份必须一个字都不多说。
+        { "find-scope-group",      ["find", "thingClass", "RimWorld.Bullet", "--scope", "vanilla"] },
+        { "find-scope-literal",    ["find", "thingClass", "RimWorld.Bullet", "--scope", "ludeon.rimworld"] },
         // R10 fatal:换一份快照就拿得到,而这句话一直是可算出来的。
         { "get-other-snapshot",    ["get", "OnlyInOtherSnapshot"] },
         { "inherit-other-snapshot", ["inherit", "OnlyInOtherSnapshot"] },

@@ -44,6 +44,11 @@ public sealed class ScopeFilter
     /// <c>ludeon.rimworld*</c> 模块,也就是 Core 加全部已装 DLC;而一份**叫** vanilla 的
     /// 快照可能只有 Core。两份文档都没写这件事,而两者在句子里长得一模一样。
     /// 展开是当场算得出来的,那就算出来 —— 让读者去记一份对照表,等于把工具的活推给他。
+    ///
+    /// 五轮:这个方法原先七个调用点**全在零结果句里**,于是查到东西时不告诉你范围、
+    /// 查不到时才告诉你 —— 承诺与实现正好反了向。现在它只有一个调用点
+    /// (<c>CommandBase.AnnounceScope</c>,展开与字面不同时无条件说一句),
+    /// 散文里一律写调用方输入的字面。展开一句话说一次,别在同一次输出里重复两遍。
     /// </summary>
     public string Describe()
     {
@@ -115,11 +120,26 @@ public sealed class ScopeFilter
 
     private static readonly string[] VanillaPrefixes = ["ludeon.rimworld"];
 
+    /// <summary>内置组名。与 <see cref="Resolve"/> 用同一份,免得两处各记一份而漂移。</summary>
+    private static readonly string[] BuiltinGroups = ["vanilla", "base", "core", "official"];
+
+    /// <summary>
+    /// 这个词是不是一个 scope **组名**(而不是一个 packageId)。
+    ///
+    /// 用处只有一个:一份快照恰好也叫这个名字时要说破两者不是一回事。上面 <see cref="Describe"/>
+    /// 的注释已经把这一词两义写下来了,而它当时只解决了「散文里写 scope」那一半 ——
+    /// 另一半是 <c>--snapshot vanilla</c>,而那一半在五轮里差点造成 22 倍的错答案。
+    /// </summary>
+    public static bool IsGroupName(string? name, RimConfig config)
+        => name is { Length: > 0 } &&
+           (BuiltinGroups.Contains(name, StringComparer.OrdinalIgnoreCase) ||
+            config.ScopeGroups.ContainsKey(name));
+
     private static HashSet<string> Resolve(string name, HashSet<string> universe, RimConfig config)
     {
         var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        if (name is "vanilla" or "base" or "core" or "official")
+        if (BuiltinGroups.Contains(name, StringComparer.OrdinalIgnoreCase))
         {
             foreach (var id in universe)
                 if (VanillaPrefixes.Any(p => id.StartsWith(p, StringComparison.OrdinalIgnoreCase)))

@@ -32,6 +32,9 @@ public static class Fixture
         }
     }
 
+    /// <summary>名字本身就是一个 scope 组名的那份快照 —— 撞名提示的落点。</summary>
+    public static string CoreDb => Path.Combine(SnapshotDir, "core.db");
+
     /// <summary>造好一次,整个测试进程共用。</summary>
     public static string Db
     {
@@ -53,6 +56,13 @@ public static class Fixture
                 WriteOtherExport(otherExport);
                 new SnapshotImporter().Import(otherExport, Path.Combine(SnapshotDir, "other.db"));
 
+                // 第三份:文件名就是一个 scope 组名。五轮 F3 的落点 —— 快照叫 core/vanilla
+                // 与 `--scope core` 是两回事,而两者在句子里长得一模一样。内容刻意与 other
+                // 不同名,免得跨快照点名那句话多出一个落点。
+                var coreExport = Path.Combine(dir, "core" + IntermediateFormat.FileExtension);
+                WriteOtherExport(coreExport, "OnlyInCoreSnapshot");
+                new SnapshotImporter().Import(coreExport, CoreDb);
+
                 return _dbPath = db;
             }
         }
@@ -62,7 +72,7 @@ public static class Fixture
     /// 另一份快照的语料。刻意只有一个 def,而且是 fixture 里没有的名字 ——
     /// 它存在的唯一理由是让「换一份快照就能拿到」这句话可判定。
     /// </summary>
-    private static void WriteOtherExport(string path)
+    private static void WriteOtherExport(string path, string defName = "OnlyInOtherSnapshot")
     {
         using var fs = File.Create(path);
         using var gz = new GZipStream(fs, CompressionLevel.Optimal);
@@ -85,7 +95,7 @@ public static class Fixture
         w.WriteLine(new JsonLine()
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindDef)
             .Str(IntermediateFormat.KeyDefType, "ThingDef")
-            .Str(IntermediateFormat.KeyDefName, "OnlyInOtherSnapshot")
+            .Str(IntermediateFormat.KeyDefName, defName)
             .Str(IntermediateFormat.KeyLabel, "only in other")
             .Str(IntermediateFormat.KeyDescription, "")
             .Str(IntermediateFormat.KeySourceMod, "other.mod")

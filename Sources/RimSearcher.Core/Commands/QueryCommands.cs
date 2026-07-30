@@ -115,7 +115,7 @@ public sealed class SearchCommand : Command
             // 而错误消息当时把他指向 code-search:那条路找得到类,却永远找不到用它的 def。
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"Nothing matched '{query}' in this snapshot" +
-                (scope.IsAll ? "" : $" within --scope {scope.Describe()}") +
+                (scope.IsAll ? "" : $" within --scope {scope.Expression}") +
                 ". This command covers def names, labels, descriptions and translations, not C# class names.");
 
             // R8:剩下那半句原先是**猜**的 —— 「像个类名」就指向 find/code-search,
@@ -660,7 +660,7 @@ public sealed class FindCommand : Command
 
                 ctx.Report.Notice(NoticeKind.NextStep,
                     $"No def in this snapshot has a field path ending in '{path}'" +
-                    (scope.IsAll ? "" : $" within --scope {scope.Describe()}") + ". " +
+                    (scope.IsAll ? "" : $" within --scope {scope.Expression}") + ". " +
                     (identity.TryGetValue(path, out var hint)
                         ? $"'{path}' is part of a def's identity rather than one of its fields: {hint}."
                         : "'rimsearcher fields <DefType> --path <text>' lists the paths that a def type actually has" +
@@ -671,7 +671,7 @@ public sealed class FindCommand : Command
             if (value is null)
             {
                 ctx.Report.Notice(NoticeKind.NextStep,
-                    $"'{path}' exists in this snapshot but no def has it within --scope {scope.Describe()}. " +
+                    $"'{path}' exists in this snapshot but no def has it within --scope {scope.Expression}. " +
                     "Widen the scope, or pass a value to look for.");
                 return 1;
             }
@@ -778,7 +778,7 @@ public sealed class FindCommand : Command
                                 (char.IsUpper(value[0]) || value.Contains('.'));
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"No field in this snapshot holds a value {(exact ? "equal to" : "containing")} '{value}'" +
-                (scope.IsAll ? "" : $" within --scope {scope.Describe()}") +
+                (scope.IsAll ? "" : $" within --scope {scope.Expression}") +
                 (exact ? ". Drop --exact to match it as a substring." : "") +
                 (looksLikeType
                     ? " If that is a class name: the snapshot indexes leaf scalars and a comp's compClass, but " +
@@ -883,7 +883,7 @@ public sealed class ListCommand : Command
                 if (everywhere > 0)
                 {
                     ctx.Report.Notice(NoticeKind.NextStep,
-                        $"No def of type {type} is in scope '{scope.Describe()}'" +
+                        $"No def of type {type} is in scope '{scope.Expression}'" +
                         (wantClass is null ? "" : $" with class '{wantClass}'") +
                         $", but this snapshot has {Tally.Complete(everywhere).Render("def")} of it overall. " +
                         $"Drop --scope, or run 'rimsearcher mods' to see which mods the scope selects.");

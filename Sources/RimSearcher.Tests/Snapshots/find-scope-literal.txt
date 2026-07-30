@@ -1,0 +1,10 @@
+$ rimsearcher find thingClass RimWorld.Bullet --scope ludeon.rimworld
+exit 0
+--- stdout ---
+1 def.
+
+def_name         def_type  path        value            code_default  mod
+Bullet_Revolver  ThingDef  thingClass  RimWorld.Bullet  no            ludeon.rimworld
+
+Counted over indexed field paths only: 1 def of the same def types lost fields at export time and could belong here without showing up. 'rimsearcher snapshot truncated' lists them.
+--- stderr ---

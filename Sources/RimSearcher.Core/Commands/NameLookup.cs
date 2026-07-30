@@ -74,7 +74,7 @@ internal static class NameLookup
                 var mods = defs.Select(d => d.SourceMod).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
                 return new Sighting(Where.DefOutsideScope,
                     $"'{name}' is in this snapshot after all — it comes from {string.Join(", ", mods)}, " +
-                    $"which --scope {scope.Describe()} excludes. Drop --scope, or name that mod in it.");
+                    $"which --scope {scope.Expression} excludes. Drop --scope, or name that mod in it.");
             }
         }
 

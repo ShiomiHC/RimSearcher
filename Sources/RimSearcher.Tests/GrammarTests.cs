@@ -398,6 +398,63 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 五轮 F3:一个词同时是快照名和 scope 组名时,要说破两者不是一回事。
+    ///
+    /// 实测代价 22 倍:机器上恰好有一份叫 vanilla 的快照(Core + 导出器,两个 mod),
+    /// 而提问问的是「原版怎么算」,顺手 <c>--snapshot vanilla</c> —— 唯一烧油的那个
+    /// 穿梭机来自 Odyssey,整个不在射程里,而输出一个字不提。
+    /// <c>--scope vanilla</c> 则是六个 Ludeon 模块(含 DLC),第三义是提问者嘴里的「原版」。
+    ///
+    /// 「显式指定就闭嘴,你已经说了要哪个环境」这条原则在这里恰好不成立:
+    /// 它的前提是调用方知道自己选的环境是什么,而这一格正是他以为知道其实不知道的。
+    /// 只在撞名时说,所以平常一次都不出现 —— 下面第二组断言守的就是这个。
+    /// </summary>
+    [Fact]
+    public void 快照名与scope组名撞车时说破()
+    {
+        const string collision = "is both this snapshot's name and a --scope group name";
+
+        // core.db:文件名就是内置组名之一。
+        var (hit, _, _) = Fixture.Run("get", "OnlyInCoreSnapshot", "--db", Fixture.CoreDb);
+        Assert.Contains(collision, hit);
+        // 说破的必须是**这份快照实际盖住什么**,不是一句泛泛的免责声明。
+        Assert.Contains("other.mod", hit);
+
+        // 名字不撞车的那份,一个字都不多说。
+        var (quiet, _, _) = Fixture.Run("get", "Apparel_ShieldBelt");
+        Assert.DoesNotContain(collision, quiet);
+    }
+
+    /// <summary>
+    /// 五轮 F2:scope 展开成了什么,在**有结果时**也要说。
+    ///
+    /// 文档两处承诺过,而 <c>Describe()</c> 的七个调用点原先全嵌在零结果句里 ——
+    /// 查到东西时不告诉你范围,查不到时才告诉你,方向正好反了。四份轨迹撞上,
+    /// 其中一份连着五次 <c>--scope vanilla</c> 零次播报,而那个词实际展开成六个
+    /// Ludeon 模块(含 DLC),口径直接决定答案怎么写。
+    ///
+    /// 判据是「展开与字面不同」,不是「多于一个 mod」:写死 packageId 的调用
+    /// 一个字都不该多收。同一次输出里也只说一遍 —— 散文里一律写调用方输入的字面。
+    /// </summary>
+    [Fact]
+    public void scope展开在有结果时也播报()
+    {
+        // 组名:夹具里 vanilla 展开成 ludeon.rimworld,与字面不同 —— 必须说。
+        var (group, _, code) = Fixture.Run("find", "thingClass", "RimWorld.Bullet", "--scope", "vanilla");
+        Assert.Equal(0, code);
+        Assert.Contains("--scope vanilla (= ludeon.rimworld)", group);
+
+        // 写死 packageId:你写的就是你得到的,一个字都不多说。
+        var (literal, _, _) = Fixture.Run("find", "thingClass", "RimWorld.Bullet", "--scope", "ludeon.rimworld");
+        Assert.DoesNotContain("--scope ludeon.rimworld (", literal);
+
+        // 零结果那一侧原先就说,现在仍要说,但**只说一遍**:散文改用字面之后,
+        // 展开只剩播报那一个产地。两遍与一遍在这里差的是「读者以为看到了两条独立证据」。
+        var (miss, _, _) = Fixture.Run("find", "--value", "NoSuchValueXyz", "--scope", "vanilla");
+        Assert.Single(Regex.Matches(miss, @"= ludeon\.rimworld\)"));
+    }
+
+    /// <summary>
     /// 五轮 F1:截断尾注是给「这就是全部」背书的那句话,而它自己算错了。
     ///
     /// 两处根因。一是 <c>find --value</c> 按**结果里的每条路径**各查一次再求和,同一个被砍的
