@@ -1275,6 +1275,37 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// `sources list` 的表头报「33 棵树 / 24 个 mod」,两个数怎么合上原先要读者自己数 33 行。
+    /// 对账行把两边各自拆到桶里,而闸判的正是**加得起来** —— 一句对不上的对账比没有更坏,
+    /// 它让人以为自己看懂了。
+    ///
+    /// 两条等式各只用一个单位:混着数会得出一个凑巧对得上的和(树侧的 vanilla 那一棵
+    /// 同时又代表 mod 侧那几个 packageId,重复计一次照样「相等」)。
+    /// </summary>
+    [Fact]
+    public void sources对账的两条等式都要加得起来()
+    {
+        var (stdout, _, _) = Fixture.Run("sources", "list");
+
+        var mods = Regex.Match(stdout,
+            @"Mods in [^(]*\((\d+)\): (\d+) with a tree of their own, (\d+) folded into[^,]*, " +
+            @"(\d+) with no assembly to decompile, (\d+) not installed here, (\d+) the exporter itself\.");
+        Assert.True(mods.Success, stdout);
+        var m = mods.Groups.Cast<Group>().Skip(1).Select(g => int.Parse(g.Value)).ToList();
+        Assert.Equal(m[0], m[1] + m[2] + m[3] + m[4] + m[5]);
+
+        var trees = Regex.Match(stdout,
+            @"Trees on disk \((\d+)\): (\d+) current, (\d+) stale, (\d+) never built, (\d+) from outside");
+        Assert.True(trees.Success, stdout);
+        var t = trees.Groups.Cast<Group>().Skip(1).Select(g => int.Parse(g.Value)).ToList();
+        Assert.Equal(t[0], t[1] + t[2] + t[3] + t[4]);
+
+        // 只加注,不缩范围。把这件事实现成「默认只扫快照内的树」会让穷举论证整批作废,
+        // 而降级前后的输出一模一样 —— 所以这句承诺本身要在场。
+        Assert.Contains("reads every tree either way", stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 落空那句话报的值域不许超发。它说 covers 什么,就得真覆盖到什么。
     /// </summary>
     [Fact]

@@ -133,6 +133,8 @@ public sealed class SourcesListCommand : Command
         var rows = new List<IReadOnlyDictionary<string, object?>>();
         var stale = 0;
         var missing = 0;
+        var current = 0;
+        var outside = 0;
 
         foreach (var name in onDisk.Union(plans.Keys, StringComparer.OrdinalIgnoreCase)
                                    .OrderBy(n => n, StringComparer.OrdinalIgnoreCase))
@@ -146,13 +148,13 @@ public sealed class SourcesListCommand : Command
             if (!plans.TryGetValue(name, out var plan))
                 // 计划里没有它:这棵树对应的 mod 不在这次的列表里。不是「坏了」,
                 // 但也不该被当成当前环境的一部分 —— 说清是哪一种。
-                status = "not in " + from;
+                { status = "not in " + from; outside++; }
             else if (state is null)
                 { status = exists ? "no manifest" : "never built"; missing++; }
             else if (!state.SameSources(SourcePlanner.Manifest(plan, gameVersion)))
                 { status = "stale"; stale++; }
             else
-                status = "current";
+                { status = "current"; current++; }
 
             rows.Add(new Dictionary<string, object?>
             {
@@ -174,6 +176,39 @@ public sealed class SourcesListCommand : Command
             $"{Tally.Complete(rows.Count).Render("source tree")} under '{root}', " +
             $"checked against {from} ({Tally.Complete(ids.Count).Render("mod")}, " +
             $"game {SourcePlanner.NormalizeGameVersion(gameVersion)}).");
+
+        // 对账。表头报「33 棵树 / 24 个 mod」,两个数怎么合上原先要读者自己数 33 行 ——
+        // 而 status 那一列的五种取值里,只有一种说的是「这棵树不属于这份快照」。
+        //
+        // 四个桶都得点名,不许留「余数」:光报「12 棵是当前的」时,另外 12 个 mod
+        // 去哪儿了一个字都没有 —— 而它们不是坏了,是**根本没有 C#**(纯 XML 的 mod,
+        // SourcePlanner 见 dlls.Count == 0 直接 continue),或者被并进了 vanilla 那一棵
+        // (每个 DLC 各是一个 packageId,树只有一棵)。这两件事说不清,读的人只能读成
+        // 「一半的 mod 反编译失败了」。
+        //
+        // 最后半句是有承重的:**只加注,不缩范围**。把这件事实现成「默认只扫快照内的树」
+        // 会让穷举论证整批作废,而降级前后的输出一模一样 —— 本轮候选里最危险的同形。
+        // 句中不出现随计数变形的动词:冒号在前,数在后。
+        // 两条等式各自封闭,而且**各只用一个单位**。混着数会得出一个凑巧对得上的和:
+        // 「12 棵当前的树 + 6 个并进 vanilla 的 mod + 6 个没代码的 mod = 24 个 mod」——
+        // 左边前一项数的是树,vanilla 那一棵同时又代表右边那 6 个 mod,重复计了一次。
+        // 「并进 vanilla 那一棵」只在那一棵真被计划出来时才说得通。没配 game_dir 时
+        // 一个 DLL 都找不到,于是并没有那么一棵树可并 —— 这时候这几个 packageId 的
+        // 真实处境就是「没有可反编译的程序集」,归到下面那个桶里去。
+        var vanillaIds = plans.ContainsKey(SourcePlanner.VanillaTree) ? ids.Count(SourcePlanner.IsVanilla) : 0;
+        var exporterIds = ids.Count(i => string.Equals(i, Contract.IntermediateFormat.ExporterPackageId,
+                                                       StringComparison.OrdinalIgnoreCase));
+        var ownTree = plans.Keys.Count(k => !string.Equals(k, SourcePlanner.VanillaTree, StringComparison.OrdinalIgnoreCase));
+        var noCode = ids.Count - vanillaIds - exporterIds - notInstalled.Count - ownTree;
+
+        ctx.Report.Notice(NoticeKind.Count,
+            $"Mods in {from} ({ids.Count}): {ownTree} with a tree of their own, " +
+            $"{vanillaIds} folded into the single '{SourcePlanner.VanillaTree}' tree, " +
+            $"{noCode} with no assembly to decompile, {notInstalled.Count} not installed here, " +
+            $"{exporterIds} the exporter itself. " +
+            $"Trees on disk ({rows.Count}): {current} current, {stale} stale, {missing} never built, " +
+            $"{outside} from outside {from}. " +
+            "'code-search' reads every tree either way; this list is the only place that says which is which.");
 
         // 「N tree(s)」是登记处存在的理由本身:括号 s 把单复数问题推给读者,而这一句正是
         // 用来判断「要不要重新反编译」的。两截各自只在非零时出现 —— 「0 were never built」

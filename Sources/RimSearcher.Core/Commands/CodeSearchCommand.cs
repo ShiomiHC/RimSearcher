@@ -302,7 +302,7 @@ public sealed class CodeSearchCommand : Command
             else
                 ctx.Report.Notice(NoticeKind.NextStep,
                     $"No line matched in {Tally.Complete(filesRead).Render("file")} under '{glob}'" +
-                    (treesTotal > 1 ? $" across {Tally.Complete(treesTotal).Render("source tree")}" : "") + ". " +
+                    Framing(root, sourceName, treesTotal) + ". " +
                     "If you were looking for a def rather than code, 'rimsearcher search' and 'rimsearcher find' " +
                     "answer that from the snapshot — the XML is not searched here.");
         }
@@ -320,7 +320,9 @@ public sealed class CodeSearchCommand : Command
                 $"{found.Render("match")} in {Tally.Complete(filesWithMatches).Render("file")}" +
                 (printed < totalMatches ? $" ({printed} printed)" : "") +
                 $"; {fileTally.Render("file")} read" +
-                (treesTotal > 1 ? $" across {treeTally.Render("source tree")}" : "") + ".");
+                (treesRead < treesTotal
+                    ? $" across {treeTally.Render("source tree")}"
+                    : Framing(root, sourceName, treesTotal)) + ".");
         }
 
         // 三个旋钮各自申报,因为被截的原因不同,该拧的也不同。
@@ -484,6 +486,31 @@ public sealed class CodeSearchCommand : Command
     /// 路径一律相对根目录,<c>--source</c> 只是少走几棵树,不改变文件的名字。
     /// </summary>
     /// <summary>目录在,里面一个文件都没有 —— 与「目录不在」和「glob 没打中」是三件事。</summary>
+    /// <summary>
+    /// 取景 —— 这一次扫的是哪一片。
+    ///
+    /// 原先只在 <c>treesTotal > 1</c> 时才说「across N source trees」,于是
+    /// <c>--source vanilla</c> 一加,这半句整个消失:输出变成「1 match in 1 file;
+    /// 10222 files read.」,而它与「全库扫完只有这一条」逐字同形。四份实测把穷举论证
+    /// 建在这句话上,而窄化把论证的射程悄悄改了。
+    ///
+    /// 所以窄化时**说得更多**而不是更少:点名扫了哪一棵,以及有几棵没扫、怎么把它们扫上。
+    /// </summary>
+    private static string Framing(string root, string? sourceName, int treesTotal)
+    {
+        if (string.IsNullOrEmpty(sourceName))
+            return treesTotal > 1 ? $" across {Tally.Complete(treesTotal).Render("source tree")}" : "";
+
+        // 数目用「N of M」而不是相减出来的差:磁盘上有 33 个目录,而不窄化那次报的
+        // 「23 棵」数的是**有候选文件的**树 —— 两个数并排一放就有人去减,减出来的
+        // 那个「10 棵没扫」谁都验证不了。各自标清自己数的是什么,不请人做减法。
+        var onDisk = SourcesShared.TreeNames(root).Count();
+        return $" in the '{sourceName}' tree alone" +
+               (onDisk > 1
+                   ? $" ({Tally.Of(1, onDisk).Render("source tree")} on disk); drop --source to search them all"
+                   : "");
+    }
+
     private static bool EmptyTree(string root, string sourceName)
     {
         var dir = Path.Combine(root, sourceName);
