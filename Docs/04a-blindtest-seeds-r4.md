@@ -475,18 +475,67 @@ usages / overrides / derived。
 **明确不做:** `<li Class=>` 类型名入索引(5:1,真需求是另一件事,另立)/
 `read` 接 Roslyn(四份实测支持原判定)/ 三条 schema 级改动。
 
+### 落地(三批全完,2026-07-30)
+
+三批共 15 条,全部落在 `rebuild` 分支上,`bb1bc42..6a3d8e3`。全套 340 条绿,
+88 份字节基线;新立的每一道闸都单独见过红(改法一律:备份文件 → 屏蔽被测那一支 →
+看它红 → 还原)。
+
+| 批 | 提交 | 内容 |
+|---|---|---|
+| 一 | `bb1bc42` `1f58af2` `9b5ea43` `1760de3` | 默认值声明收回两个承诺;scope 展开与撞名播报;`inherit` 印 `n/a`;截断注脚按值一次问清 |
+| 二 | `32fe5e2` | `search` 一名两 def 崩溃(exit 70)—— `AllDefNames` 无 `DISTINCT`,炸在主推入口上 |
+| 二 | `2004109` | 译文 original 侧接上;`search "brain damage"` 真快照 0 → 13 |
+| 二 | `ff809fb` | 子串命中说破自己不是整段命中(`get --path` / `fields --path` / `find --value`) |
+| 二 | `0e52c2b` | `find` 四条零结果分支叠加跨快照兜底 |
+| 二 | `844b7ed` | `ClassNameShape` 判据归一;抽象基类猜测收回,改指 `code-search "class \w+ : X\b"` |
+| 二 | `57eb4bd` | `sources list` 对账两条等式;`code-search --source` 取景回声 |
+| 二 | `a43cede` | `snapshot truncated --type/--def`;尾注指的路走得到它刚说的那批 |
+| 二 | `19c069e` | 同一块 `comps[N]` 里有人设过的兄弟字段要点名 |
+| 三 | `d0a360f` | 零行一律 exit 1(`types`);`values` 补「存在但不在这个 scope 里」那一档;`ArgParser` 的 `Take(3)` 改走 `NameList` |
+| 三 | `44a9f98` | `code-search` 零命中说破反编译抹掉了什么;`read --member` 落空指向基类 |
+| 三 | `04ce1b9` | `--help` 的 "Global options" 与位置约束抵触 |
+| 三 | `b8ab969` | 射程边界三行;收回对 MCP 的四类外包并给出 CLI 等价式 |
+| 三 | `6a3d8e3` | 本轮修复里属于**用法**的五条收进 SKILL,各钉一道闸 |
+| 搭车 | `0199290` | 夹具 `CoreDb` 自己建库并拆出私有路径 —— 重入 `Db` 时两层 `Import` 抢同一份 `fixture.db.tmp`,实测 168/339 红 |
+
+**三处与原计划不同的:**
+
+- **`read --member` 那条从「指向同名声明」改成「指向基类」。** 「同名声明在别处」
+  要扫全树才知道,而基类就写在类声明那一行上。实测 `read MapPortal.cs --member Destroy`
+  现在回 `MapPortal extends Building` 并给出 `read Building.cs --member Destroy` ——
+  那条命令直接读出 27 行方法体。首版把整张基类型表都端出来,`Pawn` 回了十二条、
+  十一条是接口,「Pawn extends IBillGiver」既没用也不对:**只取首位,且首位若按
+  .NET 约定长得像接口就当没有基类**。
+- **`code-search` 零命中那条的两条触发都量过,不是推的。** 本机 23 棵树 19467 个文件:
+  `^\s*///` 零条;`^\s*//` 一共 1369 条,其中 1334 条是 ILSpy 自己的备注;
+  `numN = ` 有 17212 条。**参数名照旧留着**(在元数据里,`Pawn pawn` 原样),
+  所以句子只敢说局部变量。`$"` 插值也留着 —— 原打算写进去的那条被真数据否掉了。
+- **`types --scope` 那一刀顺手带出 `values` 的同族缺陷。**
+  `values defName --scope <没有 def 的 mod>` 回「本快照没有 defName」,
+  而不带 scope 时每个 def 都有它 —— 空是 scope 造的,句子却记在了快照头上。
+
+**收进 SKILL 的判据:**「这条修复改变了调用方该怎么用它吗」。改输出措辞、退出码、
+报错分流的一律不进(那些在输出里当场说,写进 skill 是重复计费)。进的五条是:
+译文两侧都搜得到 / `--path` `--value` 是子串匹配 / 同块 `comps[N]` 兄弟字段互相约束 /
+`snapshot truncated` 收 `--type` `--def` / 全局参数写在命令之后。五条各钉一道已存在的闸。
+
 ### 下一轮的靶子(共识全做完仍会栽的)
 
 1. **「这个 def 被别的 mod patch 过没有」整个工具里没有查询路径** —— 第一批那一刀
    只是让它不再撒谎。同源的一条:`--scope vanilla` 按 def 归属过滤,被 PatchOperation
    改过的 ludeon def 照样算 vanilla,而 `--scope` 从不自报这个语义。**最该立项的贵活。**
+   *(三批全完后仍然成立,一个字没动。)*
 2. **射程边界**(6 份)—— 「这段 XML 该怎么写」这一类在工具里仍无直路。
+   *(`b8ab969` 只做到把边界说出来并指出最近的替代路;直路仍然没有。)*
 3. **穷举证据的取景无回声**(4 份)—— `--source` 窄化后连 `across N source trees`
-   半句都消失。
+   半句都消失。*(`57eb4bd` 已修:窄化时回声改成 `in the 'vanilla' tree alone
+   (1 of 33 source trees on disk)`,零命中与有命中两句都带。)*
 4. **聚合表扣着已经算好的东西**(4 份)—— `find --value` 给带下标的全路径却不给 def 名;
-   `ValueCoverage` 已写好却只在零结果分支调。
+   `ValueCoverage` 已写好却只在零结果分支调。*(仍然成立。)*
 5. **C# → def 反查**(3 份)—— 修好的 `find` 只在人**已经决定去反查之后**才帮得上忙,
-   不会在读到那行源码、症状与提问者原话逐字对上的那一刻拦住他。
+   不会在读到那行源码、症状与提问者原话逐字对上的那一刻拦住他。*(仍然成立;
+   `44a9f98` 让 `read` 落空时指得动基类,但那是 C# 内部的一跳,不是跨到 def 侧。)*
 
 ### 种子池
 
