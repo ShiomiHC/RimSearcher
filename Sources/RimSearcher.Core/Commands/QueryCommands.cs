@@ -799,9 +799,15 @@ public sealed class FindCommand : Command
                 ["example_value"] = r.Sample,
             }).ToList());
 
+        // 五轮 F1:这里原先按**结果里的每条路径**各查一次再求和。两处都错。
+        // 一是求和把同一个被砍的 def 按它出现在几条路径上重复计数;二是只要结果里有一条
+        // 路径叫 defName —— 而 `find --value` 命中一个 def 名时必然有 —— 那条路径的
+        // 「同类型」就退化成全体 def 类型,这一项独自等于全库。实测报出 251 与 242,
+        // 而快照总共 239:**子集计数大于全集**,却与一个正常计数逐字同形。
+        // 按值一次问清,不按路径拆:表里那批 def 是「取到过这个值」选出来的,
+        // 尾注担保的也必须是同一批。
         Completeness.NoteIndexedPathsOnly(ctx,
-            rows.Select(r => r.Path).Distinct(StringComparer.Ordinal)
-                .Sum(pth => ctx.Db.TruncatedDefsSharingPath(pth, scope)));
+            ctx.Db.TruncatedDefsSharingValue(value, exact ? ValueMatch.Exact : ValueMatch.Substring, scope));
         return 0;
     }
 }

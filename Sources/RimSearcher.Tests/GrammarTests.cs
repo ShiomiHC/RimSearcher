@@ -398,6 +398,72 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 五轮 F1:截断尾注是给「这就是全部」背书的那句话,而它自己算错了。
+    ///
+    /// 两处根因。一是 <c>find --value</c> 按**结果里的每条路径**各查一次再求和,同一个被砍的
+    /// def 出现在几条路径上就被数几次;二是那个子查询问的是「用过这条路径的 def 类型」,
+    /// 而结果里只要有一条路径叫 <c>defName</c> —— 命中一个 def 名时必然有 —— 它就退化成
+    /// 全体类型,这一项独自等于全库。真数据上报出 251 与 242,而快照总共 239 个被砍的 def。
+    ///
+    /// 闸按**数学上不可能**立,不按具体数字立:尾注说的是「同类型里还有几个」,那是全库
+    /// 被砍总数的一个子集,任何时候都不许超过它。子集大于全集,这句背书就作废了,而它
+    /// 印出来与一个正常计数逐字同形 —— 八份盲测轨迹里没有一份当场看出来。
+    ///
+    /// 红不红验过:把调用改回 <c>rows.Select(r =&gt; r.Path).Distinct().Sum(...)</c>,
+    /// <c>find --value RimWorld</c> 命中两条路径(thingClass 与 comps[0].compClass),
+    /// 在夹具上报 2 而全库只有 1 个被砍的 def,当场红。
+    /// </summary>
+    [Fact]
+    public void 截断尾注的计数不许超过全库被砍的总数()
+    {
+        var (all, _, _) = Fixture.Run("snapshot", "truncated", "--limit", "all", "--json");
+        using var doc = System.Text.Json.JsonDocument.Parse(all);
+        var total = doc.RootElement.GetProperty("truncated").GetArrayLength();
+        Assert.True(total > 0, "The fixture has no truncated def, so this gate cannot go red.");
+
+        // 覆盖四条会出这句尾注的路:按值查(求和的那条)、按路径+值查、值空间、字段路径表。
+        string[][] queries =
+        [
+            ["find", "--value", "RimWorld"],
+            ["find", "--value", "CompShield"],
+            ["find", "thingClass", "RimWorld.Apparel"],
+            ["values", "thingClass"],
+            ["fields", "ThingDef"],
+        ];
+
+        foreach (var argv in queries)
+        {
+            var (text, _, _) = Fixture.Run(argv);
+            var m = System.Text.RegularExpressions.Regex.Match(
+                text, @"Counted over indexed field paths only: (\d+) defs?\b");
+            if (!m.Success) continue;
+            var counted = int.Parse(m.Groups[1].Value);
+            Assert.True(counted <= total,
+                $"'{string.Join(' ', argv)}' vouches for a subset of {total} truncated defs but counted " +
+                $"{counted} — a subset larger than the whole, printed exactly like a sound count.");
+        }
+    }
+
+    /// <summary>
+    /// 同一句尾注的第二处:它原先只在内层收窄 scope,外层的 COUNT 不带谓词,于是
+    /// <c>--scope</c> 把结果收进一个 mod 之后,「可能属于这里而没露面」说的仍是一批
+    /// scope 明明排除掉的 def。四份轨迹各自报过「计数不跟随 --scope」。
+    /// </summary>
+    [Fact]
+    public void 截断尾注跟随scope收窄()
+    {
+        // 夹具里唯一被砍的 def(Bullet_Revolver)属于 ludeon.rimworld,而同一个值
+        // RimWorld.CompShield 在 test.mod 的 TestModGun 上也有 —— 收窄之后仍有结果,
+        // 变的只是这句背书该不该说话。
+        var (wide, _, _) = Fixture.Run("find", "--value", "CompShield");
+        Assert.Contains("Counted over indexed field paths only:", wide);
+
+        // 收到 test.mod 之后被砍的那个不在 scope 里,这句背书就不该再提它。
+        var (narrow, _, _) = Fixture.Run("find", "--value", "CompShield", "--scope", "test.mod");
+        Assert.DoesNotContain("Counted over indexed field paths only:", narrow);
+    }
+
+    /// <summary>
     /// R2:同名提示不随 <c>--type</c> 消失。
     ///
     /// 三轮最恶劣的一处就在这个缝上 —— 提示原先挂在**过滤后**的集合上,于是按 SKILL 教的

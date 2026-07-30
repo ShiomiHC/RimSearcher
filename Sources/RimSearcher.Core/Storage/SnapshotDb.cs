@@ -432,6 +432,34 @@ public sealed class SnapshotDb : IDisposable
     /// 后缀匹配的 WHERE 子句 —— <c>values</c> 与 <c>ValueCoverage</c> 必须用同一个,
     /// 否则「覆盖面」描述的就不是「值表」实际统计的那批行,而这正是最容易骗人的一种不一致。
     /// </summary>
+    /// <summary>
+    /// 「取到过这个值」的谓词。抽出来是因为截断尾注要按**同一批 def** 收窄 ——
+    /// 两处各写一份的话,尾注担保的集合与表里那批就会悄悄分家。
+    /// </summary>
+    private static string ValueWhere(string value, ValueMatch match, ScopeFilter scope,
+                                     Dictionary<string, object?> p)
+    {
+        var conds = new List<string>();
+        switch (match)
+        {
+            case ValueMatch.Exact:
+                p["@v"] = value;
+                conds.Add("fv.value = @v COLLATE NOCASE");
+                break;
+            case ValueMatch.Identifier:
+                p["@v"] = value;
+                p["@vq"] = "%." + Escape(value);
+                conds.Add("(fv.value = @v COLLATE NOCASE OR fv.value LIKE @vq ESCAPE '\\')");
+                break;
+            default:
+                p["@v"] = "%" + Escape(value) + "%";
+                conds.Add("fv.value LIKE @v ESCAPE '\\'");
+                break;
+        }
+        if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
+        return "WHERE " + string.Join(" AND ", conds);
+    }
+
     private static string SuffixWhere(string pathSuffix, ScopeFilter scope, Dictionary<string, object?> p)
     {
         var conds = new List<string>();
@@ -500,10 +528,42 @@ public sealed class SnapshotDb : IDisposable
     public int TruncatedDefsSharingPath(string pathSuffix, ScopeFilter scope)
     {
         var p = new Dictionary<string, object?>();
-        var where = SuffixWhere(pathSuffix, scope, p);
-        return Scalar(
-            "SELECT COUNT(*) FROM defs d WHERE d.fields_truncated > 0 AND d.def_type IN (" +
-            $"SELECT DISTINCT d.def_type FROM field_values fv JOIN defs d ON d.id = fv.def_id {where})", p);
+        return TruncatedAmong(SuffixWhere(pathSuffix, scope, p), scope, p);
+    }
+
+    /// <summary>
+    /// 同上,但这批 def 是「取到过某个值」而不是「有某条路径」选出来的。
+    ///
+    /// <c>find --value</c> 非有它不可:那条路上的结果行是**路径**,而按路径逐条求和
+    /// 会把 <c>defName</c> 这种每个 def 类型都有的路径整个放大成全库 —— 五轮实测
+    /// 报出 251 与 242,而快照总共只有 239 个被砍的 def。**子集计数大于全集**,
+    /// 数学上不可能,而它印出来与一个正常计数逐字同形。
+    /// </summary>
+    public int TruncatedDefsSharingValue(string value, ValueMatch match, ScopeFilter scope)
+    {
+        var p = new Dictionary<string, object?>();
+        return TruncatedAmong(ValueWhere(value, match, scope, p), scope, p);
+    }
+
+    /// <summary>
+    /// 「落在这批 def 类型上、且被砍过」的 def 有几个。
+    ///
+    /// 外层原先不带 scope 谓词:<c>--scope</c> 把结果收到一个 mod 里,尾注却仍按全库报数,
+    /// 于是「可能属于这里而没露面」说的是一批 scope 明明排除掉的 def。收窄的两处
+    /// (类型 + scope)缺一处,这句话担保的东西就不成立。
+    /// </summary>
+    private int TruncatedAmong(string innerWhere, ScopeFilter scope, Dictionary<string, object?> p)
+    {
+        // 外层用 t、内层用 d:同名别名在 SQLite 里靠作用域遮蔽也能跑,但读的人分不出
+        // 哪个 d 是哪个,而这段 SQL 的全部意思都在「内外收窄的是不同的东西」上。
+        var conds = new List<string>
+        {
+            "t.fields_truncated > 0",
+            "t.def_type IN (SELECT DISTINCT d.def_type FROM field_values fv " +
+            $"JOIN defs d ON d.id = fv.def_id {innerWhere})",
+        };
+        if (scope.SqlPredicate("t.source_mod", p) is { } sc) conds.Add(sc);
+        return Scalar($"SELECT COUNT(*) FROM defs t WHERE {string.Join(" AND ", conds)}", p);
     }
 
     /// <summary>某个 def 类型里有几个 def 在导出时被砍过。</summary>
@@ -536,25 +596,7 @@ public sealed class SnapshotDb : IDisposable
         // 既成的静默吞掉。它在这里是有意义的(整值相等 vs 含子串),所以实现它,而不是拒绝它:
         // 少一条要记的例外,对拼命令行的调用方就少一次踩空。
         var p = new Dictionary<string, object?>();
-        var conds = new List<string>();
-        switch (match)
-        {
-            case ValueMatch.Exact:
-                p["@v"] = value;
-                conds.Add("fv.value = @v COLLATE NOCASE");
-                break;
-            case ValueMatch.Identifier:
-                p["@v"] = value;
-                p["@vq"] = "%." + Escape(value);
-                conds.Add("(fv.value = @v COLLATE NOCASE OR fv.value LIKE @vq ESCAPE '\\')");
-                break;
-            default:
-                p["@v"] = "%" + Escape(value) + "%";
-                conds.Add("fv.value LIKE @v ESCAPE '\\'");
-                break;
-        }
-        if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
-        var where = "WHERE " + string.Join(" AND ", conds);
+        var where = ValueWhere(value, match, scope, p);
         const string join = "FROM field_values fv JOIN defs d ON d.id = fv.def_id";
 
         var total = Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT fv.path, d.def_type {join} {where})", p);
