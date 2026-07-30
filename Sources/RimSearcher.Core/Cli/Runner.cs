@@ -172,6 +172,12 @@ public static class Runner
         var ctx = new CommandContext(config, parsed) { Progress = stderr };
         try
         {
+            // 数据键恒在,产地在声明层(<see cref="JsonKeySpec.Rows"/>)。在**开查之前**发,
+            // 而不是在零行分支里补 —— 补的那种漏一条分支就漏一个形状,而分支恰恰是这套输出
+            // 最爱加的东西。条件性的键(互斥的那几对)仍由命令在自己那条分支上认领。
+            foreach (var key in command.Spec.JsonKeys.Where(k => k.Rows))
+                ctx.Report.Promises(key.Key);
+
             var code = command.Run(ctx);
             stdout.Write(ctx.Json ? JsonRenderer.Render(ctx.Report) : TextRenderer.Render(ctx.Report));
             return code;

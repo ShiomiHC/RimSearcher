@@ -68,6 +68,7 @@ public sealed class InheritCommand : Command
             new()
             {
                 Key = "nodes",
+                Rows = true,
                 What = "one object per XML node answering to the name — each with 'node' (identity and patch " +
                        "count), 'ancestors', 'children' when it has any, and 'witnesses' when --path is given.",
             },

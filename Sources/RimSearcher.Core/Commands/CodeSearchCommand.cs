@@ -143,6 +143,7 @@ public sealed class CodeSearchCommand : Command
             new()
             {
                 Key = "matches",
+                Rows = true,
                 What = "one row per printed line — file, line, is_match, group, text. Context lines come " +
                        "through with is_match false, and 'group' is the merged window they belong to, so the " +
                        "text form's '--' separator needs no counterpart here.",
@@ -197,7 +198,6 @@ public sealed class CodeSearchCommand : Command
 
         var matcher = GlobToRegex(glob);
         var maxFiles = PositiveOrAll(ctx, "max-files", Limits.CodeSearchMaxFiles);
-        ctx.Report.Promises("matches");
 
         var lines = new List<string>();
         var rows = new List<IReadOnlyDictionary<string, object?>>();

@@ -70,6 +70,7 @@ public sealed class KeyedCommand : Command
             new()
             {
                 Key = "keys",
+                Rows = true,
                 What = "one row per keyed translation — key, translated, original, origin ('in effect' or " +
                        "'on disk'), placeholder, mod, source. Always an array, including when a single key " +
                        "matched exactly, so the shape does not change with the kind of match.",

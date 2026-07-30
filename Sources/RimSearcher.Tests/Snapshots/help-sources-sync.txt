@@ -28,7 +28,7 @@ Global options (every command takes these, written after the command):
       --config <path>    Use this config file instead of the default one.
 
 --json keys (besides 'notes'):
-  rebuilt  one row per tree that was rewritten: tree, assemblies, files.
+  rebuilt  without --dry-run: one row per tree that was rewritten — tree, assemblies, files. 'plan' is absent then.
   plan     with --dry-run: one row per tree that would be rebuilt — tree, assemblies, reason, root. Nothing is written, and 'rebuilt' is absent.
 
 Examples:

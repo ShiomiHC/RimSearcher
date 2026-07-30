@@ -118,8 +118,10 @@ public sealed class ReadCommand : Command
             new()
             {
                 Key = "source",
-                What = "one row per source line — file, line, text, plus kind and declaration when the line " +
-                       "came from --member/--type. The text form's line-number gutter is not repeated here.",
+                What = "without --outline: one row per source line — file, line, text, plus kind and " +
+                       "declaration when the line came from --member/--type. The text form's line-number " +
+                       "gutter is not repeated here. This is the key the three reading modes produce; " +
+                       "'declarations' is absent then.",
             },
             new()
             {
@@ -151,6 +153,10 @@ public sealed class ReadCommand : Command
                 "--lines reads raw lines and --member/--type find a declaration; they are two different " +
                 "reads, so pass one or the other. '--outline' lists the declarations with their line ranges " +
                 "if you want to pick a range from them.");
+
+        // 两张表互斥,而「读哪一种」在开查之前就定了 —— 于是这里就能认领,不必等到有行才有键。
+        // 不能交给声明层统一发(见 JsonKeySpec.Rows):两个都发就等于说「另一路也查过了,没有」。
+        ctx.Report.Promises(outline ? "declarations" : "source");
 
         var sourceName = ctx.Args.Value("source");
         if (sourceName is { Length: > 0 } && !Directory.Exists(Path.Combine(root, sourceName)))

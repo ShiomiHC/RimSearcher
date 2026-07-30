@@ -596,7 +596,7 @@ Page with --lines, never with a pipe. The first line of the answer says which li
 
 | Key | Holds |
 |---|---|
-| `source` | one row per source line — file, line, text, plus kind and declaration when the line came from --member/--type. The text form's line-number gutter is not repeated here. |
+| `source` | without --outline: one row per source line — file, line, text, plus kind and declaration when the line came from --member/--type. The text form's line-number gutter is not repeated here. This is the key the three reading modes produce; 'declarations' is absent then. |
 | `declarations` | with --outline: one row per declaration — kind, name, in (the owner), lines, at (the 'start-end' range to hand back to --lines). |
 
 Examples:
@@ -820,7 +820,7 @@ A tree whose source assemblies have not changed is left alone. Comparing version
 
 | Key | Holds |
 |---|---|
-| `rebuilt` | one row per tree that was rewritten: tree, assemblies, files. |
+| `rebuilt` | without --dry-run: one row per tree that was rewritten — tree, assemblies, files. 'plan' is absent then. |
 | `plan` | with --dry-run: one row per tree that would be rebuilt — tree, assemblies, reason, root. Nothing is written, and 'rebuilt' is absent. |
 
 Examples:

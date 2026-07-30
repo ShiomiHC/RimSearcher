@@ -31,7 +31,7 @@ public sealed class SearchCommand : Command
         ],
         JsonKeys =
         [
-            new() { Key = "defs", What = "one row per matching def: def_name, def_type, label, matched_on, mod." },
+            new() { Key = "defs", Rows = true, What = "one row per matching def: def_name, def_type, label, matched_on, mod." },
         ],
     };
 
@@ -43,7 +43,6 @@ public sealed class SearchCommand : Command
         var type = ctx.Args.Value("type");
 
         var offset = ctx.Args.Offset();
-        ctx.Report.Promises("defs");
 
         var (rows, total) = ctx.Db.SearchFts(query, scope, type, limit.Effective, offset);
         var ftsTotal = total;
@@ -302,6 +301,7 @@ public sealed class GetCommand : Command
             new()
             {
                 Key = "defs",
+                Rows = true,
                 What = "one object per def carrying the name — each with 'def' (identity), 'fields' " +
                        "(path/value rows) and, when there are any, 'translations'. It stays an array even " +
                        "for a single def, because a name can belong to several def types at once.",
@@ -1026,6 +1026,7 @@ public sealed class ListCommand : Command
             new()
             {
                 Key = "defs",
+                Rows = true,
                 What = "one row per def: def_name, label, mod, plus 'class' when the bucket holds more " +
                        "than one def class.",
             },
@@ -1039,7 +1040,6 @@ public sealed class ListCommand : Command
         var offset = ctx.Args.Offset();
         var wantClass = ctx.Args.Value("class");
         var scope = ctx.Scope();
-        ctx.Report.Promises("defs");
 
         var (rows, total) = ctx.Db.ListByType(type, scope, limit.Effective, offset, wantClass);
 
@@ -1182,7 +1182,7 @@ public sealed class FieldsCommand : Command
         ],
         JsonKeys =
         [
-            new() { Key = "fields", What = "one row per field path: path, defs (how many defs use it)." },
+            new() { Key = "fields", Rows = true, What = "one row per field path: path, defs (how many defs use it)." },
         ],
     };
 
@@ -1192,7 +1192,6 @@ public sealed class FieldsCommand : Command
         var limit = ctx.Limit();
         var filters = ctx.Args.Values("path");
         var offset = ctx.Args.Offset();
-        ctx.Report.Promises("fields");
         var (rows, total, whole) = ctx.Db.FieldPathsForType(type, limit.Effective, filters.FirstOrDefault(), offset);
 
         if (rows.Count == 0)
@@ -1262,7 +1261,7 @@ public sealed class ValuesCommand : Command
         ],
         JsonKeys =
         [
-            new() { Key = "values", What = "one row per distinct value: value, defs." },
+            new() { Key = "values", Rows = true, What = "one row per distinct value: value, defs." },
             new()
             {
                 Key = "field",
@@ -1280,7 +1279,6 @@ public sealed class ValuesCommand : Command
         var scope = ctx.Scope();
         var type = ctx.Args.Value("type");
         var offset = ctx.Args.Offset();
-        ctx.Report.Promises("values");
         var (rows, total) = ctx.Db.DistinctValues(path, scope, limit.Effective, type, offset);
 
         if (rows.Count == 0)
@@ -1354,13 +1352,12 @@ public sealed class TypesCommand : Command
         Summary = "List every def type in the snapshot with how many defs it has.",
         Options = [CommonOptions.Limit("def types") with { Default = "all" }, CommonOptions.Scope],
         Examples = ["rimsearcher types", "rimsearcher types --scope all,-vanilla"],
-        JsonKeys = [new() { Key = "types", What = "one row per def type: def_type, defs." }],
+        JsonKeys = [new() { Key = "types", Rows = true, What = "one row per def type: def_type, defs." }],
     };
 
     public override int Run(CommandContext ctx)
     {
         var scope = ctx.Scope();
-        ctx.Report.Promises("types");
         var all = ctx.Db.Types(scope);
 
         // 零行是 exit 1(R12 约定),`types` 原先无条件 return 0 —— 按退出码分流的脚本
@@ -1406,7 +1403,7 @@ public sealed class ModsCommand : Command
         // 实际只是「这里不需要」。严格模式该拦的是拼错的名字,不是合理的期待。
         Options = [CommonOptions.Limit("mods") with { Default = "all" }],
         Examples = ["rimsearcher mods"],
-        JsonKeys = [new() { Key = "mods", What = "one row per mod, in load order: order, package_id, name, version." }],
+        JsonKeys = [new() { Key = "mods", Rows = true, What = "one row per mod, in load order: order, package_id, name, version." }],
     };
 
     public override int Run(CommandContext ctx)

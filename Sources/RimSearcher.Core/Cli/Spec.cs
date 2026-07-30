@@ -80,6 +80,22 @@ public sealed record JsonKeySpec
 
     /// <summary>这个键装着什么:一句话说清它是数组还是对象、每一项是什么。</summary>
     public required string What { get; init; }
+
+    /// <summary>
+    /// 这个键是**行数组**,而且这条命令一跑就该有它 —— 于是零行时它是 <c>[]</c>,不是整个消失。
+    ///
+    /// 认领动作原先由每条命令自己在 Run 里调 <see cref="Output.Report.Promises"/>,
+    /// 而「记得调」这件事漏了五条(get / keyed / inherit / read / mods)整整一轮:
+    /// 漏掉的表现是那个键不在,与「查过了确实没有」在消费方那儿逐字同形,
+    /// 正是 SKILL.md 明说不许留的那个形状。所以认领挪回声明层,由 <see cref="Runner"/>
+    /// 在开查之前统一发,命令不必记得。
+    ///
+    /// **只在某个开关下才产出的键不标**(<c>find --value</c> 的 paths、<c>read --outline</c>
+    /// 的 declarations、<c>sources sync --dry-run</c> 的 plan):它们互斥,凭空多一个空数组
+    /// 在机器侧读作「这一路也查过了,没有」—— 那是一句假话。那几条由命令在自己那条分支上认领。
+    /// 「an object: …」那类键同理不标:空数组不是它们的空形状。
+    /// </summary>
+    public bool Rows { get; init; }
 }
 
 /// <summary>一条命令(或子命令)的完整声明。</summary>

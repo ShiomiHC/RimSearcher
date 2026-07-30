@@ -1692,6 +1692,14 @@ public class GrammarTests
             ("types",     ["types", "--scope", "all,-ludeon.rimworld,-test.mod"]),
             ("truncated", ["snapshot", "truncated", "--def", "zzznothing"]),
             ("matches",   ["code-search", "zzzznothing"]),
+            // 八轮审计:上面这张表原先到此为止,而**表里没有的命令恰恰是没兑现的那几条**。
+            // get / keyed / inherit / read 四条一个都没认领过键,零行时 --json 只回 notes ——
+            // 闸全绿的同时,SKILL.md 那句「missing key 只可能是你问错了键」在四条命令上是假的。
+            // 用例表按命令补齐,认领动作本身也挪进了声明层(JsonKeySpec.Rows)。
+            ("defs",      ["get", "zzznosuchdef"]),
+            ("keys",      ["keyed", "zzznosuchkey"]),
+            ("nodes",     ["inherit", "zzznosuchnode"]),
+            ("source",    ["read", "zzznosuchfile.cs"]),
         ];
 
         foreach (var (key, argv) in cases)
@@ -1713,6 +1721,46 @@ public class GrammarTests
         var (byValue, _, _) = Fixture.Run("find", "--value", "zzznothing", "--json");
         using var v = System.Text.Json.JsonDocument.Parse(byValue);
         Assert.False(v.RootElement.TryGetProperty("matches", out _));
+
+        // read 的两张表同理互斥。
+        var (outline, _, _) = Fixture.Run("read", "zzznosuchfile.cs", "--outline", "--json");
+        using var o = System.Text.Json.JsonDocument.Parse(outline);
+        Assert.True(o.RootElement.TryGetProperty("declarations", out var decls));
+        Assert.Equal(System.Text.Json.JsonValueKind.Array, decls.ValueKind);
+        Assert.False(o.RootElement.TryGetProperty("source", out _));
+    }
+
+    /// <summary>
+    /// 上一条的**声明侧**:一个键要么在声明里就说明白它恒在(<see cref="JsonKeySpec.Rows"/>),
+    /// 要么在它自己那句 <c>What</c> 的开头说明白它是有条件的。两者都不占的键会掉进裂缝 ——
+    /// 上一条那张用例表按命令逐条走,而漏掉一条命令的代价正是八轮审计翻出来的那四条。
+    ///
+    /// 判据取措辞的开头而不是全文搜关键词:那句话是写给消费方读的,「with --outline: …」
+    /// 这种前置从句本身就是「没给这个开关时它不在」的说明,把它与 Rows 钉成同一件事,
+    /// 文档与行为就没有各自漂移的余地。
+    /// </summary>
+    [Fact]
+    public void 每个行数组键要么声明恒在要么在措辞开头说明它有条件()
+    {
+        var offenders = new List<string>();
+        foreach (var spec in new CommandRegistry().Specs)
+            foreach (var key in spec.JsonKeys)
+            {
+                // 「an object: …」那类不是行数组,不在此列。
+                var isRowTable = key.What.StartsWith("one row per", StringComparison.Ordinal)
+                              || key.What.StartsWith("one object per", StringComparison.Ordinal);
+                var saysConditional = key.What.StartsWith("with ", StringComparison.Ordinal)
+                                   || key.What.StartsWith("without ", StringComparison.Ordinal);
+                if (isRowTable && !key.Rows)
+                    offenders.Add($"{spec.Name} → '{key.Key}' 是行数组却没标 Rows");
+                if (key.Rows && saysConditional)
+                    offenders.Add($"{spec.Name} → '{key.Key}' 标了 Rows 却自称有条件");
+            }
+
+        Assert.True(offenders.Count == 0,
+            "行数组键的「恒在」在声明与措辞两处说法不一:\n  " + string.Join("\n  ", offenders) +
+            "\n恒在的标 Rows = true(Runner 统一认领);互斥/条件性的把条件写进 What 开头," +
+            "并在命令自己那条分支上调 Report.Promises()。");
     }
 
     /// <summary>

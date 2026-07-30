@@ -15,7 +15,7 @@ public sealed class SnapshotListCommand : Command
         Options = [],
         UsesGlobals = true,
         Examples = ["rimsearcher snapshot list"],
-        JsonKeys = [new() { Key = "snapshots", What = "one row per registered snapshot: name, defs, mods, game, language, exported, pinned, path." }],
+        JsonKeys = [new() { Key = "snapshots", Rows = true, What = "one row per registered snapshot: name, defs, mods, game, language, exported, pinned, path." }],
     };
 
     public override int Run(CommandContext ctx)
@@ -227,7 +227,7 @@ public sealed class SnapshotTruncatedCommand : Command
             "rimsearcher snapshot truncated --type ThingDef",
             "rimsearcher snapshot truncated --def Bullet_Revolver",
         ],
-        JsonKeys = [new() { Key = "truncated", What = "one row per def that lost fields at export time: def_name, def_type, dropped, mod." }],
+        JsonKeys = [new() { Key = "truncated", Rows = true, What = "one row per def that lost fields at export time: def_name, def_type, dropped, mod." }],
     };
 
     public override int Run(CommandContext ctx)
@@ -236,7 +236,6 @@ public sealed class SnapshotTruncatedCommand : Command
         var scope = ctx.Scope();
         var types = ctx.Args.Values("type");
         var defName = ctx.Args.Value("def");
-        ctx.Report.Promises("truncated");
         var (rows, total) = ctx.Db.TruncatedDefs(scope, limit.Effective, types, defName);
 
         if (rows.Count == 0)

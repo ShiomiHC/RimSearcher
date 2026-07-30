@@ -107,7 +107,7 @@ public sealed class SourcesListCommand : Command
         Options = [],
         UsesGlobals = true,
         Examples = ["rimsearcher sources list"],
-        JsonKeys = [new() { Key = "trees", What = "one row per decompiled source tree: tree, files, assemblies, status." }],
+        JsonKeys = [new() { Key = "trees", Rows = true, What = "one row per decompiled source tree: tree, files, assemblies, status." }],
     };
 
     public override int Run(CommandContext ctx)
@@ -334,7 +334,12 @@ public sealed class SourcesSyncCommand : Command
         ],
         JsonKeys =
         [
-            new() { Key = "rebuilt", What = "one row per tree that was rewritten: tree, assemblies, files." },
+            new()
+            {
+                Key = "rebuilt",
+                What = "without --dry-run: one row per tree that was rewritten — tree, assemblies, files. " +
+                       "'plan' is absent then.",
+            },
             new()
             {
                 Key = "plan",
@@ -375,6 +380,10 @@ public sealed class SourcesSyncCommand : Command
 
         var force = ctx.Args.Flag("force");
         var dryRun = ctx.Args.Flag("dry-run");
+
+        // 两张表互斥,`--dry-run` 一给就定了哪一张 —— 同 read,不走声明层的统一认领
+        // (见 JsonKeySpec.Rows):凭空多一个空数组等于说「那一路也做过了」。
+        ctx.Report.Promises(dryRun ? "plan" : "rebuilt");
 
         // 哈希整批来源 dll。vanilla 那几个大文件实测不到一秒,而它换来的是「没变就不重跑」——
         // 少一次重跑就少一屏假 diff。
