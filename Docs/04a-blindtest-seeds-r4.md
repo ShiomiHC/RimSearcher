@@ -775,3 +775,31 @@ ep11 的四个常数语义分配,两处都根本没进 claims 表。
 
 上上轮遗留的四条(patch 归属无查询路径 / 射程边界无直路 / 聚合表扣着算好的东西 /
 C# → def 反查)**仍未动**;其中「C# → def 反查」与本轮 T1 是同一件事的两面,**已连撞两轮**。
+
+### 第七轮落账(2026-07-30,八条全修)
+
+两个提交:`3a1bcce`(T2/T5/T6/T7)、`303bb98`(T1/T3/T4/T8)。
+
+| # | 落点 | 闸 |
+|---|---|---|
+| T1 | 导出器给列表元素发 `<path>.Class`,版本 0.1.0→**0.2.0**;读侧按 `ExporterVersion` 分说两句话(`ExportMeta.IndexesNestedClass`),SKILL 收进 `find Class <ClassName>` | `嵌套类型这一维量没量过要按导出器版本分说` |
+| T2 | `get --path` / `fields --path` 的整段告警改写:点破「这行不删任何东西,先读再判」 | `子串匹配要说破自己不是整段命中`(改) |
+| T3 | `Completeness.NoteIndexHoldsValuesOnly` 单一产地,find / values / fields 三条反查路的零结果各挂一次;identity 那一档不挂 | `反查落空要说破索引里装的只是值` |
+| T4 | `PathSegments.IndexPrefixes` 算折叠前后的下标前缀差集;`get` 藏了就点名、没藏就明说没藏 | `折叠藏掉整个列表项时要点名没藏时要说没藏` |
+| T5 | `sources list` 把「建了但空」拆成独立一档(不再被「计划外」吸收),对账式加一项;孤儿目录另挂一句 | `空的源码树要自成一档而不是被计划外那句话吸收掉` |
+| T6 | `TruncatedDefsSharingPath` / `TruncatedAmong` 补第三道收窄(defType),脚注跟着自己划的类型收 | `完整性脚注要跟着自己划的类型一起收` |
+| T7 | `snapshot status` 一致那句后面并排一句边界:比的是加载清单,mod 内部文件一个字没比,并给出 export 时刻 | `一致这句话要同时说清没比的是什么` |
+| T8 | `read` 的 Remarks:首行自报的行号范围被管道裁过之后照旧,下游无从分辨 | 走 `CommandSpec.Remarks` 声明层,由既有的参考文档逐字节闸覆盖 |
+
+三道新闸各自禁用对应分支验证红过一次(T3 摘 find 那处调用 / T4 把条件钉死为 `false` /
+T1 把 `AtLeast` 钉死为 `true`),复原后 **359 passing**。
+
+**T1 只修好了读侧的一半。** 数据侧要重新 `rimsearcher export`(要开游戏)才写得出
+`<path>.Class`;在那之前 `modded` 仍是 0.1.0 快照,`find Class X` 回的是
+「这份快照没量过这一维,re-export」而不是零 —— 这正是这条改动最该防的同形。
+
+**未被 T1 覆盖的余数:簇 C(块级查询)。** ep15 那 26 次手工对齐是「把 `comps[N]`
+整块对齐着读」的需求,加一维索引不解决它,仍开着。
+
+进 SKILL 的只有 T1(多了一种查法)。T3/T4/T8 与其余各条都只改输出措辞或退出码,
+输出自身已把话说全 —— 判据仍是「这条修复改变了调用方该怎么用它吗」。
