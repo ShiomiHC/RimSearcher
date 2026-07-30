@@ -38,6 +38,21 @@ public static class PathSegments
         return false;
     }
 
+    /// <summary>
+    /// 这条路径所在的**带下标容器**的前缀,含末尾的点;不在这种容器里就回 null。
+    ///
+    /// <c>comps[1].minFuelCost</c> → <c>comps[1].</c>。判据只认 <c>].</c>:
+    /// 只有带下标的那一层才是「一个可以整块换掉的东西」(一个 comp、一个 li),
+    /// 而同一块里的字段互相约束 —— 实测里 <c>minFuelCost=50</c> 盖掉了同块的
+    /// <c>fuelPerTile=3</c>,差 16 倍,而只看后者的输出一个字都没提前者。
+    /// 不带下标的层(<c>projectile.</c>)不算:那是分类,不是实例,兄弟太多且不成组。
+    /// </summary>
+    public static string? ContainerPrefix(string path)
+    {
+        var i = path.LastIndexOf("].", StringComparison.Ordinal);
+        return i < 0 ? null : path[..(i + 2)];
+    }
+
     /// <summary>这条路径的某一段与**任意一个**查询词整体相等。</summary>
     public static bool IsWholeSegment(string path, IReadOnlyList<string> texts)
     {

@@ -460,6 +460,10 @@ public sealed class GetCommand : Command
                     if (fields.Count < matched)
                         ctx.Report.Notice(NoticeKind.Truncation,
                             $"Showing {Tally.Of(fields.Count, matched).Render("field")}; raise --limit for the rest.");
+
+                    // --path 是调用方自己收窄的,而收窄之后同一块里的其它字段就看不见了。
+                    Advisory.NoteAuthoredSiblings(ctx, fields.Where(f => f.Default != Contract.DefaultState.Same)
+                                                             .Select(f => (def.Id, f.Path)));
                 }
             }
             else
@@ -827,6 +831,8 @@ public sealed class FindCommand : Command
                 ["mod"] = r.Def.SourceMod,
             }).ToList());
 
+        Advisory.NoteAuthoredSiblings(ctx, rows.Where(r => r.Default != Contract.DefaultState.Same)
+                                                .Select(r => (r.Def.Id, r.Path)));
         Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(path, scope));
         return 0;
     }
@@ -1370,5 +1376,28 @@ internal static class Advisory
             $"{Tally.Complete(n).Render("def")} above also matched language files from mods that are installed " +
             "but were not enabled in this snapshot; those translations are searchable but were not in effect. " +
             "'rimsearcher get <defName>' shows which.", footnote: true);
+    }
+
+    /// <summary>
+    /// 同一块 <c>comps[N]</c> 里、有人设过的兄弟字段(同样是聚合成一行,不是每行挂一句)。
+    ///
+    /// 第五轮实测:`minFuelCost=50` 盖掉同块的 `fuelPerTile=3`,差 16 倍,而只列出后者的
+    /// 那张表干净、计数明确、一条警告都没有 —— 错结论就是从那张表上读出来的。
+    /// 一句话只做一件事:**点名**,不解释谁盖谁。工具证得了「这几个字段有人设过、
+    /// 而且与你看的这个同处一块」,证不了「它们的关系是什么」,后者要读源码。
+    ///
+    /// 第三道收窄在调用侧(<paramref name="shown"/> 已经筛过):只有当**你看的这一行自己**
+    /// 是有人设过的值时才提示。判别字段(compClass / thingClass / workerClass)按定义
+    /// 就是声明默认值,而 `find compClass CompShield` 恰恰是文档推荐的那条主查询 ——
+    /// 在它上面挂一句「同块还有 energyMax」是纯噪音,而噪音要在所有调用上收税。
+    /// </summary>
+    public static void NoteAuthoredSiblings(CommandContext ctx, IEnumerable<(long DefId, string Path)> shown)
+    {
+        var names = ctx.Db.AuthoredSiblings(shown);
+        if (names.Count == 0) return;
+        ctx.Report.Notice(NoticeKind.Advisory,
+            $"Set by hand in the same block as the rows above: {NameList.Render(names, Limits.MaxSuggestions)}. " +
+            "Fields in one comps[N] entry bound and override each other, and this table shows only the one " +
+            "asked for. 'rimsearcher get <defName> --path <block>' lists the whole block.", footnote: true);
     }
 }

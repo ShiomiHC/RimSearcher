@@ -1,8 +1,8 @@
 $ rimsearcher get Apparel_ShieldBelt
 exit 0
 --- stdout ---
-3 fields.
-Not listed: 1 field whose value is the one a fresh instance of the declaring type already carries, so this snapshot cannot tell whether anything set it. The snapshot holds 4 field paths for this def; --defaults lists the rest of those, and --path <text> sees a named one either way. A field whose value was null is in none of them: it never entered the index, so its absence here is not evidence that the field does not exist.
+4 fields.
+Not listed: 1 field whose value is the one a fresh instance of the declaring type already carries, so this snapshot cannot tell whether anything set it. The snapshot holds 5 field paths for this def; --defaults lists the rest of those, and --path <text> sees a named one either way. A field whose value was null is in none of them: it never entered the index, so its absence here is not evidence that the field does not exist.
 1 translation.
 
 def_name     Apparel_ShieldBelt
@@ -12,10 +12,11 @@ class        Verse.ThingDef
 mod          ludeon.rimworld
 source       Apparel_Belts.xml
 
-path                      value             code_default
-thingClass                RimWorld.Apparel  no
-comps[0].props.energyMax  0.5               no
-statBases[0].stat         MarketValue       no
+path                                value             code_default
+thingClass                          RimWorld.Apparel  no
+comps[0].props.energyMax            0.5               no
+comps[0].props.energyLossPerDamage  0.033             no
+statBases[0].stat                   MarketValue       no
 
 path   translated  original     language           origin
 label  护盾腰带        shield belt  ChineseSimplified  in effect

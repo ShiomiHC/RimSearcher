@@ -1,7 +1,7 @@
 $ rimsearcher get Apparel_ShieldBelt --path comps
 exit 0
 --- stdout ---
-Matching 'comps': 2 fields, out of 4 fields on the def.
+Matching 'comps': 3 fields, out of 5 fields on the def.
 
 def_name     Apparel_ShieldBelt
 def_type     ThingDef
@@ -10,7 +10,8 @@ class        Verse.ThingDef
 mod          ludeon.rimworld
 source       Apparel_Belts.xml
 
-path                      value                code_default
-comps[0].compClass        RimWorld.CompShield  yes
-comps[0].props.energyMax  0.5                  no
+path                                value                code_default
+comps[0].compClass                  RimWorld.CompShield  yes
+comps[0].props.energyMax            0.5                  no
+comps[0].props.energyLossPerDamage  0.033                no
 --- stderr ---

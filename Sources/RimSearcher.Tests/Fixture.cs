@@ -180,6 +180,10 @@ public static class Fixture
             ("thingClass", "RimWorld.Apparel", DefaultState.Differs),
             ("comps[0].compClass", "RimWorld.CompShield", DefaultState.Same),
             ("comps[0].props.energyMax", "0.5", DefaultState.Differs),
+            // 同块的第二个「有人设过」的字段 —— 兄弟提示的落点。实测里
+            // minFuelCost=50 盖掉同块的 fuelPerTile=3(16 倍),而只列出后者的那张表
+            // 干净、计数明确、一条警告都没有。
+            ("comps[0].props.energyLossPerDamage", "0.033", DefaultState.Differs),
             ("statBases[0].stat", "MarketValue", DefaultState.Differs),
             // 噪声:末段匹配应把这两条挡掉(02-2 的唯一产地在 import 侧)
             ("shortHash", "12345", DefaultState.Differs),

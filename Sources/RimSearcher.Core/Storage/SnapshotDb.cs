@@ -719,6 +719,58 @@ public sealed class SnapshotDb : IDisposable
         return (rows, total, exact);
     }
 
+    /// <summary>
+    /// 与这些行同处一个带下标容器、而且**有人设过**(<c>is_default &lt;&gt; Same</c>)的兄弟字段。
+    ///
+    /// 一块 <c>comps[1]</c> 里的字段互相约束:实测里 <c>minFuelCost=50</c> 盖掉了同块的
+    /// <c>fuelPerTile=3</c>,差 16 倍,而只列出后者的输出一个字都没提前者 —— 一张干净的、
+    /// 计数明确、无警告的表,而它带出的结论是错的。
+    ///
+    /// 两道收窄都是有意的。只认带下标的容器:不带下标的层是分类不是实例,兄弟太多且不成组,
+    /// 提示会退化成免责声明。只点 <c>code_default=no</c>:声明默认值那一批没人挑过,
+    /// 把它们列出来等于把整个类的字段表倒一遍。
+    /// </summary>
+    /// <remarks>
+    /// 回**全部**,不在这里截:截了再交给 NameList,它就以为名单是完整的,于是
+    /// 「and N more」一个字都不说 —— 静默截断正是这一轮在修的东西,不许从这里漏回来。
+    /// 一块 comps[N] 的字段数是个位到几十,不设上限也不会失控。
+    /// </remarks>
+    public IReadOnlyList<string> AuthoredSiblings(IEnumerable<(long DefId, string Path)> shown)
+    {
+        var p = new Dictionary<string, object?>();
+        var ors = new List<string>();
+        var already = new HashSet<string>(StringComparer.Ordinal);
+        var i = 0;
+
+        foreach (var (id, path) in shown)
+        {
+            already.Add(id + " " + path);
+            if (Search.PathSegments.ContainerPrefix(path) is not { } prefix) continue;
+            p["@si" + i] = id;
+            p["@sp" + i] = Escape(prefix) + "%";
+            ors.Add($"(fv.def_id = @si{i} AND fv.path LIKE @sp{i} ESCAPE '\\')");
+            i++;
+        }
+        if (ors.Count == 0) return [];
+
+        var names = new List<string>();
+        using var rd = Query(
+            "SELECT fv.def_id, fv.path, fv.leaf FROM field_values fv " +
+            $"WHERE ({string.Join(" OR ", ors)}) AND fv.is_default <> {Contract.DefaultState.Same} " +
+            // 按 rowid 排 = 导出器写入的顺序 = 这一块在 XML/类声明里的顺序。
+            // 按 path 字典序排会让同一块里语义最近的几个字段散到各处 —— 实测里
+            // fuelPerTile 就是这样被 cooldown* 挤出前三名的,而它正是要点名的那一个。
+            "ORDER BY fv.rowid", p);
+        while (rd.Read())
+        {
+            // 已经印在表里的那一行不算它自己的兄弟。
+            if (already.Contains(rd.GetInt64(0) + " " + rd.GetString(1))) continue;
+            var leaf = rd.GetString(2);
+            if (!names.Contains(leaf, StringComparer.Ordinal)) names.Add(leaf);
+        }
+        return names;
+    }
+
     public (IReadOnlyList<(string Value, int Count)> Rows, int Total) DistinctValues(
         string pathSuffix, ScopeFilter scope, int limit, string? defType = null, int offset = 0)
     {

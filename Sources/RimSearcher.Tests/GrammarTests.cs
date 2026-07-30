@@ -1348,6 +1348,45 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 同一块 `comps[N]` 里的字段互相约束。第五轮实测:`minFuelCost=50` 盖掉同块的
+    /// `fuelPerTile=3`,差 16 倍 —— 而只列出后者的那张表干净、计数明确、一条警告都没有。
+    ///
+    /// 语料里 Apparel_ShieldBelt 的 comps[0] 有三条:compClass(默认值,不点名)、
+    /// props.energyMax(有人设过)、index(默认值)。
+    /// </summary>
+    [Fact]
+    public void 同一块里有人设过的兄弟字段要点名()
+    {
+        var (get, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--path", "energyMax");
+        Assert.Contains("same block as the rows above", get, StringComparison.Ordinal);
+        Assert.Contains("energyLossPerDamage", get, StringComparison.Ordinal);
+
+        // 只点 code_default=no 的:默认值那一批没人挑过,列出来等于把类的字段表倒一遍。
+        var tail = get.Split("same block")[1];
+        Assert.DoesNotContain("compClass", tail, StringComparison.Ordinal);
+        Assert.DoesNotContain("index", tail, StringComparison.Ordinal);
+
+        // find 走另一条路,同一句话要在。
+        var (find, _, _) = Fixture.Run("find", "energyMax", "0.5");
+        Assert.Contains("energyLossPerDamage", find, StringComparison.Ordinal);
+
+        // 但**你看的这一行自己**是声明默认值时不提示:判别字段按定义就是默认值,
+        // 而 `find compClass CompShield` 是文档推荐的那条主查询 —— 在它上面挂一句
+        // 「同块还有 energyMax」是纯噪音,而噪音要在所有调用上收税。
+        var (disc, _, _) = Fixture.Run("find", "compClass", "RimWorld.CompShield");
+        Assert.DoesNotContain("same block as the rows above", disc, StringComparison.Ordinal);
+
+        // 不带下标的层不算容器 —— 那是分类不是实例,兄弟太多且不成组,
+        // 提示会退化成每次都挂的免责声明。
+        Assert.Null(PathSegments.ContainerPrefix("projectile.damageAmountBase"));
+        Assert.Equal("comps[0].", PathSegments.ContainerPrefix("comps[0].props.energyMax"));
+
+        // 同块里没有别人设过的东西时,一个字都不说。
+        var (quiet, _, _) = Fixture.Run("get", "TestModGun", "--path", "compClass");
+        Assert.DoesNotContain("same block as the rows above", quiet, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 落空那句话报的值域不许超发。它说 covers 什么,就得真覆盖到什么。
     /// </summary>
     [Fact]
