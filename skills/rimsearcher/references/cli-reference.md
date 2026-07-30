@@ -316,6 +316,8 @@ rimsearcher get <defName> [options]
 
 Field paths are the merged, post-patch shape the game actually had in memory when the snapshot was taken, so PatchOperations and inheritance are already applied. A def created in code rather than XML says so on its source line.
 
+The 'source' line is the bare file name the game reported for that def — no directory, because the game does not keep one. It names the file inside that mod's Defs folder ('mod' above says which mod); it is not a path, and nothing here reads the file system to confirm the file is still there. Defs the game builds in code carry a placeholder there instead.
+
 | Argument | Meaning |
 |---|---|
 | `<defName>` | The exact def name. 'search' finds it if you only know part of it. |

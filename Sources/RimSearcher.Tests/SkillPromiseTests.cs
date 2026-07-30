@@ -114,6 +114,12 @@ public class SkillPromiseTests
             "json模式下声明区搬进notes一条不丢"),
         new("Do not guess: `<command> --help` lists that command's keys",
             nameof(skill列出的json键与声明一致)),
+        // 第六轮:越界 offset 时那个键整个消失,消费方拿到 KeyError 而不是空数组。
+        new("The key the command does produce is always there, empty array and all",
+            "json的数据键零行时是空数组而不是整个消失"),
+        // 第六轮:C11 与 C41 各自浪费一轮 —— 文档从不承认这一列,而它一直在印文件名。
+        new("`get` does print a `source` line, and it is less than it looks: the bare file name the game reported, no directory, unverified",
+            "source列印的是没有目录的裸文件名"),
         new("Exit codes carry four distinct meanings",
             "退出码如实传给shell"),
         new("Unknown options are rejected rather than ignored, with the nearest accepted spelling — or, if another command takes that option, which one",

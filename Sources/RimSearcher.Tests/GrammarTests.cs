@@ -1508,6 +1508,32 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// `get` 的 `source` 行印的是**没有目录的裸文件名**,而文档此前一个字都没提这一列。
+    ///
+    /// 第六轮 C11 与 C41 各自浪费一轮在它上面:SKILL 的「What is out of range」宣称
+    /// 「没有从 def 回到可编写源码的路」,而这一列一直在打印文件名 —— 该有的预期没建立,
+    /// 不该有的期望也没掐掉,**给一半最费人**。承诺进了 SKILL,这里钉住它说的那件事:
+    /// 有这一列、值里没有目录分隔符、代码生成的 def 走的是占位符那一档。
+    /// </summary>
+    [Fact]
+    public void source列印的是没有目录的裸文件名()
+    {
+        var (json, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--json");
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var def = doc.RootElement.GetProperty("defs")[0].GetProperty("def");
+        var source = def.GetProperty("source").GetString();
+
+        Assert.Equal("Apparel_Belts.xml", source);
+        Assert.DoesNotContain('/', source!);
+        Assert.DoesNotContain('\\', source!);
+
+        // 代码里造出来的 def 那一档不是文件名,是导出器写死的占位符 —— 两者不许同形。
+        var (implied, _, _) = Fixture.Run("get", "Meat_Muffalo");
+        Assert.Contains(RimSearcher.Contract.IntermediateFormat.ImpliedDefsSourceFile,
+                        implied, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 用户自己划的那道线,计数句要念回去。
     ///
     /// 三态计数(Tally)覆盖的是**工具造成的**收窄:行数上限、扫描没跑完。`--scope`

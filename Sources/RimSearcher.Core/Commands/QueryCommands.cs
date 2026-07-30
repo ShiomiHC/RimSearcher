@@ -237,7 +237,14 @@ public sealed class GetCommand : Command
         Remarks =
             "Field paths are the merged, post-patch shape the game actually had in memory when the snapshot was " +
             "taken, so PatchOperations and inheritance are already applied. A def created in code rather than XML " +
-            "says so on its source line.",
+            "says so on its source line.\n\n" +
+            // 第六轮:C11 与 C41 各自浪费一轮在这一列上。文档一个字没提它,而「What is out of
+            // range」还宣称没有回到可编写源码的路 —— 一列一直在印文件名,该有的预期没建立,
+            // 不该有的期望也没掐掉。**给一半最费人**,所以这里把它是什么、不是什么一次说完。
+            "The 'source' line is the bare file name the game reported for that def — no directory, because " +
+            "the game does not keep one. It names the file inside that mod's Defs folder ('mod' above says " +
+            "which mod); it is not a path, and nothing here reads the file system to confirm the file is " +
+            "still there. Defs the game builds in code carry a placeholder there instead.",
         Positionals = [new PositionalSpec { Name = "defName", Help = "The exact def name. 'search' finds it if you only know part of it." }],
         Options =
         [

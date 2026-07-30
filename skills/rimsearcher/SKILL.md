@@ -43,8 +43,9 @@ names it has a CLI answer, and these are the ones to reach for:
 | `find_derived_types` | `rimsearcher code-search "class \w+ : <Base>\b"` |
 | `get_overrides` | `rimsearcher code-search "override [\w<>, \[\]]+ <Member>\("` |
 | `find_callers` | nothing exact. `code-search` matches by *text*, so same-named members of unrelated types land in the same result set. Read the hits; do not report their count as a caller count. |
+| `get_il` | **nothing at all.** The CLI has no IL view. Opcode-level questions — `Call` vs `Callvirt`, what a Harmony transpiler is matching, a lambda that the compiler moved into a generated closure method — are invisible in decompiled C# text and cannot be answered without the MCP. Say so rather than inferring from the C#. |
 
-Note what all four have in common: **anchor the pattern, do not search a bare symbol name.**
+Note what the first four have in common: **anchor the pattern, do not search a bare symbol name.**
 `code-search MapPortal` returns every mention of it — hundreds of lines on a common name, and
 the declaration is not marked among them. `code-search "class MapPortal\b"` returns exactly one.
 Once you have the file, `read <file> --outline` lists what is in it without a second scan; that
@@ -59,7 +60,9 @@ Three questions the tool cannot answer, and it is cheaper to know than to discov
   produced them, so there is no path from a def back to authorable source. `inherit` is the one
   place XML is read at all, and it reads the *inheritance* layer only. For the shape of a tag,
   read the declaring C# class (`read <Class>.cs --outline`) — field names and types are the same
-  ones the XML parser binds to.
+  ones the XML parser binds to. `get` does print a `source` line, and it is less than it looks:
+  the bare file name the game reported, no directory, unverified. It narrows the search inside
+  that mod's Defs folder; it does not open anything.
 - **Files on disk.** Texture and sound *paths* are indexed because they are def fields
   (`values texPath` works), but nothing here reads the file system to say whether
   `Things/Item/Foo.png` exists, what resolution it is, or what else sits in that folder. That is
@@ -222,7 +225,10 @@ every declaration in the file with its line range. It finds a declaration's end 
 braces, not by parsing C#, and says so on the paths where that inference happens. Two things it
 refuses to guess at, because a wrong guess here reads exactly like a right one: when a bare file
 name matches several files it lists them instead of picking, and `--lines` together with
-`--member`/`--type` is a usage error rather than a silent preference. Reading a member of a
+`--member`/`--type` is a usage error rather than a silent preference. **Give it the bare file
+name; do not build a path out of the namespace.** The tree's folders are not namespaces —
+`HealthCardUtility` sits under `RimWorld/` and `HealthUtility` under `Verse/` — so a guessed
+`RimWorld/HealthUtility.cs` misses a file that `HealthUtility.cs` finds at once. Reading a member of a
 **loaded assembly** is still the decompiler MCP's job; `read` is for the decompiled tree on disk,
 and it is the only way to see a specific file when that MCP is not available.
 
@@ -234,7 +240,9 @@ key named after the command itself for `values`, `fields`, `types` and `mods`. `
 second key, `field`, saying which full paths and def types its value space was drawn from.
 Do not guess: `<command> --help` lists that command's keys, as does
 [references/cli-reference.md](references/cli-reference.md). Reading a key the command does not
-produce gives you nothing, which is indistinguishable from an empty result. Code output is rows
+produce gives you nothing, which is indistinguishable from an empty result. The key the command
+does produce is always there, empty array and all — a missing key means you asked for the wrong
+key, never that the query came up empty. Code output is rows
 too — `code-search` gives `{file, line, is_match, group, text}` and `read` gives `{file, line,
 text}`, so nothing has to be parsed back out of `path:line:text`.
 
@@ -242,7 +250,14 @@ Exit codes carry four distinct meanings: `0` the command ran, `1` this query ret
 `2` you used it wrong, `70` a defect in the tool. **A `1` is an answer, not a failure** —
 "nothing in this snapshot has that value" is information, and the reasoning behind it is printed
 on stdout either way. So chain with `;` rather than `&&`: a `1` on a query that answered your
-question perfectly well would otherwise silently drop whatever you queued after it.
+question perfectly well would otherwise silently drop whatever you queued after it. Note what
+`;` costs you in return: the chained call reports one exit code, the last one, so a harness that
+reads exit codes may wrap two perfectly good answers in an error. The output is on stdout
+regardless — read it, not the code.
+
+On PowerShell, quote regular expressions with **single** quotes. Double quotes make the shell
+eat the backslashes first, and `code-search "class \w+"` then searches for `class w+`, which
+matches nothing and looks exactly like an honest zero result.
 
 Do not pipe the output through `grep`. The sentence saying the result was cut short is on the
 same stream as the table, so filtering it away turns "truncated" into "absent". Narrow inside
