@@ -294,4 +294,71 @@ XML 的结构定位(ep12 think tree 节点位置、ep16 跨文件聚合使用者
 
 ## 六 · 第四轮结论
 
-待补 —— 跑完回填,并同步更新 `04-workflow.md` 的逐轮记录与靶子判定。
+**先说这一轮是什么,以及不是什么。**
+
+**不是盲测。** 04 方法论最后一条把这一轮的价值定在「种子由不知情代理挖,绕开设计者
+偏差」,而盲测的另一半 —— **跑的人也得不知情** —— 这一轮没有兑现:12 条题面由知道
+全部 R1–R15 修法的人自己跑。知道靶子在哪就不会踩进去,`nearly_wrong_answer` 这个
+最有价值的字段结构上产不出来。所以这一轮记作**回归实测(regression pass)**,
+上面那 13 条种子**一条都不算用过** —— §五「已用编号」不追加,它们仍是第五轮的盲测种子。
+
+**是什么:** 按 13 条种子的**靶子**逐条对着三份真快照与本机 33 棵源码树打命令,
+验 R1–R15 的修复在真数据上立不立得住,以及有没有新的同形物。
+
+### 前置闸
+
+三条全过:exe 重发布且晚于最后提交;三份快照都带 `is_default`(vanilla 2 种状态、
+modded / races 3 种)与 `xml_nodes`(2011 / 5213 / 8381);`rimsearcher-dev` 未在跑。
+
+### 逐条回归判定
+
+| 种子 | 靶 | 判定 | 依据 |
+|---|---|---|---|
+| B1/B4 | R1 代码默认值 | held | `get` 首句给「列了几条」,紧跟一条 Filter 说清砍掉多少、为什么、`--defaults` 怎么看回来 |
+| B2 | R8 伪 defName 假命中 | held | `get Steel20` 明说不存在,近似名单独成句(`Closest names: Steel`),不冒充命中 |
+| B3 | R2 内嵌档位 label | held | `matched_on` 打出 `degreeDatas[0].statFactors[0].stat` 这类完整路径,一眼看得出命中在哪一层 |
+| B5 | inherit + R1 | **新缺陷** | 见下 F2 |
+| B6 | R8 归属方向 | **新缺陷** | 见下 F3 |
+| B7 | R8/R9 逐项存在性 | held | `Graphic_Single_AgeSecs` 当场判成「不是 def 名,是某个字段的值」并给出两条查法 |
+| B8 | R5 读方法体 | held | `code-search` → `read --member FuelNeededToLaunchAtDist` 直接交出 9 行方法体,算式完整 |
+| B9/B10 | R10 归属 | held | `mod` 列直接给 packageId(`ludeon.rimworld` / `ludeon.rimworld.anomaly`) |
+| B11 | R10 三种成因 | **新缺陷 ×2** | 见下 F0、F1;正名之后 `--source ancot.ancotlibrary` 一次打中(4 matches / 642 files) |
+| B12 | 中文标签反查 | held | 「收获」「割除」都落到 WorkGiverDef / WorkTypeDef / JobDef,`matched_on` 区分 label / reportString |
+| B13 | 一轮发现4 + R11 | held | `find compClass CompProperties_AmbientSound` 零结果那句自带解释:「XML 写 `Class="CompProperties_X"`,字段存解析后的 `CompX`」;`--query` / `--fileExtension` 两个发明的参数名一个被点名拒绝、一个按别名收下 |
+| — | R12 退出码 | held | 不存在 1 / 零行 1 / 错命令 2 / 未知选项 2 |
+
+### 四处新缺陷(全部当轮修完并立闸)
+
+四条形状完全一致 —— **两种成因的输出逐字同形**,与 R1–R15 是同一个族。这说明本轮
+清的不是十五个 bug,是一个反复出现的形状,而清干净它需要的是**每处否定句都自报边界**。
+
+- **F0 `8fb3fd1` 空源码树被说成「glob 没打中」。** `--source Milira`:树在 `sources
+  list` 里列着、目录也在磁盘上,里面一个文件都没有(从没反编译)。本机 33 棵树里
+  **10 棵是这个状态**,`code-search` 只扫得动 23 棵。R15 修的「跳过空树」是对的,
+  跳过之后没人说破。正是 B11 题面点名要分清的三种成因里的第三种。
+- **F1 `156f625` 别名叫 extension、值的文法却是 glob。** `--file-extension cs` 被
+  别名层收下(R11 那条「发明的参数名要认」),值却按 glob 解 —— `cs` 要求整个文件名
+  就叫 cs。**同形发生在参数名与值文法之间**。不砍别名(砍了就退回 R11),改成零结果时
+  讲清文法并给出 `*.cs` / `*cs*`,且只在没有通配符时说。
+- **F2 `abfaafc` `--path` 收下的是个值,不是路径。** `get TrapSpike --path
+  TrapSpringChance` —— 那串文本装在 `statBases[6].stat` 里。stat / class / def 引用
+  这三类名字**从来都在值那一侧**,而 `--path` 是最顺手的收窄手段。新增
+  `SnapshotDb.ValueHits`:**算出来再说,不猜**,只有它真作为值出现在这个 def 上才补
+  那一句。
+- **F3 `1a530f4` 穷尽式否定句没自报边界。** `get MapPortal` 落到「不是 def 类型、
+  不是 class、不是 mod、不是抽象父节点、别的快照也没有」—— 而 MapPortal 是 RimWorld
+  的一个 C# 类,就在 `vanilla/Assembly-CSharp/RimWorld/MapPortal.cs`。那六种落点全在
+  快照里,快照只装 def 侧;代码树是第七处,而且本工具查得动。不扫(一万多文件,每次
+  落空都扫太贵),而是把没查的那一半说出来并给出 `code-search "class X"`。
+
+### 方法论(这一轮学到的)
+
+- **回归轮抓到的四条,靶子表一条都没预言。** 靶子表问的是「那十五条修住了吗」(答案:
+  全部 held),而真数据抓到的是**修复自己带出来的新同形物** —— F0 是 R15 的产物、
+  F1 是 R11 的产物。**修复引入的同形物,只有拿真数据跑才会现形**;语料是照缺陷造的,
+  照缺陷造的语料照不出修复的影子。
+- **「同形」是一个可枚举的检查项,不是一次性教训。** 四条新缺陷各占一个新位置:
+  成因之间(F0)、参数名与值文法之间(F1)、参数的两种解释之间(F2)、
+  断言的作用域与字面读法之间(F3)。下一轮该带着这四类去看,而不是只看输出文本。
+- **第五轮欠的是真盲测。** 13 条种子未被消耗,`04-workflow.md` 的开场词与 schema
+  仍然有效。要跑就得由不知情代理跑 —— 这一条是这套方法论的地基,替代不了。
