@@ -131,19 +131,34 @@ internal static class NameLookup
         //     FTS 命中界面文案,两边抢不到彼此的活。
         if (ctx.Db.KeyedCount() > 0)
         {
-            var (keyedRows, keyedTotal) = ctx.Db.KeyedSearch(name, 1);
+            // 取一批而不是一条:同一句界面文案由**几个 key 各自承载**是常态,不是边角
+            // ——真数据里「转至事件发生地点」同时是 JumpToLocation 与 ClickToJumpToProblem。
+            // 只取一条就只能说「最接近的是 X」,而两条整句相等时那是一张证不了的赢家证书
+            // (这套输出到处在修的正是这个形状)。取满 25 条,distinct 就在总数 ≤ 25 时
+            // 是准数;超了就只知道下界,措辞跟着退到不指定唯一的那一支。
+            const int probe = 25;
+            var (keyedRows, keyedTotal) = ctx.Db.KeyedSearch(name, probe);
             if (keyedRows.Count > 0)
             {
+                var distinct = keyedRows.Select(r => r.Key).Distinct(StringComparer.Ordinal).ToList();
+                var oneKeyForSure = distinct.Count == 1 && keyedTotal <= probe;
+
                 // 主语固定单数(this snapshot),计数进宾语,末句不带回指代词 ——
                 // 名词有登记处,主谓一致与「them / one」这类回指都没有(R6 同一课;
                 // 这一句第一版写的就是「shows them」,而计数是 1)。
-                var first = keyedRows[0];
-                return new Sighting(Where.Keyed,
-                    $"'{name}' is interface text rather than a def name: this snapshot holds " +
-                    $"{Output.Tally.Complete(keyedTotal).Render("keyed translation")} matching it, the closest " +
-                    $"under the key '{first.Key}'. Keyed translations belong to no def at all, which is why " +
-                    $"a def search reaches none of them. The query is 'rimsearcher keyed {name}', and " +
-                    $"'rimsearcher code-search \"\\\"{first.Key}\\\"\"' finds the code that prints that key.");
+                var head = $"'{name}' is interface text rather than a def name: this snapshot holds " +
+                           $"{Output.Tally.Complete(keyedTotal).Render("keyed translation")} matching it" +
+                           (oneKeyForSure ? $", under the key '{distinct[0]}'" : "") +
+                           ". Keyed translations belong to no def at all, which is why a def search reaches " +
+                           "none of them. ";
+                return new Sighting(Where.Keyed, head +
+                    (oneKeyForSure
+                        ? $"'rimsearcher keyed {name}' shows the full row, and " +
+                          $"'rimsearcher code-search \"\\\"{distinct[0]}\\\"\"' finds the code that prints " +
+                          "that key."
+                        : "The same line on screen can come from more than one key, so which key is the one " +
+                          $"you are after is not decided here: 'rimsearcher keyed {name}' lists them with the " +
+                          "key each belongs to, and the code search goes after whichever of those you meant."));
             }
         }
 

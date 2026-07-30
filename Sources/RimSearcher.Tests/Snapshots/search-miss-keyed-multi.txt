@@ -1,0 +1,6 @@
+$ rimsearcher search 转至此处
+exit 1
+--- stdout ---
+Nothing matched '转至此处' in this snapshot. This command covers def names, labels, descriptions and the translations injected onto defs — not C# class names, and not the UI strings under Languages/*/Keyed, which sit on a layer of their own that 'rimsearcher keyed' reads.
+'转至此处' is interface text rather than a def name: this snapshot holds 2 keyed translations matching it. Keyed translations belong to no def at all, which is why a def search reaches none of them. The same line on screen can come from more than one key, so which key is the one you are after is not decided here: 'rimsearcher keyed 转至此处' lists them with the key each belongs to, and the code search goes after whichever of those you meant.
+--- stderr ---

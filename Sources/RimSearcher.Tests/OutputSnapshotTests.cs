@@ -36,6 +36,10 @@ public class OutputSnapshotTests
         // 它与前四种不同 —— 前四种问的都是「这个**名字**是什么」,这一种问的是
         // 「这句**话**是什么」,而 search 的索引里没有它。R4 记的那个洞就是这个形状。
         { "search-miss-keyed",     ["search", "没有电力"] },
+        // 同一句话由几个 key 各自承载时,这条路不许挑一个说成「就是这个」——
+        // 真数据里「转至事件发生地点」同时是 JumpToLocation 与 ClickToJumpToProblem,
+        // 而表里那几行长得一模一样,挑错了看不出来。
+        { "search-miss-keyed-multi", ["search", "转至此处"] },
         // 五轮 F2:scope 展开在**有结果时**也要说。这两份是那道闸的字节落点 ——
         // 组名那份必须带展开句,写死 packageId 那份必须一个字都不多说。
         { "find-scope-group",      ["find", "thingClass", "RimWorld.Bullet", "--scope", "vanilla"] },
@@ -148,6 +152,9 @@ public class OutputSnapshotTests
         // 因为这正是从屏幕回到代码的那一跳)。
         { "keyed-hit",             ["keyed", "CannotUseNoPower"] },
         { "keyed-text",            ["keyed", "没有电力"] },
+        // 同上,keyed 自己那条下一步提示的落点:一个 key 时命令填好,几个 key 时
+        // 说破要按行挑 —— 填第一个等于替读的人挑了一个。
+        { "keyed-text-multi",      ["keyed", "转至此处"] },
         // 占位:表里它与真译文同形,而游戏显示的是英文。这一份守的是那句说破在场。
         { "keyed-placeholder",     ["keyed", "TodoKey"] },
         // 过滤器筛空 ≠ 没有这个 key。三轮 R8 那类误诊在这条命令上的落点。

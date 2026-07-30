@@ -202,11 +202,25 @@ public sealed class KeyedCommand : Command
 
         // 命中是靠文案搜到的时候,下一步几乎总是「那么是哪段代码印的」。key 在手上,
         // 那条命令是可以直接给出来的 —— 而 97% 的调用点把 key 写成紧邻的字面量。
+        //
+        // 只在**表里只有一个 key** 时把命令填好。同一句界面文案由几个 key 各自承载是常态
+        // (真数据里「转至事件发生地点」同时是 JumpToLocation 与 ClickToJumpToProblem),
+        // 那时填第一个就等于替读的人挑了一个 —— 而表里另外那几行长得一模一样,挑错了
+        // 看不出来。挑不了就说破要按行挑,别把「有几个候选」印成「就是这个」。
         if (matchedOn == "text" && shown.Count > 0)
-            ctx.Report.Notice(NoticeKind.NextStep,
-                $"To find the code that prints one of these, search for the key as a literal: " +
-                $"'rimsearcher code-search \"\\\"{shown[0].Key}\\\"\"'. Most call sites write the key inline, " +
-                "but not all of them do — a key assembled from parts will not appear that way.");
+        {
+            var keys = shown.Select(r => r.Key).Distinct(StringComparer.Ordinal).ToList();
+            ctx.Report.Notice(NoticeKind.NextStep, keys.Count == 1
+                ? "To find the code that prints it, search for the key as a literal: " +
+                  $"'rimsearcher code-search \"\\\"{keys[0]}\\\"\"'. Most call sites write the key inline, " +
+                  "but not all of them do — a key assembled from parts will not appear that way."
+                  // 计数上面那句已经报过了,这里再报一遍是同一个数占两行 ——
+                  // 这句要说的不是「有几个」,是「哪一个由你挑」。
+                : "These rows do not all carry the same key, so the code search goes after whichever row is " +
+                  "the one you meant: 'rimsearcher code-search \"\\\"<key>\\\"\"' with the key from that row. " +
+                  "Most call sites write the key inline, but not all of them do — a key assembled from parts " +
+                  "will not appear that way.");
+        }
 
         return 0;
     }

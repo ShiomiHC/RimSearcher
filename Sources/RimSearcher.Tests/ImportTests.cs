@@ -1,4 +1,4 @@
-using RimSearcher.Contract;
+﻿using RimSearcher.Contract;
 using RimSearcher.Snapshot;
 using RimSearcher.Storage;
 
@@ -370,15 +370,15 @@ public class ImportTests
     // ---- keyed(界面文案):与 def 无关的那一层 ----
 
     /// <summary>
-    /// 运行时 <c>keyedReplacements</c> 的三条都进库,且双语两侧、占位标记、源文件行号
+    /// 运行时 <c>keyedReplacements</c> 的五条都进库,且双语两侧、占位标记、源文件行号
     /// 都到位 —— 少了原文那一侧,「中文快照上按英文找」就整个不通(那正是修 R4 时
     /// 记下的洞);少了占位标记,「有 key 但没译」与「译了」在库里同形。
     /// </summary>
     [Fact]
-    public void 运行时keyed三条都进库且双语两侧都在()
+    public void 运行时keyed五条都进库且双语两侧都在()
     {
         using var db = Build("keyed");
-        Assert.Equal(3, db.KeyedCount());
+        Assert.Equal(5, db.KeyedCount());
 
         var row = db.KeyedByKey("CannotUseNoPower").Single();
         Assert.Equal("没有电力", row.Translated);

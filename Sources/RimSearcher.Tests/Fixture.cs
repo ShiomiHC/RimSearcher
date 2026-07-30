@@ -343,13 +343,19 @@ public static class Fixture
             records++;
         }
 
-        // 界面文案语料。三种形态各一条,因为三条判据各有各的错法:
+        // 界面文案语料。四种形态,因为四条判据各有各的错法:
         //   CannotUseNoPower  正常双语 —— 代码里那一行 .Translate() 附译文的落点
         //   TodoKey           占位 —— 「有这个 key 但没译」不许与「有译文」同形
         //   OnlyEnglishKey    没有英文那一侧(original 空)—— 双语表里缺一列不许看起来像缺数据
+        //   JumpToLocation / ClickToJump  同一句中文由两个 key 各自承载。这不是边角:
+        //     真数据(vanilla 1.6)里「转至事件发生地点」就同时是 JumpToLocation 与
+        //     ClickToJumpToProblem。少了它,「按文案反查」那两条路都会挑第一个说成
+        //     「就是这个 key」—— 而表里另一行长得一模一样,挑错了看不出来。
         Keyed("CannotUseNoPower", "没有电力", "No power", false, "Misc.xml", 12);
         Keyed("TodoKey", "TODO", "Not translated yet", true, "Misc.xml", 34);
         Keyed("OnlyEnglishKey", "只有中文这一侧", "", false, "Gui.xml", 7);
+        Keyed("JumpToLocation", "转至此处", "Jump to location", false, "Letters.xml", 6);
+        Keyed("ClickToJump", "转至此处", "Click to jump", false, "Alerts.xml", 5);
 
         // 这两条的 def_type 是 ThingDef(Injection 写死的),而同名的 StatDef Firefoam
         // 连 description 都没有 —— 按 defName 关联时它们会跑到 StatDef 的输出里去。
@@ -364,7 +370,7 @@ public static class Fixture
                 .Int(IntermediateFormat.KeyRecords, wrongRecordCount ?? records)
                 .Int(IntermediateFormat.KeyDefs, 5)
                 .Int(IntermediateFormat.KeyInjections, 3)
-                .Int(IntermediateFormat.KeyKeyedCount, 3)
+                .Int(IntermediateFormat.KeyKeyedCount, 5)
                 .Int(IntermediateFormat.KeyXmlNodes, 6)
                 .ToString());
         }
