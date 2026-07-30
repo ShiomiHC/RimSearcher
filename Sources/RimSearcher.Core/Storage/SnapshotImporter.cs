@@ -50,7 +50,7 @@ public sealed class SnapshotImporter
                                   generated, class, fields_truncated)
                 VALUES ($id,$t,$n,$l,$d,$sm,$sf,$g,$c,$ft)
                 """);
-            using var insertFv = Prepare(db, "INSERT INTO field_values (def_id, path, leaf, value) VALUES ($id,$p,$lf,$v)");
+            using var insertFv = Prepare(db, "INSERT INTO field_values (def_id, path, leaf, value, is_default) VALUES ($id,$p,$lf,$v,$def)");
             using var insertFts = Prepare(db, "INSERT INTO defs_fts (rowid, def_name, label, description, translated) VALUES ($id,$n,$l,$d,$tr)");
             using var insertTr = Prepare(db, """
                 INSERT INTO translations (def_id, def_type, def_name, path, translated, original, language, source_mod, origin)
@@ -125,15 +125,16 @@ public sealed class SnapshotImporter
                     if (root.TryGetProperty(IntermediateFormat.KeyFields, out var fields) &&
                         fields.ValueKind == JsonValueKind.Array)
                     {
-                        foreach (var pair in fields.EnumerateArray())
+                        foreach (var triple in fields.EnumerateArray())
                         {
-                            if (pair.GetArrayLength() < 2) continue;
-                            var path = pair[0].GetString() ?? "";
+                            if (triple.GetArrayLength() < 3) continue;
+                            var path = triple[0].GetString() ?? "";
                             if (NoiseFilter.IsNoise(path)) { noise++; continue; }
                             Bind(insertFv, "$id", id);
                             Bind(insertFv, "$p", path);
                             Bind(insertFv, "$lf", NoiseFilter.Leaf(path));
-                            Bind(insertFv, "$v", pair[1].GetString());
+                            Bind(insertFv, "$v", triple[1].GetString());
+                            Bind(insertFv, "$def", triple[2].GetInt32());
                             insertFv.ExecuteNonQuery();
                             fieldValues++;
                         }

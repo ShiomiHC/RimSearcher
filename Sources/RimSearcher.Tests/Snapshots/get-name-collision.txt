@@ -14,9 +14,9 @@ mod            ludeon.rimworld
 source         Buildings_Special.xml
 inherits_from  BaseProjectile (see 'rimsearcher inherit Firefoam')
 
-path               value
-thingClass         RimWorld.Building
-statBases[0].stat  MarketValue
+path               value              code_default
+thingClass         RimWorld.Building  no
+statBases[0].stat  MarketValue        no
 
 path         translated  original             language           origin
 description  一团灭火泡沫。     A blob of firefoam.  ChineseSimplified  in effect

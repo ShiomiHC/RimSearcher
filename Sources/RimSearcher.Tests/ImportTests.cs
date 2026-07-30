@@ -95,6 +95,21 @@ public class ImportTests
         Assert.Contains("999", ex.Message);
     }
 
+    /// <summary>
+    /// 上一版导出器写的文件必须被拒,而不是当成「这些字段都不是默认值」导进来 ——
+    /// 那样建出来的库,每个 def 都长得像「处处被作者改过」,与真的处处被改过逐字同形(R1)。
+    /// 消息要同时带两个版本号,否则读的人不知道该更新哪一边。
+    /// </summary>
+    [Fact]
+    public void 上一版格式的导出文件被拒绝()
+    {
+        var export = Temp("oldformat" + IntermediateFormat.FileExtension);
+        Fixture.WriteExport(export, formatVersion: IntermediateFormat.FormatVersion - 1);
+        var ex = Assert.ThrowsAny<Exception>(() => new SnapshotImporter().Import(export, Temp("oldformat.db")));
+        Assert.Contains((IntermediateFormat.FormatVersion - 1).ToString(), ex.Message);
+        Assert.Contains(IntermediateFormat.FormatVersion.ToString(), ex.Message);
+    }
+
     /// <summary>被拒的导入不许留下半个库文件 —— 否则下次打开的是一份垃圾。</summary>
     [Fact]
     public void 导入失败不留下半成品库()

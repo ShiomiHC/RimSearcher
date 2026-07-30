@@ -219,6 +219,16 @@ public sealed class GetCommand : Command
             CommonOptions.Type,
             new OptionSpec
             {
+                Name = "defaults",
+                Arity = Arity.Flag,
+                Aliases = ["with-defaults", "all-fields"],
+                Help = "Also list fields whose value is the one a fresh instance of the declaring type already "
+                     + "carries. Those rows are left out by default because they are the ones most often read as "
+                     + "something an author chose, when the snapshot cannot tell whether anything set them at all. "
+                     + "How many were left out is always printed, and --path shows a named field either way.",
+            },
+            new OptionSpec
+            {
                 Name = "fields",
                 Arity = Arity.Flag,
                 Aliases = ["with-fields", "show-fields"],
@@ -230,6 +240,7 @@ public sealed class GetCommand : Command
             "rimsearcher get Apparel_ShieldBelt",
             "rimsearcher get Apparel_ShieldBelt --path statBases",
             "rimsearcher get Bullet_Revolver --limit all",
+            "rimsearcher get Bullet_Revolver --defaults",
         ],
         JsonKeys =
         [
@@ -337,12 +348,26 @@ public sealed class GetCommand : Command
 
             ctx.Report.Detail("def", pairs);
 
-            var (fields, matched, total) = ctx.Db.Fields(def.Id, limit.Effective, paths);
-            ctx.Report.Table("fields", ["path", "value"],
+            // R1:默认不列「与 C# 声明默认值无从区分」的那些行 —— 四个错结论全是从它们
+            // 生成的,而且每次错的都恰好是「字段名与提问一字不差」的那一行。
+            //
+            // 两个例外,都指向同一条:**调用方点了名的东西不许消失**。
+            //   --path <text> 已经点名了要哪些路径:此时把其中一条藏起来,回答会变成
+            //     「没有路径含 burstCount」—— 比印错值更坏,因为它是一句彻底的假话。
+            //   --defaults 是明说要全量。
+            // 于是过滤只发生在「什么都没点名」的那一次,而那一次省下的正是纯篇幅。
+            var withDefaults = ctx.Args.Flag("defaults") || paths.Count > 0;
+            var (fields, matched, total, defaulted) =
+                ctx.Db.Fields(def.Id, limit.Effective, paths, includeDefaults: withDefaults);
+            ctx.Report.Table("fields", ["path", "value", FieldDefault.Column],
                 fields.Select(f => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
                 {
                     ["path"] = f.Path,
                     ["value"] = f.Value,
+                    // 这一列恒在,不随「本次有没有默认值行」出现或消失:表的形状随数据变,
+                    // 照着一次输出写的解析器下一次就取不到键。unknown 也必须能与 no 分开 ——
+                    // 把「没比成」印成「有人改过」正是 R1 本身。
+                    [FieldDefault.Column] = FieldDefault.Render(f.Default),
                 }).ToList());
 
             // 多个 def 同名时,截断声明必须指名道姓 —— 否则两条「Showing 5 of N fields」
@@ -360,9 +385,13 @@ public sealed class GetCommand : Command
                 {
                     // 这是调用方自己要的过滤,不是截断。机器侧靠 kind 分类,混用会让
                     // 「我主动只要 driverClass」被扫 notes 的下一位读成「结果不完整」。
+                    // 动词不进登记处,所以句子不能让动词跟着计数走 —— 原先是
+                    // 「{N} fields{whose} match …」,N 为 1 时读出「1 field match」。
+                    // 把计数挪到冒号后,主句就不再有随数量变形的成分(R6 的同一条教训)。
                     ctx.Report.Notice(NoticeKind.Filter,
-                        $"{Tally.Complete(matched).Render("field")}{whose} " +
-                        $"match {Join(paths)}, out of {total} on the def.");
+                        $"Matching {Join(paths)}{whose}: " +
+                        $"{Tally.Complete(matched).Render("field")}, out of " +
+                        $"{Tally.Complete(total).Render("field")} on the def.");
                     if (fields.Count < matched)
                         ctx.Report.Notice(NoticeKind.Truncation,
                             $"Showing {Tally.Of(fields.Count, matched).Render("field")}; raise --limit for the rest.");
@@ -370,9 +399,23 @@ public sealed class GetCommand : Command
             }
             else
             {
-                ctx.Report.CountNotice(Tally.Of(fields.Count, total), "field",
+                // 分母是**列出来的那一群**的总数,不是 def 的字段总数 —— 否则「3 of 120」里
+                // 那 117 条既包含被 limit 截的、也包含被默认值过滤掉的,读者无从拆开。
+                // 两者各自一句,再由 total 把账对上。
+                var listable = withDefaults ? total : total - defaulted;
+                ctx.Report.CountNotice(Tally.Of(fields.Count, listable), "field",
                     $"pass --limit all{(matches.Count == 1 ? "" : $" (this is {def.DefName})")} " +
                     "for the rest, or --path <text> to pick out the ones you want.");
+
+                // 措辞不许滑成「没人设过它」:XML 里照着默认值写一遍是常事,快照里那两种
+                // 情形完全同形。这一列能证的只有「与声明默认值无从区分」,句子就只说这个。
+                // 同理句中不出现任何与数量一致的动词或代词(名词才有登记处)。
+                if (!withDefaults && defaulted > 0)
+                    ctx.Report.Notice(NoticeKind.Filter,
+                        $"Not listed: {Tally.Complete(defaulted).Render("field")} whose value is the one a fresh " +
+                        "instance of the declaring type already carries, so this snapshot cannot tell whether " +
+                        $"anything set it. The def has {Tally.Complete(total).Render("field")} in all; pass " +
+                        "--defaults to list every one, or --path <text> to see a named field either way.");
             }
 
             // 02-3:「字段被截」与「没有该字段」必须可区分。上游把这件事整个略过了,
@@ -668,13 +711,17 @@ public sealed class FindCommand : Command
             return i < 0 ? v : v[(i + 1)..];
         }
 
-        ctx.Report.Table("matches", ["def_name", "def_type", "path", "value", "mod"],
+        // 这里不像 get 那样把默认值行滤掉:调用方点名了一个字段与一个值,「哪些 def 取到过它」
+        // 的答案里就该有它们。但**为什么取到**要分得开 —— comps[N].compClass 一整批
+        // 等于 CompShield,多半是 CompProperties_Shield 的声明里写死的,不是谁在 XML 里挑的。
+        ctx.Report.Table("matches", ["def_name", "def_type", "path", "value", FieldDefault.Column, "mod"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
                 ["def_name"] = r.Def.DefName,
                 ["def_type"] = r.Def.DefType,
                 ["path"] = r.Path,
                 ["value"] = r.Value,
+                [FieldDefault.Column] = FieldDefault.Render(r.Default),
                 ["mod"] = r.Def.SourceMod,
             }).ToList());
 

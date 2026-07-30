@@ -92,7 +92,8 @@ public static class Fixture
             .Str(IntermediateFormat.KeySourceFile, "Other.xml")
             .Bool(IntermediateFormat.KeyGenerated, false)
             .Str(IntermediateFormat.KeyClass, "Verse.ThingDef")
-            .Pairs(IntermediateFormat.KeyFields, [new KeyValuePair<string, string>("thingClass", "Verse.ThingWithComps")])
+            .Fields(IntermediateFormat.KeyFields,
+                [new ExportedField("thingClass", "Verse.ThingWithComps", DefaultState.Differs)])
             .Int(IntermediateFormat.KeyFieldsTruncated, 0)
             .ToString());
 
@@ -107,7 +108,8 @@ public static class Fixture
         w.Flush();
     }
 
-    public static void WriteExport(string path, bool omitEndMarker = false, long? wrongRecordCount = null)
+    public static void WriteExport(string path, bool omitEndMarker = false, long? wrongRecordCount = null,
+                                   int? formatVersion = null)
     {
         using var fs = File.Create(path);
         using var gz = new GZipStream(fs, CompressionLevel.Optimal);
@@ -117,7 +119,7 @@ public static class Fixture
 
         w.WriteLine(new JsonLine()
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindMeta)
-            .Int(IntermediateFormat.KeyFormatVersion, IntermediateFormat.FormatVersion)
+            .Int(IntermediateFormat.KeyFormatVersion, formatVersion ?? IntermediateFormat.FormatVersion)
             .Str(IntermediateFormat.KeyExporterVersion, "test")
             .Str(IntermediateFormat.KeyExportedAtUtc, "2026-01-01T00:00:00.0000000Z")
             .Str(IntermediateFormat.KeyGameVersion, GameVersion)
@@ -131,15 +133,15 @@ public static class Fixture
         records++;
 
         void Def(string type, string name, string? label, string mod, string file, bool generated,
-                 int truncated, params (string Path, string Value)[] fields)
+                 int truncated, params (string Path, string Value, int Default)[] fields)
             => DefAs(type, "Verse." + type, name, label, mod, file, generated, truncated, fields);
 
         // 运行时 class 与 def_type 不是一回事:游戏只给「祖先链上没有非抽象 Def」的类型建库,
         // 所以子类型的 def 全落在基类桶里。语料里必须有这么一桶,否则 list --class 那条路没人守。
         void DefAs(string type, string cls, string name, string? label, string mod, string file, bool generated,
-                   int truncated, params (string Path, string Value)[] fields)
+                   int truncated, params (string Path, string Value, int Default)[] fields)
         {
-            var pairs = fields.Select(f => new KeyValuePair<string, string>(f.Path, f.Value)).ToList();
+            var pairs = fields.Select(f => new ExportedField(f.Path, f.Value, f.Default)).ToList();
             w.WriteLine(new JsonLine()
                 .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindDef)
                 .Str(IntermediateFormat.KeyDefType, type)
@@ -150,37 +152,46 @@ public static class Fixture
                 .Str(IntermediateFormat.KeySourceFile, file)
                 .Bool(IntermediateFormat.KeyGenerated, generated)
                 .Str(IntermediateFormat.KeyClass, cls)
-                .Pairs(IntermediateFormat.KeyFields, pairs)
+                .Fields(IntermediateFormat.KeyFields, pairs)
                 .Int(IntermediateFormat.KeyFieldsTruncated, truncated)
                 .ToString());
             records++;
         }
 
+        // 第三位是 R1 的语料:一条值与「这个类型刚 new 出来时」的关系。
+        //   compClass 取 Same —— CompProperties_Shield 的声明里就写着 typeof(CompShield),
+        //   没有任何人在 XML 里挑过它;而 energyMax 是作者写的。两条挨在一起、在旧输出里
+        //   逐字同形,正是四个错结论的产地。
         Def("ThingDef", "Apparel_ShieldBelt", "shield belt", "ludeon.rimworld", "Apparel_Belts.xml", false, 0,
-            ("thingClass", "RimWorld.Apparel"),
-            ("comps[0].compClass", "RimWorld.CompShield"),
-            ("comps[0].props.energyMax", "0.5"),
-            ("statBases[0].stat", "MarketValue"),
+            ("thingClass", "RimWorld.Apparel", DefaultState.Differs),
+            ("comps[0].compClass", "RimWorld.CompShield", DefaultState.Same),
+            ("comps[0].props.energyMax", "0.5", DefaultState.Differs),
+            ("statBases[0].stat", "MarketValue", DefaultState.Differs),
             // 噪声:末段匹配应把这两条挡掉(02-2 的唯一产地在 import 侧)
-            ("shortHash", "12345"),
-            ("comps[0].index", "0"),
-            ("modContentPack.name", "Core"));
+            ("shortHash", "12345", DefaultState.Differs),
+            ("comps[0].index", "0", DefaultState.Same),
+            ("modContentPack.name", "Core", DefaultState.Differs));
 
+        // burstCount 是 R1 报告里那一行的形状:**字段名与提问一字不差,值却是代码默认值**。
+        // 它必须在语料里,否则「--path 点了名的东西不许被过滤掉」那道闸没有落点。
+        // speed 取 Unknown —— 三态里最容易被顺手并进某一边的那个。
         Def("ThingDef", "Bullet_Revolver", "revolver bullet", "ludeon.rimworld", "Projectiles_Guns.xml", false, 3,
-            ("thingClass", "RimWorld.Bullet"),
-            ("projectile.damageAmountBase", "12"));
+            ("thingClass", "RimWorld.Bullet", DefaultState.Differs),
+            ("projectile.damageAmountBase", "12", DefaultState.Differs),
+            ("projectile.burstCount", "1", DefaultState.Same),
+            ("projectile.speed", "70", DefaultState.Unknown));
 
         Def("ThingDef", "Meat_Muffalo", "muffalo meat", "ludeon.rimworld",
             IntermediateFormat.ImpliedDefsSourceFile, true, 0,
-            ("thingClass", "Verse.ThingWithComps"),
-            ("ingestible.foodType", "Meat"));
+            ("thingClass", "Verse.ThingWithComps", DefaultState.Differs),
+            ("ingestible.foodType", "Meat", DefaultState.Differs));
 
         Def("HediffDef", "Anesthetic", "anesthetic", "ludeon.rimworld", "Hediffs_Local.xml", false, 0,
-            ("hediffClass", "Verse.HediffWithComps"));
+            ("hediffClass", "Verse.HediffWithComps", DefaultState.Differs));
 
         Def("ThingDef", "TestModGun", "test gun", "test.mod", "Guns.xml", false, 0,
-            ("thingClass", "RimWorld.Apparel"),
-            ("comps[0].compClass", "RimWorld.CompShield"));
+            ("thingClass", "RimWorld.Apparel", DefaultState.Differs),
+            ("comps[0].compClass", "RimWorld.CompShield", DefaultState.Same));
 
         // 同名跨 def 类型 —— RimWorld 常态,也是 JSON 撞键静默丢数据那条的唯一语料。
         // 一个有字段一个没有,是为了让「后写的把先写的盖成空」当场暴露。
@@ -194,8 +205,8 @@ public static class Fixture
         // 导入侧原先按 defName 建「名字 → 单个 id」的表,后写的顶掉先写的,于是译文会绑到
         // 后写的 StatDef 上 —— 反过来写,同一份错代码就碰巧绑对了,闸也就白立了。
         Def("ThingDef", "Firefoam", "firefoam", "ludeon.rimworld", "Buildings_Special.xml", false, 0,
-            ("thingClass", "RimWorld.Building"),
-            ("statBases[0].stat", "MarketValue"));
+            ("thingClass", "RimWorld.Building", DefaultState.Differs),
+            ("statBases[0].stat", "MarketValue", DefaultState.Differs));
 
         Def("StatDef", "Firefoam", null, "ludeon.rimworld", "Stats_Basics.xml", false, 0);
 
@@ -208,7 +219,7 @@ public static class Fixture
 
         // 异构桶:两个 def 的 def_type 都是 TestBaseDef,运行时 class 却不同。
         DefAs("TestBaseDef", "Verse.TestVariantDef", "VariantOne", "variant one", "test.mod", "Variants.xml", false, 0,
-            ("workerClass", "Verse.TestWorker"));
+            ("workerClass", "Verse.TestWorker", DefaultState.Differs));
         DefAs("TestBaseDef", "Verse.TestBaseDef", "PlainOne", "plain one", "test.mod", "Variants.xml", false, 0);
 
         void XmlNode(string defType, string name, string parentName, bool isAbstract,

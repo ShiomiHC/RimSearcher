@@ -1,11 +1,15 @@
-$ rimsearcher get Apparel_ShieldBelt --limit 3 --json
+$ rimsearcher get Apparel_ShieldBelt --limit 2 --json
 exit 0
 --- stdout ---
 {
   "notes": [
     {
       "kind": "truncation",
-      "text": "Showing 3 of 4 fields; pass --limit all for the rest, or --path <text> to pick out the ones you want."
+      "text": "Showing 2 of 3 fields; pass --limit all for the rest, or --path <text> to pick out the ones you want."
+    },
+    {
+      "kind": "filter",
+      "text": "Not listed: 1 field whose value is the one a fresh instance of the declaring type already carries, so this snapshot cannot tell whether anything set it. The def has 4 fields in all; pass --defaults to list every one, or --path <text> to see a named field either way."
     },
     {
       "kind": "count",
@@ -26,15 +30,13 @@ exit 0
       "fields": [
         {
           "path": "thingClass",
-          "value": "RimWorld.Apparel"
-        },
-        {
-          "path": "comps[0].compClass",
-          "value": "RimWorld.CompShield"
+          "value": "RimWorld.Apparel",
+          "code_default": "no"
         },
         {
           "path": "comps[0].props.energyMax",
-          "value": "0.5"
+          "value": "0.5",
+          "code_default": "no"
         }
       ],
       "translations": [

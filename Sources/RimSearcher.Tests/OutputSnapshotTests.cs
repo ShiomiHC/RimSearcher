@@ -43,6 +43,11 @@ public class OutputSnapshotTests
         { "get-path-filter",       ["get", "Apparel_ShieldBelt", "--path", "comps"] },
         { "get-path-no-match",     ["get", "Apparel_ShieldBelt", "--path", "zzzz"] },
         { "get-truncated-export",  ["get", "Bullet_Revolver"] },
+        // R1 的三个落点。第一条是那份报告里错答案的原形:字段名与提问一字不差,值却是
+        // 声明默认值 —— 点了名就必须印出来,并且当场说清它是哪一种。
+        { "get-code-default-path", ["get", "Bullet_Revolver", "--path", "burstCount"] },
+        { "get-code-default-all",  ["get", "Bullet_Revolver", "--defaults"] },
+        { "get-code-default-json", ["get", "Bullet_Revolver", "--defaults", "--json"] },
         { "get-generated",         ["get", "Meat_Muffalo"] },
         { "get-missing",           ["get", "NoSuchDef"] },
         // R2:同名跨 def_type。两份基线的分工是「不带 --type 时提示在场」与「带 --type 时
@@ -75,7 +80,9 @@ public class OutputSnapshotTests
         { "values-miss",           ["values", "noSuchField"] },
         { "types",                 ["types"] },
         { "mods",                  ["mods"] },
-        { "json-mode",             ["get", "Apparel_ShieldBelt", "--limit", "3", "--json"] },
+        // limit 取 2 而不是 3:R1 把默认值行从表里拿掉之后,ShieldBelt 只剩 3 条可列,
+        // --limit 3 就再也截不到东西了 —— 这份基线原本就是为「JSON 里的截断声明」立的。
+        { "json-mode",             ["get", "Apparel_ShieldBelt", "--limit", "2", "--json"] },
         // R14 的第二半:代码块在 --json 里也得是行,不是一串 "path:line:text" 字符串。
         // 消费方重新解析我们刚拼好的东西,是把一个已经有答案的问题外包出去 ——
         // 而路径里本来就可能有冒号,解析回来不一定还原得了。

@@ -85,6 +85,15 @@ stays local.
    translations. Field paths are indexed, so `comps[4].compClass` is the real, post-patch shape.
    A big def has hundreds of paths, so name what you want rather than dumping and filtering:
    `get Apparel_ShieldBelt --path statBases`. Same switch on `fields`.
+   Every field row carries a `code_default` column, and it decides how much a value is worth:
+   `no` means the value differs from what a fresh instance of the declaring type carries, so
+   something — XML, a patch, or `ResolveReferences` — put it there. `yes` means it is the same
+   as that fresh instance, so the snapshot **cannot tell** whether anyone set it; quoting such a
+   row as "this def sets X" is the single most common way to get a confident wrong answer here.
+   `unknown` means the type could not be constructed for comparison, so neither claim holds.
+   `yes` rows are left out of the listing by default, with a line saying how many and how to see
+   them; `--defaults` lists everything, and `--path <text>` always shows a named field whichever
+   kind it is.
 3. **Working backwards from a class or a value.** `find` matches the field path from the end:
    `find compClass RimWorld.CompShield` needs no index and no full path.
    `values <field>` gives the whole value space, and prints which full paths and def types
@@ -171,7 +180,7 @@ the tool instead, where the counts stay honest:
 
 | Command | Narrow with |
 |---|---|
-| `get` | `--path`, `--type`, `--limit` |
+| `get` | `--path`, `--type`, `--defaults`, `--limit` |
 | `fields` | `--path`, `--offset`, `--limit` |
 | `values` | `--type`, `--scope`, `--offset`, `--limit` |
 | `search` | `--type`, `--scope`, `--offset`, `--limit` |

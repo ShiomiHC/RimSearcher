@@ -171,7 +171,7 @@ namespace RimSearcher.DataMod
 
         private static string BuildDefLine(Def def, Type defType)
         {
-            var fields = new List<KeyValuePair<string, string>>();
+            var fields = new List<ExportedField>();
             var state = new WalkState();
             Walk(def, "", 0, fields, state);
 
@@ -186,7 +186,7 @@ namespace RimSearcher.DataMod
                 .Str(IntermediateFormat.KeySourceFile, ResolveSourceFile(def))
                 .Bool(IntermediateFormat.KeyGenerated, def.generated)
                 .Str(IntermediateFormat.KeyClass, def.GetType().FullName)
-                .Pairs(IntermediateFormat.KeyFields, fields)
+                .Fields(IntermediateFormat.KeyFields, fields)
                 .Int(IntermediateFormat.KeyFieldsTruncated, state.Truncated)
                 .ToString();
         }
@@ -220,9 +220,14 @@ namespace RimSearcher.DataMod
         /// `DirectXmlSaver.XElementFromField` 就是照这条跳过的,直接沿用而不是另立一套判据。
         /// </summary>
         private static void Walk(object obj, string prefix, int depth,
-                                 List<KeyValuePair<string, string>> output, WalkState state)
+                                 List<ExportedField> output, WalkState state)
         {
             var type = obj.GetType();
+            // 比较基准:同一个运行时类型刚 new 出来的样子。整个 R1 的判据就这一句 ——
+            // 它答的是「C# 声明里这个字段初始是什么」,包括集合元素:走到 comps[0] 时基准
+            // 换成新 new 的那个 CompProperties 子类,于是 props.energyMax 比的是它自己的初始值,
+            // 而不是「ThingDef 上有没有 comps」。
+            var pristine = Pristine(type);
             foreach (var field in type.GetFields(
                          BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
             {
@@ -233,16 +238,48 @@ namespace RimSearcher.DataMod
                 try { value = field.GetValue(obj); }
                 catch { continue; }
                 var path = prefix.Length == 0 ? field.Name : prefix + "." + field.Name;
-                Emit(value, path, depth, output, state);
+                object baseline = null;
+                var known = pristine != null;
+                if (known)
+                {
+                    try { baseline = field.GetValue(pristine); }
+                    catch { known = false; }
+                }
+                Emit(value, path, depth, output, state, known, baseline);
             }
         }
+
+        /// <summary>
+        /// 一个类型新 new 出来的样子,按类型缓存(失败也缓存,免得同一个坏类型被反复试)。
+        ///
+        /// 用 nonPublic:true 是因为数据类里私有/保护无参构造并不罕见;构造函数有副作用的
+        /// 类型理论上存在,所以整段包在 try 里 —— 新不出来就返回 null,那一路的字段进
+        /// <see cref="DefaultState.Unknown"/>,呈现侧照常显示。
+        /// </summary>
+        private static object Pristine(Type type)
+        {
+            object cached;
+            if (PristineCache.TryGetValue(type, out cached)) return cached;
+
+            object made = null;
+            if (!type.IsAbstract && !type.IsInterface && type != typeof(string))
+            {
+                try { made = Activator.CreateInstance(type, true); }
+                catch { made = null; }
+            }
+            PristineCache[type] = made;
+            return made;
+        }
+
+        private static readonly Dictionary<Type, object> PristineCache = new Dictionary<Type, object>();
 
         /// <summary>
         /// 叶子不占深度 —— 上游 ExtractFieldValuesRecursive 的语义(03 乙的换算口径)。
         /// 只有「往下钻进一个复合对象」才消耗深度预算,所以同一个数值下覆盖比按节点计深要深得多。
         /// </summary>
         private static void Emit(object value, string path, int depth,
-                                 List<KeyValuePair<string, string>> output, WalkState state)
+                                 List<ExportedField> output, WalkState state,
+                                 bool baselineKnown, object baseline)
         {
             if (value == null) return;
 
@@ -251,12 +288,17 @@ namespace RimSearcher.DataMod
             string leaf;
             if (TryLeaf(value, out leaf))
             {
+                // 判默认态要在截断**之前**:两个长值前 400 字符相同、后面不同,截完就分不出来了。
+                var defaultState = !baselineKnown
+                    ? DefaultState.Unknown
+                    : SameAsBaseline(leaf, baseline) ? DefaultState.Same : DefaultState.Differs;
+
                 if (leaf.Length > Limits.MaxValueLength)
                 {
                     leaf = leaf.Substring(0, Limits.MaxValueLength);
                     state.Truncated++;
                 }
-                output.Add(new KeyValuePair<string, string>(path, leaf));
+                output.Add(new ExportedField(path, leaf, defaultState));
                 state.Emitted++;
                 return;
             }
@@ -267,17 +309,57 @@ namespace RimSearcher.DataMod
             var enumerable = value as IEnumerable;
             if (enumerable != null)
             {
+                // 基准里对应位置的元素。基准列表是 null 或更短 = 这一项代码里根本没有,
+                // 于是 baseline 为 null 而 known 仍为 true —— 「代码默认里没这一项」是一句
+                // 判得出来的话,不该退化成「没法比」。
+                var baselineItems = baselineKnown ? AsList(baseline) : null;
                 var i = 0;
                 foreach (var item in enumerable)
                 {
                     if (i >= Limits.MaxCollectionItems) { state.Truncated++; break; }
-                    Emit(item, path + "[" + i.ToString(CultureInfo.InvariantCulture) + "]", depth + 1, output, state);
+                    var itemBaseline = baselineItems != null && i < baselineItems.Count ? baselineItems[i] : null;
+                    Emit(item, path + "[" + i.ToString(CultureInfo.InvariantCulture) + "]", depth + 1,
+                         output, state, baselineKnown, itemBaseline);
                     i++;
                 }
                 return;
             }
 
+            // 钻进复合对象时基准换成**它自己类型**新 new 的一个,不沿用外层传下来的那个:
+            // comps[0].props.energyMax 问的是「CompProperties_Shield 声明里 energyMax 是多少」,
+            // 与「ThingDef 默认有没有 comps」是两个问题,混为一谈正是 R1 的形状。
             Walk(value, path, depth + 1, output, state);
+        }
+
+        /// <summary>
+        /// 与基准同不同。比的是**渲染后的叶子文本**,因为进快照的就是那一份 ——
+        /// 拿对象 Equals 比会在 Def 引用、Type、结构体这几类上与快照里存的东西对不上。
+        /// </summary>
+        private static bool SameAsBaseline(string leaf, object baseline)
+        {
+            if (baseline == null) return false;
+            string baselineLeaf;
+            if (!TryLeaf(baseline, out baselineLeaf)) return false;
+            return string.Equals(leaf, baselineLeaf, StringComparison.Ordinal);
+        }
+
+        private static IList<object> AsList(object value)
+        {
+            var enumerable = value as IEnumerable;
+            if (enumerable == null || value is string) return null;
+            var list = new List<object>();
+            try
+            {
+                // 只取到导出上限为止 —— 后面的元素反正不会被导出,而基准对象理论上可以是
+                // 一个无穷序列,枚举到底会把整次导出挂死。
+                foreach (var item in enumerable)
+                {
+                    if (list.Count >= Limits.MaxCollectionItems) break;
+                    list.Add(item);
+                }
+            }
+            catch { return null; }
+            return list;
         }
 
         private static bool TryLeaf(object value, out string text)

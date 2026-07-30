@@ -321,6 +321,7 @@ Field paths are the merged, post-patch shape the game actually had in memory whe
 | `-n`, `--limit` <n|all> | How many fields to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `60`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--path` <text> | Only show field paths containing this text. Repeat it to widen the selection. | `--paths`, `--field`, `--field-path`, `--only`, `--filter`, `--grep` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind`, `--category` |
+| `--defaults` | Also list fields whose value is the one a fresh instance of the declaring type already carries. Those rows are left out by default because they are the ones most often read as something an author chose, when the snapshot cannot tell whether anything set them at all. How many were left out is always printed, and --path shows a named field either way. | `--with-defaults`, `--all-fields` |
 | `--fields` | Deprecated no-op: fields are always shown. Kept so that scripts that pass it keep working. | `--with-fields`, `--show-fields` |
 
 `--json` keys, besides the global `notes`:
@@ -335,6 +336,7 @@ Examples:
 rimsearcher get Apparel_ShieldBelt
 rimsearcher get Apparel_ShieldBelt --path statBases
 rimsearcher get Bullet_Revolver --limit all
+rimsearcher get Bullet_Revolver --defaults
 ```
 
 ## `inherit`

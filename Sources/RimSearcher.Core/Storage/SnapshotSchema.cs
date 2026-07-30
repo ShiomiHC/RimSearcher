@@ -9,8 +9,11 @@ namespace RimSearcher.Storage;
 public static class SnapshotSchema
 {
     /// <summary>schema 版本。表结构变化时 +1。</summary>
-    /// <remarks>3:加了 xml_nodes 继承层。</remarks>
-    public const int Version = 3;
+    /// <remarks>
+    /// 3:加了 xml_nodes 继承层。
+    /// 4:field_values 加了 is_default —— 一条值与 C# 声明默认值的关系(R1)。
+    /// </remarks>
+    public const int Version = 4;
 
     public const string MetaKeySchemaVersion = "schema_version";
     public const string MetaKeyRaw = "export_meta_json";
@@ -41,11 +44,15 @@ public static class SnapshotSchema
             fields_truncated INTEGER NOT NULL DEFAULT 0
         );
 
+        -- is_default:这一行与「这个类型刚 new 出来时」的关系,取值见 IntermediateFormat.DefaultState
+        -- (0 一定被改过 / 1 与代码默认值无从区分 / 2 没法比)。存原样而不是存 bool ——
+        -- 「没法比」并进任何一边都会让呈现侧说出一句它证不了的话(R1)。
         CREATE TABLE field_values (
-            def_id INTEGER NOT NULL,
-            path   TEXT NOT NULL,
-            leaf   TEXT NOT NULL,
-            value  TEXT
+            def_id     INTEGER NOT NULL,
+            path       TEXT NOT NULL,
+            leaf       TEXT NOT NULL,
+            value      TEXT,
+            is_default INTEGER NOT NULL DEFAULT 0
         );
 
         CREATE TABLE translations (

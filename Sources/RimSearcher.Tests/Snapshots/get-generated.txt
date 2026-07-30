@@ -10,7 +10,7 @@ class        Verse.ThingDef
 mod          ludeon.rimworld
 source       ImpliedDefs (created in code, not from an XML file)
 
-path                 value
-thingClass           Verse.ThingWithComps
-ingestible.foodType  Meat
+path                 value                 code_default
+thingClass           Verse.ThingWithComps  no
+ingestible.foodType  Meat                  no
 --- stderr ---

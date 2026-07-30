@@ -11,6 +11,6 @@ mod            test.mod
 source         Variants.xml
 inherits_from  BaseProjectile (see 'rimsearcher inherit VariantOne')
 
-path         value
-workerClass  Verse.TestWorker
+path         value             code_default
+workerClass  Verse.TestWorker  no
 --- stderr ---

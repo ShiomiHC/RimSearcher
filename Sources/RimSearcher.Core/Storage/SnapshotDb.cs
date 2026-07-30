@@ -7,7 +7,12 @@ public sealed record DefRow(long Id, string DefType, string DefName, string? Lab
                             string? SourceMod, string? SourceFile, bool Generated, string? Class,
                             int FieldsTruncated);
 
-public sealed record FieldRow(string Path, string Leaf, string? Value);
+/// <summary>
+/// 一条字段值。<paramref name="Default"/> 取 <see cref="Contract.DefaultState"/> 三值之一 ——
+/// 「这一行是不是 C# 声明默认值」是 R1 的全部内容,而它必须**随行**走到呈现层:
+/// 摊平成 bool 会把「没法比」并进某一边,而那一边说出来的话它证不了。
+/// </summary>
+public sealed record FieldRow(string Path, string Leaf, string? Value, int Default);
 
 /// <summary>
 /// <see cref="SnapshotDb.PathsWithValue"/> 怎么算「取到过这个值」。
@@ -236,8 +241,14 @@ public sealed class SnapshotDb : IDisposable
     /// <c>Matched</c> 是过滤后的总数,<c>Total</c> 是这个 def 的字段总数 —— 两个都给,
     /// 调用方才分得清「过滤掉了多少」和「被 limit 截了多少」。
     /// </summary>
-    public (IReadOnlyList<FieldRow> Rows, int Matched, int Total) Fields(
-        long defId, int limit, IReadOnlyList<string>? pathFilters = null)
+    /// <summary>
+    /// <paramref name="includeDefaults"/> 为 false 时,与 C# 声明默认值无从区分的那些行
+    /// **不进 Rows**,但照样计进 <c>Defaulted</c> —— 调用方据此说清「有多少条没列出来、
+    /// 为什么」。滤掉的判据只认 <see cref="Contract.DefaultState.Same"/>:「没法比」的
+    /// 一律留下,少省一点篇幅换「不会有值凭空消失」。
+    /// </summary>
+    public (IReadOnlyList<FieldRow> Rows, int Matched, int Total, int Defaulted) Fields(
+        long defId, int limit, IReadOnlyList<string>? pathFilters = null, bool includeDefaults = true)
     {
         var p = new Dictionary<string, object?> { ["@id"] = defId };
         var total = Scalar("SELECT COUNT(*) FROM field_values WHERE def_id = @id", p);
@@ -258,10 +269,17 @@ public sealed class SnapshotDb : IDisposable
         var matched = filters.Count == 0
             ? total
             : Scalar($"SELECT COUNT(*) FROM field_values {where}", p);
+        var defaulted = Scalar(
+            $"SELECT COUNT(*) FROM field_values {where} AND is_default = {Contract.DefaultState.Same}", p);
+
+        var listed = includeDefaults ? where : $"{where} AND is_default <> {Contract.DefaultState.Same}";
         var rows = new List<FieldRow>();
-        using var rd = Query($"SELECT path, leaf, value FROM field_values {where} ORDER BY rowid LIMIT {limit}", p);
-        while (rd.Read()) rows.Add(new FieldRow(rd.GetString(0), rd.GetString(1), rd.IsDBNull(2) ? null : rd.GetString(2)));
-        return (rows, matched, total);
+        using var rd = Query(
+            $"SELECT path, leaf, value, is_default FROM field_values {listed} ORDER BY rowid LIMIT {limit}", p);
+        while (rd.Read())
+            rows.Add(new FieldRow(rd.GetString(0), rd.GetString(1),
+                                  rd.IsDBNull(2) ? null : rd.GetString(2), rd.GetInt32(3)));
+        return (rows, matched, total, defaulted);
     }
 
     /// <summary>LIKE 的通配符转义。用户给的过滤串里出现 <c>_</c> 是常事(field_path 之类)。</summary>
@@ -342,7 +360,7 @@ public sealed class SnapshotDb : IDisposable
     /// 反查:哪些 def 的某字段等于某值。路径按**后缀**匹配(上游 <c>find</c> 的语义),
     /// 因为调用方通常只知道末段(<c>compClass</c>),不知道完整路径(<c>comps[3].compClass</c>)。
     /// </summary>
-    public (IReadOnlyList<(DefRow Def, string Path, string? Value)> Rows, int Total)
+    public (IReadOnlyList<(DefRow Def, string Path, string? Value, int Default)> Rows, int Total)
         FindByField(string pathSuffix, string? value, bool exact, ScopeFilter scope, int limit, int offset = 0)
     {
         var p = new Dictionary<string, object?>();
@@ -370,12 +388,12 @@ public sealed class SnapshotDb : IDisposable
         var where = "WHERE " + string.Join(" AND ", conds);
         var total = Scalar($"SELECT COUNT(*) FROM field_values fv JOIN defs d ON d.id = fv.def_id {where}", p);
 
-        var rows = new List<(DefRow, string, string?)>();
+        var rows = new List<(DefRow, string, string?, int)>();
         using var rd = Query(
-            $"SELECT {DefColumns}, fv.path, fv.value FROM field_values fv JOIN defs d ON d.id = fv.def_id {where} " +
+            $"SELECT {DefColumns}, fv.path, fv.value, fv.is_default FROM field_values fv JOIN defs d ON d.id = fv.def_id {where} " +
             $"ORDER BY d.def_name LIMIT {limit} OFFSET {offset}", p);
         while (rd.Read())
-            rows.Add((ReadDefRow(rd), rd.GetString(10), rd.IsDBNull(11) ? null : rd.GetString(11)));
+            rows.Add((ReadDefRow(rd), rd.GetString(10), rd.IsDBNull(11) ? null : rd.GetString(11), rd.GetInt32(12)));
         return (rows, total);
     }
 

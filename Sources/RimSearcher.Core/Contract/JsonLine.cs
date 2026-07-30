@@ -57,20 +57,27 @@ namespace RimSearcher.Contract
             return this;
         }
 
-        /// <summary>字段表:[["path","value"],...]。成对数组比对象省字节,且允许同路径重复。</summary>
-        public JsonLine Pairs(string key, IEnumerable<KeyValuePair<string, string>> pairs)
+        /// <summary>
+        /// 字段表:<c>[["path","value",默认态],…]</c>。数组比对象省字节,且允许同路径重复。
+        ///
+        /// 默认态跟着自己那一行走,而不是另开一个「哪些路径是默认值」的并行数组 ——
+        /// 并行数组一旦错位,产出的行与没错位的逐字同形,而这正是本轮反复在拆的那个形状。
+        /// </summary>
+        public JsonLine Fields(string key, IEnumerable<ExportedField> fields)
         {
             Key(key);
             _sb.Append('[');
             var first = true;
-            foreach (var p in pairs)
+            foreach (var f in fields)
             {
                 if (!first) _sb.Append(',');
                 first = false;
                 _sb.Append('[');
-                AppendQuoted(_sb, p.Key);
+                AppendQuoted(_sb, f.Path);
                 _sb.Append(',');
-                AppendQuoted(_sb, p.Value ?? string.Empty);
+                AppendQuoted(_sb, f.Value ?? string.Empty);
+                _sb.Append(',');
+                _sb.Append(f.Default.ToString(CultureInfo.InvariantCulture));
                 _sb.Append(']');
             }
             _sb.Append(']');

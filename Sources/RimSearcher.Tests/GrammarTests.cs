@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using RimSearcher.Cli;
+using RimSearcher.Contract;
 using RimSearcher.Output;
 
 namespace RimSearcher.Tests;
@@ -784,5 +785,78 @@ public class GrammarTests
             Assert.NotEqual(first, second);
             Assert.Contains("starting at 2", second, StringComparison.Ordinal);
         }
+    }
+
+    // ---- R1:C# 声明默认值与被人设过的值不许同形 ----
+
+    /// <summary>
+    /// R1 报告里那一行的形状:**字段名与提问一字不差,值却是声明默认值**。四个错结论
+    /// 全是这么生成的。所以 <c>--path</c> 点了名的字段绝不许因为「是默认值」而消失 ——
+    /// 藏起来会把回答变成「没有路径含 burstCount」,那是比印错值更彻底的假话。
+    /// </summary>
+    [Fact]
+    public void 点了名的字段不因为是默认值而消失()
+    {
+        var (named, _, code) = Fixture.Run("get", "Bullet_Revolver", "--path", "burstCount");
+        Assert.Equal(0, code);
+        Assert.Contains("projectile.burstCount", named, StringComparison.Ordinal);
+        // 印出来还不够,还得说清它是哪一种 —— 只印值就退回了 R1 本身。
+        Assert.Contains(FieldDefault.Column, named, StringComparison.Ordinal);
+        Assert.Contains("yes", named, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 不点名时默认值行不列,但**不许静默**:少了多少条、为什么、怎么看回来,都要在场。
+    /// 机器侧靠 kind 分类(这是过滤不是截断,混用会让扫 notes 的下一位读成「结果不完整」)。
+    /// </summary>
+    [Fact]
+    public void 默认值行被拿掉时当场说清有多少条()
+    {
+        var (plain, _, _) = Fixture.Run("get", "Bullet_Revolver");
+        Assert.DoesNotContain("projectile.burstCount", plain, StringComparison.Ordinal);
+        Assert.Contains("Not listed", plain, StringComparison.Ordinal);
+        Assert.Contains("--defaults", plain, StringComparison.Ordinal);
+
+        var (json, _, _) = Fixture.Run("get", "Bullet_Revolver", "--json");
+        Assert.Contains("\"kind\": \"filter\"", json, StringComparison.Ordinal);
+
+        var (all, _, _) = Fixture.Run("get", "Bullet_Revolver", "--defaults");
+        Assert.Contains("projectile.burstCount", all, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 三态里「没法比」最容易被顺手并进某一边。它必须**照常显示**(少省一点篇幅,
+    /// 换「不会有值凭空消失」),而且在列里与「有人改过」分得开 —— 把没比成印成
+    /// 有人改过,正是 R1 本身,只是换了个入口。
+    /// </summary>
+    [Fact]
+    public void 没法比的那一档照常显示且不与被改过的同形()
+    {
+        var (plain, _, _) = Fixture.Run("get", "Bullet_Revolver");
+        Assert.Contains("projectile.speed", plain, StringComparison.Ordinal);
+        Assert.Contains("unknown", plain, StringComparison.Ordinal);
+
+        Assert.Equal("no", FieldDefault.Render(DefaultState.Differs));
+        Assert.Equal("yes", FieldDefault.Render(DefaultState.Same));
+        Assert.Equal("unknown", FieldDefault.Render(DefaultState.Unknown));
+        Assert.Equal(3, new[] { DefaultState.Differs, DefaultState.Same, DefaultState.Unknown }
+            .Select(FieldDefault.Render).Distinct(StringComparer.Ordinal).Count());
+    }
+
+    /// <summary>
+    /// 表的形状不许随数据变:这一列恒在,不因为「本次没有默认值行」就消失。照着一次输出
+    /// 写解析器的人下一次还得取到同一个键,而缺键与「值是 no」在 JSON 里是两回事。
+    /// </summary>
+    [Fact]
+    public void 默认值列恒在而不随本次有没有默认值行出现()
+    {
+        // Anesthetic 只有一条字段,且不是默认值 —— 「本次没有默认值行」的那一种。
+        var (json, _, _) = Fixture.Run("get", "Anesthetic", "--json");
+        Assert.Contains($"\"{FieldDefault.Column}\"", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("Not listed", json, StringComparison.Ordinal);
+
+        // find 走另一条查询路径,同样要带这一列。
+        var (find, _, _) = Fixture.Run("find", "compClass", "RimWorld.CompShield", "--json");
+        Assert.Contains($"\"{FieldDefault.Column}\"", find, StringComparison.Ordinal);
     }
 }

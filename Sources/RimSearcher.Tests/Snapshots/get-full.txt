@@ -1,7 +1,8 @@
 $ rimsearcher get Apparel_ShieldBelt
 exit 0
 --- stdout ---
-4 fields.
+3 fields.
+Not listed: 1 field whose value is the one a fresh instance of the declaring type already carries, so this snapshot cannot tell whether anything set it. The def has 4 fields in all; pass --defaults to list every one, or --path <text> to see a named field either way.
 1 translation.
 
 def_name     Apparel_ShieldBelt
@@ -11,11 +12,10 @@ class        Verse.ThingDef
 mod          ludeon.rimworld
 source       Apparel_Belts.xml
 
-path                      value
-thingClass                RimWorld.Apparel
-comps[0].compClass        RimWorld.CompShield
-comps[0].props.energyMax  0.5
-statBases[0].stat         MarketValue
+path                      value             code_default
+thingClass                RimWorld.Apparel  no
+comps[0].props.energyMax  0.5               no
+statBases[0].stat         MarketValue       no
 
 path   translated  original     language           origin
 label  护盾腰带        shield belt  ChineseSimplified  in effect

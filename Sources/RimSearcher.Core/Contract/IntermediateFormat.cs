@@ -18,9 +18,15 @@ namespace RimSearcher.Contract
     public static class IntermediateFormat
     {
         /// <summary>格式版本。中间格式契约变化时 +1;import 侧不认识就拒收。</summary>
-        /// <remarks>2:加了 kind=xmlnode 继承层。旧文件被拒收是对的 —— 拿它建出来的库
-        /// 会在「谁继承谁」上一律零结果,而零结果与「确实没有父节点」长得一模一样。</remarks>
-        public const int FormatVersion = 2;
+        /// <remarks>
+        /// 2:加了 kind=xmlnode 继承层。旧文件被拒收是对的 —— 拿它建出来的库
+        /// 会在「谁继承谁」上一律零结果,而零结果与「确实没有父节点」长得一模一样。
+        ///
+        /// 3:fields 从二元组变三元组,第三位是 <see cref="DefaultState"/>。同理必须拒收 v2:
+        /// 那些文件里每一行都「没说自己是不是代码默认值」,而 <c>get</c> 会把它们全归进
+        /// 「不是默认值」那一栏 —— 与一个真的处处被作者改过的 def 逐字同形。
+        /// </remarks>
+        public const int FormatVersion = 3;
 
         /// <summary>导出文件的推荐扩展名。</summary>
         public const string FileExtension = ".rsx.jsonl.gz";
@@ -64,6 +70,7 @@ namespace RimSearcher.Contract
         public const string KeySourceFile = "source_file";
         public const string KeyGenerated = "generated";
         public const string KeyClass = "class";
+        /// <summary>字段表:<c>[["path","value",默认态],…]</c>,默认态见 <see cref="DefaultState"/>。</summary>
         public const string KeyFields = "fields";
         public const string KeyFieldsTruncated = "fields_truncated";
 
@@ -107,6 +114,49 @@ namespace RimSearcher.Contract
 
         /// <summary>定义全部就位,导出开始。到这一步之后再慢就是真在写数据了。</summary>
         public const string StageExporting = "exporting";
+    }
+
+    /// <summary>
+    /// 一条字段值与「这个类型刚 new 出来时它是什么」的关系。
+    ///
+    /// 起因是 R1:XML 里作者亲手写的值、C# 字段声明里的初始值、以及 <c>ResolveReferences</c>
+    /// 填的兜底值,在快照里长成一模一样的行。四个错结论全由这张表直接生成,而且每次错的
+    /// 那一行都恰好是「字段名与提问一字不差」的那一行。
+    ///
+    /// 判据只有一条、也只能有一条:**把这个对象的运行时类型新 new 一个,同一个字段读出来
+    /// 一样吗**。这问的是 C# 声明默认值,不是「作者写没写」—— 后者要重放继承与补丁才知道,
+    /// 而重放一份必然与游戏分家。所以这里只声明证得出来的那一半:
+    /// <see cref="Same"/> = 「与代码默认值无从区分」,<see cref="Differs"/> = 「一定不是代码默认值」
+    /// (XML 写的、补丁改的、ResolveReferences 填的,都落这一栏)。
+    ///
+    /// 证不出来的那些进 <see cref="Unknown"/> 而不是并进任何一边 —— 呈现侧据此把它们
+    /// **照常显示**,于是「新不出来这个类型」最坏只是少省一点篇幅,不会让一行值凭空消失。
+    /// </summary>
+    public static class DefaultState
+    {
+        /// <summary>与新 new 的实例不同 —— 一定有人改过(XML / 补丁 / ResolveReferences)。</summary>
+        public const int Differs = 0;
+
+        /// <summary>与新 new 的实例相同 —— 与 C# 声明默认值无从区分。</summary>
+        public const int Same = 1;
+
+        /// <summary>没法比 —— 这个类型 new 不出来。照常显示,不许并进上面任何一栏。</summary>
+        public const int Unknown = 2;
+    }
+
+    /// <summary>导出侧攒好的一条字段值。net472 可编译,故不是 record。</summary>
+    public struct ExportedField
+    {
+        public string Path;
+        public string Value;
+        public int Default;
+
+        public ExportedField(string path, string value, int defaultState)
+        {
+            Path = path;
+            Value = value;
+            Default = defaultState;
+        }
     }
 
     /// <summary>
