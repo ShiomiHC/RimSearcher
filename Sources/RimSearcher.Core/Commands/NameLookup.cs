@@ -137,7 +137,7 @@ internal static class NameLookup
             // (这套输出到处在修的正是这个形状)。取满 25 条,distinct 就在总数 ≤ 25 时
             // 是准数;超了就只知道下界,措辞跟着退到不指定唯一的那一支。
             const int probe = 25;
-            var (keyedRows, keyedTotal) = ctx.Db.KeyedSearch(name, probe);
+            var (keyedRows, keyedTotal, _) = ctx.Db.KeyedSearch(name, probe);
             if (keyedRows.Count > 0)
             {
                 var distinct = keyedRows.Select(r => r.Key).Distinct(StringComparer.Ordinal).ToList();

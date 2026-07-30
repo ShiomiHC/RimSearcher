@@ -1001,7 +1001,17 @@ public sealed class SnapshotDb : IDisposable
     /// 这一层的 original 进了 FTS(与 translations 那张表不同,那边只索引 translated),
     /// 因为「从屏幕上的字往回走」是这一层存在的理由,而屏幕上的字两种语言都可能。
     /// </summary>
-    public (IReadOnlyList<KeyedRow> Rows, int Total) KeyedSearch(string query, int limit, int offset = 0)
+    /// <param name="placeholdersOnly">
+    /// 只要占位译文。**必须在这里筛,不能等取完页再筛** —— 页内筛出来的
+    /// 「这一页没有占位」会被当成「一条占位都没有」说出去,而分母还是全体命中数
+    /// (八轮审计:默认 25 行时那句最强否定句覆盖的是 2337 条里的前 25 条)。
+    /// </param>
+    /// <returns>
+    /// <c>Total</c> 是**过滤之后**的命中数,分页三件事按它算;<c>MatchedTotal</c> 忽略
+    /// 占位过滤 —— 「N 条命中里一条占位都没有」那句话要的是它,两个数不能混用一个。
+    /// </returns>
+    public (IReadOnlyList<KeyedRow> Rows, int Total, int MatchedTotal) KeyedSearch(
+        string query, int limit, int offset = 0, bool placeholdersOnly = false)
     {
         var p = new Dictionary<string, object?>
         {
@@ -1009,12 +1019,14 @@ public sealed class SnapshotDb : IDisposable
             ["@q"] = query,
         };
         var from = "FROM keyed_fts f JOIN keyed k ON k.id = f.rowid WHERE keyed_fts MATCH @m";
-        var total = Scalar($"SELECT COUNT(*) {from}", p);
+        var filtered = placeholdersOnly ? from + " AND k.placeholder = 1" : from;
+        var total = Scalar($"SELECT COUNT(*) {filtered}", p);
+        var matchedTotal = placeholdersOnly ? Scalar($"SELECT COUNT(*) {from}", p) : total;
         // key 整体命中排最前,然后是生效层压过磁盘层 —— 后者只是「存在」,不是答案。
         var order = "ORDER BY (k.key = @q COLLATE NOCASE) DESC, (k.origin = 'runtime') DESC, " +
                     "bm25(keyed_fts, 10.0, 3.0, 3.0), LENGTH(k.key), k.key";
-        var rows = ReadKeyed($"SELECT {KeyedColumnsPrefixed} {from} {order} LIMIT {limit} OFFSET {offset}", p);
-        return (rows, total);
+        var rows = ReadKeyed($"SELECT {KeyedColumnsPrefixed} {filtered} {order} LIMIT {limit} OFFSET {offset}", p);
+        return (rows, total, matchedTotal);
     }
 
     /// <summary>

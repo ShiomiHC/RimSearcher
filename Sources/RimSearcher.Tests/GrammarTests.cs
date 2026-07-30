@@ -1731,6 +1731,60 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// <c>--limit all</c> 解除**行上限**,这是全系统一句话的总纲(SKILL.md),不分命令。
+    ///
+    /// 八轮审计:`keyed` 是唯一把 <c>all</c> 翻译成 <see cref="Limits.MaxLimit"/> 的地方,
+    /// 于是 4353 条命中回 2000 条,而截断句给的补救是「pass --limit all for the rest」——
+    /// 指着调用方刚刚用过的那个参数。夹紧本身也不合口径:MaxLimit 管的是「--limit 收多大的
+    /// 数字」,而 <c>all</c> 根本不走那条路。
+    /// </summary>
+    [Fact]
+    public void limit_all在keyed上也解除行上限()
+    {
+        var (json, _, code) = Fixture.Run("keyed", "filler", "--limit", "all", "--json");
+        Assert.Equal(0, code);
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+
+        var rows = doc.RootElement.GetProperty("keys").GetArrayLength();
+        Assert.True(rows > Limits.MaxLimit,
+                    $"'--limit all' 只回了 {rows} 行,而语料有 2100 条 —— 它被夹到上限了。");
+
+        // 全给了就没有截断可申报。留着那句「pass --limit all」等于叫人再传一次同一个参数。
+        var kinds = doc.RootElement.GetProperty("notes")
+                       .EnumerateArray().Select(n => n.GetProperty("kind").GetString()).ToList();
+        Assert.DoesNotContain("truncation", kinds);
+    }
+
+    /// <summary>
+    /// <c>--placeholders</c> 在**取页之前**筛。
+    ///
+    /// 八轮审计:原先是取完这一页再在页内 <c>Where(r =&gt; r.Placeholder)</c>,于是
+    /// 「第一页里没有占位」被当成「一条占位都没有」说了出去,而那句话的分母还是全体命中数。
+    /// 默认 25 行时它覆盖的是两千多条里的前二十五条 —— 这个开关唯一的用途就是回答
+    /// 「这批有没有没译的」,而它给的是一个假阴性,形状与真阴性逐字相同。
+    ///
+    /// 语料把唯一那条占位排在 2100 条的最末,页内筛必然摸不到它。
+    /// </summary>
+    [Fact]
+    public void placeholders是在取页之前筛的()
+    {
+        var (json, _, code) = Fixture.Run("keyed", "filler", "--placeholders", "--limit", "5", "--json");
+        Assert.Equal(0, code);
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+
+        var keys = doc.RootElement.GetProperty("keys").EnumerateArray()
+                      .Select(k => k.GetProperty("key").GetString()).ToList();
+        Assert.Contains("FillerKey2099", keys);
+        Assert.All(doc.RootElement.GetProperty("keys").EnumerateArray(),
+                   k => Assert.True(k.GetProperty("placeholder").GetBoolean()));
+
+        // 反向:落空那句话的分母是**过滤之前**的命中数,不是自己筛剩的零。
+        var (miss, _, missCode) = Fixture.Run("keyed", "转至此处", "--placeholders");
+        Assert.Equal(1, missCode);
+        Assert.Contains("2 keys matched", miss, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 上一条的**声明侧**:一个键要么在声明里就说明白它恒在(<see cref="JsonKeySpec.Rows"/>),
     /// 要么在它自己那句 <c>What</c> 的开头说明白它是有条件的。两者都不占的键会掉进裂缝 ——
     /// 上一条那张用例表按命令逐条走,而漏掉一条命令的代价正是八轮审计翻出来的那四条。

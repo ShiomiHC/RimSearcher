@@ -103,28 +103,50 @@ public sealed class KeyedCommand : Command
         var exact = ctx.Db.KeyedByKey(query);
         var rows = exact;
         var matchedOn = "key";
+        // 分页三件事按它算。--placeholders 下推之后它是过滤后的数。
         var ftsTotal = exact.Count;
+        // 「N 条命中里一条占位都没有」要的是过滤**之前**的数。两个数混用一个,
+        // 那句最强否定句就会拿着自己筛剩的零去否定全体。
+        var matchedTotal = exact.Count;
 
         if (exact.Count == 0)
         {
-            var (hits, hitTotal) = ctx.Db.KeyedSearch(query, limit.IsAll ? Limits.MaxLimit : limit.Effective, offset);
+            // limit.Effective 而不是夹到 Limits.MaxLimit:`--limit all` 在别处一律解除行上限
+            // (SKILL.md 的总纲就一句「lifts the row cap」),只有这里把它翻译成 2000,
+            // 而截断时给的补救仍是「pass --limit all」—— 指着调用方刚用过的那个参数。
+            var (hits, hitTotal, hitMatched) =
+                ctx.Db.KeyedSearch(query, limit.Effective, offset, placeholdersOnly);
             rows = hits;
             ftsTotal = hitTotal;
+            matchedTotal = hitMatched;
             matchedOn = "text";
         }
-
-        if (placeholdersOnly)
-            rows = rows.Where(r => r.Placeholder).ToList();
+        else if (placeholdersOnly)
+        {
+            // 精确命中这一路不分页 —— 一个 key 的几条来源全在手上,页内筛就是全量筛。
+            rows = exact.Where(r => r.Placeholder).ToList();
+            ftsTotal = rows.Count;
+        }
 
         if (rows.Count == 0)
         {
-            // 四种互斥成因。合成一句「没找到」会让前三种被读成第四种,而第四种
+            // 五种互斥成因。合成一句「没找到」会让前四种被读成第五种,而第五种
             // (这个环境里真没有)是最强的那个结论。
-            if (placeholdersOnly && ftsTotal > 0)
+            //
+            // 翻过头排在最前:它与「没有」的区别最大,而这条命令此前根本没判它 ——
+            // 一次翻页会被读成一次否定,正是别处点名清过的那个形状。
+            if (offset > 0 && ftsTotal > 0)
+            {
+                ctx.Report.PastEnd(offset,
+                    $"{Tally.Complete(ftsTotal).Render("key")} match '{query}' in all.");
+                return 1;
+            }
+
+            if (placeholdersOnly && matchedTotal > 0)
             {
                 // 主语是 --placeholders(固定单数),计数进从句 —— 见下面那条注释。
                 ctx.Report.Notice(NoticeKind.Filter,
-                    $"--placeholders filtered out every match: {Tally.Complete(ftsTotal).Render("key")} " +
+                    $"--placeholders filtered out every match: {Tally.Complete(matchedTotal).Render("key")} " +
                     $"matched '{query}', and none of them is a placeholder — each has a real translation. " +
                     "Drop --placeholders to see them.");
                 return 1;
@@ -184,9 +206,17 @@ public sealed class KeyedCommand : Command
         // 名词跟着「数的是什么」变,不是跟着命令名变:按 key 精确命中时数的是这个 key 的
         // 几条来源(in effect 一条,on disk 可以另有几条),按文案搜时数的是命中了几个 key。
         // 两者混用一个词,读的人就会把「一个 key 三条来源」读成「三个 key」(R7)。
-        ctx.Report.CountNotice(Tally.Of(shown.Count, placeholdersOnly ? rows.Count : ftsTotal),
-            matchedOn == "key" ? "keyed translation" : "key",
-            "pass --limit all for the rest.");
+        //
+        // 两条路的计数形态不同,因为**只有一条会翻页**:按文案搜是 LIMIT/OFFSET 出来的一页,
+        // 走分页文法(下一页的 --offset 恒在、末页明说是末页);按 key 精确命中拿到的是
+        // 这个 key 的全部来源,没有第二页可翻。原先两条共用 CountNotice + 一句写死的
+        // 「pass --limit all for the rest」,于是 `--limit all --offset N` 会拿到一句
+        // 指着调用方刚用过的参数的补救 —— 而真正让它变短的是 --offset。
+        if (matchedOn == "key")
+            ctx.Report.CountNotice(Tally.Of(shown.Count, ftsTotal), "keyed translation",
+                                   "pass --limit all for the rest.");
+        else
+            ctx.Report.PageNotice("key", shown.Count, offset, ftsTotal);
 
         // 占位译文实际显示的是英文 —— 表里它与真译文同形,所以点名说破。
         //

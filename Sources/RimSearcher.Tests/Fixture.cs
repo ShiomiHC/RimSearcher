@@ -396,6 +396,14 @@ public static class Fixture
         Keyed("JumpToLocation", "转至此处", "Jump to location", false, "Letters.xml", 6);
         Keyed("ClickToJump", "转至此处", "Click to jump", false, "Alerts.xml", 5);
 
+        // 过线的填充批。两道闸共用,而两道都**必须**有一批过 Limits.MaxLimit(2000)的语料:
+        //   `--limit all` 解除行上限 —— 语料不过线,「夹到 2000」与「全给」印出来一模一样;
+        //   `--placeholders` 在 SQL 里筛 —— 占位排在这批的最末一条,于是「取完这一页再筛」
+        //     会拿着第一页的零去否定全部 2100 条,而那正是这个开关唯一用途上的最强否定句。
+        // 全部共用 original 里的 filler 一词,与上面五条的查询词不相交(基线不受牵连)。
+        for (var i = 0; i < 2100; i++)
+            Keyed($"FillerKey{i:0000}", $"填充{i}", "filler line", i == 2099, "Filler.xml", i + 1);
+
         // 这两条的 def_type 是 ThingDef(Injection 写死的),而同名的 StatDef Firefoam
         // 连 description 都没有 —— 按 defName 关联时它们会跑到 StatDef 的输出里去。
         Injection("Firefoam", "label", "灭火泡沫", "firefoam");
