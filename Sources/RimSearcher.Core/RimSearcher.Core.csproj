@@ -12,6 +12,9 @@
          漏洞(GHSA-2m69-gcr7-jv3q,NU1903)。直接钉到 3.x 把传递版本顶上去 ——
          这条依赖负责解析我们喂给它的每一个快照文件,不是可以先欠着的那类债。 -->
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
+    <!-- ILSpy 的反编译器。`sources sync` 唯一非自己实现不可的部分 —— 它是个普通库,
+         与旧世系的 MCP 管线无关,所以那一支只剩这一个东西值得搬。 -->
+    <PackageReference Include="ICSharpCode.Decompiler" Version="8.2.0.7535" />
   </ItemGroup>
 
 </Project>

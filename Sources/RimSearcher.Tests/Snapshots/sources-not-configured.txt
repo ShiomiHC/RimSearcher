@@ -1,0 +1,5 @@
+$ rimsearcher sources list
+exit 2
+--- stdout ---
+--- stderr ---
+No decompiled source tree is configured, so there is nowhere to put the C#. Set 'decompiled_dir' in the config file to the directory that should hold it.

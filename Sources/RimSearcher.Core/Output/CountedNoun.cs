@@ -70,6 +70,8 @@ public static class NounRegistry
         ["XML node"] = "XML nodes",
         ["direct child"] = "direct children",
         ["patch operation"] = "patch operations",
+        ["assembly"] = "assemblies",
+        ["directory"] = "directories",
     };
 
     public static IReadOnlyCollection<string> Known => Plurals.Keys;

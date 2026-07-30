@@ -42,7 +42,7 @@ TraceTool 27),这些资产与存储层无关,不论各点择优选了谁的做�
 | 未知参数提示 | `ArgParser` 未知 flag 报错带近似候选;无候选时直接列出接受的参数,免得再跑一轮 help |
 | scope 语法设计 | `Snapshot/ScopeFilter.cs`,`all,-vanilla` 排除语法与配置组都在 |
 | 文法/措辞系统 | `CountedNoun` / `OutputText` / `GrammarTests`。1338603 的写法教训贯彻到底:判产地渲染的槽空不空 |
-| 字节级基线方法 | `OutputSnapshotTests` + `Snapshots/`(33 份)。`SnapshotGrammarGateTests` 那道缝合进 `GateTests`——基线逐行喂回文法检查,已验证故意写坏会红。**另补 SKILL.md 两道闸**:它是手写的、又按 04 的口径「本身进入被测物」,原先反而是唯一没人守的产物 —— 现在文中每条 `rimsearcher …` 命令行与收窄开关表都对着注册表验,故意写错开关会红 |
+| 字节级基线方法 | `OutputSnapshotTests` + `Snapshots/`(36 份)。`SnapshotGrammarGateTests` 那道缝合进 `GateTests`——基线逐行喂回文法检查,已验证故意写坏会红。**另补 SKILL.md 两道闸**:它是手写的、又按 04 的口径「本身进入被测物」,原先反而是唯一没人守的产物 —— 现在文中每条 `rimsearcher …` 命令行与收窄开关表都对着注册表验,故意写错开关会红 |
 | 盲测方法论 | workflow 盲测两轮,结果与教训在 04。第二轮的场景种子改从 Vethara 会话 transcript 逐条抽真实 episode(不再按 07 的意图分布编),同时兼任改版后的回归轮 |
 | staleness 机制设计 | `CommandBase.AnnounceSnapshot`;判据在实现阶段改过一次,记在 06 |
 | 模糊匹配实现 | `Search/FuzzyMatcher.cs`,Ordinal-vs-CurrentCulture 那条教训原样带注释搬来;另加 `StripKindPrefix` 应对 07-⑤ 的 `method:` 前缀 |

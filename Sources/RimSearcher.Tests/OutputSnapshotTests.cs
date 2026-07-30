@@ -59,6 +59,10 @@ public class OutputSnapshotTests
         { "help-overview",         ["--help"] },
         { "help-get",              ["get", "--help"] },
         { "help-code-search",      ["code-search", "--help"] },
+        { "help-sources-sync",     ["sources", "sync", "--help"] },
+        // 没配 decompiled_dir 时说的那句话。反编译树是**唯一**不在快照里的数据源,
+        // 于是「没有它」这条路必然被走到,而它必须说清该往哪补一行配置。
+        { "sources-not-configured", ["sources", "list"] },
     };
 
     [Theory]

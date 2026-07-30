@@ -57,6 +57,17 @@ one round trip you do not need to spend.
 `code-search` searches **decompiled C#**, never Defs. Pointing it at data questions returns
 nothing and tells you so.
 
+The decompiled C# is a tree on disk, one directory per mod named by its packageId (the game's
+own code is `vanilla`). `rimsearcher sources list` says which trees exist and which ones came
+from assemblies that have since changed; `rimsearcher sources sync` rebuilds the stale ones from
+whatever the snapshot's mods actually load. A tree reported as stale still answers questions —
+about the older build. Say which when it matters.
+
+Neither command compares versions. That tree is a git repository, so **what changed between
+builds is a `git diff` / `git log -p` question**, and asking it that way also gets you rename
+detection and per-file history. Do not add a remote to it: it holds decompiled game code and
+stays local.
+
 ## Working through a question
 
 1. **Do not know the exact name.** `search` takes words, partial names, and translated text.
@@ -133,6 +144,7 @@ the tool instead, where the counts stay honest:
 | `inherit` | `--limit` |
 | `find` | `--scope`, `--exact`, `--limit` |
 | `code-search` | `--source`, `--files`, `--max-files`, `--limit` |
+| `sources sync` | `--only`, `--modlist`, `--force`, `--dry-run` |
 
 `--type <DefType>` picks one def when a name is shared — which is common: `PsychicSensitivity`
 is both a `StatDef` and a `TraitDef`. `--json` keeps each of them in its own slot regardless.

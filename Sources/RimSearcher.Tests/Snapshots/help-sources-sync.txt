@@ -1,0 +1,34 @@
+$ rimsearcher sources sync --help
+exit 0
+--- stdout ---
+Usage: rimsearcher sources sync [options]
+
+Decompile the assemblies the game actually loads into the configured source tree.
+
+Which mods to cover comes from the snapshot, not from a hand-written list: the snapshot's mod list is the game's own answer, and a hand-written one drifts. Within each mod, only the assemblies the game would load are decompiled — the version folders and loadFolders.xml conditions are resolved the same way the game resolves them, so years-old dlls and mutually-exclusive branches stay out.
+
+A tree whose source assemblies have not changed is left alone. Comparing versions is not this command's job: keep the tree in git and 'git diff' answers it, with rename detection and history that a bespoke comparison cannot offer.
+
+Options:
+      --modlist <name>  Cover the mods in this saved mod list instead of the ones in the snapshot.
+                        Also accepted: --list, --from, --profile.
+      --only <name>     Build just this one tree. Takes a tree name as 'sources list' prints it.
+                        Also accepted: --tree, --source, --mod.
+      --force           Rebuild even the trees whose assemblies have not changed.
+                        Also accepted: --rebuild, --all.
+      --dry-run         Report what would be decompiled and stop without writing anything.
+                        Also accepted: --plan, --check.
+
+Global options:
+      --snapshot <name>  Query this named snapshot instead of the one that would be picked automatically. An explicit choice always wins over auto-detection.
+                         Also accepted: --snap, --env.
+      --db <path>        Query the snapshot database at this path directly, bypassing the registry.
+                         Also accepted: --database, --snapshot-path.
+      --json             Emit machine-readable JSON. Anything the text output would have said in prose moves into a 'notes' array, so nothing is lost.
+      --config <path>    Use this config file instead of the default one.
+
+Examples:
+  rimsearcher sources sync
+  rimsearcher sources sync --dry-run
+  rimsearcher sources sync --only erdelf.humanoidalienraces --force
+--- stderr ---

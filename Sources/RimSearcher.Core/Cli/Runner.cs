@@ -27,6 +27,8 @@ public sealed class CommandRegistry
         new TypesCommand(),
         new ModsCommand(),
         new CodeSearchCommand(),
+        new SourcesListCommand(),
+        new SourcesSyncCommand(),
         new SnapshotListCommand(),
         new SnapshotStatusCommand(),
         new SnapshotUseCommand(),

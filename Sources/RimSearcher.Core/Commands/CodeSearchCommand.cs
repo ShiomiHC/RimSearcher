@@ -132,12 +132,7 @@ public sealed class CodeSearchCommand : Command
             var available = Directory.Exists(root)
                 ? Directory.EnumerateDirectories(root).Select(Path.GetFileName).Where(n => n is not null).ToList()!
                 : new List<string?>();
-            var close = FuzzyMatcher.Rank(available.Select(a => a!), sourceName ?? "").Take(Limits.MaxSuggestions)
-                                    .Select(t => t.Text).ToList();
-            throw new CliUsageException(
-                $"No decompiled source tree named '{sourceName}'." +
-                (close.Count > 0 ? $" Closest: {string.Join(", ", close)}."
-                                 : available.Count > 0 ? $" Available: {string.Join(", ", available)}." : ""));
+            throw new CliUsageException(NoSuchTree(sourceName, available.Select(a => a!)));
         }
 
         var matcher = GlobToRegex(glob);
@@ -245,6 +240,29 @@ public sealed class CodeSearchCommand : Command
             (reached.Count > 1 ? $" across {Tally.Complete(reached.Count).Render("source tree")}" : "") + ".");
         ctx.Report.Text("matches", lines);
         return 0;
+    }
+
+    /// <summary>
+    /// <c>--source</c> 打不中时说什么。
+    ///
+    /// 树名是 packageId,而人记得的往往是个外号(HAR、miho)—— 外号不在任何数据里,所以打分器
+    /// 对它只能给出**看起来像但是错的**那一个(实测:<c>HAR</c> → <c>brrainz.harmony</c>)。
+    /// 一个错的独家建议比没有建议更坏:它看着像答案,于是没人再去看名单。故永远同时指向名单,
+    /// 并且说破「外号匹配不上任何东西」这条成因。
+    /// </summary>
+    public static string NoSuchTree(string? typed, IEnumerable<string> available)
+    {
+        var all = available.ToList();
+        var close = FuzzyMatcher.Rank(all, typed ?? "").Take(Limits.MaxSuggestions).Select(t => t.Text).ToList();
+        return $"No decompiled source tree named '{typed}'." +
+               (close.Count > 0
+                   ? $" Closest by spelling: {string.Join(", ", close)} — but tree names are packageIds, " +
+                     "so a nickname matches nothing. "
+                   : " ") +
+               "'rimsearcher sources list' names every tree." +
+               (all.Count > 0 && all.Count <= Limits.MaxSuggestions
+                   ? $" Here they are: {string.Join(", ", all)}."
+                   : "");
     }
 
     /// <summary>

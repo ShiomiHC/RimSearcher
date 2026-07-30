@@ -26,6 +26,8 @@ Answers questions about RimWorld's defs and C# from a snapshot of what the game 
 | `snapshot status` | Explain in full which snapshot is in use and how it compares with the game as installed right now. |
 | `snapshot truncated` | List the defs whose fields the exporter stopped short on. |
 | `snapshot use` | Pin a snapshot so later commands use it without being told each time. |
+| `sources list` | List the decompiled source trees and say which ones no longer match the installed assemblies. |
+| `sources sync` | Decompile the assemblies the game actually loads into the configured source tree. |
 | `types` | List every def type in the snapshot with how many defs it has. |
 | `values` | List the distinct values a field takes, most common first. |
 
@@ -472,6 +474,51 @@ Examples:
 
 ```
 rimsearcher snapshot use vanilla
+```
+
+## `sources list`
+
+List the decompiled source trees and say which ones no longer match the installed assemblies.
+
+```
+rimsearcher sources list
+```
+
+Each tree carries a manifest naming the assemblies it was decompiled from and their hashes, so 'stale' here means exactly one thing: a dll on disk is not the dll this tree came from.
+
+It does not say what changed inside the source. That is git's job — see the note this command prints.
+
+Examples:
+
+```
+rimsearcher sources list
+```
+
+## `sources sync`
+
+Decompile the assemblies the game actually loads into the configured source tree.
+
+```
+rimsearcher sources sync [options]
+```
+
+Which mods to cover comes from the snapshot, not from a hand-written list: the snapshot's mod list is the game's own answer, and a hand-written one drifts. Within each mod, only the assemblies the game would load are decompiled — the version folders and loadFolders.xml conditions are resolved the same way the game resolves them, so years-old dlls and mutually-exclusive branches stay out.
+
+A tree whose source assemblies have not changed is left alone. Comparing versions is not this command's job: keep the tree in git and 'git diff' answers it, with rename detection and history that a bespoke comparison cannot offer.
+
+| Option | Meaning | Also accepted |
+|---|---|---|
+| `--modlist` <name> | Cover the mods in this saved mod list instead of the ones in the snapshot. | `--list`, `--from`, `--profile` |
+| `--only` <name> | Build just this one tree. Takes a tree name as 'sources list' prints it. | `--tree`, `--source`, `--mod` |
+| `--force` | Rebuild even the trees whose assemblies have not changed. | `--rebuild`, `--all` |
+| `--dry-run` | Report what would be decompiled and stop without writing anything. | `--plan`, `--check` |
+
+Examples:
+
+```
+rimsearcher sources sync
+rimsearcher sources sync --dry-run
+rimsearcher sources sync --only erdelf.humanoidalienraces --force
 ```
 
 ## `types`

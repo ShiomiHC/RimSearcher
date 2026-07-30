@@ -267,16 +267,75 @@ modlist 别名、scope 组。**不放**:指纹事实(产地在 db meta)、任何
   `find_derived_types(transitive)` / `find_base_types` / `get_overrides` /
   `get_implementations` 全套且走元数据(实测 ThingComp → 378 个派生类型)。
   InheritorsMap 不需自建,05-5 的 callvirt 补法在外包侧直接可做。
-- **确认存在的洞 [05-9]**:①**版本 diff 的字节基线**——`set_decompile_settings` 只有
-  7 个开关,`LanguageVersion` 不可设且未知键**静默忽略**,master 那条 C#9 锁定的
-  diff 基线确认无法复刻(后备 decompile 命令若兑现可救回);②**单次查询不跨 context**
-  ——多 assembly 可并存但要遍历 alias,属迭代成本;③**任意正则匹配方法体文本**
-  ——`search_string_literals` 只覆盖 IL 字面量,形状搜索仍归 `code-search`。
-- 落盘再生成:短期 master `sync_sources` 代管;**后备记账**:若 master 退役,把
-  DecompileService 砍成独立命令带走(自包含百行级,锁 C#9 保 diff 基线,05-2)——
-  用现成 ilspycmd 会丢该基线,不取。现在不动手。
+- **确认存在的洞 [05-9]**:①~~**版本 diff 的字节基线**~~ **[已由 `sources sync` + git 补上,
+  见下]**;②**单次查询不跨 context**——多 assembly 可并存但要遍历 alias,属迭代成本;
+  ③**任意正则匹配方法体文本**——`search_string_literals` 只覆盖 IL 字面量,形状搜索仍归
+  `code-search`。
+- 落盘再生成 **[已落地 2026-07-30,`sources sync` / `sources list`]**:后备记账兑现,
+  DecompileService 砍成命令带走(它只依赖 `ICSharpCode.Decompiler` 这个 NuGet 包,
+  与 MCP 的任何管线无关)。旧世系 `SourceSyncService` 那九百行**不搬**,理由见下一节。
   注:落盘树仅服务 `code-search`(方法体形状搜索)与跨全源类型定位;DecompilerServer
   自身**不需要**它(load_assembly 实测 0.4 秒自带 warm,无预处理,05-9)。
+
+### 版本间差异交给 git,不自己实现 [2026-07-30 裁定]
+
+旧世系 `sync_sources` 的 `check → sync → diff` 三段里,只有 `sync` 值得搬。`diff` 那一段
+(含 `SourceHistoryStore`、成员级折叠、分页)整体废弃,判据是**能力对比**而非工作量:
+
+| | 自制 diff | git |
+|---|---|---|
+| 上次 ↔ 现在 | 有 | 有 |
+| 重命名检测 | 无 | 有 |
+| 跨多个游戏版本回溯 | 无 | 有 |
+| 单文件演化史 | 无 | `git log -p` |
+
+零代码,严格强于原有能力。落地形态:`decompiled_dir` 自己是一个 git 仓
+(`S:\works\CS\RimSearcher\Decompiled`,首次入库 14502 文件 / 145 万行,`.git` 13 MB)。
+
+这条路成立的前提是**产出逐次可复现**,否则 diff 里全是噪音。实测踩到一处:反编译器给
+每个 `.csproj` 生成随机 `ProjectGuid`,一次「什么都没变」的重跑里 16094 个 `.cs` 逐字节
+相同、29 个 `.csproj` 全红。改成由项目名算出的固定值后,`--force` 全量重跑的 git 工作树
+**零改动**。语言档位锁 C#9 同属这一条(档位一变整棵树重排)。
+
+防外传换了实现:旧世系往每棵树里写一个内容为 `*` 的 `.gitignore`,防的是「使用者的
+mod 工程仓库顺手把产物一起提交」。顾虑对,但这棵树现在自己就是 git 仓 —— 嵌套的 `.git`
+让外层仓库根本看不进来,比 ignore 规则更硬(外层改不掉它)。留着那个文件反而屏蔽掉
+唯一的 diff 能力。现由 `pre-push` 钩子 + 「没有 remote」承担,钩子已实测拦得住。
+
+### 该反编译谁:复刻游戏的算法,启用集合取自快照
+
+「一个 mod 里哪些 dll 在跑」不是「找出所有 dll」。实测 HAR 装了六年,20 个 dll 里在用的
+只有 2 个;RatkinGene 的 `1.6` 与 `1.6_unofficial` 是靠 `IfModActive` 开关的互斥分支,
+两套只该进一套。反编译进错的那一套,后果是 `code-search` 拿出根本没在跑的代码 ——
+而它长得跟真答案一模一样。
+
+所以 `ModFolders` **复刻游戏自己的两个方法**,不另立启发式:
+
+- `LoadFolders` ← `ModContentPack.InitLoadFolders()`:loadFolders.xml 的版本键两级回退
+  (精确 → 小于等于当前的最高一个 → `default`),声明过就**只**用它(根目录/Common/版本
+  目录一概不再自动补),条目倒序即优先级,`IfModActive`/`IfModActiveAll`/`IfModNotActive`
+  按启用集合裁,比对忽略 `_steam` 后缀。
+- `Assemblies` ← `GetAllFilesForModPreserveOrder(mod, "Assemblies/")`:按 `Assemblies/`
+  起算的**相对路径**去重,高优先级目录赢(HAR 的根 `Assemblies/AlienRace.dll` 正是这样被
+  `1.6/Assemblies/` 顶掉的)。
+
+启用集合从**快照**来,不是 config 里手写一条 `active_mods`(旧世系的做法)。判据:快照的
+mod 列表是游戏亲自答的,手写清单会漂 —— 这个错刚在 export 上付过代价(手写 races 列表
+漏了一个前置,换来一次挂死的无头导出)。附带收益是**树名统一**:树名就是 packageId,
+也就是 `rimsearcher mods` 第二列、`--scope` 认的那个,整个工具里 mod 只有一套名字。
+旧世系那套短名(`HAR`/`miho`/`Ratkin`)是第二个产地,已改名。
+
+搜索目录也顺带修对了:`ReferencePaths` **无条件**带上游戏的 Managed 目录,旧世系只按
+AssemblyRef 名字命中的 dll 所在目录来加。实测收益可量化 —— 重建旧世系建过的 6 棵 mod 树,
+54 个 `.cs` 有实质改动,而那**不是 mod 更新**(Wolfein 的 dll 时间戳比旧树的反编译还早):
+139 处凭空的强制转换消失(`((CompApparelVerbOwner)(object)((Thing)x).TryGetComp<T>()`
+→ `x.TryGetComp<T>()`)、具名实参恢复、`base.Generate` 取代 `((GenStep_Signal)this).Generate`。
+解析不到 `Def`/`Thing`,反编译器只能插一堆转换把类型糊过去,而读代码的人看不出那是噪音。
+
+**残余盲区(逐条申报,不用一句免责糊)**:`.rimsearcher-source.json` 记的是来源 dll 的
+哈希,所以「树过期了」判得准;但 loadFolders.xml 里若出现游戏支持而这里未复刻的写法,
+落点是多反编译或少反编译一个目录。已复刻的是上面列出的全部条件形式;`LoadFolder` 类
+在 1.6 只有这三种条件属性,故当前无已知缺口。
 
 ## 与 04 顺序的衔接
 
