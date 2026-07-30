@@ -291,7 +291,8 @@ public sealed class SnapshotDb : IDisposable
     /// 为什么」。滤掉的判据只认 <see cref="Contract.DefaultState.Same"/>:「没法比」的
     /// 一律留下,少省一点篇幅换「不会有值凭空消失」。
     /// </summary>
-    public (IReadOnlyList<FieldRow> Rows, int Matched, int Total, int Defaulted) Fields(
+    public (IReadOnlyList<FieldRow> Rows, int Matched, int Total, int Defaulted,
+            IReadOnlyList<string> MatchedPaths) Fields(
         long defId, int limit, IReadOnlyList<string>? pathFilters = null, bool includeDefaults = true)
     {
         var p = new Dictionary<string, object?> { ["@id"] = defId };
@@ -316,6 +317,13 @@ public sealed class SnapshotDb : IDisposable
         var defaulted = Scalar(
             $"SELECT COUNT(*) FROM field_values {where} AND is_default = {Contract.DefaultState.Same}", p);
 
+        // 命中的**全部**路径,不受 limit 与 includeDefaults 影响 —— 「其中几条是整段命中」
+        // 这句话必须在截断之前数完,否则同一个 --path 换个 --limit 就换一句结论。
+        // 只取 path 一列,一个 def 至多几百条,比再跑一趟计数查询便宜。
+        var allPaths = new List<string>();
+        using (var pr = Query($"SELECT path FROM field_values {where} ORDER BY rowid", p))
+            while (pr.Read()) allPaths.Add(pr.GetString(0));
+
         var listed = includeDefaults ? where : $"{where} AND is_default <> {Contract.DefaultState.Same}";
         var rows = new List<FieldRow>();
         using var rd = Query(
@@ -323,7 +331,7 @@ public sealed class SnapshotDb : IDisposable
         while (rd.Read())
             rows.Add(new FieldRow(rd.GetString(0), rd.GetString(1),
                                   rd.IsDBNull(2) ? null : rd.GetString(2), rd.GetInt32(3)));
-        return (rows, matched, total, defaulted);
+        return (rows, matched, total, defaulted, allPaths);
     }
 
     /// <summary>
@@ -452,24 +460,42 @@ public sealed class SnapshotDb : IDisposable
         return (rows, total);
     }
 
-    public (IReadOnlyList<(string Path, int Count)> Rows, int Total) FieldPathsForType(
+    /// <summary>
+    /// <c>WholeSegment</c> 是 <c>Total</c> 里有几条把 <paramref name="pathFilter"/> 用作**完整的一段**。
+    /// 子串匹配不留痕:不拆开这两档,「你要的那个字段根本不在」与「它在,旁边还有一堆别的」
+    /// 逐字同形。数在分页**之前**数 —— 翻一页换一句结论是同一个病换个位置。
+    /// </summary>
+    public (IReadOnlyList<(string Path, int Count)> Rows, int Total, int WholeSegment) FieldPathsForType(
         string defType, int limit, string? pathFilter = null, int offset = 0)
     {
         var p = new Dictionary<string, object?> { ["@t"] = defType };
         var where = "WHERE d.def_type = @t COLLATE NOCASE";
+        var whole = "";
         if (!string.IsNullOrEmpty(pathFilter))
         {
             p["@f"] = "%" + Escape(pathFilter!) + "%";
             where += " AND fv.path LIKE @f ESCAPE '\\'";
+
+            // 「完整的一段」有六种落法:整条就是它,或者它是开头段 / 中间段 / 结尾段,
+            // 后面接 `.` 或 `[`。下标不算段的一部分 —— comps[3] 里那个 comps 就是完整的一段。
+            var e = Escape(pathFilter!);
+            p["@s0"] = e; p["@s1"] = e + ".%"; p["@s2"] = e + "[%";
+            p["@s3"] = "%." + e; p["@s4"] = "%." + e + ".%"; p["@s5"] = "%." + e + "[%";
+            whole = " AND (fv.path LIKE @s0 ESCAPE '\\' OR fv.path LIKE @s1 ESCAPE '\\' OR " +
+                    "fv.path LIKE @s2 ESCAPE '\\' OR fv.path LIKE @s3 ESCAPE '\\' OR " +
+                    "fv.path LIKE @s4 ESCAPE '\\' OR fv.path LIKE @s5 ESCAPE '\\')";
         }
         var total = Scalar(
             $"SELECT COUNT(*) FROM (SELECT DISTINCT fv.path FROM field_values fv JOIN defs d ON d.id = fv.def_id {where})", p);
+        var wholeCount = whole.Length == 0 ? total : Scalar(
+            "SELECT COUNT(*) FROM (SELECT DISTINCT fv.path FROM field_values fv " +
+            $"JOIN defs d ON d.id = fv.def_id {where}{whole})", p);
         var rows = new List<(string, int)>();
         using var rd = Query(
             $"SELECT fv.path, COUNT(*) c FROM field_values fv JOIN defs d ON d.id = fv.def_id {where} " +
             $"GROUP BY fv.path ORDER BY c DESC, fv.path LIMIT {limit} OFFSET {offset}", p);
         while (rd.Read()) rows.Add((rd.GetString(0), rd.GetInt32(1)));
-        return (rows, total);
+        return (rows, total, wholeCount);
     }
 
     /// <summary>
@@ -633,7 +659,12 @@ public sealed class SnapshotDb : IDisposable
     /// 有人用 <c>fields FactionDef --path texture</c> 拿到唯一命中 <c>settlementTexturePath</c>
     /// 并准备据此下结论,真正管事的 <c>factionIconPath</c> 因为名字里没有 "texture" 被整个滤掉。
     /// </summary>
-    public (IReadOnlyList<(string Path, string DefType, int Defs, string Sample)> Rows, int Total)
+    /// <remarks>
+    /// <c>Exact</c> 是 <c>Total</c> 里有几组**整值就等于**这段文本。子串命中不留痕:
+    /// 不拆开这两档,「有一个字段的值就是它」与「有一堆字段的值里碰巧含这几个字母」
+    /// 逐字同形,而后者常常一条都不是提问的人要的东西。
+    /// </remarks>
+    public (IReadOnlyList<(string Path, string DefType, int Defs, string Sample)> Rows, int Total, int Exact)
         PathsWithValue(string value, ScopeFilter scope, int limit, ValueMatch match = ValueMatch.Substring, int offset = 0)
     {
         // R11:`--exact` 原先在这条路上被接受、被忽略、输出与不加时一字不差 —— 三轮唯一一处
@@ -650,7 +681,15 @@ public sealed class SnapshotDb : IDisposable
             $"GROUP BY fv.path, d.def_type ORDER BY c DESC, fv.path LIMIT {limit} OFFSET {offset}", p);
         while (rd.Read())
             rows.Add((rd.GetString(0), rd.GetString(1), rd.GetInt32(2), rd.IsDBNull(3) ? "" : rd.GetString(3)));
-        return (rows, total);
+
+        var exact = total;
+        if (match == ValueMatch.Substring && total > 0)
+        {
+            var ep = new Dictionary<string, object?>();
+            var ew = ValueWhere(value, ValueMatch.Exact, scope, ep);
+            exact = Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT fv.path, d.def_type {join} {ew})", ep);
+        }
+        return (rows, total, exact);
     }
 
     public (IReadOnlyList<(string Value, int Count)> Rows, int Total) DistinctValues(

@@ -1167,6 +1167,46 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 子串匹配不留痕 —— 第五轮盲测里直接产出错结论的那一条。
+    /// `get X --path soundImpact` 只回一行 `soundImpactDefault`(语义相反的另一个字段,
+    /// `code_default=no` 让它看着像作者刻意设的),而输出里没有一处说过「你打的这个词
+    /// 作为完整的一段一次都没命中」。
+    ///
+    /// 三个落点都要判,因为改一处剩两处的输出一字不变:`get --path` / `fields --path` /
+    /// `find --value`。每处判两档:一条整段都没有 → 说破;有整段也有子串 → 给拆分。
+    /// </summary>
+    [Fact]
+    public void 子串匹配要说破自己不是整段命中()
+    {
+        // get:语料里 Apparel_ShieldBelt 有 comps[0].props.energyMax。查 "energy" 命中它,
+        // 而没有任何一段整个叫 energy。
+        var (get0, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--path", "energy");
+        Assert.Contains("whole path segment", get0, StringComparison.Ordinal);
+        Assert.Contains("may not exist here", get0, StringComparison.Ordinal);
+
+        // 查 "comps" 则条条整段命中 —— 这时候一个字都不许多说。
+        var (getAll, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--path", "comps");
+        Assert.DoesNotContain("whole path segment", getAll, StringComparison.Ordinal);
+        Assert.DoesNotContain("longer name", getAll, StringComparison.Ordinal);
+
+        // fields:同一条纪律在「这个类型有没有这个字段」的正式问法上。
+        var (f0, _, _) = Fixture.Run("fields", "ThingDef", "--path", "energy");
+        Assert.Contains("whole path segment", f0, StringComparison.Ordinal);
+
+        var (fMix, _, _) = Fixture.Run("fields", "ThingDef", "--path", "compClass");
+        Assert.DoesNotContain("whole path segment", fMix, StringComparison.Ordinal);
+
+        // find --value:值侧。语料里 compClass 的值是 RimWorld.CompShield,
+        // 整值等于 CompShield 的一条都没有。
+        var (v0, _, _) = Fixture.Run("find", "--value", "CompShield");
+        Assert.Contains("No value here is exactly 'CompShield'", v0, StringComparison.Ordinal);
+
+        // 而 --exact 是调用方自己点的名,这时候不许再劝一遍。
+        var (vExact, _, _) = Fixture.Run("find", "--value", "RimWorld.CompShield", "--exact");
+        Assert.DoesNotContain("exactly", vExact, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 落空那句话报的值域不许超发。它说 covers 什么,就得真覆盖到什么。
     /// </summary>
     [Fact]

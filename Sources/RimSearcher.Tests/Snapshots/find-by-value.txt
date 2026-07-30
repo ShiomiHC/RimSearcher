@@ -2,6 +2,7 @@ $ rimsearcher find --value CompShield
 exit 0
 --- stdout ---
 1 field path.
+No value here is exactly 'CompShield'; each match has it inside a longer value — see example_value. --exact would return nothing.
 
 path                def_type  defs  example_value
 comps[0].compClass  ThingDef  2     RimWorld.CompShield

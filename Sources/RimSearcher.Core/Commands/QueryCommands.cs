@@ -397,7 +397,7 @@ public sealed class GetCommand : Command
             //   --defaults 是明说要全量。
             // 于是过滤只发生在「什么都没点名」的那一次,而那一次省下的正是纯篇幅。
             var withDefaults = ctx.Args.Flag("defaults") || paths.Count > 0;
-            var (fields, matched, total, defaulted) =
+            var (fields, matched, total, defaulted, matchedPaths) =
                 ctx.Db.Fields(def.Id, limit.Effective, paths, includeDefaults: withDefaults);
             ctx.Report.Table("fields", ["path", "value", FieldDefault.Column],
                 fields.Select(f => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
@@ -441,10 +441,23 @@ public sealed class GetCommand : Command
                     // 动词不进登记处,所以句子不能让动词跟着计数走 —— 原先是
                     // 「{N} fields{whose} match …」,N 为 1 时读出「1 field match」。
                     // 把计数挪到冒号后,主句就不再有随数量变形的成分(R6 的同一条教训)。
+                    // 子串匹配不留痕:`--path soundImpact` 只回一行 `soundImpactDefault` ——
+                    // 语义相反的另一个字段,`code_default=no` 让它看着像作者刻意设的,而输出里
+                    // 没有一处说过「你打的这个词作为完整的一段一次都没命中」。第五轮盲测里
+                    // 这一条直接产出了错结论。整段命中的数在**截断之前**数(matchedPaths 不受
+                    // --limit 影响),否则同一个 --path 换个 --limit 就换一句结论。
+                    var whole = matchedPaths.Count(x => PathSegments.IsWholeSegment(x, paths));
                     ctx.Report.Notice(NoticeKind.Filter,
                         $"Matching {Join(paths)}{whose}: " +
                         $"{Tally.Complete(matched).Render("field")}, out of " +
-                        $"{Tally.Complete(total).Render("field")} on the def.");
+                        $"{Tally.Complete(total).Render("field")} on the def." +
+                        (whole == 0
+                            ? $" None of those has {Join(paths)} as a whole path segment — each contains it " +
+                              "inside a longer name, so a field by exactly that name may not exist here."
+                            : whole < matched
+                                ? $" Whole path segment: {Tally.Complete(whole).Render("field")}; " +
+                                  $"inside a longer name: {Tally.Complete(matched - whole).Render("field")}."
+                                : ""));
                     if (fields.Count < matched)
                         ctx.Report.Notice(NoticeKind.Truncation,
                             $"Showing {Tally.Of(fields.Count, matched).Render("field")}; raise --limit for the rest.");
@@ -800,7 +813,7 @@ public sealed class FindCommand : Command
     private static int ByValue(CommandContext ctx, string value, Snapshot.ScopeFilter scope, LimitValue limit,
                                bool exact, int offset)
     {
-        var (rows, total) = ctx.Db.PathsWithValue(value, scope, limit.Effective,
+        var (rows, total, exactTotal) = ctx.Db.PathsWithValue(value, scope, limit.Effective,
             exact ? ValueMatch.Exact : ValueMatch.Substring, offset);
 
         if (rows.Count == 0 && offset > 0 && total > 0)
@@ -833,6 +846,19 @@ public sealed class FindCommand : Command
         }
 
         ctx.Report.PageNotice("field path", rows.Count, offset, total);
+
+        // 子串命中不留痕,与 `--path` 是同一条纪律的值侧。`find --value Bullet` 命中
+        // 每一个 `Bullet_*` 的字符串,而问的人多半只想要「值就是 Bullet 的那些」——
+        // 拆不开这两档,「有一个字段的值就是它」与「有一堆值里碰巧含这几个字母」逐字同形。
+        if (!exact && exactTotal < total)
+            ctx.Report.Notice(NoticeKind.Filter,
+                exactTotal == 0
+                    ? $"No value here is exactly '{value}'; each match has it inside a longer value — see " +
+                      "example_value. --exact would return nothing."
+                    : $"Value exactly '{value}': {Tally.Complete(exactTotal).Render("field path")}; " +
+                      $"containing it: {Tally.Complete(total - exactTotal).Render("field path")}. " +
+                      "--exact keeps the first group only.");
+
         ctx.Report.Table("paths", ["path", "def_type", "defs", "example_value"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
@@ -1051,7 +1077,7 @@ public sealed class FieldsCommand : Command
         var limit = ctx.Limit();
         var filters = ctx.Args.Values("path");
         var offset = ctx.Args.Offset();
-        var (rows, total) = ctx.Db.FieldPathsForType(type, limit.Effective, filters.FirstOrDefault(), offset);
+        var (rows, total, whole) = ctx.Db.FieldPathsForType(type, limit.Effective, filters.FirstOrDefault(), offset);
 
         if (rows.Count == 0)
         {
@@ -1072,6 +1098,17 @@ public sealed class FieldsCommand : Command
         }
 
         ctx.Report.PageNotice("field path", rows.Count, offset, total, "narrow with --path <text>.");
+
+        // 与 `get --path` 同一条纪律:子串匹配不留痕。这里的代价更大 —— 这条命令是
+        // 「这个类型有没有这个字段」的正式问法,而「一条都不是整段」正是「没有」的形状。
+        if (filters.Count > 0 && whole < total)
+            ctx.Report.Notice(NoticeKind.Filter,
+                whole == 0
+                    ? $"None of those has '{filters[0]}' as a whole path segment — each contains it inside a " +
+                      $"longer name, so '{filters[0]}' may not be a field of '{type}' at all."
+                    : $"Whole path segment: {Tally.Complete(whole).Render("field path")}; " +
+                      $"inside a longer name: {Tally.Complete(total - whole).Render("field path")}.");
+
         ctx.Report.Table("fields", ["path", "defs"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {

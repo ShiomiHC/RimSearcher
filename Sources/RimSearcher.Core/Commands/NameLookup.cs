@@ -139,7 +139,7 @@ internal static class NameLookup
         //     只认整值与限定形态(ValueMatch.Identifier):子串在这里会把更强的解释挤掉 ——
         //     实测 `search ludeon.rimworld` 被 `showIfModsLoaded[0]` 装的
         //     `ludeon.rimworld.royalty` 抢答,而正确答案是下一档的「它是本快照覆盖的 mod」。
-        var (holdingPaths, holdingTotal) = ctx.Db.PathsWithValue(name, unscoped, 3, ValueMatch.Identifier);
+        var (holdingPaths, holdingTotal, _) = ctx.Db.PathsWithValue(name, unscoped, 3, ValueMatch.Identifier);
         if (holdingPaths.Count > 0)
         {
             var best = holdingPaths[0];
