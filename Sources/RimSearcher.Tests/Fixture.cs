@@ -1,4 +1,4 @@
-using System.IO.Compression;
+﻿using System.IO.Compression;
 using System.Text;
 using RimSearcher.Contract;
 using RimSearcher.Storage;
@@ -60,7 +60,7 @@ public static class Fixture
                 // 与 `--scope core` 是两回事,而两者在句子里长得一模一样。内容刻意与 other
                 // 不同名,免得跨快照点名那句话多出一个落点。
                 var coreExport = Path.Combine(dir, "core" + IntermediateFormat.FileExtension);
-                WriteOtherExport(coreExport, "OnlyInCoreSnapshot");
+                WriteOtherExport(coreExport, "OnlyInCoreSnapshot", "CoreMod.CompOnlyInCore");
                 new SnapshotImporter().Import(coreExport, CoreDb);
 
                 return _dbPath = db;
@@ -72,7 +72,8 @@ public static class Fixture
     /// 另一份快照的语料。刻意只有一个 def,而且是 fixture 里没有的名字 ——
     /// 它存在的唯一理由是让「换一份快照就能拿到」这句话可判定。
     /// </summary>
-    private static void WriteOtherExport(string path, string defName = "OnlyInOtherSnapshot")
+    private static void WriteOtherExport(string path, string defName = "OnlyInOtherSnapshot",
+                                         string compClass = "OtherMod.CompOnlyElsewhere")
     {
         using var fs = File.Create(path);
         using var gz = new GZipStream(fs, CompressionLevel.Optimal);
@@ -102,8 +103,11 @@ public static class Fixture
             .Str(IntermediateFormat.KeySourceFile, "Other.xml")
             .Bool(IntermediateFormat.KeyGenerated, false)
             .Str(IntermediateFormat.KeyClass, "Verse.ThingDef")
+            // 第二个字段是跨快照兜底的落点:这个值在 fixture 那份里一次都不出现,于是
+            // 「本快照没有」与「哪儿都没有」在 find 的输出上分不分得开,有地方可验。
             .Fields(IntermediateFormat.KeyFields,
-                [new ExportedField("thingClass", "Verse.ThingWithComps", DefaultState.Differs)])
+                [new ExportedField("thingClass", "Verse.ThingWithComps", DefaultState.Differs),
+                 new ExportedField("comps[0].compClass", compClass, DefaultState.Differs)])
             .Int(IntermediateFormat.KeyFieldsTruncated, 0)
             .ToString());
 

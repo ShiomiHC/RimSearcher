@@ -1207,6 +1207,35 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 「本快照没有」在读的人眼里就是「这东西不存在」。R10 原先只覆盖「按名字取一个 def」
+    /// 那条路,而第五轮实测里落空的是 `find` —— races 那份快照里明明有 6 条。
+    ///
+    /// 叠加不替换:本快照那句成因分流一个字不许少,别处那句排在它**后面**。
+    /// </summary>
+    [Fact]
+    public void find落空时说破别的快照里有()
+    {
+        // OtherMod.CompOnlyElsewhere 只在 other.db 里。
+        var (byValue, _, code) = Fixture.Run("find", "--value", "CompOnlyElsewhere");
+        Assert.Equal(1, code);
+        Assert.Contains("No field in this snapshot holds a value", byValue, StringComparison.Ordinal);
+        Assert.Contains("'other'", byValue, StringComparison.Ordinal);
+        Assert.Contains("--snapshot other", byValue, StringComparison.Ordinal);
+
+        // 成因分流那句必须排在前面 —— 顺序反了就成了「换一份快照」压过「这里为什么没有」。
+        Assert.True(byValue.IndexOf("No field in this snapshot", StringComparison.Ordinal) <
+                    byValue.IndexOf("Another registered snapshot", StringComparison.Ordinal));
+
+        // 指名字段那条路同样要接上。
+        var (byField, _, _) = Fixture.Run("find", "compClass", "CompOnlyElsewhere");
+        Assert.Contains("--snapshot other", byField, StringComparison.Ordinal);
+
+        // 哪儿都没有的时候不许无中生有 —— 一句「别处有」比没有更坏。
+        var (nowhere, _, _) = Fixture.Run("find", "--value", "NoSuchValueAnywhereAtAll");
+        Assert.DoesNotContain("Another registered snapshot", nowhere, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 落空那句话报的值域不许超发。它说 covers 什么,就得真覆盖到什么。
     /// </summary>
     [Fact]

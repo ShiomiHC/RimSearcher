@@ -1,5 +1,6 @@
 using RimSearcher.Cli;
 using RimSearcher.Config;
+using RimSearcher.Output;
 using RimSearcher.Search;
 using RimSearcher.Snapshot;
 using RimSearcher.Storage;
@@ -184,6 +185,46 @@ internal static class NameLookup
             $"'{name}' is a mod installed on this machine{Spell(name, offSnapshot.PackageId)} that this snapshot " +
             "does not cover, so nothing from it can be found here. 'rimsearcher snapshot status' compares " +
             "the two, and re-exporting with that mod enabled is what brings it in.");
+    }
+
+    /// <summary>
+    /// 零结果时问一遍别的已注册快照:同一个问题在那边有没有答案。
+    ///
+    /// R10 原先只覆盖「按名字取一个 def」那条路。第五轮实测里 `find` 落空、而
+    /// races 那份快照里明明有 6 条 —— 同一句「本快照没有」在这里说出来,读的人只能
+    /// 读成「这东西不存在」。
+    ///
+    /// **叠加不替换**:本快照那句成因分流仍然要说完,这条只在后面补一句「别处有」。
+    /// 只数不取行;而且**一律不带 scope** —— 别的快照装的 mod 不一样,把这里的
+    /// `--scope` 搬过去,只会把「那边有」错报成「那边也没有」。
+    /// </summary>
+    public static string? Elsewhere(CommandContext ctx, Func<SnapshotDb, int> probe, string noun)
+    {
+        var here = ctx.Db.Path;
+        var found = new List<(string Alias, int Count)>();
+
+        foreach (var entry in SnapshotCatalog.Enumerate(ctx.Config))
+        {
+            if (string.Equals(Path.GetFullPath(entry.Path), Path.GetFullPath(here), StringComparison.OrdinalIgnoreCase))
+                continue;
+            try
+            {
+                using var other = SnapshotDb.Open(entry.Path);
+                var n = probe(other);
+                if (n > 0) found.Add((entry.Alias, n));
+            }
+            catch
+            {
+                // 打不开的快照不该让一句「没找到」变成一次崩溃 —— 它本来就只是补充信息。
+            }
+        }
+
+        if (found.Count == 0) return null;
+
+        // 句中不出现随计数变形的动词:别名是固定的单数,数目一律走登记处。
+        return "Another registered snapshot does have it — " +
+               string.Join(", ", found.Select(f => $"'{f.Alias}': {Tally.Complete(f.Count).Render(noun)}")) +
+               $". Add '--snapshot {found[0].Alias}' to ask there; that check ignored --scope.";
     }
 
     /// <summary>

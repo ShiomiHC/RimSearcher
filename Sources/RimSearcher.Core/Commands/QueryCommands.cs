@@ -691,6 +691,18 @@ public sealed class FindCommand : Command
 
         if (rows.Count == 0)
         {
+            // 别的快照里有没有,是**算得出来**的,而本快照那句「没有」在读的人眼里就是
+            // 「这东西不存在」。叠加不替换:成因分流照说,这一句排在它后面。
+            // 放在成因分流之前算、之后印 —— 它对四条分支一视同仁,而每条分支各自 return。
+            void NoteElsewhere()
+            {
+                if (NameLookup.Elsewhere(ctx, db => db.FindByField(
+                        path, value, exact,
+                        Snapshot.ScopeFilter.Parse("all", db.PackageIds(), ctx.Config), 0, 0).Total, "def")
+                    is { } line)
+                    ctx.Report.Notice(NoticeKind.NextStep, line);
+            }
+
             // 零结果有三种互斥成因,它们要的下一步完全不同:
             //   (1) 这个字段路径根本不存在 → 该去找字段叫什么
             //   (2) 字段存在,但这个值不在它的值域里 → 该去看值域
@@ -721,6 +733,7 @@ public sealed class FindCommand : Command
                         ? $"'{path}' is part of a def's identity rather than one of its fields: {hint}."
                         : "'rimsearcher fields <DefType> --path <text>' lists the paths that a def type actually has" +
                           (value is null ? "." : $", and 'rimsearcher find --value {value}' finds which field holds that value.")));
+                NoteElsewhere();
                 return 1;
             }
 
@@ -729,6 +742,7 @@ public sealed class FindCommand : Command
                 ctx.Report.Notice(NoticeKind.NextStep,
                     $"'{path}' exists in this snapshot but no def has it within --scope {scope.Expression}. " +
                     "Widen the scope, or pass a value to look for.");
+                NoteElsewhere();
                 return 1;
             }
 
@@ -782,6 +796,7 @@ public sealed class FindCommand : Command
                     : $" 'rimsearcher values {path} --limit all' lists them. If '{value}' is an abstract base " +
                       "class, no def names it directly: get its subclasses from the decompiler first, then " +
                       "look each one up."));
+            NoteElsewhere();
             return 1;
         }
 
@@ -834,14 +849,21 @@ public sealed class FindCommand : Command
                                 (char.IsUpper(value[0]) || value.Contains('.'));
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"No field in this snapshot holds a value {(exact ? "equal to" : "containing")} '{value}'" +
-                (scope.IsAll ? "" : $" within --scope {scope.Expression}") +
-                (exact ? ". Drop --exact to match it as a substring." : "") +
+                (scope.IsAll ? "" : $" within --scope {scope.Expression}") + "." +
+                (exact ? " Drop --exact to match it as a substring." : "") +
                 (looksLikeType
                     ? " If that is a class name: the snapshot indexes leaf scalars and a comp's compClass, but " +
                       "not the runtime type of nested <li Class=\"...\"> objects (modExtensions, sub-object " +
                       "parameters), so a class can be in use by a def and still be absent here. " +
                       "'rimsearcher code-search' finds the class itself."
                     : ""));
+
+            // 叠加不替换:上面那句说的是「这份快照里没有」,而别的快照里有没有算得出来。
+            if (NameLookup.Elsewhere(ctx, db => db.PathsWithValue(
+                    value, Snapshot.ScopeFilter.Parse("all", db.PackageIds(), ctx.Config), 0,
+                    exact ? ValueMatch.Exact : ValueMatch.Substring).Total, "field path")
+                is { } line)
+                ctx.Report.Notice(NoticeKind.NextStep, line);
             return 1;
         }
 
