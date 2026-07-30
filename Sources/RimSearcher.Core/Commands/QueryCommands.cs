@@ -79,13 +79,16 @@ public sealed class SearchCommand : Command
         if (rows.Count == 0 && offset == 0)
         {
             // 02-7 的对策:调用方不该需要知道 '*' 才搜得到复合名,更不该知道打错一个字母就归零。
-            var names = ctx.Db.AllDefNames(scope);
+            // 候选先去重再打分:AllDefNames 是**按 def 一行**给的,而 Firefoam 那样一名两 def
+            // 的名字在候选集里会出现两次,于是 `--limit 5` 里有一格花在同一个名字上。
+            var names = ctx.Db.AllDefNames(scope).Distinct(StringComparer.Ordinal).ToList();
             var (bare, kind) = FuzzyMatcher.StripKindPrefix(query);
             var ranked = FuzzyMatcher.Rank(names, bare).Take(limit.Effective).Select(t => t.Text).ToList();
             if (ranked.Count > 0)
             {
+                // total 用 ByNames 报的**行数**,不是名字数 —— 一个名字带两行时,
+                // 按名字数报会让页脚的 M 比表里的行还少。
                 (rows, total) = ctx.Db.ByNames(ranked, limit.Effective);
-                total = ranked.Count;
                 how = kind is null ? "fuzzy" : $"fuzzy (ignoring the '{kind}:' prefix, which defs do not use)";
                 ctx.Report.Notice(NoticeKind.Boundary,
                     $"No def matched '{query}' as written; these are the closest names by spelling.");

@@ -1111,4 +1111,29 @@ public class GrammarTests
         var (find, _, _) = Fixture.Run("find", "compClass", "RimWorld.CompShield", "--json");
         Assert.Contains($"\"{FieldDefault.Column}\"", find, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// 一个 defName 对应几行是常态(Firefoam 既是 ThingDef 又是 StatDef,mod 覆盖原版时同理)。
+    /// 模糊回退在这里建过「名字 → 一行」的字典,同名处当场抛 —— 用户打错一个字母,
+    /// 换回来一个 exit 70。闸判三件事:不许崩、两行都在、页脚的数按**行**算。
+    ///
+    /// 第三件是前两件的陪嫁:只留一行也「不崩」,而那份输出与正确输出逐字同形。
+    /// </summary>
+    [Fact]
+    public void 同名两个def不许把模糊兜底打成内部错误()
+    {
+        var (stdout, _, code) = Fixture.Run("search", "Firefoan");
+        Assert.Equal(0, code);
+
+        // 两条 Firefoam 各是一个 def,都得出现 —— 少一条正是「同形的错答案」。
+        Assert.Contains("ThingDef", stdout, StringComparison.Ordinal);
+        Assert.Contains("StatDef", stdout, StringComparison.Ordinal);
+
+        // 页脚报的数不许小于表里的行数。
+        var rows = Regex.Matches(stdout, @"^Firefoam\s", RegexOptions.Multiline).Count;
+        Assert.Equal(2, rows);
+        if (Regex.Match(stdout, @"\b(\d+) of (\d+) defs?\b") is { Success: true } m)
+            Assert.True(int.Parse(m.Groups[2].Value) >= rows,
+                $"页脚说共 {m.Groups[2].Value} 条,表里印了 {rows} 行:{stdout}");
+    }
 }

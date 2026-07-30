@@ -207,6 +207,17 @@ public sealed class SnapshotDb : IDisposable
         return names;
     }
 
+    /// <summary>
+    /// 按名字取行,顺序照传入的名次排(模糊打分的排序不能被 SQL 打乱)。
+    ///
+    /// 一个 defName 带**几行**是常态:Firefoam 既是 ThingDef 又是 StatDef,mod 覆盖原版时
+    /// 同理。所以这里不建「名字 → 一行」的字典 —— 建了就在同名处当场抛,而抛出去是 exit 70,
+    /// 一次「你是不是想找」的兜底把整条命令打死。同名的几行**都出**:只留一行也不崩,
+    /// 但那份输出与正确输出逐字同形,读的人无从知道自己少看了一个 def。
+    ///
+    /// <c>Total</c> 数的是行不是名字,而且在截断**之前**数 —— 页脚那句「N of M」的 M
+    /// 若按名字算,同名处就会比表里的行还少。
+    /// </summary>
     public (IReadOnlyList<DefRow> Rows, int Total) ByNames(IReadOnlyList<string> names, int limit)
     {
         if (names.Count == 0) return ([], 0);
@@ -214,11 +225,18 @@ public sealed class SnapshotDb : IDisposable
         var keys = new List<string>();
         for (var i = 0; i < names.Count; i++) { p["@n" + i] = names[i]; keys.Add("@n" + i); }
         var where = $"WHERE d.def_name IN ({string.Join(",", keys)})";
-        var rows = ReadDefs($"SELECT {DefColumns} FROM defs d {where} LIMIT {limit}", p);
-        // 保持传入顺序(模糊打分的排序不能被 SQL 打乱)
-        var byName = rows.ToDictionary(r => r.DefName, StringComparer.Ordinal);
-        var ordered = names.Where(byName.ContainsKey).Select(n => byName[n]).ToList();
-        return (ordered, names.Count);
+        var rows = ReadDefs($"SELECT {DefColumns} FROM defs d {where}", p);
+
+        var byName = rows.GroupBy(r => r.DefName, StringComparer.Ordinal)
+                         .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+        var ordered = new List<DefRow>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var n in names)
+            if (seen.Add(n) && byName.TryGetValue(n, out var group)) ordered.AddRange(group);
+
+        var total = ordered.Count;
+        if (ordered.Count > limit) ordered.RemoveRange(limit, ordered.Count - limit);
+        return (ordered, total);
     }
 
     public DefRow? GetDef(string defName)
