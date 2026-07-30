@@ -1,10 +1,11 @@
 $ rimsearcher code-search public --max-per-file 1
 exit 0
 --- stdout ---
-8 matches in 4 files (4 printed); 4 files read across 2 source trees.
---max-per-file allows 1 match from any one file, and 2 files had more than that; the count above still includes every one of them. Raise it to see the rest.
+13 matches in 5 files (5 printed); 6 files read across 2 source trees.
+--max-per-file allows 1 match from any one file, and 3 files had more than that; the count above still includes every one of them. Raise it to see the rest.
 
 vanilla/RimWorld/CompShield.cs:3:	public class CompShield : ThingComp
+vanilla/Verse/Outline.cs:7:	public class Outer
 vanilla/Verse/ThingComp.cs:3:	public class ThingComp
 vanilla/Verse/Widgets.cs:3:	public static class Widgets
 zz.othermod/Patches.cs:3:	public class MyComp : ThingComp

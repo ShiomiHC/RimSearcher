@@ -1,0 +1,14 @@
+$ rimsearcher values thingClass --limit 1 --offset 1
+exit 0
+--- stdout ---
+1 of 4 values, starting at 2; pass --offset 2 for the next page, or --limit all for every one at once.
+
+matched_paths    thingClass (5)
+def_types        ThingDef (5 of 8)
+defs_with_field  5
+
+value              defs
+RimWorld.Building  1
+
+Counted over indexed field paths only: 1 def of the same def types lost fields at export time and could belong here without showing up. 'rimsearcher snapshot truncated' lists them.
+--- stderr ---

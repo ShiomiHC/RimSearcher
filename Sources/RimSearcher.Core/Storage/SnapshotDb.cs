@@ -1,4 +1,4 @@
-using Microsoft.Data.Sqlite;
+﻿using Microsoft.Data.Sqlite;
 using RimSearcher.Snapshot;
 
 namespace RimSearcher.Storage;
@@ -153,7 +153,7 @@ public sealed class SnapshotDb : IDisposable
 
     // ---------- 查询 ----------
 
-    public (IReadOnlyList<DefRow> Rows, int Total) SearchFts(string query, ScopeFilter scope, string? defType, int limit)
+    public (IReadOnlyList<DefRow> Rows, int Total) SearchFts(string query, ScopeFilter scope, string? defType, int limit, int offset = 0)
     {
         var match = FtsText.BuildMatchQuery(query);
         var p = new Dictionary<string, object?> { ["@m"] = match, ["@q"] = query };
@@ -178,7 +178,7 @@ public sealed class SnapshotDb : IDisposable
                     "(d.label IS NOT NULL AND d.label != '') DESC, " +
                     "(d.def_name LIKE @q || '%' COLLATE NOCASE) DESC, " +
                     "bm25(defs_fts, 10.0, 4.0, 1.0, 3.0), LENGTH(d.def_name), d.def_name";
-        var rows = ReadDefs($"SELECT {DefColumns} {from} {order} LIMIT {limit}", p);
+        var rows = ReadDefs($"SELECT {DefColumns} {from} {order} LIMIT {limit} OFFSET {offset}", p);
         return (rows, total);
     }
 
@@ -343,7 +343,7 @@ public sealed class SnapshotDb : IDisposable
     /// 因为调用方通常只知道末段(<c>compClass</c>),不知道完整路径(<c>comps[3].compClass</c>)。
     /// </summary>
     public (IReadOnlyList<(DefRow Def, string Path, string? Value)> Rows, int Total)
-        FindByField(string pathSuffix, string? value, bool exact, ScopeFilter scope, int limit)
+        FindByField(string pathSuffix, string? value, bool exact, ScopeFilter scope, int limit, int offset = 0)
     {
         var p = new Dictionary<string, object?>();
         var conds = new List<string>();
@@ -373,14 +373,14 @@ public sealed class SnapshotDb : IDisposable
         var rows = new List<(DefRow, string, string?)>();
         using var rd = Query(
             $"SELECT {DefColumns}, fv.path, fv.value FROM field_values fv JOIN defs d ON d.id = fv.def_id {where} " +
-            $"ORDER BY d.def_name LIMIT {limit}", p);
+            $"ORDER BY d.def_name LIMIT {limit} OFFSET {offset}", p);
         while (rd.Read())
             rows.Add((ReadDefRow(rd), rd.GetString(10), rd.IsDBNull(11) ? null : rd.GetString(11)));
         return (rows, total);
     }
 
     public (IReadOnlyList<(string Path, int Count)> Rows, int Total) FieldPathsForType(
-        string defType, int limit, string? pathFilter = null)
+        string defType, int limit, string? pathFilter = null, int offset = 0)
     {
         var p = new Dictionary<string, object?> { ["@t"] = defType };
         var where = "WHERE d.def_type = @t COLLATE NOCASE";
@@ -394,7 +394,7 @@ public sealed class SnapshotDb : IDisposable
         var rows = new List<(string, int)>();
         using var rd = Query(
             $"SELECT fv.path, COUNT(*) c FROM field_values fv JOIN defs d ON d.id = fv.def_id {where} " +
-            $"GROUP BY fv.path ORDER BY c DESC, fv.path LIMIT {limit}", p);
+            $"GROUP BY fv.path ORDER BY c DESC, fv.path LIMIT {limit} OFFSET {offset}", p);
         while (rd.Read()) rows.Add((rd.GetString(0), rd.GetInt32(1)));
         return (rows, total);
     }
@@ -501,7 +501,7 @@ public sealed class SnapshotDb : IDisposable
     /// 并准备据此下结论,真正管事的 <c>factionIconPath</c> 因为名字里没有 "texture" 被整个滤掉。
     /// </summary>
     public (IReadOnlyList<(string Path, string DefType, int Defs, string Sample)> Rows, int Total)
-        PathsWithValue(string value, ScopeFilter scope, int limit, ValueMatch match = ValueMatch.Substring)
+        PathsWithValue(string value, ScopeFilter scope, int limit, ValueMatch match = ValueMatch.Substring, int offset = 0)
     {
         // R11:`--exact` 原先在这条路上被接受、被忽略、输出与不加时一字不差 —— 三轮唯一一处
         // 既成的静默吞掉。它在这里是有意义的(整值相等 vs 含子串),所以实现它,而不是拒绝它:
@@ -532,14 +532,14 @@ public sealed class SnapshotDb : IDisposable
         var rows = new List<(string, string, int, string)>();
         using var rd = Query(
             $"SELECT fv.path, d.def_type, COUNT(DISTINCT d.id) c, MIN(fv.value) {join} {where} " +
-            $"GROUP BY fv.path, d.def_type ORDER BY c DESC, fv.path LIMIT {limit}", p);
+            $"GROUP BY fv.path, d.def_type ORDER BY c DESC, fv.path LIMIT {limit} OFFSET {offset}", p);
         while (rd.Read())
             rows.Add((rd.GetString(0), rd.GetString(1), rd.GetInt32(2), rd.IsDBNull(3) ? "" : rd.GetString(3)));
         return (rows, total);
     }
 
     public (IReadOnlyList<(string Value, int Count)> Rows, int Total) DistinctValues(
-        string pathSuffix, ScopeFilter scope, int limit, string? defType = null)
+        string pathSuffix, ScopeFilter scope, int limit, string? defType = null, int offset = 0)
     {
         var p = new Dictionary<string, object?>();
         var where = SuffixWhere(pathSuffix, scope, p);
@@ -553,7 +553,7 @@ public sealed class SnapshotDb : IDisposable
         var rows = new List<(string, int)>();
         using var rd = Query(
             $"SELECT fv.value, COUNT(*) c FROM field_values fv JOIN defs d ON d.id = fv.def_id {where} " +
-            $"GROUP BY fv.value ORDER BY c DESC, fv.value LIMIT {limit}", p);
+            $"GROUP BY fv.value ORDER BY c DESC, fv.value LIMIT {limit} OFFSET {offset}", p);
         while (rd.Read()) rows.Add((rd.IsDBNull(0) ? "" : rd.GetString(0), rd.GetInt32(1)));
         return (rows, total);
     }

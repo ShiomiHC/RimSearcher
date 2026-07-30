@@ -106,6 +106,42 @@ public class OutputSnapshotTests
         // --source 已经给出时,补救措施里不许再列 --source(R3)。
         { "code-search-source-cap", ["code-search", "public", "--source", "vanilla", "--max-files", "1"] },
         { "code-search-no-tree",   ["code-search", "public", "--source", "HAR"] },
+        // 三轮 R5:CLI 侧读不了文件,于是 CLI-only 时读代码退化成编造正则。read 补上这条
+        // 底线,而它自己的错法集中在两处 —— 定位到哪个文件、以及配平括号找到的是不是那一段。
+        // 轮廓:注释/字符串/字符字面量里的括号不许算数,方法体里的 if 不许变成成员,
+        // 带初值的字段不许被初值里的括号认成方法。
+        { "read-outline",          ["read", "Outline.cs", "--source", "vanilla", "--outline"] },
+        // 同名成员分属两个类型:不带 --type 全给并说破归属,带 --type 只给一份。
+        { "read-member",           ["read", "vanilla/Verse/Outline.cs", "--member", "Shared"] },
+        { "read-member-typed",     ["read", "vanilla/Verse/Outline.cs", "--member", "Shared", "--type", "Inner"] },
+        // 「有这个成员但不在那个类型里」与「整个文件都没有」是两句不同的话。
+        { "read-member-wrong-type", ["read", "vanilla/Verse/Outline.cs", "--member", "Shared", "--type", "Nope"] },
+        { "read-member-missing",   ["read", "vanilla/Verse/Outline.cs", "--member", "Shard"] },
+        { "read-type",             ["read", "vanilla/Verse/Outline.cs", "--type", "Inner"] },
+        // 裸行三态:一段、整份、越过末尾。翻页参数与总行数恒在,这条命令的分页就靠它。
+        { "read-lines",            ["read", "vanilla/Verse/Outline.cs", "--lines", "7-12"] },
+        { "read-whole-file",       ["read", "vanilla/Verse/Widgets.cs"] },
+        { "read-past-end",         ["read", "vanilla/Verse/Outline.cs", "--lines", "900"] },
+        { "read-line-cap",         ["read", "vanilla/Verse/Outline.cs", "--type", "Outer", "--limit", "4"] },
+        // 基名撞车时不选,只列 —— 选错的输出与选对的逐字同形。
+        { "read-ambiguous",        ["read", "Outline.cs"] },
+        { "read-no-file",          ["read", "NoSuchFile.cs"] },
+        // 两种读法同时传:不排优先级,当场说破这是两件事(旧世系在这里是静默择一的)。
+        { "read-two-modes",        ["read", "Outline.cs", "--lines", "1-3", "--member", "Shared"] },
+        // 三轮 R5 的另一半:没有 --offset 的表把调用方逼去接管道,而管道会把声明区
+        // 连同计数一起截掉。四条盯分页的三个位置 —— 中间页要说自己从第几条起、
+        // 末页不许再给下一页的参数、翻过头不是「没有这个东西」。
+        { "page-middle",           ["list", "ThingDef", "--limit", "2", "--offset", "2"] },
+        { "page-last",             ["list", "ThingDef", "--limit", "4", "--offset", "4"] },
+        { "page-past-end",         ["list", "ThingDef", "--offset", "900"] },
+        // 同一套文法长在另外三条命令上(产地唯一的意思就是措辞不许各写一份)。
+        // search 的结果集是「FTS 命中」接着「子串补扫」两段拼的,翻页要在拼好的那条序列上走 ——
+        // 两段各自跳一次 offset 会让第二页把第一页的补扫结果原样再印一遍。
+        { "page-search",           ["search", "VoidNode", "--limit", "1", "--offset", "1"] },
+        { "page-fields",           ["fields", "ThingDef", "--limit", "3", "--offset", "3"] },
+        { "page-values",           ["values", "thingClass", "--limit", "1", "--offset", "1"] },
+        // 负偏移在 SQL 里等同于 0 —— 不拦下来,「少给了一个负号」与「这就是第一页」逐字相同。
+        { "page-negative",         ["list", "ThingDef", "--offset", "-2"] },
     };
 
     [Theory]

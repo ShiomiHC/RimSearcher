@@ -1,0 +1,15 @@
+$ rimsearcher read vanilla/Verse/Widgets.cs
+exit 0
+--- stdout ---
+vanilla/Verse/Widgets.cs, all 9 lines.
+
+     1  namespace Verse
+     2  {
+     3  	public static class Widgets
+     4  	{
+     5  		public static void Label(Rect rect, string label)
+     6  		{
+     7  		}
+     8  	}
+     9  }
+--- stderr ---

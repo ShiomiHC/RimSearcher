@@ -394,6 +394,55 @@ public static class Fixture
             "\t}",
             "}");
 
+        // read 的语料。轮廓靠配平大括号,于是每一种「括号看起来在那儿其实不在」的写法
+        // 都要有一份:字符串里的 }、注释里的 {、字符字面量、逐字字符串里的双写引号。
+        // 另外三件事各要一个落点:方法体里的 if(…){ 不许变成一个叫 if 的成员;
+        // 带初值的字段不许被初值里的括号认成方法(`= Make(…)` 曾经报出 Make);
+        // 同名成员分属两个类型 —— --type 就是为分开它们存在的。
+        File_("vanilla/Verse/Outline.cs",
+            "using System;",
+            "",
+            "namespace Verse",
+            "{",
+            "\t// A brace in a comment: {",
+            "\t[StaticConstructorOnStartup]",
+            "\tpublic class Outer",
+            "\t{",
+            "\t\tprivate static readonly string Marker = Make(\"} not a brace {\");",
+            "",
+            "\t\tprivate char Open = '{';",
+            "",
+            "\t\tpublic string Verbatim => @\"he said \"\"} \"\" and left\";",
+            "",
+            "\t\tpublic void Shared(int n)",
+            "\t\t{",
+            "\t\t\tif (n > 0)",
+            "\t\t\t{",
+            "\t\t\t\tConsole.WriteLine(Marker);",
+            "\t\t\t}",
+            "\t\t}",
+            "",
+            "\t\tpublic class Inner",
+            "\t\t{",
+            "\t\t\tpublic void Shared(int n)",
+            "\t\t\t{",
+            "\t\t\t}",
+            "\t\t}",
+            "\t}",
+            "}");
+
+        // 同名文件的第二份。read 收基名,而基名在两棵树里撞车时选错的代价是整条结论作废
+        // (mod 的覆盖版被当成原版读下去,输出里逐字看不出区别)—— 所以那条路不选,只列。
+        // 正文刻意不含 "public" 与 ": ThingComp":它进了 code-search 的候选集,内容一撞
+        // 那几份基线就不只是数字变化了。
+        File_("zz.othermod/Outline.cs",
+            "namespace OtherMod",
+            "{",
+            "\tclass Outer",
+            "\t{",
+            "\t}",
+            "}");
+
         Directory.CreateDirectory(Path.Combine(root, "zz.emptytree"));
     }
 }

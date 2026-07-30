@@ -1,8 +1,8 @@
 $ rimsearcher code-search public --source vanilla --max-files 1
 exit 0
 --- stdout ---
-at least 1 match in 1 file; 1 of 3 files read.
-The scan stopped after reading 1 file, so this answer is partial rather than complete. 'vanilla' was read only in part: 1 of 3 files. Raise the cap with --max-files all, or narrow with --files <glob>.
+at least 1 match in 1 file; 1 of 4 files read.
+The scan stopped after reading 1 file, so this answer is partial rather than complete. 'vanilla' was read only in part: 1 of 4 files. Raise the cap with --max-files all, or narrow with --files <glob>.
 
 vanilla/RimWorld/CompShield.cs:3:	public class CompShield : ThingComp
 --- stderr ---

@@ -23,6 +23,7 @@ Answers questions about RimWorld's defs and C# from a snapshot of what the game 
 | `modlist save` | Capture the mods currently enabled in the game as a named list. |
 | `modlist show` | Show the mods in one list, in load order. |
 | `mods` | List the mods that were active when the snapshot was taken, in load order. |
+| `read` | Read source out of the decompiled tree — one member, one type, or a line range. |
 | `search` | Find defs by name, label, description, or translated text. |
 | `snapshot import` | Build a queryable snapshot database out of a file the in-game exporter wrote. |
 | `snapshot list` | List the snapshots this machine knows about. |
@@ -210,6 +211,7 @@ Use this before 'find' when you are not sure what a field is called. The counts 
 |---|---|---|
 | `-n`, `--limit` <n|all> | How many field paths to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--path` <text> | Only list paths containing this text. Repeat it to widen the selection. | `--paths`, `--contains`, `--match`, `--filter`, `--grep`, `--only` |
+| `--offset` <n> | Skip this many field paths before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
 
 Examples:
 
@@ -237,6 +239,7 @@ The field path is matched from the end, so 'compClass' finds 'comps[3].compClass
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n|all> | How many defs to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+| `--offset` <n> | Skip this many defs before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
 | `--exact` | Require the whole value to match, with either a field path or --value. Without it, the value is matched as a substring. | `--exact-match`, `--whole` |
 | `--value` <text> | Search every field for this value and report which paths hold it, instead of naming a field yourself. | `--any-field`, `--search-values`, `--holding` |
@@ -322,7 +325,7 @@ rimsearcher list <defType> [options]
 |---|---|---|
 | `-n`, `--limit` <n|all> | How many defs to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
-| `--offset` <n> | Skip this many defs before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start` |
+| `--offset` <n> | Skip this many defs before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
 | `--class` <ClassName> | Only defs whose own class is this. Def types that hold several classes list them below the count. | `--def-class`, `--runtime-class` |
 
 Examples:
@@ -417,6 +420,41 @@ Examples:
 rimsearcher mods
 ```
 
+## `read`
+
+Read source out of the decompiled tree — one member, one type, or a line range.
+
+```
+rimsearcher read <file> [options]
+```
+
+The file is named by its path relative to the decompiled root ('vanilla/Assembly-CSharp/Verse/Pawn.cs'), by any tail of that path, or by its bare name. When a bare name matches several files, the answer lists them instead of picking one.
+
+--member and --type find the declaration by matching braces, not by parsing C#. That is enough for decompiled output, which is machine-formatted, but it means a name this command cannot see is not proof the file lacks it — 'code-search' searches the text and --lines reads it raw.
+
+For who calls a method, what it overrides, and what derives from a type, the DecompilerServer MCP answers from metadata and is both faster and exact. This command answers a different question: what the decompiled file on disk actually says.
+
+| Argument | Meaning |
+|---|---|
+| `<file>` | A path under the decompiled root, a tail of one, or a bare file name such as 'Pawn.cs'. |
+
+| Option | Meaning | Also accepted |
+|---|---|---|
+| `--member` <name> | Read the declaration of this member. Every member of that name in the file is returned; --type narrows it to one declaring type. | `--method`, `--method-name`, `--member-name`, `--field`, `--property` |
+| `--type` <name> | Read this whole type. With --member it instead says which type the member must belong to. | `--class`, `--class-name`, `--type-name`, `--extract-class` |
+| `--lines` <a-b|a+n|a|all> | Read raw lines instead: '400-460' is inclusive, '400+60' is sixty lines from 400, '400' starts there and takes the default window, 'all' is the whole file. Without it the read starts at line 1 and takes 150. | `--line`, `--range`, `--line-range` |
+| `--source` <name> | Only resolve the file name inside this source tree. 'rimsearcher sources list' names them. | `--root`, `--tree` |
+| `--outline` | List the file's types and members with their line ranges instead of reading any of them. This is the cheap way to find out what to ask for. | `--members`, `--toc` |
+| `-n`, `--limit` <n|all> | How many lines to print at most. Values above 2000 are clamped to it, because one type can be thousands of lines and this output is read whole. Default: `2000`. | `--max-lines`, `--max-results`, `--count`, `--rows`, `--head` |
+
+Examples:
+
+```
+rimsearcher read Pawn.cs --outline
+rimsearcher read CompShield.cs --member CompTick
+rimsearcher read vanilla/Assembly-CSharp/Verse/ThingComp.cs --lines 1-40
+```
+
 ## `search`
 
 Find defs by name, label, description, or translated text.
@@ -434,6 +472,7 @@ Matching is in three stages and stops at the first one that finds anything: full
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n|all> | How many defs to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+| `--offset` <n> | Skip this many defs before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind`, `--category` |
 
@@ -625,6 +664,7 @@ Answers 'what am I allowed to put here' and 'which classes are actually in use' 
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n|all> | How many values to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+| `--offset` <n> | Skip this many values before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind`, `--category` |
 

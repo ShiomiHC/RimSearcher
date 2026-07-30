@@ -34,6 +34,21 @@ public static class Limits
     /// <summary>code-search 正则单文件匹配超时(毫秒),防灾难性回溯。</summary>
     public const int CodeSearchRegexTimeoutMs = 2000;
 
+    /// <summary>read 不给 --lines 时读多少行。翻页的一页就是它。</summary>
+    public const int ReadWindow = 150;
+
+    /// <summary>
+    /// read 一次最多印多少行(--limit 的默认值,也是它的上限)。
+    ///
+    /// 一个反编译出来的大类动辄四五千行,而这份输出是被整个读进上下文的 —— 这道闸挡的是
+    /// 「一次调用吃掉整个预算」。它只管印:总行数与该翻到哪一页恒在,所以被它咬到不会
+    /// 变成一个看不出来的截断。
+    /// </summary>
+    public const int ReadMaxLines = 2000;
+
+    /// <summary>同名文件几选一时最多列几条。</summary>
+    public const int AmbiguousFiles = 8;
+
     /// <summary>get 命令默认展开的字段条数;超出以三态文法声明。</summary>
     public const int DefaultFieldsPerDef = 60;
 

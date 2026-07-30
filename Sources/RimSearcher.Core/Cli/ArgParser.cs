@@ -274,6 +274,19 @@ public sealed class ParseResult(
             $"--{name} expects a positive whole number or 'all' (got '{raw}').");
     }
 
+    /// <summary>
+    /// --offset 的取值,产地唯一。负数在 SQL 里等同于 0 —— 那会让 <c>--offset -5</c> 出
+    /// 第一页而输出里没有半点异样,即「我少给了一个负号」和「这就是第一页」逐字相同。
+    /// </summary>
+    public int Offset(string name = "offset")
+    {
+        var raw = Value(name);
+        if (raw is null) return 0;
+        if (int.TryParse(raw, out var n) && n >= 0) return n;
+        throw new CliUsageException(
+            $"--{name} expects a whole number of rows to skip, zero or more (got '{raw}').");
+    }
+
     public int Int(string name, int fallback)
     {
         var raw = Value(name);

@@ -67,6 +67,20 @@ public static class CommonOptions
         Default = Limits.DefaultLimit.ToString(),
     };
 
+    /// <summary>
+    /// 翻页。声明产地唯一,措辞在 <see cref="Report.PageNotice"/> ——
+    /// 一个只在 <c>list</c> 上有的参数等于没有:调用方记不住哪条命令认它,于是一律去接管道。
+    /// </summary>
+    public static OptionSpec Offset(string what) => new()
+    {
+        Name = "offset",
+        Aliases = ["skip", "start", "page-from"],
+        Placeholder = "<n>",
+        Help = $"Skip this many {what} before listing. The total is always reported, so you can tell when " +
+               "you have reached the end.",
+        Default = "0",
+    };
+
     public static readonly OptionSpec Scope = new()
     {
         Name = "scope",

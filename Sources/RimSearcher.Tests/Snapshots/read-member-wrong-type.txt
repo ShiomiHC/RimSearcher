@@ -1,0 +1,5 @@
+$ rimsearcher read vanilla/Verse/Outline.cs --member Shared --type Nope
+exit 1
+--- stdout ---
+'Shared' is in vanilla/Verse/Outline.cs after all, just not in a type called 'Nope'. It is declared in Outer (line 15), Inner (line 25). Drop --type, or name one of those.
+--- stderr ---

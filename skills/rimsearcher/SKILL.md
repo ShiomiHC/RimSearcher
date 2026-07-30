@@ -31,6 +31,7 @@ is the only command that reads it, and it says so.
 | Who calls it / what does it override / what derives from it? | `mcp__decompiler__find_callers`, `get_overrides`, `find_derived_types` |
 | Where is this type? | `mcp__decompiler__search_types` |
 | A code *shape* across all files, e.g. every method matching a signature pattern | `rimsearcher code-search <regex>` |
+| The actual text of one file, one member, or one line range | `rimsearcher read <file> --member <name>` |
 
 ## If your instinct is to grep the XML, stop
 
@@ -120,7 +121,7 @@ states its own status rather than leaving you to infer it.
 Counts are written three ways, and the difference matters:
 
 - `12 defs.` — that is all of them.
-- `12 of 347 defs; raise --limit.` — cut off; 347 exist.
+- `12 of 347 defs; pass --offset 12 for the next page…` — cut off; 347 exist.
 - `at least 12 matches` — the scan stopped early; the true total is unknown.
 
 A count of matched rows under `--path` is a filter you asked for, not a truncation; in `--json`
@@ -137,6 +138,17 @@ from a scan that stopped short says so and does **not** point you at the snapsho
 `code-search` also reports matches and files as two different numbers — a question about how many
 methods have some shape wants the first.
 
+Once `code-search` has told you *where*, `read` gives you the text. It takes a path from a
+`code-search` hit, any tail of one, or a bare file name, and then either `--member <name>` /
+`--type <name>` for one declaration or `--lines <a-b|a+n|all>` for raw lines; `--outline` lists
+every declaration in the file with its line range. It finds a declaration's end by matching
+braces, not by parsing C#, and says so on the paths where that inference happens. Two things it
+refuses to guess at, because a wrong guess here reads exactly like a right one: when a bare file
+name matches several files it lists them instead of picking, and `--lines` together with
+`--member`/`--type` is a usage error rather than a silent preference. Reading a member of a
+**loaded assembly** is still the decompiler MCP's job; `read` is for the decompiled tree on disk,
+and it is the only way to see a specific file when that MCP is not available.
+
 `--json` gives machine-readable output with the same prose moved into a `notes` array.
 
 Exit codes carry four distinct meanings: `0` the command ran, `1` this query returned no rows,
@@ -152,14 +164,21 @@ the tool instead, where the counts stay honest:
 | Command | Narrow with |
 |---|---|
 | `get` | `--path`, `--type`, `--limit` |
-| `fields` | `--path`, `--limit` |
-| `values` | `--type`, `--scope`, `--limit` |
-| `search` | `--type`, `--scope`, `--limit` |
+| `fields` | `--path`, `--offset`, `--limit` |
+| `values` | `--type`, `--scope`, `--offset`, `--limit` |
+| `search` | `--type`, `--scope`, `--offset`, `--limit` |
 | `list` | `--class`, `--scope`, `--offset`, `--limit` |
 | `inherit` | `--limit` |
-| `find` | `--scope`, `--exact`, `--limit` |
+| `find` | `--scope`, `--exact`, `--offset`, `--limit` |
 | `code-search` | `--source`, `--files`, `--max-files`, `--max-per-file`, `--limit` |
+| `read` | `--member`, `--type`, `--lines`, `--outline`, `--limit` |
 | `sources sync` | `--only`, `--modlist`, `--force`, `--dry-run` |
+
+That `head` habit has a replacement too. Every table above pages with `--offset`, and a paged
+answer always states the three things a pipe would have destroyed: how many rows this page holds,
+how many exist in total, and the exact `--offset` for the next page. The last page says it is the
+last one rather than leaving you to do the arithmetic, and an `--offset` past the end is reported
+as an overshoot, not as "nothing found". `read` pages the same way with `--lines`.
 
 `--type <DefType>` picks one def when a name is shared — which is common: `PsychicSensitivity`
 is both a `StatDef` and a `TraitDef`. `--json` keeps each of them in its own slot regardless.

@@ -49,7 +49,7 @@ public sealed class SearchCommand : Command
             "You never need to add '*' yourself. Translated text is indexed alongside the English, so a " +
             "Chinese label finds the def even though the label column keeps the value the game had at export time.",
         Positionals = [new PositionalSpec { Name = "query", Help = "Words, a def name, or part of one." }],
-        Options = [CommonOptions.Limit("defs"), CommonOptions.Scope, CommonOptions.Type],
+        Options = [CommonOptions.Limit("defs"), CommonOptions.Offset("defs"), CommonOptions.Scope, CommonOptions.Type],
         Examples =
         [
             "rimsearcher search shield",
@@ -65,7 +65,10 @@ public sealed class SearchCommand : Command
         var scope = ctx.Scope();
         var type = ctx.Args.Value("type");
 
-        var (rows, total) = ctx.Db.SearchFts(query, scope, type, limit.Effective);
+        var offset = ctx.Args.Offset();
+
+        var (rows, total) = ctx.Db.SearchFts(query, scope, type, limit.Effective, offset);
+        var ftsTotal = total;
         var how = "full-text";
         var addedBySubstring = 0;
 
@@ -86,14 +89,21 @@ public sealed class SearchCommand : Command
                 var room = Math.Max(0, limit.Effective - rows.Count);
                 if (room > 0)
                 {
-                    var (more, _) = ctx.Db.ByNames([.. extra.Take(room)], room);
+                    // 结果集是「FTS 命中」接着「子串补扫」两段拼起来的,翻页要在**拼好的那一条
+                    // 序列**上走。FTS 段已经在 SQL 里跳过了 offset;跳完还有剩,就说明这一页
+                    // 落在了第二段里,余下的偏移量从这里接着扣。两段各自跳一次 offset 是最容易
+                    // 犯的那个错 —— 第二页会把第一页的补扫结果原样再印一遍。
+                    var skipHere = Math.Max(0, offset - ftsTotal);
+                    var (more, _) = ctx.Db.ByNames([.. extra.Skip(skipHere).Take(room)], room);
                     rows = [.. rows, .. more];
                     addedBySubstring = more.Count;
                 }
             }
         }
 
-        if (rows.Count == 0)
+        // 模糊回退只在**第一页**做。翻到末页之后 rows 自然为空,那时改口给一批「拼写相近的
+        // 名字」,读起来就像前面那些命中不作数了 —— 而它们明明是同一次查询的前几页。
+        if (rows.Count == 0 && offset == 0)
         {
             // 02-7 的对策:调用方不该需要知道 '*' 才搜得到复合名,更不该知道打错一个字母就归零。
             var names = ctx.Db.AllDefNames(scope);
@@ -109,11 +119,9 @@ public sealed class SearchCommand : Command
             }
         }
 
-        var tally = Tally.Of(rows.Count, Math.Max(total, rows.Count));
         if (rows.Count > 0)
         {
-            ctx.Report.CountNotice(tally, "def",
-                limit.IsAll ? "narrow the query." : "raise --limit or narrow the query.");
+            ctx.Report.PageNotice("def", rows.Count, offset, Math.Max(total, offset + rows.Count));
 
             if (addedBySubstring > 0)
                 ctx.Report.Notice(NoticeKind.Boundary,
@@ -121,7 +129,15 @@ public sealed class SearchCommand : Command
                     $"'{query}' as a substring; full-text matching alone splits names at word starts, so it misses " +
                     "the query in the middle of a compound name.");
         }
-        if (rows.Count == 0)
+        if (rows.Count == 0 && offset > 0)
+        {
+            // 翻过了头不是「没有这个东西」。分开说,否则一次翻页会被读成一次否定 ——
+            // 这正是 R8 那批误诊的形状换个位置再来一遍。
+            ctx.Report.Notice(NoticeKind.NextStep,
+                $"--offset {offset} is past the end: '{query}' matched " +
+                $"{Tally.Complete(total).Render("def")} in all.");
+        }
+        else if (rows.Count == 0)
         {
             // 值域必须说清。search 覆盖的是 defName / label / description / 译文 ——
             // **不含** C# 类名。实测里有人拿 CompShield 来搜,零结果被读成「模糊匹配坏了」,
@@ -495,6 +511,7 @@ public sealed class FindCommand : Command
         Options =
         [
             CommonOptions.Limit("defs"),
+            CommonOptions.Offset("defs"),
             CommonOptions.Scope,
             new OptionSpec
             {
@@ -527,8 +544,10 @@ public sealed class FindCommand : Command
         var limit = ctx.Args.Limit();
         var scope = ctx.Scope();
 
+        var offset = ctx.Args.Offset();
+
         if (ctx.Args.Value("value") is { Length: > 0 } anyValue)
-            return ByValue(ctx, anyValue, scope, limit, ctx.Args.Flag("exact"));
+            return ByValue(ctx, anyValue, scope, limit, ctx.Args.Flag("exact"), offset);
 
         var path = ctx.Args.Positional(0);
         if (path is null)
@@ -541,10 +560,16 @@ public sealed class FindCommand : Command
         var value = ctx.Args.Positional(1);
         var exact = ctx.Args.Flag("exact");
 
-        var (rows, total) = ctx.Db.FindByField(path, value, exact, scope, limit.Effective);
+        var (rows, total) = ctx.Db.FindByField(path, value, exact, scope, limit.Effective, offset);
 
         if (rows.Count > 0)
-            ctx.Report.CountNotice(Tally.Of(rows.Count, total), "def", "raise --limit to see the rest.");
+            ctx.Report.PageNotice("def", rows.Count, offset, total);
+        else if (offset > 0 && total > 0)
+        {
+            ctx.Report.Notice(NoticeKind.NextStep,
+                $"--offset {offset} is past the end: {Tally.Complete(total).Render("def")} match in all.");
+            return 1;
+        }
 
         if (rows.Count == 0)
         {
@@ -659,10 +684,17 @@ public sealed class FindCommand : Command
 
     /// <summary>--value:不指名字段,直接问「哪个字段装着这段文本」。</summary>
     private static int ByValue(CommandContext ctx, string value, Snapshot.ScopeFilter scope, LimitValue limit,
-                               bool exact)
+                               bool exact, int offset)
     {
         var (rows, total) = ctx.Db.PathsWithValue(value, scope, limit.Effective,
-            exact ? ValueMatch.Exact : ValueMatch.Substring);
+            exact ? ValueMatch.Exact : ValueMatch.Substring, offset);
+
+        if (rows.Count == 0 && offset > 0 && total > 0)
+        {
+            ctx.Report.Notice(NoticeKind.NextStep,
+                $"--offset {offset} is past the end: {Tally.Complete(total).Render("field path")} hold '{value}'.");
+            return 1;
+        }
 
         if (rows.Count == 0)
         {
@@ -687,7 +719,7 @@ public sealed class FindCommand : Command
             return 1;
         }
 
-        ctx.Report.CountNotice(Tally.Of(rows.Count, total), "field path", "raise --limit to see the rest.");
+        ctx.Report.PageNotice("field path", rows.Count, offset, total);
         ctx.Report.Table("paths", ["path", "def_type", "defs", "example_value"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
@@ -716,14 +748,7 @@ public sealed class ListCommand : Command
         [
             CommonOptions.Limit("defs"),
             CommonOptions.Scope,
-            new OptionSpec
-            {
-                Name = "offset",
-                Aliases = ["skip", "start"],
-                Placeholder = "<n>",
-                Help = "Skip this many defs before listing. The total is always reported, so you can tell when you have reached the end.",
-                Default = "0",
-            },
+            CommonOptions.Offset("defs"),
             new OptionSpec
             {
                 Name = "class",
@@ -744,7 +769,7 @@ public sealed class ListCommand : Command
     {
         var type = ctx.Args.Positional(0)!;
         var limit = ctx.Args.Limit();
-        var offset = ctx.Args.Int("offset", 0);
+        var offset = ctx.Args.Offset();
         var wantClass = ctx.Args.Value("class");
         var scope = ctx.Scope();
 
@@ -752,6 +777,18 @@ public sealed class ListCommand : Command
 
         if (rows.Count == 0)
         {
+            // 翻过头**先**判。它下面每一条分流问的都是「这个名字是什么」,而翻过头时
+            // 那个名字明明查得好好的 —— 实测 `list ThingDef --offset 900` 从这里掉进
+            // 「ThingDef 不是 def 类型」那一条,把一次翻页答成了一句彻头彻尾的假话。
+            if (offset > 0 && total > 0)
+            {
+                ctx.Report.Notice(NoticeKind.NextStep,
+                    $"--offset {offset} is past the end: this snapshot has " +
+                    $"{Tally.Complete(total).Render("def")} of type {type}" +
+                    (wantClass is null ? "" : $" with class '{wantClass}'") + ".");
+                return 1;
+            }
+
             // 「这个 scope 里没有」不等于「快照里没有」。下面每一条判据都是 scope 过滤过的,
             // 所以 `--scope zh`(汉化包,一个 def 都不加)会让 `list ThingDef` 报出
             // 「No def type named 'ThingDef' in this snapshot」—— 一句彻头彻尾的假话。
@@ -800,19 +837,13 @@ public sealed class ListCommand : Command
             var types = ctx.Db.Types(scope).Select(t => t.Type).ToList();
             var close = FuzzyMatcher.Rank(types, type).Take(Limits.MaxSuggestions).Select(t => t.Text).ToList();
             ctx.Report.Notice(NoticeKind.NextStep,
-                offset > 0 && total > 0
-                    ? $"--offset {offset} is past the end; this snapshot has {Tally.Complete(total).Render("def")} of type {type}."
-                    : $"No def type named '{type}' in this snapshot." +
-                      (close.Count > 0 ? $" Closest: {string.Join(", ", close)}." : " 'rimsearcher types' lists them all."));
+                $"No def type named '{type}' in this snapshot." +
+                (close.Count > 0 ? $" Closest: {string.Join(", ", close)}." : " 'rimsearcher types' lists them all."));
             return 1;
         }
 
         // 上游有 --offset 分页却拿不到总数,不知道翻到哪算到头(02-1)。这里总数恒在。
-        var shownSoFar = offset + rows.Count;
-        ctx.Report.CountNotice(
-            shownSoFar < total ? Tally.Of(rows.Count, total) : Tally.Complete(rows.Count),
-            "def",
-            $"{shownSoFar} of {total} listed so far; pass --offset {shownSoFar} for the next page.");
+        ctx.Report.PageNotice("def", rows.Count, offset, total);
 
         // 桶里只有一种 class 时不平白多一列(ThingDef 一万多个 def 都是 Verse.ThingDef);
         // 异构时这一列是唯一能把子类型区分开的东西。
@@ -873,6 +904,7 @@ public sealed class FieldsCommand : Command
                 Placeholder = "<text>",
                 Help = "Only list paths containing this text. Repeat it to widen the selection.",
             },
+            CommonOptions.Offset("field paths"),
         ],
         Examples =
         [
@@ -887,10 +919,18 @@ public sealed class FieldsCommand : Command
         var type = ctx.Args.Positional(0)!;
         var limit = ctx.Args.Limit();
         var filters = ctx.Args.Values("path");
-        var (rows, total) = ctx.Db.FieldPathsForType(type, limit.Effective, filters.FirstOrDefault());
+        var offset = ctx.Args.Offset();
+        var (rows, total) = ctx.Db.FieldPathsForType(type, limit.Effective, filters.FirstOrDefault(), offset);
 
         if (rows.Count == 0)
         {
+            if (offset > 0 && total > 0)
+            {
+                ctx.Report.Notice(NoticeKind.NextStep,
+                    $"--offset {offset} is past the end: {Tally.Complete(total).Render("field path")} match in all.");
+                return 1;
+            }
+
             if (filters.Count > 0 && ctx.Db.FieldPathsForType(type, 1).Rows.Count > 0)
             {
                 ctx.Report.Notice(NoticeKind.Boundary,
@@ -905,8 +945,7 @@ public sealed class FieldsCommand : Command
             return 1;
         }
 
-        ctx.Report.CountNotice(Tally.Of(rows.Count, total), "field path",
-            "raise --limit, or narrow with --path <text>.");
+        ctx.Report.PageNotice("field path", rows.Count, offset, total, "narrow with --path <text>.");
         ctx.Report.Table("fields", ["path", "defs"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
@@ -930,7 +969,7 @@ public sealed class ValuesCommand : Command
             "A bare name such as compClass matches every path ending in it, so the table above the values tells you " +
             "which full paths and which def types actually contributed, and how many defs are covered.",
         Positionals = [new PositionalSpec { Name = "fieldPath", Help = "A field path or its last segment, such as compClass." }],
-        Options = [CommonOptions.Limit("values"), CommonOptions.Scope, CommonOptions.Type],
+        Options = [CommonOptions.Limit("values"), CommonOptions.Offset("values"), CommonOptions.Scope, CommonOptions.Type],
         Examples =
         [
             "rimsearcher values compClass",
@@ -945,10 +984,18 @@ public sealed class ValuesCommand : Command
         var limit = ctx.Args.Limit();
         var scope = ctx.Scope();
         var type = ctx.Args.Value("type");
-        var (rows, total) = ctx.Db.DistinctValues(path, scope, limit.Effective, type);
+        var offset = ctx.Args.Offset();
+        var (rows, total) = ctx.Db.DistinctValues(path, scope, limit.Effective, type, offset);
 
         if (rows.Count == 0)
         {
+            if (offset > 0 && total > 0)
+            {
+                ctx.Report.Notice(NoticeKind.NextStep,
+                    $"--offset {offset} is past the end: '{path}' takes {Tally.Complete(total).Render("value")} in all.");
+                return 1;
+            }
+
             var withoutType = type is not null && ctx.Db.FieldPathExists(path, scope);
             ctx.Report.Notice(NoticeKind.NextStep,
                 withoutType
@@ -977,7 +1024,7 @@ public sealed class ValuesCommand : Command
             new("defs_with_field", (object)cov.DefsCovered),
         ]);
 
-        ctx.Report.CountNotice(Tally.Of(rows.Count, total), "value", "raise --limit to see the rest.");
+        ctx.Report.PageNotice("value", rows.Count, offset, total);
         ctx.Report.Table("values", ["value", "defs"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {

@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using RimSearcher.Cli;
 using RimSearcher.Output;
 
 namespace RimSearcher.Tests;
@@ -572,5 +573,195 @@ public class GrammarTests
         var (both, _, _) = Fixture.Run("code-search", "public", "--source", "vanilla",
                                        "--files", "*.cs", "--max-files", "1");
         Assert.DoesNotContain("narrow with", both);
+    }
+
+    // ---- read(三轮 R5:CLI 侧读不了文件)----
+
+    /// <summary>
+    /// 配平括号得躲开四种「看起来是括号」:注释里的、字符串里的、字符字面量里的、
+    /// 逐字字符串里双写引号后面的。躲不开的后果不是少认一个成员,而是**认错边界** ——
+    /// 交出去的那段代码从中间截断,而它看上去是完整的一段。
+    /// </summary>
+    [Fact]
+    public void 括号只在真的是括号时算数()
+    {
+        var (stdout, _, code) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--outline");
+        Assert.Equal(0, code);
+
+        // 类体的两端就是文件里那一对真括号:少认一个,Outer 会在 Marker 那一行提前收尾。
+        Assert.Contains("5-29", stdout, StringComparison.Ordinal);
+        // 初值里的 Make( 不是一个方法声明,字段名才是 Marker。
+        Assert.Contains("Marker", stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain("Make", stdout, StringComparison.Ordinal);
+        // 方法体里的 if (n > 0) { 不是一个叫 if 的成员。
+        Assert.DoesNotContain(" if ", stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 同名成员:全给、说破归属、<c>--type</c> 能收敛到一个。
+    /// 「文件里没有这个成员」与「有,但不在你说的那个类型里」必须是两句话 —— 前者会被
+    /// 直接读成「这个类没有覆写它」,而那个成员就在同一份文件的另一个类型里。
+    /// </summary>
+    [Fact]
+    public void 同名成员分得开也说得清()
+    {
+        var (all, _, _) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--member", "Shared");
+        Assert.Contains("Outer.Shared", all, StringComparison.Ordinal);
+        Assert.Contains("Inner.Shared", all, StringComparison.Ordinal);
+
+        var (one, _, _) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--member", "Shared", "--type", "Inner");
+        Assert.Contains("Inner.Shared", one, StringComparison.Ordinal);
+        Assert.DoesNotContain("Outer.Shared", one, StringComparison.Ordinal);
+
+        var (wrong, _, wrongCode) = Fixture.Run("read", "vanilla/Verse/Outline.cs",
+                                                "--member", "Shared", "--type", "Nope");
+        Assert.Equal(1, wrongCode);
+        Assert.Contains("after all", wrong, StringComparison.Ordinal);
+        Assert.Contains("Outer", wrong, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 基名撞车时不许静默选一份。选错的输出与选对的**逐字同形**(mod 的覆盖版与原版),
+    /// 所以这条路上唯一安全的动作是把重名列出来。
+    /// </summary>
+    [Fact]
+    public void 同名文件不替调用方挑()
+    {
+        var (stdout, _, code) = Fixture.Run("read", "Outline.cs");
+        Assert.Equal(1, code);
+        Assert.Contains("vanilla/Verse/Outline.cs", stdout, StringComparison.Ordinal);
+        Assert.Contains("zz.othermod/Outline.cs", stdout, StringComparison.Ordinal);
+        // 只列不读:一行源码都不许出现。
+        Assert.DoesNotContain("class Outer", stdout, StringComparison.Ordinal);
+
+        // --source 收敛到一棵树之后,同一个基名就该直接读到。
+        var (narrowed, _, ok) = Fixture.Run("read", "Outline.cs", "--source", "vanilla", "--lines", "7");
+        Assert.Equal(0, ok);
+        Assert.Contains("class Outer", narrowed, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 分页:总行数与下一页的参数恒在。R5 的成因不是「读不到」,是**没有读的路**,
+    /// 于是调用方去编正则;给了路还得让它走得下去,不然第二页又回到编的老路上。
+    /// </summary>
+    [Fact]
+    public void 裸行读随时说得出总数与下一页()
+    {
+        var (page, _, _) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--lines", "7-12");
+        Assert.Contains("of 30", page, StringComparison.Ordinal);
+        Assert.Contains("--lines 13", page, StringComparison.Ordinal);
+
+        // 一次读完时不许再劝人翻页 —— 那一句会被读成「后面还有」。
+        var (whole, _, _) = Fixture.Run("read", "vanilla/Verse/Widgets.cs");
+        Assert.Contains("all 9 lines", whole, StringComparison.Ordinal);
+        Assert.DoesNotContain("next page", whole, StringComparison.Ordinal);
+
+        // 印刷上限咬下去时,接着读的那一段是算得出来的,就得给出来。
+        var (capped, _, _) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--type", "Outer", "--limit", "4");
+        Assert.Contains("--lines 9-29", capped, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 两种读法同时传时不排优先级。旧世系在这里是静默择一的,后果不是「少了点什么」,
+    /// 而是拿回**完全另一块代码**,而返回里一个字都不提被丢掉的那个参数。
+    /// </summary>
+    [Fact]
+    public void 两种读法同时传时当场说破()
+    {
+        var (stdout, stderr, code) = Fixture.Run("read", "Outline.cs", "--lines", "1-3", "--member", "Shared");
+        Assert.Equal(2, code);
+        Assert.Empty(stdout);
+        Assert.Contains("--lines", stderr, StringComparison.Ordinal);
+        Assert.Contains("--member", stderr, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 配平括号不是解析,这句边界必须跟着**用了轮廓的**那几条路走(R51:写进它作用的
+    /// 那个块)。裸行读没有任何推断,那里不该多这一句 —— 常驻免责声明对手上这一条什么也没说。
+    /// </summary>
+    [Fact]
+    public void 能力边界只挂在做了推断的那几条路上()
+    {
+        foreach (var argv in new[]
+                 {
+                     new[] { "read", "vanilla/Verse/Outline.cs", "--outline" },
+                     ["read", "vanilla/Verse/Outline.cs", "--member", "Shared"],
+                     ["read", "vanilla/Verse/Outline.cs", "--type", "Inner"],
+                 })
+            Assert.Contains("not by parsing C#", Fixture.Run(argv).Stdout, StringComparison.Ordinal);
+
+        var (raw, _, _) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--lines", "1-5");
+        Assert.DoesNotContain("not by parsing C#", raw, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 分页的三个位置各说各的话:中间页说得出自己从第几条起,末页**不给**下一页的参数,
+    /// 翻过了头是一句「翻过头了」而不是一句「没有这个东西」。
+    ///
+    /// 第三条是这一组里最贵的:R8 那批误诊的形状就是「分不清缺席的成因就报最强的那种」,
+    /// 而分页给缺席添了一种全新的成因。
+    /// </summary>
+    [Fact]
+    public void 分页的三个位置各说各的话()
+    {
+        var (mid, _, midCode) = Fixture.Run("list", "ThingDef", "--limit", "2", "--offset", "2");
+        Assert.Equal(0, midCode);
+        Assert.Contains("2 of 8 defs, starting at 3", mid, StringComparison.Ordinal);
+        Assert.Contains("--offset 4", mid, StringComparison.Ordinal);
+
+        var (last, _, lastCode) = Fixture.Run("list", "ThingDef", "--limit", "4", "--offset", "4");
+        Assert.Equal(0, lastCode);
+        Assert.Contains("starting at 5", last, StringComparison.Ordinal);
+        Assert.DoesNotContain("next page", last, StringComparison.Ordinal);
+        // 「到头了」不许由那句话的缺席承载 —— 末页要自己说出来。
+        Assert.Contains("that is the last page", last, StringComparison.Ordinal);
+
+        var (past, _, pastCode) = Fixture.Run("list", "ThingDef", "--offset", "900");
+        Assert.Equal(1, pastCode);
+        Assert.Contains("past the end", past, StringComparison.Ordinal);
+        Assert.DoesNotContain("No def type named", past, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 负偏移当场拒绝。SQL 把负的 OFFSET 当 0,于是「我少给了一个负号」与「这就是第一页」
+    /// 逐字相同 —— 又一处「错的输出与对的输出同形」。
+    /// </summary>
+    [Fact]
+    public void 负偏移不被悄悄当成零()
+    {
+        var (stdout, stderr, code) = Fixture.Run("list", "ThingDef", "--offset", "-2");
+        Assert.Equal(2, code);
+        Assert.Empty(stdout);
+        Assert.Contains("--offset", stderr, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 声明了 --offset 的命令必须真的翻得动。声明层与实现层各写一份是这套代码里最容易
+    /// 长出来的漂移:参数表上挂着,Run 里没读,于是 <c>--offset 2</c> 与不给一模一样 ——
+    /// 静默忽略一个参数,正是本轮 R11 修过的那个错。
+    /// </summary>
+    [Fact]
+    public void 声明了offset的命令都真的翻得动()
+    {
+        string[][] probes =
+        [
+            ["list", "ThingDef"],
+            ["search", "VoidNode"],
+            ["find", "thingClass"],
+            ["fields", "ThingDef"],
+            ["values", "thingClass"],
+        ];
+
+        foreach (var probe in probes)
+        {
+            var declared = new CommandRegistry().Specs
+                .Single(s => s.Name == probe[0]).Options.Any(o => o.Name == "offset");
+            Assert.True(declared, $"'{probe[0]}' does not declare --offset.");
+
+            var first = Fixture.Run([.. probe, "--limit", "1"]).Stdout;
+            var second = Fixture.Run([.. probe, "--limit", "1", "--offset", "1"]).Stdout;
+            Assert.NotEqual(first, second);
+            Assert.Contains("starting at 2", second, StringComparison.Ordinal);
+        }
     }
 }

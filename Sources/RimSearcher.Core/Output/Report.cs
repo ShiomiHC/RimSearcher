@@ -82,6 +82,38 @@ public sealed class Report
             : Notice(NoticeKind.Count, $"{tally.Render(noun)}.");
 
     /// <summary>
+    /// 分页态的计数,产地唯一。
+    ///
+    /// 没有 <c>--offset</c> 的表只有两条出路:把 <c>--limit</c> 抬到全量(一次吃掉整个
+    /// 上下文预算),或者管道接 head(把声明区连同计数一起截掉,而那正是这套输出唯一
+    /// 说得清「你没看到什么」的地方)。三轮实测里两条都发生过。
+    ///
+    /// 三件事恒在:这一页几条、总共几条、下一页怎么要。到头时**不给**下一页的参数 ——
+    /// 一句「pass --offset N」挂在最后一页上,会被读成后面还有。
+    ///
+    /// 但「到头了」不能由那句话的**缺席**来承载(01 的老账:靠沉默传达完整会被读错)。
+    /// 末页照样得说出「这是最后一页」,否则一句「4 of 8 defs, starting at 5」与半截结果同形,
+    /// 要读者自己做一次加法才敢下结论 —— 而这一轮修的正是「要读者自己推」的那类输出。
+    ///
+    /// <paramref name="narrow"/> 是这条命令特有的「与其翻页不如筛」的出路(fields 的
+    /// --path 之类),只在还有下一页时说 —— 到头了再劝人筛就是废话。
+    /// </summary>
+    public Report PageNotice(string noun, int shown, int offset, int total, string? narrow = null)
+    {
+        var seen = offset + shown;
+        var tally = shown < total ? Tally.Of(shown, total) : Tally.Complete(shown);
+        return Notice(tally.IsTruncated ? NoticeKind.Truncation : NoticeKind.Count,
+            tally.Render(noun) +
+            (offset > 0 ? $", starting at {offset + 1}" : "") +
+            (seen < total
+                ? $"; pass --offset {seen} for the next page, or --limit all for every one at once" +
+                  (narrow is null ? "." : $", or {narrow}")
+                : offset > 0
+                    ? "; that is the last page."
+                    : "."));
+    }
+
+    /// <summary>
     /// 只在被截断时发声。留给「完整态另有更贴切的说法」的调用点(get 的字段表由
     /// --path 分支自己报数,再补一条裸计数就成了两句话说同一件事)。
     /// </summary>

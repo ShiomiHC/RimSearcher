@@ -1,0 +1,13 @@
+$ rimsearcher read vanilla/Verse/Outline.cs --type Outer --limit 4
+exit 0
+--- stdout ---
+1 declaration in vanilla/Verse/Outline.cs; --limit stopped the printing at 4 lines, 21 short of the whole. Raise it, or read on with --lines 9-29.
+
+vanilla/Verse/Outline.cs:5-29  class Outer
+     5  	// A brace in a comment: {
+     6  	[StaticConstructorOnStartup]
+     7  	public class Outer
+     8  	{
+
+Declarations here are found by matching braces, not by parsing C#, so a name this command does not see may still be in vanilla/Verse/Outline.cs. 'rimsearcher code-search' searches the text.
+--- stderr ---

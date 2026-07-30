@@ -1,0 +1,16 @@
+$ rimsearcher read Outline.cs --source vanilla --outline
+exit 0
+--- stdout ---
+7 declarations.
+
+kind      name      in     lines  at
+field     Marker    Outer  1      9-9
+field     Open      Outer  1      11-11
+property  Verbatim  Outer  1      13-13
+method    Shared    Outer  7      15-21
+method    Shared    Inner  3      25-27
+class     Inner     Outer  6      23-28
+class     Outer            25     5-29
+
+Declarations here are found by matching braces, not by parsing C#, so a name this command does not see may still be in vanilla/Verse/Outline.cs. 'rimsearcher code-search' searches the text.
+--- stderr ---

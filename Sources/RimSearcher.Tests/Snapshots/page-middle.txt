@@ -1,0 +1,9 @@
+$ rimsearcher list ThingDef --limit 2 --offset 2
+exit 0
+--- stdout ---
+2 of 8 defs, starting at 3; pass --offset 4 for the next page, or --limit all for every one at once.
+
+def_name          label               mod
+Firefoam          firefoam            ludeon.rimworld
+GleamingVoidNode  gleaming void node  test.mod
+--- stderr ---

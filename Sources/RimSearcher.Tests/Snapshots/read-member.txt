@@ -1,0 +1,22 @@
+$ rimsearcher read vanilla/Verse/Outline.cs --member Shared
+exit 0
+--- stdout ---
+2 declarations in vanilla/Verse/Outline.cs, 10 lines.
+'Shared' is declared more than once here: Outer.Shared, Inner.Shared. '--type <name>' narrows it to one.
+
+vanilla/Verse/Outline.cs:15-21  method Outer.Shared
+    15  		public void Shared(int n)
+    16  		{
+    17  			if (n > 0)
+    18  			{
+    19  				Console.WriteLine(Marker);
+    20  			}
+    21  		}
+--
+vanilla/Verse/Outline.cs:25-27  method Inner.Shared
+    25  			public void Shared(int n)
+    26  			{
+    27  			}
+
+Declarations here are found by matching braces, not by parsing C#, so a name this command does not see may still be in vanilla/Verse/Outline.cs. 'rimsearcher code-search' searches the text.
+--- stderr ---

@@ -72,6 +72,8 @@ public static class NounRegistry
         ["patch operation"] = "patch operations",
         ["assembly"] = "assemblies",
         ["directory"] = "directories",
+        ["line"] = "lines",
+        ["declaration"] = "declarations",
     };
 
     public static IReadOnlyCollection<string> Known => Plurals.Keys;

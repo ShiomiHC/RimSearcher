@@ -1,0 +1,12 @@
+$ rimsearcher read vanilla/Verse/Outline.cs --member Shared --type Inner
+exit 0
+--- stdout ---
+1 declaration in vanilla/Verse/Outline.cs, 3 lines.
+
+vanilla/Verse/Outline.cs:25-27  method Inner.Shared
+    25  			public void Shared(int n)
+    26  			{
+    27  			}
+
+Declarations here are found by matching braces, not by parsing C#, so a name this command does not see may still be in vanilla/Verse/Outline.cs. 'rimsearcher code-search' searches the text.
+--- stderr ---
