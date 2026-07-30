@@ -1454,4 +1454,61 @@ public class GrammarTests
         Assert.Contains("No def in this snapshot has a field path ending in 'zzznotafield'",
                         gone, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// `code-search` 零命中时原先只给一种别的解释:「你要找的其实是 def 吧,去 search/find」。
+    /// 而这棵树是反编译产物 —— 作者写的注释一条都没留下(本机 23 棵树 19467 个文件里
+    /// `///` 零条,`^\s*//` 的 1369 条里 1334 条是 ILSpy 自己的备注),局部变量名也没留下
+    /// (`numN = ` 有 17212 条)。**照注释或照记忆里的局部变量名去 grep,永远零命中**,
+    /// 而那句话把人推去换数据源,是把已知盲区指成了别的方向。
+    ///
+    /// 两条触发都要有落点,而不该触发的那条也要证明它闭着嘴 —— 否则这句话退化成
+    /// 每次落空都挂的免责声明。
+    /// </summary>
+    [Fact]
+    public void 代码零命中要说破反编译抹掉了什么()
+    {
+        var (comment, _, _) = Fixture.Run("code-search", "--", @"//\s*TODO");
+        Assert.Contains("comment", comment, StringComparison.Ordinal);
+        Assert.Contains("ILSpy", comment, StringComparison.Ordinal);
+
+        var (local, _, _) = Fixture.Run("code-search", "--", "myFuelCounter");
+        Assert.Contains("Local variable names", local, StringComparison.Ordinal);
+
+        // 带元字符的模式不是「照名字找一个局部变量」,不许挂那句话。
+        var (regex, _, _) = Fixture.Run("code-search", "--", @"zzz\w+\(");
+        Assert.DoesNotContain("Local variable names", regex, StringComparison.Ordinal);
+        Assert.DoesNotContain("ILSpy", regex, StringComparison.Ordinal);
+
+        // 有命中时一个字都不说 —— 这是零结果分支的话。
+        var (hit, _, hcode) = Fixture.Run("code-search", "props");
+        Assert.Equal(0, hcode);
+        Assert.DoesNotContain("Local variable names", hit, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 反编译产物**不重复父类的成员**,于是 `read MapPortal.cs --member Destroy` 落空,
+    /// 而 Destroy 就在两跳之外的 Thing 里 —— `MapPortal : Building`,一行之内看得见。
+    /// 原先那句话只给「跑 --outline 看看这文件有什么」和一句没带参数的
+    /// 「code-search 搜的是文本本身」:前者确认它不在,后者指了条路却不说往哪走,
+    /// 而「这文件里没有」与「这个类型没有这个成员」是两件事,读的人会读成后者。
+    ///
+    /// 基类型就在类声明那一行上,算得出来就算,不猜。
+    /// </summary>
+    [Fact]
+    public void 成员落空时指向它可能继承自谁()
+    {
+        var (miss, _, code) = Fixture.Run("read", "CompShield.cs", "--member", "PostSpawnSetup");
+        Assert.Equal(1, code);
+        Assert.Contains("CompShield", miss, StringComparison.Ordinal);
+        Assert.Contains("ThingComp", miss, StringComparison.Ordinal);
+        // 指的那条路要走得到 —— 语料里 ThingComp.cs 上确实有这个成员。
+        var (there, _, ok) = Fixture.Run("read", "ThingComp.cs", "--member", "PostSpawnSetup");
+        Assert.Equal(0, ok);
+        Assert.Contains("PostSpawnSetup", there, StringComparison.Ordinal);
+
+        // 没有基类型可说时不许硬编一个。Outer 是个裸类。
+        var (bare, _, _) = Fixture.Run("read", "Outline.cs", "--member", "NoSuchMember");
+        Assert.DoesNotContain("inherit", bare, StringComparison.OrdinalIgnoreCase);
+    }
 }

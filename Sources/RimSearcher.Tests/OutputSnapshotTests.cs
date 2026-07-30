@@ -12,6 +12,7 @@ namespace RimSearcher.Tests;
 /// 基线不对时用 <c>RIMSEARCHER_UPDATE_SNAPSHOTS=1 dotnet test</c> 重写,然后**读 diff**。
 /// 重写是一个动作,不是一个默认值 —— 默认重写等于没有闸。
 /// </summary>
+[Collection(Collection)]
 public class OutputSnapshotTests
 {
     /// <summary>
@@ -223,4 +224,12 @@ public class OutputSnapshotTests
     }
 
     internal static string SnapshotDir => Path.Combine(DeclarationTests.RepoRoot(), "Sources", "RimSearcher.Tests", "Snapshots");
+
+    /// <summary>
+    /// 读写基线的测试类共用的 collection 名。xUnit 默认「一个测试类一个 collection、
+    /// collection 之间并行」,而基线目录是**同一批文件**被一个类写、被另一个类读 ——
+    /// 同名进一个 collection 是让它们串起来的唯一办法。
+    /// 闸在 <c>GateTests.读写基线的测试类同属一个collection</c>。
+    /// </summary>
+    internal const string Collection = "baseline-files";
 }

@@ -353,6 +353,96 @@ public sealed class ReadCommand : Command
             Suggestion.Say(close) +
             " 'rimsearcher read " + rel + " --outline' lists every declaration, and brace matching is not a " +
             "parse — 'rimsearcher code-search' searches the text itself.");
+
+        // 「这个文件里没有」与「这个类型没有这个成员」是两件事,而上面那句话会被读成后者。
+        // 反编译产物**不重复父类的成员**:`read MapPortal.cs --member Destroy` 落空,
+        // 而 MapPortal : Building,Destroy 在再上一层的 Thing 里。基类型就写在类声明那一行,
+        // 算得出来就算 —— 而且下一步是一条**走得到**的命令,不是「再去 grep 一遍」。
+        if (member is { Length: > 0 })
+        {
+            var bases = decls.Where(d => CsOutlineIsType(d.Kind))
+                             .Where(d => type is not { Length: > 0 } || Same(d.Name, type))
+                             .Select(d => (Type: d.Name, Base: BaseClassOf(text, d)))
+                             .Where(b => b.Base is not null)
+                             .DistinctBy(b => b.Type, StringComparer.Ordinal)
+                             .ToList();
+            if (bases.Count > 0)
+                ctx.Report.Notice(NoticeKind.NextStep,
+                    NameList.Render([.. bases.Select(b => $"{b.Type} extends {b.Base}")], Limits.MaxSuggestions) +
+                    ". Inherited members are not repeated by the decompiler, so one declared further up the " +
+                    $"chain is not in this file at all: 'rimsearcher read {bases[0].Base}.cs --member {member}' " +
+                    "looks one level up, and these trees hold one file per type.");
+        }
+    }
+
+    /// <summary>
+    /// 一个类型声明的**基类**,没有就回 null。轮廓只记名字与行号,而「这个成员是不是
+    /// 继承来的」恰恰要看这一段。
+    ///
+    /// 只取基类,不取接口。C# 的基类型表里基类必在首位,而接口带不来成员实现 ——
+    /// 首版把整张表都端出来,`Pawn` 于是回了十二条,其中十一条是接口,
+    /// 「Pawn extends IBillGiver」既没用也不对。首位那个若按 .NET 约定长得像接口
+    /// (<c>I</c> 接大写字母)就当没有基类:反编译产物的命名一律守这条约定,
+    /// 而 Ideo、IntVec3 这些真类型的第二个字母是小写,分得开。
+    ///
+    /// 与 <see cref="CsOutline"/> 同一个赌注:对象是 ILSpy 生成的 C#,格式规整,
+    /// 不接语法分析。取的是**声明头那一行到第一个 '{' 为止**的文本,冒号后、
+    /// <c>where</c> 前的那一段,按顶层逗号切开(尖括号里的逗号不算 ——
+    /// <c>class A : Dictionary&lt;string, int&gt;</c> 的基类型是一个,不是两个)。
+    /// 判不出来就回 null,一个字不说。
+    /// </summary>
+    private static string? BaseClassOf(string[] text, CsDecl type)
+    {
+        // StartLine 被 Backfill 往上收编过注释与特性行,所以从它起往下找带关键字的那一行。
+        var header = "";
+        for (var i = type.StartLine - 1; i < Math.Min(text.Length, type.StartLine + 8); i++)
+        {
+            header += " " + text[i];
+            if (text[i].Contains('{')) break;
+        }
+
+        var at = header.IndexOf($"{type.Kind} {type.Name}", StringComparison.Ordinal);
+        if (at < 0) return null;
+        var rest = header[(at + type.Kind.Length + 1 + type.Name.Length)..];
+
+        var colon = -1;
+        var angle = 0;
+        for (var i = 0; i < rest.Length && colon < 0; i++)
+            switch (rest[i])
+            {
+                case '<': angle++; break;
+                case '>': if (angle > 0) angle--; break;
+                case '{': return null;
+                case ':' when angle == 0: colon = i; break;
+            }
+        if (colon < 0) return null;
+
+        rest = rest[(colon + 1)..];
+        var stop = rest.IndexOf('{');
+        if (stop >= 0) rest = rest[..stop];
+        var where = rest.IndexOf(" where ", StringComparison.Ordinal);
+        if (where >= 0) rest = rest[..where];
+
+        // 首位那一个就是基类,后面的全是接口。切到第一个顶层逗号为止。
+        angle = 0;
+        var end = rest.Length;
+        for (var i = 0; i < rest.Length; i++)
+        {
+            if (rest[i] == '<') angle++;
+            else if (rest[i] == '>') { if (angle > 0) angle--; }
+            else if (rest[i] == ',' && angle == 0) { end = i; break; }
+        }
+
+        var one = rest[..end].Trim();
+        // 泛型实参与命名空间限定都不该进那条「去读 X.cs」的建议 —— 文件名是末段的裸名字。
+        var cut = one.IndexOf('<');
+        if (cut > 0) one = one[..cut];
+        var dot = one.LastIndexOf('.');
+        if (dot >= 0) one = one[(dot + 1)..];
+
+        if (one.Length == 0 || !one.All(c => char.IsLetterOrDigit(c) || c == '_')) return null;
+        if (one.Length > 1 && one[0] == 'I' && char.IsUpper(one[1])) return null;   // 接口,没有基类
+        return one;
     }
 
     private static void SayNoFile(CommandContext ctx, string root, string wanted, string? sourceName)

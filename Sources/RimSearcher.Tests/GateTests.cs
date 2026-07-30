@@ -8,6 +8,7 @@ namespace RimSearcher.Tests;
 /// <summary>
 /// 两道跨产物的闸:生成的参数参考必须与声明一致,基线里的每一行输出必须过文法。
 /// </summary>
+[Collection(OutputSnapshotTests.Collection)]
 public class GateTests
 {
     private static string ReferencePath =>
@@ -548,6 +549,52 @@ public class GateTests
             foreach (var line in raw.Split('\n'))
                 Assert.Equal(line.TrimEnd(), line);
         }
+    }
+
+    /// <summary>
+    /// 写基线的类与读基线的类不许并行跑。
+    ///
+    /// xUnit 默认每个测试类自成一个 collection,collection 之间并行。于是带
+    /// <c>RIMSEARCHER_UPDATE_SNAPSHOTS=1</c> 时,<see cref="OutputSnapshotTests"/> 的
+    /// <c>File.WriteAllText</c> 与这里的 <c>File.ReadAllText</c> 会落在同一份 .txt 上:
+    /// Windows 的共享语义下写方持 Write/FileShare.Read、读方要 Read/FileShare.Read,
+    /// 两边互不相容 —— 一次 IOException,只红一条,原样重跑就绿。
+    ///
+    /// 竞态本身立不出一道稳定红的闸(它按时序发作),所以这里判的是**结构**:
+    /// 凡是碰基线目录的测试类,都得挂同一个 collection 名。少挂一个就红,
+    /// 而红的时机与机器快慢无关。
+    /// </summary>
+    [Fact]
+    public void 读写基线的测试类同属一个collection()
+    {
+        var dir = Path.Combine(DeclarationTests.RepoRoot(), "Sources", "RimSearcher.Tests");
+        var offenders = new List<string>();
+
+        foreach (var type in typeof(GateTests).Assembly.GetTypes().OrderBy(t => t.Name, StringComparer.Ordinal))
+        {
+            if (!type.IsClass || type.IsAbstract) continue;
+            if (!type.GetMethods().Any(m => m.GetCustomAttributes(typeof(FactAttribute), true).Length > 0)) continue;
+
+            var file = Path.Combine(dir, type.Name + ".cs");
+            if (!File.Exists(file)) continue;
+
+            // Fixture.SnapshotDir 是 %TEMP% 下的快照库目录,与基线目录无关 —— 排掉它,
+            // 免得这道闸把不相干的类也拖进串行。
+            if (!Regex.IsMatch(File.ReadAllText(file), @"(?<!Fixture\.)\bSnapshotDir\b")) continue;
+
+            // xunit 2.x 的 CollectionAttribute 只有构造参数、没有 Name 属性,只能读 attribute data。
+            var name = type.GetCustomAttributesData()
+                           .Where(a => a.AttributeType == typeof(CollectionAttribute))
+                           .Select(a => a.ConstructorArguments[0].Value as string)
+                           .FirstOrDefault();
+            if (name != OutputSnapshotTests.Collection)
+                offenders.Add($"{type.Name}: {(name is null ? "没有 [Collection]" : $"[Collection(\"{name}\")]")}");
+        }
+
+        Assert.True(offenders.Count == 0,
+            $"These test classes touch the baseline directory but are not in the " +
+            $"'{OutputSnapshotTests.Collection}' collection, so xUnit may run them in parallel and " +
+            "their reads and writes will collide on the same .txt:\n  " + string.Join("\n  ", offenders));
     }
 
     private static IEnumerable<(string File, string Line)> BaselineLines()

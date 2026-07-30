@@ -303,6 +303,10 @@ public sealed class CodeSearchCommand : Command
                 ctx.Report.Notice(NoticeKind.NextStep,
                     $"No line matched in {Tally.Complete(filesRead).Render("file")} under '{glob}'" +
                     Framing(root, sourceName, treesTotal) + ". " +
+                    // 第五种成因,而且是唯一一种「再怎么扫都不会有」的:模式指的东西在反编译时
+                    // 就没了。它排在 def 那句之前 —— 原先这一支只提供「你要找的其实是 def 吧」
+                    // 一种解释,于是读的人被推去换数据源,而真相是这棵树里本来就查不到这种东西。
+                    (Erased(ctx.Args.Positional(0)!) is { } erased ? erased + " " : "") +
                     "If you were looking for a def rather than code, 'rimsearcher search' and 'rimsearcher find' " +
                     "answer that from the snapshot — the XML is not searched here.");
         }
@@ -395,6 +399,38 @@ public sealed class CodeSearchCommand : Command
                   (narrow.Count > 0 ? $", or narrow with {string.Join(" or ", narrow)}." : "."));
 
         ctx.Report.Notice(NoticeKind.Truncation, string.Join(" ", parts));
+    }
+
+    /// <summary>
+    /// 这个模式指的东西是不是**反编译时就被抹掉**的那一类 —— 是的话再怎么扫都不会有命中,
+    /// 而「零命中」与「代码里没这回事」逐字同形。不是就回 null,一个字不说。
+    ///
+    /// 两条判据都量过(本机 23 棵树、19467 个文件):
+    ///   注释 —— `^\s*///` 零条;`^\s*//` 一共 1369 条,其中 1334 条是 ILSpy 自己的备注
+    ///           (「ILSpy generated this…」「try-fault」「yield-return decompiler failed」)。
+    ///           作者写的注释一条都没留下。
+    ///   局部变量 —— `numN = ` 有 17212 条。**参数名留着**(它在元数据里,`Pawn pawn` 照旧),
+    ///           留不住的是方法体内的局部;ILSpy 按初始化表达式现编一个,于是同一个变量
+    ///           可能叫 num、list、flag,也可能叫 bossgroupCaller。
+    ///
+    /// 裸标识符那一条要求模式里没有正则元字符且首字母小写:带元字符的模式是在找一种形状,
+    /// 不是在找一个记得住名字的变量,对它说这句话就是每次落空都挂的免责声明。
+    /// </summary>
+    private static string? Erased(string pattern)
+    {
+        if (pattern.Contains("//", StringComparison.Ordinal) || pattern.Contains("/*", StringComparison.Ordinal))
+            return "These are decompiler output: no comment written by the author survives, and the few '//' " +
+                   "lines present are ILSpy's own notes about what it could not translate.";
+
+        if (pattern.Length > 1 && char.IsLower(pattern[0]) &&
+            pattern.All(c => char.IsLetterOrDigit(c) || c == '_'))
+            // 举的这几个名字不是被截断的名单,是**生成规则**的例子(有多少个 num 取决于
+            // 方法里有几个 int),所以不走 NameList,也不能写省略号 —— 那会读成「还有几条没列」。
+            return "These are decompiler output. Local variable names do not survive it — ILSpy re-invents them " +
+                   $"from the assignment, giving names like num, num2, list and flag, so '{pattern}' can only " +
+                   "turn up here if it is a type, member, parameter or string literal name, never if it was a local.";
+
+        return null;
     }
 
     /// <summary>没读到的树最多点几个名。</summary>
