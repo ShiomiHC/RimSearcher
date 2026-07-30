@@ -96,4 +96,18 @@ public static class PathSegments
             if (IsWholeSegment(path, texts[i])) return true;
         return false;
     }
+
+    /// <summary>
+    /// 路径里每一层带下标的前缀:<c>a[0].b[1].c</c> → <c>a[0]</c>、<c>a[0].b[1]</c>。
+    ///
+    /// 服务一句话(第七轮 T4):`get` 折叠掉默认值行之后,一整个列表项可能一条不剩,
+    /// 于是「这个列表只有一项」成了看得见的形状,而真值是它更长 —— 实测一份轨迹
+    /// 正是这么判的 subSound 数量。下标前缀不受折叠影响(matchedPaths 是折叠前的),
+    /// 拿它与印出来的那些一比,「有没有整项消失」就是算得出来的。
+    /// </summary>
+    public static IEnumerable<string> IndexPrefixes(string path)
+    {
+        for (var i = 0; i < path.Length; i++)
+            if (path[i] == ']') yield return path[..(i + 1)];
+    }
 }

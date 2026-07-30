@@ -36,7 +36,15 @@ public sealed class ReadCommand : Command
             "is not proof the file lacks it — 'code-search' searches the text and --lines reads it raw.\n\n" +
             "For who calls a method, what it overrides, and what derives from a type, the DecompilerServer " +
             "MCP answers from metadata and is both faster and exact. This command answers a different " +
-            "question: what the decompiled file on disk actually says.",
+            "question: what the decompiled file on disk actually says.\n\n" +
+            // 第七轮 T8:「不要拿 head 截这条命令的输出」这条禁令 SKILL 里写了,而两份轨迹
+            // 独立踩,其中一份把 330 行的文件截在 120 行、恰好切掉了要找的那一行。归因复核的
+            // 判词是「禁令都写了,位置不对 —— 散文式地写在文档别处,而犯错发生在拼命令的
+            // 那一刻」。声明层同时渲染 --help 与 cli-reference.md,那正是拼命令时打开的那一份。
+            "Page with --lines, never with a pipe. The first line of the answer says which lines these are " +
+            "and how many the file has ('lines 1-150 of 330'), and a shell pipe that trims the output leaves " +
+            "that line untouched — so the answer keeps claiming a range it no longer contains, and nothing " +
+            "downstream can tell.",
         Positionals =
         [
             new PositionalSpec

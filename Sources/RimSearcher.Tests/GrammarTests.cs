@@ -2012,4 +2012,85 @@ public class GrammarTests
         Assert.Contains("code-search' reports reading no file from", stdout, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// 第七轮 T3:反查落空时要说破**这个索引里装的只是值**。
+    ///
+    /// 导出器见 null 直接 return(DefExporter:284),那条路径从来没进过索引。于是
+    /// 「这个字段不存在」与「它在,只是每个 def 上都是 null」在输出上完全同形 ——
+    /// 六份轨迹独立踩,其中三次差点交出反向结论(「本体标了但没人用」「没被挡,是运气」)。
+    ///
+    /// <c>get</c> 早就为**单个 def** 说过这句话(五轮 F4),而 find / values / fields
+    /// 三条反查路一直没说。三处都判,因为补一处剩两处的输出一字不变。
+    /// </summary>
+    [Fact]
+    public void 反查落空要说破索引里装的只是值()
+    {
+        const string Line = "never entered this index";
+
+        var (find, _, _) = Fixture.Run("find", "noSuchField", "x");
+        Assert.Contains(Line, find, StringComparison.Ordinal);
+
+        var (values, _, _) = Fixture.Run("values", "noSuchField");
+        Assert.Contains(Line, values, StringComparison.Ordinal);
+
+        var (fields, _, _) = Fixture.Run("fields", "ThingDef", "--path", "zzznosuchtext");
+        Assert.Contains(Line, fields, StringComparison.Ordinal);
+
+        // identity 那一档不说 —— 答案已经给全了,再挂一句索引边界是纯噪音。
+        // 这一条反着守:少了它,「到处都说一遍」也能让上面三条全绿。
+        var (identity, _, _) = Fixture.Run("find", "mod");
+        Assert.DoesNotContain(Line, identity, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 第七轮 T4:默认值折叠按「谁设的值」筛,而提问常常是「这个列表有几项」——
+    /// 两个维度正交,却归同一个开关管。
+    ///
+    /// 一整个列表项被折光时,「这个列表只有一项」就成了看得见的形状,而真值是它更长。
+    /// 实测一份轨迹正是这么判的 subSound 数量。下标前缀不受折叠影响(matchedPaths 是
+    /// 折叠前的),所以这件事算得出来 —— **两边都要说**:藏了就点名,没藏就把那句
+    /// 正面的话给出来。靠沉默承载「没藏」正是这套输出一直在清的东西。
+    /// </summary>
+    [Fact]
+    public void 折叠藏掉整个列表项时要点名没藏时要说没藏()
+    {
+        // --limit 2 把 statBases[0] 那一族整个挤出视野 —— 藏了就点名。
+        var (hidden, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--limit", "2");
+        Assert.Contains("Nothing above shows any field of these list entries", hidden, StringComparison.Ordinal);
+        Assert.Contains("statBases[0]", hidden, StringComparison.Ordinal);
+
+        // 不截时每个下标都露过面 —— 这时候要给正面那句话,不能沉默。
+        var (whole, _, _) = Fixture.Run("get", "Apparel_ShieldBelt");
+        Assert.Contains("Every list index this def has does appear above", whole, StringComparison.Ordinal);
+        Assert.DoesNotContain("Nothing above shows any field", whole, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 第七轮 T1:嵌套 <c>&lt;li Class="…"&gt;</c> 的运行时类型这一维,要按导出器版本分说。
+    ///
+    /// 0.2.0 起导出器给列表元素发一条 <c>&lt;path&gt;.Class</c>,于是「哪些 ThingDef 挂了
+    /// 这个节点」这类 def 侧最常见的反查第一次有了查法。而**老快照对 `find Class X` 回的
+    /// 那个零,与「量过了、确实没人用它」逐字同形** —— 给索引加一维恰恰是最容易造出
+    /// 这个形状的改动,所以两个世界各要一个落点:主快照标 0.2.0,other 那份标 0.1.0。
+    /// </summary>
+    [Fact]
+    public void 嵌套类型这一维量没量过要按导出器版本分说()
+    {
+        // 量过的那份:这一维真的能查到东西。
+        var (hit, _, code) = Fixture.Run("find", "Class", "RimWorld.CompProperties_Shield");
+        Assert.Equal(0, code);
+        Assert.Contains("TestModGun", hit, StringComparison.Ordinal);
+
+        // 量过的那份落空时:指的路是这一维本身。
+        var (miss, _, _) = Fixture.Run("find", "noSuchField", "x");
+        Assert.Contains("indexed as '<path>.Class'", miss, StringComparison.Ordinal);
+
+        // 没量过的那份:不许长成一样。说破是这份快照没量,而不是没人用。
+        var other = Path.Combine(Fixture.SnapshotDir, "other.db");
+        _ = Fixture.Db;
+        var (old, _, _) = Fixture.Run("find", "noSuchField", "x", "--db", other);
+        Assert.Contains("before that type entered the index", old, StringComparison.Ordinal);
+        Assert.DoesNotContain("indexed as '<path>.Class'", old, StringComparison.Ordinal);
+    }
+
 }

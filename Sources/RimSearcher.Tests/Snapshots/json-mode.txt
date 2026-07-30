@@ -9,7 +9,7 @@ exit 0
     },
     {
       "kind": "filter",
-      "text": "Not listed: 1 field whose value is the one a fresh instance of the declaring type already carries, so this snapshot cannot tell whether anything set it. The snapshot holds 6 field paths for this def; --defaults lists the rest of those, and --path <text> sees a named one either way. A field whose value was null is in none of them: it never entered the index, so its absence here is not evidence that the field does not exist."
+      "text": "Not listed: 1 field whose value is the one a fresh instance of the declaring type already carries, so this snapshot cannot tell whether anything set it. The snapshot holds 6 field paths for this def; --defaults lists the rest of those, and --path <text> sees a named one either way. A field whose value was null is in none of them: it never entered the index, so its absence here is not evidence that the field does not exist. Nothing above shows any field of these list entries, which the def has all the same: statBases[0] — so the lists run longer than they look here."
     },
     {
       "kind": "count",

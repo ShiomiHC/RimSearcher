@@ -536,6 +536,8 @@ The file is named by its path relative to the decompiled root ('vanilla/Assembly
 
 For who calls a method, what it overrides, and what derives from a type, the DecompilerServer MCP answers from metadata and is both faster and exact. This command answers a different question: what the decompiled file on disk actually says.
 
+Page with --lines, never with a pipe. The first line of the answer says which lines these are and how many the file has ('lines 1-150 of 330'), and a shell pipe that trims the output leaves that line untouched — so the answer keeps claiming a range it no longer contains, and nothing downstream can tell.
+
 | Argument | Meaning |
 |---|---|
 | `<file>` | A path under the decompiled root, a tail of one, or a bare file name such as 'Pawn.cs'. |

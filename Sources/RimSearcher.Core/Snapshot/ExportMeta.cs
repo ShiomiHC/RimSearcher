@@ -25,6 +25,23 @@ public sealed record ExportMeta(
 {
     public string Fingerprint => ComputeFingerprint(GameVersion, Language, Mods);
 
+    /// <summary>
+    /// 这份快照量过嵌套 <c>&lt;li Class="…"&gt;</c> 的运行时类型吗(导出器 0.2.0 起)。
+    ///
+    /// 非有它不可:老快照对 <c>find Class X</c> 回一个干干净净的零,而那与「量过了、
+    /// 确实没人用它」逐字同形 —— 「错的输出与对的输出同形」是这套输出唯一不许留的形状,
+    /// 而给索引加一维恰恰是最容易造出它的那种改动。
+    /// </summary>
+    public bool IndexesNestedClass => AtLeast(ExporterVersion, 0, 2);
+
+    private static bool AtLeast(string version, int major, int minor)
+    {
+        var parts = (version ?? "").Split('.');
+        if (parts.Length < 2 || !int.TryParse(parts[0], out var ma) || !int.TryParse(parts[1], out var mi))
+            return false;   // "unknown" / "test" 一律当成没量过 —— 少说一件事比多担保一件强
+        return ma > major || (ma == major && mi >= minor);
+    }
+
     /// <summary>只看有序 packageId 的短指纹 —— 用来回答「同一套 modlist 吗」。</summary>
     public string ModlistFingerprint => ComputeModlistFingerprint(Mods.Select(m => m.PackageId));
 

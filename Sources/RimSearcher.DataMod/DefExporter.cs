@@ -22,7 +22,12 @@ namespace RimSearcher.DataMod
     /// </summary>
     public static class DefExporter
     {
-        public const string ExporterVersion = "0.1.0";
+        /// <summary>
+        /// 0.2.0 起,列表元素的运行时类型也进索引(见 <see cref="Emit"/> 里 <c>.Class</c> 那一段)。
+        /// 读取侧靠这个数分辨「这份快照里没人引用它」与「这份快照根本没量过这件事」——
+        /// 两者在结果上逐字同形,而那正是本项目唯一不许留的形状。
+        /// </summary>
+        public const string ExporterVersion = "0.2.0";
 
         public static ExportLimits Limits = new ExportLimits();
 
@@ -323,6 +328,30 @@ namespace RimSearcher.DataMod
                     i++;
                 }
                 return;
+            }
+
+            // 列表元素的**运行时类型**单发一条 `<path>.Class`(0.2.0 起)。
+            //
+            // 第七轮 T1:`<li Class="JobGiver_AnimalFlee">` 这一类多态子对象的类型此前一条也
+            // 不进索引 —— 类型不是字段,Emit 走到这里就直接钻进去了。于是「哪些 ThinkTreeDef
+            // 挂了这个节点」这类反查在工具内**无解**,而这是 def 侧最常见的反查之一:
+            // 思维树节点、各种 worker/li 全在这个形状上。一份盲测轨迹为此半题答不出,
+            // 另花 6 次调用只为确认「这是边界,不是我不会查」。
+            //
+            // 只发给列表元素(路径以 ] 收尾),不是每个复合对象都发:`<li Class=>` 只出现在
+            // 列表里,而给每个嵌套对象都加一行会把 MaxFieldValuesPerDef 提前撞穿 ——
+            // 换来的是更多 def 被截,那是让一层看着「没有」的方向。
+            if (path.Length > 0 && path[path.Length - 1] == ']')
+            {
+                if (state.Emitted >= Limits.MaxFieldValuesPerDef) { state.Truncated++; return; }
+                var typeName = value.GetType().FullName;
+                // 与基准同不同的判据跟别处一致:基准里同一位置是同一个类型 = 无从区分,
+                // 类型不同或基准里根本没有这一项 = 作者写了 Class=。
+                var classState = !baselineKnown ? DefaultState.Unknown
+                    : baseline != null && baseline.GetType().FullName == typeName ? DefaultState.Same
+                    : DefaultState.Differs;
+                output.Add(new ExportedField(path + ".Class", typeName, classState));
+                state.Emitted++;
             }
 
             // 钻进复合对象时基准换成**它自己类型**新 new 的一个,不沿用外层传下来的那个:

@@ -160,6 +160,11 @@ stays local.
    exist — read the declaring class to see the shape.
 3. **Working backwards from a class or a value.** `find` matches the field path from the end:
    `find compClass RimWorld.CompShield` needs no index and no full path.
+   The runtime type of a nested `<li Class="…">` is queryable the same way, under the field name
+   `Class`: `find Class RimWorld.CompProperties_Shield` is how you ask which defs carry that
+   node. This is one dimension the index only started measuring at exporter 0.2.0, and on an
+   older snapshot the query says so rather than returning a bare zero — if you see that line,
+   re-export before reading the zero as an answer.
    `values <field>` gives the whole value space, and prints which full paths and def types
    contributed — a bare name like `damageAmountBase` can match several unrelated paths, and
    that header is how you tell which ones you are actually looking at.

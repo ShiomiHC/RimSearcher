@@ -97,7 +97,7 @@ public static class Fixture
         w.WriteLine(new JsonLine()
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindMeta)
             .Int(IntermediateFormat.KeyFormatVersion, IntermediateFormat.FormatVersion)
-            .Str(IntermediateFormat.KeyExporterVersion, "test")
+            .Str(IntermediateFormat.KeyExporterVersion, "0.1.0")
             .Str(IntermediateFormat.KeyExportedAtUtc, "2026-01-02T00:00:00.0000000Z")
             .Str(IntermediateFormat.KeyGameVersion, GameVersion)
             .Str(IntermediateFormat.KeyLanguage, Language)
@@ -149,7 +149,7 @@ public static class Fixture
         w.WriteLine(new JsonLine()
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindMeta)
             .Int(IntermediateFormat.KeyFormatVersion, formatVersion ?? IntermediateFormat.FormatVersion)
-            .Str(IntermediateFormat.KeyExporterVersion, "test")
+            .Str(IntermediateFormat.KeyExporterVersion, "0.2.0")
             .Str(IntermediateFormat.KeyExportedAtUtc, "2026-01-01T00:00:00.0000000Z")
             .Str(IntermediateFormat.KeyGameVersion, GameVersion)
             .Str(IntermediateFormat.KeyLanguage, Language)
@@ -231,6 +231,10 @@ public static class Fixture
 
         Def("ThingDef", "TestModGun", "test gun", "test.mod", "Guns.xml", false, 0,
             ("thingClass", "RimWorld.Apparel", DefaultState.Differs),
+            // 列表元素的运行时类型(导出器 0.2.0 起发的那一维,第七轮 T1)。这是主快照里
+            // 唯一一条 `.Class`,而 other 那份标着 0.1.0 —— 于是「量过了、没人用」与
+            // 「这份快照根本没量」两个世界各有一个落点,不然那道闸只守得住一半。
+            ("comps[0].Class", "RimWorld.CompProperties_Shield", DefaultState.Differs),
             ("comps[0].compClass", "RimWorld.CompShield", DefaultState.Same));
 
         // 同名跨 def 类型 —— RimWorld 常态,也是 JSON 撞键静默丢数据那条的唯一语料。

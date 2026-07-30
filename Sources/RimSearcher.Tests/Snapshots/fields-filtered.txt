@@ -1,10 +1,11 @@
 $ rimsearcher fields ThingDef --path comps
 exit 0
 --- stdout ---
-3 field paths within --path comps.
+4 field paths within --path comps.
 
 path                                defs
 comps[0].compClass                  2
+comps[0].Class                      1
 comps[0].props.energyLossPerDamage  1
 comps[0].props.energyMax            1
 

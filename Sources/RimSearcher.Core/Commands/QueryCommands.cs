@@ -515,13 +515,32 @@ public sealed class GetCommand : Command
                 // 第一分句逐字不动(它是被反复点名的那句认识论诚实),--path 那半句也不动
                 // (那是唯一的逃生指令),只换中间那一段。
                 if (!withDefaults && defaulted > 0)
+                {
+                    // 第七轮 T4:折叠按「谁设的值」筛,而提问常常是「有几条 / 列表多长」——
+                    // 两个维度正交,却归同一个开关管。一整个列表项被折光时,「这个列表只有
+                    // 一项」就成了看得见的形状,而真值是它更长。这件事算得出来(下标前缀不受
+                    // 折叠影响),所以两边都说破:藏了就点名,没藏就把那句正面的话给出来 ——
+                    // 靠沉默承载「没藏」正是这套输出一直在清的东西。
+                    var shownIdx = fields.SelectMany(f => PathSegments.IndexPrefixes(f.Path))
+                                         .ToHashSet(StringComparer.Ordinal);
+                    var hiddenIdx = matchedPaths.SelectMany(PathSegments.IndexPrefixes)
+                                                .Distinct(StringComparer.Ordinal)
+                                                .Where(x => !shownIdx.Contains(x))
+                                                .ToList();
                     ctx.Report.Notice(NoticeKind.Filter,
                         $"Not listed: {Tally.Complete(defaulted).Render("field")} whose value is the one a fresh " +
                         "instance of the declaring type already carries, so this snapshot cannot tell whether " +
                         $"anything set it. The snapshot holds {Tally.Complete(total).Render("field path")} for this " +
                         "def; --defaults lists the rest of those, and --path <text> sees a named one either way. " +
                         "A field whose value was null is in none of them: it never entered the index, so its " +
-                        "absence here is not evidence that the field does not exist.");
+                        "absence here is not evidence that the field does not exist." +
+                        (hiddenIdx.Count > 0
+                            ? " Nothing above shows any field of these list entries, which the def has all the " +
+                              $"same: {NameList.Render(hiddenIdx, Limits.MaxSuggestions)} — so the lists run " +
+                              "longer than they look here."
+                            : " Every list index this def has does appear above, so the lists are as long as " +
+                              "they look here."));
+                }
             }
 
             // 02-3:「字段被截」与「没有该字段」必须可区分。上游把这件事整个略过了,
@@ -770,6 +789,12 @@ public sealed class FindCommand : Command
                         ? $"'{path}' is part of a def's identity rather than one of its fields: {hint}."
                         : "'rimsearcher fields <DefType> --path <text>' lists the paths that a def type actually has" +
                           (value is null ? "." : $", and 'rimsearcher find --value {value}' finds which field holds that value.")));
+                // identity 那一档不说:那时候答案已经给全了,再挂一句索引边界是纯噪音。
+                // `class` 是例外,而且是**唯一**的例外:导出器 0.2.0 起 `<path>.Class` 是一条
+                // 真路径,于是敲 `find Class X` 的人问的多半是嵌套子对象的类型,而 identity 那句
+                // 只答了「def 自己的 class」—— 答了半边,另半边恰恰是这次要修的那个洞。
+                if (!identity.ContainsKey(path) || string.Equals(path, "class", StringComparison.OrdinalIgnoreCase))
+                    Completeness.NoteIndexHoldsValuesOnly(ctx);
                 NoteElsewhere();
                 return 1;
             }
@@ -906,10 +931,9 @@ public sealed class FindCommand : Command
                 (scope.IsAll ? "" : $" within --scope {scope.Expression}") + "." +
                 (exact ? " Drop --exact to match it as a substring." : "") +
                 (looksLikeType
-                    ? " If that is a class name: the snapshot indexes leaf scalars and a comp's compClass, but " +
-                      "not the runtime type of nested <li Class=\"...\"> objects (modExtensions, sub-object " +
-                      "parameters), so a class can be in use by a def and still be absent here. " +
-                      $"'rimsearcher code-search \"class {ClassNameShape.Tail(value)}\\b\"' finds the class itself."
+                    ? " If that is a class name: the snapshot indexes leaf scalars and a comp's compClass. " +
+                      Completeness.NestedClassLine(ctx) +
+                      $" 'rimsearcher code-search \"class {ClassNameShape.Tail(value)}\\b\"' finds the class itself."
                     : ""));
 
             // 值侧是单语的:同一个词在文本索引里可能好端端地在(译文的另一侧)。
@@ -1174,6 +1198,7 @@ public sealed class FieldsCommand : Command
             {
                 ctx.Report.Notice(NoticeKind.Boundary,
                     $"'{type}' has field paths, but none contains '{filters[0]}'. Drop --path to see them all.");
+                Completeness.NoteIndexHoldsValuesOnly(ctx);
                 return 1;
             }
             ctx.Report.Notice(NoticeKind.NextStep, DefTypeMiss.Say(type, ctx.Db.Types(ctx.Scope()).Select(t => t.Type)));
@@ -1274,6 +1299,7 @@ public sealed class ValuesCommand : Command
                           (scope.IsAll ? "" : $" (nor anywhere outside --scope {scope.Expression})") + ". " +
                           $"'rimsearcher fields <DefType>' lists the paths a type actually has, and " +
                           $"'rimsearcher find --value <text>' finds which path holds a value you already know.");
+            if (!withoutType && !outsideScope) Completeness.NoteIndexHoldsValuesOnly(ctx);
             return 1;
         }
 
@@ -1424,6 +1450,39 @@ internal static class Completeness
     /// 尾注刚说的却是其中某几个类型的一小批 —— 照着跑一遍拿到的是另一个集合,
     /// 而两者的输出形状一模一样。类型不多时逐个带上 --type;多到列不下就说清列不下。
     /// </summary>
+    /// <summary>
+    /// 「这条路径不在索引里」有几种互不相同的成因,而反查侧那句话原先只覆盖「你拼错了」。
+    ///
+    /// 导出器见 null 直接 return(DefExporter:284),那条路径从来没进过索引;嵌套
+    /// <c>&lt;li Class="…"&gt;</c> 的运行时类型也一样不进。于是「这个字段不存在」与
+    /// 「它在,只是每个 def 上都是 null」在输出上完全同形。
+    ///
+    /// <c>get</c> 早就为**单个 def** 说过这句话(五轮 F4),而 find / values / fields
+    /// 三条反查路一直没说 —— 第七轮六份轨迹独立踩,其中三次差点交出反向结论。
+    /// 一件事一个产地:三处调同一份措辞,不各写各的。
+    /// </summary>
+    public static void NoteIndexHoldsValuesOnly(CommandContext ctx)
+        => ctx.Report.Notice(NoticeKind.Boundary,
+            "A field whose value is null on every def never entered this index. " +
+            NestedClassLine(ctx) +
+            " So this says no indexed value sits at that path — not that no such field exists. " +
+            "'rimsearcher code-search' reads the class declaration, which does say.");
+
+    /// <summary>
+    /// 嵌套 <c>&lt;li Class="…"&gt;</c> 的运行时类型这一维,手上这份快照量没量过。
+    ///
+    /// 导出器 0.2.0 起发 <c>&lt;path&gt;.Class</c>(第七轮 T1)。而**老快照对
+    /// <c>find Class X</c> 回的那个零,与「量过了、确实没人用它」逐字同形** ——
+    /// 给索引加一维恰恰是最容易造出这个形状的改动,所以两种世界各说各的话,一处产地。
+    /// </summary>
+    public static string NestedClassLine(CommandContext ctx)
+        => ctx.Db.Meta.IndexesNestedClass
+            ? "The runtime type of a nested <li Class=\"...\"> object is indexed as '<path>.Class', so " +
+              "'rimsearcher find Class <ClassName>' is the query that reaches it."
+            : "The runtime type of a nested <li Class=\"...\"> object is not in this snapshot at all: it was " +
+              $"written by exporter {ctx.Db.Meta.ExporterVersion}, before that type entered the index, so no " +
+              "query here reaches it — re-export to get 'rimsearcher find Class <ClassName>'.";
+
     public static void NoteIndexedPathsOnly(CommandContext ctx, TruncationScope affected)
     {
         if (affected.Count == 0) return;
