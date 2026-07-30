@@ -462,7 +462,9 @@ public sealed class CodeSearchCommand : Command
     public static string NoSuchTree(string? typed, IEnumerable<string> available)
     {
         var all = available.ToList();
-        var close = FuzzyMatcher.Rank(all, typed ?? "").Take(Limits.MaxSuggestions).Select(t => t.Text).ToList();
+        // 候选走 Suggestion,句子不走 —— 它在名单后面还要加一句「树名是 packageId,
+        // 外号匹配不上任何东西」,那是这条命令独有的成因,不该挤进公共措辞里。
+        var close = Suggestion.Closest(all, typed);
         return $"No decompiled source tree named '{typed}'." +
                (close.Count > 0
                    ? $" Closest by spelling: {string.Join(", ", close)} — but tree names are packageIds, " +

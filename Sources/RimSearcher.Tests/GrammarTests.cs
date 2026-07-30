@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using RimSearcher.Cli;
 using RimSearcher.Contract;
 using RimSearcher.Output;
+using RimSearcher.Search;
 
 namespace RimSearcher.Tests;
 
@@ -14,6 +15,45 @@ namespace RimSearcher.Tests;
 /// </summary>
 public class GrammarTests
 {
+    // ---- 举例子的名单(NameList)----
+
+    /// <summary>
+    /// 举例子这一层与三态文法是同一条纪律的两个位置:被截掉的部分**必须有数**。
+    /// 这道闸守的是产地本身,而 <c>名单截断时不许把数量省成省略号</c> 守的是没人绕开它。
+    /// </summary>
+    [Fact]
+    public void 举例子的名单说清没举出来的有几条()
+    {
+        string[] five = ["a", "b", "c", "d", "e"];
+        Assert.Equal("a, b, c, and 2 more", NameList.Render(five, 3));
+
+        // 装得下就一个字都不多说 —— 「and 0 more」比沉默更糟,它让人以为有下文。
+        Assert.Equal("a, b, c, d, e", NameList.Render(five, 5));
+        Assert.Equal("a, b, c, d, e", NameList.Render(five, 99));
+        Assert.Equal("", NameList.Render([], 3));
+
+        // 差一条就截:边界上不许把「刚好装下」算成「截了」。
+        Assert.Equal("a, b, c, d, and 1 more", NameList.Render(five, 4));
+    }
+
+    /// <summary>
+    /// 近似候选**不报**被截掉的数量,这与上面那条相反,是有意的:排在第 4 位往后的
+    /// 按定义就不是「最近的」,补一句「还有 37 个」会让人以为答案可能在那 37 个里。
+    /// 「Closest」这个词本身声明了它是个 top-N。
+    /// </summary>
+    [Fact]
+    public void 近似候选不谎报也不追加数量()
+    {
+        var pool = Enumerable.Range(0, 40).Select(i => $"Bullet_Revolver{i}").ToList();
+        var said = Suggestion.Say(Suggestion.Closest(pool, "Bullet_Revolver"));
+        Assert.Contains("Closest by spelling:", said);
+        Assert.DoesNotContain("more", said);
+
+        // 一条候选都没有时走 whenNone,而不是留下一个空的「Closest by spelling: .」
+        Assert.Equal(" nothing close.", Suggestion.Say([], " nothing close."));
+        Assert.Equal("", Suggestion.Say([]));
+    }
+
     // ---- 三态截断文法(01 头号资产)----
 
     [Fact]

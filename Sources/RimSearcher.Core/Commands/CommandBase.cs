@@ -164,8 +164,10 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
         if (filter.UnknownTokens.Count > 0)
             throw new CliUsageException(
                 $"--scope does not know {string.Join(", ", filter.UnknownTokens.Select(t => $"'{t}'"))}. " +
-                $"This snapshot contains: {string.Join(", ", Db.PackageIds().Take(8))}" +
-                (Db.PackageIds().Count > 8 ? ", …" : "") +
+                // 原先这里是裸 ", …" —— 22 个 packageId 里举 8 个,而省掉的正是「还有 14 个」。
+                // 读出来是「大概就这些」,与「一共就这 8 个」逐字同形。举例子这一层也要说清
+                // 没举出来的有多少(产地在 NameList)。
+                $"This snapshot contains: {NameList.Render(Db.PackageIds(), 8)}" +
                 ". 'rimsearcher mods' lists them all.");
         return filter;
     }

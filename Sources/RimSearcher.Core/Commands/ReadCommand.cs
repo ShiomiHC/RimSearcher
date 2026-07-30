@@ -346,13 +346,13 @@ public sealed class ReadCommand : Command
         // 落空成因,而正确的那个就在同一份列表里。
         var pool = decls.Where(d => member is { Length: > 0 } ? !CsOutlineIsType(d.Kind) : CsOutlineIsType(d.Kind))
                         .Select(d => d.Name).Distinct(StringComparer.Ordinal).ToList();
-        var close = FuzzyMatcher.Rank(pool, name).Take(Limits.MaxSuggestions).Select(t => t.Text).ToList();
+        var close = Suggestion.Closest(pool, name);
 
         ctx.Report.Notice(NoticeKind.NextStep,
             $"No {(member is { Length: > 0 } ? "member" : "type")} named '{name}' was found in {rel} " +
             $"({Tally.Complete(text.Length).Render("line")}, " +
             $"{Tally.Complete(decls.Count).Render("declaration")})." +
-            (close.Count > 0 ? $" Closest by spelling: {string.Join(", ", close)}." : "") +
+            Suggestion.Say(close) +
             " 'rimsearcher read " + rel + " --outline' lists every declaration, and brace matching is not a " +
             "parse — 'rimsearcher code-search' searches the text itself.");
     }
@@ -363,13 +363,12 @@ public sealed class ReadCommand : Command
         // 因为拼错才是这条路上的常见成因。
         var names = AllFiles(root, sourceName).Select(Path.GetFileName).Distinct(StringComparer.OrdinalIgnoreCase)
                                               .Select(n => n!).ToList();
-        var close = FuzzyMatcher.Rank(names, Path.GetFileName(wanted) ?? wanted)
-                                .Take(Limits.MaxSuggestions).Select(t => t.Text).ToList();
+        var close = Suggestion.Closest(names, Path.GetFileName(wanted) ?? wanted);
 
         ctx.Report.Notice(NoticeKind.NextStep,
             $"No file named '{wanted}' is under the decompiled root" +
             (sourceName is { Length: > 0 } ? $" in tree '{sourceName}'" : "") + "." +
-            (close.Count > 0 ? $" Closest by spelling: {string.Join(", ", close)}." : "") +
+            Suggestion.Say(close) +
             (sourceName is { Length: > 0 }
                 ? " Drop --source to look in every tree."
                 : " 'rimsearcher code-search' finds which file a symbol lives in."));
@@ -380,11 +379,9 @@ public sealed class ReadCommand : Command
         // 静默取第一份是旧世系的做法,附一句 note。而这份 note 说的是「有几份同名」,
         // 读的人仍然拿到了其中一份的内容 —— mod 的覆盖版被当成 vanilla 原版读下去,
         // 输出里逐字看不出区别。这里不选:选错的代价是整条结论作废,而列出来只花一行。
-        var shown = hits.Take(Limits.AmbiguousFiles).ToList();
         ctx.Report.Notice(NoticeKind.NextStep,
             $"'{wanted}' matches {Tally.Complete(hits.Count).Render("file")}, and reading the wrong one gives " +
-            "an answer that looks right: " + string.Join(", ", shown) +
-            (hits.Count > shown.Count ? $", and {hits.Count - shown.Count} more" : "") +
+            "an answer that looks right: " + NameList.Render(hits, Limits.AmbiguousFiles) +
             ". Name one of those paths, or narrow with --source.");
     }
 

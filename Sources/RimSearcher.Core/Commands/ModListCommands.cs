@@ -324,7 +324,7 @@ public sealed class ModListSaveCommand : Command
         if (missing.Count > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
                 $"{Tally.Complete(missing.Count).Render("mod")} in the list are not installed on this machine " +
-                $"({string.Join(", ", missing.Take(5))}{(missing.Count > 5 ? ", …" : "")}). " +
+                $"({NameList.Render(missing, 5)}). " +
                 "The file is written as asked; 'export' will refuse to start the game until they are present.");
         return 0;
     }

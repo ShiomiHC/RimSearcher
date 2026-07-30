@@ -331,6 +331,92 @@ public class GateTests
                     $"{file} teaches a workaround: '{line.Trim()}'. Fix the CLI instead.");
     }
 
+    /// <summary>
+    /// 举例子的名单被截断时,读者必须能算出**没举出来的有几个**。
+    ///
+    /// 这道闸是清理时补的:「取前 N 条 + 逗号连起来 + 尾巴」散在十几处,尾巴长出四种写法,
+    /// 其中三处写裸 <c>", …"</c> —— 22 个 packageId 里举 8 个,省掉的正是「还有 14 个」。
+    /// 读出来是「大概就这些」,与「一共就这 8 个」逐字同形。三态文法管的是结果集,
+    /// 举例子这一层此前没有产地,于是各写各的。
+    ///
+    /// 合法只有两种:走 <see cref="NameList"/>(它自己接 and N more),或者在同一句里
+    /// 先把总数说出来(<c>ScopeFilter.Describe</c> 的「= 22 mods: a, b, c, …」—— 分母
+    /// 已经在场,再补一句「还有 19 个」是复述)。所以豁免按**方法**列,不按文件。
+    /// </summary>
+    [Fact]
+    public void 名单截断时不许把数量省成省略号()
+    {
+        // 这一条的产地是 ScopeFilter.Describe:它在省略号**之前**已经给出了 mod 总数。
+        string[] exempt = ["ScopeFilter.cs"];
+
+        var dir = Path.Combine(DeclarationTests.RepoRoot(), "Sources", "RimSearcher.Core");
+        var flagged = new List<string>();
+        foreach (var file in Directory.EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories))
+        {
+            if (exempt.Contains(Path.GetFileName(file), StringComparer.Ordinal)) continue;
+            var lines = File.ReadAllLines(file);
+            for (var i = 0; i < lines.Length; i++)
+            {
+                var line = lines[i];
+                if (line.TrimStart().StartsWith("//", StringComparison.Ordinal)) continue;
+                if (line.TrimStart().StartsWith("///", StringComparison.Ordinal)) continue;
+                // 判的是「逗号接省略号」这个形状本身,不管它后面拼的是什么 —— 第一版
+                // 写死了 ", …" 与 ", …)" 两种收尾,而 `{Join(…)}, …"` 两种都不是,
+                // 红不了。**一道红不了的闸比没有更坏**,所以这里放宽到整个形状。
+                if (line.Contains(", …", StringComparison.Ordinal))
+                    flagged.Add($"{Path.GetFileName(file)}:{i + 1}: {line.Trim()}");
+            }
+        }
+
+        Assert.True(flagged.Count == 0,
+            "These truncate a list into '…' without saying how many are hidden. Use NameList.Render, " +
+            "or state the total in the same sentence:\n  " + string.Join("\n  ", flagged));
+    }
+
+    /// <summary>
+    /// 「你是不是想打这个」只有一种说法。原先是三种(<c>Closest:</c> / <c>Closest names:</c> /
+    /// <c>Closest by spelling:</c>),同一件事三种措辞,而读的人会以为差别有意义。
+    ///
+    /// 两处豁免,各有实质理由,不是历史包袱:
+    /// - <c>CodeSearchCommand.NoSuchTree</c> 在名单后面还要说「树名是 packageId,外号匹配
+    ///   不上任何东西」—— 那是这条命令独有的成因;
+    /// - <c>find</c> 的值域近似先做**末段精确匹配**(CompAmbientSound 对
+    ///   RimWorld.CompAmbientSound 是同一个名字,不是「长得像」),说 by spelling 是假话。
+    /// </summary>
+    [Fact]
+    public void 近似候选的措辞只有一个产地()
+    {
+        var allowed = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "Suggestion.cs",          // 产地
+            "CodeSearchCommand.cs",   // 树名:名单后面接一句独有的成因
+            "QueryCommands.cs",       // find 值域:不是拼写近似
+        };
+
+        // 判的是**字面量里**的 Closest,不是标识符 —— `Suggestion.Closest(pool, name)` 正是
+        // 我们要的写法,把它一起判红,这道闸就变成了「不许调用产地」。
+        var inLiteral = new Regex("\"[^\"]*Closest");
+
+        var dir = Path.Combine(DeclarationTests.RepoRoot(), "Sources", "RimSearcher.Core");
+        var flagged = new List<string>();
+        foreach (var file in Directory.EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories))
+        {
+            var lines = File.ReadAllLines(file);
+            for (var i = 0; i < lines.Length; i++)
+            {
+                if (!inLiteral.IsMatch(lines[i])) continue;
+                if (lines[i].TrimStart().StartsWith("//", StringComparison.Ordinal)) continue;
+                if (lines[i].TrimStart().StartsWith("///", StringComparison.Ordinal)) continue;
+                if (allowed.Contains(Path.GetFileName(file))) continue;
+                flagged.Add($"{Path.GetFileName(file)}:{i + 1}: {lines[i].Trim()}");
+            }
+        }
+
+        Assert.True(flagged.Count == 0,
+            "These word the near-miss suggestion themselves. Route it through Suggestion.Say:\n  " +
+            string.Join("\n  ", flagged));
+    }
+
     /// <summary>输出契约在基线上的落点:不许有行尾空格,不许有 CR。</summary>
     [Fact]
     public void 基线里没有行尾空格也没有CR()

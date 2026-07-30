@@ -278,8 +278,7 @@ public sealed class SourcesSyncCommand : Command
                 throw new CliUsageException(
                     $"Nothing named '{only}' would be built from {from}." +
                     (plans.Count > 0
-                        ? $" It covers: {string.Join(", ", plans.Take(Limits.MaxSuggestions).Select(p => p.Name))}" +
-                          (plans.Count > Limits.MaxSuggestions ? ", …" : "") + "."
+                        ? $" It covers: {NameList.Render([.. plans.Select(p => p.Name)], Limits.MaxSuggestions)}."
                         : ""));
             plans = kept;
         }

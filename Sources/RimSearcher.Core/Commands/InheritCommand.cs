@@ -65,8 +65,7 @@ public sealed class InheritCommand : Command
         var nodes = ctx.Db.NodesNamed(name);
         if (nodes.Count == 0)
         {
-            var close = FuzzyMatcher.Rank(ctx.Db.AllXmlNodeNames(), name)
-                                    .Take(Limits.MaxSuggestions).Select(t => t.Text).ToList();
+            var close = Suggestion.Closest(ctx.Db.AllXmlNodeNames(), name);
 
             // 三种互斥成因,分清楚再说。名字错了 / 这个 def 不参与继承 / 它根本不在快照里 ——
             // 报成同一句「没有」会让前两种被读成第三种,而第三种是最强的那个结论。
@@ -84,7 +83,7 @@ public sealed class InheritCommand : Command
             var sighting = NameLookup.Locate(ctx, name);
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"No XML node named '{name}' is in this snapshot." +
-                (close.Count > 0 ? $" Closest names: {string.Join(", ", close)}." : ""));
+                Suggestion.Say(close));
             if (sighting is not null) ctx.Report.Notice(NoticeKind.NextStep, sighting.Sentence);
             return 1;
         }

@@ -292,7 +292,7 @@ public sealed class GetCommand : Command
             }
 
             var names = ctx.Db.AllDefNames(Snapshot.ScopeFilter.Parse("all", ctx.Db.PackageIds(), ctx.Config));
-            var close = FuzzyMatcher.Rank(names, name).Take(Limits.MaxSuggestions).Select(t => t.Text).ToList();
+            var close = Suggestion.Closest(names, name);
 
             // 走到这里,六种落点都算过了,别的快照也问过了 —— 这时候「没有」才是个结论,
             // 而不是「我只查了一张表」。把这层意思说出来,否则读的人无从判断该不该相信它。
@@ -306,7 +306,7 @@ public sealed class GetCommand : Command
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"No def is named '{name}' in this snapshot, and it is not a def type, a class, a mod, " +
                 "an abstract XML parent, or a name held by any other registered snapshot." +
-                (close.Count > 0 ? $" Closest names: {string.Join(", ", close)}." : " 'rimsearcher search' matches on labels and translations too.") +
+                Suggestion.Say(close, " 'rimsearcher search' matches on labels and translations too.") +
                 " All of that is the def side; C# type names that no def references live only in the " +
                 $"decompiled trees, which this lookup never reads: 'rimsearcher code-search \"class {name}\"'.");
             return 1;
@@ -907,16 +907,11 @@ public sealed class ListCommand : Command
                     present.Count == 0
                         ? $"No def type named '{type}' in this snapshot. 'rimsearcher types' lists them all."
                         : $"No def of type {type} has class '{wantClass}'. That type holds " +
-                          string.Join(", ", present.Take(Limits.MaxSuggestions).Select(c => $"{c.Class} ({c.Count})")) +
-                          (present.Count > Limits.MaxSuggestions ? $", and {present.Count - Limits.MaxSuggestions} more" : "") + ".");
+                          NameList.Render([.. present.Select(c => $"{c.Class} ({c.Count})")], Limits.MaxSuggestions) + ".");
                 return 1;
             }
 
-            var types = ctx.Db.Types(scope).Select(t => t.Type).ToList();
-            var close = FuzzyMatcher.Rank(types, type).Take(Limits.MaxSuggestions).Select(t => t.Text).ToList();
-            ctx.Report.Notice(NoticeKind.NextStep,
-                $"No def type named '{type}' in this snapshot." +
-                (close.Count > 0 ? $" Closest: {string.Join(", ", close)}." : " 'rimsearcher types' lists them all."));
+            ctx.Report.Notice(NoticeKind.NextStep, DefTypeMiss.Say(type, ctx.Db.Types(scope).Select(t => t.Type)));
             return 1;
         }
 
@@ -933,8 +928,7 @@ public sealed class ListCommand : Command
                 // 与实际所数的东西不是一回事,而这一句正长在「def 类型不等于运行时 class」
                 // 那条区分上,说反了等于把要讲清的两件事又搅回一起。
                 $"Type {type} holds {Tally.Complete(classes.Count).Render("def class")}: " +
-                string.Join(", ", classes.Take(Limits.MaxSuggestions).Select(c => $"{Tail(c.Class)} ({c.Count})")) +
-                (classes.Count > Limits.MaxSuggestions ? $", and {classes.Count - Limits.MaxSuggestions} more" : "") +
+                NameList.Render([.. classes.Select(c => $"{Tail(c.Class)} ({c.Count})")], Limits.MaxSuggestions) +
                 ". Pass --class to pick one.");
 
         var columns = heterogeneous
@@ -1022,11 +1016,7 @@ public sealed class FieldsCommand : Command
                     $"'{type}' has field paths, but none contains '{filters[0]}'. Drop --path to see them all.");
                 return 1;
             }
-            var types = ctx.Db.Types(ctx.Scope()).Select(t => t.Type).ToList();
-            var close = FuzzyMatcher.Rank(types, type).Take(Limits.MaxSuggestions).Select(t => t.Text).ToList();
-            ctx.Report.Notice(NoticeKind.NextStep,
-                $"No def type named '{type}' in this snapshot." +
-                (close.Count > 0 ? $" Closest: {string.Join(", ", close)}." : " 'rimsearcher types' lists them all."));
+            ctx.Report.Notice(NoticeKind.NextStep, DefTypeMiss.Say(type, ctx.Db.Types(ctx.Scope()).Select(t => t.Type)));
             return 1;
         }
 
@@ -1106,6 +1096,8 @@ public sealed class ValuesCommand : Command
         // 「这个字段到处都是这个值」—— 实测里 `values damageAmountBase` 正是这样险些骗到人。
         var cov = ctx.Db.ValueCoverage(path, scope, Limits.MaxSuggestions, type);
 
+        // 这里的省略不是 NameList 那种「我取了前几条」—— cov.Paths 已经在 SQL 侧截过,
+        // 手上根本没有第 4 条起的名字。分母只有 cov.PathTotal 知道,所以照实拼。
         var pathList = string.Join(", ", cov.Paths.Select(x => $"{x.Path} ({x.Count})"));
         if (cov.PathTotal > cov.Paths.Count) pathList += $", and {cov.PathTotal - cov.Paths.Count} more";
 
@@ -1195,6 +1187,18 @@ public sealed class ModsCommand : Command
             }).ToList());
         return 0;
     }
+}
+
+internal static class DefTypeMiss
+{
+    /// <summary>
+    /// 「这个快照里没有这个 def 类型」的唯一产地。<c>list</c> 与 <c>fields</c> 原先各写一份,
+    /// 逐字相同 —— 两份逐字相同的句子只有一个结局:改一处、忘一处,而两条命令回答同一个
+    /// 问题时口径不一致,读的人会以为差别有意义。
+    /// </summary>
+    public static string Say(string typed, IEnumerable<string> known)
+        => $"No def type named '{typed}' in this snapshot." +
+           Suggestion.Say(Suggestion.Closest(known, typed), " 'rimsearcher types' lists them all.");
 }
 
 internal static class Completeness
