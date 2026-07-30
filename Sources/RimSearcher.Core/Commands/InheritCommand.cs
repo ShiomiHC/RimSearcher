@@ -83,7 +83,15 @@ public sealed class InheritCommand : Command
             var sighting = NameLookup.Locate(ctx, name);
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"No XML node named '{name}' is in this snapshot." +
-                Suggestion.Say(close));
+                Suggestion.Say(close) +
+                // 六种落点全落空、拼写也不近时,这句话原先到此为止 —— 一条死路。
+                // 继承层只装带 Name=/ParentName=/Abstract= 的节点,**普通 def 不在里面**,
+                // 而这正是敲 inherit 落空最常见的成因,却要读的人自己想到。
+                (sighting is null
+                    ? " Only nodes that declare Name=, ParentName= or Abstract= are in this layer, so a def " +
+                      "that inherits from nothing never shows up here: 'rimsearcher get " + name + "' looks it " +
+                      "up as a def, and 'rimsearcher search' matches on labels and translations too."
+                    : ""));
             if (sighting is not null) ctx.Report.Notice(NoticeKind.NextStep, sighting.Sentence);
             return 1;
         }

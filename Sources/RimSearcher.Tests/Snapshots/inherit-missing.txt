@@ -1,5 +1,5 @@
 $ rimsearcher inherit NoSuchNode
 exit 1
 --- stdout ---
-No XML node named 'NoSuchNode' is in this snapshot.
+No XML node named 'NoSuchNode' is in this snapshot. Only nodes that declare Name=, ParentName= or Abstract= are in this layer, so a def that inherits from nothing never shows up here: 'rimsearcher get NoSuchNode' looks it up as a def, and 'rimsearcher search' matches on labels and translations too.
 --- stderr ---

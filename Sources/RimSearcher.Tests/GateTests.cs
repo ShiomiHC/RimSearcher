@@ -417,6 +417,87 @@ public class GateTests
             string.Join("\n  ", flagged));
     }
 
+    /// <summary>
+    /// **输出自己指的路必须走得通。** SKILL.md 里的命令行早就有闸(上面那条),而输出里
+    /// 那些「'rimsearcher sources sync' rebuilds it」一直没有 —— 同一份风险,只差一个位置。
+    ///
+    /// 这一条属于第四轮 F0–F3 那个族的可查部分:**输出做了一个代码自己验得了的断言,
+    /// 却没验**。命令改名、子命令合并、开关换词,散在几十条散文里的指路当场变成假话,
+    /// 而假话与真话在输出里逐字同形 —— 读的人照着敲,拿回一条「no such command」,
+    /// 然后开始怀疑自己记错了工具怎么用。
+    ///
+    /// 判的是**基线**而不是源码:源码里那些字符串带插值,拼不出完整命令行;基线是真跑出来的。
+    /// 代价是没进基线的指路守不到,所以下面顺带断言基线里指路的条数不能突然掉下去。
+    /// </summary>
+    [Fact]
+    public void 输出里指的每条命令都真的存在()
+    {
+        var registry = new CommandRegistry();
+        // 命令名后面可能跟子命令(「sources sync」),再往后是位置参数与开关 —— 一律不管,
+        // 这里只判**命令名解析得出来**。Resolve 自己会吃掉一到两段。
+        var invocation = new Regex(CommandRegistry.ExeName + @" ([a-z][a-z-]*)(?: ([a-z][a-z-]*))?");
+
+        var seen = 0;
+        foreach (var (file, line) in BaselineLines())
+        {
+            // 基线首行是回显的命令行本身,它是被测输入不是指路。
+            if (line.StartsWith("$ ", StringComparison.Ordinal)) continue;
+            foreach (Match m in invocation.Matches(line))
+            {
+                var argv = new List<string> { m.Groups[1].Value };
+                if (m.Groups[2].Success) argv.Add(m.Groups[2].Value);
+                var (command, _) = registry.Resolve(argv);
+
+                // 两段解析不出来时退回一段:「rimsearcher search shield」里 shield 是查询词。
+                if (command is null && argv.Count == 2)
+                    (command, _) = registry.Resolve([argv[0]]);
+
+                // 拼错的命令名是有意的语料(「did you mean」那条基线回显的就是错名)。
+                if (command is null && line.Contains("did you mean", StringComparison.OrdinalIgnoreCase)) continue;
+
+                Assert.True(command is not null,
+                    $"{file} points at '{m.Value}', but there is no such command:\n  {line.Trim()}");
+                seen++;
+            }
+        }
+
+        Assert.True(seen > 20, $"Only {seen} pointers found across the baselines; the scanner is probably broken.");
+    }
+
+    /// <summary>
+    /// 零结果不许是死路:退出码 1 的输出必须给出**下一步能敲什么**。
+    ///
+    /// 诚实地说这道闸的斤两:它**不会**抓到第四轮那四条(F0–F3 都给了下一步,只是给错了
+    /// 那一条),它抓的是更早的一类 —— 一轮二轮各有几个场景在「工具说没有,然后没了」上
+    /// 停住。那一类现在通篇清零,而这条闸是**防它回来**,不是防 F 族。F 族要靠盲测,
+    /// 不靠闸:一句话指错方向,机器分辨不出来。
+    ///
+    /// 「下一步」认三种:另一条命令、一个能改的开关、一处能改的配置。
+    /// </summary>
+    [Fact]
+    public void 零结果不许是死路()
+    {
+        var deadEnds = new List<string>();
+        foreach (var file in Directory.EnumerateFiles(OutputSnapshotTests.SnapshotDir, "*.txt"))
+        {
+            var text = File.ReadAllText(file);
+            if (!text.Contains("\nexit 1\n", StringComparison.Ordinal)) continue;
+            // 去掉回显的命令行与 `--- stdout ---` 那两条分隔线 —— 分隔线自带 `--`,
+            // 留着的话每一份基线都「提到了一个开关」,这道闸就恒绿。**红不了的闸比没有更坏**,
+            // 而这一处的红不了正藏在夹具格式里,不在被测代码里。
+            var body = string.Join("\n", text.Split('\n')
+                                             .Skip(1)
+                                             .Where(l => !l.StartsWith("--- ", StringComparison.Ordinal)));
+            if (body.Contains(CommandRegistry.ExeName + " ", StringComparison.Ordinal)) continue;
+            if (body.Contains("--", StringComparison.Ordinal)) continue;
+            if (body.Contains("Set '", StringComparison.Ordinal)) continue;
+            deadEnds.Add(Path.GetFileName(file));
+        }
+
+        Assert.True(deadEnds.Count == 0,
+            "These end with 'there is none' and no way forward:\n  " + string.Join("\n  ", deadEnds));
+    }
+
     /// <summary>输出契约在基线上的落点:不许有行尾空格,不许有 CR。</summary>
     [Fact]
     public void 基线里没有行尾空格也没有CR()

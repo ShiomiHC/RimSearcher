@@ -714,10 +714,15 @@ public sealed class FindCommand : Command
                 $"No def has '{path}' set to {(exact ? "exactly " : "")}'{value}'{provenance}." +
                 (close.Count > 0
                     ? $" Closest: {string.Join(", ", close)}." +
-                      (alt is not null && close.Any(c => Tail(c).Equals(alt, StringComparison.OrdinalIgnoreCase))
+                      (alt is not null && close.FirstOrDefault(c => Tail(c).Equals(alt, StringComparison.OrdinalIgnoreCase)) is { } resolved
                           // 说破规律,不只是给一个名字 —— 否则同一个人下一个 comp 还会再敲错一次。
-                          ? " The XML writes Class=\"CompProperties_X\"; this field holds the resolved CompX."
-                          : "")
+                          // 规律之外还得把**那条命令**给出来:读的人手上有了正确的名字,却还要
+                          // 自己把它拼回一条命令行,而这一步正是「指了路却没给路」的老形状。
+                          ? " The XML writes Class=\"CompProperties_X\"; this field holds the resolved CompX — " +
+                            $"'rimsearcher find {path} {resolved}' is the query you meant."
+                          // 有近似项时原先就到此为止,而没有近似项的那一支反倒指了路 ——
+                          // 「给了个名字」不等于「说了下一步」:那三条只是最近的,真值域没看过。
+                          : $" 'rimsearcher values {path} --limit all' lists the whole value domain.")
                     : $" 'rimsearcher values {path} --limit all' lists them. If '{value}' is an abstract base " +
                       "class, no def names it directly: get its subclasses from the decompiler first, then " +
                       "look each one up."));
