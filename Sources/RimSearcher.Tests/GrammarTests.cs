@@ -736,6 +736,27 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 参数被改写就要说破。<c>LimitValue.Clamped</c> 与 <c>NoticeKind.Clamp</c> 从落地起
+    /// 一个引用点都没有:解析器老实记下了「这个数被我改了」,却没有任何一条路把它印出来,
+    /// 于是 <c>--limit 5000</c> 与 <c>--limit 2000</c> 的输出逐字相同 —— 又一处
+    /// 「静默改写调用方给的参数」,与 R11 吞掉 --exact 同形。
+    /// </summary>
+    [Fact]
+    public void 超过上限的limit不被悄悄夹紧()
+    {
+        var (stdout, _, _) = Fixture.Run("list", "ThingDef", "--limit", (Limits.MaxLimit + 1).ToString());
+        Assert.Contains(Limits.MaxLimit.ToString(), stdout, StringComparison.Ordinal);
+        Assert.Contains((Limits.MaxLimit + 1).ToString(), stdout, StringComparison.Ordinal);
+
+        var (plain, _, _) = Fixture.Run("list", "ThingDef", "--limit", Limits.MaxLimit.ToString());
+        Assert.DoesNotContain("ceiling", plain, StringComparison.Ordinal);
+
+        // 机器侧靠 kind 分类,不靠措辞。
+        var (json, _, _) = Fixture.Run("list", "ThingDef", "--limit", (Limits.MaxLimit + 1).ToString(), "--json");
+        Assert.Contains("\"kind\": \"clamp\"", json, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 声明了 --offset 的命令必须真的翻得动。声明层与实现层各写一份是这套代码里最容易
     /// 长出来的漂移:参数表上挂着,Run 里没读,于是 <c>--offset 2</c> 与不给一模一样 ——
     /// 静默忽略一个参数,正是本轮 R11 修过的那个错。

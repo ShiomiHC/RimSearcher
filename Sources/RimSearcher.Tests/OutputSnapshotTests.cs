@@ -150,6 +150,9 @@ public class OutputSnapshotTests
         { "page-values",           ["values", "thingClass", "--limit", "1", "--offset", "1"] },
         // 负偏移在 SQL 里等同于 0 —— 不拦下来,「少给了一个负号」与「这就是第一页」逐字相同。
         { "page-negative",         ["list", "ThingDef", "--offset", "-2"] },
+        // 参数被改写就要说破:--limit 5000 与 --limit 2000 原先输出逐字相同,
+        // 而调用方明确要了 5000。声明层早写着会夹紧,差的只是当场说一句。
+        { "limit-clamped",         ["list", "ThingDef", "--limit", "5000"] },
     };
 
     [Theory]

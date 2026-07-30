@@ -1,4 +1,4 @@
-using RimSearcher.Cli;
+﻿using RimSearcher.Cli;
 using RimSearcher.Output;
 using RimSearcher.Search;
 using RimSearcher.Storage;
@@ -89,7 +89,7 @@ public sealed class InheritCommand : Command
             return 1;
         }
 
-        var limit = ctx.Args.Limit();
+        var limit = ctx.Limit();
 
         foreach (var node in nodes)
         {

@@ -138,6 +138,26 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
         }
     }
 
+    /// <summary>
+    /// <c>--limit</c> 的取值,**并且把夹紧说出来**。
+    ///
+    /// <see cref="LimitValue.Clamped"/> 与 <see cref="NoticeKind.Clamp"/> 从落地起就没有一个
+    /// 引用点:解析器老老实实记下了「这个数被我改了」,而没有任何一条路把它印出来。于是
+    /// <c>--limit 5000</c> 与 <c>--limit 2000</c> 的输出逐字相同 —— 调用方明确要了 5000,
+    /// 拿回 2000 条,再从裸计数读出「一共就这么多」。这与本轮反复在修的那类错同形:
+    /// **参数被静默改写,而输出里没有任何迹象**。声明层早就写着「超过 2000 会被夹紧」,
+    /// 差的只是当场说一句。
+    /// </summary>
+    public LimitValue Limit(string name = "limit", int? fallback = null)
+    {
+        var limit = Args.Limit(name, fallback);
+        if (limit.Clamped)
+            Report.Notice(NoticeKind.Clamp,
+                $"--{name} {Args.Value(name)} is above the ceiling of {Limits.MaxLimit}, so at most " +
+                $"{Limits.MaxLimit} were taken. Pass --{name} all to lift the cap, or page with --offset.");
+        return limit;
+    }
+
     public ScopeFilter Scope()
     {
         var filter = ScopeFilter.Parse(Args.Value("scope"), Db.PackageIds(), Config);

@@ -191,7 +191,7 @@ public sealed class SnapshotTruncatedCommand : Command
 
     public override int Run(CommandContext ctx)
     {
-        var limit = ctx.Args.Limit();
+        var limit = ctx.Limit();
         var scope = ctx.Scope();
         var (rows, total) = ctx.Db.TruncatedDefs(scope, limit.Effective);
 

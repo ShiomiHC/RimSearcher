@@ -1,4 +1,4 @@
-using RimSearcher.Cli;
+﻿using RimSearcher.Cli;
 using RimSearcher.Output;
 using RimSearcher.Search;
 using RimSearcher.Storage;
@@ -65,7 +65,7 @@ public sealed class SearchCommand : Command
     public override int Run(CommandContext ctx)
     {
         var query = ctx.Args.Positional(0)!;
-        var limit = ctx.Args.Limit();
+        var limit = ctx.Limit();
         var scope = ctx.Scope();
         var type = ctx.Args.Value("type");
 
@@ -323,7 +323,7 @@ public sealed class GetCommand : Command
             return 1;
         }
 
-        var limit = ctx.Args.Limit(fallback: Limits.DefaultFieldsPerDef);
+        var limit = ctx.Limit(fallback: Limits.DefaultFieldsPerDef);
         var paths = ctx.Args.Values("path");
 
         foreach (var def in matches)
@@ -572,7 +572,7 @@ public sealed class FindCommand : Command
 
     public override int Run(CommandContext ctx)
     {
-        var limit = ctx.Args.Limit();
+        var limit = ctx.Limit();
         var scope = ctx.Scope();
 
         var offset = ctx.Args.Offset();
@@ -808,7 +808,7 @@ public sealed class ListCommand : Command
     public override int Run(CommandContext ctx)
     {
         var type = ctx.Args.Positional(0)!;
-        var limit = ctx.Args.Limit();
+        var limit = ctx.Limit();
         var offset = ctx.Args.Offset();
         var wantClass = ctx.Args.Value("class");
         var scope = ctx.Scope();
@@ -964,7 +964,7 @@ public sealed class FieldsCommand : Command
     public override int Run(CommandContext ctx)
     {
         var type = ctx.Args.Positional(0)!;
-        var limit = ctx.Args.Limit();
+        var limit = ctx.Limit();
         var filters = ctx.Args.Values("path");
         var offset = ctx.Args.Offset();
         var (rows, total) = ctx.Db.FieldPathsForType(type, limit.Effective, filters.FirstOrDefault(), offset);
@@ -1039,7 +1039,7 @@ public sealed class ValuesCommand : Command
     public override int Run(CommandContext ctx)
     {
         var path = ctx.Args.Positional(0)!;
-        var limit = ctx.Args.Limit();
+        var limit = ctx.Limit();
         var scope = ctx.Scope();
         var type = ctx.Args.Value("type");
         var offset = ctx.Args.Offset();
@@ -1110,7 +1110,7 @@ public sealed class TypesCommand : Command
     {
         var scope = ctx.Scope();
         var all = ctx.Db.Types(scope);
-        var limit = ctx.Args.Value("limit") is null ? LimitValue.All : ctx.Args.Limit();
+        var limit = ctx.Args.Value("limit") is null ? LimitValue.All : ctx.Limit();
         var rows = limit.IsAll ? all : all.Take(limit.Effective).ToList();
 
         ctx.Report.CountNotice(Tally.Of(rows.Count, all.Count), "def type", "pass --limit all for the rest.");
@@ -1142,7 +1142,7 @@ public sealed class ModsCommand : Command
     public override int Run(CommandContext ctx)
     {
         var all = ctx.Db.Mods;
-        var limit = ctx.Args.Value("limit") is null ? LimitValue.All : ctx.Args.Limit();
+        var limit = ctx.Args.Value("limit") is null ? LimitValue.All : ctx.Limit();
         var mods = limit.IsAll ? all : all.Take(limit.Effective).ToList();
 
         ctx.Report.CountNotice(Tally.Of(mods.Count, all.Count), "mod",

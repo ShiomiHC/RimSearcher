@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using RimSearcher.Cli;
 using RimSearcher.Output;
 using RimSearcher.Search;
@@ -155,7 +155,7 @@ public sealed class CodeSearchCommand : Command
         var sourceName = ctx.Args.Value("source");
         var glob = ctx.Args.Value("files") ?? "*.cs";
         var contextLines = ctx.Args.Int("context", 0);
-        var limit = ctx.Args.Limit();
+        var limit = ctx.Limit();
         var maxPerFile = PositiveOrAll(ctx, "max-per-file", Limits.CodeSearchMatchesPerFile);
 
         Regex regex;
