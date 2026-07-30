@@ -2142,6 +2142,34 @@ public class GrammarTests
         Assert.DoesNotContain("not that this def chose it", own, StringComparison.Ordinal);
     }
 
+    // ---- mod 列表这一层(收束时才发现它一道闸都没有)----
+
+    /// <summary>
+    /// 「某份保存的列表点了它的名」与「这份快照覆盖了它」是两个问题,而且答案会不一样 ——
+    /// 列表是**导出的输入**,快照是导出的产物,中间隔着一次没跑过的导出。
+    ///
+    /// 落空那一句是这条的要害。`modlist show --find` 找不到时,唯一诚实的话是
+    /// 「没有哪份列表点它的名」,**不是**「本机没装」—— 后者这条命令根本没看过。
+    /// 实现里那句话写对了,而这道闸是它的产地凭据:说宽一格,读的人就会拿一次
+    /// exit 1 当成「这个 mod 不存在」,而那正是这套输出一直在清的那种同形。
+    /// </summary>
+    [Fact]
+    public void 列表点没点名与快照覆没覆盖是两个问题()
+    {
+        // fixture-extra 点了 test.notinsnapshot 的名,而快照里没有它。
+        var (found, _, fcode) = Fixture.Run("modlist", "show", "--find", "test.notinsnapshot");
+        Assert.Equal(0, fcode);
+        Assert.Contains("fixture-extra", found, StringComparison.Ordinal);
+
+        var (covered, _, _) = Fixture.Run("mods");
+        Assert.DoesNotContain("test.notinsnapshot", covered, StringComparison.Ordinal);
+
+        // 一份列表都没点名时,不许把话说成「没装」。
+        var (miss, _, mcode) = Fixture.Run("modlist", "show", "--find", "zzznotamodanywhere");
+        Assert.Equal(1, mcode);
+        Assert.Contains("says nothing about whether it is installed", miss, StringComparison.Ordinal);
+    }
+
     // ---- types 并入 list(功能收束)----
 
     /// <summary>

@@ -463,6 +463,31 @@ public static class Fixture
                     "<li>ludeon.rimworld</li><li>test.mod</li>" +
                     "</activeMods></ModsConfigData>\n", new UTF8Encoding(false));
 
+                // 两份 mod 列表。`ModListIo.Directories` 取的是**配置文件旁边**的
+                // modlists/,不需要新配置键 —— 于是这一层进得了测试,而 modlist 这一族
+                // 此前一道闸都没有(407 行、export 的必填输入、冷启动路径上的那一跳)。
+                //
+                // 形状是刻意的:extra 里那个 packageId **不在快照里**。「某份列表点了它的名」
+                // 与「快照覆盖了它」是两个问题,而它们的答案在这里必须分得开 ——
+                // 两份列表都只装快照里那两个 mod 的话,这条区分就没有落点。
+                //
+                // id 取得刁钻是因为 Directories 还会扫本机真实的 LocalLow ModLists:
+                // 断言只挂在这几个名字上,才不会随本机装了什么而变。
+                var modlists = Path.Combine(dir, "modlists");
+                Directory.CreateDirectory(modlists);
+                File.WriteAllText(Path.Combine(modlists, "fixture-current.rml"),
+                    "<savedModList><modList><ids>" +
+                    "<li>ludeon.rimworld</li><li>test.mod</li></ids>" +
+                    "<names><li>Core</li><li>Test Mod</li></names>" +
+                    "<gameVersion>1.6.0000</gameVersion></modList></savedModList>\n",
+                    new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(modlists, "fixture-extra.rml"),
+                    "<savedModList><modList><ids>" +
+                    "<li>ludeon.rimworld</li><li>test.notinsnapshot</li></ids>" +
+                    "<names><li>Core</li><li>Not In Snapshot</li></names>" +
+                    "<gameVersion>1.6.0000</gameVersion></modList></savedModList>\n",
+                    new UTF8Encoding(false));
+
                 var path = Path.Combine(dir, "sources-config.toml");
                 File.WriteAllText(path,
                     "decompiled_dir = '" + Path.Combine(dir, "sources") + "'\n" +

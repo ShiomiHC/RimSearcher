@@ -95,6 +95,14 @@ public class SkillPromiseTests
         // 这里不给它单独立一行:能钉住的原文只有收窄表里孤零零一个 `--exact`,
         // 那样的 pin 无论实现怎么变都不会红 —— 一道红不了的闸比没有更坏,它看起来像覆盖。
 
+        // ---- mod 列表:导出的**输入**那一侧 ----
+        // 这一句是收束时才补上的:SKILL 原先只说 `export --modlist <name>`,而 <name> 的
+        // 合法取值从哪来一个字没写 —— 一个必填参数在 skill 这一层指路指了个空。
+        // 补的时候措辞取的是实现里那句窄的(SearchAll 的落空话),不是代码注释里那句宽的
+        // (「这个 mod 在本机装了没」)—— 两者差着这条命令根本没看过的一整个游戏目录。
+        new("That search\nanswers **which saved lists name a mod**, which is not the same question as whether the mod is\ninstalled",
+            nameof(GrammarTests.列表点没点名与快照覆没覆盖是两个问题)),
+
         // ---- R1:代码默认值 ----
         new("`yes` rows are left out of the listing by default, with a line saying how many and how to see them",
             nameof(GrammarTests.默认值行被拿掉时当场说清有多少条)),

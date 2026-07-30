@@ -27,6 +27,7 @@ is the only command that reads it, and it says so.
 | What fields does this def type have? | `rimsearcher fields <DefType>` |
 | Everything of one kind | `rimsearcher list <DefType>` |
 | What kinds of def does this snapshot hold at all? | `rimsearcher list` with no type |
+| Which saved mod lists name this mod? | `rimsearcher modlist show --find <text>` |
 | What does this inherit from / what inherits from it? | `rimsearcher inherit <name>` |
 | Which layer of the chain writes this field? | `rimsearcher inherit <def> --path <field>` |
 | What does this interface text say, or which key is behind it? | `rimsearcher keyed <key or phrase>` |
@@ -354,6 +355,14 @@ the game headless, so it takes minutes on a large mod list and prints nothing wh
 loading stage sits still it says so on stderr and **keeps waiting** — that line is a report, not a
 verdict, and the only thing that stops the game is `--timeout`. Raise `--timeout` rather than
 treating a stall report as failure.
+
+That `<name>` is required, and `rimsearcher modlist list` is where it comes from: those saved lists
+are the only thing an export can be run against. One saved from the game's mod screen, one written
+by `modlist save`, and one typed by hand are equally valid. `modlist show <name>` prints a single
+list in load order, and `modlist show --find <text>` searches every list on this machine at once.
+That search answers **which saved lists name a mod**, which is not the same question as whether the
+mod is installed — nothing here reads the game's mod folder, and a zero result says so in those
+words rather than leaving you to read it as "not installed".
 
 ## Parameters
 
