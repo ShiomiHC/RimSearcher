@@ -470,11 +470,13 @@ public class GrammarTests
         Assert.Equal(0, code);
         Assert.Contains("--scope vanilla (= ludeon.rimworld)", group);
 
-        // 写死 packageId:你写的就是你得到的,**一行都不多印**。
+        // 写死 packageId:你写的就是你得到的,**播报那一行不多印**。
         // 断言写成「不含带括号的那种形态」是不够的 —— 判据一旦退回「多于一个 mod 就播」,
-        // 印出来的是不带括号的 `--scope ludeon.rimworld.`,那样的闸红不了。
+        // 印出来的是不带括号的 `--scope ludeon.rimworld.`,那样的闸红不了。所以钉的是
+        // 「有没有一条**以它开头的声明行**」:计数句里那句 `1 def within --scope
+        // ludeon.rimworld.` 是另一件事的产地(用户侧收窄要念回去),不在这条闸的射程内。
         var (literal, _, _) = Fixture.Run("find", "thingClass", "RimWorld.Bullet", "--scope", "ludeon.rimworld");
-        Assert.DoesNotContain("--scope ludeon.rimworld", literal);
+        Assert.DoesNotMatch(new Regex(@"^--scope ludeon\.rimworld", RegexOptions.Multiline), literal);
 
         // 零结果那一侧原先就说,现在仍要说,但**只说一遍**:散文改用字面之后,
         // 展开只剩播报那一个产地。两遍与一遍在这里差的是「读者以为看到了两条独立证据」。
@@ -1327,7 +1329,9 @@ public class GrammarTests
         Assert.NotEmpty(argv);   // 裸命令走到的是全库,不是刚说的那批
 
         var (listed, _, _) = Fixture.Run(["snapshot", "truncated", .. argv, "--limit", "all"]);
-        var got = Regex.Match(listed, @"^(\d+) defs?\.", RegexOptions.Multiline);
+        // 计数句现在会把用户自己划的那道线念回去(`1 def within --type ThingDef.`)——
+        // 数还是同一个数,取数的正则跟着放宽,不是把那半句当噪音滤掉。
+        var got = Regex.Match(listed, @"^(\d+) defs?( within [^.]*)?\.", RegexOptions.Multiline);
         Assert.True(got.Success, listed);
         Assert.Equal(claimed, int.Parse(got.Groups[1].Value));
 
@@ -1501,6 +1505,46 @@ public class GrammarTests
         Assert.Equal(1, gcode);
         Assert.Contains("No def in this snapshot has a field path ending in 'zzznotafield'",
                         gone, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 用户自己划的那道线,计数句要念回去。
+    ///
+    /// 三态计数(Tally)覆盖的是**工具造成的**收窄:行数上限、扫描没跑完。`--scope`
+    /// `--type` `--exact` `--path` 这些造成的收窄不在其中,于是
+    /// `search 狂暴 --type MentalStateDef` 报一个完整式的「52 defs.」—— 字面完整,
+    /// 实则「在我自己划的范围内完整」,而第六轮有三份轨迹据此下了「一个不漏」的结论。
+    ///
+    /// 三头都要钉:给了就念、没给就一个字不多、**而且不许念错东西** ——
+    /// `get --type` 挑的是哪个 def 不是从字段里筛,念回去会被读成「去掉它还有更多字段」,
+    /// 而去掉它得到的是另一个 def。判据在声明层(OptionSpec.Narrows),不在这里。
+    /// </summary>
+    [Fact]
+    public void 用户自己划的收窄要在计数句里念回去()
+    {
+        var (scoped, _, _) = Fixture.Run("find", "thingClass", "RimWorld.Bullet", "--scope", "vanilla");
+        Assert.Contains("1 def within --scope vanilla.", scoped, StringComparison.Ordinal);
+
+        // 多个收窄参数一起念,顺序按声明层。
+        var (two, _, _) = Fixture.Run("find", "thingClass", "RimWorld.Bullet",
+                                      "--scope", "vanilla", "--exact");
+        Assert.Contains("within --scope vanilla --exact", two, StringComparison.Ordinal);
+
+        // --path 是 Multi,给几次念几次。
+        var (paths, _, _) = Fixture.Run("fields", "ThingDef", "--path", "comps");
+        Assert.Contains("field paths within --path comps.", paths, StringComparison.Ordinal);
+
+        // 一个都没给就一个字不多 —— 否则这半句退化成每条输出都挂的免责声明。
+        var (bare, _, _) = Fixture.Run("find", "thingClass", "RimWorld.Bullet");
+        Assert.DoesNotContain(" within ", bare, StringComparison.Ordinal);
+
+        // --limit / --offset 不算收窄:它们管印几行,三态文法早已把那件事说清。
+        var (limited, _, _) = Fixture.Run("list", "ThingDef", "--limit", "2");
+        Assert.DoesNotContain(" within ", limited, StringComparison.Ordinal);
+
+        // get 的 --type 挑的是哪个 def,不是从这个 def 的字段里筛 —— 不许念。
+        var (typed, _, _) = Fixture.Run("get", "Firefoam", "--type", "StatDef");
+        Assert.DoesNotContain("within --type", typed, StringComparison.Ordinal);
     }
 
     /// <summary>

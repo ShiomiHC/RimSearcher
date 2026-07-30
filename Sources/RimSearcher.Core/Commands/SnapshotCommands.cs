@@ -197,6 +197,7 @@ public sealed class SnapshotTruncatedCommand : Command
                 // 照着尾注跑一遍拿到的是另一个集合,输出形状却一模一样。
                 Help = "Only defs of this type. Repeat it for several — the completeness footnotes elsewhere " +
                        "name the types they mean, and this is the switch that carries them over.",
+                Narrows = true,
             },
             new OptionSpec
             {
@@ -204,6 +205,7 @@ public sealed class SnapshotTruncatedCommand : Command
                 Aliases = ["def-name", "defname", "name"],
                 Placeholder = "<defName>",
                 Help = "Only this def. Answers 'was this particular def cut short' without reading the whole list.",
+                Narrows = true,
             },
         ],
         Examples =

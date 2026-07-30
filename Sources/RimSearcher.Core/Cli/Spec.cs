@@ -41,6 +41,19 @@ public sealed record OptionSpec
 
     /// <summary>取值的枚举集合;非空时解析器校验并在报错里回传候选。</summary>
     public string[] Choices { get; init; } = [];
+
+    /// <summary>
+    /// 这个参数一给,结果集就**变小** —— 计数句要把它念回去。
+    ///
+    /// 三态计数(<see cref="Output.Tally"/>)覆盖的是**工具造成的**收窄:行数上限、
+    /// 扫描没跑完。用户自己划的那道线不在其中,于是 `search 狂暴 --type MentalStateDef`
+    /// 报一个完整式的「52 defs.」—— 字面完整,实则「在我自己划的范围内完整」,
+    /// 而第六轮有三份轨迹据此下了「一个不漏」的结论。
+    ///
+    /// 只标**过滤**性质的参数。<c>--limit</c> / <c>--offset</c> 不标:它们管的是印几行,
+    /// 而三态文法早已把那件事说清,再念一遍是两句话说同一件事。
+    /// </summary>
+    public bool Narrows { get; init; }
 }
 
 /// <summary>位置参数声明。</summary>

@@ -260,6 +260,25 @@ public sealed class ParseResult(
     public bool Has(string name) => values.ContainsKey(name);
 
     /// <summary>
+    /// 这一次真给了的**收窄参数**,按声明层的 <see cref="OptionSpec.Narrows"/> 认,
+    /// 渲染成可以原样贴回命令行的一串(<c>--type MentalStateDef --exact</c>)。
+    ///
+    /// 判据在声明里而不在这里:哪个参数会让结果集变小,是那个参数自己的性质,
+    /// 写在这里就成了第二份产地,而两份产地迟早各自正确地不一致。
+    /// </summary>
+    public string Narrowing()
+    {
+        var parts = new List<string>();
+        foreach (var o in Spec.Options.Where(o => o.Narrows))
+        {
+            if (!values.TryGetValue(o.Name, out var given) || given.Count == 0) continue;
+            if (o.Arity == Arity.Flag) { parts.Add($"--{o.Name}"); continue; }
+            parts.AddRange(given.Select(v => $"--{o.Name} {v}"));
+        }
+        return string.Join(" ", parts);
+    }
+
+    /// <summary>
     /// --limit 的取值。<c>all</c> 是正式取值(07-② 实证:真实调用方高频使用),不是错误;
     /// 超过 <see cref="Limits.MaxLimit"/> 的数被夹紧,夹紧事实由调用方在输出里声明。
     /// </summary>

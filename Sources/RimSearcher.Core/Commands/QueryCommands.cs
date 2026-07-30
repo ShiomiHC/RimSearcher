@@ -251,11 +251,15 @@ public sealed class GetCommand : Command
                 Aliases = ["paths", "field", "field-path", "only", "filter", "grep"],
                 Placeholder = "<text>",
                 Help = "Only show field paths containing this text. Repeat it to widen the selection.",
+                Narrows = true,
             },
             // 同名跨 def 类型是 RimWorld 常态(PsychicSensitivity 既是 StatDef 又是 TraitDef)。
             // 工具自己都在输出「N defs share the name」,却没有任何开关能挑一个 —— 实测里
             // 四个 agent 各自敲了 `--type` 然后吃同一句「Unknown option」。
-            CommonOptions.Type,
+            // `get` 的 --type 挑的是**哪个 def**,不是从这个 def 的字段里筛 ——
+            // 计数句里念一句「within --type StatDef」会被读成「去掉它还有更多字段」,
+            // 而去掉它得到的是另一个 def。收窄要念回去,前提是它真的在收窄这次数的东西。
+            CommonOptions.Type with { Narrows = false },
             new OptionSpec
             {
                 Name = "defaults",
@@ -635,6 +639,7 @@ public sealed class FindCommand : Command
                 Aliases = ["exact-match", "whole"],
                 Help = "Require the whole value to match, with either a field path or --value. " +
                        "Without it, the value is matched as a substring.",
+                Narrows = true,
             },
             new OptionSpec
             {
@@ -960,6 +965,7 @@ public sealed class ListCommand : Command
                 Aliases = ["def-class", "runtime-class"],
                 Placeholder = "<ClassName>",
                 Help = "Only defs whose own class is this. Def types that hold several classes list them below the count.",
+                Narrows = true,
             },
         ],
         Examples =
@@ -1117,6 +1123,7 @@ public sealed class FieldsCommand : Command
                 Aliases = ["paths", "contains", "match", "filter", "grep", "only"],
                 Placeholder = "<text>",
                 Help = "Only list paths containing this text. Repeat it to widen the selection.",
+                Narrows = true,
             },
             CommonOptions.Offset("field paths"),
         ],

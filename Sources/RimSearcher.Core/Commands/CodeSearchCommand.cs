@@ -62,6 +62,7 @@ public sealed class CodeSearchCommand : Command
                        "there '*' stops at a '/' while '**' crosses it. So */Verse/* is one level down, " +
                        "**/Verse/** is any.",
                 Default = "*.cs",
+                Narrows = true,
             },
             new OptionSpec
             {
@@ -94,6 +95,7 @@ public sealed class CodeSearchCommand : Command
                 Aliases = ["root", "tree", "scope"],
                 Placeholder = "<name>",
                 Help = "Which decompiled source tree to search. Omit to search them all.",
+                Narrows = true,
             },
             new OptionSpec
             {

@@ -79,6 +79,20 @@ public sealed class Report
     public IReadOnlyList<string> Promised => _promised;
 
     /// <summary>
+    /// 这一次用户自己划的那道线,原样贴回命令行的形态(<c>--type MentalStateDef --exact</c>)。
+    ///
+    /// 三态计数(<see cref="Tally"/>)覆盖的是**工具造成的**收窄:行数上限、扫描没跑完。
+    /// 用户侧的收窄不在其中,于是 `search 狂暴 --type MentalStateDef` 报一个完整式的
+    /// 「52 defs.」—— 字面完整,实则「在我自己划的范围内完整」。第六轮三份轨迹据此
+    /// 下了「一个不漏」的结论,而三态文法一个字都没说错。
+    ///
+    /// 判据在声明层(<see cref="Cli.OptionSpec.Narrows"/>),这里只负责念回去。
+    /// </summary>
+    public string Narrowing { get; set; } = "";
+
+    private string Within => Narrowing.Length == 0 ? "" : $" within {Narrowing}";
+
+    /// <summary>
     /// 数据键恒在 —— 与「计数恒在」同一条道理的机器侧版本。
     ///
     /// 零行时命令一律提前 return,于是 <c>--json</c> 里那个键**整个消失**:
@@ -109,8 +123,8 @@ public sealed class Report
     /// </summary>
     public Report CountNotice(Tally tally, string noun, string howToSeeMore)
         => tally.IsTruncated
-            ? Notice(NoticeKind.Truncation, $"Showing {tally.Render(noun)}; {howToSeeMore}")
-            : Notice(NoticeKind.Count, $"{tally.Render(noun)}.");
+            ? Notice(NoticeKind.Truncation, $"Showing {tally.Render(noun)}{Within}; {howToSeeMore}")
+            : Notice(NoticeKind.Count, $"{tally.Render(noun)}{Within}.");
 
     /// <summary>
     /// 分页态的计数,产地唯一。
@@ -134,7 +148,7 @@ public sealed class Report
         var seen = offset + shown;
         var tally = shown < total ? Tally.Of(shown, total) : Tally.Complete(shown);
         return Notice(tally.IsTruncated ? NoticeKind.Truncation : NoticeKind.Count,
-            tally.Render(noun) +
+            tally.Render(noun) + Within +
             (offset > 0 ? $", starting at {offset + 1}" : "") +
             (seen < total
                 ? $"; pass --offset {seen} for the next page, or --limit all for every one at once" +

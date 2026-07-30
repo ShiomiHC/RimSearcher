@@ -96,6 +96,7 @@ public static class CommonOptions
                "Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot " +
                "that happens to be named vanilla; the output spells out what it resolved to.",
         Default = ScopeFilter.DefaultScope,
+        Narrows = true,
     };
 
     public static readonly OptionSpec Type = new()
@@ -104,6 +105,7 @@ public static class CommonOptions
         Aliases = ["def-type", "kind", "category"],
         Placeholder = "<DefType>",
         Help = "Restrict results to one def type, for example ThingDef or HediffDef.",
+        Narrows = true,
     };
 }
 
@@ -116,7 +118,7 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
 
     public RimConfig Config { get; } = config;
     public ParseResult Args { get; } = args;
-    public Report Report { get; } = new();
+    public Report Report { get; } = new() { Narrowing = args.Narrowing() };
     public bool Json => Args.Flag("json");
 
     /// <summary>
