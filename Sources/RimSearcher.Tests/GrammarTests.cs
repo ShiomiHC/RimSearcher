@@ -272,4 +272,49 @@ public class GrammarTests
                        .EnumerateArray().Select(n => n.GetProperty("kind").GetString()).ToList();
         Assert.Equal(["count"], kinds);
     }
+
+    /// <summary>
+    /// R2:同名提示不随 <c>--type</c> 消失。
+    ///
+    /// 三轮最恶劣的一处就在这个缝上 —— 提示原先挂在**过滤后**的集合上,于是按 SKILL 教的
+    /// 加了 --type,提示走了、按名字关联来的错行留下,对冲归零。而调用方主动收窄这个动作
+    /// 恰恰说明它知道有歧义:这是最需要那句提示的时刻,不是最不需要的。
+    /// </summary>
+    [Fact]
+    public void 同名提示不随type消失()
+    {
+        foreach (var argv in new[]
+                 {
+                     new[] { "get", "Firefoam" },
+                     ["get", "Firefoam", "--type", "StatDef"],
+                     ["get", "Firefoam", "--type", "ThingDef"],
+                 })
+        {
+            var (stdout, _, code) = Fixture.Run(argv);
+            Assert.Equal(0, code);
+            Assert.Contains("share the name 'Firefoam'", stdout);
+        }
+    }
+
+    /// <summary>
+    /// R2 的另一半,也是这条修复自己最容易犯的错:收窄之后**不许**把该显示的弄丢。
+    ///
+    /// 继承层的 def_type 是 XML 根元素名,defs 表的是 AllDefTypesWithDatabases 的桶名,
+    /// 两者会不一致(实测本机快照 26 个,如 Blindhealer 的 CreepJoinerFormKindDef →
+    /// PawnKindDef)。语料里 VariantOne 就是这个形状:硬要求 def_type 相等,它的
+    /// inherits_from 会整批消失 —— 串味换成丢数据,正是 R2 要修的那类错本身。
+    /// </summary>
+    [Fact]
+    public void 桶名不一致时父节点仍在场()
+    {
+        var (stdout, _, code) = Fixture.Run("get", "VariantOne");
+        Assert.Equal(0, code);
+        Assert.Contains("inherits_from", stdout);
+
+        // 同名的那一半反过来:StatDef 的 Firefoam 没有自己的 XML 节点,
+        // 就一个字都不许提父节点(ThingDef 那个有,但那不是它的)。
+        var (typed, _, _) = Fixture.Run("get", "Firefoam", "--type", "StatDef");
+        Assert.DoesNotContain("inherits_from", typed);
+        Assert.DoesNotContain("灭火泡沫", typed);
+    }
 }

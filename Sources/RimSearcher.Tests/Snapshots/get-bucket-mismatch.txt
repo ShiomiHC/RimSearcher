@@ -1,0 +1,16 @@
+$ rimsearcher get VariantOne
+exit 0
+--- stdout ---
+1 field.
+
+def_name       VariantOne
+def_type       TestBaseDef
+label          variant one
+class          Verse.TestVariantDef
+mod            test.mod
+source         Variants.xml
+inherits_from  BaseProjectile (see 'rimsearcher inherit VariantOne')
+
+path         value
+workerClass  Verse.TestWorker
+--- stderr ---

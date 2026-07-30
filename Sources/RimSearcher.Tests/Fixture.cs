@@ -114,6 +114,11 @@ public static class Fixture
 
         // 同名跨 def 类型 —— RimWorld 常态,也是 JSON 撞键静默丢数据那条的唯一语料。
         // 一个有字段一个没有,是为了让「后写的把先写的盖成空」当场暴露。
+        //
+        // 三轮 R2 还要求这两边**资产不对称**:下面的 XML 节点与两条译文都只挂在 ThingDef
+        // 那一边,StatDef 这边一无所有。于是 `get Firefoam --type StatDef` 一旦按 defName
+        // 关联,就会在 StatDef 的标题块下印出 ThingDef 的父节点与描述译文 —— 那正是
+        // S8 险些交出的错答案(字段表刚说完「没有 description」,紧接着一条 description 译文)。
         Def("StatDef", "Firefoam", null, "ludeon.rimworld", "Stats_Basics.xml", false, 0);
 
         Def("ThingDef", "Firefoam", "firefoam", "ludeon.rimworld", "Buildings_Special.xml", false, 0,
@@ -160,6 +165,15 @@ public static class Fixture
         XmlNode("ThingDef", "", "BaseBullet", false, "Bullet_Revolver", "ludeon.rimworld", "Projectiles_Guns.xml", 0);
         XmlNode("ThingDef", "", "BaseFromSomeDisabledMod", false, "TestModGun", "test.mod", "Guns.xml", 0);
 
+        // R2 的语料另一半:只有 ThingDef 那个 Firefoam 有父节点,StatDef 那个没有。
+        XmlNode("ThingDef", "", "BaseProjectile", false, "Firefoam", "ludeon.rimworld", "Buildings_Special.xml", 0);
+
+        // 桶名不一致:VariantOne 的 def 落在 TestBaseDef 桶(异构桶语料),而它的 XML 根元素
+        // 是 TestVariantDef。实测本机快照有 26 个这种 def(Blindhealer 的
+        // CreepJoinerFormKindDef → PawnKindDef 等),R2 若改成「def_type 必须相等」就会
+        // 把它们的 inherits_from 整批弄丢 —— 串味换成丢数据,正是它要修的那类错。
+        XmlNode("TestVariantDef", "", "BaseProjectile", false, "VariantOne", "test.mod", "Variants.xml", 0);
+
         void Injection(string defName, string path, string translated, string original)
         {
             w.WriteLine(new JsonLine()
@@ -175,6 +189,11 @@ public static class Fixture
 
         Injection("Apparel_ShieldBelt", "label", "护盾腰带", "shield belt");
 
+        // 这两条的 def_type 是 ThingDef(Injection 写死的),而同名的 StatDef Firefoam
+        // 连 description 都没有 —— 按 defName 关联时它们会跑到 StatDef 的输出里去。
+        Injection("Firefoam", "label", "灭火泡沫", "firefoam");
+        Injection("Firefoam", "description", "一团灭火泡沫。", "A blob of firefoam.");
+
         if (!omitEndMarker)
         {
             records++;
@@ -182,8 +201,8 @@ public static class Fixture
                 .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindEnd)
                 .Int(IntermediateFormat.KeyRecords, wrongRecordCount ?? records)
                 .Int(IntermediateFormat.KeyDefs, 5)
-                .Int(IntermediateFormat.KeyInjections, 1)
-                .Int(IntermediateFormat.KeyXmlNodes, 4)
+                .Int(IntermediateFormat.KeyInjections, 3)
+                .Int(IntermediateFormat.KeyXmlNodes, 6)
                 .ToString());
         }
 

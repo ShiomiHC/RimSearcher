@@ -9,8 +9,12 @@ public sealed record DefRow(long Id, string DefType, string DefName, string? Lab
 
 public sealed record FieldRow(string Path, string Leaf, string? Value);
 
-public sealed record TranslationRow(string DefName, string Path, string? Translated, string? Original,
-                                   string? Language, string? SourceMod, string Origin);
+/// <summary>
+/// 一条译文。<paramref name="DefType"/> 为 null 表示这条是从语言文件收割的,注入 key
+/// 只有 <c>DefName.field</c> —— 同名跨 def 类型时它归谁在数据源里就是不确定的。
+/// </summary>
+public sealed record TranslationRow(string DefName, string? DefType, string Path, string? Translated,
+                                   string? Original, string? Language, string? SourceMod, string Origin);
 
 /// <summary>
 /// 继承层的一行:XML 里一个带 <c>Name=</c> / <c>ParentName=</c> / <c>Abstract=</c> 的节点。
@@ -514,18 +518,27 @@ public sealed class SnapshotDb : IDisposable
         return (rows, total);
     }
 
+    /// <summary>
+    /// 一个 defName 的全部译文,连 <c>def_type</c> 一起回 —— 同名跨 def 类型时,挑哪些
+    /// 归这个 def 的判断要在命令层做,因为那里才知道有没有同名歧义(R2)。
+    ///
+    /// <c>def_type</c> 可能为 null:收割自语言文件的行,注入 key 是 <c>DefName.field</c>,
+    /// 不带类型,游戏自己也是按 defName 注入的 —— 那条译文属于哪个同名 def,在数据源里
+    /// 就是不确定的,不是这里丢了信息。
+    /// </summary>
     public IReadOnlyList<TranslationRow> Translations(string defName)
     {
         var p = new Dictionary<string, object?> { ["@n"] = defName };
         var rows = new List<TranslationRow>();
         using var rd = Query(
-            "SELECT def_name, path, translated, original, language, source_mod, origin FROM translations " +
+            "SELECT def_name, def_type, path, translated, original, language, source_mod, origin FROM translations " +
             "WHERE def_name = @n COLLATE NOCASE ORDER BY origin, path", p);
         while (rd.Read())
-            rows.Add(new TranslationRow(rd.GetString(0), rd.GetString(1),
-                rd.IsDBNull(2) ? null : rd.GetString(2), rd.IsDBNull(3) ? null : rd.GetString(3),
-                rd.IsDBNull(4) ? null : rd.GetString(4), rd.IsDBNull(5) ? null : rd.GetString(5),
-                rd.GetString(6)));
+            rows.Add(new TranslationRow(rd.GetString(0),
+                rd.IsDBNull(1) ? null : rd.GetString(1), rd.GetString(2),
+                rd.IsDBNull(3) ? null : rd.GetString(3), rd.IsDBNull(4) ? null : rd.GetString(4),
+                rd.IsDBNull(5) ? null : rd.GetString(5), rd.IsDBNull(6) ? null : rd.GetString(6),
+                rd.GetString(7)));
         return rows;
     }
 

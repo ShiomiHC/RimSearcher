@@ -5,6 +5,37 @@ using RimSearcher.Storage;
 
 namespace RimSearcher.Commands;
 
+/// <summary>
+/// 一个名字下挂着的东西归不归这个 def —— 同名跨 def 类型是 RimWorld 常态,而快照里
+/// 有三张表按 <c>def_name</c> 存东西(译文、继承层、defs 自己),按名字关联就会串味(R2)。
+/// </summary>
+internal static class DefTypes
+{
+    /// <summary>
+    /// 两个 <c>def_type</c> 是否指同一个类型。
+    ///
+    /// 需要这个判断而不是直接 <c>==</c>,是因为两者不同源:继承层的是 XML 根元素名,
+    /// defs 表的是 <c>AllDefTypesWithDatabases</c> 的桶名(只产出「祖先链上没有非抽象 Def」
+    /// 的类型)。实测本机 modded 快照,在**没有同名歧义**的 def 里有 26 个对不上,三种形状:
+    ///   Blindhealer             CreepJoinerFormKindDef          → PawnKindDef        (子类落进基类桶)
+    ///   AncientComplex_Loot     ComplexLayoutDef                → LayoutDef          (同上)
+    ///   DefaultCareForColonist  Defaults.Defs.DefaultSettingDef → DefaultSettingDef  (带命名空间)
+    /// 前两种由调用点的「无歧义时回退到唯一候选」兜住;第三种在**同时有同名歧义**时连回退都
+    /// 走不到,所以这里补一层:全等优先,再退到去掉命名空间后相等。
+    ///
+    /// 次选那一层理论上能把两个 mod 各自的 <c>A.FooDef</c> / <c>B.FooDef</c> 配到一起,
+    /// 但调用点只在候选里挑,配错的前提是同一个 defName 下同时存在这两个类型 —— 比
+    /// 「该显示的东西不显示」罕见得多,而后者正是这一轮反复在修的那类错(缺席被读成事实)。
+    /// </summary>
+    public static bool Same(string? a, string? b)
+    {
+        if (a is null || b is null) return false;
+        if (string.Equals(a, b, StringComparison.OrdinalIgnoreCase)) return true;
+        static string Leaf(string s) => s[(s.LastIndexOf('.') + 1)..];
+        return string.Equals(Leaf(a), Leaf(b), StringComparison.OrdinalIgnoreCase);
+    }
+}
+
 public sealed class SearchCommand : Command
 {
     public override CommandSpec Spec => new()
@@ -143,7 +174,12 @@ public sealed class SearchCommand : Command
         if (Has(r.Description)) parts.Add("description");
         if (parts.Count > 0) return string.Join("+", parts);
 
+        // R2 的同族:这里也只按 defName 取过译文,于是同名跨 def 类型时会把**别人的**译文
+        // 路径报成「这一行靠什么命中」。F18 加这一列正是为了让 label 空的行有个解释,
+        // 给错的解释比不给更坏。def_type 为空的(语言文件收割,注入 key 不带类型)仍算,
+        // 因为游戏也是按名字注入的 —— 那条译文确实作用在这个 def 上。
         var t = ctx.Db.Translations(r.DefName)
+                      .Where(x => x.DefType is null || DefTypes.Same(x.DefType, r.DefType))
                       .FirstOrDefault(x => Has(x.Translated) || Has(x.Original));
         return t is not null ? t.Path : "indexed text";
     }
@@ -203,7 +239,11 @@ public sealed class GetCommand : Command
     {
         var name = ctx.Args.Positional(0)!;
         var wantType = ctx.Args.Value("type");
-        var matches = ctx.Db.GetDefsNamed(name);
+        // 过滤前的全量要留住:同名提示必须按**这个名字一共有几个 def** 说话,而不是按
+        // 这次显示了几个。R2 最恶劣的一半正是这里 —— 提示原先挂在过滤后的集合上,
+        // 于是按 SKILL 教的加了 --type 之后提示消失、串味的行留下,对冲归零。
+        var allMatches = ctx.Db.GetDefsNamed(name);
+        var matches = allMatches;
 
         if (wantType is { Length: > 0 } && matches.Count > 0)
         {
@@ -270,8 +310,20 @@ public sealed class GetCommand : Command
 
             // 有父节点才出这一行。没有的那九成 def 平白多一行空值,就是把上下文预算
             // 花在「这里什么也没有」上 —— 而恒 null 的 parent 字段正是 F13 删掉的那个东西。
-            var xmlNode = ctx.Db.NodesNamed(def.DefName)
-                                .FirstOrDefault(n => string.Equals(n.DefName, def.DefName, StringComparison.OrdinalIgnoreCase));
+            //
+            // R2:原先只按 defName 取,于是同名跨 def 类型时把**别人的**父节点印在自己的
+            // 标题块下(实测 def_type MentalStateDef 底下印出 inherits_from PsycastBase)。
+            // 但不能改成「def_type 必须相等」就完事:`xml_nodes.def_type` 是 XML 根元素名,
+            // `defs.def_type` 是 AllDefTypesWithDatabases 的桶名,F5 已经证明这两者会不一致
+            // (CreepJoinerAggressiveDef 的 def 落在 CreepJoinerBaseDef 桶里)。硬要求相等
+            // 会把「串味」换成「丢数据」—— 正是它要修的那类错。
+            // 收法:先要相等的;没有相等的,只在这个名字**没有同名歧义**时才回退到唯一候选,
+            // 有歧义就不显示(不显示比显示错的强,而 `inherit` 那条路照样答得出)。
+            var named = ctx.Db.NodesNamed(def.DefName)
+                              .Where(n => string.Equals(n.DefName, def.DefName, StringComparison.OrdinalIgnoreCase))
+                              .ToList();
+            var xmlNode = named.FirstOrDefault(n => DefTypes.Same(n.DefType, def.DefType))
+                       ?? (named.Count == 1 && allMatches.Count == 1 ? named[0] : null);
             if (xmlNode?.ParentName is { Length: > 0 } parentName)
                 pairs.Add(new("inherits_from", $"{parentName} (see 'rimsearcher inherit {def.DefName}')"));
 
@@ -327,7 +379,17 @@ public sealed class GetCommand : Command
             // 就出现过 `get Muffalo --limit 5` 吐出八十行的实测 —— 限额说了不算,预算就是空话。
             // --path 同理:实测里字段表正确地报了「一个都没匹配上」,紧接着三份内容相同的
             // 译文块把这个真结论淹掉,第一眼读成「找到了一堆东西」。精确提问不该更吵。
-            var allTranslations = ctx.Db.Translations(def.DefName);
+            // R2 的另一半:译文原先也只按 defName 取,于是字段表刚说完「这个 def 没有
+            // description」,紧接着就印出同名**别的 def type** 的 description 译文并标
+            // 「origin: in effect」—— 读者只能读成「描述由翻译文件注入」。
+            // 策略与 inherits_from 同源:def_type 对得上的归自己;对不上的一律不要;
+            // def_type 为空的(语言文件收割,注入 key 不带类型)留着,但要自证它是按名字匹配的。
+            var allTranslations = (IReadOnlyList<TranslationRow>)ctx.Db.Translations(def.DefName)
+                .Where(t => t.DefType is null || DefTypes.Same(t.DefType, def.DefType))
+                .ToList();
+            // 一个 def_type 对得上的都没有、却有一批不带类型的,且名字还有歧义 —— 此时
+            // 「这批译文归谁」纯属未知,说清比默默端出去强。
+            var byNameOnly = allTranslations.Count > 0 && allTranslations.All(t => t.DefType is null);
             if (paths.Count > 0)
                 allTranslations = allTranslations
                     .Where(t => paths.Any(p => t.Path.Contains(p, StringComparison.OrdinalIgnoreCase)))
@@ -360,15 +422,36 @@ public sealed class GetCommand : Command
                         "Rows marked 'outside this snapshot' come from language files of mods that were installed " +
                         "but not enabled when the snapshot was taken. They are searchable, but the game did not " +
                         "apply them.", footnote: true);
+
+                if (byNameOnly && allMatches.Count > 1)
+                    ctx.Report.Notice(NoticeKind.Boundary,
+                        $"These rows were matched by defName alone: they come from language files, whose keys are " +
+                        $"'{def.DefName}.<field>' with no def type, and {allMatches.Count} defs share this name. " +
+                        "The game injects them by name too, so which of the same-named defs they belong to is not " +
+                        "recorded anywhere.");
             }
         }
 
         ctx.Report.EndItems();
 
-        if (matches.Count > 1)
-            ctx.Report.Notice(NoticeKind.Boundary,
-                $"{Tally.Complete(matches.Count).Render("def")} share the name '{name}' across different def types; " +
-                $"all of them are shown. Pass --type <DefType> for just one.");
+        // R2:这句原先挂在**过滤后**的集合上,于是 --type 一给就消失 —— 而那正是最需要它的
+        // 时候:调用方主动收窄了,恰恰说明它知道有歧义、并打算只读一个。提示走了,读者就
+        // 没有任何迹象去怀疑标题块里那些按名字关联来的行。改成按全量说话,两种情形各自措辞。
+        if (allMatches.Count > 1)
+        {
+            var others = allMatches.Where(d => !matches.Contains(d))
+                                   .Select(d => d.DefType)
+                                   .Distinct(StringComparer.Ordinal)
+                                   .ToList();
+            ctx.Report.Notice(NoticeKind.Boundary, others.Count == 0
+                ? $"{Tally.Complete(allMatches.Count).Render("def")} share the name '{name}' across different def " +
+                  "types; all of them are shown. Pass --type <DefType> for just one."
+                : $"{Tally.Complete(allMatches.Count).Render("def")} share the name '{name}': this is the " +
+                  $"{string.Join(" and ", matches.Select(d => d.DefType).Distinct(StringComparer.Ordinal))} one. " +
+                  $"The other{(others.Count == 1 ? " is a" : "s are")} {string.Join(" and ", others)}" +
+                  $"{(others.Count == 1 ? "" : " def")}, shown only without --type. Fields, parent node and " +
+                  "translations above are this def's own.");
+        }
 
         return 0;
     }

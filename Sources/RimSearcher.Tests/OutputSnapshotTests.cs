@@ -34,6 +34,14 @@ public class OutputSnapshotTests
         { "get-truncated-export",  ["get", "Bullet_Revolver"] },
         { "get-generated",         ["get", "Meat_Muffalo"] },
         { "get-missing",           ["get", "NoSuchDef"] },
+        // R2:同名跨 def_type。两份基线的分工是「不带 --type 时提示在场」与「带 --type 时
+        // 提示不许消失、且父节点/译文不许串味」—— 后者是本轮最恶劣的一处:按 SKILL 教的
+        // 加了 --type 之后,同名提示反而没了,错行留下,对冲归零。
+        { "get-name-collision",    ["get", "Firefoam"] },
+        { "get-name-collision-typed", ["get", "Firefoam", "--type", "StatDef"] },
+        // 桶名不一致(XML 根元素 TestVariantDef,def 落在 TestBaseDef 桶)时 inherits_from
+        // 仍要在场 —— R2 的修法收窄了关联条件,这一份守的是它没有收窄过头。
+        { "get-bucket-mismatch",   ["get", "VariantOne"] },
         { "find-hit",              ["find", "compClass", "RimWorld.CompShield"] },
         { "find-miss-compprops",   ["find", "compClass", "CompProperties_Shield"] },
         { "find-miss-field",       ["find", "noSuchField", "x"] },

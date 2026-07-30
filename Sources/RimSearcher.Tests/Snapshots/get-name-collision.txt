@@ -1,0 +1,30 @@
+$ rimsearcher get Firefoam
+exit 0
+--- stdout ---
+0 fields.
+2 fields.
+2 translations.
+2 defs share the name 'Firefoam' across different def types; all of them are shown. Pass --type <DefType> for just one.
+
+def_name     Firefoam
+def_type     StatDef
+class        Verse.StatDef
+mod          ludeon.rimworld
+source       Stats_Basics.xml
+
+def_name       Firefoam
+def_type       ThingDef
+label          firefoam
+class          Verse.ThingDef
+mod            ludeon.rimworld
+source         Buildings_Special.xml
+inherits_from  BaseProjectile (see 'rimsearcher inherit Firefoam')
+
+path               value
+thingClass         RimWorld.Building
+statBases[0].stat  MarketValue
+
+path         translated  original             language           origin
+description  一团灭火泡沫。     A blob of firefoam.  ChineseSimplified  in effect
+label        灭火泡沫        firefoam             ChineseSimplified  in effect
+--- stderr ---
