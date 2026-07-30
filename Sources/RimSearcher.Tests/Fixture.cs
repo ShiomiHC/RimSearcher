@@ -32,8 +32,23 @@ public static class Fixture
         }
     }
 
-    /// <summary>名字本身就是一个 scope 组名的那份快照 —— 撞名提示的落点。</summary>
-    public static string CoreDb => Path.Combine(SnapshotDir, "core.db");
+    /// <summary>
+    /// 只拼路径,不建库。<see cref="Db"/> 的实现体自己要用它 —— 走公开的
+    /// <see cref="CoreDb"/> 会重入 <c>Db</c>(<c>lock</c> 对同一线程放行,而
+    /// <c>_dbPath</c> 到最后一行才赋值),于是同一份 <c>fixture.db.tmp</c> 被两层
+    /// <c>Import</c> 抢着写。
+    /// </summary>
+    private static string CoreDbPath => Path.Combine(SnapshotDir, "core.db");
+
+    /// <summary>
+    /// 名字本身就是一个 scope 组名的那份快照 —— 撞名提示的落点。
+    ///
+    /// 取路径就把库建出来。原先它只拼路径,靠调用方经由 <see cref="Run"/> 缺省的
+    /// <c>--config</c> 走到 <see cref="SourcesConfigPath"/> 里那句 <c>_ = Db</c> 才有库 ——
+    /// 一条同时显式传 <c>--db</c> 与 <c>--config</c> 的用例就会拿到一个不存在的文件,
+    /// 而那看起来会像一次偶发。
+    /// </summary>
+    public static string CoreDb { get { _ = Db; return CoreDbPath; } }
 
     /// <summary>造好一次,整个测试进程共用。</summary>
     public static string Db
@@ -61,7 +76,7 @@ public static class Fixture
                 // 不同名,免得跨快照点名那句话多出一个落点。
                 var coreExport = Path.Combine(dir, "core" + IntermediateFormat.FileExtension);
                 WriteOtherExport(coreExport, "OnlyInCoreSnapshot", "CoreMod.CompOnlyInCore");
-                new SnapshotImporter().Import(coreExport, CoreDb);
+                new SnapshotImporter().Import(coreExport, CoreDbPath);
 
                 return _dbPath = db;
             }
