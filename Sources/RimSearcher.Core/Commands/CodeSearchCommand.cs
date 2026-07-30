@@ -173,6 +173,7 @@ public sealed class CodeSearchCommand : Command
 
         var matcher = GlobToRegex(glob);
         var maxFiles = PositiveOrAll(ctx, "max-files", Limits.CodeSearchMaxFiles);
+        ctx.Report.Promises("matches");
 
         var lines = new List<string>();
         var rows = new List<IReadOnlyDictionary<string, object?>>();

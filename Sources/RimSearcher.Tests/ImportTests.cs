@@ -325,4 +325,24 @@ public class ImportTests
         Assert.Contains(thing.Id, untyped);
         Assert.Contains(stat.Id, untyped);
     }
+
+    /// <summary>
+    /// 兄弟字段那条尾注每行挂一个 OR,而 SQLite 的表达式树深度上限是 1000 ——
+    /// 第六轮实测 `find stat Mass --scope vanilla --limit all` 的 1229 行当场 exit 70。
+    ///
+    /// 最坏的地方是崩点的位置:主表早就算好了,却因为一句**可有可无的提示**整条命令崩掉,
+    /// 而 `--limit` 的文档只说「2000 以上截到 2000」,反向担保了 2000 以内安全。
+    /// 闸给 1200 行(过阈值),同时核对答案与一行时逐字相同 —— 分批不许换答案。
+    /// </summary>
+    [Fact]
+    public void 兄弟字段的查询不许被行数撑爆表达式树()
+    {
+        using var db = Build("batch");
+        var def = db.GetDefsNamed("Apparel_ShieldBelt").Single();
+        var one = db.AuthoredSiblings([(def.Id, "comps[0].compClass")]);
+        Assert.NotEmpty(one);
+
+        var many = Enumerable.Repeat((def.Id, "comps[0].compClass"), 1200).ToList();
+        Assert.Equal(one, db.AuthoredSiblings(many));
+    }
 }

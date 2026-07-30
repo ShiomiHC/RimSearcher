@@ -221,6 +221,7 @@ public sealed class SnapshotTruncatedCommand : Command
         var scope = ctx.Scope();
         var types = ctx.Args.Values("type");
         var defName = ctx.Args.Value("def");
+        ctx.Report.Promises("truncated");
         var (rows, total) = ctx.Db.TruncatedDefs(scope, limit.Effective, types, defName);
 
         if (rows.Count == 0)

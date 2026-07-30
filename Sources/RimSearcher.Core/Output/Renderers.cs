@@ -170,6 +170,10 @@ public static class JsonRenderer
 
         foreach (var (name, items) in collections) Put(root, name, items, "the top level");
 
+        // 答应过的数据键就得在,哪怕是空数组 —— 见 Report.Promises。
+        foreach (var name in report.Promised)
+            if (!root.ContainsKey(name)) root[name] = new List<IReadOnlyDictionary<string, object?>>();
+
         return OutputText.Finish(JsonSerializer.Serialize(root, Options));
     }
 

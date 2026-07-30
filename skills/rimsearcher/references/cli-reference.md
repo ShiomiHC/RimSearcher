@@ -60,7 +60,7 @@ Every command takes these, and they are written **after** the command name: `rim
 |---|---|---|
 | `--snapshot` <name> | Query this named snapshot instead of the one that would be picked automatically. An explicit choice always wins over auto-detection. | `--snap`, `--env` |
 | `--db` <path> | Query the snapshot database at this path directly, bypassing the registry. | `--database`, `--snapshot-path` |
-| `--json` | Emit machine-readable JSON. Anything the text output would have said in prose moves into a 'notes' array, so nothing is lost. |  |
+| `--json` | Emit machine-readable JSON. Anything the text output would have said in prose moves into a 'notes' array, so nothing is lost. The command's own table key is always present — an empty array when nothing matched, never a missing key. |  |
 | `--config` <path> | Use this config file instead of the default one. |  |
 
 ## `code-search`

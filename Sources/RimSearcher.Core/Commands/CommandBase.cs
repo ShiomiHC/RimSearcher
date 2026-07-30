@@ -35,7 +35,8 @@ public static class GlobalOptions
         Name = "json",
         Arity = Arity.Flag,
         Help = "Emit machine-readable JSON. Anything the text output would have said in prose " +
-               "moves into a 'notes' array, so nothing is lost.",
+               "moves into a 'notes' array, so nothing is lost. The command's own table key is " +
+               "always present — an empty array when nothing matched, never a missing key.",
     };
 
     public static readonly OptionSpec Config = new()

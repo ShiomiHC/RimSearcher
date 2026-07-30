@@ -43,6 +43,7 @@ public sealed class SearchCommand : Command
         var type = ctx.Args.Value("type");
 
         var offset = ctx.Args.Offset();
+        ctx.Report.Promises("defs");
 
         var (rows, total) = ctx.Db.SearchFts(query, scope, type, limit.Effective, offset);
         var ftsTotal = total;
@@ -675,8 +676,14 @@ public sealed class FindCommand : Command
 
         var offset = ctx.Args.Offset();
 
+        // 两张表互斥,按分支认领 —— 声明在命令头上的话,`find compClass X` 会白发一个
+        // 空的 paths,而空数组在机器侧读作「查过了,没有」。
         if (ctx.Args.Value("value") is { Length: > 0 } anyValue)
+        {
+            ctx.Report.Promises("paths");
             return ByValue(ctx, anyValue, scope, limit, ctx.Args.Flag("exact"), offset);
+        }
+        ctx.Report.Promises("matches");
 
         var path = ctx.Args.Positional(0);
         if (path is null)
@@ -969,6 +976,7 @@ public sealed class ListCommand : Command
         var offset = ctx.Args.Offset();
         var wantClass = ctx.Args.Value("class");
         var scope = ctx.Scope();
+        ctx.Report.Promises("defs");
 
         var (rows, total) = ctx.Db.ListByType(type, scope, limit.Effective, offset, wantClass);
 
@@ -1120,6 +1128,7 @@ public sealed class FieldsCommand : Command
         var limit = ctx.Limit();
         var filters = ctx.Args.Values("path");
         var offset = ctx.Args.Offset();
+        ctx.Report.Promises("fields");
         var (rows, total, whole) = ctx.Db.FieldPathsForType(type, limit.Effective, filters.FirstOrDefault(), offset);
 
         if (rows.Count == 0)
@@ -1202,6 +1211,7 @@ public sealed class ValuesCommand : Command
         var scope = ctx.Scope();
         var type = ctx.Args.Value("type");
         var offset = ctx.Args.Offset();
+        ctx.Report.Promises("values");
         var (rows, total) = ctx.Db.DistinctValues(path, scope, limit.Effective, type, offset);
 
         if (rows.Count == 0)
@@ -1279,6 +1289,7 @@ public sealed class TypesCommand : Command
     public override int Run(CommandContext ctx)
     {
         var scope = ctx.Scope();
+        ctx.Report.Promises("types");
         var all = ctx.Db.Types(scope);
 
         // 零行是 exit 1(R12 约定),`types` 原先无条件 return 0 —— 按退出码分流的脚本

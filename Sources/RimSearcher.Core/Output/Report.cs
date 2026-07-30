@@ -70,9 +70,31 @@ public sealed class Report
 {
     private readonly List<Notice> _notices = [];
     private readonly List<Block> _blocks = [];
+    private readonly List<string> _promised = [];
 
     public IReadOnlyList<Notice> Notices => _notices;
     public IReadOnlyList<Block> Blocks => _blocks;
+
+    /// <summary>这条命令答应过要有的顶层数据键,哪怕这次一行都没有。</summary>
+    public IReadOnlyList<string> Promised => _promised;
+
+    /// <summary>
+    /// 数据键恒在 —— 与「计数恒在」同一条道理的机器侧版本。
+    ///
+    /// 零行时命令一律提前 return,于是 <c>--json</c> 里那个键**整个消失**:
+    /// 第六轮实测 `find … --offset 9000 --json` 回的对象里没有 `matches`,
+    /// 消费方拿到的不是空数组而是 KeyError。而「翻过头了」与「这个快照里没有」
+    /// 与「工具崩了」在这份 JSON 上的形状完全一样 —— 都是那个键不在。
+    /// 文本侧照旧不印空表(<see cref="TextRenderer"/> 自己滤),这条只管机器侧。
+    ///
+    /// 在命令**开查之前**声明,而不是在零行分支里补:补的那种漏一条分支就漏一个形状,
+    /// 而分支恰恰是这套输出最爱加的东西。
+    /// </summary>
+    public Report Promises(string tableName)
+    {
+        if (!_promised.Contains(tableName, StringComparer.Ordinal)) _promised.Add(tableName);
+        return this;
+    }
 
     public Report Notice(NoticeKind kind, string text, bool footnote = false)
     {

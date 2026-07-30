@@ -1504,6 +1504,55 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// `--json` 里那个数据键**恒在**,零行时是空数组,不是整个消失。
+    ///
+    /// 第六轮实测:`find … --offset 9000 --json` 回的对象里根本没有 `matches`,消费方拿到的
+    /// 不是空数组而是 KeyError。而这份 JSON 上「翻过头了」「快照里没有」「工具崩了」
+    /// 形状完全一样 —— 都是那个键不在。翻页越界只是它最容易撞到的一副面孔,
+    /// 所以闸按**命令**过一遍七条查询命令的各种零行成因,而不是只钉越界那一种。
+    ///
+    /// 反向也要钉:`find` 的两张表互斥,认领的那张有、另一张不许平白出现 ——
+    /// 空数组在机器侧读作「查过了,没有」,凭空多一个就是凭空多一句假话。
+    /// </summary>
+    [Fact]
+    public void json的数据键零行时是空数组而不是整个消失()
+    {
+        (string Key, string[] Argv)[] cases =
+        [
+            ("defs",      ["search", "zzznothing"]),
+            ("defs",      ["list", "ThingDef", "--offset", "9000"]),
+            ("matches",   ["find", "compClass", "zzznothing"]),
+            ("matches",   ["find", "compClass", "--offset", "9000"]),
+            ("paths",     ["find", "--value", "zzznothing"]),
+            ("fields",    ["fields", "ThingDef", "--path", "zzznothing"]),
+            ("values",    ["values", "zzznotafield"]),
+            ("types",     ["types", "--scope", "all,-ludeon.rimworld,-test.mod"]),
+            ("truncated", ["snapshot", "truncated", "--def", "zzznothing"]),
+            ("matches",   ["code-search", "zzzznothing"]),
+        ];
+
+        foreach (var (key, argv) in cases)
+        {
+            var (json, err, _) = Fixture.Run([.. argv, "--json"]);
+            Assert.True(json.Length > 0, $"'{string.Join(" ", argv)}' 没有 stdout: {err}");
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            Assert.True(doc.RootElement.TryGetProperty(key, out var data),
+                        $"'{string.Join(" ", argv)}' 的 JSON 里没有 '{key}' 键");
+            Assert.Equal(System.Text.Json.JsonValueKind.Array, data.ValueKind);
+            Assert.Equal(0, data.GetArrayLength());
+        }
+
+        // find 的两张表互斥,不许两个都出现。
+        var (byField, _, _) = Fixture.Run("find", "compClass", "zzznothing", "--json");
+        using var f = System.Text.Json.JsonDocument.Parse(byField);
+        Assert.False(f.RootElement.TryGetProperty("paths", out _));
+
+        var (byValue, _, _) = Fixture.Run("find", "--value", "zzznothing", "--json");
+        using var v = System.Text.Json.JsonDocument.Parse(byValue);
+        Assert.False(v.RootElement.TryGetProperty("matches", out _));
+    }
+
+    /// <summary>
     /// 扫了几棵树,要跟 `sources list` 列的那几棵对得上账。
     ///
     /// 第六轮实测:`code-search` 说「across 23 source trees」,`sources list` 同一台机器上

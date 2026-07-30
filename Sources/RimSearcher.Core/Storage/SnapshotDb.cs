@@ -734,26 +734,47 @@ public sealed class SnapshotDb : IDisposable
     /// 回**全部**,不在这里截:截了再交给 NameList,它就以为名单是完整的,于是
     /// 「and N more」一个字都不说 —— 静默截断正是这一轮在修的东西,不许从这里漏回来。
     /// 一块 comps[N] 的字段数是个位到几十,不设上限也不会失控。
+    ///
+    /// 上面那条只管**回多少**;行数本身要分批发,见 <see cref="BatchedOrTerms"/>。
     /// </remarks>
     public IReadOnlyList<string> AuthoredSiblings(IEnumerable<(long DefId, string Path)> shown)
     {
+        var rows = shown.ToList();
+        // 「已经印出来的那些行」要在**开查之前**全部就位:分批之后,后一批查出来的兄弟里
+        // 可能有前一批印过的行,按批填就会把它当成新兄弟点名。
+        var already = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (id, path) in rows) already.Add(id + "" + path);
+
+        var names = new List<string>();
+        foreach (var batch in rows.Chunk(BatchedOrTerms)) SiblingsOfBatch(batch, already, names);
+        return names;
+    }
+
+    /// <summary>
+    /// 一次 SQL 里挂几个 OR 项。SQLite 的表达式树深度上限是 1000,而这条查询每行一个 OR ——
+    /// 第六轮实测 <c>find stat Mass --scope vanilla --limit all</c> 的 1229 行当场 exit 70。
+    /// 崩点藏在一条**尾注**里:主表早就算好了,却因为一句可有可无的提示整条命令崩掉;
+    /// 而 <c>--limit</c> 的文档只说「2000 以上截到 2000」,反向担保了 2000 以内安全。
+    /// </summary>
+    private const int BatchedOrTerms = 200;
+
+    private void SiblingsOfBatch((long DefId, string Path)[] batch,
+                                 HashSet<string> already, List<string> names)
+    {
         var p = new Dictionary<string, object?>();
         var ors = new List<string>();
-        var already = new HashSet<string>(StringComparer.Ordinal);
         var i = 0;
 
-        foreach (var (id, path) in shown)
+        foreach (var (id, path) in batch)
         {
-            already.Add(id + " " + path);
             if (Search.PathSegments.ContainerPrefix(path) is not { } prefix) continue;
             p["@si" + i] = id;
             p["@sp" + i] = Escape(prefix) + "%";
             ors.Add($"(fv.def_id = @si{i} AND fv.path LIKE @sp{i} ESCAPE '\\')");
             i++;
         }
-        if (ors.Count == 0) return [];
+        if (ors.Count == 0) return;
 
-        var names = new List<string>();
         using var rd = Query(
             "SELECT fv.def_id, fv.path, fv.leaf FROM field_values fv " +
             $"WHERE ({string.Join(" OR ", ors)}) AND fv.is_default <> {Contract.DefaultState.Same} " +
@@ -764,11 +785,10 @@ public sealed class SnapshotDb : IDisposable
         while (rd.Read())
         {
             // 已经印在表里的那一行不算它自己的兄弟。
-            if (already.Contains(rd.GetInt64(0) + " " + rd.GetString(1))) continue;
+            if (already.Contains(rd.GetInt64(0) + "" + rd.GetString(1))) continue;
             var leaf = rd.GetString(2);
             if (!names.Contains(leaf, StringComparer.Ordinal)) names.Add(leaf);
         }
-        return names;
     }
 
     public (IReadOnlyList<(string Value, int Count)> Rows, int Total) DistinctValues(
