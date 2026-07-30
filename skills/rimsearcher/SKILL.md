@@ -308,11 +308,15 @@ the tool instead, where the counts stay honest:
 | `read` | `--member`, `--type`, `--lines`, `--outline`, `--limit` |
 | `sources sync` | `--only`, `--modlist`, `--force`, `--dry-run` |
 
-That `head` habit has a replacement too. Every table above pages with `--offset`, and a paged
-answer always states the three things a pipe would have destroyed: how many rows this page holds,
-how many exist in total, and the exact `--offset` for the next page. The last page says it is the
+That `head` habit has a replacement too. `search`, `find`, `list`, `fields`, `values` and `keyed`
+page with `--offset`, and a paged answer always states the three things a pipe would have
+destroyed: how many rows this page holds, how many exist in total, and the exact `--offset` for
+the next page. The last page says it is the
 last one rather than leaving you to do the arithmetic, and an `--offset` past the end is reported
-as an overshoot, not as "nothing found". `read` pages the same way with `--lines`.
+as an overshoot, not as "nothing found". `read` pages the same way with `--lines`. The rest do not
+page and do not take `--offset`: `get` and `inherit` narrow with `--path` or open up with
+`--limit all`, and `code-search` has its own three caps — passing `--offset` to any of them is a
+usage error naming the commands that do take it, not a silently ignored switch.
 
 `--type <DefType>` picks one def when a name is shared — which is common: `PsychicSensitivity`
 is both a `StatDef` and a `TraitDef`. `--json` keeps each of them in its own slot regardless.
@@ -370,7 +374,7 @@ For the decompiler MCP, see [references/decompiler-mcp.md](references/decompiler
 `--scope vanilla` (also `core`, `base`, `official`) means **every module Ludeon ships** — Core
 plus each DLC the snapshot covers — which is not the same as a snapshot that happens to be
 *named* `vanilla`. The two look identical in a sentence, so the output spells out what a scope
-resolved to whenever it is more than one mod.
+resolved to whenever the expansion is not word for word what you typed.
 
 ## Recovering
 

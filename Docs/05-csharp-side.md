@@ -116,8 +116,12 @@ reference 提到的**一个不缺**,另有 31 个未提。与本篇结论相关�
 
 - `find_derived_types`(**支持 `transitive`**)/ `find_base_types` / `get_overrides` /
   `get_implementations` —— **继承关系全套具备**
-- `search_types` / `search_members` / `search_symbols` 均支持 `regex` 与丰富过滤
-  (kind / namespace / declaringType / accessibility / isStatic / genericArity…)
+- `search_types` / `search_members` / `search_symbols` 均支持 `regex`,**但过滤面不同形**
+  (2026-07-31 复核 schema 更正:本条原先把三者写成同一套过滤器,参考页照抄了这个错):
+  `search_members` 才有那一大排(`kind` / `namespaceFilter` / `declaringTypeFilter` /
+  `accessibility` / `isStatic` / `isAbstract` / `isVirtual` / `genericArity` /
+  `paramTypeFilters` / `returnTypeFilter` / `attributeFilter`);`search_types` **只有**
+  `namespaceFilter` 与 `includeNested`。名字带 `Filter` 后缀,漏写后缀即无效参数。
 - `search_string_literals`(IL 字面量正则)、`find_usages`、`get_ast_outline`、
   `get_xml_doc`、`get_overloads`、`get_member_signature`
 - Harmony 专用:`suggest_transpiler_targets`、`generate_harmony_patch_skeleton`、
@@ -182,6 +186,10 @@ reference 提到的**一个不缺**,另有 31 个未提。与本篇结论相关�
 载回的 29 个工具里恰好缺了参考页开篇点名的 `status`/`search_types`/`search_members`/
 `resolve_member_id`**,三个 agent 各白花一个来回补发 `select:`。44 个工具在 30 上限下
 似乎按名字序而非重要度截断。修法是在参考页给一行可原样粘贴的 `select:` 指令。
+
+**2026-07-31 补:那一行当时写的是裸工具名,实测零命中** —— `select:` 按工具全名精确匹配,
+`select:status,load_assembly,…` 回的是「No matching deferred tools found」,而那个零
+与「这台机器上没装这个 server」同形。参考页已改成带 `mcp__decompiler__` 前缀的全名。
 
 ## 复核途径
 

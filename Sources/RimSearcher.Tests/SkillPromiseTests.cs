@@ -138,7 +138,10 @@ public class SkillPromiseTests
             "退出码如实传给shell"),
         new("Unknown options are rejected rather than ignored, with the nearest accepted spelling — or, if another command takes that option, which one",
             nameof(未知选项的报错点名接受它的那条命令)),
-        new("the output spells out what a scope resolved to whenever it is more than one mod",
+        // 八轮审计:代码的判据早换成「展开与你输入的字面不同」,而 SKILL 那句停在
+        // 「多于一个 mod」—— `--scope ludeon.rimworld` 展开成一个 mod 也不播报,
+        // 照字面读是假的;实现里那条「文档要跟着改」的注释挂了一轮。
+        new("the output spells out what a scope resolved to whenever the expansion is not word for word what you typed",
             "scope在散文里展开成实际圈住的mod"),
 
         // ---- 落空的成因 ----

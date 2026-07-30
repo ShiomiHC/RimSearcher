@@ -19,7 +19,8 @@ SQLite → CLI 查询 → skill 文档引导,即上游 3.x 的管线形状)。�
 - 上游 3.x:`upstream/master` @ `8a0a4f7`(kearril/RimSearcher)
 - 本地旧世系:`master`(ShiomiHC/RimSearcher fork;本轮分析时点 `f2afe08`,与上游 merge-base `2ae4c35`,分叉 130/24)
 - 两边已不可 merge:上游 `718a6c4` 删除了 Core/Server —— 即本地 130 个提交所改的全部代码
-- 本分支(`rebuild`)为 orphan 世系,只放迁移文档;两边代码随取:
+- 本分支(`rebuild`)为 orphan 世系。**写这一行时它只放迁移文档,现在整套重建的代码与
+  skill 都在这里**(2026-07-30 起),Docs/ 是它的设计产地而不是它的全部内容;两边旧代码随取:
   `git show master:<path>` / `git show upstream/master:<path>`(同仓库共享 object store)
 
 ## 决定性论据(为何对象导出而非静态 XML 方案)

@@ -202,7 +202,7 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
     /// 判据取「展开与你输入的字面不同」而不是「多于一个 mod」:后者对
     /// <c>--scope ludeon.rimworld</c> 这种写死 packageId 的调用也要发声,而那种调用
     /// 一个字都不需要 —— 你写的就是你得到的。前者覆盖了全部已举证的用例而不收那份税。
-    /// 相应地文档那句「whenever it is more than one mod」要跟着改。
+    /// (SKILL.md 那句已按此改写,承诺闸盯着;八轮审计前它挂了一轮没跟上。)
     /// </summary>
     private void AnnounceScope(ScopeFilter filter)
     {

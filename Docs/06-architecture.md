@@ -11,7 +11,7 @@
 2. **输出形态**:结构化主体 + 散文声明区。随调用变化的自证(截断/过期/未知 flag)必须在
    stdout 该次输出里;恒定教学入 SKILL.md;参数声明产地唯一在代码(判据:R51 —— 声明要
    写进它作用的那个块)。
-3. **C# 侧**:符号级阅读外包 DecompilerServer MCP(00 已裁,不动);跨文件正则**收进 CLI**
+3. **C# 侧**:符号级阅读外包 DecompilerServer MCP(00 已裁);跨文件正则**收进 CLI**
    (`code-search`,修正 01 对 SourceIndexer「整个扔掉」的口径:正则扫描段带走);
    反编译落盘再生成短期由 master 的 sync_sources 代管(master 转维护但活着)。
 4. **快照**:多快照,身份 = db meta 里的 modlist 指纹;选择显式优先(`--snapshot` /
@@ -92,7 +92,7 @@ SQLite 建库、FTS、噪声过滤全部在 CLI `snapshot import` 侧。论据:
 | meta 采集 | [全新] | 写进中间格式首行:游戏 build、当前语言(label 是该语言产物)、**有序** packageId 列表+各 mod 版本、导出时间、各上限参数值、导出器版本、mod 设置文件哈希(留缝,见开放点)。**顺序入指纹**:激活顺序 = patch 应用顺序(03 甲) |
 | 原子性 | [全新] | 游戏侧 temp+rename+尾标记(02-6);import 侧 temp db 建完 rename+登记 |
 | patch 溯源拦截 | [可选后备] | ApplyPatches Harmony dump,走同一导出通道,CLI 侧 UnifiedDiffFormatter diff(03 甲);不在第一批(04 步骤 9);mod 工程给它独立源文件位,Harmony 依赖不搅进主导出路径 |
-| 工程 | [机器事实] | net472 + Krafs.Rimworld.Ref;编译产物不进库(02-8),csproj 输出到本地 Mods 目录;About.xml 留发布缝 |
+| 工程 | [机器事实] | net472 + Krafs.Rimworld.Ref;编译产物不进库(02-8),csproj 输出到 `ModStaging/`(About/ + Assemblies/ 各就各位),由 `export` 期间的目录联接接进 `<game>/Mods/RimSearcher` —— 见下「导出器按需接挂」,该节 2026-07-30 裁定推翻了「常驻 Mods 目录」;About.xml 留发布缝 |
 
 ### 自动化编排 [全新](第二轮裁决 6)
 
@@ -105,8 +105,15 @@ SQLite 建库、FTS、噪声过滤全部在 CLI `snapshot import` 侧。论据:
 4. `RimWorldWin64.exe -savedatafolder=<隔离> -rimsearcher-export=<出口>`
    (`-savedatafolder` 重定向整个 SaveData,`GenFilePaths` 实证);
 5. 等进程退出+出口文件出现,超时可配(大 modlist 载入分钟级);
-6. 自动 `snapshot import` + **指纹自校**:请求的 ids 序列 == 产出 meta 的 ids 序列,
-   不等即报错。期望环境由 CLI 主动制造并验证,自动检测只剩「手动导出归属谁」一个用途。
+6. 自动 `snapshot import` + **指纹自校**:**发射用的** ids 序列 == 产出 meta 的 ids 序列。
+   期望环境由 CLI 主动制造并验证,自动检测只剩「手动导出归属谁」一个用途。
+
+   两处按实现校正(2026-07-31):基准是**发射列表**而不是请求列表 —— 发射列表 = 请求 +
+   `ResolveDependencies` 补的硬前置 + 导出器自己,拿请求列表去比,每一次自动补全都会
+   报一条假的「加载的和要求的不一样」。而不等时**不报错**:发一条 `Staleness` 声明,
+   退出码仍是 0。理由是这时快照已经建好且是有效的 —— 它如实描述了游戏**实际**加载了什么
+   (最常见的成因是某个 mod 自己的加载检查没过),把它判成失败会让一份可用的快照被丢掉;
+   该说的是「你要的和你得到的不是一回事」,而那正是一条声明的活。
 
 备份还原方案否决记录:「换入后还原前」崩溃窗口 + 游戏退出可能回写 ModsConfig 的竞争。
 
@@ -150,17 +157,46 @@ config 的 `datamod_dir` 指着它,`export` 开跑前在 `<game>/Mods/RimSearche
 
 ## 层 2 · SQLite schema(import 侧构建)
 
-- 基础表 **[上游]**:`defs` / `field_values` / `defs_fts`(形状见上游 cli-reference,列名沿用)。
+> **产地提示(2026-07-31 校)**:本节写的是设计时的分层意图。**表与列的产地唯一在
+> `Sources/RimSearcher.Core/Storage/SnapshotSchema.cs`**,每张表的成因写在它自己的建表注释里。
+> 下面这份清单跟到 schema **Version 6**;再有变动改那边,这里只留意图与择优来源。
+
+- 基础表 **[上游沿语义,列名自立]**:`defs` / `field_values` / `defs_fts`。
+  设计时写的是「列名沿用上游」,**实际一列都没沿用**,而三张表照上游列名去查是一列都查不到:
+  `defs` 用单列 `source_mod`(上游是 `mod_name` + `package_id` 两列)、没有 `full_data`,
+  另有 `generated` / `class` / `fields_truncated`;`field_values` 是 `def_id` / `path` /
+  `leaf` / `value` / `is_default`;`defs_fts` 第四列是 `translated`。
+- `field_values.is_default` **[全新]**:这一行与「这个类型刚 new 出来时」的关系,**三态**
+  (0 一定被改过 / 1 与代码默认值无从区分 / 2 没法比)。存原样而不是压成 bool ——
+  「没法比」并进任何一边都会让呈现侧说出一句它证不了的话。出口是 `get` 的 `code_default` 列。
+- `shared_values` 表 **[全新]**(schema 6,第八轮 ep34):一条「与新实例不同」的值在同类型里
+  有多普遍。非有它不可 —— `code_default` 那一列能证的只有「与刚 new 出来的实例不同」,
+  而读的人一律读成「有人给这个 def 挑了这个值」。分辨「XML 写的」与「引擎事后填的」在这份
+  快照里**没有产地**(要在 ResolveReferences 前后各取一次,而导出跑在
+  StaticConstructorOnStartup;插进去只能上 Harmony,而 DataMod 刻意无依赖),
+  所以不猜成因,只报可核对的事实:3538 分之 2658,读的人自己判。import 时一次 GROUP BY 扫出,
+  只收「过半且不少于 8 个」的组。
+- `keyed` + `keyed_fts` 表 **[全新]**(schema 5):界面文案那一层。**这张表里一行都不属于
+  任何 def** —— key 是 `"SomeKey".Translate()` 里那个 SomeKey,没有类型维、与 defName 无关,
+  所以挤不进 `translations`(那张表的主键形状是 def_name + path)。`placeholder` 列区分
+  「有 key 没译文」与「有译文」,不带它出来「没译」就与「没有这个 key」分不开。
+  FTS 也必须自立:`defs_fts` 的 rowid 是 def 的 id,借用它的 rowid 空间会让两边的命中互相冒充。
+- `xml_nodes` 表 **[全新]**(schema 3):继承层,详见下文「继承层」一节。
+  **唯一一张不是「游戏内存里的对象」的表** —— 它是打补丁之前的 XML 原文。
 - FTS 构建 **[上游逻辑,移址 CLI]**:unicode61 + CJK bigram 展开(02-8:别丢
   `ExpandCjkBigrams`);Microsoft.Data.Sqlite 自带 FTS5,无 Interop 问题。
 - 噪声过滤 **[混合]**:清单内容沿上游、末段匹配语义,**单一产地在 import 侧**(02-2);
   `generated` 不在清单里(03 甲)。
-- `meta` 表 **[全新]**:单行,内容 = 中间格式首行 meta 原样落库。**指纹事实的唯一产地**,
-  config.toml 只存别名指针。
+- `meta` 表 **[全新]**:**键值表**(`key` / `value`),不是单行 —— import 写六行:
+  `schema_version` / `export_meta_json`(中间格式首行 meta 原样)/ `fingerprint` /
+  `imported_at_utc` / `def_count` / `source_file`(键名常量在 SnapshotSchema.cs:20-25)。
+  **指纹事实的唯一产地**,config.toml 只存别名指针。
 - 截断自证列 **[全新]**:`defs.fields_truncated`(该 def 被上限截掉的条数,0 = 完整)。
   「字段被截」与「没有该字段」必须可区分(02-3;离群 mod 687 个 def 是实证样本,03 乙)。
 - `schema_version` **[全新]**:自立计数,**不兼容上游 db** —— 无 meta 或版本不符拒读并
-  指导重导(错误消息不含本机路径,发布缝)。
+  指导重导(错误消息不含本机路径,发布缝)。历次:3 加 `xml_nodes`、4 加
+  `field_values.is_default`、5 加 `keyed`、6 加 `shared_values`(**当前 6**)。
+  这份台账的产地是 SnapshotSchema.cs 的 `Version` 注释,这里只做索引。
 - `translations` 表 **[全新]**(第二轮裁决 8):两来源层——**运行时注入**(环境内权威,
   来自中间格式的 defInjections 节,译文+原文)与**静态收割**(import 时扫描**所有已装
   mod** 的 `Languages/<快照语言>/DefInjected/`,只保留 defName 命中快照内 def 的条目,
@@ -184,6 +220,9 @@ config 的 `datamod_dir` 指着它,`export` 开跑前在 `<game>/Mods/RimSearche
 | `snapshot`(子族:`list` / `import` / `use` / `status`) | [全新] | 快照登记、指纹比对、自动检测报告;`import` 兼任建库(层 2),无参时扫描 config.toml 导出目录 |
 | `export` | [全新] | 自动化编排全流程(层 1「自动化编排」) |
 | `modlist`(子族:`list` / `save` / `show`) | [全新] | `.rml` 枚举/抓取/查看;宽读严写(层 1「modlist」) |
+| `read` | [全新] | 落盘反编译树的**逐字阅读**:`--member` / `--type` / `--outline` / `--lines`。三轮 R5 实测:CLI 没有这条能力时调用方不会转投 MCP,只会拿 `code-search` 拼正则 —— 那条链拼了七轮,最后交出的是一段拼接起来的伪代码。收进来之后与 MCP 的分工是**元数据级归 MCP、落盘文本归 CLI**(见旁路一节) |
+| `keyed` | [全新] | 界面文案那一层(schema 5)。玩家看见的字里超过一半不来自任何 def,而这条路不通的样子与「查不到」逐字同形 |
+| `snapshot truncated` | [全新] | 导出时被砍过字段的 def 名单;截断自证列的出口 |
 | `docs` | [全新] | 维护用:把声明层渲染成 markdown 参数表(见「声明层」) |
 | ~~`update`~~ | — | 不做(自用);发布缝备忘:02-8 两条教训 |
 
@@ -240,7 +279,11 @@ config 的 `datamod_dir` 指着它,`export` 开跑前在 `<game>/Mods/RimSearche
 ### config.toml
 
 机器事实与偏好:游戏路径(`ModsConfig.xml`、DataMod 导出目录)、快照库目录、
-`datamod_dir`(导出器构建产物,按需接挂的目标)、modlist 别名、scope 组。
+`datamod_dir`(导出器构建产物,按需接挂的目标)、scope 组。
+
+**modlist 不在这里**(2026-07-31 校:原写「modlist 别名」,而 config 从来没有这个键,
+写了会被静默忽略)。别名就是文件名(去掉 `.rml`),查找目录固定两处、均不可配:
+游戏 SaveData 的 `ModLists/` 与 config.toml 同级的 `modlists/`(产地 `ModListIo.Directories`)。
 **不放**:指纹事实(产地在 db meta)、任何声明文本。
 
 ### 测试(01 可移植清单的落点)
@@ -275,8 +318,14 @@ config 的 `datamod_dir` 指着它,`export` 开跑前在 `<game>/Mods/RimSearche
 
 ## 旁路 · C# 阅读能力
 
-- 符号级(反编译单成员、callers/callees、IL、版本 diff):DecompilerServer MCP,00 已裁。
-  能力洞与固有缺陷底账在 05,skill 的 decompiler-mcp.md 承接。
+- **元数据级**(callers/callees、派生/覆写、IL、版本 diff、加载中的 assembly 里的单成员):
+  DecompilerServer MCP,00 已裁。能力洞与固有缺陷底账在 05,skill 的 decompiler-mcp.md 承接。
+- **落盘树的逐字阅读:`read`(2026-07-30 收进 CLI,推翻本篇原写的「符号级阅读外包 MCP,
+  不动」)**。分界不在「符号级 / 非符号级」而在**问的是元数据还是文本** ——
+  `read <file> --member <name>` 要的是那几行字,MCP 不在时它是唯一的路。
+  三轮 R5 实证:CLI 没有这条能力时调用方不会转投 MCP,只会拿 `code-search` 拼正则,
+  实测拼了七轮,最后交出的是一段拼接起来的伪代码 —— 而那份伪代码与真源码同形。
+  产地 `Commands/ReadCommand.cs`,类注释里记着这笔账。
 - 跨文件正则:`code-search`(本篇层 3),对象是落盘目录。
 - **类型定位 [本地体验,零索引]**:落盘树本身即类型级符号索引(WholeProjectDecompiler
   一类型一文件、命名空间分目录、按源分根)——`code-search` 加类型/文件名模式,
@@ -437,6 +486,15 @@ AssemblyRef 名字命中的 dll 所在目录来加。实测收益可量化 —�
 配套的闸有两道,缺一道就走形:一道判「完整态只准有计数那一句,不准有边界/建议类散文」,
 另一道判「没有边界可申报时完整结果集只有计数」—— 少了后一道,那条 boundary 尾注
 就可能悄悄变成常驻声明,而那正是 00 论据 3 淘汰掉的东西。
+
+**又开了一态:`get` 的共享值 advisory 是恒发的**(第八轮 ep34,2026-07-31 补记)。
+它两个分支都说 —— 有共享值时点名哪几行、一条都没有时也明说一句。照上面两道闸的字面
+它像是「常驻声明」,而判据得再往下一层:**这一句随调用变化**(它报的是这次印出来的那些行
+里哪几行、分母是这个类型有多少个 def),所以它是自证不是免责声明,与 00 论据 3 淘汰掉的
+「每次返回挂同一句话」不是一回事。靠沉默承载「这些值都是这个 def 自己的」正是这套输出
+一直在清的东西 —— 与「靠沉默传达完整」同一个病。
+
+那两道闸跑在 `find` 上,够不着 `get`;这一态目前没有独立的闸,只被 `get` 的字节基线钉着。
 
 **继承层:先判成架构边界,后来补成了一层。**(第二轮盲测 F11 → 本轮落地)
 

@@ -38,15 +38,15 @@ TraceTool 27),这些资产与存储层无关,不论各点择优选了谁的做�
 | 产地唯一 | `CommandSpec`/`OptionSpec` 是唯一产地,`--help` 与 markdown 参考页是两个渲染器;闸是 `GateTests.入库的参数参考与声明渲染逐字节一致` |
 | 声明政策 | `ArgParser` 严格模式 + 有意接受的拼写变体(07-② 的 9 种写法);数字从 `Limits` 插值进散文,`DeclarationTests` 盯着 |
 | 闸的事实侧取行为 | `ProcessTests` —— 真起进程读 stdout。**不做「找不到就跳过」**:xunit 2.x 没有真跳过,拿 `Assert.True` 冒充会把「没跑」记成「跑过且通过」 |
-| ToolResult 输出收口 | `Output/OutputText.cs`;LF、TrimEnd、单个结尾换行,进程侧也验 |
+| ToolResult 输出收口 | `Output/Report.cs` 里的 `OutputText`(`Finish` / `Newline`;没有单独的 OutputText.cs,2026-07-31 校);LF、TrimEnd、单个结尾换行,进程侧也验 |
 | 未知参数提示 | `ArgParser` 未知 flag 报错带近似候选;无候选时直接列出接受的参数,免得再跑一轮 help |
 | scope 语法设计 | `Snapshot/ScopeFilter.cs`,`all,-vanilla` 排除语法与配置组都在 |
 | 文法/措辞系统 | `CountedNoun` / `OutputText` / `GrammarTests`。1338603 的写法教训贯彻到底:判产地渲染的槽空不空 |
-| 字节级基线方法 | `OutputSnapshotTests` + `Snapshots/`(36 份)。`SnapshotGrammarGateTests` 那道缝合进 `GateTests`——基线逐行喂回文法检查,已验证故意写坏会红。**另补 SKILL.md 两道闸**:它是手写的、又按 04 的口径「本身进入被测物」,原先反而是唯一没人守的产物 —— 现在文中每条 `rimsearcher …` 命令行与收窄开关表都对着注册表验,故意写错开关会红 |
-| 盲测方法论 | workflow 盲测两轮,结果与教训在 04。第二轮的场景种子改从 Vethara 会话 transcript 逐条抽真实 episode(不再按 07 的意图分布编),同时兼任改版后的回归轮 |
+| 字节级基线方法 | `OutputSnapshotTests` + `Snapshots/`(首版 36 份,2026-07-31 实测 99 份)。`SnapshotGrammarGateTests` 那道缝合进 `GateTests`——基线逐行喂回文法检查,已验证故意写坏会红。**另补 SKILL.md 两道闸**:它是手写的、又按 04 的口径「本身进入被测物」,原先反而是唯一没人守的产物 —— 现在文中每条 `rimsearcher …` 命令行与收窄开关表都对着注册表验,故意写错开关会红 |
+| 盲测方法论 | workflow 盲测**八轮**(首版写「两轮」;第四轮起跑成回归实测,第六~八轮的种子、结论与方法论在 04a)。结果与教训在 04 与 04a。第二轮的场景种子改从 Vethara 会话 transcript 逐条抽真实 episode(不再按 07 的意图分布编),同时兼任改版后的回归轮 |
 | staleness 机制设计 | `CommandBase.AnnounceSnapshot`;判据在实现阶段改过一次,记在 06 |
 | 模糊匹配实现 | `Search/FuzzyMatcher.cs`,Ordinal-vs-CurrentCulture 那条教训原样带注释搬来;另加 `StripKindPrefix` 应对 07-⑤ 的 `method:` 前缀 |
-| 可移植测试类 | **部分移植**。OutputSnapshotTests / OutputGrammarGateTests(并入 GateTests)/ OutputVolumeCapTests(并入 GrammarTests 的声明区行数上限)/ GrammarRulesTests / CountedNounRegistryTests 都在。**OutputReadabilityTests 未移植** —— 它判的是表格可读性(列宽、对齐),而这里的表格渲染已被 25 份字节基线整体钉死,再立一层同源的判据是 schema 验 schema |
+| 可移植测试类 | **部分移植**。OutputSnapshotTests / OutputGrammarGateTests(并入 GateTests)/ OutputVolumeCapTests(并入 GrammarTests 的声明区行数上限)/ GrammarRulesTests / CountedNounRegistryTests 都在。**OutputReadabilityTests 未移植** —— 它判的是表格可读性(列宽、对齐),而这里的表格渲染已被字节基线整体钉死(凡带列对齐的都算,不写死份数),再立一层同源的判据是 schema 验 schema |
 | UnifiedDiffFormatter | **明确弃置(暂)**。它的用武之地是 patch 前后 diff,而本轮**没有做** patch 拦截点 —— 运行时导出拿到的就是合并后的结果,「前」那一半根本不在场。真要做 03 的拦截点时再从 master 取,产地已记在上表 |
 
 ## 扔掉(取数实现,被「游戏运行时已加载数据库」整体替代)
@@ -58,9 +58,22 @@ TraceTool 27),这些资产与存储层无关,不论各点择优选了谁的做�
 勿因惋惜捡回:它们回答的问题(「XML 合并后长什么样」)在运行时导出方案下由导出时点的
 运行时数据直接回答。
 
+**两个例外**(下面两段),两个都是「这句话原先写错了」而不是后来改的主意。
+
 **「谁继承谁」那一半是例外,这句话原先写错了。**运行时数据答不了它 —— `XmlInheritance.Clear()`
 在导出时点之前就跑过了。补法不是捡回 `XmlInheritanceHelper`(自己写 XML 读取器,必然在
 loadFolders/版本目录/优先级去重上跟游戏分家),而是在 DataMod 里调游戏自己的
-`DirectXmlLoader.XmlAssetsInModFolder`,单独收一层 `kind=xmlnode`。成因与代价在 06。C# 源码阅读能力(read_code / trace 的那半边)按决定外包给
-DecompilerServer MCP,skill 里引导(上游 `skills/rimsearcher/references/decompiler-mcp.md`
-已有现成一份)。
+`DirectXmlLoader.XmlAssetsInModFolder`,单独收一层 `kind=xmlnode`。成因与代价在 06。
+
+**`SourceIndexer` 的正则扫描段是第二个例外,这一条也写错了。**它回答的不是「XML 合并后
+长什么样」,而是「方法体文本里有没有这个形状」—— 运行时数据答不了。那一段已带走,落成
+`code-search`,产地 `Sources/RimSearcher.Core/Commands/CodeSearchCommand.cs`
+(三刀自证契约整体带走:每文件预览上限 / 文件数上限 / 未扫全 → `at least N`,三刀分开声明)。
+同一处修订记在 06 需求口径 3 与层 3 命令面表;CodeSearchCommand 的类注释里点着本节的名。
+
+**C# 源码阅读能力的分工也不是「整半边外包」**(2026-07-31 校)。元数据级
+(callers/callees、派生/覆写、IL、版本 diff)归 DecompilerServer MCP,skill 里引导
+(上游 `skills/rimsearcher/references/decompiler-mcp.md` 已有现成一份);而**落盘反编译树的
+逐字阅读收进了 CLI** —— `read` 命令,产地 `Commands/ReadCommand.cs`。成因是三轮 R5:
+CLI 没有这条能力时调用方不会转投 MCP,只会拿 `code-search` 拼正则,实测拼了七轮,
+最后交出的是一段与真源码同形的伪代码。

@@ -9,10 +9,14 @@ Tool names below are the bare names; the full prefix is `mcp__decompiler__`.
 
 If the tools are deferred, load them with this exact line. A keyword search for "decompiler"
 returns 30 of the 44 tools and, in practice, leaves out the four you need first — including
-`status` and `search_members`:
+`status` and `search_members`.
+
+This is the one place the full prefix is written out: `select:` matches tool names exactly, so a
+bare name here returns **"No matching deferred tools found"** — a zero that looks like the server
+is absent rather than like a mistyped query.
 
 ```
-ToolSearch select:status,load_assembly,search_types,search_members,resolve_member_id,list_members,get_members_of_type,get_decompiled_source,batch_get_decompiled_source,find_usages,find_callers,get_overrides,find_derived_types,get_source_slice
+ToolSearch select:mcp__decompiler__status,mcp__decompiler__load_assembly,mcp__decompiler__search_types,mcp__decompiler__search_members,mcp__decompiler__resolve_member_id,mcp__decompiler__list_members,mcp__decompiler__get_members_of_type,mcp__decompiler__get_decompiled_source,mcp__decompiler__batch_get_decompiled_source,mcp__decompiler__find_usages,mcp__decompiler__find_callers,mcp__decompiler__get_overrides,mcp__decompiler__find_derived_types,mcp__decompiler__get_source_slice
 ```
 
 ```
@@ -29,14 +33,21 @@ context** — to cover the game and a mod, ask twice.
 
 | Want | Tool |
 |---|---|
-| Type by name or fragment | `search_types` (`query`, `regex`, filters on namespace/kind/accessibility) |
-| Member by name | `search_members` (same shape) |
+| Type by name or fragment | `search_types` (`query`, `regex`, `namespaceFilter`, `includeNested`) |
+| Member by name | `search_members` (same two, plus a dozen more filters) |
 | Either | `search_symbols` |
 | A fully-qualified name you already believe | `resolve_member_id` |
 | What is in a namespace | `get_types_in_namespace`, `list_namespaces` |
 
-`search_types` and `search_members` take `query`, **not** `pattern`, and support `regex: true`
-plus filters (`kind`, `namespace`, `declaringType`, `accessibility`, `isStatic`, `genericArity`).
+Both take `query`, **not** `pattern`, and both support `regex: true`. Their filter sets are
+**not** the same shape, and the names carry a `Filter` suffix that is easy to drop:
+
+- `search_types` has exactly one filter — `namespaceFilter` — plus `includeNested`. It has no
+  `kind`, no `accessibility`, no `declaringType`. Passing one is not a narrower search.
+- `search_members` has the rest: `kind`, `namespaceFilter`, `declaringTypeFilter`,
+  `accessibility`, `isStatic`, `isAbstract`, `isVirtual`, `genericArity`, `paramTypeFilters`,
+  `returnTypeFilter`, `attributeFilter`.
+
 That covers most of what you would otherwise reach for a text search to do.
 
 ## Reading
@@ -53,7 +64,7 @@ Two things the outline drops, both measured on v1.3.7:
   Hediff>>` shows as `IEnumerable`. When the type arguments are the answer, read the member.
 - **`search_members` with `mode: "signatures"` drops `declaringType`.** Six same-named members
   then look identical. The default discovery mode keeps that column — use it, or filter by
-  `declaringType` yourself.
+  `declaringTypeFilter` yourself.
 
 `batch_get_decompiled_source` can return the first 50 lines of a 203-line method while reporting
 `truncated: false` at the top level. Check `endLine` against `totalLines` per slice.
