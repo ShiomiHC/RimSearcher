@@ -10,6 +10,27 @@ public sealed record DefRow(long Id, string DefType, string DefName, string? Lab
 public sealed record FieldRow(string Path, string Leaf, string? Value);
 
 /// <summary>
+/// <see cref="SnapshotDb.PathsWithValue"/> 怎么算「取到过这个值」。
+/// </summary>
+public enum ValueMatch
+{
+    /// <summary>值里含这段文本(<c>find</c> 的默认)。</summary>
+    Substring,
+    /// <summary>整个值与它相等(<c>find --exact</c>)。</summary>
+    Exact,
+    /// <summary>
+    /// 值**就是**这个标识符,或者是它的限定形态(<c>RimWorld.CompShield</c> 之于
+    /// <c>CompShield</c>)。
+    ///
+    /// 子串在这一档会骗人:<c>ludeon.rimworld</c> 命中 <c>ludeon.rimworld.royalty</c>,
+    /// 于是「它是某个字段的取值」把「它是这份快照覆盖的一个 mod」这个更强的解释挤掉了。
+    /// 只有落空成因分流(<see cref="Commands.NameLookup"/>)用它 —— 那里要问的是
+    /// 「这个名字就是它」,不是「这个名字出现在它里面」。
+    /// </summary>
+    Identifier,
+}
+
+/// <summary>
 /// 一条译文。<paramref name="DefType"/> 为 null 表示这条是从语言文件收割的,注入 key
 /// 只有 <c>DefName.field</c> —— 同名跨 def 类型时它归谁在数据源里就是不确定的。
 /// </summary>
@@ -480,15 +501,29 @@ public sealed class SnapshotDb : IDisposable
     /// 并准备据此下结论,真正管事的 <c>factionIconPath</c> 因为名字里没有 "texture" 被整个滤掉。
     /// </summary>
     public (IReadOnlyList<(string Path, string DefType, int Defs, string Sample)> Rows, int Total)
-        PathsWithValue(string valueSubstring, ScopeFilter scope, int limit, bool exact = false)
+        PathsWithValue(string value, ScopeFilter scope, int limit, ValueMatch match = ValueMatch.Substring)
     {
         // R11:`--exact` 原先在这条路上被接受、被忽略、输出与不加时一字不差 —— 三轮唯一一处
         // 既成的静默吞掉。它在这里是有意义的(整值相等 vs 含子串),所以实现它,而不是拒绝它:
         // 少一条要记的例外,对拼命令行的调用方就少一次踩空。
         var p = new Dictionary<string, object?>();
         var conds = new List<string>();
-        if (exact) { p["@v"] = valueSubstring; conds.Add("fv.value = @v COLLATE NOCASE"); }
-        else { p["@v"] = "%" + Escape(valueSubstring) + "%"; conds.Add("fv.value LIKE @v ESCAPE '\\'"); }
+        switch (match)
+        {
+            case ValueMatch.Exact:
+                p["@v"] = value;
+                conds.Add("fv.value = @v COLLATE NOCASE");
+                break;
+            case ValueMatch.Identifier:
+                p["@v"] = value;
+                p["@vq"] = "%." + Escape(value);
+                conds.Add("(fv.value = @v COLLATE NOCASE OR fv.value LIKE @vq ESCAPE '\\')");
+                break;
+            default:
+                p["@v"] = "%" + Escape(value) + "%";
+                conds.Add("fv.value LIKE @v ESCAPE '\\'");
+                break;
+        }
         if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
         var where = "WHERE " + string.Join(" AND ", conds);
         const string join = "FROM field_values fv JOIN defs d ON d.id = fv.def_id";

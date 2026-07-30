@@ -1,5 +1,5 @@
 $ rimsearcher get NoSuchDef
 exit 1
 --- stdout ---
-No def is named 'NoSuchDef' in this snapshot. Try 'rimsearcher search' instead.
+No def is named 'NoSuchDef' in this snapshot, and it is not a def type, a class, a mod, an abstract XML parent, or a name held by any other registered snapshot. 'rimsearcher search' matches on labels and translations too.
 --- stderr ---

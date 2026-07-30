@@ -72,9 +72,14 @@ public static class CommonOptions
         Name = "scope",
         Aliases = ["mod", "mods", "source", "from"],
         Placeholder = "<expr>",
+        // R10 的一词两义:'vanilla' 在这里 = Ludeon 出的每一个模块(Core 加全部已装 DLC),
+        // 而一份**叫** vanilla 的快照可能只有 Core。两份文档原先都没写,而两者在句子里
+        // 长得一模一样 —— 一个快照名和一个 scope 词恰好同形,是最容易被读成同一件事的那种。
         Help = "Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. " +
                "'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' " +
-               "means everything except vanilla.",
+               "means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module " +
+               "Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot " +
+               "that happens to be named vanilla; the output spells out what it resolved to.",
         Default = ScopeFilter.DefaultScope,
     };
 

@@ -1,5 +1,6 @@
 $ rimsearcher search CompShield
 exit 1
 --- stdout ---
-Nothing matched 'CompShield' in this snapshot. This command covers def names, labels, descriptions and translations, not C# class names. That looks like a class: 'rimsearcher find compClass CompShield' (or thingClass, workerClass) finds the defs that use it, and 'rimsearcher code-search' searches the source text.
+Nothing matched 'CompShield' in this snapshot. This command covers def names, labels, descriptions and translations, not C# class names.
+'CompShield' is not a def name, but it appears as a field value: 'comps[0].compClass' holds 'RimWorld.CompShield'. 'rimsearcher find compClass CompShield' lists the defs that use it, and 'rimsearcher find --value CompShield' covers every path at once.
 --- stderr ---

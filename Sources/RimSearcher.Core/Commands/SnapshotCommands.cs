@@ -195,7 +195,7 @@ public sealed class SnapshotTruncatedCommand : Command
         {
             ctx.Report.Notice(NoticeKind.Count,
                 "No def in this snapshot lost fields at export time" +
-                (scope.IsAll ? "" : $" within --scope {scope.Expression}") +
+                (scope.IsAll ? "" : $" within --scope {scope.Describe()}") +
                 ", so counts over field paths are complete for it.");
             return 0;
         }

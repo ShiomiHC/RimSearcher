@@ -470,6 +470,93 @@ public class GrammarTests
         Assert.DoesNotContain("rimsearcher search", empty);
     }
 
+    // ---- 零结果的成因分流(三轮 R8 四种误诊 + R10 fatal)----
+
+    /// <summary>
+    /// 六种落点各说各的,而且**说的是算出来的那一条**,不是猜的那一条。
+    ///
+    /// 三轮 R8 的四种误诊全部出自同两句猜话:「像类名」→ find/code-search,否则 → types。
+    /// 于是抽象父节点、def 类型、mod 名三种输入都被推去了必然空手的地方,其中两种的答案
+    /// 就在同一个库的另一张表里。字节基线钉住措辞,这一条钉住的是**分流本身**:
+    /// 每种输入必须落到自己那一支,而不是落到别人那一支。
+    /// </summary>
+    [Fact]
+    public void 零结果按算得出来的落点分流()
+    {
+        (string Argv, string Must, string MustNot)[] cases =
+        [
+            // 继承层里的抽象 Name= —— 不许再说「像个类名」
+            ("BaseBullet",        "rimsearcher inherit BaseBullet", "find compClass"),
+            // 存储桶的名字,不是一个 def
+            ("ThingDef",          "is a def type in this snapshot", "find compClass"),
+            // def 自己的运行时 class
+            ("TestVariantDef",    "--class TestVariantDef",         "rimsearcher types"),
+            // 字段取值(comps[N].compClass 那一类)—— 这一支是修这条时自己弄丢又补回来的
+            ("CompShield",        "rimsearcher find compClass CompShield", "no class"),
+            // 快照覆盖的 mod
+            ("ludeon.rimworld",   "is a mod this snapshot covers",  "rimsearcher types"),
+        ];
+
+        foreach (var (query, must, mustNot) in cases)
+        {
+            var (stdout, _, code) = Fixture.Run("search", query);
+            Assert.Equal(1, code);
+            Assert.Contains(must, stdout, StringComparison.Ordinal);
+            Assert.DoesNotContain(mustNot, stdout, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// 被自己的 <c>--scope</c> 挡住,不是「没有」。这一条排在分流的第一位,因为
+    /// 把「过滤掉了」说成「不存在」是这批误诊里最贵的一种:数据就在手边。
+    /// </summary>
+    [Fact]
+    public void 被scope挡住时说破是过滤器干的()
+    {
+        var (stdout, _, _) = Fixture.Run("search", "TestModGun", "--scope", "ludeon.rimworld");
+        Assert.Contains("is in this snapshot after all", stdout, StringComparison.Ordinal);
+        Assert.Contains("test.mod", stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// R10 fatal(三个场景):「它在别的快照里」这句话一直是可算出来的,工具从没说过。
+    /// get 与 inherit 两条路都要说 —— 三轮踩到的是 get 那条,而两条落空的成因同源。
+    /// </summary>
+    [Fact]
+    public void 别的快照里有时点名说出来()
+    {
+        string[][] paths =
+        [
+            ["get", "OnlyInOtherSnapshot"],
+            ["inherit", "OnlyInOtherSnapshot"],
+            ["search", "OnlyInOtherSnapshot"],
+        ];
+
+        foreach (var argv in paths)
+        {
+            var (stdout, _, code) = Fixture.Run(argv);
+            Assert.Equal(1, code);
+            Assert.Contains("--snapshot other", stdout, StringComparison.Ordinal);
+        }
+
+        // 反面:六种落点都算过、别的快照也问过之后,「没有」才是个结论 —— 而且要说破
+        // 自己查过哪些,否则读的人无从判断该不该相信它。
+        var (absent, _, _) = Fixture.Run("get", "NoSuchDefAnywhere");
+        Assert.Contains("not a def type, a class, a mod", absent, StringComparison.Ordinal);
+        Assert.DoesNotContain("--snapshot", absent, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// R10 的一词两义:<c>--scope vanilla</c> 展开成每个 ludeon.rimworld* 模块,而一份
+    /// **叫** vanilla 的快照可能只有 Core。展开当场算得出来,那就写进句子里。
+    /// </summary>
+    [Fact]
+    public void scope在散文里展开成实际圈住的mod()
+    {
+        var (stdout, _, _) = Fixture.Run("search", "zzzznothing", "--scope", "vanilla");
+        Assert.Contains("--scope vanilla (= ludeon.rimworld)", stdout, StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// R3 的第四件事:<c>--source</c> 已经给出时,补救措施里不许再列它 ——
     /// 实测 <c>--source vanilla</c> 换来的是一模一样的警告,而那句话仍在建议加 <c>--source</c>。

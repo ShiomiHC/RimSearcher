@@ -202,14 +202,22 @@ answer.
 
 For the decompiler MCP, see [references/decompiler-mcp.md](references/decompiler-mcp.md).
 
+`--scope vanilla` (also `core`, `base`, `official`) means **every module Ludeon ships** — Core
+plus each DLC the snapshot covers — which is not the same as a snapshot that happens to be
+*named* `vanilla`. The two look identical in a sentence, so the output spells out what a scope
+resolved to whenever it is more than one mod.
+
 ## Recovering
 
-- **Nothing found.** Check you are asking the right source: data questions go to the snapshot,
-  code questions to the decompiler. `rimsearcher types` shows what the snapshot holds;
-  `rimsearcher mods` shows which mods it covers.
+- **Nothing found.** A zero result names its own cause: the tool checks whether the name is a
+  def hidden by your `--scope`, an abstract XML parent, a def type, a class, a mod, or a def
+  that lives in one of your *other* snapshots — and says which. Read that sentence before
+  concluding the thing does not exist; "not here" and "not anywhere" are different answers and
+  the tool distinguishes them.
 - **The def exists in game but not in the snapshot.** Its mod was probably not enabled when the
   snapshot was taken. `rimsearcher mods` lists what the snapshot covers and
-  `rimsearcher snapshot status` compares it with the installed game.
+  `rimsearcher snapshot status` compares it with the installed game. If another registered
+  snapshot has that def, the zero result says so by name.
 - **You are looking for an abstract parent.** It is not a def and `get` will not find it: the
   game resolves inheritance while loading and then discards it, so an abstract
   `<ThingDef Name="…">` never becomes an object. `rimsearcher inherit <name>` answers from the

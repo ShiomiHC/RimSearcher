@@ -62,12 +62,21 @@ public sealed class InheritCommand : Command
             // 三种互斥成因,分清楚再说。名字错了 / 这个 def 不参与继承 / 它根本不在快照里 ——
             // 报成同一句「没有」会让前两种被读成第三种,而第三种是最强的那个结论。
             var isDef = ctx.Db.GetDefsNamed(name).Count > 0;
+            if (isDef)
+            {
+                ctx.Report.Notice(NoticeKind.NextStep,
+                    $"'{name}' is a def in this snapshot but its XML declares no Name=, ParentName= or " +
+                    "Abstract=, so it takes part in no inheritance. 'rimsearcher get " + name + "' shows it.");
+                return 1;
+            }
+
+            // 第三种成因原先到「本快照里没有」为止,而那正是 R10 说的可算而未算:
+            // 别的已注册快照里有没有它、它是不是个 def 类型 / class / mod,都是当场问得出的。
+            var sighting = NameLookup.Locate(ctx, name);
             ctx.Report.Notice(NoticeKind.NextStep,
-                isDef
-                    ? $"'{name}' is a def in this snapshot but its XML declares no Name=, ParentName= or " +
-                      "Abstract=, so it takes part in no inheritance. 'rimsearcher get " + name + "' shows it."
-                    : $"No XML node named '{name}' is in this snapshot." +
-                      (close.Count > 0 ? $" Closest names: {string.Join(", ", close)}." : ""));
+                $"No XML node named '{name}' is in this snapshot." +
+                (close.Count > 0 ? $" Closest names: {string.Join(", ", close)}." : ""));
+            if (sighting is not null) ctx.Report.Notice(NoticeKind.NextStep, sighting.Sentence);
             return 1;
         }
 

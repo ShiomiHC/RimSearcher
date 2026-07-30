@@ -23,6 +23,17 @@ public class OutputSnapshotTests
         { "search-hit",            ["search", "shield"] },
         { "search-miss",           ["search", "zzzznothing"] },
         { "search-miss-classlike", ["search", "CompShield"] },
+        // R8 的四种误诊,一种一份基线。原先这四条走同两句猜话:「像类名」→ find/code-search,
+        // 否则 → types。四种成因要的下一步各不相同,而其中三种的答案就在同一个库里。
+        { "search-miss-xmlnode",   ["search", "BaseBullet"] },
+        { "search-miss-deftype",   ["search", "ThingDef"] },
+        { "search-miss-class",     ["search", "TestVariantDef"] },
+        { "search-miss-mod",       ["search", "ludeon.rimworld"] },
+        // 被自己的 --scope 挡住 —— 「过滤掉了」被说成「没有」是最贵的那种。
+        { "search-miss-scoped",    ["search", "TestModGun", "--scope", "ludeon.rimworld"] },
+        // R10 fatal:换一份快照就拿得到,而这句话一直是可算出来的。
+        { "get-other-snapshot",    ["get", "OnlyInOtherSnapshot"] },
+        { "inherit-other-snapshot", ["inherit", "OnlyInOtherSnapshot"] },
         { "search-typo",           ["search", "Aparel_ShieldBelt"] },
         // 混合命中:两条 FTS + 一条只有子串扫描找得到,再加上一个小 limit ——
         // 「N of M 的 M 不随 limit 变」除了 GrammarTests 那条断言,这里也逐字节钉一份。

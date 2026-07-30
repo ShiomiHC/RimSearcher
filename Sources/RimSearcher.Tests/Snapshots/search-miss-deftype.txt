@@ -1,0 +1,6 @@
+$ rimsearcher search ThingDef
+exit 1
+--- stdout ---
+Nothing matched 'ThingDef' in this snapshot. This command covers def names, labels, descriptions and translations, not C# class names.
+'ThingDef' is a def type in this snapshot, not a def: it holds 8 defs. 'rimsearcher list ThingDef' lists them and 'rimsearcher fields ThingDef' shows what fields they can have.
+--- stderr ---

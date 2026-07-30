@@ -1,0 +1,6 @@
+$ rimsearcher search ludeon.rimworld
+exit 1
+--- stdout ---
+Nothing matched 'ludeon.rimworld' in this snapshot. This command covers def names, labels, descriptions and translations, not C# class names.
+'ludeon.rimworld' is a mod this snapshot covers, not a def. '--scope ludeon.rimworld' restricts any query to it; 'rimsearcher mods' lists them all.
+--- stderr ---

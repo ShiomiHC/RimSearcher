@@ -1,0 +1,6 @@
+$ rimsearcher search TestVariantDef
+exit 1
+--- stdout ---
+Nothing matched 'TestVariantDef' in this snapshot. This command covers def names, labels, descriptions and translations, not C# class names.
+'TestVariantDef' is a class rather than a def name. This snapshot holds 1 def of that class, filed under TestBaseDef; the query is 'rimsearcher list TestBaseDef --class TestVariantDef'.
+--- stderr ---

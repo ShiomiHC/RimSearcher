@@ -18,6 +18,20 @@ public static class Fixture
     private static readonly object Gate = new();
     private static string? _dbPath;
 
+    /// <summary>
+    /// 两份快照住在一起的目录。<c>snapshot_dir</c> 指着它 ——
+    /// 不指,零结果的跨快照分流(R10)就会去开**本机真实**的快照,测试从此依赖这台机器。
+    /// </summary>
+    public static string SnapshotDir
+    {
+        get
+        {
+            var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "snapshots");
+            Directory.CreateDirectory(dir);
+            return dir;
+        }
+    }
+
     /// <summary>造好一次,整个测试进程共用。</summary>
     public static string Db
     {
@@ -30,11 +44,67 @@ public static class Fixture
                 Directory.CreateDirectory(dir);
                 var export = Path.Combine(dir, "fixture" + IntermediateFormat.FileExtension);
                 WriteExport(export);
-                var db = Path.Combine(dir, "fixture.db");
+                var db = Path.Combine(SnapshotDir, "fixture.db");
                 new SnapshotImporter().Import(export, db);
+
+                // 第二份快照:R10 的落点。它有一个 fixture 里没有的 def,
+                // 于是「这个名字不在你问的这份里,但在 other 那份里」这句话有地方可验。
+                var otherExport = Path.Combine(dir, "other" + IntermediateFormat.FileExtension);
+                WriteOtherExport(otherExport);
+                new SnapshotImporter().Import(otherExport, Path.Combine(SnapshotDir, "other.db"));
+
                 return _dbPath = db;
             }
         }
+    }
+
+    /// <summary>
+    /// 另一份快照的语料。刻意只有一个 def,而且是 fixture 里没有的名字 ——
+    /// 它存在的唯一理由是让「换一份快照就能拿到」这句话可判定。
+    /// </summary>
+    private static void WriteOtherExport(string path)
+    {
+        using var fs = File.Create(path);
+        using var gz = new GZipStream(fs, CompressionLevel.Optimal);
+        using var w = new StreamWriter(gz, new UTF8Encoding(false)) { NewLine = "\n" };
+
+        w.WriteLine(new JsonLine()
+            .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindMeta)
+            .Int(IntermediateFormat.KeyFormatVersion, IntermediateFormat.FormatVersion)
+            .Str(IntermediateFormat.KeyExporterVersion, "test")
+            .Str(IntermediateFormat.KeyExportedAtUtc, "2026-01-02T00:00:00.0000000Z")
+            .Str(IntermediateFormat.KeyGameVersion, GameVersion)
+            .Str(IntermediateFormat.KeyLanguage, Language)
+            .Raw(IntermediateFormat.KeyMods,
+                "[" + new JsonLine().Str("package_id", "ludeon.rimworld").Str("name", "Core").Str("version", "1.6") + "," +
+                      new JsonLine().Str("package_id", "other.mod").Str("name", "Other Mod").Str("version", "0.1") + "]")
+            .Raw(IntermediateFormat.KeyLimits, new JsonLine().Int("max_field_depth", 6).ToString())
+            .Str(IntermediateFormat.KeyModSettingsHash, "")
+            .ToString());
+
+        w.WriteLine(new JsonLine()
+            .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindDef)
+            .Str(IntermediateFormat.KeyDefType, "ThingDef")
+            .Str(IntermediateFormat.KeyDefName, "OnlyInOtherSnapshot")
+            .Str(IntermediateFormat.KeyLabel, "only in other")
+            .Str(IntermediateFormat.KeyDescription, "")
+            .Str(IntermediateFormat.KeySourceMod, "other.mod")
+            .Str(IntermediateFormat.KeySourceFile, "Other.xml")
+            .Bool(IntermediateFormat.KeyGenerated, false)
+            .Str(IntermediateFormat.KeyClass, "Verse.ThingDef")
+            .Pairs(IntermediateFormat.KeyFields, [new KeyValuePair<string, string>("thingClass", "Verse.ThingWithComps")])
+            .Int(IntermediateFormat.KeyFieldsTruncated, 0)
+            .ToString());
+
+        w.WriteLine(new JsonLine()
+            .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindEnd)
+            .Int(IntermediateFormat.KeyRecords, 3)
+            .Int(IntermediateFormat.KeyDefs, 1)
+            .Int(IntermediateFormat.KeyInjections, 0)
+            .Int(IntermediateFormat.KeyXmlNodes, 0)
+            .ToString());
+
+        w.Flush();
     }
 
     public static void WriteExport(string path, bool omitEndMarker = false, long? wrongRecordCount = null)
@@ -246,9 +316,12 @@ public static class Fixture
                 var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests");
                 Directory.CreateDirectory(dir);
                 WriteSourceTree(Path.Combine(dir, "sources"));
+                _ = Db;   // 先把两份快照造出来,snapshot_dir 才指得到东西
                 var path = Path.Combine(dir, "sources-config.toml");
                 File.WriteAllText(path,
-                    "decompiled_dir = '" + Path.Combine(dir, "sources") + "'\n",
+                    "decompiled_dir = '" + Path.Combine(dir, "sources") + "'\n" +
+                    // 不写这一行,零结果的跨快照分流会去开 ~/.rimsearcher/snapshots 下的真快照。
+                    "snapshot_dir = '" + SnapshotDir + "'\n",
                     new UTF8Encoding(false));
                 return _sourcesConfig = path;
             }

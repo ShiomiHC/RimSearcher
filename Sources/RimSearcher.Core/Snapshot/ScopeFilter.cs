@@ -36,6 +36,30 @@ public sealed class ScopeFilter
     public bool Includes(string? packageId)
         => _all || (packageId is not null && _included.Contains(packageId));
 
+    /// <summary>
+    /// 这个 scope 实际圈住了谁 —— 写进散文时用这个,不要用裸的 <see cref="Expression"/>。
+    ///
+    /// 三轮 R10 的一词两义:<c>--scope vanilla|base|core|official</c> 展开成**每个**
+    /// <c>ludeon.rimworld*</c> 模块,也就是 Core 加全部已装 DLC;而一份**叫** vanilla 的
+    /// 快照可能只有 Core。两份文档都没写这件事,而两者在句子里长得一模一样。
+    /// 展开是当场算得出来的,那就算出来 —— 让读者去记一份对照表,等于把工具的活推给他。
+    /// </summary>
+    public string Describe()
+    {
+        if (_all) return Expression;
+        if (_included.Count == 0) return $"{Expression} (which matches no mod in this snapshot)";
+
+        var ids = _included.OrderBy(s => s, StringComparer.OrdinalIgnoreCase).ToList();
+        if (ids.Count == 1)
+            return string.Equals(ids[0], Expression, StringComparison.OrdinalIgnoreCase)
+                ? Expression
+                : $"{Expression} (= {ids[0]})";
+
+        return ids.Count <= 4
+            ? $"{Expression} (= {string.Join(", ", ids)})"
+            : $"{Expression} (= {ids.Count} mods: {string.Join(", ", ids.Take(3))}, …)";
+    }
+
     /// <summary>拼一段 SQL 谓词。全选时返回 null,让调用方省掉这个条件。</summary>
     public string? SqlPredicate(string column, IDictionary<string, object?> parameters, string prefix = "@sc")
     {

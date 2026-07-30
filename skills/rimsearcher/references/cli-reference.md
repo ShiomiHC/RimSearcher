@@ -237,7 +237,7 @@ The field path is matched from the end, so 'compClass' finds 'comps[3].compClass
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n|all> | How many defs to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
-| `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
+| `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
 | `--exact` | Require the whole value to match, with either a field path or --value. Without it, the value is matched as a substring. | `--exact-match`, `--whole` |
 | `--value` <text> | Search every field for this value and report which paths hold it, instead of naming a field yourself. | `--any-field`, `--search-values`, `--holding` |
 
@@ -321,7 +321,7 @@ rimsearcher list <defType> [options]
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n|all> | How many defs to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
-| `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
+| `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
 | `--offset` <n> | Skip this many defs before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start` |
 | `--class` <ClassName> | Only defs whose own class is this. Def types that hold several classes list them below the count. | `--def-class`, `--runtime-class` |
 
@@ -434,7 +434,7 @@ Matching is in three stages and stops at the first one that finds anything: full
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n|all> | How many defs to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
-| `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
+| `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind`, `--category` |
 
 Examples:
@@ -514,7 +514,7 @@ Every count this tool reports over field paths — 'find', 'values', 'fields' �
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n|all> | How many defs to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
-| `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
+| `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
 
 Examples:
 
@@ -599,7 +599,7 @@ rimsearcher types [options]
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n|all> | How many def types to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `all`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
-| `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
+| `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
 
 Examples:
 
@@ -625,7 +625,7 @@ Answers 'what am I allowed to put here' and 'which classes are actually in use' 
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n|all> | How many values to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
-| `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
+| `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind`, `--category` |
 
 Examples:

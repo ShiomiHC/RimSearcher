@@ -126,17 +126,26 @@ public sealed class SearchCommand : Command
             // 值域必须说清。search 覆盖的是 defName / label / description / 译文 ——
             // **不含** C# 类名。实测里有人拿 CompShield 来搜,零结果被读成「模糊匹配坏了」,
             // 而错误消息当时把他指向 code-search:那条路找得到类,却永远找不到用它的 def。
-            // 「像个类名」= 带命名空间点号,或者驼峰(首字母大写且内部还有大写)。
+            ctx.Report.Notice(NoticeKind.NextStep,
+                $"Nothing matched '{query}' in this snapshot" +
+                (scope.IsAll ? "" : $" within --scope {scope.Describe()}") +
+                ". This command covers def names, labels, descriptions and translations, not C# class names.");
+
+            // R8:剩下那半句原先是**猜**的 —— 「像个类名」就指向 find/code-search,
+            // 否则指向 types。两条猜法各自造出一种误诊,而名字的真实落点是可以当场算的。
+            // 算得出来就说算出来的那一条,算不出来才退回猜(而猜也只在真像类名时才猜)。
+            var sighting = NameLookup.Locate(ctx, query, scope);
             var looksLikeClass = query.Contains('.') ||
                                  (query.Length > 2 && char.IsUpper(query[0]) && query.Skip(1).Any(char.IsUpper));
             ctx.Report.Notice(NoticeKind.NextStep,
-                $"Nothing matched '{query}' in this snapshot" +
-                (scope.IsAll ? "" : $" within --scope {scope.Expression}") +
-                ". This command covers def names, labels, descriptions and translations, not C# class names." +
-                (looksLikeClass
-                    ? $" That looks like a class: 'rimsearcher find compClass {query}' (or thingClass, workerClass) " +
-                      "finds the defs that use it, and 'rimsearcher code-search' searches the source text."
-                    : " 'rimsearcher types' lists what kinds of def this snapshot holds."));
+                sighting?.Sentence
+                ?? (looksLikeClass
+                    ? $"Nothing in this snapshot is called that under any other guise either — no def type, " +
+                      $"no class, no mod. If '{query}' is a class that only appears inside nested " +
+                      "<li Class=\"...\"> objects, the snapshot does not index those: 'rimsearcher code-search' " +
+                      "finds the class itself."
+                    : "'rimsearcher types' lists what kinds of def this snapshot holds, and " +
+                      "'rimsearcher mods' lists which mods it covers."));
         }
 
         // 「靠什么命中的」必须在表里。实测:`search 心灵迟钝` 命中 TraitDef PsychicSensitivity,
@@ -263,24 +272,24 @@ public sealed class GetCommand : Command
         {
             // 抽象父节点原先只能靠一句**无条件**的边界句糊过去,因为快照里一点痕迹都没有 ——
             // 那句话每次 get 落空都要说一遍,而十有八九问的根本不是抽象节点。继承层落地之后
-            // 这件事变成可判定的:名字在 xml_nodes 里就点名说它是什么、去哪儿看。
-            var node = ctx.Db.NodesNamed(name).FirstOrDefault();
-            if (node is not null)
+            // 这件事变成可判定的,而它只是「名字在哪儿」的一种落点:判据搬进 NameLookup,
+            // 六种落点一起判(R8/R10),这里不再自己只查一张表。
+            var sighting = NameLookup.Locate(ctx, name);
+            if (sighting is not null)
             {
-                ctx.Report.Notice(NoticeKind.NextStep,
-                    $"'{name}' is an XML node in {node.SourceMod} ({node.SourceFile}) but never becomes a def" +
-                    (node.Abstract ? " — it is Abstract=\"True\"" : "") +
-                    ", so 'get' cannot show it. 'rimsearcher inherit " + name + "' shows what it inherits from, " +
-                    "what inherits from it, and which concrete child to read the merged values off.");
+                ctx.Report.Notice(NoticeKind.NextStep, sighting.Sentence);
                 return 1;
             }
 
             var names = ctx.Db.AllDefNames(Snapshot.ScopeFilter.Parse("all", ctx.Db.PackageIds(), ctx.Config));
             var close = FuzzyMatcher.Rank(names, name).Take(Limits.MaxSuggestions).Select(t => t.Text).ToList();
 
+            // 走到这里,六种落点都算过了,别的快照也问过了 —— 这时候「没有」才是个结论,
+            // 而不是「我只查了一张表」。把这层意思说出来,否则读的人无从判断该不该相信它。
             ctx.Report.Notice(NoticeKind.NextStep,
-                $"No def is named '{name}' in this snapshot." +
-                (close.Count > 0 ? $" Closest names: {string.Join(", ", close)}." : " Try 'rimsearcher search' instead."));
+                $"No def is named '{name}' in this snapshot, and it is not a def type, a class, a mod, " +
+                "an abstract XML parent, or a name held by any other registered snapshot." +
+                (close.Count > 0 ? $" Closest names: {string.Join(", ", close)}." : " 'rimsearcher search' matches on labels and translations too."));
             return 1;
         }
 
@@ -564,7 +573,7 @@ public sealed class FindCommand : Command
 
                 ctx.Report.Notice(NoticeKind.NextStep,
                     $"No def in this snapshot has a field path ending in '{path}'" +
-                    (scope.IsAll ? "" : $" within --scope {scope.Expression}") + ". " +
+                    (scope.IsAll ? "" : $" within --scope {scope.Describe()}") + ". " +
                     (identity.TryGetValue(path, out var hint)
                         ? $"'{path}' is part of a def's identity rather than one of its fields: {hint}."
                         : "'rimsearcher fields <DefType> --path <text>' lists the paths that a def type actually has" +
@@ -575,7 +584,7 @@ public sealed class FindCommand : Command
             if (value is null)
             {
                 ctx.Report.Notice(NoticeKind.NextStep,
-                    $"'{path}' exists in this snapshot but no def has it within --scope {scope.Expression}. " +
+                    $"'{path}' exists in this snapshot but no def has it within --scope {scope.Describe()}. " +
                     "Widen the scope, or pass a value to look for.");
                 return 1;
             }
@@ -652,7 +661,8 @@ public sealed class FindCommand : Command
     private static int ByValue(CommandContext ctx, string value, Snapshot.ScopeFilter scope, LimitValue limit,
                                bool exact)
     {
-        var (rows, total) = ctx.Db.PathsWithValue(value, scope, limit.Effective, exact);
+        var (rows, total) = ctx.Db.PathsWithValue(value, scope, limit.Effective,
+            exact ? ValueMatch.Exact : ValueMatch.Substring);
 
         if (rows.Count == 0)
         {
@@ -666,7 +676,7 @@ public sealed class FindCommand : Command
                                 (char.IsUpper(value[0]) || value.Contains('.'));
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"No field in this snapshot holds a value {(exact ? "equal to" : "containing")} '{value}'" +
-                (scope.IsAll ? "" : $" within --scope {scope.Expression}") +
+                (scope.IsAll ? "" : $" within --scope {scope.Describe()}") +
                 (exact ? ". Drop --exact to match it as a substring." : "") +
                 (looksLikeType
                     ? " If that is a class name: the snapshot indexes leaf scalars and a comp's compClass, but " +
@@ -752,7 +762,7 @@ public sealed class ListCommand : Command
                 if (everywhere > 0)
                 {
                     ctx.Report.Notice(NoticeKind.NextStep,
-                        $"No def of type {type} is in scope '{scope.Expression}'" +
+                        $"No def of type {type} is in scope '{scope.Describe()}'" +
                         (wantClass is null ? "" : $" with class '{wantClass}'") +
                         $", but this snapshot has {Tally.Complete(everywhere).Render("def")} of it overall. " +
                         $"Drop --scope, or run 'rimsearcher mods' to see which mods the scope selects.");
