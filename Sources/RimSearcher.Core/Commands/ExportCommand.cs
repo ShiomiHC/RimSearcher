@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text;
 using System.Xml.Linq;
 using RimSearcher.Cli;
@@ -94,6 +94,11 @@ public sealed class ExportCommand : Command
             },
         ],
         Examples = ["rimsearcher export --modlist vanilla", "rimsearcher export --modlist vanilla --dry-run"],
+        JsonKeys =
+        [
+            new() { Key = "exported", What = "an object: the snapshot that was produced, and what it covers." },
+            new() { Key = "would_run", What = "with --dry-run: an object describing the launch that was not performed." },
+        ],
     };
 
     /// <summary>

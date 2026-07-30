@@ -122,6 +122,16 @@ public sealed class CodeSearchCommand : Command
             "rimsearcher code-search \"class \\w+ : ThingComp\"",
             "rimsearcher code-search \"Notify_\\w+\\(\" --context 2",
         ],
+        JsonKeys =
+        [
+            new()
+            {
+                Key = "matches",
+                What = "one row per printed line — file, line, is_match, group, text. Context lines come " +
+                       "through with is_match false, and 'group' is the merged window they belong to, so the " +
+                       "text form's '--' separator needs no counterpart here.",
+            },
+        ],
     };
 
     public override int Run(CommandContext ctx)
@@ -167,6 +177,7 @@ public sealed class CodeSearchCommand : Command
         var maxFiles = PositiveOrAll(ctx, "max-files", Limits.CodeSearchMaxFiles);
 
         var lines = new List<string>();
+        var rows = new List<IReadOnlyDictionary<string, object?>>();
         var filesRead = 0;          // 真读进来过的文件
         var filesCandidate = 0;     // 过了 --files 的文件,不管读没读 —— 「N of M」的那个 M
         var filesWithMatches = 0;
@@ -231,7 +242,7 @@ public sealed class CodeSearchCommand : Command
 
                 if (hitsHere > 0) filesWithMatches++;
                 if (hitsHere > toPrint.Count && toPrint.Count >= maxPerFile) perFileCapped++;
-                if (toPrint.Count > 0) Emit(lines, rel, text, toPrint, contextLines);
+                if (toPrint.Count > 0) Emit(lines, rows, rel, text, toPrint, contextLines);
             }
 
             if (readHere == 0) unreached.Add((tree, treeFiles.Count));
@@ -322,7 +333,7 @@ public sealed class CodeSearchCommand : Command
 
         if (lines.Count == 0) return 1;
 
-        ctx.Report.Text("matches", lines);
+        ctx.Report.Text("matches", lines, rows);
         return 0;
     }
 
@@ -382,9 +393,11 @@ public sealed class CodeSearchCommand : Command
     /// 而且重复行让人以为那里真有好几处命中。
     /// 分隔符只在两组之间出现,不留尾巴 —— 尾部空隔符会被读成「后面还有,被截了」。
     /// </summary>
-    private static void Emit(List<string> lines, string rel, string[] text, List<int> hits, int context)
+    private static void Emit(List<string> lines, List<IReadOnlyDictionary<string, object?>> rows,
+                             string rel, string[] text, List<int> hits, int context)
     {
         var isHit = hits.ToHashSet();
+        var group = rows.Count == 0 ? 0 : (int)rows[^1]["group"]! + 1;
         var i = 0;
         while (i < hits.Count)
         {
@@ -398,7 +411,20 @@ public sealed class CodeSearchCommand : Command
 
             if (context > 0 && lines.Count > 0) lines.Add("--");
             for (var c = start; c <= end; c++)
+            {
                 lines.Add($"{rel}:{c + 1}{(isHit.Contains(c) ? ":" : "-")}{text[c].TrimEnd()}");
+                // 文本侧那条 "--" 分隔符在结构化侧变成 group 序号:JSON 里插一行假数据
+                // 表示「这里断开了」,消费方要么被它绊倒,要么得知道该忽略它。
+                rows.Add(new Dictionary<string, object?>
+                {
+                    ["file"] = rel,
+                    ["line"] = c + 1,
+                    ["is_match"] = isHit.Contains(c),
+                    ["group"] = group,
+                    ["text"] = text[c].TrimEnd(),
+                });
+            }
+            group++;
             i++;
         }
     }

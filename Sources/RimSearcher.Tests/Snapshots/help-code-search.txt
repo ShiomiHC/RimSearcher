@@ -38,6 +38,9 @@ Global options:
       --json             Emit machine-readable JSON. Anything the text output would have said in prose moves into a 'notes' array, so nothing is lost.
       --config <path>    Use this config file instead of the default one.
 
+--json keys (besides 'notes'):
+  matches  one row per printed line — file, line, is_match, group, text. Context lines come through with is_match false, and 'group' is the merged window they belong to, so the text form's '--' separator needs no counterpart here.
+
 Examples:
   rimsearcher code-search "class \w+ : ThingComp"
   rimsearcher code-search "Notify_\w+\(" --context 2

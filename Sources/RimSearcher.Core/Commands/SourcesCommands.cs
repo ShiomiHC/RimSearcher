@@ -1,4 +1,4 @@
-using RimSearcher.Cli;
+﻿using RimSearcher.Cli;
 using RimSearcher.Config;
 using RimSearcher.Output;
 using RimSearcher.Sources;
@@ -94,6 +94,7 @@ public sealed class SourcesListCommand : Command
         Options = [],
         UsesGlobals = true,
         Examples = ["rimsearcher sources list"],
+        JsonKeys = [new() { Key = "trees", What = "one row per decompiled source tree: tree, files, assemblies, status." }],
     };
 
     public override int Run(CommandContext ctx)
@@ -158,13 +159,25 @@ public sealed class SourcesListCommand : Command
 
         ctx.Report.Notice(NoticeKind.Boundary,
             $"{Tally.Complete(rows.Count).Render("source tree")} under '{root}', " +
-            $"checked against {from} ({ids.Count} mods, game {SourcePlanner.NormalizeGameVersion(gameVersion)}).");
+            $"checked against {from} ({Tally.Complete(ids.Count).Render("mod")}, " +
+            $"game {SourcePlanner.NormalizeGameVersion(gameVersion)}).");
 
+        // 「N tree(s)」是登记处存在的理由本身:括号 s 把单复数问题推给读者,而这一句正是
+        // 用来判断「要不要重新反编译」的。两截各自只在非零时出现 —— 「0 were never built」
+        // 既占字节又要读者过滤。
         if (stale > 0 || missing > 0)
+        {
+            // 从句里不带随数变形的动词:名词有登记处,动词没有(R6 反复上的那一课)。
+            var parts = new List<string>();
+            if (stale > 0)
+                parts.Add($"built from an assembly that has changed since — {Tally.Complete(stale).Render("source tree")}");
+            if (missing > 0)
+                parts.Add($"never built at all — {Tally.Complete(missing).Render("source tree")}");
             ctx.Report.Notice(NoticeKind.Staleness,
-                $"{stale} tree(s) came from assemblies that have since changed and {missing} were never built; " +
-                "'rimsearcher sources sync' brings them up to date. Anything they say about code is from the " +
-                "older build until then.");
+                "Not current: " + string.Join("; ", parts) +
+                ". 'rimsearcher sources sync' rebuilds them; until then anything those trees say about code " +
+                "is from the older build.");
+        }
 
         if (notInstalled.Count > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
@@ -237,6 +250,16 @@ public sealed class SourcesSyncCommand : Command
             "rimsearcher sources sync",
             "rimsearcher sources sync --dry-run",
             "rimsearcher sources sync --only erdelf.humanoidalienraces --force",
+        ],
+        JsonKeys =
+        [
+            new() { Key = "rebuilt", What = "one row per tree that was rewritten: tree, assemblies, files." },
+            new()
+            {
+                Key = "plan",
+                What = "with --dry-run: one row per tree that would be rebuilt — tree, assemblies, reason, root. " +
+                       "Nothing is written, and 'rebuilt' is absent.",
+            },
         ],
     };
 
@@ -336,7 +359,7 @@ public sealed class SourcesSyncCommand : Command
                 });
             ctx.Report.Notice(NoticeKind.Boundary,
                 $"{Tally.Complete(work.Count).Render("source tree")} would be decompiled from {from}; " +
-                $"{skipped.Count} already current. Nothing was written.");
+                $"{Tally.Complete(skipped.Count).Render("source tree")} already current. Nothing was written.");
             ctx.Report.Table("plan", ["tree", "assemblies", "reason", "root"], rows);
             return 0;
         }
@@ -407,7 +430,8 @@ public sealed class SourcesSyncCommand : Command
 
         ctx.Report.Notice(NoticeKind.Boundary,
             $"{Tally.Complete(rows.Count).Render("source tree")} rebuilt from {from}, " +
-            $"{totalFiles} C# files in total" + (skipped.Count > 0 ? $"; {skipped.Count} already current" : "") + ".");
+            $"{Tally.Complete(totalFiles).Render("C# file")} in total" +
+            (skipped.Count > 0 ? $"; {Tally.Complete(skipped.Count).Render("source tree")} already current" : "") + ".");
         ctx.Report.Table("rebuilt", ["tree", "assemblies", "files"], rows);
         SourcesShared.SayHowToDiff(ctx, root);
         return 0;

@@ -56,6 +56,10 @@ public sealed class SearchCommand : Command
             "rimsearcher search \"psychic shock\" --type ThingDef",
             "rimsearcher search CompShield --scope all,-vanilla",
         ],
+        JsonKeys =
+        [
+            new() { Key = "defs", What = "one row per matching def: def_name, def_type, label, matched_on, mod." },
+        ],
     };
 
     public override int Run(CommandContext ctx)
@@ -258,6 +262,16 @@ public sealed class GetCommand : Command
             "rimsearcher get Apparel_ShieldBelt --path statBases",
             "rimsearcher get Bullet_Revolver --limit all",
         ],
+        JsonKeys =
+        [
+            new()
+            {
+                Key = "defs",
+                What = "one object per def carrying the name — each with 'def' (identity), 'fields' " +
+                       "(path/value rows) and, when there are any, 'translations'. It stays an array even " +
+                       "for a single def, because a name can belong to several def types at once.",
+            },
+        ],
     };
 
     public override int Run(CommandContext ctx)
@@ -451,7 +465,8 @@ public sealed class GetCommand : Command
                 if (byNameOnly && allMatches.Count > 1)
                     ctx.Report.Notice(NoticeKind.Boundary,
                         $"These rows were matched by defName alone: they come from language files, whose keys are " +
-                        $"'{def.DefName}.<field>' with no def type, and {allMatches.Count} defs share this name. " +
+                        $"'{def.DefName}.<field>' with no def type, and " +
+                        $"{Tally.Complete(allMatches.Count).Render("def")} share this name. " +
                         "The game injects them by name too, so which of the same-named defs they belong to is not " +
                         "recorded anywhere.");
             }
@@ -536,6 +551,22 @@ public sealed class FindCommand : Command
             "rimsearcher find compClass RimWorld.CompShield",
             "rimsearcher find defaultProjectile Bullet_Revolver",
             "rimsearcher find --value World/WorldObjects/Expanding",
+        ],
+        // 这条命令的两种问法产出两种行,所以键名也是两个 —— 同一个键装两种形状,
+        // 消费方读到的字段会随它没传过的参数变,比多一个键危险得多。
+        JsonKeys =
+        [
+            new()
+            {
+                Key = "matches",
+                What = "with a field path: one row per def that has it — def_name, def_type, value, mod.",
+            },
+            new()
+            {
+                Key = "paths",
+                What = "with --value: one row per field path that holds the value — path, def_type, defs, " +
+                       "example_value. This is the key --value produces; 'matches' is absent then.",
+            },
         ],
     };
 
@@ -763,6 +794,15 @@ public sealed class ListCommand : Command
             "rimsearcher list CreepJoinerBaseDef --class CreepJoinerAggressiveDef",
             "rimsearcher list ThingDef --scope all,-vanilla --limit all",
         ],
+        JsonKeys =
+        [
+            new()
+            {
+                Key = "defs",
+                What = "one row per def: def_name, label, mod, plus 'class' when the bucket holds more " +
+                       "than one def class.",
+            },
+        ],
     };
 
     public override int Run(CommandContext ctx)
@@ -851,7 +891,10 @@ public sealed class ListCommand : Command
         var heterogeneous = wantClass is null && classes.Count > 1;
         if (heterogeneous)
             ctx.Report.Notice(NoticeKind.Boundary,
-                $"Type {type} holds {Tally.Complete(classes.Count).Render("def type")} of def class: " +
+                // 数的是 class,名词原先写的是「def type」—— R7 的形状:计数的名词
+                // 与实际所数的东西不是一回事,而这一句正长在「def 类型不等于运行时 class」
+                // 那条区分上,说反了等于把要讲清的两件事又搅回一起。
+                $"Type {type} holds {Tally.Complete(classes.Count).Render("def class")}: " +
                 string.Join(", ", classes.Take(Limits.MaxSuggestions).Select(c => $"{Tail(c.Class)} ({c.Count})")) +
                 (classes.Count > Limits.MaxSuggestions ? $", and {classes.Count - Limits.MaxSuggestions} more" : "") +
                 ". Pass --class to pick one.");
@@ -911,6 +954,10 @@ public sealed class FieldsCommand : Command
             "rimsearcher fields ThingDef",
             "rimsearcher fields ThingDef --path comps",
             "rimsearcher fields HediffDef --limit all",
+        ],
+        JsonKeys =
+        [
+            new() { Key = "fields", What = "one row per field path: path, defs (how many defs use it)." },
         ],
     };
 
@@ -975,6 +1022,17 @@ public sealed class ValuesCommand : Command
             "rimsearcher values compClass",
             "rimsearcher values expandingIconTexture --type WorldObjectDef",
             "rimsearcher values thingClass --scope vanilla",
+        ],
+        JsonKeys =
+        [
+            new() { Key = "values", What = "one row per distinct value: value, defs." },
+            new()
+            {
+                Key = "field",
+                What = "an object, not an array: which full paths and def types the values came from " +
+                       "(matched_paths, def_types, defs_with_field). A bare name matches by suffix, so this " +
+                       "says what was actually pooled.",
+            },
         ],
     };
 
@@ -1045,6 +1103,7 @@ public sealed class TypesCommand : Command
         Summary = "List every def type in the snapshot with how many defs it has.",
         Options = [CommonOptions.Limit("def types") with { Default = "all" }, CommonOptions.Scope],
         Examples = ["rimsearcher types", "rimsearcher types --scope all,-vanilla"],
+        JsonKeys = [new() { Key = "types", What = "one row per def type: def_type, defs." }],
     };
 
     public override int Run(CommandContext ctx)
@@ -1077,6 +1136,7 @@ public sealed class ModsCommand : Command
         // 实际只是「这里不需要」。严格模式该拦的是拼错的名字,不是合理的期待。
         Options = [CommonOptions.Limit("mods") with { Default = "all" }],
         Examples = ["rimsearcher mods"],
+        JsonKeys = [new() { Key = "mods", What = "one row per mod, in load order: order, package_id, name, version." }],
     };
 
     public override int Run(CommandContext ctx)

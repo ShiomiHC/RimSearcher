@@ -1,4 +1,4 @@
-using RimSearcher.Cli;
+﻿using RimSearcher.Cli;
 using RimSearcher.Output;
 
 namespace RimSearcher.Commands;
@@ -23,6 +23,7 @@ public sealed class DataModAttachCommand : Command
             "the next 'export' detaches it again.",
         UsesGlobals = false,
         Examples = ["rimsearcher datamod attach"],
+        JsonKeys = [new() { Key = "attached", What = "an object: where the junction was made and what it points at." }],
     };
 
     public override int Run(CommandContext ctx)
@@ -70,6 +71,7 @@ public sealed class DataModDetachCommand : Command
             "A real folder installed at the same place is left alone: only a link this tool could have made is removed.",
         UsesGlobals = false,
         Examples = ["rimsearcher datamod detach"],
+        JsonKeys = [new() { Key = "detached", What = "an object: which junction was removed." }],
     };
 
     public override int Run(CommandContext ctx)
@@ -107,6 +109,7 @@ public sealed class DataModStatusCommand : Command
         Summary = "Report whether the game can currently see the exporter mod.",
         UsesGlobals = false,
         Examples = ["rimsearcher datamod status"],
+        JsonKeys = [new() { Key = "datamod", What = "an object: whether the exporter is attached to the game's Mods directory right now." }],
     };
 
     public override int Run(CommandContext ctx)

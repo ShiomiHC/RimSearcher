@@ -66,6 +66,16 @@ public static class HelpRenderer
             AppendOptions(sb, globals);
         }
 
+        // R14:键名此前只活在代码里,于是消费方先猜键再发命令。猜错拿到的是 null,
+        // 而那与「查到了但确实没有」在下游同形 —— 这套输出里最不该留的那种形状。
+        if (spec.JsonKeys.Length > 0)
+        {
+            sb.Append(OutputText.Newline).Append("--json keys (besides 'notes'):").Append(OutputText.Newline);
+            var w = spec.JsonKeys.Max(k => k.Key.Length);
+            foreach (var k in spec.JsonKeys)
+                sb.Append("  ").Append(k.Key.PadRight(w)).Append("  ").Append(k.What).Append(OutputText.Newline);
+        }
+
         if (spec.Examples.Length > 0)
         {
             sb.Append(OutputText.Newline).Append("Examples:").Append(OutputText.Newline);
@@ -143,6 +153,21 @@ public static class MarkdownRenderer
           .Append("`;` rather than `&&`, or a `1` on a query that answered your question will silently drop ")
           .Append("whatever you queued after it.").Append(OutputText.Newline).Append(OutputText.Newline);
 
+        // R14:「nothing is lost」这句承诺此前只兑现了一半 —— notes 确实在,而**数据键叫什么**
+        // 一个字都没写。于是消费方只能先猜一个键名再发命令,猜错读到 null,而 null 与
+        // 「查到了但确实没有」在下游长得一模一样。每条命令自己那一节列出它的键。
+        sb.Append("## `--json`").Append(OutputText.Newline).Append(OutputText.Newline);
+        sb.Append("The root is an object. Every prose sentence the text output would have printed moves into ")
+          .Append("`notes`, an array of `{kind, text}` — `kind` is one of ")
+          .Append(string.Join(", ", Enum.GetNames<NoticeKind>().Select(n => "`" + JsonRenderer.SnakeCase(n) + "`")))
+          .Append(", so a truncation can be told from a filter without reading English.")
+          .Append(OutputText.Newline).Append(OutputText.Newline);
+        sb.Append("The data keys sit beside it, and each command's section below names its own. ")
+          .Append("They are not interchangeable: reading a key a command does not produce gives you nothing, ")
+          .Append("which looks exactly like an empty result. Rows are objects keyed by the same column names ")
+          .Append("the text table prints.")
+          .Append(OutputText.Newline).Append(OutputText.Newline);
+
         sb.Append("## Global options").Append(OutputText.Newline).Append(OutputText.Newline);
         AppendOptionTable(sb, globals);
 
@@ -171,6 +196,17 @@ public static class MarkdownRenderer
             }
 
             if (c.Options.Length > 0) AppendOptionTable(sb, c.Options);
+
+            if (c.JsonKeys.Length > 0)
+            {
+                sb.Append("`--json` keys, besides the global `notes`:").Append(OutputText.Newline).Append(OutputText.Newline);
+                sb.Append("| Key | Holds |").Append(OutputText.Newline);
+                sb.Append("|---|---|").Append(OutputText.Newline);
+                foreach (var k in c.JsonKeys)
+                    sb.Append("| `").Append(k.Key).Append("` | ").Append(Escape(k.What)).Append(" |")
+                      .Append(OutputText.Newline);
+                sb.Append(OutputText.Newline);
+            }
 
             if (c.Examples.Length > 0)
             {

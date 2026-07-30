@@ -50,8 +50,17 @@ public sealed record TableBlock(string Name, IReadOnlyList<string> Columns,
 /// <summary>键值明细块(get 这类单对象输出)。</summary>
 public sealed record DetailBlock(string Name, IReadOnlyList<KeyValuePair<string, object?>> Pairs) : Block;
 
-/// <summary>自由文本块(code-search 的代码片段)。</summary>
-public sealed record TextBlock(string Name, IReadOnlyList<string> Lines) : Block;
+/// <summary>
+/// 自由文本块(代码片段)。文本侧必须逐字保真 —— 表格会按
+/// <see cref="TextRenderer.MaxCellWidth"/> 截单元格,而截过的源码不是源码。
+///
+/// <paramref name="Rows"/> 是同一批内容的结构化形态,只给 <c>--json</c> 用。R14 的第二半:
+/// 一份 <c>["vanilla/Verse/Widgets.cs:12:\tpublic static void Draw()"]</c> 逼着机器侧
+/// 自己拿冒号切一遍,而路径里本来就可能有冒号 —— 让消费方重新解析我们刚拼好的东西,
+/// 是把一个我们已经知道答案的问题外包出去。两侧同源,不是两份数据。
+/// </summary>
+public sealed record TextBlock(string Name, IReadOnlyList<string> Lines,
+                               IReadOnlyList<IReadOnlyDictionary<string, object?>>? Rows = null) : Block;
 
 /// <summary>
 /// 一次命令输出的完整模型。命令只管往里塞内容,行尾/尾空行/声明区排布由渲染器统一收口
@@ -158,8 +167,9 @@ public sealed class Report
     public Report Detail(string name, IReadOnlyList<KeyValuePair<string, object?>> pairs)
         => Add(new DetailBlock(name, pairs));
 
-    public Report Text(string name, IReadOnlyList<string> lines)
-        => Add(new TextBlock(name, lines));
+    public Report Text(string name, IReadOnlyList<string> lines,
+                       IReadOnlyList<IReadOnlyDictionary<string, object?>>? rows = null)
+        => Add(new TextBlock(name, lines, rows));
 }
 
 public static class OutputText

@@ -186,6 +186,133 @@ public class GateTests
     }
 
     /// <summary>
+    /// R7 的产地侧闸。上面那条判的是**基线里出现过的**句子,于是一条只在少见分支上
+    /// 才打印的手拼计数(`{ids.Count} mods`)永远等不到红灯 —— 而 R7 那次正是这种。
+    ///
+    /// 这里改判源码:插值里出现一个数,紧跟着一个登记过的名词,而那个插值又没走登记处,
+    /// 就是在自己拼单复数。手拼的地方迟早遇到 1,而「1 mods」不只是难看 —— 它说明
+    /// **这个数与这个名词的对应关系是当场编的**,而 R7 的形状恰恰是编错了对应关系。
+    /// </summary>
+    [Fact]
+    public void 源码里没有绕开登记处的手拼计数()
+    {
+        var words = NounRegistry.Known
+            .SelectMany(n => new[] { n, NounRegistry.Form(n, 2) })
+            .OrderByDescending(w => w.Length)
+            .Select(Regex.Escape);
+        // `{…}` 之后允许夹一个修饰词(「and 3 more def types」),再往后就不是这个数在数的东西了。
+        var suspect = new Regex(@"\{([^{}]*)\}\s+(?:more\s+)?(" + string.Join("|", words) + @")\b");
+
+        var dir = Path.Combine(DeclarationTests.RepoRoot(), "Sources", "RimSearcher.Core");
+        var flagged = new List<string>();
+        foreach (var file in Directory.EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories))
+        {
+            var lines = File.ReadAllLines(file);
+            for (var i = 0; i < lines.Length; i++)
+            {
+                var line = lines[i];
+                if (line.TrimStart().StartsWith("//", StringComparison.Ordinal)) continue;
+                foreach (Match m in suspect.Matches(line))
+                {
+                    // 走了登记处的那一种正是我们要的写法;名词字面量本身(Render("mod"))也不算。
+                    if (m.Groups[1].Value.Contains("Render(", StringComparison.Ordinal)) continue;
+                    if (!LooksNumeric(m.Groups[1].Value)) continue;
+                    flagged.Add($"{Path.GetFileName(file)}:{i + 1}: {m.Value.Trim()}");
+                }
+            }
+        }
+
+        Assert.True(flagged.Count == 0,
+            "These count these nouns without going through NounRegistry:\n  " + string.Join("\n  ", flagged));
+    }
+
+    /// <summary>
+    /// 这段插值里装的是不是一个数。判不准的代价不对称:漏判只是少守一处,误判会把
+    /// <c>$"{Extension} file"</c> 这种「常量 + 恰好同形的名词」判红,逼人把正确的句子改坏。
+    /// 所以只认三种明确形态:<c>.Count</c>/<c>.Length</c> 结尾、含算术、以及小写起头的局部变量
+    /// (计数变量在这份代码里一律是局部量,而常量与属性名一律大写起头)。
+    /// </summary>
+    private static bool LooksNumeric(string expr)
+    {
+        var e = expr.Trim();
+        if (e.Length == 0) return false;
+        if (e.EndsWith(".Count", StringComparison.Ordinal) || e.EndsWith(".Length", StringComparison.Ordinal)) return true;
+        if (e.Contains(" - ", StringComparison.Ordinal) || e.Contains(" + ", StringComparison.Ordinal)) return true;
+        var last = e[(e.LastIndexOf('.') + 1)..];
+        return last.Length > 0 && char.IsLower(last[0]);
+    }
+
+    /// <summary>
+    /// R14 的事实侧闸。<c>--json</c> 的顶层键名此前只活在代码里,消费方只能先猜键再发命令,
+    /// 猜错拿到 null —— 而那与「查到了但确实没有」在下游同形。键名进了声明层
+    /// (<see cref="JsonKeySpec"/>)之后,这里拿**真跑出来的输出**验那份声明:
+    /// 出现过而没声明的键会红,于是文档不可能落后于实现。
+    /// </summary>
+    [Fact]
+    public void 每个json顶层键都在声明里()
+    {
+        var registry = new CommandRegistry();
+        var undeclared = new SortedSet<string>(StringComparer.Ordinal);
+
+        foreach (var (name, argv) in OutputSnapshotTests.Cases.Select(c => ((string)c[0], (string[])c[1])))
+        {
+            if (argv.Contains("--help") || argv.Contains("--json")) continue;
+            var (command, _) = registry.Resolve(argv);
+            if (command is null || !command.Spec.UsesGlobals) continue;
+
+            var (stdout, _, _) = Fixture.Run([.. argv, "--json"]);
+            if (stdout.Length == 0) continue;
+
+            using var doc = System.Text.Json.JsonDocument.Parse(stdout);
+            var declared = command.Spec.JsonKeys.Select(k => k.Key).ToHashSet(StringComparer.Ordinal);
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                if (prop.Name == "notes") continue;
+                if (!declared.Contains(prop.Name))
+                    undeclared.Add($"{command.Spec.Name} emits '{prop.Name}' (seen in case '{name}')");
+            }
+        }
+
+        Assert.True(undeclared.Count == 0,
+            "These --json keys are not declared in CommandSpec.JsonKeys:\n  " + string.Join("\n  ", undeclared));
+    }
+
+    /// <summary>
+    /// 反方向:声明了却从没产出过的键是一句空承诺,而空承诺正是 R14 归因到 skill_doc 的那条
+    /// (「nothing is lost」写着,键名没有)。只对**基线覆盖到的命令**判 —— 没有实测输出的
+    /// 命令这里判不了,那是覆盖率的问题,不该在这条闸上假装守住了。
+    /// </summary>
+    [Fact]
+    public void 声明过的json键都真的产出过()
+    {
+        var registry = new CommandRegistry();
+        var seen = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+
+        foreach (var argv in OutputSnapshotTests.Cases.Select(c => (string[])c[1]))
+        {
+            if (argv.Contains("--help") || argv.Contains("--json")) continue;
+            var (command, _) = registry.Resolve(argv);
+            if (command is null || !command.Spec.UsesGlobals) continue;
+
+            var (stdout, _, _) = Fixture.Run([.. argv, "--json"]);
+            if (stdout.Length == 0) continue;
+
+            using var doc = System.Text.Json.JsonDocument.Parse(stdout);
+            if (!seen.TryGetValue(command.Spec.Name, out var keys)) seen[command.Spec.Name] = keys = [];
+            foreach (var prop in doc.RootElement.EnumerateObject())
+                if (prop.Name != "notes") keys.Add(prop.Name);
+        }
+
+        var never = new List<string>();
+        foreach (var (cmd, keys) in seen)
+            foreach (var declared in registry.Specs.Single(s => s.Name == cmd).JsonKeys)
+                if (!keys.Contains(declared.Key))
+                    never.Add($"{cmd} declares '{declared.Key}', which no baseline case produces");
+
+        Assert.True(never.Count == 0, string.Join("\n  ", never));
+    }
+
+    /// <summary>
     /// 基线里不许出现教人绕路的话。CLI 该做的事不该让调用方替它做 ——
     /// 02-7 的 '*' 就是这么被上游推给调用方的。
     /// </summary>

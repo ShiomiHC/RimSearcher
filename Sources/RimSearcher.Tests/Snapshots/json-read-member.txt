@@ -1,0 +1,92 @@
+$ rimsearcher read vanilla/Verse/Outline.cs --member Shared --json
+exit 0
+--- stdout ---
+{
+  "notes": [
+    {
+      "kind": "count",
+      "text": "2 declarations in vanilla/Verse/Outline.cs, 10 lines."
+    },
+    {
+      "kind": "filter",
+      "text": "'Shared' is declared more than once here: Outer.Shared, Inner.Shared. '--type <name>' narrows it to one."
+    },
+    {
+      "kind": "boundary",
+      "text": "Declarations here are found by matching braces, not by parsing C#, so a name this command does not see may still be in vanilla/Verse/Outline.cs. 'rimsearcher code-search' searches the text."
+    }
+  ],
+  "source": [
+    {
+      "file": "vanilla/Verse/Outline.cs",
+      "line": 15,
+      "kind": "method",
+      "declaration": "Outer.Shared",
+      "text": "\t\tpublic void Shared(int n)"
+    },
+    {
+      "file": "vanilla/Verse/Outline.cs",
+      "line": 16,
+      "kind": "method",
+      "declaration": "Outer.Shared",
+      "text": "\t\t{"
+    },
+    {
+      "file": "vanilla/Verse/Outline.cs",
+      "line": 17,
+      "kind": "method",
+      "declaration": "Outer.Shared",
+      "text": "\t\t\tif (n > 0)"
+    },
+    {
+      "file": "vanilla/Verse/Outline.cs",
+      "line": 18,
+      "kind": "method",
+      "declaration": "Outer.Shared",
+      "text": "\t\t\t{"
+    },
+    {
+      "file": "vanilla/Verse/Outline.cs",
+      "line": 19,
+      "kind": "method",
+      "declaration": "Outer.Shared",
+      "text": "\t\t\t\tConsole.WriteLine(Marker);"
+    },
+    {
+      "file": "vanilla/Verse/Outline.cs",
+      "line": 20,
+      "kind": "method",
+      "declaration": "Outer.Shared",
+      "text": "\t\t\t}"
+    },
+    {
+      "file": "vanilla/Verse/Outline.cs",
+      "line": 21,
+      "kind": "method",
+      "declaration": "Outer.Shared",
+      "text": "\t\t}"
+    },
+    {
+      "file": "vanilla/Verse/Outline.cs",
+      "line": 25,
+      "kind": "method",
+      "declaration": "Inner.Shared",
+      "text": "\t\t\tpublic void Shared(int n)"
+    },
+    {
+      "file": "vanilla/Verse/Outline.cs",
+      "line": 26,
+      "kind": "method",
+      "declaration": "Inner.Shared",
+      "text": "\t\t\t{"
+    },
+    {
+      "file": "vanilla/Verse/Outline.cs",
+      "line": 27,
+      "kind": "method",
+      "declaration": "Inner.Shared",
+      "text": "\t\t\t}"
+    }
+  ]
+}
+--- stderr ---

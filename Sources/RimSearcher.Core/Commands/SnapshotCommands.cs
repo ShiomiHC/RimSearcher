@@ -1,4 +1,4 @@
-using RimSearcher.Cli;
+﻿using RimSearcher.Cli;
 using RimSearcher.Contract;
 using RimSearcher.Output;
 using RimSearcher.Snapshot;
@@ -15,6 +15,7 @@ public sealed class SnapshotListCommand : Command
         Options = [],
         UsesGlobals = true,
         Examples = ["rimsearcher snapshot list"],
+        JsonKeys = [new() { Key = "snapshots", What = "one row per registered snapshot: name, defs, mods, game, language, exported, pinned, path." }],
     };
 
     public override int Run(CommandContext ctx)
@@ -77,6 +78,7 @@ public sealed class SnapshotStatusCommand : Command
             "every result.",
         Options = [],
         Examples = ["rimsearcher snapshot status"],
+        JsonKeys = [new() { Key = "snapshot", What = "an object, not an array: the chosen snapshot compared with the installed game." }],
     };
 
     public override int Run(CommandContext ctx)
@@ -153,6 +155,7 @@ public sealed class SnapshotUseCommand : Command
         Positionals = [new PositionalSpec { Name = "name", Help = "A name from 'snapshot list'." }],
         Options = [],
         Examples = ["rimsearcher snapshot use vanilla"],
+        JsonKeys = [new() { Key = "pinned", What = "an object: which snapshot is now pinned, and where the choice was written." }],
     };
 
     public override int Run(CommandContext ctx)
@@ -183,6 +186,7 @@ public sealed class SnapshotTruncatedCommand : Command
             "'that is all of them' gets cross-checked rather than trusted.",
         Options = [CommonOptions.Limit("defs"), CommonOptions.Scope],
         Examples = ["rimsearcher snapshot truncated", "rimsearcher snapshot truncated --limit all"],
+        JsonKeys = [new() { Key = "truncated", What = "one row per def that lost fields at export time: def_name, def_type, dropped, mod." }],
     };
 
     public override int Run(CommandContext ctx)
@@ -257,6 +261,7 @@ public sealed class SnapshotImportCommand : Command
             "rimsearcher snapshot import",
             "rimsearcher snapshot import exports/vanilla.rsx.jsonl.gz --name vanilla --harvest-translations",
         ],
+        JsonKeys = [new() { Key = "imported", What = "an object: the snapshot that was written, and what went into it." }],
     };
 
     public override int Run(CommandContext ctx)

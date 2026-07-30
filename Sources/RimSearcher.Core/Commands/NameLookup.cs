@@ -110,7 +110,9 @@ internal static class NameLookup
             return new Sighting(Where.Class,
                 $"'{name}' is a class rather than a def name. This snapshot holds " +
                 $"{Output.Tally.Complete(total).Render("def")} of that class, filed under {where}" +
-                (holders.Count > 3 ? $" and {holders.Count - 3} more def types" : "") +
+                (holders.Count > 3
+                    ? $" and {Output.Tally.Complete(holders.Count - 3).Render("def type")} more"
+                    : "") +
                 $"; the query is 'rimsearcher list {holders[0].DefType} --class {name}'.");
         }
 

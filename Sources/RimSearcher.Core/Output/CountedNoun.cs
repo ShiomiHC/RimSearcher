@@ -59,11 +59,15 @@ public static class NounRegistry
     {
         ["def"] = "defs",
         ["def type"] = "def types",
+        // 运行时 class 与存储桶不是一回事,而这套输出到处在讲这条区分 ——
+        // 数 class 的地方就不能借「def type」这个词(R7)。
+        ["def class"] = "def classes",
         ["field"] = "fields",
         ["field path"] = "field paths",
         ["value"] = "values",
         ["match"] = "matches",
         ["file"] = "files",
+        ["C# file"] = "C# files",
         ["mod"] = "mods",
         ["translation"] = "translations",
         ["source tree"] = "source trees",

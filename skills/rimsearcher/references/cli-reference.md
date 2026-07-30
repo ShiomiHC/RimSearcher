@@ -46,6 +46,12 @@ Answers questions about RimWorld's defs and C# from a snapshot of what the game 
 
 A `1` is an answer rather than a failure: "nothing in this snapshot has that value" is information, and the reasoning behind it goes to stdout either way. Chain commands with `;` rather than `&&`, or a `1` on a query that answered your question will silently drop whatever you queued after it.
 
+## `--json`
+
+The root is an object. Every prose sentence the text output would have printed moves into `notes`, an array of `{kind, text}` — `kind` is one of `truncation`, `count`, `filter`, `staleness`, `snapshot_choice`, `boundary`, `advisory`, `clamp`, `next_step`, so a truncation can be told from a filter without reading English.
+
+The data keys sit beside it, and each command's section below names its own. They are not interchangeable: reading a key a command does not produce gives you nothing, which looks exactly like an empty result. Rows are objects keyed by the same column names the text table prints.
+
 ## Global options
 
 | Option | Meaning | Also accepted |
@@ -83,6 +89,12 @@ Three caps apply, and they divide in two. --limit and --max-per-file decide how 
 | `-n`, `--limit` <n|all> | How many matching lines to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `-i`, `--ignore-case` | Match without regard to letter case. | `--case-insensitive` |
 
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `matches` | one row per printed line — file, line, is_match, group, text. Context lines come through with is_match false, and 'group' is the merged window they belong to, so the text form's '--' separator needs no counterpart here. |
+
 Examples:
 
 ```
@@ -102,6 +114,12 @@ The exporter is not a mod you play with, so it is kept out of the game's mod fol
 
 Attaching only makes the mod visible. Enabling it is still a choice made in the game's mod list, and the next 'export' detaches it again.
 
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `attached` | an object: where the junction was made and what it points at. |
+
 Examples:
 
 ```
@@ -120,6 +138,12 @@ rimsearcher datamod detach
 
 A real folder installed at the same place is left alone: only a link this tool could have made is removed.
 
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `detached` | an object: which junction was removed. |
+
 Examples:
 
 ```
@@ -133,6 +157,12 @@ Report whether the game can currently see the exporter mod.
 ```
 rimsearcher datamod status
 ```
+
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `datamod` | an object: whether the exporter is attached to the game's Mods directory right now. |
 
 Examples:
 
@@ -186,6 +216,13 @@ The game runs headless: no window appears and nothing is written to the display 
 | `--dry-run` | Do everything except start the game: resolve the list, check every mod is installed, and report what would be run. | `--check`, `--validate` |
 | `--harvest-translations` | Passed through to the import step: also index language files of installed mods that the list does not enable. | `--harvest` |
 
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `exported` | an object: the snapshot that was produced, and what it covers. |
+| `would_run` | with --dry-run: an object describing the launch that was not performed. |
+
 Examples:
 
 ```
@@ -212,6 +249,12 @@ Use this before 'find' when you are not sure what a field is called. The counts 
 | `-n`, `--limit` <n|all> | How many field paths to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--path` <text> | Only list paths containing this text. Repeat it to widen the selection. | `--paths`, `--contains`, `--match`, `--filter`, `--grep`, `--only` |
 | `--offset` <n> | Skip this many field paths before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
+
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `fields` | one row per field path: path, defs (how many defs use it). |
 
 Examples:
 
@@ -244,6 +287,13 @@ The field path is matched from the end, so 'compClass' finds 'comps[3].compClass
 | `--exact` | Require the whole value to match, with either a field path or --value. Without it, the value is matched as a substring. | `--exact-match`, `--whole` |
 | `--value` <text> | Search every field for this value and report which paths hold it, instead of naming a field yourself. | `--any-field`, `--search-values`, `--holding` |
 
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `matches` | with a field path: one row per def that has it — def_name, def_type, value, mod. |
+| `paths` | with --value: one row per field path that holds the value — path, def_type, defs, example_value. This is the key --value produces; 'matches' is absent then. |
+
 Examples:
 
 ```
@@ -273,6 +323,12 @@ Field paths are the merged, post-patch shape the game actually had in memory whe
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind`, `--category` |
 | `--fields` | Deprecated no-op: fields are always shown. Kept so that scripts that pass it keep working. | `--with-fields`, `--show-fields` |
 
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `defs` | one object per def carrying the name — each with 'def' (identity), 'fields' (path/value rows) and, when there are any, 'translations'. It stays an array even for a single def, because a name can belong to several def types at once. |
+
 Examples:
 
 ```
@@ -301,6 +357,12 @@ What is shown is the XML before PatchOperations are applied. Each named node rep
 |---|---|---|
 | `-n`, `--limit` <n|all> | How many children to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `nodes` | one object per XML node answering to the name — each with 'node' (identity and patch count), 'ancestors' and, when it has any, 'children'. |
+
 Examples:
 
 ```
@@ -328,6 +390,12 @@ rimsearcher list <defType> [options]
 | `--offset` <n> | Skip this many defs before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
 | `--class` <ClassName> | Only defs whose own class is this. Def types that hold several classes list them below the count. | `--def-class`, `--runtime-class` |
 
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `defs` | one row per def: def_name, label, mod, plus 'class' when the bucket holds more than one def class. |
+
 Examples:
 
 ```
@@ -345,6 +413,12 @@ rimsearcher modlist list
 ```
 
 Mod lists are the game's own .rml files. Anything that produces one — the game's mod screen, 'modlist save', or a text editor — is equally valid input.
+
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `modlists` | one row per saved mod list: name, mods, saved, path. |
 
 Examples:
 
@@ -370,6 +444,12 @@ Also works as a tidy-up pass on a hand-written file: read it back with --from an
 |---|---|---|
 | `--from` <name|path> | Read the ids from this list instead of from the game's current configuration. | `--source`, `--input` |
 
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `saved` | an object: the list that was written, and where. |
+
 Examples:
 
 ```
@@ -393,6 +473,12 @@ rimsearcher modlist show [name] [options]
 |---|---|---|
 | `--find` <text> | Only rows whose id or name contains this. Without a list name, every list is searched. | `--filter`, `--grep`, `--search`, `--match` |
 
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `mods` | one row per mod in the list, in load order: order, package_id, name, installed. |
+
 Examples:
 
 ```
@@ -413,6 +499,12 @@ Load order matters: it is the order in which PatchOperations were applied, so it
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n|all> | How many mods to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `all`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `mods` | one row per mod, in load order: order, package_id, name, version. |
 
 Examples:
 
@@ -447,6 +539,13 @@ For who calls a method, what it overrides, and what derives from a type, the Dec
 | `--outline` | List the file's types and members with their line ranges instead of reading any of them. This is the cheap way to find out what to ask for. | `--members`, `--toc` |
 | `-n`, `--limit` <n|all> | How many lines to print at most. Values above 2000 are clamped to it, because one type can be thousands of lines and this output is read whole. Default: `2000`. | `--max-lines`, `--max-results`, `--count`, `--rows`, `--head` |
 
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `source` | one row per source line — file, line, text, plus kind and declaration when the line came from --member/--type. The text form's line-number gutter is not repeated here. |
+| `declarations` | with --outline: one row per declaration — kind, name, in (the owner), lines, at (the 'start-end' range to hand back to --lines). |
+
 Examples:
 
 ```
@@ -476,6 +575,12 @@ Matching is in three stages and stops at the first one that finds anything: full
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind`, `--category` |
 
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `defs` | one row per matching def: def_name, def_type, label, matched_on, mod. |
+
 Examples:
 
 ```
@@ -503,6 +608,12 @@ The export file is refused rather than half-imported if it lacks the end marker 
 | `--name` <name> | Name to register the snapshot under. Defaults to the export file's name. | `--as`, `--alias` |
 | `--harvest-translations` | Also scan the language files of every installed mod, including ones not enabled in the snapshot, so that a translated name still finds the def. Harvested rows are marked and never replace the values the game actually had. | `--harvest`, `--scan-languages` |
 
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `imported` | an object: the snapshot that was written, and what went into it. |
+
 Examples:
 
 ```
@@ -517,6 +628,12 @@ List the snapshots this machine knows about.
 ```
 rimsearcher snapshot list
 ```
+
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `snapshots` | one row per registered snapshot: name, defs, mods, game, language, exported, pinned, path. |
 
 Examples:
 
@@ -533,6 +650,12 @@ rimsearcher snapshot status
 ```
 
 Ordinary queries stay quiet when the snapshot matches the game, and say one line when it does not. This command is where the full comparison lives, so that the detail never has to ride along with every result.
+
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `snapshot` | an object, not an array: the chosen snapshot compared with the installed game. |
 
 Examples:
 
@@ -555,6 +678,12 @@ Every count this tool reports over field paths — 'find', 'values', 'fields' �
 | `-n`, `--limit` <n|all> | How many defs to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
 
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `truncated` | one row per def that lost fields at export time: def_name, def_type, dropped, mod. |
+
 Examples:
 
 ```
@@ -576,6 +705,12 @@ A pinned choice still loses to an explicit --snapshot or --db on a single comman
 |---|---|
 | `<name>` | A name from 'snapshot list'. |
 
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `pinned` | an object: which snapshot is now pinned, and where the choice was written. |
+
 Examples:
 
 ```
@@ -593,6 +728,12 @@ rimsearcher sources list
 Each tree carries a manifest naming the assemblies it was decompiled from and their hashes, so 'stale' here means exactly one thing: a dll on disk is not the dll this tree came from.
 
 It does not say what changed inside the source. That is git's job — see the note this command prints.
+
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `trees` | one row per decompiled source tree: tree, files, assemblies, status. |
 
 Examples:
 
@@ -619,6 +760,13 @@ A tree whose source assemblies have not changed is left alone. Comparing version
 | `--force` | Rebuild even the trees whose assemblies have not changed. | `--rebuild`, `--all` |
 | `--dry-run` | Report what would be decompiled and stop without writing anything. | `--plan`, `--check` |
 
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `rebuilt` | one row per tree that was rewritten: tree, assemblies, files. |
+| `plan` | with --dry-run: one row per tree that would be rebuilt — tree, assemblies, reason, root. Nothing is written, and 'rebuilt' is absent. |
+
 Examples:
 
 ```
@@ -639,6 +787,12 @@ rimsearcher types [options]
 |---|---|---|
 | `-n`, `--limit` <n|all> | How many def types to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `all`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
+
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `types` | one row per def type: def_type, defs. |
 
 Examples:
 
@@ -667,6 +821,13 @@ Answers 'what am I allowed to put here' and 'which classes are actually in use' 
 | `--offset` <n> | Skip this many values before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind`, `--category` |
+
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `values` | one row per distinct value: value, defs. |
+| `field` | an object, not an array: which full paths and def types the values came from (matched_paths, def_types, defs_with_field). A bare name matches by suffix, so this says what was actually pooled. |
 
 Examples:
 

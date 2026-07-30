@@ -1,4 +1,5 @@
 using RimSearcher.Config;
+using RimSearcher.Output;
 
 namespace RimSearcher.Snapshot;
 
@@ -57,7 +58,7 @@ public sealed class ScopeFilter
 
         return ids.Count <= 4
             ? $"{Expression} (= {string.Join(", ", ids)})"
-            : $"{Expression} (= {ids.Count} mods: {string.Join(", ", ids.Take(3))}, …)";
+            : $"{Expression} (= {Tally.Complete(ids.Count).Render("mod")}: {string.Join(", ", ids.Take(3))}, …)";
     }
 
     /// <summary>拼一段 SQL 谓词。全选时返回 null,让调用方省掉这个条件。</summary>

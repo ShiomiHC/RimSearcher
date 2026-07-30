@@ -53,6 +53,22 @@ public sealed record PositionalSpec
     public bool Variadic { get; init; }
 }
 
+/// <summary>
+/// <c>--json</c> 输出里一个顶层数据键的声明。
+///
+/// R14:键名此前只存在于代码里,文档一个字没写。消费方于是**先猜键名再发命令**,猜错
+/// 拿到的是 null/空,而那与「查到了但确实没有」在下游长得一模一样 —— 这套输出里
+/// 「错的与对的同形」是唯一不许留的形状。所以键名进声明层,与参数走同一条产地。
+/// </summary>
+public sealed record JsonKeySpec
+{
+    /// <summary>顶层键名。</summary>
+    public required string Key { get; init; }
+
+    /// <summary>这个键装着什么:一句话说清它是数组还是对象、每一项是什么。</summary>
+    public required string What { get; init; }
+}
+
 /// <summary>一条命令(或子命令)的完整声明。</summary>
 public sealed record CommandSpec
 {
@@ -72,6 +88,12 @@ public sealed record CommandSpec
 
     /// <summary>用法示例,每条一行。盲测实证 07-④:旧习惯迁移靠示例带,比散文有效。</summary>
     public string[] Examples { get; init; } = [];
+
+    /// <summary>
+    /// <c>--json</c> 下这条命令可能产出的顶层数据键。<c>notes</c> 是全局的,不在这里列。
+    /// 有闸对着实测输出验:实际出现过而没声明的键会红。
+    /// </summary>
+    public JsonKeySpec[] JsonKeys { get; init; } = [];
 
     /// <summary>是否吃全局参数(--snapshot/--db/--json 等)。维护型命令可以关掉。</summary>
     public bool UsesGlobals { get; init; } = true;

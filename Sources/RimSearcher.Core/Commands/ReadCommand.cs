@@ -105,6 +105,21 @@ public sealed class ReadCommand : Command
             "rimsearcher read CompShield.cs --member CompTick",
             "rimsearcher read vanilla/Assembly-CSharp/Verse/ThingComp.cs --lines 1-40",
         ],
+        JsonKeys =
+        [
+            new()
+            {
+                Key = "source",
+                What = "one row per source line — file, line, text, plus kind and declaration when the line " +
+                       "came from --member/--type. The text form's line-number gutter is not repeated here.",
+            },
+            new()
+            {
+                Key = "declarations",
+                What = "with --outline: one row per declaration — kind, name, in (the owner), lines, at " +
+                       "(the 'start-end' range to hand back to --lines).",
+            },
+        ],
     };
 
     public override int Run(CommandContext ctx)
@@ -197,6 +212,9 @@ public sealed class ReadCommand : Command
         if (picked.Count == 0) { SayNoDeclaration(ctx, rel, text, decls, member, type); return 1; }
 
         var lines = new List<string>();
+        // 结构化侧不重复文本侧的那些排版件(分隔符、标题行):每一行自带它属于哪个声明,
+        // 于是消费方不必从 "rel:12-40  method Foo.Bar" 里再解析一遍我们刚拼出来的东西。
+        var rows = new List<IReadOnlyDictionary<string, object?>>();
         var printed = 0;
         var clipped = 0;
         (int From, int To)? resume = null;
@@ -213,6 +231,14 @@ public sealed class ReadCommand : Command
                     break;
                 }
                 lines.Add(Numbered(i, text[i - 1]));
+                rows.Add(new Dictionary<string, object?>
+                {
+                    ["file"] = rel,
+                    ["line"] = i,
+                    ["kind"] = d.Kind,
+                    ["declaration"] = d.Qualified,
+                    ["text"] = text[i - 1].TrimEnd(),
+                });
                 printed++;
             }
         }
@@ -221,7 +247,8 @@ public sealed class ReadCommand : Command
             $"{Tally.Complete(picked.Count).Render("declaration")} in {rel}" +
             (clipped > 0
                 // 「剩下的自己想办法」是没有用的建议:接着读的那一段当场就算得出来,给出来。
-                ? $"; --limit stopped the printing at {cap} lines, {clipped} short of the whole. " +
+                ? $"; --limit stopped the printing at {Tally.Complete(cap).Render("line")}, " +
+                  $"{clipped} short of the whole. " +
                   $"Raise it, or read on with --lines {resume!.Value.From}-{resume.Value.To}."
                 : $", {Tally.Complete(printed).Render("line")}."));
 
@@ -233,7 +260,7 @@ public sealed class ReadCommand : Command
                 string.Join(", ", picked.Select(d => d.Qualified)) +
                 ". '--type <name>' narrows it to one.");
 
-        ctx.Report.Text("source", lines);
+        ctx.Report.Text("source", lines, rows);
         SayBraceMatched(ctx, rel);
         return 0;
     }
@@ -256,17 +283,29 @@ public sealed class ReadCommand : Command
         if (to - from + 1 > cap) { clipped = to - (from + cap - 1); to = from + cap - 1; }
 
         var lines = new List<string>();
-        for (var i = from; i <= to; i++) lines.Add(Numbered(i, text[i - 1]));
+        var rows = new List<IReadOnlyDictionary<string, object?>>();
+        for (var i = from; i <= to; i++)
+        {
+            lines.Add(Numbered(i, text[i - 1]));
+            rows.Add(new Dictionary<string, object?>
+            {
+                ["file"] = rel,
+                ["line"] = i,
+                ["text"] = text[i - 1].TrimEnd(),
+            });
+        }
 
         var complete = from == 1 && to == text.Length;
         ctx.Report.Notice(complete ? NoticeKind.Count : NoticeKind.Truncation,
             complete
                 ? $"{rel}, all {Tally.Complete(text.Length).Render("line")}."
                 : $"{rel}, lines {from}-{to} of {text.Length}." +
-                  (clipped > 0 ? $" --limit stopped it {clipped} lines short of what --lines asked for." : "") +
+                  (clipped > 0
+                      ? $" --limit stopped it {Tally.Complete(clipped).Render("line")} short of what --lines asked for."
+                      : "") +
                   (to < text.Length ? $" Pass --lines {to + 1}+{to - from + 1} for the next page." : ""));
 
-        ctx.Report.Text("source", lines);
+        ctx.Report.Text("source", lines, rows);
         return 0;
     }
 

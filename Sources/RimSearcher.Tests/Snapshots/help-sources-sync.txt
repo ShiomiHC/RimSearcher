@@ -27,6 +27,10 @@ Global options:
       --json             Emit machine-readable JSON. Anything the text output would have said in prose moves into a 'notes' array, so nothing is lost.
       --config <path>    Use this config file instead of the default one.
 
+--json keys (besides 'notes'):
+  rebuilt  one row per tree that was rewritten: tree, assemblies, files.
+  plan     with --dry-run: one row per tree that would be rebuilt — tree, assemblies, reason, root. Nothing is written, and 'rebuilt' is absent.
+
 Examples:
   rimsearcher sources sync
   rimsearcher sources sync --dry-run

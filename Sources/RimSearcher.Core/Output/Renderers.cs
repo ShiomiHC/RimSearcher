@@ -148,7 +148,9 @@ public static class JsonRenderer
             {
                 TableBlock t => (t.Name, (object?)t.Rows),
                 DetailBlock d => (d.Name, d.Pairs.ToDictionary(p => p.Key, p => p.Value)),
-                TextBlock x => (x.Name, x.Lines),
+                // 有结构化形态就用它:让消费方去拆 "path:line:text" 是把一个我们已经
+                // 知道答案的解析问题外包出去(R14)。
+                TextBlock x => (x.Name, x.Rows is null ? x.Lines : (object)x.Rows),
                 _ => ("", null),
             };
             if (name.Length == 0) continue;
@@ -184,7 +186,12 @@ public static class JsonRenderer
                 "(Report.Item) so that each one keeps its own slot; writing them to the same key loses data.");
     }
 
-    private static string SnakeCase(string s)
+    /// <summary>
+    /// <see cref="NoticeKind"/> → JSON 里的 kind 值。参考页要列出这份取值集合,
+    /// 而那份列表必须与真写进 JSON 的那一份同源 —— 否则文档里的 kind 与输出里的 kind
+    /// 可以各自正确地不一致。
+    /// </summary>
+    internal static string SnakeCase(string s)
     {
         var sb = new StringBuilder();
         foreach (var c in s)

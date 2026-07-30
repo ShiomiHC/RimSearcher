@@ -28,6 +28,9 @@ Global options:
       --json             Emit machine-readable JSON. Anything the text output would have said in prose moves into a 'notes' array, so nothing is lost.
       --config <path>    Use this config file instead of the default one.
 
+--json keys (besides 'notes'):
+  defs  one object per def carrying the name — each with 'def' (identity), 'fields' (path/value rows) and, when there are any, 'translations'. It stays an array even for a single def, because a name can belong to several def types at once.
+
 Examples:
   rimsearcher get Apparel_ShieldBelt
   rimsearcher get Apparel_ShieldBelt --path statBases

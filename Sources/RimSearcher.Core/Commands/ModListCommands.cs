@@ -1,4 +1,4 @@
-using System.Xml.Linq;
+﻿using System.Xml.Linq;
 using RimSearcher.Cli;
 using RimSearcher.Config;
 using RimSearcher.Output;
@@ -128,6 +128,7 @@ public sealed class ModListListCommand : Command
                   "'modlist save', or a text editor — is equally valid input.",
         Options = [],
         Examples = ["rimsearcher modlist list"],
+        JsonKeys = [new() { Key = "modlists", What = "one row per saved mod list: name, mods, saved, path." }],
     };
 
     public override int Run(CommandContext ctx)
@@ -178,6 +179,7 @@ public sealed class ModListShowCommand : Command
             "rimsearcher modlist show vanilla",
             "rimsearcher modlist show --find milira",
         ],
+        JsonKeys = [new() { Key = "mods", What = "one row per mod in the list, in load order: order, package_id, name, installed." }],
     };
 
     public override int Run(CommandContext ctx)
@@ -284,6 +286,7 @@ public sealed class ModListSaveCommand : Command
             },
         ],
         Examples = ["rimsearcher modlist save current", "rimsearcher modlist save tidy --from scratch.rml"],
+        JsonKeys = [new() { Key = "saved", What = "an object: the list that was written, and where." }],
     };
 
     public override int Run(CommandContext ctx)

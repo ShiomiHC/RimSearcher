@@ -47,6 +47,15 @@ public sealed class InheritCommand : Command
             "rimsearcher inherit Bullet_Revolver",
             "rimsearcher inherit BaseHumanlike --limit all",
         ],
+        JsonKeys =
+        [
+            new()
+            {
+                Key = "nodes",
+                What = "one object per XML node answering to the name — each with 'node' (identity and patch " +
+                       "count), 'ancestors' and, when it has any, 'children'.",
+            },
+        ],
     };
 
     public override int Run(CommandContext ctx)

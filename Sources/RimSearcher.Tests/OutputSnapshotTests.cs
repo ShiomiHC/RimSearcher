@@ -56,6 +56,9 @@ public class OutputSnapshotTests
         { "find-hit",              ["find", "compClass", "RimWorld.CompShield"] },
         { "find-miss-compprops",   ["find", "compClass", "CompProperties_Shield"] },
         { "find-miss-field",       ["find", "noSuchField", "x"] },
+        // 另一半问法。行的形状不同,--json 的顶层键也就不同(matches / paths),
+        // 而「同一条命令按参数换键」正是 R14 里猜错键换来一个空结果的那种落差。
+        { "find-by-value",         ["find", "--value", "CompShield"] },
         // 继承层的四条路各钉一份:抽象节点(有子、被 patch 点名)、具体 def(往上走)、
         // 断链(父不在快照里)、名字不在这一层。四条的措辞各说一件不同的事,
         // 而它们混起来正是「零结果一律报最强的那种」那类事故的温床。
@@ -73,6 +76,11 @@ public class OutputSnapshotTests
         { "types",                 ["types"] },
         { "mods",                  ["mods"] },
         { "json-mode",             ["get", "Apparel_ShieldBelt", "--limit", "3", "--json"] },
+        // R14 的第二半:代码块在 --json 里也得是行,不是一串 "path:line:text" 字符串。
+        // 消费方重新解析我们刚拼好的东西,是把一个已经有答案的问题外包出去 ——
+        // 而路径里本来就可能有冒号,解析回来不一定还原得了。
+        { "json-code-search",      ["code-search", "public", "--files", "ThingComp.cs", "-C", "1", "--json"] },
+        { "json-read-member",      ["read", "vanilla/Verse/Outline.cs", "--member", "Shared", "--json"] },
         { "usage-unknown-flag",    ["search", "shield", "--lmit", "5"] },
         { "usage-unknown-command", ["serach", "shield"] },
         { "help-overview",         ["--help"] },
