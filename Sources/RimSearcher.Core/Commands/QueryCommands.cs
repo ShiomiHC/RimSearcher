@@ -13,10 +13,13 @@ public sealed class SearchCommand : Command
         Aliases = ["find-def", "s"],
         Summary = "Find defs by name, label, description, or translated text.",
         Remarks =
-            "Matching is in three stages and stops at the first one that finds anything: full-text search, " +
-            "then a prefix pass, then fuzzy identifier matching that tolerates typos and CamelCase initials. " +
-            "You never need to add '*' yourself. Translated text is indexed alongside the English, so a " +
-            "Chinese label finds the def even though the label column keeps the value the game had at export time.",
+            "Matching runs in stages and stops at the first one that finds anything: full-text search, a " +
+            "substring pass over names, the pre-translation original text of translations, then fuzzy " +
+            "identifier matching that tolerates typos and CamelCase initials. You never need to add '*' " +
+            "yourself. Translated text is in the full-text index, so a Chinese label finds the def; the " +
+            "English wording it replaced is not, and is reached only by that later pass — which is why an " +
+            "English query against a translated snapshot can come back with rows whose label column is not " +
+            "English. Each result says in 'matched_on' which of these it was.",
         Positionals = [new PositionalSpec { Name = "query", Help = "Words, a def name, or part of one." }],
         Options = [CommonOptions.Limit("defs"), CommonOptions.Offset("defs"), CommonOptions.Scope, CommonOptions.Type],
         Examples =
@@ -71,6 +74,26 @@ public sealed class SearchCommand : Command
                     rows = [.. rows, .. more];
                     addedBySubstring = more.Count;
                 }
+            }
+        }
+
+        // 译文原文那一侧的兜底。FTS 只索引 translated,于是一份中文快照上,每个 def 的英文
+        // 原名都在库里躺着却一个也搜不到 —— 而落空那句话还写着「covers … and translations」。
+        //
+        // **必须排在模糊回退之前**:反过来的话,英文查询会先撞上一批「拼写相近的中文名」,
+        // 而那份输出读起来就是「这东西没有」。真答案被拼写噪声挤掉,是同形错答案的又一种。
+        if (rows.Count == 0 && offset == 0)
+        {
+            var byOriginal = ctx.Db.NamesByTranslationOriginal(query, scope, type);
+            if (byOriginal.Count > 0)
+            {
+                (rows, total) = ctx.Db.ByNames(byOriginal, limit.Effective);
+                how = "translation original";
+                ctx.Report.Notice(NoticeKind.Boundary,
+                    $"No name, label or translated text in this snapshot contains '{query}'; these defs have it " +
+                    "in the original text a translation replaced. This snapshot's language is " +
+                    $"{ctx.Db.Meta.Language}, so the English wording survives only where a translation " +
+                    "recorded what it was translated from.");
             }
         }
 
@@ -177,10 +200,17 @@ public sealed class SearchCommand : Command
         // 路径报成「这一行靠什么命中」。F18 加这一列正是为了让 label 空的行有个解释,
         // 给错的解释比不给更坏。def_type 为空的(语言文件收割,注入 key 不带类型)仍算,
         // 因为游戏也是按名字注入的 —— 那条译文确实作用在这个 def 上。
-        var t = ctx.Db.Translations(r.DefName)
-                      .Where(x => x.DefType is null || DefTypes.Same(x.DefType, r.DefType))
-                      .FirstOrDefault(x => Has(x.Translated) || Has(x.Original));
-        return t is not null ? t.Path : "indexed text";
+        var all = ctx.Db.Translations(r.DefName);
+        var t = all.Where(x => x.DefType is null || DefTypes.Same(x.DefType, r.DefType))
+                   .FirstOrDefault(x => Has(x.Translated) || Has(x.Original));
+        if (t is not null) return t.Path;
+
+        // 命中来自**另一个同名 def** 的译文 —— 上一句的 def_type 过滤刚把它挡掉。这一行
+        // 自己没有任何东西含查询词,说成 "indexed text" 就是给它一个它验证不了的解释,
+        // 而它与真·靠索引文本命中的行在这一列上逐字同形。
+        if (all.Any(x => Has(x.Translated) || Has(x.Original))) return "same def_name";
+
+        return "indexed text";
     }
 
     /// <summary>单个复合标识符(无空格、内部有大写或下划线)—— 只有这种查询词会落进名字中段。</summary>

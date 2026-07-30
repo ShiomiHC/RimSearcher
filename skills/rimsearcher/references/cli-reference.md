@@ -566,7 +566,7 @@ Find defs by name, label, description, or translated text.
 rimsearcher search <query> [options]
 ```
 
-Matching is in three stages and stops at the first one that finds anything: full-text search, then a prefix pass, then fuzzy identifier matching that tolerates typos and CamelCase initials. You never need to add '*' yourself. Translated text is indexed alongside the English, so a Chinese label finds the def even though the label column keeps the value the game had at export time.
+Matching runs in stages and stops at the first one that finds anything: full-text search, a substring pass over names, the pre-translation original text of translations, then fuzzy identifier matching that tolerates typos and CamelCase initials. You never need to add '*' yourself. Translated text is in the full-text index, so a Chinese label finds the def; the English wording it replaced is not, and is reached only by that later pass — which is why an English query against a translated snapshot can come back with rows whose label column is not English. Each result says in 'matched_on' which of these it was.
 
 | Argument | Meaning |
 |---|---|

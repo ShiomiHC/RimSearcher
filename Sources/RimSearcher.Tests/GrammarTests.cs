@@ -1136,4 +1136,49 @@ public class GrammarTests
             Assert.True(int.Parse(m.Groups[2].Value) >= rows,
                 $"页脚说共 {m.Groups[2].Value} 条,表里印了 {rows} 行:{stdout}");
     }
+
+    /// <summary>
+    /// FTS 只索引译文的**译过来的那一侧**。于是一份中文快照上,每个 def 的英文原文都在库里
+    /// 躺着,却一个也搜不到 —— 而落空那句话当时还写着「covers … and translations」,
+    /// 把只覆盖一半说成覆盖全部。
+    ///
+    /// 语料里 "A blob of firefoam." 只在 original 侧,label 与 description 都不含 blob。
+    /// </summary>
+    [Fact]
+    public void 英文原文在中文快照上搜得到()
+    {
+        var (stdout, _, code) = Fixture.Run("search", "blob");
+        Assert.Equal(0, code);
+        Assert.Contains("Firefoam", stdout, StringComparison.Ordinal);
+
+        // 兜底必须**排在模糊回退之前**:不然拼写噪声会把真答案挤掉,
+        // 而那份输出看起来就是「没有,这是几个拼写相近的」。
+        Assert.DoesNotContain("closest names by spelling", stdout, StringComparison.Ordinal);
+
+        // 命中来自哪一侧要说破 —— 不说,这一行在中文快照上无从解释。
+        Assert.Contains("original", stdout, StringComparison.Ordinal);
+
+        // 译文按 defName 关联(注入目录名是 XML 根元素,与运行时桶名对不上是常态,
+        // 拿它做连接条件会整批漏),于是同名的 StatDef 也进来了。它自己一个字都不含
+        // 查询词,那一格就不许写成与「真·靠索引文本命中」同形的解释。
+        var stat = Assert.Single(stdout.Split('\n'), l => l.Contains("StatDef", StringComparison.Ordinal));
+        Assert.Contains("same def_name", stat, StringComparison.Ordinal);
+        Assert.DoesNotContain("indexed text", stat, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 落空那句话报的值域不许超发。它说 covers 什么,就得真覆盖到什么。
+    /// </summary>
+    [Fact]
+    public void 落空句报的值域与真覆盖面一致()
+    {
+        var (stdout, _, code) = Fixture.Run("search", "NoSuchThingAnywhere");
+        Assert.Equal(1, code);
+
+        // 「translations」不带限定就是承诺两侧都覆盖。真覆盖到了才准这么写;
+        // 而覆盖到了,上面那道闸就得是绿的 —— 两条互为对方的证明。
+        var (blob, _, _) = Fixture.Run("search", "blob");
+        if (!blob.Contains("Firefoam", StringComparison.Ordinal))
+            Assert.DoesNotContain("translations", stdout, StringComparison.Ordinal);
+    }
 }

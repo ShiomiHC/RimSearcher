@@ -208,6 +208,32 @@ public sealed class SnapshotDb : IDisposable
     }
 
     /// <summary>
+    /// 译文**原文那一侧**含这段文本的 def 名。
+    ///
+    /// FTS 只索引 translated —— 一份中文快照上,每个 def 的英文原名都在 translations.original
+    /// 里躺着,却一个也搜不到,而落空那句话还说自己 covers translations。这条把另一半接上。
+    ///
+    /// 走 LIKE 不走 FTS 是有意的:original 侧没进 FTS,而为它建索引要改 schema、逼所有人
+    /// 重新导入一次 —— 用一条只在**零结果时**才跑的扫描换掉那笔账。
+    /// 连接只按 def_name:译文的 def_type 来自 DefInjected 的目录名(XML 根元素),
+    /// 而 defs.def_type 是运行时的桶名,两者对不上是常态,拿它做条件会漏。
+    /// </summary>
+    public IReadOnlyList<string> NamesByTranslationOriginal(string query, ScopeFilter scope, string? defType)
+    {
+        var p = new Dictionary<string, object?> { ["@q"] = "%" + Escape(query) + "%" };
+        var conds = new List<string> { "t.original LIKE @q ESCAPE '\\'" };
+        if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
+        if (defType is { Length: > 0 }) { p["@dt"] = defType; conds.Add("d.def_type = @dt COLLATE NOCASE"); }
+
+        var names = new List<string>();
+        using var rd = Query(
+            "SELECT DISTINCT d.def_name FROM translations t JOIN defs d ON d.def_name = t.def_name " +
+            $"WHERE {string.Join(" AND ", conds)} ORDER BY LENGTH(d.def_name), d.def_name", p);
+        while (rd.Read()) names.Add(rd.GetString(0));
+        return names;
+    }
+
+    /// <summary>
     /// 按名字取行,顺序照传入的名次排(模糊打分的排序不能被 SQL 打乱)。
     ///
     /// 一个 defName 带**几行**是常态:Firefoam 既是 ThingDef 又是 StatDef,mod 覆盖原版时
