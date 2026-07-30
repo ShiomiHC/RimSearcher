@@ -1731,6 +1731,45 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// <c>--path</c> 重复给是**并集**,而计数句念回去的那几个必须都真的生效过。
+    ///
+    /// 八轮审计:`fields` 声明的是 Multi + 「Repeat it to widen the selection」,
+    /// 拿到手却只用了第一个 —— 而 <c>Narrows</c> 让两个 --path 都被念进
+    /// 「within --path A --path B」。于是输出声称两个过滤器都在,结果只按 A 算,
+    /// 且与一个正确结果逐字同形:第二个 --path 独有的那些行一条不剩,没有任何痕迹。
+    ///
+    /// 判据是**总数的单调性**:并集不可能小于任一单项。数在分页之前数,所以与 --limit 无关。
+    /// </summary>
+    [Fact]
+    public void fields的多个path是并集而不是只认第一个()
+    {
+        int Total(params string[] argv)
+        {
+            var (json, _, _) = Fixture.Run([.. argv, "--json"]);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            // 总数在计数句里,而计数句在 notes —— 直接读行数会被 --limit 骗。
+            var text = string.Join(" ", doc.RootElement.GetProperty("notes")
+                          .EnumerateArray().Select(n => n.GetProperty("text").GetString()));
+            var m = System.Text.RegularExpressions.Regex.Match(text, @"(\d+)\s+field paths?");
+            Assert.True(m.Success, $"'{string.Join(" ", argv)}' 的计数句里读不到总数: {text}");
+            // 「N of M」时要的是 M。
+            var all = System.Text.RegularExpressions.Regex.Matches(text, @"(\d+)\s+field paths?");
+            return all.Select(x => int.Parse(x.Groups[1].Value)).Max();
+        }
+
+        var onlyComps = Total("fields", "ThingDef", "--path", "comps", "--limit", "1");
+        var onlyStats = Total("fields", "ThingDef", "--path", "statBases", "--limit", "1");
+        var both = Total("fields", "ThingDef", "--path", "comps", "--path", "statBases", "--limit", "1");
+
+        Assert.True(onlyComps > 0 && onlyStats > 0, "语料没覆盖到这两个 path,闸问不出话来。");
+        Assert.True(both >= onlyComps && both >= onlyStats,
+            $"--path comps --path statBases 的总数是 {both},而单独给是 {onlyComps} / {onlyStats} —— " +
+            "并集比其中一项还小,说明第二个 --path 根本没生效。");
+        Assert.True(both > Math.Min(onlyComps, onlyStats),
+            "两个 --path 的并集与其中较小的那个一样大,第二个大概率被丢了。");
+    }
+
+    /// <summary>
     /// <c>--limit all</c> 解除**行上限**,这是全系统一句话的总纲(SKILL.md),不分命令。
     ///
     /// 八轮审计:`keyed` 是唯一把 <c>all</c> 翻译成 <see cref="Limits.MaxLimit"/> 的地方,

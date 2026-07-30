@@ -544,25 +544,37 @@ public sealed class SnapshotDb : IDisposable
     /// 子串匹配不留痕:不拆开这两档,「你要的那个字段根本不在」与「它在,旁边还有一堆别的」
     /// 逐字同形。数在分页**之前**数 —— 翻一页换一句结论是同一个病换个位置。
     /// </summary>
+    /// <param name="pathFilters">
+    /// 多个一起给是**并集**(声明层的措辞就是 "Repeat it to widen the selection")。
+    /// 原先这里只收单个,而命令侧照收不误地把整串念进计数句 —— 于是
+    /// `--path A --path B` 印出「within --path A --path B」却只按 A 查,
+    /// 而结果与一个正确结果逐字同形。
+    /// </param>
     public (IReadOnlyList<(string Path, int Count)> Rows, int Total, int WholeSegment) FieldPathsForType(
-        string defType, int limit, string? pathFilter = null, int offset = 0)
+        string defType, int limit, IReadOnlyList<string>? pathFilters = null, int offset = 0)
     {
         var p = new Dictionary<string, object?> { ["@t"] = defType };
         var where = "WHERE d.def_type = @t COLLATE NOCASE";
         var whole = "";
-        if (!string.IsNullOrEmpty(pathFilter))
+        var filters = (pathFilters ?? []).Where(f => !string.IsNullOrEmpty(f)).ToList();
+        if (filters.Count > 0)
         {
-            p["@f"] = "%" + Escape(pathFilter!) + "%";
-            where += " AND fv.path LIKE @f ESCAPE '\\'";
+            var any = new List<string>();
+            var anyWhole = new List<string>();
+            for (var i = 0; i < filters.Count; i++)
+            {
+                var e = Escape(filters[i]);
+                p[$"@f{i}"] = "%" + e + "%";
+                any.Add($"fv.path LIKE @f{i} ESCAPE '\\'");
 
-            // 「完整的一段」有六种落法:整条就是它,或者它是开头段 / 中间段 / 结尾段,
-            // 后面接 `.` 或 `[`。下标不算段的一部分 —— comps[3] 里那个 comps 就是完整的一段。
-            var e = Escape(pathFilter!);
-            p["@s0"] = e; p["@s1"] = e + ".%"; p["@s2"] = e + "[%";
-            p["@s3"] = "%." + e; p["@s4"] = "%." + e + ".%"; p["@s5"] = "%." + e + "[%";
-            whole = " AND (fv.path LIKE @s0 ESCAPE '\\' OR fv.path LIKE @s1 ESCAPE '\\' OR " +
-                    "fv.path LIKE @s2 ESCAPE '\\' OR fv.path LIKE @s3 ESCAPE '\\' OR " +
-                    "fv.path LIKE @s4 ESCAPE '\\' OR fv.path LIKE @s5 ESCAPE '\\')";
+                // 「完整的一段」有六种落法:整条就是它,或者它是开头段 / 中间段 / 结尾段,
+                // 后面接 `.` 或 `[`。下标不算段的一部分 —— comps[3] 里那个 comps 就是完整的一段。
+                p[$"@s{i}_0"] = e;         p[$"@s{i}_1"] = e + ".%";        p[$"@s{i}_2"] = e + "[%";
+                p[$"@s{i}_3"] = "%." + e;  p[$"@s{i}_4"] = "%." + e + ".%"; p[$"@s{i}_5"] = "%." + e + "[%";
+                for (var k = 0; k < 6; k++) anyWhole.Add($"fv.path LIKE @s{i}_{k} ESCAPE '\\'");
+            }
+            where += $" AND ({string.Join(" OR ", any)})";
+            whole = $" AND ({string.Join(" OR ", anyWhole)})";
         }
         var total = Scalar(
             $"SELECT COUNT(*) FROM (SELECT DISTINCT fv.path FROM field_values fv JOIN defs d ON d.id = fv.def_id {where})", p);

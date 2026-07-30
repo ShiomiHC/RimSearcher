@@ -449,13 +449,13 @@ public sealed class GetCommand : Command
                     // 而后者算得出来,所以算出来再说 —— 猜出来的下一步正是 R8 那批误诊。
                     var asValue = paths.Where(t => ctx.Db.ValueHits(def.Id, t) > 0).ToList();
                     ctx.Report.Notice(NoticeKind.Boundary,
-                        $"No field path{whose} contains {Join(paths)}; the def does have " +
+                        $"No field path{whose} contains {PathFilterText.Say(paths)}; the def does have " +
                         $"{Tally.Complete(total).Render("field")}. Drop --path to see them." +
                         // 动词不进登记处,所以句子里不能有随 asValue 数量变形的成分 ——
                         // 冒号在前、名单在后,主句就没有跟着计数走的动词(R6 的同一条教训)。
                         (asValue.Count > 0
                             ? " Found on this def as a field's value rather than anywhere in a path: " +
-                              $"{Join(asValue)}. 'rimsearcher find --value {asValue[0]}' names every path holding it."
+                              $"{PathFilterText.Say(asValue)}. 'rimsearcher find --value {asValue[0]}' names every path holding it."
                             : ""));
                 }
                 else
@@ -472,7 +472,7 @@ public sealed class GetCommand : Command
                     // --limit 影响),否则同一个 --path 换个 --limit 就换一句结论。
                     var whole = matchedPaths.Count(x => PathSegments.IsWholeSegment(x, paths));
                     ctx.Report.Notice(NoticeKind.Filter,
-                        $"Matching {Join(paths)}{whose}: " +
+                        $"Matching {PathFilterText.Say(paths)}{whose}: " +
                         $"{Tally.Complete(matched).Render("field")}, out of " +
                         $"{Tally.Complete(total).Render("field")} on the def." +
                         (whole == 0
@@ -481,7 +481,7 @@ public sealed class GetCommand : Command
                             // 实测一份轨迹「差一点因为那句话就掠过去了」,而决定性的那个字段
                             // 就躺在这句话下面那张表里。措辞改成:摆事实、两种读法都点出来、
                             // 并说破这句话**一行都没滤掉** —— 被劝退才是它造成的真损失。
-                            ? $" None of those has {Join(paths)} as a whole path segment: each match contains " +
+                            ? $" None of those has {PathFilterText.Say(paths)} as a whole path segment: each match contains " +
                               "it inside a longer name. Either those longer names are the fields you meant, or " +
                               "nothing here is called exactly that — this line removes none of the matched " +
                               "fields, so read them before deciding which."
@@ -642,8 +642,6 @@ public sealed class GetCommand : Command
         return 0;
     }
 
-    private static string Join(IReadOnlyList<string> parts)
-        => parts.Count == 1 ? $"'{parts[0]}'" : string.Join(" or ", parts.Select(p => $"'{p}'"));
 
     /// <summary>--path 在场时把 description 压成一行:它不是被要的东西,却最占地方。</summary>
     private static string? Clip(string? text)
@@ -1192,7 +1190,7 @@ public sealed class FieldsCommand : Command
         var limit = ctx.Limit();
         var filters = ctx.Args.Values("path");
         var offset = ctx.Args.Offset();
-        var (rows, total, whole) = ctx.Db.FieldPathsForType(type, limit.Effective, filters.FirstOrDefault(), offset);
+        var (rows, total, whole) = ctx.Db.FieldPathsForType(type, limit.Effective, filters, offset);
 
         if (rows.Count == 0)
         {
@@ -1205,7 +1203,7 @@ public sealed class FieldsCommand : Command
             if (filters.Count > 0 && ctx.Db.FieldPathsForType(type, 1).Rows.Count > 0)
             {
                 ctx.Report.Notice(NoticeKind.Boundary,
-                    $"'{type}' has field paths, but none contains '{filters[0]}'. Drop --path to see them all.");
+                    $"'{type}' has field paths, but none contains {PathFilterText.Say(filters)}. Drop --path to see them all.");
                 Completeness.NoteIndexHoldsValuesOnly(ctx);
                 return 1;
             }
@@ -1222,9 +1220,9 @@ public sealed class FieldsCommand : Command
                 whole == 0
                     // 同上(第七轮 T2)。这一处代价更大:`fields <DefType> --path <text>` 是
                     // 「这个类型有没有这个字段」的正式问法,于是这句话最像一句判决。
-                    ? $"None of those has '{filters[0]}' as a whole path segment: each match contains it " +
+                    ? $"None of those has {PathFilterText.Say(filters)} as a whole path segment: each match contains it " +
                       $"inside a longer name. Either those longer names are the paths you meant, or '{type}' " +
-                      $"has no field called exactly '{filters[0]}' — this line removes none of the " +
+                      $"has no field called exactly {PathFilterText.Say(filters)} — this line removes none of the " +
                       $"{Tally.Complete(total).Render("field path")} that matched, so read them before deciding which."
                     : $"Whole path segment: {Tally.Complete(whole).Render("field path")}; " +
                       $"inside a longer name: {Tally.Complete(total - whole).Render("field path")}.");
@@ -1424,6 +1422,16 @@ public sealed class ModsCommand : Command
             }).ToList());
         return 0;
     }
+}
+
+/// <summary>
+/// 一串 <c>--path</c> 念回给读的人时的写法。产地唯一 —— `get` 与 `fields` 说的是同一件事,
+/// 两份逐字相同的措辞只有一个结局:改一处、忘一处。
+/// </summary>
+internal static class PathFilterText
+{
+    public static string Say(IReadOnlyList<string> parts)
+        => parts.Count == 1 ? $"'{parts[0]}'" : string.Join(" or ", parts.Select(p => $"'{p}'"));
 }
 
 internal static class DefTypeMiss
