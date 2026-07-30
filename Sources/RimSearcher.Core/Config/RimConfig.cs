@@ -12,6 +12,14 @@ public sealed class RimConfig
     public string? SnapshotDir { get; init; }
     public string? ExportDir { get; init; }
     public string? DecompiledDir { get; init; }
+
+    /// <summary>
+    /// 导出器 mod 的**构建产物**目录(含 About/ 与 Assemblies/)。配了它,导出才会在游戏的
+    /// Mods 目录下临时接一个目录联接过去,导完断开 —— 于是平常的游戏里没有这个 mod。
+    /// 不配就是老样子:导出器得自己常驻装在 Mods 目录下。
+    /// </summary>
+    public string? DataModDir { get; init; }
+
     public IReadOnlyList<string> ModRoots { get; init; } = [];
     public string? ActiveSnapshot { get; init; }
 
@@ -66,6 +74,7 @@ public sealed class RimConfig
             SnapshotDir = root.String("snapshot_dir"),
             ExportDir = root.String("export_dir"),
             DecompiledDir = root.String("decompiled_dir"),
+            DataModDir = root.String("datamod_dir"),
             ModRoots = root.Strings("mod_roots"),
             ActiveSnapshot = state.String("active_snapshot") ?? root.String("active_snapshot"),
             Snapshots = snapshots,

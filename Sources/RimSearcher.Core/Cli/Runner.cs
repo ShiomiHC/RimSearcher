@@ -38,6 +38,9 @@ public sealed class CommandRegistry
         new ModListShowCommand(),
         new ModListSaveCommand(),
         new ExportCommand(),
+        new DataModStatusCommand(),
+        new DataModAttachCommand(),
+        new DataModDetachCommand(),
         new DocsCommand(),
     ];
 

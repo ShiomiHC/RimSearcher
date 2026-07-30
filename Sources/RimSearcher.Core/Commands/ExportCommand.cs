@@ -298,6 +298,17 @@ public sealed class ExportCommand : Command
         var exe = Directory.EnumerateFiles(gameDir, "RimWorld*.exe").FirstOrDefault()
             ?? throw new CliUsageException($"No RimWorld executable found in '{gameDir}'.");
 
+        // 导出器接挂。必须在扫描之前 —— 扫描要看见它,才判得了「导出器装没装」。
+        //
+        // using 是本命令唯一的断开产地:下面每一条 throw、每一个 return 都会经过它。
+        // 唯一漏得掉的是进程被强杀,而那一种由**下一次** Attach 清理(它照样接管已存在的联接)。
+        using var exporterLink = DataModLink.Attach(ctx.Config);
+        if (exporterLink.WasAlreadyThere && exporterLink.State == DataModLink.LinkState.Attached)
+            ctx.Report.Notice(NoticeKind.Advisory,
+                "The exporter was already attached before this run — either an earlier export was killed before it " +
+                "could detach, or it was attached by hand. It has been re-attached and will be detached when this " +
+                "command finishes.");
+
         // 步骤 2:启动前验证。缺一个 mod 就失败并报候选,不烧一轮游戏启动。
         var installed = InstalledMods.Scan(ctx.Config);
         var missing = list.Ids.Where(id => !installed.ContainsKey(id)).ToList();
@@ -355,8 +366,10 @@ public sealed class ExportCommand : Command
             if (!installed.ContainsKey(IntermediateFormat.ExporterPackageId))
                 throw new CliUsageException(
                     $"The exporter mod '{IntermediateFormat.ExporterPackageId}' is not installed, so the game has " +
-                    "no way to write an export. Build Sources/RimSearcher.DataMod and put its output in the game's " +
-                    "Mods folder. The game was not started.");
+                    "no way to write an export. Build Sources/RimSearcher.DataMod, then either set 'datamod_dir' in " +
+                    "the config file to the mod folder the build stages — it is attached for the duration of a run " +
+                    "and detached afterwards — or copy that folder into the game's Mods folder to keep it there. " +
+                    "The game was not started.");
 
             launchIds.Add(IntermediateFormat.ExporterPackageId);
             ctx.Report.Notice(NoticeKind.Advisory,

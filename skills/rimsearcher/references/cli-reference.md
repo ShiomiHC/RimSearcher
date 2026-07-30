@@ -9,6 +9,9 @@ Answers questions about RimWorld's defs and C# from a snapshot of what the game 
 | Command | What it answers |
 |---|---|
 | `code-search` | Search the decompiled C# with a regular expression. |
+| `datamod attach` | Make the exporter mod visible to the game until it is detached again. |
+| `datamod detach` | Hide the exporter mod from the game again. |
+| `datamod status` | Report whether the game can currently see the exporter mod. |
 | `docs` | Render the command reference from the declarations in the code. |
 | `export` | Run the game unattended with a chosen mod list and import what it exports. |
 | `fields` | List the field paths that a def type actually uses, with how often each occurs. |
@@ -84,6 +87,56 @@ Examples:
 ```
 rimsearcher code-search "class \w+ : ThingComp"
 rimsearcher code-search "Notify_\w+\(" --context 2
+```
+
+## `datamod attach`
+
+Make the exporter mod visible to the game until it is detached again.
+
+```
+rimsearcher datamod attach
+```
+
+The exporter is not a mod you play with, so it is kept out of the game's mod folder and attached only for as long as it is needed. 'export' does this by itself; attach it by hand when you want to run the export from the mod's own settings page inside the game.
+
+Attaching only makes the mod visible. Enabling it is still a choice made in the game's mod list, and the next 'export' detaches it again.
+
+Examples:
+
+```
+rimsearcher datamod attach
+```
+
+## `datamod detach`
+
+Hide the exporter mod from the game again.
+
+```
+rimsearcher datamod detach
+```
+
+'export' already detaches on its way out, including when it fails. This is for the case where it was killed before it could — the leftover is a link the game lists but does not enable, and this removes it.
+
+A real folder installed at the same place is left alone: only a link this tool could have made is removed.
+
+Examples:
+
+```
+rimsearcher datamod detach
+```
+
+## `datamod status`
+
+Report whether the game can currently see the exporter mod.
+
+```
+rimsearcher datamod status
+```
+
+Examples:
+
+```
+rimsearcher datamod status
 ```
 
 ## `docs`

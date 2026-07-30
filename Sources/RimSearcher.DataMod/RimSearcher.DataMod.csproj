@@ -7,7 +7,12 @@
     <RootNamespace>RimSearcher.DataMod</RootNamespace>
     <Nullable>disable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
-    <!-- 02-8:编译产物不进库。输出直接落到本机 Mods 目录下的 mod 结构里。 -->
+    <!-- 02-8:编译产物不进库。构建直接拼出一个**完整的 mod 目录** ModStaging/ ——
+         About/ 与 Assemblies/ 各就各位,于是 config 的 datamod_dir 指着它就能被 export
+         临时接进游戏。分两处放(About 在源码树、dll 在 bin/)的时候,部署只能靠手工拷贝,
+         而手工拷贝就是「改完代码忘了重发布」的产地。 -->
+    <ModStagingDir>$(MSBuildProjectDirectory)\ModStaging\</ModStagingDir>
+    <OutputPath>$(ModStagingDir)Assemblies\</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
@@ -25,5 +30,17 @@
     <!-- 中间格式契约:与 CLI 侧共享同一份源文件(产地唯一跨进程边界) -->
     <Compile Include="..\RimSearcher.Core\Contract\*.cs" LinkBase="Contract" />
   </ItemGroup>
+
+  <!-- About/ 跟着一起就位。少了它 ModStaging 就不是一个 mod,而游戏对「不是 mod 的目录」
+       的反应是**静默忽略** —— 那会表现成一次跑到超时的导出,而不是一句报错。 -->
+  <ItemGroup>
+    <AboutFiles Include="About\**\*" />
+  </ItemGroup>
+
+  <Target Name="StageAbout" AfterTargets="Build" Inputs="@(AboutFiles)"
+          Outputs="@(AboutFiles->'$(ModStagingDir)About\%(RecursiveDir)%(Filename)%(Extension)')">
+    <Copy SourceFiles="@(AboutFiles)"
+          DestinationFiles="@(AboutFiles->'$(ModStagingDir)About\%(RecursiveDir)%(Filename)%(Extension)')" />
+  </Target>
 
 </Project>

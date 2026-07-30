@@ -110,6 +110,33 @@ SQLite 建库、FTS、噪声过滤全部在 CLI `snapshot import` 侧。论据:
 
 备份还原方案否决记录:「换入后还原前」崩溃窗口 + 游戏退出可能回写 ModsConfig 的竞争。
 
+### 导出器按需接挂 [全新](2026-07-30 裁定)
+
+导出器是**工具而不是内容**,平常玩游戏时它出现在 mod 列表里是纯粹的副作用。
+所以它不再常驻 Mods 目录,改成:构建拼出 `ModStaging/`(About/ + Assemblies/),
+config 的 `datamod_dir` 指着它,`export` 开跑前在 `<game>/Mods/RimSearcher` 接一个
+**目录联接**过去,跑完断开。`datamod status / attach / detach` 是手工面(设置页那个
+导出入口没有 CLI 能替它接挂)。
+
+- **为什么是联接不是「拷进去、拷完删掉」**:后者与上面被否决的备份还原是同一个形状 ——
+  中途一崩就留下半个 mod(About.xml 在而 Assemblies 空了)。联接只有一个目录项,
+  建与断都是原子的,不存在「断了一半」。
+- **只删 reparse point,绝不删真目录**:接挂点上若是使用者手工装的那一份,一律不碰。
+  删除走 `recursive: false` —— 对联接它删链接本身,对非空真目录它抛。
+  「误删使用者的东西」在实现层就不可能发生,而不是靠调用处记得判断。
+- **断开是后置条件**:`using` 是唯一的断开产地,每条 throw / return 都经过它;
+  唯一漏得掉的是进程被强杀,由**下一次** Attach 接管清理(并把「它本来就在」说出去)。
+- **接挂只让游戏看得见,不让它启用**:启用仍然是隔离 savedata 那份 ModsConfig 的事。
+  于是哪怕残骸留下,使用者的游戏里它也是未启用状态。
+- **顺带收进来的教训**(2026-07-30 实测):Mods 目录里**一条悬空链接就能让整个 mod
+  系统死掉** —— `ModLister.RebuildModList()` 在 `ModMetaData.Init()` 里 `GetFiles`
+  一个不存在的目标,异常从**静态构造函数**抛出,`ModsConfig` 连带初始化失败,一个 mod
+  都不加载,游戏空转在主菜单反复抛 NRE。从编排侧看就是 `stage 'none'` 挂到超时。
+  真凶是一个与本工具无关的旧链接(`Kiiro PsyArt`),但结论对导出器自己的联接同样成立:
+  **坏联接必须认得出来并清掉**,而「认」的判据是 reparse point 属性本身,不是
+  「能不能解析到目标」—— 恰恰是解析不到的那种最需要被清理。闸在
+  `DataModLinkTests.坏联接也认得出来并被清掉`。
+
 ### modlist(`.rml`)[混合:游戏原生格式](第二轮裁决 7)
 
 - 格式唯一 `.rml`(`SaveData/ModLists/`,游戏 mod 界面「保存模组列表」的产物);
@@ -213,7 +240,8 @@ SQLite 建库、FTS、噪声过滤全部在 CLI `snapshot import` 侧。论据:
 ### config.toml
 
 机器事实与偏好:游戏路径(`ModsConfig.xml`、DataMod 导出目录)、快照库目录、
-modlist 别名、scope 组。**不放**:指纹事实(产地在 db meta)、任何声明文本。
+`datamod_dir`(导出器构建产物,按需接挂的目标)、modlist 别名、scope 组。
+**不放**:指纹事实(产地在 db meta)、任何声明文本。
 
 ### 测试(01 可移植清单的落点)
 
