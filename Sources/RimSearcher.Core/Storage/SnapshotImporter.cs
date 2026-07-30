@@ -510,7 +510,11 @@ public sealed class SnapshotImporter
         {
             var text = el.Value;
             if (string.IsNullOrWhiteSpace(text)) continue;
-            yield return (el.Name.LocalName, text);
+            // 游戏读这两种文件时都会把字面 `\n` 换成真换行(Keyed 走
+            // DirectXmlLoaderSimple、DefInjected 走 DefInjectionPackage,两处都只换 `\n`)。
+            // 不跟着换,收割层与运行时层就会为**同一句译文**存下两个不同的字符串 ——
+            // 于是「两层不一致」这个信号里混进了一批纯表示差异,读的人无从分辨哪些是真覆盖。
+            yield return (el.Name.LocalName, text.Replace("\\n", "\n"));
         }
     }
 

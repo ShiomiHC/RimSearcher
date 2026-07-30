@@ -440,6 +440,25 @@ public class ImportTests
     }
 
     /// <summary>
+    /// 收割层要和运行时层存下**同一个字符串**。游戏读语言文件时把字面 <c>\n</c> 换成真换行
+    /// (Keyed 走 DirectXmlLoaderSimple、DefInjected 走 DefInjectionPackage),收割不跟着换,
+    /// 同一句译文在两层就长得不一样 —— 于是「两层不一致」这个信号里混进一批纯表示差异,
+    /// 「磁盘上那句和生效的那句不同」这句话再也分不出真覆盖和假告警。
+    /// </summary>
+    [Fact]
+    public void 收割把字面n还原成换行和运行时一致()
+    {
+        var roots = ModRootWithKeyed("keyedescape", "test.mod",
+            ("CannotUseNoPower", "上一行\\n下一行"));
+        using var db = BuildAt("keyedescape", modRoots: [roots]).Db;
+
+        var harvested = db.KeyedByKey("CannotUseNoPower")
+                          .Single(r => r.Origin == TranslationOrigin.Harvested);
+        Assert.Equal("上一行\n下一行", harvested.Translated);
+        Assert.DoesNotContain("\\n", harvested.Translated);
+    }
+
+    /// <summary>
     /// keyed 走自己的 FTS 表,而不是蹭 <c>defs_fts</c>(那张表的 rowid 是 def id)。
     /// 两侧文本都要能召回:中文快照上按英文原文找是这一层最主要的用法之一。
     /// </summary>
