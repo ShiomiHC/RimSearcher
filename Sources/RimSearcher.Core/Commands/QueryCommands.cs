@@ -169,8 +169,8 @@ public sealed class SearchCommand : Command
                       $"no class, no mod. If '{query}' is a class that only appears inside nested " +
                       "<li Class=\"...\"> objects, the snapshot does not index those: 'rimsearcher code-search' " +
                       "finds the class itself."
-                    : "'rimsearcher types' lists what kinds of def this snapshot holds, and " +
-                      "'rimsearcher mods' lists which mods it covers."));
+                    : "'rimsearcher list' with no def type lists what kinds of def this snapshot holds, " +
+                      "and 'rimsearcher mods' lists which mods it covers."));
         }
 
         // 「靠什么命中的」必须在表里。实测:`search 心灵迟钝` 命中 TraitDef PsychicSensitivity,
@@ -998,9 +998,19 @@ public sealed class ListCommand : Command
     public override CommandSpec Spec => new()
     {
         Name = "list",
-        Aliases = ["ls"],
-        Summary = "List every def of one type.",
-        Positionals = [new PositionalSpec { Name = "defType", Help = "A def type such as ThingDef. 'rimsearcher types' lists them." }],
+        Aliases = ["ls", "types", "def-types"],
+        Summary = "List every def of one type — or, with no type given, every def type in the snapshot.",
+        Positionals =
+        [
+            new PositionalSpec
+            {
+                Name = "defType",
+                Required = false,
+                Help = "A def type such as ThingDef. Leave it out and this lists the def types themselves, " +
+                       "with how many defs each holds — all of them, unless you pass --limit. " +
+                       "--class and --offset need a def type and are refused without one.",
+            },
+        ],
         Options =
         [
             CommonOptions.Limit("defs"),
@@ -1017,6 +1027,7 @@ public sealed class ListCommand : Command
         ],
         Examples =
         [
+            "rimsearcher list",
             "rimsearcher list HediffDef",
             "rimsearcher list CreepJoinerBaseDef --class CreepJoinerAggressiveDef",
             "rimsearcher list ThingDef --scope all,-vanilla --limit all",
@@ -1026,15 +1037,90 @@ public sealed class ListCommand : Command
             new()
             {
                 Key = "defs",
-                What = "one row per def: def_name, label, mod, plus 'class' when the bucket holds more " +
-                       "than one def class.",
+                What = "with a def type: one row per def — def_name, label, mod, plus 'class' when the " +
+                       "bucket holds more than one def class.",
+            },
+            new()
+            {
+                Key = "types",
+                What = "without one: one row per def type — def_type, defs. Which of the two keys is " +
+                       "present follows the def type, so a caller that passed one never has to guess.",
             },
         ],
     };
 
     public override int Run(CommandContext ctx)
     {
-        var type = ctx.Args.Positional(0)!;
+        // 「有哪些桶」与「桶里装了哪些 def」是同一张表的两个层级,原先是两条命令。
+        // 分模式的判据是**给没给 def 类型**,而不是一个开关参数:落空分流里那句
+        // 「没有这个 def 类型」现在指得回同一条命令,恢复路径少一跳。
+        var type = ctx.Args.Positional(0);
+        return type is null ? RunTypes(ctx) : RunDefs(ctx, type);
+    }
+
+    /// <summary>
+    /// 不给 def 类型的那一半:列出这份快照有哪些 def 类型。
+    ///
+    /// <c>--class</c> 与 <c>--offset</c> 只对另一半有意义。它们仍然声明在这条命令上,
+    /// 于是「不给类型还传了它们」是一个新开的沉默口子 —— 照单收下、悄悄不生效,
+    /// 输出里没有任何迹象,与 <see cref="CommandContext.Limit"/> 记的 <c>--limit</c>
+    /// 被静默夹紧同形。所以当场退 2,并把该走的那条路说出来。
+    /// </summary>
+    private static int RunTypes(CommandContext ctx)
+    {
+        // 指的那条路只在名字**真是** def class 时才落到桶上。第一版这里写的是
+        // 「it names the bucket」—— 而 `list CompShield` 实测回的是「No def type named
+        // 'CompShield'」:一句无条件的许诺,指路指了个空。所以两种落点都说出来。
+        if (ctx.Args.Value("class") is { } cls)
+            throw new CliUsageException(
+                $"--class needs a def type to narrow inside. If you do not know which def type holds " +
+                $"the class '{cls}', run 'rimsearcher list {cls}': it names the def type when '{cls}' " +
+                $"is a def class, and reports no such def type when it is not — a class that defs only " +
+                $"reference in a field is found by 'rimsearcher find <field> {cls}' instead.");
+
+        // 数量不许猜。第一版写的是「a few dozen def types」,而实测的一份快照有 232 个。
+        if (ctx.Args.Offset() > 0)
+            throw new CliUsageException(
+                "--offset needs a def type to page through. Without one this lists the def types " +
+                "themselves, and they all come out at once unless you pass --limit.");
+
+        var scope = ctx.Scope();
+        ctx.Report.Promises("types");
+        var all = ctx.Db.Types(scope);
+
+        // 零行是 exit 1(R12 约定),这一支原先无条件 return 0 —— 按退出码分流的脚本
+        // 会把「0 def types.」读成「查到了」。而那句话本身也不许把 scope 造成的空
+        // 说成快照的空:整份快照的数就在手边,算一次比让人再跑一趟便宜。
+        if (all.Count == 0)
+        {
+            if (scope.IsAll)
+                ctx.Report.Notice(NoticeKind.NextStep,
+                    "This snapshot holds no defs at all. 'rimsearcher snapshot list' shows when it was taken, " +
+                    "and 'rimsearcher export' rebuilds it.");
+            else
+                ctx.Report.Notice(NoticeKind.NextStep,
+                    $"No def in this snapshot comes from --scope {scope.Expression}. Snapshot-wide the figure is " +
+                    Tally.Complete(ctx.Db.Types(ScopeFilter.Parse("all", ctx.Db.PackageIds(), ctx.Config)).Count)
+                         .Render("def type") + ". 'rimsearcher mods' lists what this snapshot actually has.");
+            return 1;
+        }
+
+        // 缺省全给(理由的产地在 LimitOrAll):问的是「一共有哪些」,截一刀就答不完整。
+        var limit = ctx.LimitOrAll();
+        var rows = limit.IsAll ? all : all.Take(limit.Effective).ToList();
+
+        ctx.Report.CountNotice(Tally.Of(rows.Count, all.Count), "def type", "pass --limit all for the rest.");
+        ctx.Report.Table("types", ["def_type", "defs"],
+            rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+            {
+                ["def_type"] = r.Type,
+                ["defs"] = r.Count,
+            }).ToList());
+        return 0;
+    }
+
+    private static int RunDefs(CommandContext ctx, string type)
+    {
         var limit = ctx.Limit();
         var offset = ctx.Args.Offset();
         var wantClass = ctx.Args.Value("class");
@@ -1094,7 +1180,7 @@ public sealed class ListCommand : Command
                 var present = ctx.Db.ClassesInType(type, scope);
                 ctx.Report.Notice(NoticeKind.NextStep,
                     present.Count == 0
-                        ? $"No def type named '{type}' in this snapshot. 'rimsearcher types' lists them all."
+                        ? $"No def type named '{type}' in this snapshot. 'rimsearcher list' with no def type lists them all."
                         : $"No def of type {type} has class '{wantClass}'. That type holds " +
                           NameList.Render([.. present.Select(c => $"{c.Class} ({c.Count})")], Limits.MaxSuggestions) + ".");
                 return 1;
@@ -1345,55 +1431,6 @@ public sealed class ValuesCommand : Command
     }
 }
 
-public sealed class TypesCommand : Command
-{
-    public override CommandSpec Spec => new()
-    {
-        Name = "types",
-        Aliases = ["def-types"],
-        Summary = "List every def type in the snapshot with how many defs it has.",
-        Options = [CommonOptions.Limit("def types") with { Default = "all" }, CommonOptions.Scope],
-        Examples = ["rimsearcher types", "rimsearcher types --scope all,-vanilla"],
-        JsonKeys = [new() { Key = "types", What = "one row per def type: def_type, defs." }],
-    };
-
-    public override int Run(CommandContext ctx)
-    {
-        var scope = ctx.Scope();
-        ctx.Report.Promises("types");
-        var all = ctx.Db.Types(scope);
-
-        // 零行是 exit 1(R12 约定),`types` 原先无条件 return 0 —— 按退出码分流的脚本
-        // 会把「0 def types.」读成「查到了」。而那句话本身也不许把 scope 造成的空
-        // 说成快照的空:整份快照的数就在手边,算一次比让人再跑一趟便宜。
-        if (all.Count == 0)
-        {
-            if (scope.IsAll)
-                ctx.Report.Notice(NoticeKind.NextStep,
-                    "This snapshot holds no defs at all. 'rimsearcher snapshot list' shows when it was taken, " +
-                    "and 'rimsearcher export' rebuilds it.");
-            else
-                ctx.Report.Notice(NoticeKind.NextStep,
-                    $"No def in this snapshot comes from --scope {scope.Expression}. Snapshot-wide the figure is " +
-                    Tally.Complete(ctx.Db.Types(ScopeFilter.Parse("all", ctx.Db.PackageIds(), ctx.Config)).Count)
-                         .Render("def type") + ". 'rimsearcher mods' lists what this snapshot actually has.");
-            return 1;
-        }
-
-        var limit = ctx.LimitOrAll();
-        var rows = limit.IsAll ? all : all.Take(limit.Effective).ToList();
-
-        ctx.Report.CountNotice(Tally.Of(rows.Count, all.Count), "def type", "pass --limit all for the rest.");
-        ctx.Report.Table("types", ["def_type", "defs"],
-            rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
-            {
-                ["def_type"] = r.Type,
-                ["defs"] = r.Count,
-            }).ToList());
-        return 0;
-    }
-}
-
 public sealed class ModsCommand : Command
 {
     public override CommandSpec Spec => new()
@@ -1438,7 +1475,7 @@ internal static class DefTypeMiss
     /// </summary>
     public static string Say(string typed, IEnumerable<string> known)
         => $"No def type named '{typed}' in this snapshot." +
-           Suggestion.Say(Suggestion.Closest(known, typed), " 'rimsearcher types' lists them all.");
+           Suggestion.Say(Suggestion.Closest(known, typed), " 'rimsearcher list' with no def type lists them all.");
 }
 
 internal static class Completeness

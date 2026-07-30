@@ -26,6 +26,7 @@ is the only command that reads it, and it says so.
 | What can this field be set to? | `rimsearcher values <field>` |
 | What fields does this def type have? | `rimsearcher fields <DefType>` |
 | Everything of one kind | `rimsearcher list <DefType>` |
+| What kinds of def does this snapshot hold at all? | `rimsearcher list` with no type |
 | What does this inherit from / what inherits from it? | `rimsearcher inherit <name>` |
 | Which layer of the chain writes this field? | `rimsearcher inherit <def> --path <field>` |
 | What does this interface text say, or which key is behind it? | `rimsearcher keyed <key or phrase>` |
@@ -265,10 +266,11 @@ and it is the only way to see a specific file when that MCP is not available.
 `notes` as `{kind, text}`, and the data sits beside it under a key that depends on the command —
 `defs` for `search`/`list`/`get`, `matches` for `code-search` and for `find` with a field path,
 `paths` for `find --value`, `nodes` for `inherit`, `keys` for `keyed`, `source` and `declarations`
-for `read`, and a key named after the command itself for `values`, `fields`, `types` and `mods`.
-Two commands carry a second key: `values` has `field`, saying which full paths and def types its
-value space was drawn from, and `code-search` has `ui_text`, holding the keyed translation of every
-key written as a literal on a matching line.
+for `read`, and a key named after the command itself for `values`, `fields` and `mods`.
+Three commands carry a second key: `values` has `field`, saying which full paths and def types its
+value space was drawn from, `code-search` has `ui_text`, holding the keyed translation of every
+key written as a literal on a matching line, and `list` swaps between `defs` and `types` according
+to whether you named a def type — the two never appear together.
 Do not guess: `<command> --help` lists that command's keys, as does
 [references/cli-reference.md](references/cli-reference.md). Reading a key the command does not
 produce gives you nothing, which is indistinguishable from an empty result. The key the command
@@ -300,7 +302,7 @@ the tool instead, where the counts stay honest:
 | `fields` | `--path`, `--offset`, `--limit` |
 | `values` | `--type`, `--scope`, `--offset`, `--limit` |
 | `search` | `--type`, `--scope`, `--offset`, `--limit` |
-| `list` | `--class`, `--scope`, `--offset`, `--limit` |
+| `list` | `--class`, `--scope`, `--offset`, `--limit` (`--class` and `--offset` need a def type) |
 | `inherit` | `--path`, `--limit` |
 | `keyed` | `--placeholders`, `--offset`, `--limit` |
 | `find` | `--scope`, `--exact`, `--offset`, `--limit` |
@@ -362,7 +364,7 @@ another command takes that option, which one — so a wrong guess costs one line
 answer.
 
 The global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the command name:
-`rimsearcher types --json`, not `rimsearcher --json types`. "Global" describes which commands
+`rimsearcher mods --json`, not `rimsearcher --json mods`. "Global" describes which commands
 take them, not where they sit.
 
 For the decompiler MCP, see [references/decompiler-mcp.md](references/decompiler-mcp.md).

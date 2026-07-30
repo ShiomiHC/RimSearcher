@@ -19,7 +19,7 @@ Answers questions about RimWorld's defs and C# from a snapshot of what the game 
 | `get` | Show one def in full: its identity, its fields, and any translations of it. |
 | `inherit` | Show what an XML node inherits from and what inherits from it, including abstract parents. |
 | `keyed` | Look up the UI text behind a translation key, or find the key behind a piece of UI text. |
-| `list` | List every def of one type. |
+| `list` | List every def of one type — or, with no type given, every def type in the snapshot. |
 | `modlist list` | List the mod lists available on this machine. |
 | `modlist save` | Capture the mods currently enabled in the game as a named list. |
 | `modlist show` | Show the mods in one list, in load order. |
@@ -33,7 +33,6 @@ Answers questions about RimWorld's defs and C# from a snapshot of what the game 
 | `snapshot use` | Pin a snapshot so later commands use it without being told each time. |
 | `sources list` | List the decompiled source trees and say which ones no longer match the installed assemblies. |
 | `sources sync` | Decompile the assemblies the game actually loads into the configured source tree. |
-| `types` | List every def type in the snapshot with how many defs it has. |
 | `values` | List the distinct values a field takes, most common first. |
 
 ## Exit codes
@@ -55,7 +54,7 @@ The data keys sit beside it, and each command's section below names its own. The
 
 ## Global options
 
-Every command takes these, and they are written **after** the command name: `rimsearcher types --json`, not `rimsearcher --json types`.
+Every command takes these, and they are written **after** the command name: `rimsearcher mods --json`, not `rimsearcher --json mods`.
 
 | Option | Meaning | Also accepted |
 |---|---|---|
@@ -424,15 +423,15 @@ rimsearcher keyed Command --limit all
 
 ## `list`
 
-List every def of one type.
+List every def of one type — or, with no type given, every def type in the snapshot.
 
 ```
-rimsearcher list <defType> [options]
+rimsearcher list [defType] [options]
 ```
 
 | Argument | Meaning |
 |---|---|
-| `<defType>` | A def type such as ThingDef. 'rimsearcher types' lists them. |
+| `<defType>` | A def type such as ThingDef. Leave it out and this lists the def types themselves, with how many defs each holds — all of them, unless you pass --limit. --class and --offset need a def type and are refused without one. *(optional)* |
 
 | Option | Meaning | Also accepted |
 |---|---|---|
@@ -445,11 +444,13 @@ rimsearcher list <defType> [options]
 
 | Key | Holds |
 |---|---|
-| `defs` | one row per def: def_name, label, mod, plus 'class' when the bucket holds more than one def class. |
+| `defs` | with a def type: one row per def — def_name, label, mod, plus 'class' when the bucket holds more than one def class. |
+| `types` | without one: one row per def type — def_type, defs. Which of the two keys is present follows the def type, so a caller that passed one never has to guess. |
 
 Examples:
 
 ```
+rimsearcher list
 rimsearcher list HediffDef
 rimsearcher list CreepJoinerBaseDef --class CreepJoinerAggressiveDef
 rimsearcher list ThingDef --scope all,-vanilla --limit all
@@ -829,32 +830,6 @@ Examples:
 rimsearcher sources sync
 rimsearcher sources sync --dry-run
 rimsearcher sources sync --only erdelf.humanoidalienraces --force
-```
-
-## `types`
-
-List every def type in the snapshot with how many defs it has.
-
-```
-rimsearcher types [options]
-```
-
-| Option | Meaning | Also accepted |
-|---|---|---|
-| `-n`, `--limit` <n|all> | How many def types to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `all`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
-| `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
-
-`--json` keys, besides the global `notes`:
-
-| Key | Holds |
-|---|---|
-| `types` | one row per def type: def_type, defs. |
-
-Examples:
-
-```
-rimsearcher types
-rimsearcher types --scope all,-vanilla
 ```
 
 ## `values`

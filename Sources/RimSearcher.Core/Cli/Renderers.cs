@@ -178,7 +178,7 @@ public static class MarkdownRenderer
 
         sb.Append("## Global options").Append(OutputText.Newline).Append(OutputText.Newline);
         sb.Append("Every command takes these, and they are written **after** the command name: ")
-          .Append("`rimsearcher types --json`, not `rimsearcher --json types`.")
+          .Append("`rimsearcher mods --json`, not `rimsearcher --json mods`.")
           .Append(OutputText.Newline).Append(OutputText.Newline);
         AppendOptionTable(sb, globals);
 

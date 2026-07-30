@@ -199,7 +199,7 @@ public class SkillPromiseTests
         [
             ["search", "shield"], ["list", "ThingDef"], ["get", "Apparel_ShieldBelt"],
             ["find", "compClass", "RimWorld.CompShield"], ["values", "thingClass"],
-            ["fields", "ThingDef"], ["types"], ["mods"], ["inherit", "BaseBullet"],
+            ["fields", "ThingDef"], ["list"], ["mods"], ["inherit", "BaseBullet"],
         ];
 
         // 「N noun」/「N of M noun」/「at least N noun」—— 三态各自的开头形状。
@@ -410,7 +410,7 @@ public class SkillPromiseTests
             "The --json paragraph names keys that no command declares: " + string.Join(", ", invented));
 
         // 反向:SKILL 教的那几条命令,声明的每个键都得在这段话里。
-        string[] taught = ["search", "list", "get", "find", "values", "fields", "types", "mods", "inherit",
+        string[] taught = ["search", "list", "get", "find", "values", "fields", "mods", "inherit",
                            "keyed", "read", "code-search"];
         var undocumented = registry.Specs
             .Where(s => taught.Contains(s.Name))

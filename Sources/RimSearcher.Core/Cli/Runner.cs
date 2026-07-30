@@ -25,7 +25,6 @@ public sealed class CommandRegistry
         new KeyedCommand(),
         new FieldsCommand(),
         new ValuesCommand(),
-        new TypesCommand(),
         new ModsCommand(),
         new CodeSearchCommand(),
         new ReadCommand(),

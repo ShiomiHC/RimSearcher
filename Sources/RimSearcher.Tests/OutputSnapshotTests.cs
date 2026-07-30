@@ -91,7 +91,9 @@ public class OutputSnapshotTests
         { "fields-filtered",       ["fields", "ThingDef", "--path", "comps"] },
         { "values-coverage",       ["values", "compClass"] },
         { "values-miss",           ["values", "noSuchField"] },
-        { "types",                 ["types"] },
+        // 并条之后的两种模式各钉一份:上面 list-limited / list-scope-empty 是给了 def 类型
+        // 的那一半,这一份是不给的那一半。
+        { "list-types",            ["list"] },
         { "mods",                  ["mods"] },
         // limit 取 2 而不是 3:R1 把默认值行从表里拿掉之后,ShieldBelt 只剩 3 条可列,
         // --limit 3 就再也截不到东西了 —— 这份基线原本就是为「JSON 里的截断声明」立的。
