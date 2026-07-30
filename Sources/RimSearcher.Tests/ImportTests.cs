@@ -23,12 +23,50 @@ public class ImportTests
     }
 
     private static SnapshotDb Build(string tag, bool omitEnd = false, long? wrongCount = null)
+        => BuildAt(tag, omitEnd, wrongCount).Db;
+
+    /// <summary>
+    /// 同 <see cref="Build"/>,外加库文件路径 —— 有些字段没有任何命令读它
+    /// (<c>translations.def_id</c> 就是),要立闸只能自己开库看。
+    /// </summary>
+    private static (SnapshotDb Db, string Path) BuildAt(string tag, bool omitEnd = false, long? wrongCount = null,
+                                                        IReadOnlyList<string>? modRoots = null)
     {
         var export = Temp(tag + IntermediateFormat.FileExtension);
         Fixture.WriteExport(export, omitEnd, wrongCount);
         var db = Temp(tag + ".db");
-        new SnapshotImporter().Import(export, db);
-        return SnapshotDb.Open(db);
+        new SnapshotImporter { ModRoots = modRoots ?? [] }.Import(export, db);
+        return (SnapshotDb.Open(db), db);
+    }
+
+    /// <summary>直接读 <c>translations</c>,包括查询侧不返回的 <c>def_id</c>。</summary>
+    private static List<(string Path, long? DefId)> RawTranslations(string dbPath, string defName)
+    {
+        using var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={dbPath}");
+        raw.Open();
+        using var cmd = raw.CreateCommand();
+        cmd.CommandText = "SELECT path, def_id FROM translations WHERE def_name = $n ORDER BY path";
+        cmd.Parameters.AddWithValue("$n", defName);
+        using var rd = cmd.ExecuteReader();
+        var rows = new List<(string, long?)>();
+        while (rd.Read()) rows.Add((rd.GetString(0), rd.IsDBNull(1) ? null : rd.GetInt64(1)));
+        return rows;
+    }
+
+    /// <summary>造一个只有语言文件的 mod 目录,给静态收割那条路当输入。</summary>
+    private static string ModRootWith(string tag, params (string Key, string Text)[] entries)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "import", tag + "-mods");
+        if (Directory.Exists(root)) Directory.Delete(root, true);
+        var mod = Path.Combine(root, "SomeTranslationMod");
+        Directory.CreateDirectory(Path.Combine(mod, "About"));
+        File.WriteAllText(Path.Combine(mod, "About", "About.xml"),
+            "<ModMetaData><packageId>test.mod</packageId></ModMetaData>");
+        var inj = Path.Combine(mod, "Languages", Fixture.Language, "DefInjected");
+        Directory.CreateDirectory(inj);
+        File.WriteAllText(Path.Combine(inj, "Injected.xml"),
+            "<LanguageData>" + string.Concat(entries.Select(e => $"<{e.Key}>{e.Text}</{e.Key}>")) + "</LanguageData>");
+        return root;
     }
 
     // ---- 完整性:半份文件必须被拒,不许静默建成一个缺行的库 ----
@@ -201,5 +239,75 @@ public class ImportTests
         var scope = ScopeFilter.Parse("all", db.PackageIds(), NoConfig);
         var (rows, _) = db.SearchFts("护盾", scope, null, 25);
         Assert.Contains(rows, r => r.DefName == "Apparel_ShieldBelt");
+    }
+
+    // ---- 同名 def 的译文归属(R2 的建库侧;盲测没碰到,是修 R2 时实测查出的)----
+
+    /// <summary>
+    /// 一个 defName 下挂着几个 def 时,带类型的运行时注入要绑到**类型对得上**的那个。
+    /// 原先这里是「名字 → 最后写的那个 id」,绑对绑错全看导出顺序 —— 语料特意把
+    /// ThingDef 写在前面,让「后写的赢」当场赢错。
+    /// </summary>
+    [Fact]
+    public void 同名def的译文按类型绑到对的那个()
+    {
+        var (db, path) = BuildAt("owner");
+        using var _ = db;
+        var named = db.GetDefsNamed("Firefoam");
+        var thing = named.Single(d => d.DefType == "ThingDef");
+        var stat = named.Single(d => d.DefType == "StatDef");
+        Assert.NotEqual(thing.Id, stat.Id);
+
+        var rows = RawTranslations(path, "Firefoam");
+        Assert.Equal(2, rows.Count);
+        Assert.All(rows, r => Assert.Equal(thing.Id, r.DefId));
+    }
+
+    /// <summary>
+    /// 静态收割来的 key 是 `DefName.field`,一个字的类型信息都没有。同名歧义下**写 null**,
+    /// 不挑一个 —— 挑错的那一行与挑对的长得一模一样,而 null 至少是一句真话。
+    /// 同一份收割里名字唯一的那条照常绑上,免得「判不出来」被写成「一律不绑」。
+    /// </summary>
+    [Fact]
+    public void 收割译文判不出归属时写空而不是挑一个()
+    {
+        var roots = ModRootWith("harvest",
+            ("Firefoam.label", "赛博泡沫"),
+            ("Apparel_ShieldBelt.description", "一条护盾腰带。"));
+        var (db, path) = BuildAt("harvest", modRoots: [roots]);
+        using var _ = db;
+
+        var ambiguous = RawTranslations(path, "Firefoam")
+            .Where(r => r.Path == "label")
+            .ToList();
+        Assert.Contains(ambiguous, r => r.DefId is null);
+
+        var unique = RawTranslations(path, "Apparel_ShieldBelt").Single(r => r.Path == "description");
+        Assert.Equal(db.GetDefsNamed("Apparel_ShieldBelt").Single().Id, unique.DefId);
+    }
+
+    /// <summary>
+    /// FTS 的 translated 列是召回用的,判据与 def_id 不同:归属判得出来就只挂那一个
+    /// (中文名搜出来的不该是同名的另一个类型),判不出来就每个同名 def 都挂 ——
+    /// 漏掉一个的后果是「用中文名搜不到那个 def」,比多召回一个同名的贵得多。
+    /// </summary>
+    [Fact]
+    public void 中文名召回到判得出归属的那个否则全都召回()
+    {
+        var roots = ModRootWith("recall", ("Firefoam.label", "赛博泡沫"));
+        var (db, _path) = BuildAt("recall", modRoots: [roots]);
+        using var _ = db;
+        var scope = ScopeFilter.Parse("all", db.PackageIds(), NoConfig);
+        var named = db.GetDefsNamed("Firefoam");
+        var thing = named.Single(d => d.DefType == "ThingDef");
+        var stat = named.Single(d => d.DefType == "StatDef");
+
+        var typed = db.SearchFts("灭火泡沫", scope, null, 25).Rows.Select(r => r.Id).ToList();
+        Assert.Contains(thing.Id, typed);
+        Assert.DoesNotContain(stat.Id, typed);
+
+        var untyped = db.SearchFts("赛博", scope, null, 25).Rows.Select(r => r.Id).ToList();
+        Assert.Contains(thing.Id, untyped);
+        Assert.Contains(stat.Id, untyped);
     }
 }

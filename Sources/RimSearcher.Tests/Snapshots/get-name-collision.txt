@@ -1,16 +1,10 @@
 $ rimsearcher get Firefoam
 exit 0
 --- stdout ---
-0 fields.
 2 fields.
 2 translations.
+0 fields.
 2 defs share the name 'Firefoam' across different def types; all of them are shown. Pass --type <DefType> for just one.
-
-def_name     Firefoam
-def_type     StatDef
-class        Verse.StatDef
-mod          ludeon.rimworld
-source       Stats_Basics.xml
 
 def_name       Firefoam
 def_type       ThingDef
@@ -27,4 +21,10 @@ statBases[0].stat  MarketValue
 path         translated  original             language           origin
 description  一团灭火泡沫。     A blob of firefoam.  ChineseSimplified  in effect
 label        灭火泡沫        firefoam             ChineseSimplified  in effect
+
+def_name     Firefoam
+def_type     StatDef
+class        Verse.StatDef
+mod          ludeon.rimworld
+source       Stats_Basics.xml
 --- stderr ---

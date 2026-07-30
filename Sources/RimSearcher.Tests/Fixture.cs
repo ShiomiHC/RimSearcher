@@ -189,11 +189,15 @@ public static class Fixture
         // 那一边,StatDef 这边一无所有。于是 `get Firefoam --type StatDef` 一旦按 defName
         // 关联,就会在 StatDef 的标题块下印出 ThingDef 的父节点与描述译文 —— 那正是
         // S8 险些交出的错答案(字段表刚说完「没有 description」,紧接着一条 description 译文)。
-        Def("StatDef", "Firefoam", null, "ludeon.rimworld", "Stats_Basics.xml", false, 0);
-
+        //
+        // **这两行的先后是有承重的**:两条译文的 def_type 是 ThingDef,而 ThingDef 写在前面。
+        // 导入侧原先按 defName 建「名字 → 单个 id」的表,后写的顶掉先写的,于是译文会绑到
+        // 后写的 StatDef 上 —— 反过来写,同一份错代码就碰巧绑对了,闸也就白立了。
         Def("ThingDef", "Firefoam", "firefoam", "ludeon.rimworld", "Buildings_Special.xml", false, 0,
             ("thingClass", "RimWorld.Building"),
             ("statBases[0].stat", "MarketValue"));
+
+        Def("StatDef", "Firefoam", null, "ludeon.rimworld", "Stats_Basics.xml", false, 0);
 
         // 三级匹配的语料:查 "VoidNode" 时 FTS 命中前两个(词首对齐),第三个只有子串扫描找得到。
         // 混合命中是「N of M 的 M 不许随 --limit 变」那道闸唯一的落点 —— 少了它,

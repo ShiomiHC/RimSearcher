@@ -62,7 +62,12 @@ public sealed class SnapshotImporter
                 VALUES ($t,$n,$pn,$a,$dn,$l,$sm,$sf,$po)
                 """);
 
-            var idByName = new Dictionary<string, long>(StringComparer.Ordinal);
+            // 一个 defName 下可能挂着**几个** def(同名跨 def 类型是 RimWorld 常态)。
+            // 原先这里是 name → 单个 id,后写的把先写的顶掉,于是 `Firefoam` 的译文
+            // 一律绑到导出文件里最后出现的那个 Firefoam 上 —— 绑对绑错取决于导出顺序,
+            // 而输出里没有任何迹象。查询侧已经改成按名字取、由命令层判归属(R2),
+            // 于是这个 def_id 反倒成了一个没人读、又一直是错的字段:留着就是给下一个人挖坑。
+            var idsByName = new Dictionary<string, List<(long Id, string? Type)>>(StringComparer.Ordinal);
             var ftsExtra = new Dictionary<long, List<string>>();
             var pendingInjections = new List<(string defName, string defType, string path, string translated, string original)>();
             long nextId = 1;
@@ -95,14 +100,17 @@ public sealed class SnapshotImporter
                 {
                     var id = nextId++;
                     var defName = Str(root, IntermediateFormat.KeyDefName) ?? "";
-                    idByName[defName] = id;
+                    var defTypeHere = Str(root, IntermediateFormat.KeyDefType);
+                    (idsByName.TryGetValue(defName, out var sameName)
+                        ? sameName
+                        : idsByName[defName] = []).Add((id, defTypeHere));
 
                     var truncated = root.TryGetProperty(IntermediateFormat.KeyFieldsTruncated, out var ftEl)
                         ? ftEl.GetInt32() : 0;
                     if (truncated > 0) truncatedDefs++;
 
                     Bind(insertDef, "$id", id);
-                    Bind(insertDef, "$t", Str(root, IntermediateFormat.KeyDefType));
+                    Bind(insertDef, "$t", defTypeHere);
                     Bind(insertDef, "$n", defName);
                     Bind(insertDef, "$l", Str(root, IntermediateFormat.KeyLabel));
                     Bind(insertDef, "$d", Str(root, IntermediateFormat.KeyDescription));
@@ -182,8 +190,9 @@ public sealed class SnapshotImporter
 
             foreach (var inj in pendingInjections)
             {
-                idByName.TryGetValue(inj.defName, out var defId);
-                Bind(insertTr, "$id", defId == 0 ? null : defId);
+                var candidates = Candidates(idsByName, inj.defName);
+                var owner = Owner(candidates, inj.defType);
+                Bind(insertTr, "$id", owner);
                 Bind(insertTr, "$t", inj.defType);
                 Bind(insertTr, "$n", inj.defName);
                 Bind(insertTr, "$p", inj.path);
@@ -194,11 +203,10 @@ public sealed class SnapshotImporter
                 Bind(insertTr, "$origin", TranslationOrigin.Runtime);
                 insertTr.ExecuteNonQuery();
                 runtimeTr++;
-                if (defId != 0)
-                    (ftsExtra.TryGetValue(defId, out var l) ? l : ftsExtra[defId] = []).Add(inj.translated);
+                Recall(ftsExtra, owner, candidates, inj.translated);
             }
 
-            var harvested = HarvestStaticTranslations(insertTr, idByName, meta, ftsExtra);
+            var harvested = HarvestStaticTranslations(insertTr, idsByName, meta, ftsExtra);
 
             // 翻译文本回填进 FTS 的 translated 列(双语索引)
             using (var updFts = Prepare(db, "INSERT INTO defs_fts (defs_fts, rowid, def_name, label, description, translated) VALUES ('delete',$id,$n0,$l0,$d0,$t0)"))
@@ -270,15 +278,39 @@ public sealed class SnapshotImporter
         }
     }
 
+    /// <summary>这个 defName 下的全部 def。没有就是空表,调用点不必分两种写法。</summary>
+    private static IReadOnlyList<(long Id, string? Type)> Candidates(
+        Dictionary<string, List<(long Id, string? Type)>> idsByName, string defName)
+        => idsByName.TryGetValue(defName, out var list) ? list : [];
+
     /// <summary>
-    /// 静态收割(第二轮裁决 8 的 advisory 层):扫**所有已装 mod** 的
-    /// <c>Languages/&lt;快照语言&gt;/DefInjected/</c>,只留 defName 命中快照内 def 的条目。
-    ///
-    /// 要点:不判「这是不是翻译 mod」——没有判据,也不需要。目标 mod 自带的翻译与第三方
-    /// 汉化包一视同仁,不相干的条目被 defName 过滤自然掉出去。**不替换任何字段值**,
-    /// 纯检索召回,所以同路径多译文并存不构成冲突。
+    /// 这条译文归哪个 def。**判不出来就写 null**,不挑一个 —— 挑错的那一行与挑对的
+    /// 长得一模一样,而 null 至少是一句真话(游戏自己也是按 defName 注入的,
+    /// 语言文件的 key 里根本没有类型这一维)。
     /// </summary>
-    private int HarvestStaticTranslations(SqliteCommand insertTr, Dictionary<string, long> idByName,
+    private static long? Owner(IReadOnlyList<(long Id, string? Type)> candidates, string? defType)
+    {
+        if (candidates.Count == 0) return null;
+        if (candidates.Count == 1) return candidates[0].Id;
+        var typed = candidates.Where(c => DefTypes.Same(c.Type, defType)).ToList();
+        return typed.Count == 1 ? typed[0].Id : null;
+    }
+
+    /// <summary>
+    /// 译文进双语 FTS。归属判不出来时**每个同名 def 都收**:这一列是召回用的,
+    /// 而漏掉一个的后果是「用中文名搜不到那个 def」—— 比多召回一个同名 def 贵得多,
+    /// 后者读者一眼就分得清(get 的输出会把同名歧义说破)。
+    /// </summary>
+    private static void Recall(Dictionary<long, List<string>> ftsExtra, long? owner,
+                               IReadOnlyList<(long Id, string? Type)> candidates, string text)
+    {
+        var targets = owner is { } id ? [id] : candidates.Select(c => c.Id);
+        foreach (var target in targets)
+            (ftsExtra.TryGetValue(target, out var l) ? l : ftsExtra[target] = []).Add(text);
+    }
+
+    private int HarvestStaticTranslations(SqliteCommand insertTr,
+                                          Dictionary<string, List<(long Id, string? Type)>> idsByName,
                                           ExportMeta meta, Dictionary<long, List<string>> ftsExtra)
     {
         if (ModRoots.Count == 0) return 0;
@@ -301,9 +333,13 @@ public sealed class SnapshotImporter
                             if (dot <= 0) continue;
                             var defName = key[..dot];
                             var path = key[(dot + 1)..];
-                            if (!idByName.TryGetValue(defName, out var defId)) continue;
+                            var candidates = Candidates(idsByName, defName);
+                            if (candidates.Count == 0) continue;
 
-                            Bind(insertTr, "$id", defId);
+                            // 收割来的 key 是 `DefName.field`,一个字的类型信息都没有 ——
+                            // 所以这里能判出归属的只有「这个名字下只有一个 def」那一种。
+                            var owner = Owner(candidates, null);
+                            Bind(insertTr, "$id", owner);
                             Bind(insertTr, "$t", null);
                             Bind(insertTr, "$n", defName);
                             Bind(insertTr, "$p", path);
@@ -316,7 +352,7 @@ public sealed class SnapshotImporter
                                 : TranslationOrigin.HarvestedOutside);
                             insertTr.ExecuteNonQuery();
                             count++;
-                            (ftsExtra.TryGetValue(defId, out var l) ? l : ftsExtra[defId] = []).Add(text);
+                            Recall(ftsExtra, owner, candidates, text);
                         }
                     }
                 }
