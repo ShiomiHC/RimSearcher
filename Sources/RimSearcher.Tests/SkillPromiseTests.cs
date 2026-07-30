@@ -62,8 +62,20 @@ public class SkillPromiseTests
         // 照字面读会被当成查得到的问题。收窄成「注入到 def 上的译文」并把 Keyed 明说成不覆盖。
         new("It covers def names, labels, descriptions and the translations injected onto defs — **not C# class names**, and **not the UI strings under `Languages/*/Keyed`**",
             nameof(search只认名字标签与译文而不认C类名)),
+        new("an English term still finds its def on a\n   Chinese snapshot",
+            nameof(GrammarTests.英文原文在中文快照上搜得到)),
         new("`values <field>` gives the whole value space, and prints which full paths and def types contributed",
             nameof(values说清这些值来自哪些路径与def类型)),
+
+        // ---- 五轮:子串匹配与同块兄弟 ----
+        new("The output says when nothing matched as a whole path segment",
+            nameof(GrammarTests.子串匹配要说破自己不是整段命中)),
+        new("the output names any hand-set field in the same `comps[N]` block as the rows it printed",
+            nameof(GrammarTests.同一块里有人设过的兄弟字段要点名)),
+        new("takes `--type` and `--def` to narrow to the\nones a particular answer depended on. The footnote on such an answer prints that command already\nfilled in",
+            nameof(GrammarTests.完整性尾注指的命令要走得到它刚说的那批)),
+        new("The global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the command name",
+            nameof(GrammarTests.全局参数的位置约束要写在它自己的标题上)),
         // R11 那处唯一既成的静默吞掉(find --value --exact)在 SKILL 里没有专属句子,
         // 兜住它的是下面那条「Unknown options are rejected rather than ignored」。
         // 这里不给它单独立一行:能钉住的原文只有收窄表里孤零零一个 `--exact`,

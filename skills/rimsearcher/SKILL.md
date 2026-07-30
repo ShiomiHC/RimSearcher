@@ -118,12 +118,23 @@ stays local.
    translations injected onto defs — **not C# class names**, and **not the UI strings under
    `Languages/*/Keyed`**. `search CompShield` finds nothing no matter how you spell it; that
    question is `find compClass CompShield`.
+   Both sides of a translation are searchable, so **an English term still finds its def on a
+   Chinese snapshot** — `search "brain damage"` works even when every label in the snapshot is
+   Chinese.
    The `matched_on` column says *where* each row matched. A row with an empty `label` did not
    fail to match; it matched somewhere else, and that column names the place.
 2. **Have the exact name.** `get` shows identity, every field path with its value, and any
    translations. Field paths are indexed, so `comps[4].compClass` is the real, post-patch shape.
    A big def has hundreds of paths, so name what you want rather than dumping and filtering:
    `get Apparel_ShieldBelt --path statBases`. Same switch on `fields`.
+   `--path` and `--value` match as **substrings**, which is why a partial name works at all — and
+   also why `--path soundImpact` returns `soundImpactDefault`, a field with the opposite meaning.
+   The output says when nothing matched as a whole path segment, so read that line before treating
+   a single clean row as the field you asked for.
+   Fields inside one indexed block constrain each other, and a `--path` filter cuts the siblings
+   away: the output names any hand-set field in the same `comps[N]` block as the rows it printed.
+   That line is not decoration — `minFuelCost` and `fuelPerTile` sit in one block and answer
+   different halves of "how far does this go".
    Every field row carries a `code_default` column, and it decides how much a value is worth:
    `no` means the value differs from what a fresh instance of the declaring type carries, so
    something — XML, a patch, or `ResolveReferences` — put it there. `yes` means it is the same
@@ -263,7 +274,9 @@ If a def was truncated at export time, `get` says so on that def. When it does, 
 missing from the list is **not** evidence that the def lacks it — raise `--limit` or trust the
 warning rather than concluding the field does not exist. The same boundary applies to `find`,
 `values` and `fields`, whose counts are over **indexed** paths; `rimsearcher snapshot truncated`
-lists the affected defs so you can cross-check.
+lists the affected defs so you can cross-check, and takes `--type` and `--def` to narrow to the
+ones a particular answer depended on. The footnote on such an answer prints that command already
+filled in.
 
 ## Snapshots
 
@@ -294,6 +307,10 @@ treating a stall report as failure.
 Unknown options are rejected rather than ignored, with the nearest accepted spelling — or, if
 another command takes that option, which one — so a wrong guess costs one line, not a wrong
 answer.
+
+The global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the command name:
+`rimsearcher types --json`, not `rimsearcher --json types`. "Global" describes which commands
+take them, not where they sit.
 
 For the decompiler MCP, see [references/decompiler-mcp.md](references/decompiler-mcp.md).
 
