@@ -106,9 +106,7 @@ public sealed class SearchCommand : Command
         {
             // 翻过了头不是「没有这个东西」。分开说,否则一次翻页会被读成一次否定 ——
             // 这正是 R8 那批误诊的形状换个位置再来一遍。
-            ctx.Report.Notice(NoticeKind.NextStep,
-                $"--offset {offset} is past the end: '{query}' matched " +
-                $"{Tally.Complete(total).Render("def")} in all.");
+            ctx.Report.PastEnd(offset, $"'{query}' matched {Tally.Complete(total).Render("def")} in all.");
         }
         else if (rows.Count == 0)
         {
@@ -631,8 +629,7 @@ public sealed class FindCommand : Command
             ctx.Report.PageNotice("def", rows.Count, offset, total);
         else if (offset > 0 && total > 0)
         {
-            ctx.Report.Notice(NoticeKind.NextStep,
-                $"--offset {offset} is past the end: {Tally.Complete(total).Render("def")} match in all.");
+            ctx.Report.PastEnd(offset, $"{Tally.Complete(total).Render("def")} match in all.");
             return 1;
         }
 
@@ -760,8 +757,7 @@ public sealed class FindCommand : Command
 
         if (rows.Count == 0 && offset > 0 && total > 0)
         {
-            ctx.Report.Notice(NoticeKind.NextStep,
-                $"--offset {offset} is past the end: {Tally.Complete(total).Render("field path")} hold '{value}'.");
+            ctx.Report.PastEnd(offset, $"{Tally.Complete(total).Render("field path")} hold '{value}'.");
             return 1;
         }
 
@@ -860,9 +856,8 @@ public sealed class ListCommand : Command
             // 「ThingDef 不是 def 类型」那一条,把一次翻页答成了一句彻头彻尾的假话。
             if (offset > 0 && total > 0)
             {
-                ctx.Report.Notice(NoticeKind.NextStep,
-                    $"--offset {offset} is past the end: this snapshot has " +
-                    $"{Tally.Complete(total).Render("def")} of type {type}" +
+                ctx.Report.PastEnd(offset,
+                    $"this snapshot has {Tally.Complete(total).Render("def")} of type {type}" +
                     (wantClass is null ? "" : $" with class '{wantClass}'") + ".");
                 return 1;
             }
@@ -1005,8 +1000,7 @@ public sealed class FieldsCommand : Command
         {
             if (offset > 0 && total > 0)
             {
-                ctx.Report.Notice(NoticeKind.NextStep,
-                    $"--offset {offset} is past the end: {Tally.Complete(total).Render("field path")} match in all.");
+                ctx.Report.PastEnd(offset, $"{Tally.Complete(total).Render("field path")} match in all.");
                 return 1;
             }
 
@@ -1077,8 +1071,7 @@ public sealed class ValuesCommand : Command
         {
             if (offset > 0 && total > 0)
             {
-                ctx.Report.Notice(NoticeKind.NextStep,
-                    $"--offset {offset} is past the end: '{path}' takes {Tally.Complete(total).Render("value")} in all.");
+                ctx.Report.PastEnd(offset, $"'{path}' takes {Tally.Complete(total).Render("value")} in all.");
                 return 1;
             }
 
@@ -1140,7 +1133,7 @@ public sealed class TypesCommand : Command
     {
         var scope = ctx.Scope();
         var all = ctx.Db.Types(scope);
-        var limit = ctx.Args.Value("limit") is null ? LimitValue.All : ctx.Limit();
+        var limit = ctx.LimitOrAll();
         var rows = limit.IsAll ? all : all.Take(limit.Effective).ToList();
 
         ctx.Report.CountNotice(Tally.Of(rows.Count, all.Count), "def type", "pass --limit all for the rest.");
@@ -1172,7 +1165,7 @@ public sealed class ModsCommand : Command
     public override int Run(CommandContext ctx)
     {
         var all = ctx.Db.Mods;
-        var limit = ctx.Args.Value("limit") is null ? LimitValue.All : ctx.Limit();
+        var limit = ctx.LimitOrAll();
         var mods = limit.IsAll ? all : all.Take(limit.Effective).ToList();
 
         ctx.Report.CountNotice(Tally.Of(mods.Count, all.Count), "mod",

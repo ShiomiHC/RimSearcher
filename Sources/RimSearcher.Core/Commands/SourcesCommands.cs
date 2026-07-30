@@ -23,6 +23,19 @@ internal static class SourcesShared
         return Path.GetFullPath(root);
     }
 
+    /// <summary>
+    /// 「没配反编译目录」这句话的**查询侧**产地(code-search / read 各写过一份,逐字相同)。
+    ///
+    /// <see cref="Root"/> 里那一份不并进来:它是**写**侧(sync 要往哪儿放 C#),
+    /// 后半截也不同 —— 那里说不出「MCP 能替你回答」,因为 MCP 读元数据,替不了落盘。
+    /// 两句话长得像而说的是两件事,合并只会逼出一个 bool 参数,然后两种措辞在一个方法里
+    /// 分叉 —— 产地还是两个,只是藏进了 if。
+    /// </summary>
+    internal static string NotConfiguredToRead(string verb)
+        => $"No decompiled source tree is configured, so there is nothing to {verb}. " +
+           "Set 'decompiled_dir' in the config file to the directory holding the decompiled C#. " +
+           "Symbol-level questions do not need it: the DecompilerServer MCP reads the assemblies directly.";
+
     /// <summary>这个目录是不是一个 git 工作树的根。</summary>
     internal static bool IsGitRoot(string dir) => Directory.Exists(Path.Combine(dir, ".git"));
 

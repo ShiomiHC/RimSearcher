@@ -123,6 +123,17 @@ public sealed class Report
     }
 
     /// <summary>
+    /// 翻过了头。**不是**「没有这个东西」—— 分开说,否则一次翻页会被读成一次否定,
+    /// 而那正是 R8 那批误诊的形状换个位置再来一遍。
+    ///
+    /// 六条命令各写过一份,前半截逐字相同、尾句各说各的(「N defs match in all」/
+    /// 「'{path}' takes N values in all」…)。尾句该各说各的 —— 数的东西不一样;
+    /// 前半截不该。<paramref name="rest"/> 接的就是那个尾句,自带句号。
+    /// </summary>
+    public Report PastEnd(int offset, string rest)
+        => Notice(NoticeKind.NextStep, $"--offset {offset} is past the end: {rest}");
+
+    /// <summary>
     /// 只在被截断时发声。留给「完整态另有更贴切的说法」的调用点(get 的字段表由
     /// --path 分支自己报数,再补一条裸计数就成了两句话说同一件事)。
     /// </summary>

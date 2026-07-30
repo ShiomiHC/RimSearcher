@@ -148,9 +148,7 @@ public sealed class CodeSearchCommand : Command
         var root = ctx.Config.DecompiledDir;
         if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
             throw new CliUsageException(
-                "No decompiled source tree is configured, so there is nothing to search. " +
-                "Set 'decompiled_dir' in the config file to the directory holding the decompiled C#. " +
-                "Symbol-level questions do not need it: the DecompilerServer MCP reads the assemblies directly.");
+                SourcesShared.NotConfiguredToRead("search"));
 
         var sourceName = ctx.Args.Value("source");
         var glob = ctx.Args.Value("files") ?? "*.cs";
