@@ -15,6 +15,14 @@ public sealed record DefRow(long Id, string DefType, string DefName, string? Lab
 public sealed record FieldRow(string Path, string Leaf, string? Value, int Default);
 
 /// <summary>
+/// 完整性尾注要说的两件事:与本次结果同类型的 def 里被砍过的**有几个**,以及**是哪几个类型**。
+///
+/// 只回一个数不够 —— 尾注末尾那条续页命令得带上收窄开关,否则它指向的是全库 239 条,
+/// 而尾注刚说的是其中某几个类型的一小批。指的路走不到刚说的地方,与不指路是同一种错。
+/// </summary>
+public sealed record TruncationScope(int Count, IReadOnlyList<string> Types);
+
+/// <summary>
 /// <see cref="SnapshotDb.PathsWithValue"/> 怎么算「取到过这个值」。
 /// </summary>
 public enum ValueMatch
@@ -404,11 +412,19 @@ public sealed class SnapshotDb : IDisposable
 
     /// <summary>导出时被砍过字段的 def —— 「完整集」这个结论的唯一交叉验证入口。</summary>
     public (IReadOnlyList<(string DefName, string DefType, int Dropped)> Rows, int Total)
-        TruncatedDefs(ScopeFilter scope, int limit)
+        TruncatedDefs(ScopeFilter scope, int limit,
+                      IReadOnlyList<string>? defTypes = null, string? defName = null)
     {
         var p = new Dictionary<string, object?>();
         var conds = new List<string> { "d.fields_truncated > 0" };
         if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
+        if (defTypes is { Count: > 0 })
+        {
+            var keys = new List<string>();
+            for (var i = 0; i < defTypes.Count; i++) { p["@dt" + i] = defTypes[i]; keys.Add("@dt" + i); }
+            conds.Add($"d.def_type IN ({string.Join(",", keys)}) COLLATE NOCASE");
+        }
+        if (defName is { Length: > 0 }) { p["@dn"] = defName; conds.Add("d.def_name = @dn COLLATE NOCASE"); }
         var where = "WHERE " + string.Join(" AND ", conds);
         var total = Scalar($"SELECT COUNT(*) FROM defs d {where}", p);
         var rows = new List<(string, string, int)>();
@@ -595,7 +611,7 @@ public sealed class SnapshotDb : IDisposable
     /// 那种每次返回都带的免责声明 —— 说了等于没说,读的人只能把它抄进答案里当保留意见。
     /// 收窄到「与本次结果同类型的 def」之后,它不发声时「完整」才是无条件的。
     /// </summary>
-    public int TruncatedDefsSharingPath(string pathSuffix, ScopeFilter scope)
+    public TruncationScope TruncatedDefsSharingPath(string pathSuffix, ScopeFilter scope)
     {
         var p = new Dictionary<string, object?>();
         return TruncatedAmong(SuffixWhere(pathSuffix, scope, p), scope, p);
@@ -609,7 +625,7 @@ public sealed class SnapshotDb : IDisposable
     /// 报出 251 与 242,而快照总共只有 239 个被砍的 def。**子集计数大于全集**,
     /// 数学上不可能,而它印出来与一个正常计数逐字同形。
     /// </summary>
-    public int TruncatedDefsSharingValue(string value, ValueMatch match, ScopeFilter scope)
+    public TruncationScope TruncatedDefsSharingValue(string value, ValueMatch match, ScopeFilter scope)
     {
         var p = new Dictionary<string, object?>();
         return TruncatedAmong(ValueWhere(value, match, scope, p), scope, p);
@@ -622,7 +638,7 @@ public sealed class SnapshotDb : IDisposable
     /// 于是「可能属于这里而没露面」说的是一批 scope 明明排除掉的 def。收窄的两处
     /// (类型 + scope)缺一处,这句话担保的东西就不成立。
     /// </summary>
-    private int TruncatedAmong(string innerWhere, ScopeFilter scope, Dictionary<string, object?> p)
+    private TruncationScope TruncatedAmong(string innerWhere, ScopeFilter scope, Dictionary<string, object?> p)
     {
         // 外层用 t、内层用 d:同名别名在 SQLite 里靠作用域遮蔽也能跑,但读的人分不出
         // 哪个 d 是哪个,而这段 SQL 的全部意思都在「内外收窄的是不同的东西」上。
@@ -633,14 +649,25 @@ public sealed class SnapshotDb : IDisposable
             $"JOIN defs d ON d.id = fv.def_id {innerWhere})",
         };
         if (scope.SqlPredicate("t.source_mod", p) is { } sc) conds.Add(sc);
-        return Scalar($"SELECT COUNT(*) FROM defs t WHERE {string.Join(" AND ", conds)}", p);
+
+        // 按类型分组而不是只取一个总数:尾注要把「这批是哪几个类型」说出来,
+        // 读的人才接得住那条续页命令。分组同时收得更紧 —— 只有**真有被砍的 def**
+        // 的类型才进名单,而内层那个 DISTINCT 列的是「用到这条路径的所有类型」。
+        var types = new List<string>();
+        var count = 0;
+        using var rd = Query(
+            $"SELECT t.def_type, COUNT(*) FROM defs t WHERE {string.Join(" AND ", conds)} " +
+            "GROUP BY t.def_type ORDER BY COUNT(*) DESC, t.def_type", p);
+        while (rd.Read()) { types.Add(rd.GetString(0)); count += rd.GetInt32(1); }
+        return new TruncationScope(count, types);
     }
 
     /// <summary>某个 def 类型里有几个 def 在导出时被砍过。</summary>
-    public int TruncatedDefsOfType(string defType)
+    public TruncationScope TruncatedDefsOfType(string defType)
     {
         var p = new Dictionary<string, object?> { ["@t"] = defType };
-        return Scalar("SELECT COUNT(*) FROM defs WHERE fields_truncated > 0 AND def_type = @t COLLATE NOCASE", p);
+        var n = Scalar("SELECT COUNT(*) FROM defs WHERE fields_truncated > 0 AND def_type = @t COLLATE NOCASE", p);
+        return new TruncationScope(n, n > 0 ? [defType] : []);
     }
 
     /// <summary>某个字段后缀在快照里到底存不存在 —— find 的零结果要靠它分流成因。</summary>

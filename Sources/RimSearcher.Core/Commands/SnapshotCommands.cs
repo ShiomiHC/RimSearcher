@@ -184,8 +184,34 @@ public sealed class SnapshotTruncatedCommand : Command
             "Every count this tool reports over field paths — 'find', 'values', 'fields' — is complete only " +
             "for what got indexed. These defs are where that gap can hide, so this is how a claim of " +
             "'that is all of them' gets cross-checked rather than trusted.",
-        Options = [CommonOptions.Limit("defs"), CommonOptions.Scope],
-        Examples = ["rimsearcher snapshot truncated", "rimsearcher snapshot truncated --limit all"],
+        Options =
+        [
+            CommonOptions.Limit("defs"), CommonOptions.Scope,
+            new OptionSpec
+            {
+                Name = "type",
+                Aliases = ["def-type", "deftype", "kind"],
+                Placeholder = "<DefType>",
+                Arity = Arity.Multi,
+                // 别处的尾注点名的是「与本次结果同类型的那批」,而这条命令原先只有全库一档:
+                // 照着尾注跑一遍拿到的是另一个集合,输出形状却一模一样。
+                Help = "Only defs of this type. Repeat it for several — the completeness footnotes elsewhere " +
+                       "name the types they mean, and this is the switch that carries them over.",
+            },
+            new OptionSpec
+            {
+                Name = "def",
+                Aliases = ["def-name", "defname", "name"],
+                Placeholder = "<defName>",
+                Help = "Only this def. Answers 'was this particular def cut short' without reading the whole list.",
+            },
+        ],
+        Examples =
+        [
+            "rimsearcher snapshot truncated",
+            "rimsearcher snapshot truncated --type ThingDef",
+            "rimsearcher snapshot truncated --def Bullet_Revolver",
+        ],
         JsonKeys = [new() { Key = "truncated", What = "one row per def that lost fields at export time: def_name, def_type, dropped, mod." }],
     };
 
@@ -193,14 +219,29 @@ public sealed class SnapshotTruncatedCommand : Command
     {
         var limit = ctx.Limit();
         var scope = ctx.Scope();
-        var (rows, total) = ctx.Db.TruncatedDefs(scope, limit.Effective);
+        var types = ctx.Args.Values("type");
+        var defName = ctx.Args.Value("def");
+        var (rows, total) = ctx.Db.TruncatedDefs(scope, limit.Effective, types, defName);
 
         if (rows.Count == 0)
         {
+            // 收窄之后的零结果与「整份快照都没有」不是一回事,而两句话原先是同一句 ——
+            // 「so counts over field paths are complete for it」在收窄时担保的是整份快照,
+            // 而它只查了其中一小块。收窄了就把收窄的条件念回去,并且把全库那个数一起给出。
+            var narrowed = types.Count > 0 || defName is { Length: > 0 };
+            var parts = new List<string>();
+            if (types.Count > 0) parts.Add("--type " + string.Join(" --type ", types));
+            if (defName is { Length: > 0 }) parts.Add($"--def {defName}");
+            if (!scope.IsAll) parts.Add($"--scope {scope.Expression}");
+
             ctx.Report.Notice(NoticeKind.Count,
-                "No def in this snapshot lost fields at export time" +
-                (scope.IsAll ? "" : $" within --scope {scope.Expression}") +
-                ", so counts over field paths are complete for it.");
+                narrowed
+                    ? $"No def matching {string.Join(" ", parts)} lost fields at export time, so counts over " +
+                      $"field paths are complete for that much. Snapshot-wide the figure is " +
+                      $"{Tally.Complete(ctx.Db.TruncatedDefCount()).Render("def")}."
+                    : "No def in this snapshot lost fields at export time" +
+                      (scope.IsAll ? "" : $" within --scope {scope.Expression}") +
+                      ", so counts over field paths are complete for it.");
             return 0;
         }
 

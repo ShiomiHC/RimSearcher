@@ -10,5 +10,5 @@ defs_with_field  2
 value                defs
 RimWorld.CompShield  2
 
-Counted over indexed field paths only: 1 def of the same def types lost fields at export time and could belong here without showing up. 'rimsearcher snapshot truncated' lists them.
+Counted over indexed field paths only: 1 def of the same def types lost fields at export time and could belong here without showing up. 'rimsearcher snapshot truncated --type ThingDef' lists them.
 --- stderr ---

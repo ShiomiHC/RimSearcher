@@ -1306,6 +1306,48 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 完整性尾注末尾那条命令,要走得到**它刚说的那一批**。
+    ///
+    /// 原先一律给裸 `snapshot truncated`,而它列的是全库(真快照上 239 条),尾注刚说的
+    /// 却是「与本次结果同类型」的一小批。照着跑一遍拿到的是另一个集合,而两份输出的
+    /// 形状一模一样 —— 上一道闸只验了那条命令**存在**,这一道验它**走得到**。
+    /// </summary>
+    [Fact]
+    public void 完整性尾注指的命令要走得到它刚说的那批()
+    {
+        var (stdout, _, _) = Fixture.Run("find", "--value", "CompShield");
+
+        var m = Regex.Match(stdout,
+            @"Counted over indexed field paths only: (\d+) defs? of the same def types[^']*" +
+            @"'rimsearcher snapshot truncated([^']*)' lists them\.");
+        Assert.True(m.Success, stdout);
+
+        var claimed = int.Parse(m.Groups[1].Value);
+        var argv = m.Groups[2].Value.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        Assert.NotEmpty(argv);   // 裸命令走到的是全库,不是刚说的那批
+
+        var (listed, _, _) = Fixture.Run(["snapshot", "truncated", .. argv, "--limit", "all"]);
+        var got = Regex.Match(listed, @"^(\d+) defs?\.", RegexOptions.Multiline);
+        Assert.True(got.Success, listed);
+        Assert.Equal(claimed, int.Parse(got.Groups[1].Value));
+    }
+
+    /// <summary>
+    /// 收窄之后的零结果与「整份快照都没有」不是一回事,而两句话原先是同一句 ——
+    /// 「counts over field paths are complete for it」在收窄时担保的是整份快照,
+    /// 而它只查了其中一小块。
+    /// </summary>
+    [Fact]
+    public void 收窄之后的零结果不许担保整份快照()
+    {
+        var (narrow, _, _) = Fixture.Run("snapshot", "truncated", "--def", "Anesthetic");
+        Assert.Contains("--def Anesthetic", narrow, StringComparison.Ordinal);
+        Assert.Contains("for that much", narrow, StringComparison.Ordinal);
+        // 全库那个数要一起给出来,否则「这里没有」读起来就是「哪儿都没有」。
+        Assert.Matches(@"Snapshot-wide the figure is \d+ defs?\.", narrow);
+    }
+
+    /// <summary>
     /// 落空那句话报的值域不许超发。它说 covers 什么,就得真覆盖到什么。
     /// </summary>
     [Fact]

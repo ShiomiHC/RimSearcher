@@ -1331,13 +1331,29 @@ internal static class Completeness
     /// 但尾注本身也不能变成新的免责声明(00 论据 3)。所以它收窄到「与本次结果**同类型**的 def
     /// 里真有被砍的」才出声:不出声时,「完整」就是无条件的,而不是「大概吧」。
     /// </summary>
-    public static void NoteIndexedPathsOnly(CommandContext ctx, int affected)
+    /// <summary>
+    /// 末尾那条命令要**走得到刚才说的那批**。原先一律给裸命令,而它列的是全库 239 条,
+    /// 尾注刚说的却是其中某几个类型的一小批 —— 照着跑一遍拿到的是另一个集合,
+    /// 而两者的输出形状一模一样。类型不多时逐个带上 --type;多到列不下就说清列不下。
+    /// </summary>
+    public static void NoteIndexedPathsOnly(CommandContext ctx, TruncationScope affected)
     {
-        if (affected == 0) return;
+        if (affected.Count == 0) return;
+
+        var types = affected.Types;
+        var shown = types.Take(Limits.MaxSuggestions).ToList();
+        var cmd = "rimsearcher snapshot truncated" +
+                  string.Concat(shown.Select(t => $" --type {t}"));
         ctx.Report.Notice(NoticeKind.Boundary,
-            $"Counted over indexed field paths only: {Tally.Complete(affected).Render("def")} of the same def types " +
-            "lost fields at export time and could belong here without showing up. " +
-            "'rimsearcher snapshot truncated' lists them.", footnote: true);
+            $"Counted over indexed field paths only: {Tally.Complete(affected.Count).Render("def")} of the same " +
+            "def types lost fields at export time and could belong here without showing up. " +
+            $"'{cmd}' lists " +
+            (shown.Count == types.Count
+                ? "them."
+                : $"the biggest {shown.Count} of those types; still in the same position — " +
+                  $"{Tally.Complete(types.Count - shown.Count).Render("def type")}, which the bare " +
+                  "'rimsearcher snapshot truncated' covers along with everything else."),
+            footnote: true);
     }
 }
 

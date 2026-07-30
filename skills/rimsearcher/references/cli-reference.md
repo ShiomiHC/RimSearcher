@@ -681,6 +681,8 @@ Every count this tool reports over field paths — 'find', 'values', 'fields' �
 |---|---|---|
 | `-n`, `--limit` <n|all> | How many defs to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
+| `--type` <DefType> | Only defs of this type. Repeat it for several — the completeness footnotes elsewhere name the types they mean, and this is the switch that carries them over. | `--def-type`, `--deftype`, `--kind` |
+| `--def` <defName> | Only this def. Answers 'was this particular def cut short' without reading the whole list. | `--def-name`, `--defname`, `--name` |
 
 `--json` keys, besides the global `notes`:
 
@@ -692,7 +694,8 @@ Examples:
 
 ```
 rimsearcher snapshot truncated
-rimsearcher snapshot truncated --limit all
+rimsearcher snapshot truncated --type ThingDef
+rimsearcher snapshot truncated --def Bullet_Revolver
 ```
 
 ## `snapshot use`
