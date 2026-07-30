@@ -118,6 +118,9 @@ public class OutputSnapshotTests
         // 第三种零结果:glob 一个文件都没打中。写这条修复时自己撞上去的 ——
         // 带 '/' 的 glob 匹配的是相对**根目录**的整条路径,少写树名就全空。
         { "code-search-glob-empty", ["code-search", "public", "--files", "Verse/ThingComp.cs"] },
+        // 第四种零结果,第四轮回归实测撞到的:树在名单里、目录也在,里面一个文件都没有。
+        // 与上一条逐字同形过 —— 于是答案变成「改 glob」,而真因是这棵树该 sync 一遍。
+        { "code-search-empty-tree", ["code-search", "public", "--source", "zz.emptytree"] },
         // --source 已经给出时,补救措施里不许再列 --source(R3)。
         { "code-search-source-cap", ["code-search", "public", "--source", "vanilla", "--max-files", "1"] },
         { "code-search-no-tree",   ["code-search", "public", "--source", "HAR"] },

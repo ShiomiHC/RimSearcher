@@ -270,7 +270,18 @@ public sealed class CodeSearchCommand : Command
             // 输出是「No line matched in 0 files under '…'」—— 与「读了但没匹配」
             // 一字之差,而下一步完全不同(该改 glob,不是该换数据源)。R3 说的
             // 「零结果一律报最强的那种」在同一条命令里还有第三份。
-            if (filesCandidate == 0)
+            // 第四种成因,第四轮回归实测撞到的:`--source Milira` —— 那棵树在
+            // `sources list` 里明明列着,目录也在磁盘上,里面却一个文件都没有(程序集从没
+            // 反编译过)。原先它落进上面那条 glob 分支,答案变成「--files '*.cs' 没打中」,
+            // 于是读的人去改 glob,而真因是这棵树该 sync 一遍。B11 的题面点名要求分清
+            // 「mod 没装 / 快照没覆盖 / 源码树没同步」三种,这是第三种。
+            if (filesCandidate == 0 && sourceName is { Length: > 0 } && EmptyTree(root, sourceName))
+                ctx.Report.Notice(NoticeKind.NextStep,
+                    $"The source tree '{sourceName}' exists but holds no decompiled files at all, so the glob " +
+                    "never came into it. Its assemblies have not been decompiled (or the tree was emptied): " +
+                    "'rimsearcher sources sync' rebuilds it from what the snapshot's mods load, and " +
+                    "'rimsearcher sources list' shows which trees are in that state.");
+            else if (filesCandidate == 0)
                 ctx.Report.Notice(NoticeKind.NextStep,
                     $"No file matched --files '{glob}', so nothing was read at all." +
                     (glob.Contains('/')
@@ -465,6 +476,14 @@ public sealed class CodeSearchCommand : Command
     /// 什么算一棵树问 <see cref="SourcesShared.TreeNames"/>,这里不自己判(R15)。
     /// 路径一律相对根目录,<c>--source</c> 只是少走几棵树,不改变文件的名字。
     /// </summary>
+    /// <summary>目录在,里面一个文件都没有 —— 与「目录不在」和「glob 没打中」是三件事。</summary>
+    private static bool EmptyTree(string root, string sourceName)
+    {
+        var dir = Path.Combine(root, sourceName);
+        try { return Directory.Exists(dir) && !Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories).Any(); }
+        catch { return false; }
+    }
+
     private static IEnumerable<(string Tree, IEnumerable<string> Files)> EnumerateTrees(string root, string? sourceName)
     {
         if (sourceName is { Length: > 0 })

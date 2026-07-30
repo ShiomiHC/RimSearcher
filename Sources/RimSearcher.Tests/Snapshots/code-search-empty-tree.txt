@@ -1,0 +1,5 @@
+$ rimsearcher code-search public --source zz.emptytree
+exit 1
+--- stdout ---
+The source tree 'zz.emptytree' exists but holds no decompiled files at all, so the glob never came into it. Its assemblies have not been decompiled (or the tree was emptied): 'rimsearcher sources sync' rebuilds it from what the snapshot's mods load, and 'rimsearcher sources list' shows which trees are in that state.
+--- stderr ---

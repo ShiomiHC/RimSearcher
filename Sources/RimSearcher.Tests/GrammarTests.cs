@@ -470,6 +470,15 @@ public class GrammarTests
         Assert.Equal(1, emptyCode);
         Assert.Contains("No file matched", empty);
         Assert.DoesNotContain("rimsearcher search", empty);
+
+        // 第四种成因:树在名单里、目录也在磁盘上,里面一个文件都没有(从没反编译过)。
+        // 它此前落进上面那条 glob 分支,于是读的人去改 glob,而真因是这棵树该 sync 一遍。
+        var (bare, _, bareCode) = Fixture.Run("code-search", "public", "--source", "zz.emptytree");
+        Assert.Equal(1, bareCode);
+        Assert.Contains("holds no decompiled files", bare);
+        Assert.Contains("sources sync", bare);
+        Assert.DoesNotContain("No file matched", bare);   // 不许再赖到 glob 头上
+        Assert.DoesNotContain("rimsearcher search", bare);
     }
 
     // ---- 零结果的成因分流(三轮 R8 四种误诊 + R10 fatal)----
