@@ -296,10 +296,19 @@ public sealed class GetCommand : Command
 
             // 走到这里,六种落点都算过了,别的快照也问过了 —— 这时候「没有」才是个结论,
             // 而不是「我只查了一张表」。把这层意思说出来,否则读的人无从判断该不该相信它。
+            //
+            // 但六种落点全在**快照**里,而快照只装 def 侧。第四轮回归实测(B6):
+            // `get MapPortal` 走到这一句,而 MapPortal 是 RimWorld 的一个 C# 类,
+            // 就在 vanilla 树的 MapPortal.cs 里。「a class」指的是「某个 def 的 class 列」,
+            // 读的人不会这么读 —— 这一句听上去穷尽了,于是归属被判成「不存在」,
+            // 正是 B6 那道题的靶子。不去扫代码树(一万多个文件,每次落空都扫太贵),
+            // 而是把没查的那一半说出来,并指名唯一那条能查的命令。
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"No def is named '{name}' in this snapshot, and it is not a def type, a class, a mod, " +
                 "an abstract XML parent, or a name held by any other registered snapshot." +
-                (close.Count > 0 ? $" Closest names: {string.Join(", ", close)}." : " 'rimsearcher search' matches on labels and translations too."));
+                (close.Count > 0 ? $" Closest names: {string.Join(", ", close)}." : " 'rimsearcher search' matches on labels and translations too.") +
+                " All of that is the def side; C# type names that no def references live only in the " +
+                $"decompiled trees, which this lookup never reads: 'rimsearcher code-search \"class {name}\"'.");
             return 1;
         }
 

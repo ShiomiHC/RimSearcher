@@ -567,6 +567,9 @@ public class GrammarTests
         var (absent, _, _) = Fixture.Run("get", "NoSuchDefAnywhere");
         Assert.Contains("not a def type, a class, a mod", absent, StringComparison.Ordinal);
         Assert.DoesNotContain("--snapshot", absent, StringComparison.Ordinal);
+        // 那六种落点全在快照里,而快照只装 def 侧。听上去穷尽、其实没查代码树 ——
+        // 第四轮 B6 的 MapPortal 就活在 vanilla 树里。没查的那一半必须自己说破。
+        Assert.Contains("code-search \"class NoSuchDefAnywhere\"", absent, StringComparison.Ordinal);
     }
 
     /// <summary>
