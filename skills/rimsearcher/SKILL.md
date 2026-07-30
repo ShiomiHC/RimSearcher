@@ -28,6 +28,7 @@ is the only command that reads it, and it says so.
 | Everything of one kind | `rimsearcher list <DefType>` |
 | What does this inherit from / what inherits from it? | `rimsearcher inherit <name>` |
 | Which layer of the chain writes this field? | `rimsearcher inherit <def> --path <field>` |
+| What does this interface text say, or which key is behind it? | `rimsearcher keyed <key or phrase>` |
 | What does this method do? | `mcp__decompiler__get_decompiled_source` |
 | Who calls it / what does it override / what derives from it? | `mcp__decompiler__find_callers`, `get_overrides`, `find_derived_types` |
 | Where is this type? | `mcp__decompiler__search_types` |
@@ -55,7 +56,7 @@ the pattern found *where the thing is defined*, not *what it does*.
 
 ## What is out of range
 
-Three questions the tool cannot answer, and it is cheaper to know than to discover:
+Two questions the tool cannot answer, and it is cheaper to know than to discover:
 
 - **"How should this XML be written?"** The snapshot holds runtime objects, not the XML that
   produced them, so there is no path from a def back to authorable source. `inherit` is the one
@@ -68,12 +69,33 @@ Three questions the tool cannot answer, and it is cheaper to know than to discov
   (`values texPath` works), but nothing here reads the file system to say whether
   `Things/Item/Foo.png` exists, what resolution it is, or what else sits in that folder. That is
   an `ls` question.
-- **`Languages/*/Keyed` UI strings.** The snapshot's translations are the ones injected onto
-  defs — `def_type`, `def_name`, `field`. A key like `CommandSelectOverseer` is nowhere in it.
-  The code side reaches the key but not its text: `code-search '"CommandSelectOverseer"\.Translate'`
-  finds where it is used, and the translated string itself lives in a language file this tool
-  does not open. Going the other way — from a UI phrase you saw in game to what produces it —
-  works only when that phrase is a def's `label`, which `search <phrase>` covers.
+
+## Text on screen
+
+Most of what a player reads is not a def. Button captions, alerts, tooltips and failure reasons
+are **keyed translations** — `"CannotUseNoPower".Translate()` — and they belong to no def at all,
+which is why no amount of `search`, `get` or `find` reaches them. `rimsearcher keyed` is the one
+that does, in both directions: given a key it shows what the game displays, and given a phrase in
+either language it shows which keys carry that text.
+
+That is the road from a line on screen to the code that prints it — take the key and run
+`rimsearcher code-search '"TheKey"'`. Going the other way needs no second step:
+`code-search` resolves every key written as a literal on a matching line and prints a `ui_text`
+table beside the hits, so a scan through `.Translate()` call sites already says what each one
+displays. `--no-ui-text` turns that off. A key the code assembles at runtime (`"Stat_" + x`) has
+no literal to resolve, and the answer says how many lines were like that rather than leaving them
+blank.
+
+Rows carry an `origin` of `in effect` or `on disk`, and only `in effect` is what the game displays:
+keyed translations override each other by mod load order, the snapshot keeps the winner, and an
+`on disk` row is a translation some mod's language files contain without necessarily being the one
+that wins. A `placeholder` row is a key whose language file declares it without a translation, so
+the game falls back to English there — that is what a translation-coverage question is asking
+about, and `--placeholders` lists only those.
+
+One boundary is the snapshot's rather than any query's: this layer is written by the in-game
+exporter, so if the exporting game had no language data loaded there are no keyed translations at
+all. `keyed` says that in those words instead of reporting your key absent.
 
 ## If your instinct is to grep the XML, stop
 
@@ -121,7 +143,8 @@ stays local.
    `search shield` finds `Apparel_ShieldBelt`. It covers def names, labels, descriptions and the
    translations injected onto defs — **not C# class names**, and **not the UI strings under
    `Languages/*/Keyed`**. `search CompShield` finds nothing no matter how you spell it; that
-   question is `find compClass CompShield`.
+   question is `find compClass CompShield`; a phrase off the screen is `keyed <phrase>`, and a
+   zero result here names whichever of the two it turns out to be.
    Both sides of a translation are searchable, so **an English term still finds its def on a
    Chinese snapshot** — `search "brain damage"` works even when every label in the snapshot is
    Chinese.
@@ -241,9 +264,11 @@ and it is the only way to see a specific file when that MCP is not available.
 `--json` gives machine-readable output: the root is an object, every prose sentence moves into
 `notes` as `{kind, text}`, and the data sits beside it under a key that depends on the command —
 `defs` for `search`/`list`/`get`, `matches` for `code-search` and for `find` with a field path,
-`paths` for `find --value`, `nodes` for `inherit`, `source` and `declarations` for `read`, and a
-key named after the command itself for `values`, `fields`, `types` and `mods`. `values` carries a
-second key, `field`, saying which full paths and def types its value space was drawn from.
+`paths` for `find --value`, `nodes` for `inherit`, `keys` for `keyed`, `source` and `declarations`
+for `read`, and a key named after the command itself for `values`, `fields`, `types` and `mods`.
+Two commands carry a second key: `values` has `field`, saying which full paths and def types its
+value space was drawn from, and `code-search` has `ui_text`, holding the keyed translation of every
+key written as a literal on a matching line.
 Do not guess: `<command> --help` lists that command's keys, as does
 [references/cli-reference.md](references/cli-reference.md). Reading a key the command does not
 produce gives you nothing, which is indistinguishable from an empty result. The key the command
@@ -277,6 +302,7 @@ the tool instead, where the counts stay honest:
 | `search` | `--type`, `--scope`, `--offset`, `--limit` |
 | `list` | `--class`, `--scope`, `--offset`, `--limit` |
 | `inherit` | `--path`, `--limit` |
+| `keyed` | `--placeholders`, `--offset`, `--limit` |
 | `find` | `--scope`, `--exact`, `--offset`, `--limit` |
 | `code-search` | `--source`, `--files`, `--max-files`, `--max-per-file`, `--limit` |
 | `read` | `--member`, `--type`, `--lines`, `--outline`, `--limit` |
@@ -349,8 +375,9 @@ resolved to whenever it is more than one mod.
 ## Recovering
 
 - **Nothing found.** A zero result names its own cause: the tool checks whether the name is a
-  def hidden by your `--scope`, an abstract XML parent, a def type, a class, a mod, or a def
-  that lives in one of your *other* snapshots — and says which. Read that sentence before
+  def hidden by your `--scope`, an abstract XML parent, a def type, a class, a field value, a mod,
+  a piece of interface text, or a def that lives in one of your *other* snapshots — and says
+  which. Read that sentence before
   concluding the thing does not exist; "not here" and "not anywhere" are different answers and
   the tool distinguishes them.
 - **The def exists in game but not in the snapshot.** Its mod was probably not enabled when the

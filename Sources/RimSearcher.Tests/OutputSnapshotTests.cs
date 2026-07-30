@@ -32,6 +32,10 @@ public class OutputSnapshotTests
         { "search-miss-mod",       ["search", "ludeon.rimworld"] },
         // 被自己的 --scope 挡住 —— 「过滤掉了」被说成「没有」是最贵的那种。
         { "search-miss-scoped",    ["search", "TestModGun", "--scope", "ludeon.rimworld"] },
+        // 第五种落点,keyed 那一层落地之后才算得出来:打进来的是屏幕上的一句界面文案。
+        // 它与前四种不同 —— 前四种问的都是「这个**名字**是什么」,这一种问的是
+        // 「这句**话**是什么」,而 search 的索引里没有它。R4 记的那个洞就是这个形状。
+        { "search-miss-keyed",     ["search", "没有电力"] },
         // 五轮 F2:scope 展开在**有结果时**也要说。这两份是那道闸的字节落点 ——
         // 组名那份必须带展开句,写死 packageId 那份必须一个字都不多说。
         { "find-scope-group",      ["find", "thingClass", "RimWorld.Bullet", "--scope", "vanilla"] },

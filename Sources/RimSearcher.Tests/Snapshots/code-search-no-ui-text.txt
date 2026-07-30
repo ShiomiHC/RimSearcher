@@ -1,7 +1,7 @@
 $ rimsearcher code-search Translate --no-ui-text
 exit 0
 --- stdout ---
-3 matches in 1 file; 6 files read across 2 source trees.
+3 matches in 1 file; 6 files read across 2 of 3 source trees on disk — the rest hold no file matching --files '*.cs', and 'rimsearcher sources list' says which of those have never been decompiled.
 
 vanilla/Verse/Widgets.cs:7:			Draw(rect, "CannotUseNoPower".Translate());
 vanilla/Verse/Widgets.cs:8:			Draw(rect, "NoSuchUiKey".Translate());

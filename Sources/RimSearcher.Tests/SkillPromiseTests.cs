@@ -67,6 +67,20 @@ public class SkillPromiseTests
         new("`values <field>` gives the whole value space, and prints which full paths and def types contributed",
             nameof(values说清这些值来自哪些路径与def类型)),
 
+        // ---- 界面文案那一层(R4 记下的「索引口径的洞」,这一轮落地) ----
+        new("they belong to no def at all,\nwhich is why no amount of `search`, `get` or `find` reaches them",
+            nameof(界面文案不在search的射程里而keyed认它)),
+        new("a zero result here names whichever of the two it turns out to be",
+            nameof(界面文案不在search的射程里而keyed认它)),
+        new("`code-search` resolves every key written as a literal on a matching line and prints a `ui_text`\ntable beside the hits",
+            nameof(code_search把字面量key的译文当场解出来)),
+        new("A key the code assembles at runtime (`\"Stat_\" + x`) has\nno literal to resolve, and the answer says how many lines were like that rather than leaving them\nblank",
+            nameof(code_search把字面量key的译文当场解出来)),
+        new("only `in effect` is what the game displays",
+            "收割的keyed标成非生效且同key不去重"),
+        new("if the exporting game had no language data loaded there are no keyed translations at\nall. `keyed` says that in those words instead of reporting your key absent",
+            nameof(OutputSnapshotTests.keyed层为空时说破是快照的缘故而不是查不到)),
+
         // ---- 五轮:子串匹配与同块兄弟 ----
         new("The output says when nothing matched as a whole path segment",
             nameof(GrammarTests.子串匹配要说破自己不是整段命中)),
@@ -241,6 +255,61 @@ public class SkillPromiseTests
     }
 
     /// <summary>
+    /// 界面文案那一层与 def 无关,于是 search / get / find 三条路原理上都到不了它 ——
+    /// 而「到不了」的样子与「游戏里没有这句话」逐字同形,这正是 R4 记下的洞。
+    ///
+    /// 两个方向都验:search 打进一句界面文案确实落空(而且落空时**点名**说出该问 keyed),
+    /// 而 keyed 认它。少了后半句,这条承诺就只是一句免责声明。
+    /// </summary>
+    [Fact]
+    public void 界面文案不在search的射程里而keyed认它()
+    {
+        // 语料里 CannotUseNoPower 的译文是「没有电力」,而它不是任何 def 的 label。
+        var (bySearch, _, searchCode) = Fixture.Run("search", "没有电力");
+        Assert.Equal(1, searchCode);
+        // 落空的那一句必须把落点算出来,而不是停在「不覆盖」——「这条命令不覆盖」与
+        // 「这个工具没有」差着一条走得通的路。
+        Assert.Contains("rimsearcher keyed", bySearch, StringComparison.Ordinal);
+        Assert.Contains("interface text", bySearch, StringComparison.Ordinal);
+
+        var (byKeyed, _, keyedCode) = Fixture.Run("keyed", "没有电力");
+        Assert.Equal(0, keyedCode);
+        Assert.Contains("CannotUseNoPower", byKeyed, StringComparison.Ordinal);
+
+        // 反方向:拿 key 问也认,而且给出的是游戏真会显示的那一句。
+        var (byKey, _, keyCode) = Fixture.Run("keyed", "CannotUseNoPower");
+        Assert.Equal(0, keyCode);
+        Assert.Contains("没有电力", byKey, StringComparison.Ordinal);
+        Assert.Contains("in effect", byKey, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 「代码里这行显示的是什么字」是 code-search 最常见的下一问,而它是当场解得出来的:
+    /// 97% 的调用点把 key 写成紧邻的字面量。解不出来的那些(运行时拼出来的 key)必须
+    /// **报数**而不是留白 —— 留白与「这一行没有 key」同形。
+    /// </summary>
+    [Fact]
+    public void code_search把字面量key的译文当场解出来()
+    {
+        var (stdout, _, code) = Fixture.Run("code-search", "Translate");
+        Assert.Equal(0, code);
+
+        // 解出来的那一条:key 与它的两侧文本都在。
+        Assert.Contains("ui_text", Fixture.Run("code-search", "Translate", "--json").Stdout, StringComparison.Ordinal);
+        Assert.Contains("没有电力", stdout, StringComparison.Ordinal);
+
+        // 语料里另外两行是故意留的两种解不出来:语言文件里没有这个 key,以及 key 是拼出来的。
+        Assert.Contains("no keyed translation for", stdout, StringComparison.Ordinal);
+        Assert.Contains("not a literal", stdout, StringComparison.Ordinal);
+
+        // 关得掉,而且关掉之后一个字都不多说 —— 默认开着的东西必须有开关,否则
+        // 「我只想看命中行」这个诉求只能靠 grep 满足,而 grep 会把截断句一起滤掉。
+        var (off, _, _) = Fixture.Run("code-search", "Translate", "--no-ui-text");
+        Assert.DoesNotContain("ui_text", off, StringComparison.Ordinal);
+        Assert.DoesNotContain("没有电力", off, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 值域计数没有产地就是负资产:「out of 207 values」被读成「值的形态有讲究」,
     /// 而真因往往是一个裸字段名同时命中了几条不相干的路径。
     /// </summary>
@@ -342,7 +411,7 @@ public class SkillPromiseTests
 
         // 反向:SKILL 教的那几条命令,声明的每个键都得在这段话里。
         string[] taught = ["search", "list", "get", "find", "values", "fields", "types", "mods", "inherit",
-                           "read", "code-search"];
+                           "keyed", "read", "code-search"];
         var undocumented = registry.Specs
             .Where(s => taught.Contains(s.Name))
             .SelectMany(s => s.JsonKeys.Select(k => (s.Name, k.Key)))

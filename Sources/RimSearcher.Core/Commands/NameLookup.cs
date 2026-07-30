@@ -1,4 +1,4 @@
-using RimSearcher.Cli;
+﻿using RimSearcher.Cli;
 using RimSearcher.Config;
 using RimSearcher.Output;
 using RimSearcher.Search;
@@ -42,6 +42,8 @@ internal static class NameLookup
         DefType,
         /// <summary>是某些 def 的运行时 class。</summary>
         Class,
+        /// <summary>是界面文案(keyed 译文),与 def 无关 —— 别的每一档都判不到它。</summary>
+        Keyed,
         /// <summary>是本快照覆盖的一个 mod。名字报全了的走在字段值之前,报外号的走在之后。</summary>
         ModInSnapshot,
         /// <summary>是本机装着、但这份快照没覆盖的 mod。同上,分两档夹住字段值。</summary>
@@ -117,7 +119,35 @@ internal static class NameLookup
                 $"; the query is 'rimsearcher list {holders[0].DefType} --class {name}'.");
         }
 
-        // (5) mod,而且是**报全名报对了**的那种。R8 的第二种误诊死在这:`search Milira`
+        // (5) 界面文案。上面每一档判的都是「这个**名字**是什么」,而这一档判的是
+        //     「这句**话**是什么」—— keyed 那一层与 def 无关,所以前四档原理上都碰不到它。
+        //     它恰恰是 search 落空最常见的真实成因之一:把屏幕上看到的一句话打进 search,
+        //     而 search 只索引 def 的 label / description / 注入译文,零结果出来的样子与
+        //     「游戏里没有这句话」逐字同形。R4 把这条记成「索引口径的洞」,当时降级成纯文档
+        //     处理;这一档是它算得出来的那一半。
+        //
+        //     排在 mod 与字段值之前:那两档都只对标识符形态的查询成立,而进到这里的
+        //     phrase 形态查询它们一个都判不到 —— 反过来,标识符形态的查询也几乎不会
+        //     FTS 命中界面文案,两边抢不到彼此的活。
+        if (ctx.Db.KeyedCount() > 0)
+        {
+            var (keyedRows, keyedTotal) = ctx.Db.KeyedSearch(name, 1);
+            if (keyedRows.Count > 0)
+            {
+                // 主语固定单数(this snapshot),计数进宾语,末句不带回指代词 ——
+                // 名词有登记处,主谓一致与「them / one」这类回指都没有(R6 同一课;
+                // 这一句第一版写的就是「shows them」,而计数是 1)。
+                var first = keyedRows[0];
+                return new Sighting(Where.Keyed,
+                    $"'{name}' is interface text rather than a def name: this snapshot holds " +
+                    $"{Output.Tally.Complete(keyedTotal).Render("keyed translation")} matching it, the closest " +
+                    $"under the key '{first.Key}'. Keyed translations belong to no def at all, which is why " +
+                    $"a def search reaches none of them. The query is 'rimsearcher keyed {name}', and " +
+                    $"'rimsearcher code-search \"\\\"{first.Key}\\\"\"' finds the code that prints that key.");
+            }
+        }
+
+        // (6) mod,而且是**报全名报对了**的那种。R8 的第二种误诊死在这:`search Milira`
         //     被指向 `types`,而 types 列的是 def 类型,与「某个 mod 在不在」毫无关系。
         //
         //     它分成两半夹住下一条:整名(packageId / 末段 / 显示名)相等排在字段值**之前**
@@ -129,7 +159,7 @@ internal static class NameLookup
         var installed = new Lazy<Dictionary<string, InstalledMod>?>(() => TryScanInstalled(ctx.Config));
         if (Mod(ctx, name, installed, fuzzy: false) is { } named) return named;
 
-        // (6) 字段值。最常见的形态就是类名:`CompShield` 不是 def、不是 def 的 class,
+        // (7) 字段值。最常见的形态就是类名:`CompShield` 不是 def、不是 def 的 class,
         //     而是某些 def 的 comps[N].compClass **取值**。
         //
         //     这一条是写这次修复时补回来的:原先那句「像类名 → 去跑 find compClass X」
@@ -158,10 +188,10 @@ internal static class NameLookup
                 $"'rimsearcher find --value {name}' covers every path at once.");
         }
 
-        // (7) mod,报的是外号。实测那次输入就是 `Milira`,而 packageId 是 Ancot.MiliraRace。
+        // (8) mod,报的是外号。实测那次输入就是 `Milira`,而 packageId 是 Ancot.MiliraRace。
         if (Mod(ctx, name, installed, fuzzy: true) is { } nicknamed) return nicknamed;
 
-        // (8) 别的快照。R10 的核心:这句话一直是可算出来的。
+        // (9) 别的快照。R10 的核心:这句话一直是可算出来的。
         return InOtherSnapshot(ctx, name);
     }
 

@@ -144,13 +144,18 @@ public sealed class SearchCommand : Command
             //
             // 「译文」这个词本身在超发:快照的 translations 表是 def 侧的注入
             // (def_type + def_name + field),Languages/*/Keyed 那一整套 UI 字符串
-            // **一条都不在库里**。照这句话字面读,「收获这个 UI 词对应什么」会被当成
-            // 查得到的问题,而它查不到 —— 一个 schema 级的硬边界,写清比让人试出来便宜。
+            // 不在这条命令的射程里。照这句话字面读,「屏幕上这个 UI 词对应什么」会被当成
+            // 查得到的问题,而 search 查不到 —— 一个 schema 级的硬边界,写清比让人试出来便宜。
+            //
+            // 边界的**位置**变过一次(keyed 那一层落地之后):它现在在库里,只是在另一张表上。
+            // 所以这一句不能停在「不覆盖」——「这条命令不覆盖」与「这个工具没有」差着一条
+            // 走得通的路,而下面 NameLookup 只在那句话真的命中时才点名说出来。
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"Nothing matched '{query}' in this snapshot" +
                 (scope.IsAll ? "" : $" within --scope {scope.Expression}") +
                 ". This command covers def names, labels, descriptions and the translations injected onto " +
-                "defs — not C# class names, and not the UI strings under Languages/*/Keyed.");
+                "defs — not C# class names, and not the UI strings under Languages/*/Keyed, which sit on a " +
+                "layer of their own that 'rimsearcher keyed' reads.");
 
             // R8:剩下那半句原先是**猜**的 —— 「像个类名」就指向 find/code-search,
             // 否则指向 types。两条猜法各自造出一种误诊,而名字的真实落点是可以当场算的。
