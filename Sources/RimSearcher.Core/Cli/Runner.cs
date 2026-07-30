@@ -133,7 +133,10 @@ public static class Runner
             {
                 stderr.Write(OutputText.Finish(
                     $"'{argv[0]}' is a global option, not a command, and it goes after the command: " +
-                    $"'{CommandRegistry.ExeName} <command> ... --{asGlobal.Name} {asGlobal.Placeholder}'."));
+                    // 开关型全局参数没有占位符,拼上去就多一个空格 —— 一条给人照抄的命令,
+                    // 尾巴上挂个空格是它自己不该有的东西。
+                    $"'{CommandRegistry.ExeName} <command> ... --{asGlobal.Name}" +
+                    (asGlobal.Placeholder is { Length: > 0 } ph ? " " + ph : "") + "'."));
                 return ExitUsage;
             }
 

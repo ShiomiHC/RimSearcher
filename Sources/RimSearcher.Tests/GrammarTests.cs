@@ -1511,4 +1511,30 @@ public class GrammarTests
         var (bare, _, _) = Fixture.Run("read", "Outline.cs", "--member", "NoSuchMember");
         Assert.DoesNotContain("inherit", bare, StringComparison.OrdinalIgnoreCase);
     }
+
+    /// <summary>
+    /// 「Global options」这个词本身就在暗示位置自由,而解析器要求它写在命令**之后**。
+    /// `rimsearcher --json types` 于是 exit 2 —— 而人是照着 --help 那个小标题写的。
+    /// 错误消息上一轮已经说清了(Runner 那段注释就是为它写的),抵触的那一头没动。
+    /// </summary>
+    [Fact]
+    public void 全局参数的位置约束要写在它自己的标题上()
+    {
+        var overview = new StringWriter { NewLine = "\n" };
+        RimSearcher.Cli.Runner.Run(["--help"], overview, new StringWriter());
+
+        foreach (var help in new[] { overview.ToString(), Fixture.Run("types", "--help").Stdout })
+        {
+            var at = help.IndexOf("Global options", StringComparison.Ordinal);
+            Assert.True(at >= 0, "帮助里应当有 Global options 这一段");
+            // 位置约束要与标题同行 —— 隔一段再说等于没说,读的人照标题写命令。
+            var line = help[at..].Split('\n')[0];
+            Assert.Contains("after the command", line, StringComparison.Ordinal);
+        }
+
+        // 而写在前面时那条纠正话里不许留多余空格 —— --json 没有占位符。
+        var (_, err, code) = Fixture.Run("--json", "types");
+        Assert.Equal(2, code);
+        Assert.Contains("... --json'.", err, StringComparison.Ordinal);
+    }
 }

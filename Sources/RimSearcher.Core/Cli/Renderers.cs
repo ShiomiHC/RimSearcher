@@ -11,6 +11,14 @@ namespace RimSearcher.Cli;
 /// </summary>
 public static class HelpRenderer
 {
+    /// <summary>
+    /// 「Global options」这个词本身在暗示位置自由,而解析器要求它写在**命令之后** ——
+    /// `rimsearcher --json types` 于是 exit 2,而人正是照着这个小标题写的。
+    /// 上一轮补的是那条纠正话(<see cref="Runner"/> 里),抵触的这一头一直没动:
+    /// 约束要与标题同行,隔一段再说等于没说。
+    /// </summary>
+    internal const string GlobalsHeading = "Global options (every command takes these, written after the command):";
+
     public static string RenderOverview(string exeName, IReadOnlyList<CommandSpec> commands,
                                         IReadOnlyList<OptionSpec> globals, string tagline)
     {
@@ -23,7 +31,7 @@ public static class HelpRenderer
         foreach (var c in commands.OrderBy(c => c.Name, StringComparer.Ordinal))
             sb.Append("  ").Append(c.Name.PadRight(width)).Append("  ").Append(c.Summary).Append(OutputText.Newline);
 
-        sb.Append(OutputText.Newline).Append("Global options:").Append(OutputText.Newline);
+        sb.Append(OutputText.Newline).Append(GlobalsHeading).Append(OutputText.Newline);
         AppendOptions(sb, globals);
 
         sb.Append(OutputText.Newline)
@@ -62,7 +70,7 @@ public static class HelpRenderer
 
         if (spec.UsesGlobals && globals.Count > 0)
         {
-            sb.Append(OutputText.Newline).Append("Global options:").Append(OutputText.Newline);
+            sb.Append(OutputText.Newline).Append(GlobalsHeading).Append(OutputText.Newline);
             AppendOptions(sb, globals);
         }
 
@@ -169,6 +177,9 @@ public static class MarkdownRenderer
           .Append(OutputText.Newline).Append(OutputText.Newline);
 
         sb.Append("## Global options").Append(OutputText.Newline).Append(OutputText.Newline);
+        sb.Append("Every command takes these, and they are written **after** the command name: ")
+          .Append("`rimsearcher types --json`, not `rimsearcher --json types`.")
+          .Append(OutputText.Newline).Append(OutputText.Newline);
         AppendOptionTable(sb, globals);
 
         foreach (var c in commands.OrderBy(c => c.Name, StringComparer.Ordinal))

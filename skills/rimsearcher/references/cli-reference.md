@@ -54,6 +54,8 @@ The data keys sit beside it, and each command's section below names its own. The
 
 ## Global options
 
+Every command takes these, and they are written **after** the command name: `rimsearcher types --json`, not `rimsearcher --json types`.
+
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `--snapshot` <name> | Query this named snapshot instead of the one that would be picked automatically. An explicit choice always wins over auto-detection. | `--snap`, `--env` |

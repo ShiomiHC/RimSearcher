@@ -22,7 +22,7 @@ Options:
       --fields          Deprecated no-op: fields are always shown. Kept so that scripts that pass it keep working.
                         Also accepted: --with-fields, --show-fields.
 
-Global options:
+Global options (every command takes these, written after the command):
       --snapshot <name>  Query this named snapshot instead of the one that would be picked automatically. An explicit choice always wins over auto-detection.
                          Also accepted: --snap, --env.
       --db <path>        Query the snapshot database at this path directly, bypassing the registry.
