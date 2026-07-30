@@ -470,7 +470,7 @@ public sealed class GetCommand : Command
 
                     // --path 是调用方自己收窄的,而收窄之后同一块里的其它字段就看不见了。
                     Advisory.NoteAuthoredSiblings(ctx, fields.Where(f => f.Default != Contract.DefaultState.Same)
-                                                             .Select(f => (def.Id, f.Path)));
+                                                             .Select(f => (def.DefName, def.Id, f.Path)));
                 }
             }
             else
@@ -839,7 +839,7 @@ public sealed class FindCommand : Command
             }).ToList());
 
         Advisory.NoteAuthoredSiblings(ctx, rows.Where(r => r.Default != Contract.DefaultState.Same)
-                                                .Select(r => (r.Def.Id, r.Path)));
+                                                .Select(r => (r.Def.DefName, r.Def.Id, r.Path)));
         Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(path, scope));
         return 0;
     }
@@ -1385,15 +1385,23 @@ internal static class Completeness
         var shown = types.Take(Limits.MaxSuggestions).ToList();
         var cmd = "rimsearcher snapshot truncated" +
                   string.Concat(shown.Select(t => $" --type {t}"));
+        // 第六轮实测:原句写「defs of **the same def types**」,而它指的是「哪些 def 类型
+        // 带得动这条路径」,与表里那几行的类型没有任何关系 —— `find label 狂暴 --exact`
+        // 四行全是 MentalStateDef,脚注却建议 `--type BodyDef --type DutyDef --type ThingDef`。
+        // 「the same」是句子里唯一让人去对照的那个词,而它对照的东西不存在。
+        // 类型当场点名,读的人自己就能看出它跟表里那几行是不是一回事。
+        // 主语固定成「那些 def 类型」,计数进从句 —— 名词有登记处,动词没有,
+        // 「1 def … are of a def type」这种不一致靠加登记项修不掉(R6 的同一条)。
         ctx.Report.Notice(NoticeKind.Boundary,
-            $"Counted over indexed field paths only: {Tally.Complete(affected.Count).Render("def")} of the same " +
-            "def types lost fields at export time and could belong here without showing up. " +
+            "Counted over indexed field paths only: the def types that carry this path " +
+            $"({NameList.Render(types, Limits.MaxSuggestions)}) also hold " +
+            $"{Tally.Complete(affected.Count).Render("def")} that lost fields at export time and could belong " +
+            "here without showing up. " +
             $"'{cmd}' lists " +
             (shown.Count == types.Count
                 ? "them."
-                : $"the biggest {shown.Count} of those types; still in the same position — " +
-                  $"{Tally.Complete(types.Count - shown.Count).Render("def type")}, which the bare " +
-                  "'rimsearcher snapshot truncated' covers along with everything else."),
+                : $"the ones of the {shown.Count} biggest of those types; for the rest, the bare " +
+                  "'rimsearcher snapshot truncated' covers every type at once."),
             footnote: true);
     }
 }
@@ -1426,13 +1434,27 @@ internal static class Advisory
     /// 就是声明默认值,而 `find compClass CompShield` 恰恰是文档推荐的那条主查询 ——
     /// 在它上面挂一句「同块还有 energyMax」是纯噪音,而噪音要在所有调用上收税。
     /// </summary>
-    public static void NoteAuthoredSiblings(CommandContext ctx, IEnumerable<(long DefId, string Path)> shown)
+    public static void NoteAuthoredSiblings(CommandContext ctx,
+                                            IEnumerable<(string DefName, long DefId, string Path)> shown)
     {
-        var names = ctx.Db.AuthoredSiblings(shown);
+        var rows = shown.ToList();
+        var names = ctx.Db.AuthoredSiblings(rows.Select(r => (r.DefId, r.Path)));
         if (names.Count == 0) return;
+
+        // 第六轮实测的两处:块名写死成 `comps[N]`,而 ContainerPrefix 对**任何**带下标的
+        // 层都成立 —— `statBases[8]`、`corePart.parts[6]`、`degreeDatas[0].statFactors[0]`
+        // 三种块上都挂出了「Fields in one comps[N] entry」(8 份轨迹里 3 份撞上);
+        // 而那条命令发出去时 `<defName>` 与 `<block>` 两个占位符一个没填 —— 「指的路要走得通」
+        // 这道规矩在自家新写的句子上先破了。两样都当场算得出来,那就算出来。
+        var first = rows.FirstOrDefault(r => PathSegments.ContainerPrefix(r.Path) is not null);
+        var block = first.Path is null ? null : PathSegments.ContainerPrefix(first.Path)?.TrimEnd('.');
+
         ctx.Report.Notice(NoticeKind.Advisory,
             $"Set by hand in the same block as the rows above: {NameList.Render(names, Limits.MaxSuggestions)}. " +
-            "Fields in one comps[N] entry bound and override each other, and this table shows only the one " +
-            "asked for. 'rimsearcher get <defName> --path <block>' lists the whole block.", footnote: true);
+            (block is null
+                ? "Fields in one indexed block bind and override each other, and this table shows only the one asked for."
+                : $"Fields in one {block} entry bind and override each other, and this table shows only the one " +
+                  $"asked for. 'rimsearcher get {first.DefName} --path {block}' lists the whole block."),
+            footnote: true);
     }
 }

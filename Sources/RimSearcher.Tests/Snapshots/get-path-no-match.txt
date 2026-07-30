@@ -1,7 +1,7 @@
 $ rimsearcher get Apparel_ShieldBelt --path zzzz
 exit 0
 --- stdout ---
-No field path contains 'zzzz'; the def does have 5 fields. Drop --path to see them.
+No field path contains 'zzzz'; the def does have 6 fields. Drop --path to see them.
 
 def_name     Apparel_ShieldBelt
 def_type     ThingDef

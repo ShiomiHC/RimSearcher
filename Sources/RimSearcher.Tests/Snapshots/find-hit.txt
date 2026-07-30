@@ -7,5 +7,5 @@ def_name            def_type  path                value                code_defa
 Apparel_ShieldBelt  ThingDef  comps[0].compClass  RimWorld.CompShield  yes           ludeon.rimworld
 TestModGun          ThingDef  comps[0].compClass  RimWorld.CompShield  yes           test.mod
 
-Counted over indexed field paths only: 1 def of the same def types lost fields at export time and could belong here without showing up. 'rimsearcher snapshot truncated --type ThingDef' lists them.
+Counted over indexed field paths only: the def types that carry this path (ThingDef) also hold 1 def that lost fields at export time and could belong here without showing up. 'rimsearcher snapshot truncated --type ThingDef' lists them.
 --- stderr ---

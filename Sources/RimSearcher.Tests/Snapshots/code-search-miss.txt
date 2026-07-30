@@ -1,5 +1,5 @@
 $ rimsearcher code-search zzzznothing
 exit 1
 --- stdout ---
-No line matched in 6 files under '*.cs' across 2 source trees. These are decompiler output. Local variable names do not survive it — ILSpy re-invents them from the assignment, giving names like num, num2, list and flag, so 'zzzznothing' can only turn up here if it is a type, member, parameter or string literal name, never if it was a local. If you were looking for a def rather than code, 'rimsearcher search' and 'rimsearcher find' answer that from the snapshot — the XML is not searched here.
+No line matched in 6 files under '*.cs' across 2 of 3 source trees on disk — the rest hold no file matching --files '*.cs', and 'rimsearcher sources list' says which of those have never been decompiled. These are decompiler output. Local variable names do not survive it — ILSpy re-invents them from the assignment, giving names like num, num2, list and flag, so 'zzzznothing' can only turn up here if it is a type, member, parameter or string literal name, never if it was a local. If you were looking for a def rather than code, 'rimsearcher search' and 'rimsearcher find' answer that from the snapshot — the XML is not searched here.
 --- stderr ---

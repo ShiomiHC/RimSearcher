@@ -5,7 +5,7 @@ exit 0
   "notes": [
     {
       "kind": "count",
-      "text": "4 matches in 1 file; 1 file read."
+      "text": "4 matches in 1 file; 1 file read across 1 of 3 source trees on disk — the rest hold no file matching --files 'ThingComp.cs', and 'rimsearcher sources list' says which of those have never been decompiled."
     }
   ],
   "matches": [

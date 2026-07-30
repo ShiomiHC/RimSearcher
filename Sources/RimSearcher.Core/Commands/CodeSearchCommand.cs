@@ -302,7 +302,7 @@ public sealed class CodeSearchCommand : Command
             else
                 ctx.Report.Notice(NoticeKind.NextStep,
                     $"No line matched in {Tally.Complete(filesRead).Render("file")} under '{glob}'" +
-                    Framing(root, sourceName, treesTotal) + ". " +
+                    Framing(root, sourceName, treesTotal, glob) + ". " +
                     // 第五种成因,而且是唯一一种「再怎么扫都不会有」的:模式指的东西在反编译时
                     // 就没了。它排在 def 那句之前 —— 原先这一支只提供「你要找的其实是 def 吧」
                     // 一种解释,于是读的人被推去换数据源,而真相是这棵树里本来就查不到这种东西。
@@ -326,7 +326,7 @@ public sealed class CodeSearchCommand : Command
                 $"; {fileTally.Render("file")} read" +
                 (treesRead < treesTotal
                     ? $" across {treeTally.Render("source tree")}"
-                    : Framing(root, sourceName, treesTotal)) + ".");
+                    : Framing(root, sourceName, treesTotal, glob)) + ".");
         }
 
         // 三个旋钮各自申报,因为被截的原因不同,该拧的也不同。
@@ -532,15 +532,31 @@ public sealed class CodeSearchCommand : Command
     ///
     /// 所以窄化时**说得更多**而不是更少:点名扫了哪一棵,以及有几棵没扫、怎么把它们扫上。
     /// </summary>
-    private static string Framing(string root, string? sourceName, int treesTotal)
+    private static string Framing(string root, string? sourceName, int treesTotal, string glob)
     {
+        var onDisk = SourcesShared.TreeNames(root).Count();
+
         if (string.IsNullOrEmpty(sourceName))
-            return treesTotal > 1 ? $" across {Tally.Complete(treesTotal).Render("source tree")}" : "";
+        {
+            // 第六轮实测:不窄化那次报「across 23 source trees」,而 `sources list` 当场列 33 棵。
+            // 两个数谁也不解释谁,于是「23 棵里一次都没出现」被当成「全库唯一」用掉了四次 ——
+            // 差额到底是「十棵没扫的代码」还是「十棵空目录」,输出里一个字都没有。
+            // 说清 23 数的是什么(按这个 --files 挑得出文件的树),差额就不再是未知量;
+            // 「the rest」不带数,避免主谓跟着变数走(NounRegistry 只管名词)。
+            //
+            // 差额在就一定说,哪怕只剩一棵树被扫到 —— 原先的门槛是 treesTotal > 1,于是
+            // `--files '*Comp*.cs'` 这种一挑只剩一棵的问法整句消失,输出「2 files read.」
+            // 与「全库就这么多」逐字同形,正是这条修复要拆掉的那种同形。
+            if (treesTotal < onDisk)
+                return $" across {Tally.Of(treesTotal, onDisk).Render("source tree")} on disk — the rest hold " +
+                       $"no file matching --files '{glob}', and 'rimsearcher sources list' says which of those " +
+                       "have never been decompiled";
+            return onDisk > 1 ? $" across {Tally.Complete(treesTotal).Render("source tree")}" : "";
+        }
 
         // 数目用「N of M」而不是相减出来的差:磁盘上有 33 个目录,而不窄化那次报的
         // 「23 棵」数的是**有候选文件的**树 —— 两个数并排一放就有人去减,减出来的
         // 那个「10 棵没扫」谁都验证不了。各自标清自己数的是什么,不请人做减法。
-        var onDisk = SourcesShared.TreeNames(root).Count();
         return $" in the '{sourceName}' tree alone" +
                (onDisk > 1
                    ? $" ({Tally.Of(1, onDisk).Render("source tree")} on disk); drop --source to search them all"

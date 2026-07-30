@@ -13,29 +13,44 @@ namespace RimSearcher.Search;
 /// </summary>
 public static class PathSegments
 {
-    /// <summary><paramref name="text"/> 是不是 <paramref name="path"/> 的某一个完整段。</summary>
+    /// <summary>
+    /// <paramref name="text"/> 是不是 <paramref name="path"/> 里一段**完整的、连着的**路径。
+    ///
+    /// 两边都按 <c>.</c> 切成段;查询词写了下标就带下标比,没写就把路径那一侧的下标剥掉再比。
+    /// 于是三种写法都成立,而且各自的语义不串:
+    ///   <c>comps</c> 命中 <c>comps[0].props.energyMax</c>(下标无关的问法)
+    ///   <c>comps[0]</c> 也命中它(**块级问法** —— 第六轮实测的必然误报就在这:
+    ///     判据原先无条件剥下标,于是带下标的写法永远不可能等于任何一段,
+    ///     而三条命中明明全在那个块里,输出却说「每一条都只是子串,叫这个名字的字段可能不存在」)
+    ///   <c>props.energyMax</c> 同样命中(多段问法,原先也一律判否)
+    /// </summary>
     public static bool IsWholeSegment(string path, string text)
     {
         if (string.IsNullOrEmpty(text)) return false;
 
-        var start = 0;
-        while (start <= path.Length)
+        var want = text.Split('.');
+        var have = path.Split('.');
+        if (want.Length > have.Length) return false;
+
+        for (var at = 0; at + want.Length <= have.Length; at++)
         {
-            var dot = path.IndexOf('.', start);
-            var end = dot < 0 ? path.Length : dot;
-
-            var segEnd = end;
-            var bracket = path.IndexOf('[', start);
-            if (bracket >= 0 && bracket < end) segEnd = bracket;
-
-            if (segEnd - start == text.Length &&
-                string.Compare(path, start, text, 0, text.Length, StringComparison.OrdinalIgnoreCase) == 0)
-                return true;
-
-            if (dot < 0) break;
-            start = dot + 1;
+            var all = true;
+            for (var i = 0; i < want.Length && all; i++)
+                all = SameSegment(have[at + i], want[i]);
+            if (all) return true;
         }
         return false;
+    }
+
+    /// <summary>查询词带下标就连下标一起比,不带就把路径那一侧的下标剥掉。</summary>
+    private static bool SameSegment(string segment, string wanted)
+    {
+        if (!wanted.Contains('[', StringComparison.Ordinal))
+        {
+            var bracket = segment.IndexOf('[', StringComparison.Ordinal);
+            if (bracket >= 0) segment = segment[..bracket];
+        }
+        return string.Equals(segment, wanted, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

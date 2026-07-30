@@ -1,7 +1,7 @@
 $ rimsearcher get Apparel_ShieldBelt --path comps
 exit 0
 --- stdout ---
-Matching 'comps': 3 fields, out of 5 fields on the def.
+Matching 'comps': 3 fields, out of 6 fields on the def.
 
 def_name     Apparel_ShieldBelt
 def_type     ThingDef

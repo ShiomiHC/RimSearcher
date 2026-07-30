@@ -1318,7 +1318,7 @@ public class GrammarTests
         var (stdout, _, _) = Fixture.Run("find", "--value", "CompShield");
 
         var m = Regex.Match(stdout,
-            @"Counted over indexed field paths only: (\d+) defs? of the same def types[^']*" +
+            @"Counted over indexed field paths only: [^']*?also hold (\d+) defs? that lost fields[^']*" +
             @"'rimsearcher snapshot truncated([^']*)' lists them\.");
         Assert.True(m.Success, stdout);
 
@@ -1330,6 +1330,16 @@ public class GrammarTests
         var got = Regex.Match(listed, @"^(\d+) defs?\.", RegexOptions.Multiline);
         Assert.True(got.Success, listed);
         Assert.Equal(claimed, int.Parse(got.Groups[1].Value));
+
+        // 第六轮:句子原先写「defs of **the same def types**」,而它指的是「哪些类型能带这条
+        // 路径」,与表里那几行的类型没有任何关系 —— 实测 `find label 狂暴 --exact` 四行全是
+        // MentalStateDef,脚注却建议 `--type BodyDef --type DutyDef --type ThingDef`。
+        // 「the same」是句子里唯一让人去对照的那个词,而它对照的东西不存在。
+        Assert.DoesNotContain("the same def types", stdout, StringComparison.Ordinal);
+
+        // 类型要在散文里点名,而且与命令里那几个逐字一致 —— 不点名就没法核对。
+        foreach (var t in argv.Where(a => !a.StartsWith("--", StringComparison.Ordinal)))
+            Assert.Contains(t, stdout.Split("'rimsearcher snapshot truncated")[0], StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1384,6 +1394,44 @@ public class GrammarTests
         // 同块里没有别人设过的东西时,一个字都不说。
         var (quiet, _, _) = Fixture.Run("get", "TestModGun", "--path", "compClass");
         Assert.DoesNotContain("same block as the rows above", quiet, StringComparison.Ordinal);
+
+        // 第六轮:块名不许写死成 comps[N] —— ContainerPrefix 对任何带下标的层都成立,
+        // 而实测里 statBases[8]、corePart.parts[6]、degreeDatas[0].statFactors[0]
+        // 三种块上都挂出了「Fields in one comps[N] entry」。8 份轨迹里 3 份撞上。
+        var (stat, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--path", "statBases[0].stat");
+        Assert.Contains("statBases[0]", stat.Split("same block")[1], StringComparison.Ordinal);
+        Assert.DoesNotContain("comps[N]", stat, StringComparison.Ordinal);
+
+        // 而且指的那条路要**填好**再发出去。原先发的是字面量
+        // `rimsearcher get <defName> --path <block>`,两个占位符一个没填。
+        Assert.DoesNotContain("<defName>", stat, StringComparison.Ordinal);
+        Assert.DoesNotContain("<block>", stat, StringComparison.Ordinal);
+        Assert.Contains("rimsearcher get Apparel_ShieldBelt --path statBases[0]", stat, StringComparison.Ordinal);
+
+        // 走得到:那条命令真列得出刚被点名的兄弟。
+        var (whole, _, wcode) = Fixture.Run("get", "Apparel_ShieldBelt", "--path", "statBases[0]");
+        Assert.Equal(0, wcode);
+        Assert.Contains("statBases[0].value", whole, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 块级 `--path` 上那句「整段命中」是**必然误报**:判据把 `[N]` 从段里剥掉,
+    /// 于是 `comps[0]` 这种带下标的写法永远不可能等于任何一段,而三条命中明明全在
+    /// 那个块里。第六轮实测 `get Apparel_ShieldBelt --path "comps[0]"` 回
+    /// 「None of those has 'comps[0]' as a whole path segment … so a field by exactly
+    /// that name may not exist here」—— 每个字都在把人推离正确答案。
+    /// </summary>
+    [Fact]
+    public void 块级路径不许被判成子串误命中()
+    {
+        var (block, _, code) = Fixture.Run("get", "Apparel_ShieldBelt", "--path", "comps[0]");
+        Assert.Equal(0, code);
+        Assert.DoesNotContain("whole path segment", block, StringComparison.Ordinal);
+        Assert.Contains("comps[0].props.energyMax", block, StringComparison.Ordinal);
+
+        // 不带下标的裸名字照旧走整段判定 —— 这一改只放过「本来就是块前缀」的写法。
+        var (leaf, _, _) = Fixture.Run("get", "Bullet_Revolver", "--path", "damageAmount");
+        Assert.Contains("whole path segment", leaf, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1453,6 +1501,43 @@ public class GrammarTests
         Assert.Equal(1, gcode);
         Assert.Contains("No def in this snapshot has a field path ending in 'zzznotafield'",
                         gone, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 扫了几棵树,要跟 `sources list` 列的那几棵对得上账。
+    ///
+    /// 第六轮实测:`code-search` 说「across 23 source trees」,`sources list` 同一台机器上
+    /// 列 33 棵 —— 两个数谁也不解释谁,而八份答卷里有四份把「23 棵里一次都没出现」
+    /// 当成「全库唯一」用掉了。差额是十棵空目录(旧别名残留,从没反编译过),
+    /// 但读的人无从知道它不是「十棵没扫的代码」。
+    ///
+    /// 闸盯两头:数要写成「N of M」而不是光秃秃一个 N,并且要说破差额是什么;
+    /// 树都非空时(M == N)不许多话,否则这句话退化成每次都挂的免责声明。
+    /// </summary>
+    [Fact]
+    public void 扫过的树数要跟磁盘上的树数对得上账()
+    {
+        // fixture 三棵树,zz.emptytree 一个文件都没有 —— 差额恒为 1。
+        var (miss, _, mcode) = Fixture.Run("code-search", "--", "zzzznothing");
+        Assert.Equal(1, mcode);
+        Assert.Contains("2 of 3 source trees on disk", miss, StringComparison.Ordinal);
+        Assert.Contains("the rest hold no file matching --files '*.cs'", miss, StringComparison.Ordinal);
+        Assert.Contains("never been decompiled", miss, StringComparison.Ordinal);
+
+        // 有命中的那句用的是同一个取景,不许只修零结果那一支。
+        var (hit, _, hcode) = Fixture.Run("code-search", "props");
+        Assert.Equal(0, hcode);
+        Assert.Contains("2 of 3 source trees on disk", hit, StringComparison.Ordinal);
+
+        // glob 一收窄只剩一棵树扫得到,这句话更不能消失(消失了就与「全库就这么多」同形),
+        // 而且报的必须是**当次**的 glob,不是写死的 '*.cs'。
+        var (narrow, _, _) = Fixture.Run("code-search", "ThingComp", "--files", "*Comp*.cs");
+        Assert.Contains("1 of 3 source trees on disk", narrow, StringComparison.Ordinal);
+        Assert.Contains("--files '*Comp*.cs'", narrow, StringComparison.Ordinal);
+
+        // 窄化到一棵树时走另一支(「in the 'X' tree alone」),不许两句话叠着说。
+        var (one, _, _) = Fixture.Run("code-search", "ThingComp", "--source", "vanilla");
+        Assert.DoesNotContain("on disk — the rest", one, StringComparison.Ordinal);
     }
 
     /// <summary>

@@ -1,12 +1,12 @@
 $ rimsearcher fields ThingDef --limit 3 --offset 3
 exit 0
 --- stdout ---
-3 of 9 field paths, starting at 4; pass --offset 6 for the next page, or --limit all for every one at once, or narrow with --path <text>.
+3 of 10 field paths, starting at 4; pass --offset 6 for the next page, or --limit all for every one at once, or narrow with --path <text>.
 
 path                                defs
 comps[0].props.energyLossPerDamage  1
 comps[0].props.energyMax            1
 ingestible.foodType                 1
 
-Counted over indexed field paths only: 1 def of the same def types lost fields at export time and could belong here without showing up. 'rimsearcher snapshot truncated --type ThingDef' lists them.
+Counted over indexed field paths only: the def types that carry this path (ThingDef) also hold 1 def that lost fields at export time and could belong here without showing up. 'rimsearcher snapshot truncated --type ThingDef' lists them.
 --- stderr ---

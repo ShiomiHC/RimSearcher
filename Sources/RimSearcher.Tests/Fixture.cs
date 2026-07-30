@@ -199,7 +199,10 @@ public static class Fixture
             // minFuelCost=50 盖掉同块的 fuelPerTile=3(16 倍),而只列出后者的那张表
             // 干净、计数明确、一条警告都没有。
             ("comps[0].props.energyLossPerDamage", "0.033", DefaultState.Differs),
+            // 第二个**不叫 comps** 的块,同样有两个有人设过的字段 —— 兄弟提示的措辞
+            // 原先把块名写死成 comps[N],而 ContainerPrefix 对任何带下标的层都成立。
             ("statBases[0].stat", "MarketValue", DefaultState.Differs),
+            ("statBases[0].value", "120", DefaultState.Differs),
             // 噪声:末段匹配应把这两条挡掉(02-2 的唯一产地在 import 侧)
             ("shortHash", "12345", DefaultState.Differs),
             ("comps[0].index", "0", DefaultState.Same),
