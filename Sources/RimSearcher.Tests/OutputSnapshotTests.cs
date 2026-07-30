@@ -160,7 +160,7 @@ public class OutputSnapshotTests
         // 连同计数一起截掉。四条盯分页的三个位置 —— 中间页要说自己从第几条起、
         // 末页不许再给下一页的参数、翻过头不是「没有这个东西」。
         { "page-middle",           ["list", "ThingDef", "--limit", "2", "--offset", "2"] },
-        { "page-last",             ["list", "ThingDef", "--limit", "4", "--offset", "4"] },
+        { "page-last",             ["list", "ThingDef", "--limit", "4", "--offset", "5"] },
         { "page-past-end",         ["list", "ThingDef", "--offset", "900"] },
         // 同一套文法长在另外三条命令上(产地唯一的意思就是措辞不许各写一份)。
         // search 的结果集是「FTS 命中」接着「子串补扫」两段拼的,翻页要在拼好的那条序列上走 ——

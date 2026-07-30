@@ -185,6 +185,7 @@ public sealed class SearchCommand : Command
             }).ToList());
 
         Advisory.NoteOutsideTranslations(ctx, rows.Select(r => r.DefName));
+        Advisory.NoteSameLabel(ctx, rows);
         return rows.Count == 0 ? 1 : 0;
     }
 
@@ -821,6 +822,9 @@ public sealed class FindCommand : Command
                             $"'rimsearcher code-search \"class \\w+ : {ClassNameShape.Tail(value)}\\b\"' " +
                             "names them, and settles whether such a class exists at all."
                           : "")));
+            // 值侧是单语的 —— `find label "shield belt"` 在中文快照上必然空手,
+            // 而那个 def 就在文本索引里躺着。与上面的近似候选叠加,不替换。
+            if (value is { Length: > 0 }) Advisory.NoteTextIndexHasIt(ctx, value);
             NoteElsewhere();
             return 1;
         }
@@ -830,6 +834,9 @@ public sealed class FindCommand : Command
             var i = v.LastIndexOf('.');
             return i < 0 ? v : v[(i + 1)..];
         }
+
+        // 一次命中横跨几种路径形状 —— 拿 find 的结果做集合差的人,少的正是这一句。
+        Advisory.NoteMixedPathShapes(ctx, ctx.Db.FindPathShapes(path, value, exact, scope));
 
         // 这里不像 get 那样把默认值行滤掉:调用方点名了一个字段与一个值,「哪些 def 取到过它」
         // 的答案里就该有它们。但**为什么取到**要分得开 —— comps[N].compClass 一整批
@@ -885,6 +892,9 @@ public sealed class FindCommand : Command
                       "parameters), so a class can be in use by a def and still be absent here. " +
                       $"'rimsearcher code-search \"class {ClassNameShape.Tail(value)}\\b\"' finds the class itself."
                     : ""));
+
+            // 值侧是单语的:同一个词在文本索引里可能好端端地在(译文的另一侧)。
+            Advisory.NoteTextIndexHasIt(ctx, value);
 
             // 叠加不替换:上面那句说的是「这份快照里没有」,而别的快照里有没有算得出来。
             if (NameLookup.Elsewhere(ctx, db => db.PathsWithValue(
@@ -1419,6 +1429,95 @@ internal static class Completeness
 
 internal static class Advisory
 {
+    /// <summary>
+    /// 值侧是**单语**的:field_values 存的是游戏加载时的那一份文本(这份快照的语言),
+    /// 而另一侧只活在 translations 表里,只有 `search` 看得见。
+    ///
+    /// 第六轮实测的形状:中文快照上 `find --value "shield belt"` 回「本快照没有任何字段
+    /// 装着这段文本」,而 `search "shield belt"` 当场命中两个 def —— 两句话都对,
+    /// 而前者与「这东西真不存在」逐字同形。C41 差点据此把「显示成狂暴的技能」答错
+    /// (AbilityDef Berserk 的简中 label 是「激怒」),C42 是同一族的另一面。
+    ///
+    /// 只在文本索引**真的命中**时出声,并且点名命中了谁 —— 一句无条件的「值侧是单语的」
+    /// 就是免责声明,而这一句自带可验证的下一步。
+    /// </summary>
+    public static void NoteTextIndexHasIt(CommandContext ctx, string value)
+    {
+        var wide = ScopeFilter.Parse("all", ctx.Db.PackageIds(), ctx.Config);
+        var (rows, total) = ctx.Db.SearchFts(value, wide, null, Limits.MaxSuggestions);
+        if (rows.Count == 0) return;
+
+        ctx.Report.Notice(NoticeKind.NextStep,
+            $"The text index does have '{value}' though — " +
+            NameList.Render([.. rows.Select(r => $"{r.DefName} ({r.DefType})")], Limits.MaxSuggestions,
+                            total: total) +
+            $". Field values are stored as the game loaded them, in this snapshot's language " +
+            $"({ctx.Db.Meta.Language}); the other side of a translated label or description lives only in " +
+            $"the text index, so 'rimsearcher search {Quote(value)}' reaches it and --value cannot.");
+    }
+
+    private static string Quote(string v) => v.Contains(' ') ? $"\"{v}\"" : v;
+
+    /// <summary>
+    /// 这一屏里有两行的 label **逐字相同**。
+    ///
+    /// 第六轮 C42:`TrapSpringChance` 与 `PawnTrapSpringChance` 的简中 label 都是
+    /// 「陷阱触发率」,def_type 也都是 StatDef,mod 也都是 Core —— 表里没有任何一列
+    /// 分得开它们,而问的人只想要其中一个。这一类不能靠「多说一句边界」修:查询技术上
+    /// 成功了,表是完整的,没有任何异常信号,只是**看得见的那几列不足以判**。
+    ///
+    /// 所以这一句只做一件事:把撞在一起的那几组点出来,并指向真正分得开它们的东西
+    /// (description 不在表里)。没撞就一个字不说。
+    /// </summary>
+    /// <summary>
+    /// 这一次命中横跨了不止一种路径形状。
+    ///
+    /// 第六轮 C31:`find stat Mass` 的 1229 行里混着 1 行 <c>statFactors[].stat</c>,
+    /// 拿它做集合差时那一行是个**静默假阴性** —— 表里确实印了 path 列,但默认 25 行的
+    /// 视图下没人会逐行核对路径形状,而 `find` 恰恰是这套命令里用来做集合运算的那一个。
+    /// `values` 早有 matched_paths 表头,这是把同一条保护补到 `find` 上。
+    ///
+    /// 只有一种形状时一个字不说 —— 那时「结果集是齐的」是无条件的。
+    /// </summary>
+    public static void NoteMixedPathShapes(CommandContext ctx, IReadOnlyList<(string Shape, int Count)> shapes)
+    {
+        if (shapes.Count < 2) return;
+        var shown = shapes.Take(Limits.MaxSuggestions).ToList();
+        ctx.Report.Notice(NoticeKind.Boundary,
+            "These rows span more than one path shape: " +
+            string.Join(", ", shown.Select(x => $"{x.Shape} ({x.Count})")) +
+            (shapes.Count > shown.Count ? $", and {shapes.Count - shown.Count} more shapes" : "") +
+            ". The suffix matched them all; a set operation over this result treats them as one field " +
+            "unless the path column is read row by row.",
+            footnote: true);
+    }
+
+    private static readonly IEqualityComparer<(string, string DefType)> TupleComparer =
+        EqualityComparer<(string, string DefType)>.Default;
+
+    public static void NoteSameLabel(CommandContext ctx, IReadOnlyList<DefRow> rows)
+    {
+        // 同 label **且同 def 类型**才算撞。类型不同的那种(ConceptDef 与 ThingDef 都叫
+        // 「护盾腰带」)表里那一列当场分得开,再说一句就是废话 —— 而且「表里没有列分得开」
+        // 那半句在那种情形下是**假的**,一句为防误读而加的话自己先说错,比不说更坏。
+        var clashes = rows.Where(r => r.Label is { Length: > 0 })
+                          .GroupBy(r => (r.Label!, r.DefType), TupleComparer)
+                          .Where(g => g.Count() > 1)
+                          .ToList();
+        if (clashes.Count == 0) return;
+
+        var shown = clashes.Take(Limits.MaxSuggestions)
+                           .Select(g => $"'{g.Key.Item1}' ({g.Key.DefType}: " +
+                                        $"{NameList.Render([.. g.Select(r => r.DefName)], Limits.MaxSuggestions)})")
+                           .ToList();
+        ctx.Report.Notice(NoticeKind.Advisory,
+            "Rows above carry the same label and the same def type: " + string.Join("; ", shown) +
+            (clashes.Count > shown.Count ? $", and {clashes.Count - shown.Count} more such labels" : "") +
+            ". The defName is the only column that tells them apart; the description, which is not in this " +
+            "table, says which is which — 'rimsearcher get <defName> --path description'.",
+            footnote: true);
+    }
+
     /// <summary>
     /// 环境外翻译的聚合尾注(06 上下文预算:逐条标注聚合成一行,不是每行挂一句)。
     /// </summary>

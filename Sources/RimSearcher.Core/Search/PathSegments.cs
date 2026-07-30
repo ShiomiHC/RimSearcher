@@ -68,6 +68,27 @@ public static class PathSegments
         return i < 0 ? null : path[..(i + 2)];
     }
 
+    /// <summary>
+    /// 路径的**形状** —— 每个下标里的数字抹掉,<c>statBases[7].stat</c> → <c>statBases[].stat</c>。
+    ///
+    /// 「一次查询命中了几种东西」问的是形状,不是路径:<c>statBases[0..109].stat</c>
+    /// 一百多条原样列出来是噪音,而「statBases 与 statFactors 两种」才是做集合运算的人
+    /// 要判的那件事(第六轮 C31 的静默假阴性就差这一句)。
+    /// </summary>
+    public static string Shape(string path)
+    {
+        if (!path.Contains('[', StringComparison.Ordinal)) return path;
+        var sb = new System.Text.StringBuilder(path.Length);
+        var inIndex = false;
+        foreach (var c in path)
+        {
+            if (c == '[') { inIndex = true; sb.Append(c); continue; }
+            if (c == ']') { inIndex = false; sb.Append(c); continue; }
+            if (!inIndex) sb.Append(c);
+        }
+        return sb.ToString();
+    }
+
     /// <summary>这条路径的某一段与**任意一个**查询词整体相等。</summary>
     public static bool IsWholeSegment(string path, IReadOnlyList<string> texts)
     {

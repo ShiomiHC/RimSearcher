@@ -4,7 +4,7 @@ exit 0
 1 value.
 
 matched_paths    comps[0].compClass (2)
-def_types        ThingDef (2 of 8)
+def_types        ThingDef (2 of 9)
 defs_with_field  2
 
 value                defs

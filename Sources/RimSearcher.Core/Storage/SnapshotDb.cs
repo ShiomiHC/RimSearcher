@@ -477,6 +477,57 @@ public sealed class SnapshotDb : IDisposable
     }
 
     /// <summary>
+    /// 同一次 <see cref="FindByField"/> 的命中横跨几种**路径形状**(下标归一后的路径),
+    /// 每种几条。数在分页之前数,所以它说的是整个结果集,不是这一页。
+    ///
+    /// 起因(第六轮 C31):`find stat Mass` 的 1229 行里混着 1 行 <c>statFactors[N].stat</c>,
+    /// 其余是 <c>statBases[N].stat</c>。拿这个结果集做集合差时那一行是个**静默假阴性**,
+    /// 而默认 25 行的视图下没人会去逐行核对 path 列。`values` 早就有 matched_paths 表头,
+    /// 而 `find` 恰恰是用来做集合运算的那一个。
+    ///
+    /// 归一到形状而不是列出原始路径:`statBases[0..109].stat` 一百多条各列一遍是噪音,
+    /// 而「两种形状」才是做集合运算的人要判的那件事。
+    /// </summary>
+    public IReadOnlyList<(string Shape, int Count)> FindPathShapes(
+        string pathSuffix, string? value, bool exact, ScopeFilter scope)
+    {
+        var p = new Dictionary<string, object?>();
+        var conds = new List<string>();
+
+        var leaf = NoiseFilter.Leaf(pathSuffix);
+        if (pathSuffix.Contains('.') || pathSuffix.Contains('['))
+        {
+            p["@path"] = "%" + pathSuffix;
+            conds.Add("fv.path LIKE @path");
+        }
+        else
+        {
+            p["@leaf"] = leaf;
+            conds.Add("fv.leaf = @leaf COLLATE NOCASE");
+        }
+
+        if (value is { Length: > 0 })
+        {
+            if (exact) { p["@v"] = value; conds.Add("fv.value = @v COLLATE NOCASE"); }
+            else { p["@v"] = "%" + value + "%"; conds.Add("fv.value LIKE @v"); }
+        }
+        if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
+
+        var shapes = new Dictionary<string, int>(StringComparer.Ordinal);
+        var order = new List<string>();
+        using var rd = Query(
+            "SELECT fv.path, COUNT(*) FROM field_values fv JOIN defs d ON d.id = fv.def_id " +
+            $"WHERE {string.Join(" AND ", conds)} GROUP BY fv.path", p);
+        while (rd.Read())
+        {
+            var shape = Search.PathSegments.Shape(rd.GetString(0));
+            if (!shapes.ContainsKey(shape)) order.Add(shape);
+            shapes[shape] = shapes.GetValueOrDefault(shape) + rd.GetInt32(1);
+        }
+        return [.. order.Select(k => (k, shapes[k])).OrderByDescending(t => t.Item2)];
+    }
+
+    /// <summary>
     /// <c>WholeSegment</c> 是 <c>Total</c> 里有几条把 <paramref name="pathFilter"/> 用作**完整的一段**。
     /// 子串匹配不留痕:不拆开这两档,「你要的那个字段根本不在」与「它在,旁边还有一堆别的」
     /// 逐字同形。数在分页**之前**数 —— 翻一页换一句结论是同一个病换个位置。

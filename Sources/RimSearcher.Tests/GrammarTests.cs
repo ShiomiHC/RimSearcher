@@ -939,12 +939,12 @@ public class GrammarTests
     {
         var (mid, _, midCode) = Fixture.Run("list", "ThingDef", "--limit", "2", "--offset", "2");
         Assert.Equal(0, midCode);
-        Assert.Contains("2 of 8 defs, starting at 3", mid, StringComparison.Ordinal);
+        Assert.Contains("2 of 9 defs, starting at 3", mid, StringComparison.Ordinal);
         Assert.Contains("--offset 4", mid, StringComparison.Ordinal);
 
-        var (last, _, lastCode) = Fixture.Run("list", "ThingDef", "--limit", "4", "--offset", "4");
+        var (last, _, lastCode) = Fixture.Run("list", "ThingDef", "--limit", "4", "--offset", "5");
         Assert.Equal(0, lastCode);
-        Assert.Contains("starting at 5", last, StringComparison.Ordinal);
+        Assert.Contains("starting at 6", last, StringComparison.Ordinal);
         Assert.DoesNotContain("next page", last, StringComparison.Ordinal);
         // 「到头了」不许由那句话的缺席承载 —— 末页要自己说出来。
         Assert.Contains("that is the last page", last, StringComparison.Ordinal);
@@ -1501,6 +1501,84 @@ public class GrammarTests
         Assert.Equal(1, gcode);
         Assert.Contains("No def in this snapshot has a field path ending in 'zzznotafield'",
                         gone, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 值侧是**单语**的:`find` 查的是游戏加载时那一份文本,译文的另一侧只活在文本索引里。
+    ///
+    /// 第六轮实测的形状:中文快照上 `find --value "shield belt"` 回「本快照没有任何字段
+    /// 装着这段文本」,而 `search "shield belt"` 当场命中 —— 两句话都对,而前者与
+    /// 「这东西真不存在」逐字同形。C41 差点据此答错(AbilityDef Berserk 的简中 label
+    /// 是「激怒」而不是「狂暴」),C42 是同一族的另一面。
+    ///
+    /// 夹具是反过来的一份(英文值 + 中文注入),形状一样:`find --value 护盾腰带` 空手,
+    /// 而文本索引里躺着 Apparel_ShieldBelt。真不存在的那种不许挂这句 ——
+    /// 挂了它就退化成每次落空都发的免责声明。
+    /// </summary>
+    [Fact]
+    public void 值查不到时要说破值侧是单语的()
+    {
+        var (byValue, _, code) = Fixture.Run("find", "--value", "护盾腰带");
+        Assert.Equal(1, code);
+        Assert.Contains("The text index does have '护盾腰带' though", byValue, StringComparison.Ordinal);
+        Assert.Contains("Apparel_ShieldBelt (ThingDef)", byValue, StringComparison.Ordinal);
+        Assert.Contains("rimsearcher search 护盾腰带", byValue, StringComparison.Ordinal);
+
+        // 指名字段的那一支走的是另一条分流,同样得挂(夹具的 label 不是字段路径,
+        // 拿一条真存在的路径来问 —— 落空的是**值**,而不是路径)。
+        var (byField, _, _) = Fixture.Run("find", "thingClass", "护盾腰带");
+        Assert.Contains("The text index does have", byField, StringComparison.Ordinal);
+
+        // 文本索引里也没有的,一个字都不说。
+        var (gone, _, _) = Fixture.Run("find", "--value", "zzznothingatall");
+        Assert.DoesNotContain("The text index does have", gone, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 表里两行的 label **与 def 类型都一样**,而问的人只想要其中一个。
+    ///
+    /// 第六轮 C42:`TrapSpringChance` 与 `PawnTrapSpringChance` 的简中 label 都是
+    /// 「陷阱触发率」,def_type 都是 StatDef,mod 都是 Core。这一类不能靠「多说一句边界」修
+    /// —— 查询技术上成功了,表是完整的,没有任何异常信号,只是看得见的那几列不足以判。
+    ///
+    /// 跨类型的那种(ConceptDef 与 ThingDef 都叫「护盾腰带」)表里当场分得开,不许出声:
+    /// 那时「表里没有列分得开」这半句本身是**假的**,一句为防误读而加的话自己先说错,
+    /// 比不说更坏。
+    /// </summary>
+    [Fact]
+    public void 同类型里label逐字相同的行要点出来()
+    {
+        var (clash, _, _) = Fixture.Run("search", "firefoam");
+        Assert.Contains("carry the same label and the same def type", clash, StringComparison.Ordinal);
+        Assert.Contains("'firefoam' (ThingDef: Firefoam, FoamPopper)", clash, StringComparison.Ordinal);
+        Assert.Contains("--path description", clash, StringComparison.Ordinal);
+
+        // 同名跨类型的那一对(ThingDef / StatDef 都叫 Firefoam)label 并不相同,不许误发。
+        var (single, _, _) = Fixture.Run("search", "shield belt");
+        Assert.DoesNotContain("carry the same label", single, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 一次 `find` 的命中横跨几种**路径形状**,得当场说出来。
+    ///
+    /// 第六轮 C31:`find stat Mass` 的 1229 行里混着 1 行 `statFactors[N].stat`,其余是
+    /// `statBases[N].stat`。拿这个结果集做集合差时那一行是个**静默假阴性** —— 表里确实印了
+    /// path 列,但默认 25 行的视图下没人会逐行核对形状,而 `find` 恰恰是这套命令里
+    /// 用来做集合运算的那一个。`values` 早有 matched_paths 表头,这是把同一条补到 find 上。
+    ///
+    /// 数的是**整个结果集**不是这一页:翻一页换一句结论是同一个病换个位置。
+    /// 只有一种形状时一个字不说。
+    /// </summary>
+    [Fact]
+    public void find的命中横跨多种路径形状时要说破()
+    {
+        var (mixed, _, _) = Fixture.Run("find", "stat", "MarketValue", "--limit", "1");
+        Assert.Contains("span more than one path shape", mixed, StringComparison.Ordinal);
+        Assert.Contains("statBases[].stat (2)", mixed, StringComparison.Ordinal);
+        Assert.Contains("statFactors[].stat (1)", mixed, StringComparison.Ordinal);
+
+        var (single, _, _) = Fixture.Run("find", "compClass", "RimWorld.CompShield");
+        Assert.DoesNotContain("span more than one path shape", single, StringComparison.Ordinal);
     }
 
     /// <summary>

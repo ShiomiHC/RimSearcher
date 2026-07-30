@@ -23,9 +23,20 @@ public static class NameList
     /// 还得进登记处。要带名词的场合请在调用点自己接,别在这里开第二种形态。
     /// </summary>
     public static string Render(IReadOnlyCollection<string> items, int max)
+        => Render(items, max, items.Count);
+
+    /// <summary>
+    /// 同上,但**总数另给** —— 名单在到这里之前已经被查询本身截过一次。
+    ///
+    /// <c>SELECT … LIMIT 5</c> 回来的 5 条,<c>items.Count</c> 就是 5,于是「还有几条」
+    /// 算出 0,而真值可能是 500。少的那一截不在这里,所以这里看不见它 ——
+    /// 这正是这个文件开头那句「与『一共就这几个』逐字同形」的一种更隐蔽的犯法:
+    /// 上一层老实地给了 LIMIT,这一层老实地按拿到的条数算,合起来撒了谎。
+    /// </summary>
+    public static string Render(IReadOnlyCollection<string> items, int max, int total)
     {
         var shown = items.Take(max).ToList();
-        var hidden = items.Count - shown.Count;
+        var hidden = Math.Max(total, items.Count) - shown.Count;
         return string.Join(", ", shown) + (hidden > 0 ? $", and {hidden} more" : "");
     }
 }

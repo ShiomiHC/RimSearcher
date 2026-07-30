@@ -1,5 +1,5 @@
 $ rimsearcher list ThingDef --offset 900
 exit 1
 --- stdout ---
---offset 900 is past the end: this snapshot has 8 defs of type ThingDef.
+--offset 900 is past the end: this snapshot has 9 defs of type ThingDef.
 --- stderr ---

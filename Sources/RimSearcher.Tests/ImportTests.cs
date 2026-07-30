@@ -166,7 +166,7 @@ public class ImportTests
     public void 导入后def数量与结束标记一致()
     {
         using var db = Build("count");
-        Assert.Equal(12, db.AllDefNames(ScopeFilter.Parse("all", db.PackageIds(), NoConfig)).Count);
+        Assert.Equal(13, db.AllDefNames(ScopeFilter.Parse("all", db.PackageIds(), NoConfig)).Count);
     }
 
     [Fact]

@@ -246,6 +246,17 @@ public static class Fixture
 
         Def("StatDef", "Firefoam", null, "ludeon.rimworld", "Stats_Basics.xml", false, 0);
 
+        // 两件事一份语料,而两件事都是「表看着齐全,分不开的那一维不在表里」:
+        //
+        // ① label 与上面那个 ThingDef Firefoam **逐字相同、def 类型也相同** —— 第六轮 C42
+        //    的形状(TrapSpringChance 与 PawnTrapSpringChance 的简中 label 都是「陷阱触发率」)。
+        //    同名跨类型的那一对(Firefoam 自己)在表里当场分得开,不是同一件事,所以要各一份。
+        // ② statFactors 这一条让 `find stat MarketValue` 横跨两种路径形状 —— C31 的
+        //    静默假阴性:1229 行里混着 1 行 statFactors,而拿它做集合差的人不会逐行核对 path。
+        Def("ThingDef", "FoamPopper", "firefoam", "ludeon.rimworld", "Buildings_Special.xml", false, 0,
+            ("thingClass", "RimWorld.Building", DefaultState.Differs),
+            ("statFactors[0].stat", "MarketValue", DefaultState.Differs));
+
         // 三级匹配的语料:查 "VoidNode" 时 FTS 命中前两个(词首对齐),第三个只有子串扫描找得到。
         // 混合命中是「N of M 的 M 不许随 --limit 变」那道闸唯一的落点 —— 少了它,
         // 「把没显示出来的 FTS 命中当成新增」与「先截断再累加」两个方向的错都没人守。

@@ -4,7 +4,7 @@ exit 0
 4 def types.
 
 def_type     defs
-ThingDef     8
+ThingDef     9
 TestBaseDef  2
 HediffDef    1
 StatDef      1

@@ -2,12 +2,13 @@ $ rimsearcher list ThingDef --limit 5000
 exit 0
 --- stdout ---
 --limit 5000 is above the ceiling of 2000, so at most 2000 were taken. Pass --limit all to lift the cap, or page with --offset.
-8 defs.
+9 defs.
 
 def_name            label               mod
 Apparel_ShieldBelt  shield belt         ludeon.rimworld
 Bullet_Revolver     revolver bullet     ludeon.rimworld
 Firefoam            firefoam            ludeon.rimworld
+FoamPopper          firefoam            ludeon.rimworld
 GleamingVoidNode    gleaming void node  test.mod
 Meat_Muffalo        muffalo meat        ludeon.rimworld
 TestModGun          test gun            test.mod
