@@ -57,7 +57,10 @@ public class SkillPromiseTests
             "分页的三个位置各说各的话"),
 
         // ---- search / find / values 的分工 ----
-        new("It covers def names, labels, descriptions and translations — **not C# class names**",
+        // 五轮:原承诺写「translations」不带限定,而快照的 translations 表是 def 侧的注入,
+        // Languages/*/Keyed 那一整套 UI 字符串一条都不在库里 —— 「收获这个 UI 词对应什么」
+        // 照字面读会被当成查得到的问题。收窄成「注入到 def 上的译文」并把 Keyed 明说成不覆盖。
+        new("It covers def names, labels, descriptions and the translations injected onto defs — **not C# class names**, and **not the UI strings under `Languages/*/Keyed`**",
             nameof(search只认名字标签与译文而不认C类名)),
         new("`values <field>` gives the whole value space, and prints which full paths and def types contributed",
             nameof(values说清这些值来自哪些路径与def类型)),
@@ -211,6 +214,12 @@ public class SkillPromiseTests
         Assert.DoesNotContain("Apparel_ShieldBelt", byClass, StringComparison.Ordinal);
         // 只说「没有」不够:得把该去哪儿问说出来,否则这条承诺帮不到任何人。
         Assert.Contains("find", byClass, StringComparison.Ordinal);
+
+        // 「译文」这个词不带限定就在超发。快照的 translations 表只有 def 侧的注入
+        // (def_type + def_name + field 三列),Languages/*/Keyed 那一整套 UI 字符串
+        // 一条都进不来 —— 这是 schema 级的硬边界,不是覆盖率问题。
+        Assert.Contains("Languages/*/Keyed", byClass, StringComparison.Ordinal);
+        Assert.Contains("injected onto defs", byClass, StringComparison.Ordinal);
     }
 
     /// <summary>

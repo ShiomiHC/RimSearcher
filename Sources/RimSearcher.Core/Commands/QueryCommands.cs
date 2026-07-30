@@ -140,10 +140,16 @@ public sealed class SearchCommand : Command
             // 值域必须说清。search 覆盖的是 defName / label / description / 译文 ——
             // **不含** C# 类名。实测里有人拿 CompShield 来搜,零结果被读成「模糊匹配坏了」,
             // 而错误消息当时把他指向 code-search:那条路找得到类,却永远找不到用它的 def。
+            //
+            // 「译文」这个词本身在超发:快照的 translations 表是 def 侧的注入
+            // (def_type + def_name + field),Languages/*/Keyed 那一整套 UI 字符串
+            // **一条都不在库里**。照这句话字面读,「收获这个 UI 词对应什么」会被当成
+            // 查得到的问题,而它查不到 —— 一个 schema 级的硬边界,写清比让人试出来便宜。
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"Nothing matched '{query}' in this snapshot" +
                 (scope.IsAll ? "" : $" within --scope {scope.Expression}") +
-                ". This command covers def names, labels, descriptions and translations, not C# class names.");
+                ". This command covers def names, labels, descriptions and the translations injected onto " +
+                "defs — not C# class names, and not the UI strings under Languages/*/Keyed.");
 
             // R8:剩下那半句原先是**猜**的 —— 「像个类名」就指向 find/code-search,
             // 否则指向 types。两条猜法各自造出一种误诊,而名字的真实落点是可以当场算的。

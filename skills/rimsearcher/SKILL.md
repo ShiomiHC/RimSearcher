@@ -33,6 +33,44 @@ is the only command that reads it, and it says so.
 | A code *shape* across all files, e.g. every method matching a signature pattern | `rimsearcher code-search <regex>` |
 | The actual text of one file, one member, or one line range | `rimsearcher read <file> --member <name>` |
 
+The MCP is often not connected — that is a normal state, not an error. Every row above that
+names it has a CLI answer, and these are the ones to reach for:
+
+| Instead of | Without the MCP |
+|---|---|
+| `get_decompiled_source` | `rimsearcher read <File>.cs --member <name>` |
+| `search_types` | `rimsearcher code-search "class <Name>\b"`, then `read` that file `--outline` |
+| `find_derived_types` | `rimsearcher code-search "class \w+ : <Base>\b"` |
+| `get_overrides` | `rimsearcher code-search "override [\w<>, \[\]]+ <Member>\("` |
+| `find_callers` | nothing exact. `code-search` matches by *text*, so same-named members of unrelated types land in the same result set. Read the hits; do not report their count as a caller count. |
+
+Note what all four have in common: **anchor the pattern, do not search a bare symbol name.**
+`code-search MapPortal` returns every mention of it — hundreds of lines on a common name, and
+the declaration is not marked among them. `code-search "class MapPortal\b"` returns exactly one.
+Once you have the file, `read <file> --outline` lists what is in it without a second scan; that
+is the right move whenever the only hit was the declaration itself, because a single hit means
+the pattern found *where the thing is defined*, not *what it does*.
+
+## What is out of range
+
+Three questions the tool cannot answer, and it is cheaper to know than to discover:
+
+- **"How should this XML be written?"** The snapshot holds runtime objects, not the XML that
+  produced them, so there is no path from a def back to authorable source. `inherit` is the one
+  place XML is read at all, and it reads the *inheritance* layer only. For the shape of a tag,
+  read the declaring C# class (`read <Class>.cs --outline`) — field names and types are the same
+  ones the XML parser binds to.
+- **Files on disk.** Texture and sound *paths* are indexed because they are def fields
+  (`values texPath` works), but nothing here reads the file system to say whether
+  `Things/Item/Foo.png` exists, what resolution it is, or what else sits in that folder. That is
+  an `ls` question.
+- **`Languages/*/Keyed` UI strings.** The snapshot's translations are the ones injected onto
+  defs — `def_type`, `def_name`, `field`. A key like `CommandSelectOverseer` is nowhere in it.
+  The code side reaches the key but not its text: `code-search '"CommandSelectOverseer"\.Translate'`
+  finds where it is used, and the translated string itself lives in a language file this tool
+  does not open. Going the other way — from a UI phrase you saw in game to what produces it —
+  works only when that phrase is a def's `label`, which `search <phrase>` covers.
+
 ## If your instinct is to grep the XML, stop
 
 Searching Defs XML with a regular expression was the old way, and it does not apply here.
@@ -76,9 +114,10 @@ stays local.
 
 1. **Do not know the exact name.** `search` takes words, partial names, and translated text.
    It tolerates misspellings and CamelCase initials, and it matches inside compound names, so
-   `search shield` finds `Apparel_ShieldBelt`. It covers def names, labels, descriptions and
-   translations — **not C# class names**. `search CompShield` finds nothing no matter how you
-   spell it; that question is `find compClass CompShield`.
+   `search shield` finds `Apparel_ShieldBelt`. It covers def names, labels, descriptions and the
+   translations injected onto defs — **not C# class names**, and **not the UI strings under
+   `Languages/*/Keyed`**. `search CompShield` finds nothing no matter how you spell it; that
+   question is `find compClass CompShield`.
    The `matched_on` column says *where* each row matched. A row with an empty `label` did not
    fail to match; it matched somewhere else, and that column names the place.
 2. **Have the exact name.** `get` shows identity, every field path with its value, and any
@@ -128,8 +167,14 @@ stays local.
    And an abstract node has no field values of its own here; everything it declares is already
    merged, post-patch, into each child, so read a concrete child with `get`.
 6. **Moving into the code.** Once you have a class name from a def, hand it to
-   `mcp__decompiler__search_types` and read the member you need. This is the common path:
-   most def questions end in a C# question.
+   `mcp__decompiler__search_types` and read the member you need — or, with no MCP,
+   `code-search "class <Name>\b"` to land on the file and `read <file> --member <name>` for the
+   body. This is the common path: most def questions end in a C# question.
+   Two things the decompiled text has already lost, so no pattern can find them: **comments**
+   (only ILSpy's own notes about what it could not translate survive) and **local variable
+   names** (re-invented from the assignment as `num`, `num2`, `list`, `flag`). Parameter and
+   member names do survive. A member you expect on a class and cannot find is usually inherited —
+   the decompiler does not repeat a base type's members, so follow the `: Base` on the class line.
 
 ## Reading the output
 
