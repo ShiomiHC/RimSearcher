@@ -63,17 +63,20 @@ This is for shapes that only text can express, such as a method signature patter
 
 It does not search Defs: the game's XML is not on disk in the form the game ended up with. Data questions ('which defs use this class', 'what values does this field take') belong to 'find', 'values', and 'search', which answer them from the snapshot exactly.
 
+Three caps apply, and they divide in two. --limit and --max-per-file decide how many matching lines are printed; neither shortens the scan, so the match count stays exact whichever of them bites. --max-files decides how much is read, so when that one bites the count drops to a lower bound ('at least N') and the answer says which trees it never reached.
+
 | Argument | Meaning |
 |---|---|
 | `<pattern>` | .NET regular expression. |
 
 | Option | Meaning | Also accepted |
 |---|---|---|
-| `--files` <glob> | Only search files whose path matches this glob. A glob with no '/' matches the file name alone (*.cs is every .cs file at any depth); with a '/' it matches the whole relative path, where '*' stops at a '/' and '**' crosses it. So */Verse/* is one level down, **/Verse/** is any. Default: `*.cs`. | `--file-filter`, `--file-glob`, `--glob`, `--file-pattern`, `--file-extension`, `--file-type`, `--path-filter`, `--include` |
-| `--max-files` <n> | How many files the scan may read before it stops. Pass 'all' to lift the cap. Default: `4000`. | `--file-limit`, `--scan-limit`, `--max-scan` |
+| `--files` <glob> | Only search files whose path matches this glob. A glob with no '/' matches the file name alone (*.cs is every .cs file at any depth); with a '/' it matches the path relative to the decompiled root, which begins with the source tree's name even under --source, and there '*' stops at a '/' while '**' crosses it. So */Verse/* is one level down, **/Verse/** is any. Default: `*.cs`. | `--file-filter`, `--file-glob`, `--glob`, `--file-pattern`, `--file-extension`, `--file-type`, `--path-filter`, `--include` |
+| `--max-files` <n|all> | How many files the scan may read before it stops, counted after --files has filtered. Pass 'all' to lift the cap. This is the only cap that can make the answer partial. Default: `50000`. | `--file-limit`, `--scan-limit`, `--max-scan` |
+| `--max-per-file` <n|all> | How many matching lines to print from any one file. Matches past it are still counted, so the total stays exact. Pass 'all' to print every one. Default: `20`. | `--per-file`, `--matches-per-file`, `--max-matches-per-file`, `--file-preview` |
 | `--source` <name> | Which decompiled source tree to search. Omit to search them all. | `--root`, `--tree`, `--scope` |
-| `-C`, `--context` <n> | Show this many lines above and below each match. Default: `0`. | `--context-lines`, `--around` |
-| `-n`, `--limit` <n|all> | How many matches to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+| `-C`, `--context` <n> | Show this many lines above and below each match. Windows that overlap or touch are merged, so no line is printed twice. Default: `0`. | `--context-lines`, `--around` |
+| `-n`, `--limit` <n|all> | How many matching lines to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `-i`, `--ignore-case` | Match without regard to letter case. | `--case-insensitive` |
 
 Examples:

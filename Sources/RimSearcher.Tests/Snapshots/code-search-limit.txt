@@ -1,0 +1,9 @@
+$ rimsearcher code-search public --limit 2
+exit 0
+--- stdout ---
+8 matches in 4 files (2 printed); 4 files read across 2 source trees.
+--limit stopped the printing at 2 matches; raise it to see more. The scan itself ran to the end either way.
+
+vanilla/RimWorld/CompShield.cs:3:	public class CompShield : ThingComp
+vanilla/Verse/ThingComp.cs:3:	public class ThingComp
+--- stderr ---

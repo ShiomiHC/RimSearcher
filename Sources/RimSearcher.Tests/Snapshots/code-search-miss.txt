@@ -1,0 +1,5 @@
+$ rimsearcher code-search zzzznothing
+exit 1
+--- stdout ---
+No line matched in 4 files under '*.cs' across 2 source trees. If you were looking for a def rather than code, 'rimsearcher search' and 'rimsearcher find' answer that from the snapshot — the XML is not searched here.
+--- stderr ---

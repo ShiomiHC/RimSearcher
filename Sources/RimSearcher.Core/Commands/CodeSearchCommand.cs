@@ -14,6 +14,16 @@ namespace RimSearcher.Commands;
 ///
 /// 与 DecompilerServer 的分工(05-9 实测后收窄):符号级的一切走 MCP;这里保留的独立价值是
 /// **任意正则匹配方法体文本**,即 search_string_literals 覆盖不到的形状搜索。
+///
+/// 三轮盲测这一条命令独占六个场景(R3 fatal / R4 / R13 / R15,加一条十份轨迹零记录的
+/// 沉默缺陷),而它此前一条输出基线都没有。上面那句「三刀分开声明」写在注释里是对的,
+/// 落到实现里却各自走了形,所以这里把口径重述一遍并钉住:
+///
+///   **上限分两种,不许混。** <c>--limit</c> 与 <c>--max-per-file</c> 决定**印几行**,
+///   都不缩短扫描,所以命中总数仍是准数;<c>--max-files</c> 决定**读多少**,只有它咬下去
+///   总数才降级成下界。原先 <c>--limit</c> 一到就 break 掉整个扫描,于是
+///   「25 条」既是印出来的行数、又是扫描停下的位置,而 SKILL 明写着它只管行 ——
+///   文档承诺的语义在实现里不存在,和 R6 同形。
 /// </summary>
 public sealed class CodeSearchCommand : Command
 {
@@ -28,7 +38,11 @@ public sealed class CodeSearchCommand : Command
             "MCP answers it from metadata and is both faster and exact.\n\n" +
             "It does not search Defs: the game's XML is not on disk in the form the game ended up with. " +
             "Data questions ('which defs use this class', 'what values does this field take') belong to " +
-            "'find', 'values', and 'search', which answer them from the snapshot exactly.",
+            "'find', 'values', and 'search', which answer them from the snapshot exactly.\n\n" +
+            "Three caps apply, and they divide in two. --limit and --max-per-file decide how many matching " +
+            "lines are printed; neither shortens the scan, so the match count stays exact whichever of them " +
+            "bites. --max-files decides how much is read, so when that one bites the count drops to a lower " +
+            "bound ('at least N') and the answer says which trees it never reached.",
         Positionals = [new PositionalSpec { Name = "pattern", Help = ".NET regular expression." }],
         Options =
         [
@@ -43,8 +57,10 @@ public sealed class CodeSearchCommand : Command
                 // 语义的一对 —— 于是有人以为 `*` 跨目录,拿 `*/A*.cs` 扫了 26 轮几乎全空。
                 // 规则本身写清,比再补一个例子管用。
                 Help = "Only search files whose path matches this glob. A glob with no '/' matches the file name " +
-                       "alone (*.cs is every .cs file at any depth); with a '/' it matches the whole relative path, " +
-                       "where '*' stops at a '/' and '**' crosses it. So */Verse/* is one level down, **/Verse/** is any.",
+                       "alone (*.cs is every .cs file at any depth); with a '/' it matches the path relative to " +
+                       "the decompiled root, which begins with the source tree's name even under --source, and " +
+                       "there '*' stops at a '/' while '**' crosses it. So */Verse/* is one level down, " +
+                       "**/Verse/** is any.",
                 Default = "*.cs",
             },
             new OptionSpec
@@ -54,9 +70,23 @@ public sealed class CodeSearchCommand : Command
                 // 一模一样的警告。旋钮必须存在,声明才有落点。
                 Name = "max-files",
                 Aliases = ["file-limit", "scan-limit", "max-scan"],
-                Placeholder = "<n>",
-                Help = "How many files the scan may read before it stops. Pass 'all' to lift the cap.",
+                Placeholder = "<n|all>",
+                Help = "How many files the scan may read before it stops, counted after --files has filtered. " +
+                       "Pass 'all' to lift the cap. This is the only cap that can make the answer partial.",
                 Default = Limits.CodeSearchMaxFiles.ToString(),
+            },
+            new OptionSpec
+            {
+                // R4:第三道闸原先没有开关,两份文档都没写它,而计数行读起来像完整的 ——
+                // 「有多少个这种形状的方法」问到一个偷偷少了的数,是这条命令最贵的错法。
+                // 给开关的同时把它降级成**只管印**:过上限的命中照样计数,于是总数保持准确,
+                // 三态文法里那个「at least」也就用不着了 —— 比盲测要求的更强一档。
+                Name = "max-per-file",
+                Aliases = ["per-file", "matches-per-file", "max-matches-per-file", "file-preview"],
+                Placeholder = "<n|all>",
+                Help = "How many matching lines to print from any one file. Matches past it are still counted, " +
+                       "so the total stays exact. Pass 'all' to print every one.",
+                Default = Limits.CodeSearchMatchesPerFile.ToString(),
             },
             new OptionSpec
             {
@@ -71,10 +101,13 @@ public sealed class CodeSearchCommand : Command
                 Short = 'C',
                 Aliases = ["context-lines", "around"],
                 Placeholder = "<n>",
-                Help = "Show this many lines above and below each match.",
+                Help = "Show this many lines above and below each match. Windows that overlap or touch are " +
+                       "merged, so no line is printed twice.",
                 Default = "0",
             },
-            CommonOptions.Limit("matches"),
+            // 「matches」在这里是错的词:--limit 管的是印出来的**行**,而命中数照样数全。
+            // 一个字的差别,恰恰是这条命令被读错的那一处。
+            CommonOptions.Limit("matching lines"),
             new OptionSpec
             {
                 Name = "ignore-case",
@@ -113,6 +146,7 @@ public sealed class CodeSearchCommand : Command
         var glob = ctx.Args.Value("files") ?? "*.cs";
         var contextLines = ctx.Args.Int("context", 0);
         var limit = ctx.Args.Limit();
+        var maxPerFile = PositiveOrAll(ctx, "max-per-file", Limits.CodeSearchMatchesPerFile);
 
         Regex regex;
         try
@@ -126,121 +160,252 @@ public sealed class CodeSearchCommand : Command
             throw new CliUsageException($"The pattern is not a valid regular expression: {ex.Message}");
         }
 
-        var searchRoot = sourceName is { Length: > 0 } ? Path.Combine(root, sourceName) : root;
-        if (!Directory.Exists(searchRoot))
-        {
-            var available = Directory.Exists(root)
-                ? Directory.EnumerateDirectories(root).Select(Path.GetFileName).Where(n => n is not null).ToList()!
-                : new List<string?>();
-            throw new CliUsageException(NoSuchTree(sourceName, available.Select(a => a!)));
-        }
+        if (sourceName is { Length: > 0 } && !Directory.Exists(Path.Combine(root, sourceName)))
+            throw new CliUsageException(NoSuchTree(sourceName, SourcesShared.TreeNames(root)));
 
         var matcher = GlobToRegex(glob);
-        var maxFiles = ParseMaxFiles(ctx);
+        var maxFiles = PositiveOrAll(ctx, "max-files", Limits.CodeSearchMaxFiles);
+
         var lines = new List<string>();
-        var filesScanned = 0;
+        var filesRead = 0;          // 真读进来过的文件
+        var filesCandidate = 0;     // 过了 --files 的文件,不管读没读 —— 「N of M」的那个 M
         var filesWithMatches = 0;
-        var totalMatches = 0;
+        var totalMatches = 0;       // 找到多少
+        var printed = 0;            // 印出来多少。两者不是一件事,所以是两个数
         var filesCapped = false;
         var perFileCapped = 0;
         var timedOut = new List<string>();
-        var reached = new List<string>();
-        var unreached = new List<string>();
+        var treesRead = 0;
+        var treesTotal = 0;
+        string? partialTree = null;
+        var partialRead = 0;
+        var partialTotal = 0;
+        var unreached = new List<(string Tree, int Files)>();
 
-        foreach (var (tree, files) in EnumerateTrees(searchRoot, sourceName))
+        foreach (var (tree, files) in EnumerateTrees(root, sourceName))
         {
-            // 空名字是「根目录下直接摆着的文件」那棵伪树,它没有名字可报,列进去只是个空占位。
-            if (filesCapped) { if (tree.Length > 0) unreached.Add(tree); continue; }
-            var before = filesScanned;
+            // 过滤与排序都在这里定死。原先交给文件系统的枚举顺序 —— 而文件数上限是先到先得的,
+            // 于是「哪个文件被看见」取决于目录项在磁盘上的排布,同一条命令在两台机器上可以
+            // 给出不同答案。树间顺序早就是显式的(vanilla 优先),树内也必须是。
+            var treeFiles = files.Select(f => (Abs: f, Rel: Rel(root, f)))
+                                 .Where(f => matcher.IsMatch(f.Rel))
+                                 .OrderBy(f => f.Rel, StringComparer.OrdinalIgnoreCase)
+                                 .ToList();
 
-        foreach (var file in files)
-        {
-            var rel = Path.GetRelativePath(searchRoot, file).Replace('\\', '/');
-            if (!matcher.IsMatch(rel)) continue;
+            // 一个匹配文件都没有的树既不算读过、也不算「没读到」。R15:原先它会被点名进
+            // 「没读到的树」名单 —— 实测那份名单里十棵是空目录(旧别名残留),读的人以为
+            // 还有一大片代码没看,而那里一行都没有。
+            if (treeFiles.Count == 0) continue;
+            treesTotal++;
+            filesCandidate += treeFiles.Count;
 
-            if (filesScanned >= maxFiles) { filesCapped = true; break; }
-            filesScanned++;
-
-            string[] text;
-            try { text = File.ReadAllLines(file); }
-            catch { continue; }
-
-            var inFile = 0;
-            var emitted = false;
-            for (var i = 0; i < text.Length; i++)
+            var readHere = 0;
+            foreach (var (abs, rel) in treeFiles)
             {
-                bool hit;
-                try { hit = regex.IsMatch(text[i]); }
-                catch (RegexMatchTimeoutException) { timedOut.Add(rel); break; }
-                if (!hit) continue;
+                if (filesRead >= maxFiles) { filesCapped = true; break; }
+                filesRead++;
+                readHere++;
 
-                totalMatches++;
-                inFile++;
-                if (inFile > Limits.CodeSearchMatchesPerFile) { perFileCapped++; break; }
-                if (totalMatches > limit.Effective) break;
+                string[] text;
+                try { text = File.ReadAllLines(abs); }
+                catch { continue; }
 
-                if (!emitted) { emitted = true; filesWithMatches++; }
+                var hitsHere = 0;
+                var toPrint = new List<int>();
+                for (var i = 0; i < text.Length; i++)
+                {
+                    bool hit;
+                    try { hit = regex.IsMatch(text[i]); }
+                    catch (RegexMatchTimeoutException) { timedOut.Add(rel); break; }
+                    if (!hit) continue;
 
-                for (var c = Math.Max(0, i - contextLines); c <= Math.Min(text.Length - 1, i + contextLines); c++)
-                    lines.Add($"{rel}:{c + 1}{(c == i ? ":" : "-")}{text[c].TrimEnd()}");
-                if (contextLines > 0) lines.Add("--");
+                    hitsHere++;
+                    totalMatches++;
+                    // 两道印刷闸,都只跳过**印**这一步,continue 而不是 break ——
+                    // 数还得继续数下去,否则总数就成了「印满为止」的那个数。
+                    if (toPrint.Count >= maxPerFile) continue;
+                    if (printed >= limit.Effective) continue;
+                    toPrint.Add(i);
+                    printed++;
+                }
+
+                if (hitsHere > 0) filesWithMatches++;
+                if (hitsHere > toPrint.Count && toPrint.Count >= maxPerFile) perFileCapped++;
+                if (toPrint.Count > 0) Emit(lines, rel, text, toPrint, contextLines);
             }
 
-            if (totalMatches > limit.Effective) break;
+            if (readHere == 0) unreached.Add((tree, treeFiles.Count));
+            else
+            {
+                treesRead++;
+                if (readHere < treeFiles.Count)
+                    { partialTree = tree; partialRead = readHere; partialTotal = treeFiles.Count; }
+            }
         }
 
-            if (filesScanned > before) { if (tree.Length > 0) reached.Add(tree); }
-            else if (filesCapped && tree.Length > 0) unreached.Add(tree);
-            if (totalMatches > limit.Effective) break;
+        // 扫描完不完整,只由「读没读全」决定 —— 印几行不影响它。这是本命令整条契约的枢轴:
+        // 不完整时命中数降级成下界,完整时它是准数,哪怕只印出来其中几行。
+        var incomplete = filesCapped || timedOut.Count > 0;
+        var found = incomplete ? Tally.AtLeast(totalMatches) : Tally.Complete(totalMatches);
+
+        if (lines.Count == 0)
+        {
+            // R3 fatal(六个场景):零命中与没读完是两件事,而原先它们说同一句话
+            // 「No line matched in N files」,后面还紧跟一句「要找 def 的话去 search/find」——
+            // 于是「这道闸把 80% 的代码挡在外面」被读成「代码里没有这东西,换个数据源吧」。
+            // 六个 agent 里有人据此把 mod 里的类当成 vanilla 的答案交了出去。
+            // 没读完时:说清结论无效,并且**不指路去别的数据源** —— 该做的是把闸抬开。
+            // 第三种成因,写这条修复时自己一头撞上去的:glob 一个文件都没打中。
+            // 输出是「No line matched in 0 files under '…'」—— 与「读了但没匹配」
+            // 一字之差,而下一步完全不同(该改 glob,不是该换数据源)。R3 说的
+            // 「零结果一律报最强的那种」在同一条命令里还有第三份。
+            if (filesCandidate == 0)
+                ctx.Report.Notice(NoticeKind.NextStep,
+                    $"No file matched --files '{glob}', so nothing was read at all." +
+                    (glob.Contains('/')
+                        ? " A glob containing '/' is matched against the whole path relative to the decompiled " +
+                          "root, which begins with the source tree's name: 'vanilla/**/Widgets.cs', not " +
+                          "'Verse/Widgets.cs'. Without a '/' it matches the file name alone at any depth."
+                        : "") +
+                    " 'rimsearcher sources list' names the trees.");
+            else if (incomplete)
+                ctx.Report.Notice(NoticeKind.Truncation,
+                    $"No line matched in the {Tally.Complete(filesRead).Render("file")} that were read, " +
+                    "but the scan did not finish, so this is not evidence that nothing matches.");
+            else
+                ctx.Report.Notice(NoticeKind.NextStep,
+                    $"No line matched in {Tally.Complete(filesRead).Render("file")} under '{glob}'" +
+                    (treesTotal > 1 ? $" across {Tally.Complete(treesTotal).Render("source tree")}" : "") + ". " +
+                    "If you were looking for a def rather than code, 'rimsearcher search' and 'rimsearcher find' " +
+                    "answer that from the snapshot — the XML is not searched here.");
+        }
+        else
+        {
+            // 命中数放最前。问的是「有多少个这种形状的方法」,答的却是文件数 ——
+            // 实测里有人差点把 140(文件)当成方法数报出去,还得自己 wc 一遍输出。
+            // 「找到多少」与「印了多少」用括号并列,不用动词:NounRegistry 管名词不管主谓,
+            // 「1 are printed」这种不一致靠加登记项修不掉(R6 同一课)。
+            var fileTally = filesRead < filesCandidate
+                ? Tally.Of(filesRead, filesCandidate) : Tally.Complete(filesRead);
+            var treeTally = treesRead < treesTotal
+                ? Tally.Of(treesRead, treesTotal) : Tally.Complete(treesTotal);
+            ctx.Report.Notice(found.IsTruncated || printed < totalMatches ? NoticeKind.Truncation : NoticeKind.Count,
+                $"{found.Render("match")} in {Tally.Complete(filesWithMatches).Render("file")}" +
+                (printed < totalMatches ? $" ({printed} printed)" : "") +
+                $"; {fileTally.Render("file")} read" +
+                (treesTotal > 1 ? $" across {treeTally.Render("source tree")}" : "") + ".");
         }
 
-        // 四刀分开声明:被 --limit 截、被单文件上限截、被文件数上限截、被正则超时截,
-        // 原因不同,旋钮也不同。
-        var shownMatches = Math.Min(totalMatches, limit.Effective);
-        if (totalMatches > limit.Effective)
+        // 三个旋钮各自申报,因为被截的原因不同,该拧的也不同。
+        // 两句都以旋钮自己作主语:计数放进从句,动词就不必跟着单复数变 —— 名词有登记处,
+        // 动词没有,「the first 1 lines are printed」这种不一致靠加登记项修不掉(R6 同一课)。
+        if (printed < totalMatches && printed >= limit.Effective)
             ctx.Report.Notice(NoticeKind.Truncation,
-                $"Stopped after {Tally.AtLeast(shownMatches).Render("match")}; raise --limit to see more.");
+                $"--limit stopped the printing at {Tally.Complete(limit.Effective).Render("match")}; " +
+                "raise it to see more." +
+                // 「扫描照样跑到底」是本条修复的卖点,但它只在**真的**跑到底时才成立。
+                // --max-files 也咬下去时说这句话,就是拿一条修复去掩盖另一道闸 ——
+                // 而那正是 R3 的形状(一句正确的话贴在错误的语境上)。
+                (incomplete ? "" : " The scan itself ran to the end either way."));
         if (perFileCapped > 0)
             ctx.Report.Notice(NoticeKind.Truncation,
-                $"{Tally.Complete(perFileCapped).Render("file")} had more than {Limits.CodeSearchMatchesPerFile} " +
-                "matches; only the first ones from each are shown.");
-        if (filesCapped)
-            ctx.Report.Notice(NoticeKind.Truncation,
-                $"The scan stopped after reading {maxFiles} files." +
-                // 说清**哪些树没被读到**。只说「后面的文件没读」等于没说 —— 实测里首屏
-                // 全是 mod 代码、vanilla 一条没有,而输出没有任何迹象表明 vanilla 还在后面,
-                // 一个不细看的人就会拿 mod 里的类当答案。
-                (unreached.Count > 0
-                    ? $" These source trees were never reached: {string.Join(", ", unreached)}."
-                    : " Files later in the tree were never read.") +
-                $" Raise it with --max-files all, or narrow with --source <tree> or --files <glob>.");
+                $"--max-per-file allows {Tally.Complete(maxPerFile).Render("match")} from any one file, and " +
+                $"{Tally.Complete(perFileCapped).Render("file")} had more than that; the count above still " +
+                "includes every one of them. Raise it to see the rest.");
+        if (filesCapped) SayFilesCapped(ctx, sourceName, glob, filesRead,
+                                        partialTree, partialRead, partialTotal, unreached);
         if (timedOut.Count > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
                 $"The pattern took longer than {Limits.CodeSearchRegexTimeoutMs} ms on " +
                 $"{Tally.Complete(timedOut.Count).Render("file")}, which were skipped part-way. " +
                 "A pattern with nested quantifiers is the usual cause.");
 
-        if (lines.Count == 0)
-        {
-            ctx.Report.Notice(NoticeKind.NextStep,
-                $"No line matched in {Tally.Complete(filesScanned).Render("file")} under '{glob}'. " +
-                "If you were looking for a def rather than code, 'rimsearcher search' and 'rimsearcher find' " +
-                "answer that from the snapshot — the XML is not searched here.");
-            return 1;
-        }
+        if (lines.Count == 0) return 1;
 
-        // 命中数放前面。问的是「有多少个这种形状的方法」,答的却是文件数 ——
-        // 实测里有人差点把 140(文件)当成方法数报出去,还得自己 wc 一遍输出。
-        var matchTally = totalMatches > limit.Effective
-            ? Tally.AtLeast(shownMatches)
-            : Tally.Complete(totalMatches);
-        ctx.Report.Notice(NoticeKind.Boundary,
-            $"{matchTally.Render("match")} in {Tally.Complete(filesWithMatches).Render("file")}, " +
-            $"out of {filesScanned} scanned" +
-            (reached.Count > 1 ? $" across {Tally.Complete(reached.Count).Render("source tree")}" : "") + ".");
         ctx.Report.Text("matches", lines);
         return 0;
     }
+
+    /// <summary>
+    /// 文件数上限咬下去时说什么。三轮 R3 要求的四件事都在这里:
+    /// 说破「某棵树只读了一部分」(单树与多树同一句话,原先单树只有一句
+    /// 「Files later in the tree were never read」,连读了几分之几都不说);
+    /// 点名没读到的树并给出还剩多少文件;不点名空树;
+    /// <c>--source</c> 已经给出时不再把它列成补救 —— 实测里
+    /// <c>--source vanilla</c> 换来的是一模一样的警告,而那句话仍在建议加 <c>--source</c>。
+    /// </summary>
+    private static void SayFilesCapped(CommandContext ctx, string? sourceName, string glob, int filesRead,
+                                       string? partialTree, int partialRead, int partialTotal,
+                                       IReadOnlyList<(string Tree, int Files)> unreached)
+    {
+        var parts = new List<string>
+        {
+            $"The scan stopped after reading {Tally.Complete(filesRead).Render("file")}, " +
+            "so this answer is partial rather than complete.",
+        };
+
+        if (partialTree is not null)
+            parts.Add($"'{Label(partialTree)}' was read only in part: " +
+                      $"{Tally.Of(partialRead, partialTotal).Render("file")}.");
+
+        if (unreached.Count > 0)
+        {
+            // 名单要有上限:实测那句话点了 33 个名字,占满一屏,而其中十个是空目录。
+            var names = unreached.Take(NamedTrees).Select(u => Label(u.Tree)).ToList();
+            var more = unreached.Count - names.Count;
+            parts.Add("Never read at all: " + string.Join(", ", names) +
+                      (more > 0 ? $" and {more} more" : "") +
+                      $" — {Tally.Complete(unreached.Count).Render("source tree")}, " +
+                      $"{Tally.Complete(unreached.Sum(u => u.Files)).Render("file")}.");
+        }
+
+        var narrow = new List<string>();
+        if (string.IsNullOrEmpty(sourceName)) narrow.Add("--source <tree>");
+        if (!ctx.Args.Has("files")) narrow.Add("--files <glob>");
+        parts.Add("Raise the cap with --max-files all" +
+                  (narrow.Count > 0 ? $", or narrow with {string.Join(" or ", narrow)}." : "."));
+
+        ctx.Report.Notice(NoticeKind.Truncation, string.Join(" ", parts));
+    }
+
+    /// <summary>没读到的树最多点几个名。</summary>
+    private const int NamedTrees = 5;
+
+    /// <summary>根目录下直接摆着的文件那棵伪树没有名字,得有个说法。</summary>
+    private static string Label(string tree)
+        => tree.Length > 0 ? tree : "the files directly under the decompiled root";
+
+    /// <summary>
+    /// 上下文窗口。**重叠或相邻的窗口合并**(R13):原先每条命中各印一窗,于是
+    /// <c>-C 2</c> 打在连着的命中上会把同一行印三遍 —— 实测 5 条命中印出 15 行,
+    /// 其中 10 行是重复的。对读 stdout 的 LLM 来说这是直接的上下文预算浪费,
+    /// 而且重复行让人以为那里真有好几处命中。
+    /// 分隔符只在两组之间出现,不留尾巴 —— 尾部空隔符会被读成「后面还有,被截了」。
+    /// </summary>
+    private static void Emit(List<string> lines, string rel, string[] text, List<int> hits, int context)
+    {
+        var isHit = hits.ToHashSet();
+        var i = 0;
+        while (i < hits.Count)
+        {
+            var start = Math.Max(0, hits[i] - context);
+            var end = Math.Min(text.Length - 1, hits[i] + context);
+            while (i + 1 < hits.Count && hits[i + 1] - context <= end + 1)
+            {
+                i++;
+                end = Math.Max(end, Math.Min(text.Length - 1, hits[i] + context));
+            }
+
+            if (context > 0 && lines.Count > 0) lines.Add("--");
+            for (var c = start; c <= end; c++)
+                lines.Add($"{rel}:{c + 1}{(isHit.Contains(c) ? ":" : "-")}{text[c].TrimEnd()}");
+            i++;
+        }
+    }
+
+    /// <summary>路径一律相对**根目录**,于是它带着树名,而且不随 --source 改变形状。</summary>
+    private static string Rel(string root, string file)
+        => Path.GetRelativePath(root, file).Replace('\\', '/');
 
     /// <summary>
     /// <c>--source</c> 打不中时说什么。
@@ -270,34 +435,41 @@ public sealed class CodeSearchCommand : Command
     /// 文件数上限是先到先得的,所以枚举顺序决定了谁被截掉 —— 交给文件系统顺序,
     /// 就等于让「哪棵树被看见」取决于目录名的字母序。vanilla 排前面是有意的:
     /// 它是问题的默认语境,被截掉的代价最大。
+    ///
+    /// 什么算一棵树问 <see cref="SourcesShared.TreeNames"/>,这里不自己判(R15)。
+    /// 路径一律相对根目录,<c>--source</c> 只是少走几棵树,不改变文件的名字。
     /// </summary>
-    private static IEnumerable<(string Tree, IEnumerable<string> Files)> EnumerateTrees(string searchRoot, string? sourceName)
+    private static IEnumerable<(string Tree, IEnumerable<string> Files)> EnumerateTrees(string root, string? sourceName)
     {
         if (sourceName is { Length: > 0 })
         {
-            yield return (sourceName, Directory.EnumerateFiles(searchRoot, "*", SearchOption.AllDirectories));
+            yield return (sourceName,
+                Directory.EnumerateFiles(Path.Combine(root, sourceName), "*", SearchOption.AllDirectories));
             yield break;
         }
 
-        var dirs = Directory.EnumerateDirectories(searchRoot)
-                            .OrderBy(d => Path.GetFileName(d) is "vanilla" or "Core" ? 0 : 1)
-                            .ThenBy(d => Path.GetFileName(d), StringComparer.OrdinalIgnoreCase)
-                            .ToList();
-        foreach (var d in dirs)
-            yield return (Path.GetFileName(d), Directory.EnumerateFiles(d, "*", SearchOption.AllDirectories));
+        var trees = SourcesShared.TreeNames(root)
+                                 .OrderBy(n => n is "vanilla" or "Core" ? 0 : 1)
+                                 .ThenBy(n => n, StringComparer.OrdinalIgnoreCase)
+                                 .ToList();
+        foreach (var t in trees)
+            yield return (t, Directory.EnumerateFiles(Path.Combine(root, t), "*", SearchOption.AllDirectories));
 
         // 根目录下直接摆着的文件(没有分树的部署形态)。
-        yield return ("", Directory.EnumerateFiles(searchRoot, "*", SearchOption.TopDirectoryOnly));
+        yield return ("", Directory.EnumerateFiles(root, "*", SearchOption.TopDirectoryOnly));
     }
 
-    private static int ParseMaxFiles(CommandContext ctx)
+    /// <summary>
+    /// 「一个正数或 all」这条取值规则的唯一产地。两道闸同一个形状,分头写就会分头走形
+    /// (<c>--limit</c> 的 all/none/0/-1 四种写法是 07-② 实证的真实调用形态)。
+    /// </summary>
+    private static int PositiveOrAll(CommandContext ctx, string name, int fallback)
     {
-        var raw = ctx.Args.Value("max-files");
-        if (string.IsNullOrEmpty(raw)) return Limits.CodeSearchMaxFiles;
+        var raw = ctx.Args.Value(name);
+        if (string.IsNullOrEmpty(raw)) return fallback;
         if (raw is "all" or "none" or "0" or "-1") return int.MaxValue;
         if (int.TryParse(raw, out var n) && n > 0) return n;
-        throw new CliUsageException(
-            $"--max-files takes a positive number or 'all'; got '{raw}'.");
+        throw new CliUsageException($"--{name} takes a positive number or 'all'; got '{raw}'.");
     }
 
     /// <summary>

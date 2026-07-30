@@ -70,7 +70,31 @@ public class OutputSnapshotTests
         { "help-sources-sync",     ["sources", "sync", "--help"] },
         // 没配 decompiled_dir 时说的那句话。反编译树是**唯一**不在快照里的数据源,
         // 于是「没有它」这条路必然被走到,而它必须说清该往哪补一行配置。
-        { "sources-not-configured", ["sources", "list"] },
+        // 这一条要的是**没有**配置,所以自带 --config 覆盖掉默认那份(Fixture.Run 的规矩)。
+        { "sources-not-configured", ["sources", "list", "--config", "no-such-config.toml"] },
+        // 三轮 R3/R4/R13/R15 与「--limit 静默提前终止扫描」全落在 code-search 上,
+        // 而它此前一条输出基线都没有 —— 六个场景踩同一处、闸上却没有落点,不是巧合。
+        // 每一条盯一件事:
+        { "code-search-hit",       ["code-search", ": ThingComp"] },
+        // 上下文窗口重叠(R13):-C 1 打在连着命中的五行上。不合并就是每行印三遍。
+        { "code-search-context",   ["code-search", "public", "--files", "ThingComp.cs", "-C", "1"] },
+        // --limit 只管印几行,不许缩短扫描:总数必须仍是准数(「N of M」而非「at least N」)。
+        { "code-search-limit",     ["code-search", "public", "--limit", "2"] },
+        // 单文件上限(R4):同上,过了上限的命中仍要进总数。
+        { "code-search-per-file",  ["code-search", "public", "--max-per-file", "1"] },
+        // 文件数上限咬下去(R3):某棵树只读了一部分要说破、没读到的树要点名、
+        // .git 与空树不许出现在名单里。
+        { "code-search-max-files", ["code-search", ": ThingComp", "--max-files", "2"] },
+        // 同一道闸 + 零命中 —— 本轮最贵的一条:「没匹配到」与「没读完」必须分得开。
+        { "code-search-capped-miss", ["code-search", "zzzznothing", "--max-files", "2"] },
+        // 真零结果:扫完了确实没有。这一条才该指路去 search / find。
+        { "code-search-miss",      ["code-search", "zzzznothing"] },
+        // 第三种零结果:glob 一个文件都没打中。写这条修复时自己撞上去的 ——
+        // 带 '/' 的 glob 匹配的是相对**根目录**的整条路径,少写树名就全空。
+        { "code-search-glob-empty", ["code-search", "public", "--files", "Verse/ThingComp.cs"] },
+        // --source 已经给出时,补救措施里不许再列 --source(R3)。
+        { "code-search-source-cap", ["code-search", "public", "--source", "vanilla", "--max-files", "1"] },
+        { "code-search-no-tree",   ["code-search", "public", "--source", "HAR"] },
     };
 
     [Theory]

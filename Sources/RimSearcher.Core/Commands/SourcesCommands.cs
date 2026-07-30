@@ -27,6 +27,20 @@ internal static class SourcesShared
     internal static bool IsGitRoot(string dir) => Directory.Exists(Path.Combine(dir, ".git"));
 
     /// <summary>
+    /// 根目录下哪些子目录算一棵源码树。判据只此一处。
+    ///
+    /// 三轮 R15 的成因就是这条判据有过两份:<c>StagingDir</c> 的注释早就写下「以点开头,
+    /// 不会被当成一棵树」,<c>sources list</c> 也照此滤过,而 <c>code-search</c> 自己
+    /// <c>EnumerateDirectories</c> 一把抓 —— 于是同一个根目录,一个命令说有 3 棵树,
+    /// 另一个把 <c>.git</c> 连同它的一万个对象文件当成第 4 棵扫进去并点名报给调用方。
+    /// 顺序不共用(list 要纯字母序,code-search 要 vanilla 优先),但**什么算树**必须共用。
+    /// </summary>
+    internal static IEnumerable<string> TreeNames(string root)
+        => Directory.EnumerateDirectories(root)
+                    .Select(d => Path.GetFileName(d)!)
+                    .Where(n => n.Length > 0 && !n.StartsWith('.'));
+
+    /// <summary>
     /// 「版本间差异去问 git」这句话只有一个产地。
     ///
     /// 本命令刻意**不实现 diff**:一棵一万四千文件的生成源码树要看版本间差异,那正是版本控制的
@@ -98,11 +112,9 @@ public sealed class SourcesListCommand : Command
         var plans = SourcePlanner.Plan(ctx.Config, ids, gameVersion, installed, out var notInstalled)
                     .ToDictionary(p => p.Name, StringComparer.OrdinalIgnoreCase);
 
-        var onDisk = Directory.EnumerateDirectories(root)
-                              .Select(d => Path.GetFileName(d)!)
-                              .Where(n => !n.StartsWith('.'))
-                              .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
-                              .ToList();
+        var onDisk = SourcesShared.TreeNames(root)
+                                  .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                                  .ToList();
 
         var rows = new List<IReadOnlyDictionary<string, object?>>();
         var stale = 0;

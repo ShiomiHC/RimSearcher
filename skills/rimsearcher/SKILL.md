@@ -55,7 +55,10 @@ Ask for the properties name and `find` will tell you this and name the right one
 one round trip you do not need to spend.
 
 `code-search` searches **decompiled C#**, never Defs. Pointing it at data questions returns
-nothing and tells you so.
+nothing and tells you so. Its `--files` glob is matched against the path relative to the
+decompiled root, so a glob with a `/` in it starts with the tree's name — `vanilla/**/Widgets.cs`,
+not `Verse/Widgets.cs` — and that stays true under `--source`. A glob with no `/` matches the
+file name alone at any depth, which is what `*.cs` does.
 
 The decompiled C# is a tree on disk, one directory per mod named by its packageId (the game's
 own code is `vanilla`). `rimsearcher sources list` says which trees exist and which ones came
@@ -123,10 +126,16 @@ Counts are written three ways, and the difference matters:
 A count of matched rows under `--path` is a filter you asked for, not a truncation; in `--json`
 those carry `kind: "filter"` while a real cut-off carries `kind: "truncation"`.
 
-`--limit all` lifts the **row** cap. `code-search` has a second, separate cap on how many files
-it will read; that one is `--max-files`, and when it bites it names the source trees it never
-reached. Raising `--limit` does nothing for it. `code-search` also reports matches and files as
-two different numbers — a question about how many methods have some shape wants the first.
+`--limit all` lifts the **row** cap. `code-search` has three caps rather than one, and they
+divide in two: `--limit` and `--max-per-file` decide how many matching lines are *printed*, and
+neither shortens the scan, so the match count stays exact whichever of them bites; `--max-files`
+decides how much is *read*, so only that one can make the answer partial. When it bites, the
+count drops to `at least N`, the answer says which tree was read in part and which trees were
+never reached at all, and the fix is to raise it — not to look somewhere else. A zero result
+from a scan that stopped short says so and does **not** point you at the snapshot.
+
+`code-search` also reports matches and files as two different numbers — a question about how many
+methods have some shape wants the first.
 
 `--json` gives machine-readable output with the same prose moved into a `notes` array.
 
@@ -149,7 +158,7 @@ the tool instead, where the counts stay honest:
 | `list` | `--class`, `--scope`, `--offset`, `--limit` |
 | `inherit` | `--limit` |
 | `find` | `--scope`, `--exact`, `--limit` |
-| `code-search` | `--source`, `--files`, `--max-files`, `--limit` |
+| `code-search` | `--source`, `--files`, `--max-files`, `--max-per-file`, `--limit` |
 | `sources sync` | `--only`, `--modlist`, `--force`, `--dry-run` |
 
 `--type <DefType>` picks one def when a name is shared — which is common: `PsychicSensitivity`

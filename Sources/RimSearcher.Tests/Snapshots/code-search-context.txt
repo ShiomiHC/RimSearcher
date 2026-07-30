@@ -1,0 +1,13 @@
+$ rimsearcher code-search public --files ThingComp.cs -C 1
+exit 0
+--- stdout ---
+4 matches in 1 file; 1 file read.
+
+vanilla/Verse/ThingComp.cs:2-{
+vanilla/Verse/ThingComp.cs:3:	public class ThingComp
+vanilla/Verse/ThingComp.cs:4-	{
+vanilla/Verse/ThingComp.cs:5:		public ThingWithComps parent;
+vanilla/Verse/ThingComp.cs:6:		public CompProperties props;
+vanilla/Verse/ThingComp.cs:7:		public virtual void PostSpawnSetup(bool respawningAfterLoad)
+vanilla/Verse/ThingComp.cs:8-		{
+--- stderr ---

@@ -209,16 +209,118 @@ public static class Fixture
         w.Flush();
     }
 
-    /// <summary>跑一次 CLI(进程内),返回 stdout / stderr / 退出码。</summary>
+    /// <summary>
+    /// 跑一次 CLI(进程内),返回 stdout / stderr / 退出码。
+    ///
+    /// <c>--db</c> 与 <c>--config</c> 追加在**后面**,而用例自己写的同名参数在前面 ——
+    /// 于是「这条用例要一份别的配置」不必新开一个跑法,写进 argv 就行,而且基线里的
+    /// 命令行回显是逐字的那一份(追加的绝对路径含机器名,不能进基线)。
+    /// </summary>
     public static (string Stdout, string Stderr, int Code) Run(params string[] argv)
     {
         var stdout = new StringWriter { NewLine = "\n" };
         var stderr = new StringWriter { NewLine = "\n" };
-        var all = new List<string>(argv) { "--db", Db, "--config", NoConfigPath };
+        var all = new List<string>(argv);
+        if (!argv.Contains("--db")) { all.Add("--db"); all.Add(Db); }
+        if (!argv.Contains("--config")) { all.Add("--config"); all.Add(SourcesConfigPath); }
         var code = RimSearcher.Cli.Runner.Run(all, stdout, stderr);
         return (stdout.ToString(), stderr.ToString(), code);
     }
 
     /// <summary>指向一个不存在的配置文件 —— 测试不许读本机 config。</summary>
     public static string NoConfigPath => Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "no-such-config.toml");
+
+    private static string? _sourcesConfig;
+
+    /// <summary>
+    /// 默认配置:只写 <c>decompiled_dir</c>,指向下面那棵造出来的反编译树。
+    /// 别的键一律不写 —— 写了就会有基线依赖本机游戏目录。
+    /// </summary>
+    public static string SourcesConfigPath
+    {
+        get
+        {
+            lock (Gate)
+            {
+                if (_sourcesConfig is not null && File.Exists(_sourcesConfig)) return _sourcesConfig;
+                var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests");
+                Directory.CreateDirectory(dir);
+                WriteSourceTree(Path.Combine(dir, "sources"));
+                var path = Path.Combine(dir, "sources-config.toml");
+                File.WriteAllText(path,
+                    "decompiled_dir = '" + Path.Combine(dir, "sources") + "'\n",
+                    new UTF8Encoding(false));
+                return _sourcesConfig = path;
+            }
+        }
+    }
+
+    /// <summary>
+    /// <c>code-search</c> 的语料:一棵小反编译树。四道闸各要一个落点,所以形状是刻意的:
+    ///
+    ///   vanilla/          三个文件,排在最前(它是问题的默认语境,被截掉代价最大)
+    ///     Verse/ThingComp.cs      连着好几行命中 —— 上下文窗口重叠合并的落点
+    ///     Verse/Widgets.cs        同一文件里多条命中 —— 单文件上限的落点
+    ///     RimWorld/CompShield.cs
+    ///   .git/objects/Sneaky.cs   **必须一次都不被读到**:它匹配 *.cs,却不是源码树
+    ///   zz.emptytree/            一个文件都没有 —— 不许被点名成「没读到的树」
+    ///   zz.othermod/Patches.cs   排在 vanilla 之后 —— 文件数上限咬下去时它是「没读到」的那棵
+    /// </summary>
+    private static void WriteSourceTree(string root)
+    {
+        void File_(string rel, params string[] lines)
+        {
+            var path = Path.Combine(root, rel.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, string.Join("\n", lines) + "\n", new UTF8Encoding(false));
+        }
+
+        if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+
+        // 第 4~8 行连着命中 public,-C 1 时五个窗口两两重叠 —— 不合并就会把每行印三遍。
+        File_("vanilla/Verse/ThingComp.cs",
+            "namespace Verse",
+            "{",
+            "\tpublic class ThingComp",
+            "\t{",
+            "\t\tpublic ThingWithComps parent;",
+            "\t\tpublic CompProperties props;",
+            "\t\tpublic virtual void PostSpawnSetup(bool respawningAfterLoad)",
+            "\t\t{",
+            "\t\t}",
+            "\t}",
+            "}");
+
+        File_("vanilla/Verse/Widgets.cs",
+            "namespace Verse",
+            "{",
+            "\tpublic static class Widgets",
+            "\t{",
+            "\t\tpublic static void Label(Rect rect, string label)",
+            "\t\t{",
+            "\t\t}",
+            "\t}",
+            "}");
+
+        File_("vanilla/RimWorld/CompShield.cs",
+            "namespace RimWorld",
+            "{",
+            "\tpublic class CompShield : ThingComp",
+            "\t{",
+            "\t}",
+            "}");
+
+        File_(".git/objects/Sneaky.cs",
+            "public class Sneaky : ThingComp");
+
+        File_("zz.othermod/Patches.cs",
+            "namespace OtherMod",
+            "{",
+            "\tpublic class MyComp : ThingComp",
+            "\t{",
+            "\t}",
+            "}");
+
+        Directory.CreateDirectory(Path.Combine(root, "zz.emptytree"));
+    }
 }

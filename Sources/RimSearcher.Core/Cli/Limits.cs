@@ -15,11 +15,21 @@ public static class Limits
     /// <summary>--limit 允许的最大值;超出会被夹紧(夹紧不声明成硬约束,把数写进散文 —— 01 声明政策)。</summary>
     public const int MaxLimit = 2000;
 
-    /// <summary>code-search 单文件最多回传的匹配行数。</summary>
+    /// <summary>
+    /// code-search 单文件最多**印出**的匹配行数(--max-per-file 的默认值)。
+    /// 过了它的命中照样计数,所以它不影响总数准不准。
+    /// </summary>
     public const int CodeSearchMatchesPerFile = 20;
 
-    /// <summary>code-search 最多扫描的文件数;超出即停,计数以 at least 形态回传。</summary>
-    public const int CodeSearchMaxFiles = 4000;
+    /// <summary>
+    /// code-search 最多**读**的文件数;超出即停,计数降级成 at least 形态。
+    ///
+    /// 4000 → 50000(三轮 R3):旧值低于单棵 vanilla 树(本机 10222 个 .cs,全部 24 棵树
+    /// 合计 19467),于是任何一条不带 --source 的问句都在默认配置下被截掉八成,而截断
+    /// 恰恰是本命令最贵的错法。实测全量扫一遍 120 MB 树是 1.6 秒 —— 这道闸原本挡的成本
+    /// 根本不存在,它只是在制造假的零结果。留着是当失控兜底(一棵畸形大树),不是当预算。
+    /// </summary>
+    public const int CodeSearchMaxFiles = 50000;
 
     /// <summary>code-search 正则单文件匹配超时(毫秒),防灾难性回溯。</summary>
     public const int CodeSearchRegexTimeoutMs = 2000;

@@ -1,4 +1,4 @@
-$ rimsearcher sources list
+$ rimsearcher sources list --config no-such-config.toml
 exit 2
 --- stdout ---
 --- stderr ---

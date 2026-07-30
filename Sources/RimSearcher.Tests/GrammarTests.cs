@@ -214,6 +214,10 @@ public class GrammarTests
             ["find", "compClass", "RimWorld.CompShield"],
             ["types"],
             ["list", "ThingDef", "--limit", "2"],
+            // code-search 的最坏情形:三道闸同时咬,四句申报加一句计数。
+            // 这一条是补上来的 —— 本轮把印刷闸拆成两个旋钮,声明条数跟着涨了一条,
+            // 而这道闸原先根本没覆盖这条命令。
+            ["code-search", "public", "--limit", "1", "--max-per-file", "1", "--max-files", "1"],
         ];
 
         foreach (var argv in invocations)
@@ -377,5 +381,109 @@ public class GrammarTests
         var (typed, _, _) = Fixture.Run("get", "Firefoam", "--type", "StatDef");
         Assert.DoesNotContain("inherits_from", typed);
         Assert.DoesNotContain("灭火泡沫", typed);
+    }
+
+    // ---- code-search 的三道闸(三轮 R3 / R4 / R13 / R15 与「--limit 静默提前终止扫描」)----
+
+    /// <summary>
+    /// **印几行**的两道闸都不许缩短扫描。
+    ///
+    /// 这一条守的是 SKILL 里那句「--limit 只管行,code-search 另有一道管文件数的闸」——
+    /// 三轮盲测十份轨迹一次都没记下它是假的:实现里 --limit 一到就 break 掉整个扫描,
+    /// 于是「有多少个这种形状的方法」这类问题拿到的是「印满为止的那个数」,
+    /// 而它还被写成 at least 形态,读起来像是闸的锅。字节基线钉不住这条 ——
+    /// 措辞一改就跟着改,而这里判的是三种调法必须给出同一个总数。
+    /// </summary>
+    [Fact]
+    public void 印刷上限不缩短扫描()
+    {
+        static int Total(params string[] argv)
+        {
+            var (stdout, _, _) = Fixture.Run(argv);
+            var m = Regex.Match(stdout, @"^(?:at least )?(\d+) match");
+            Assert.True(m.Success, $"'{string.Join(' ', argv)}' printed no match count:\n{stdout}");
+            return int.Parse(m.Groups[1].Value);
+        }
+
+        var all = Total("code-search", "public", "--limit", "all");
+        Assert.Equal(all, Total("code-search", "public", "--limit", "1"));
+        Assert.Equal(all, Total("code-search", "public", "--max-per-file", "1"));
+        Assert.Equal(all, Total("code-search", "public", "--limit", "1", "--max-per-file", "1"));
+
+        // 而**读多少**的那道闸咬下去,总数就必须降级成下界 —— 三态文法的分界线在这里。
+        var (capped, _, _) = Fixture.Run("code-search", "public", "--max-files", "1");
+        Assert.StartsWith("at least ", capped);
+    }
+
+    /// <summary>
+    /// R15:点开头的目录不是源码树。判据在 SourcesShared.TreeNames,这里守的是
+    /// code-search 真的走了那一份 —— 语料里 .git 下摆着一个匹配 *.cs 的文件。
+    /// </summary>
+    [Fact]
+    public void 点开头的目录不算源码树()
+    {
+        var (stdout, _, code) = Fixture.Run("code-search", "class Sneaky");
+        Assert.Equal(1, code);
+        Assert.DoesNotContain("Sneaky.cs", stdout);
+    }
+
+    /// <summary>
+    /// R13:上下文窗口重叠时合并,同一行不许印两遍。判的是行号不重复,不是措辞。
+    /// </summary>
+    [Fact]
+    public void 上下文窗口重叠时合并()
+    {
+        var (stdout, _, _) = Fixture.Run("code-search", "public", "--files", "ThingComp.cs", "-C", "2");
+        var located = Regex.Matches(stdout, @"^(\S+\.cs:\d+)[:-]", RegexOptions.Multiline)
+                           .Select(m => m.Groups[1].Value).ToList();
+        Assert.NotEmpty(located);
+        Assert.Equal(located.Count, located.Distinct().Count());
+    }
+
+    /// <summary>
+    /// R3 fatal(六个场景):没读完的零结果不是零结果。
+    ///
+    /// 两件事必须分开说 —— 「扫完了,代码里没有」该指路去 search / find(问错了数据源),
+    /// 「没扫完」则一个字都不许提别的数据源,该做的是把闸抬开。原先两条路说同一句话。
+    /// </summary>
+    [Fact]
+    public void 没读完的零结果与真零结果分得开()
+    {
+        var (real, _, realCode) = Fixture.Run("code-search", "zzzznothing");
+        Assert.Equal(1, realCode);
+        Assert.Contains("rimsearcher search", real);
+
+        var (capped, _, cappedCode) = Fixture.Run("code-search", "zzzznothing", "--max-files", "1");
+        Assert.Equal(1, cappedCode);
+        Assert.DoesNotContain("rimsearcher search", capped);
+        Assert.Contains("did not finish", capped);
+
+        // 机器侧靠 kind 分:真零是「下一步该怎么做」,没读完是截断。
+        var (json, _, _) = Fixture.Run("code-search", "zzzznothing", "--max-files", "1", "--json");
+        Assert.Contains("\"kind\": \"truncation\"", json);
+        Assert.DoesNotContain("\"kind\": \"next_step\"", json);
+
+        // 第三种成因:glob 一个文件都没打中。三条路各说各的,不许并成一句。
+        var (empty, _, emptyCode) = Fixture.Run("code-search", "public", "--files", "Verse/ThingComp.cs");
+        Assert.Equal(1, emptyCode);
+        Assert.Contains("No file matched", empty);
+        Assert.DoesNotContain("rimsearcher search", empty);
+    }
+
+    /// <summary>
+    /// R3 的第四件事:<c>--source</c> 已经给出时,补救措施里不许再列它 ——
+    /// 实测 <c>--source vanilla</c> 换来的是一模一样的警告,而那句话仍在建议加 <c>--source</c>。
+    /// 顺带守住单树也要说破「只读了一部分」。
+    /// </summary>
+    [Fact]
+    public void 补救措施不重复已经给出的参数()
+    {
+        var (stdout, _, _) = Fixture.Run("code-search", "public", "--source", "vanilla", "--max-files", "1");
+        Assert.DoesNotContain("--source <tree>", stdout);
+        Assert.Contains("read only in part", stdout);
+
+        var (both, _, _) = Fixture.Run("code-search", "public", "--source", "vanilla",
+                                       "--files", "*.cs", "--max-files", "1");
+        Assert.DoesNotContain("narrow with", both);
     }
 }
