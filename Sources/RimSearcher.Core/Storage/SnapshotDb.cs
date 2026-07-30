@@ -480,10 +480,15 @@ public sealed class SnapshotDb : IDisposable
     /// 并准备据此下结论,真正管事的 <c>factionIconPath</c> 因为名字里没有 "texture" 被整个滤掉。
     /// </summary>
     public (IReadOnlyList<(string Path, string DefType, int Defs, string Sample)> Rows, int Total)
-        PathsWithValue(string valueSubstring, ScopeFilter scope, int limit)
+        PathsWithValue(string valueSubstring, ScopeFilter scope, int limit, bool exact = false)
     {
-        var p = new Dictionary<string, object?> { ["@v"] = "%" + Escape(valueSubstring) + "%" };
-        var conds = new List<string> { "fv.value LIKE @v ESCAPE '\\'" };
+        // R11:`--exact` 原先在这条路上被接受、被忽略、输出与不加时一字不差 —— 三轮唯一一处
+        // 既成的静默吞掉。它在这里是有意义的(整值相等 vs 含子串),所以实现它,而不是拒绝它:
+        // 少一条要记的例外,对拼命令行的调用方就少一次踩空。
+        var p = new Dictionary<string, object?>();
+        var conds = new List<string>();
+        if (exact) { p["@v"] = valueSubstring; conds.Add("fv.value = @v COLLATE NOCASE"); }
+        else { p["@v"] = "%" + Escape(valueSubstring) + "%"; conds.Add("fv.value LIKE @v ESCAPE '\\'"); }
         if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
         var where = "WHERE " + string.Join(" AND ", conds);
         const string join = "FROM field_values fv JOIN defs d ON d.id = fv.def_id";

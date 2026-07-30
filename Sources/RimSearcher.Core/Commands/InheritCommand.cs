@@ -87,6 +87,13 @@ public sealed class InheritCommand : Command
                 new("inherits_from", node.ParentName),
                 new("mod", node.SourceMod),
                 new("source", node.SourceFile),
+                // R6:这个数原先只在非零时以一句散文出现,而文档承诺的是「每个具名节点都报
+                // 一个数,0 就意味着你看到的正是游戏读到的」。于是「零」和「这件事没做」
+                // 分不开 —— 那个承诺给出的保证在实现里根本不存在。
+                // 二轮 F2(三态文法的裸 N 从未渲染出来过)是同一个形状,**这是第二次犯**。
+                // 放进 identity 块而不是补一句散文:数字每次都在场且可机读,占一行;
+                // 需要警示的后果仍由下面那句边界话说,只在非零时出现。
+                new("patch_ops", node.PatchOps),
             ]);
 
             // 往上走到根。带环保护不是防御性编程 —— XML 里写出环是可能的,而游戏自己
@@ -154,7 +161,8 @@ public sealed class InheritCommand : Command
                 }
             }
 
-            // 逐条申报,不是一句总的免责声明。0 就什么也不说 —— 那一条本来就是游戏读到的原样。
+            // 逐条申报,不是一句总的免责声明。计数本身现在恒在 identity 块的 patch_ops 上
+            // (R6),这里只在非零时补说后果 —— 0 的那一条不需要解释,它就是游戏读到的原样。
             if (node.PatchOps > 0)
                 // 主语放到句尾,免得动词跟着计数变单复数 —— NounRegistry 管名词,不管动词,
                 // 「1 patch operation … target」这种主谓不一致靠加登记项是修不掉的。

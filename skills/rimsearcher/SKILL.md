@@ -130,6 +130,12 @@ two different numbers — a question about how many methods have some shape want
 
 `--json` gives machine-readable output with the same prose moved into a `notes` array.
 
+Exit codes carry four distinct meanings: `0` the command ran, `1` this query returned no rows,
+`2` you used it wrong, `70` a defect in the tool. **A `1` is an answer, not a failure** —
+"nothing in this snapshot has that value" is information, and the reasoning behind it is printed
+on stdout either way. So chain with `;` rather than `&&`: a `1` on a query that answered your
+question perfectly well would otherwise silently drop whatever you queued after it.
+
 Do not pipe the output through `grep`. The sentence saying the result was cut short is on the
 same stream as the table, so filtering it away turns "truncated" into "absent". Narrow inside
 the tool instead, where the counts stay honest:

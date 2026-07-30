@@ -9,4 +9,5 @@ abstract       no
 inherits_from  BaseFromSomeDisabledMod
 mod            test.mod
 source         Guns.xml
+patch_ops      0
 --- stderr ---

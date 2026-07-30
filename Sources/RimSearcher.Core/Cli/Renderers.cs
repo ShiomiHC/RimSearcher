@@ -127,6 +127,22 @@ public static class MarkdownRenderer
             sb.Append("| `").Append(c.Name).Append("` | ").Append(Escape(c.Summary)).Append(" |").Append(OutputText.Newline);
         sb.Append(OutputText.Newline);
 
+        // R12:退出码原先在任何文档里都没有出现过 —— 三份盲测轨迹各自撞上「正文是一句正确、
+        // 有信息量的结论,退出码却说失败」,而参考页花了很多篇幅讲不要管道过滤,却没防住
+        // 同样会丢信息的 `&&`。约定本身是清晰的(Runner 的三个常量),缺的只是把它写下来。
+        sb.Append("## Exit codes").Append(OutputText.Newline).Append(OutputText.Newline);
+        sb.Append("| Code | Meaning |").Append(OutputText.Newline);
+        sb.Append("|---|---|").Append(OutputText.Newline);
+        sb.Append("| `0` | The command ran. |").Append(OutputText.Newline);
+        sb.Append("| `1` | This query returned no rows. |").Append(OutputText.Newline);
+        sb.Append("| `2` | Usage error: unknown command, unknown option, bad value. |").Append(OutputText.Newline);
+        sb.Append("| `70` | A defect in the tool itself, not in what you asked for. |").Append(OutputText.Newline);
+        sb.Append(OutputText.Newline);
+        sb.Append("A `1` is an answer rather than a failure: \"nothing in this snapshot has that value\" ")
+          .Append("is information, and the reasoning behind it goes to stdout either way. Chain commands with ")
+          .Append("`;` rather than `&&`, or a `1` on a query that answered your question will silently drop ")
+          .Append("whatever you queued after it.").Append(OutputText.Newline).Append(OutputText.Newline);
+
         sb.Append("## Global options").Append(OutputText.Newline).Append(OutputText.Newline);
         AppendOptionTable(sb, globals);
 

@@ -11,6 +11,7 @@ abstract       yes
 inherits_from  BaseProjectile
 mod            ludeon.rimworld
 source         Projectiles_Guns.xml
+patch_ops      2
 
 name            def_type  abstract  mod              source
 BaseProjectile  ThingDef  yes       ludeon.rimworld  Projectiles_Guns.xml

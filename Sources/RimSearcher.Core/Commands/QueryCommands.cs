@@ -492,7 +492,8 @@ public sealed class FindCommand : Command
                 Name = "exact",
                 Arity = Arity.Flag,
                 Aliases = ["exact-match", "whole"],
-                Help = "Require the whole value to match. Without it, the value is matched as a substring.",
+                Help = "Require the whole value to match, with either a field path or --value. " +
+                       "Without it, the value is matched as a substring.",
             },
             new OptionSpec
             {
@@ -518,7 +519,7 @@ public sealed class FindCommand : Command
         var scope = ctx.Scope();
 
         if (ctx.Args.Value("value") is { Length: > 0 } anyValue)
-            return ByValue(ctx, anyValue, scope, limit);
+            return ByValue(ctx, anyValue, scope, limit, ctx.Args.Flag("exact"));
 
         var path = ctx.Args.Positional(0);
         if (path is null)
@@ -648,16 +649,31 @@ public sealed class FindCommand : Command
     }
 
     /// <summary>--value:不指名字段,直接问「哪个字段装着这段文本」。</summary>
-    private static int ByValue(CommandContext ctx, string value, Snapshot.ScopeFilter scope, LimitValue limit)
+    private static int ByValue(CommandContext ctx, string value, Snapshot.ScopeFilter scope, LimitValue limit,
+                               bool exact)
     {
-        var (rows, total) = ctx.Db.PathsWithValue(value, scope, limit.Effective);
+        var (rows, total) = ctx.Db.PathsWithValue(value, scope, limit.Effective, exact);
 
         if (rows.Count == 0)
         {
+            // R9:原先这句以「so this means the text is absent, not misspelt」收尾 —— 它特意
+            // 堵掉了「你拼错了」这条退路,可快照索引的是叶子标量与 comps 的 compClass,
+            // **嵌套 li / 多态子对象的运行时类型不在其中**(modExtensions[0] 的 Class=、
+            // paramMappings[0].inParam 的 Class=)。于是「类真实存在且正在被这个 def 使用」
+            // 与「这个类根本不存在」在输出上完全一样,而它只报了后者。
+            // 类名形状的查询词最容易撞这一条,所以这时候必须把索引边界说出来。
+            var looksLikeType = value.Length > 2 && !value.Any(char.IsWhiteSpace) &&
+                                (char.IsUpper(value[0]) || value.Contains('.'));
             ctx.Report.Notice(NoticeKind.NextStep,
-                $"No field in this snapshot holds a value containing '{value}'" +
+                $"No field in this snapshot holds a value {(exact ? "equal to" : "containing")} '{value}'" +
                 (scope.IsAll ? "" : $" within --scope {scope.Expression}") +
-                ". Values are matched as substrings, so this means the text is absent, not misspelt.");
+                (exact ? ". Drop --exact to match it as a substring." : "") +
+                (looksLikeType
+                    ? " If that is a class name: the snapshot indexes leaf scalars and a comp's compClass, but " +
+                      "not the runtime type of nested <li Class=\"...\"> objects (modExtensions, sub-object " +
+                      "parameters), so a class can be in use by a def and still be absent here. " +
+                      "'rimsearcher code-search' finds the class itself."
+                    : ""));
             return 1;
         }
 

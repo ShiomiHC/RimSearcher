@@ -31,6 +31,17 @@ Answers questions about RimWorld's defs and C# from a snapshot of what the game 
 | `types` | List every def type in the snapshot with how many defs it has. |
 | `values` | List the distinct values a field takes, most common first. |
 
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | The command ran. |
+| `1` | This query returned no rows. |
+| `2` | Usage error: unknown command, unknown option, bad value. |
+| `70` | A defect in the tool itself, not in what you asked for. |
+
+A `1` is an answer rather than a failure: "nothing in this snapshot has that value" is information, and the reasoning behind it goes to stdout either way. Chain commands with `;` rather than `&&`, or a `1` on a query that answered your question will silently drop whatever you queued after it.
+
 ## Global options
 
 | Option | Meaning | Also accepted |
@@ -171,7 +182,7 @@ The field path is matched from the end, so 'compClass' finds 'comps[3].compClass
 |---|---|---|
 | `-n`, `--limit` <n|all> | How many defs to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
-| `--exact` | Require the whole value to match. Without it, the value is matched as a substring. | `--exact-match`, `--whole` |
+| `--exact` | Require the whole value to match, with either a field path or --value. Without it, the value is matched as a substring. | `--exact-match`, `--whole` |
 | `--value` <text> | Search every field for this value and report which paths hold it, instead of naming a field yourself. | `--any-field`, `--search-values`, `--holding` |
 
 Examples:

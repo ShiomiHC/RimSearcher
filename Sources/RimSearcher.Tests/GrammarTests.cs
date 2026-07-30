@@ -274,6 +274,67 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// R11:被接受的开关不许被吞。
+    ///
+    /// `find --value X --exact` 原先接受 --exact 然后完全不读它,输出与不加时一字不差 ——
+    /// 三轮唯一一处既成的静默吞掉,而它最坏的地方是让人以为拿到的是精确匹配计数。
+    /// SKILL 承诺的是「Unknown options are rejected rather than ignored … so a wrong guess
+    /// costs one line, not a wrong answer」,而那层保护只覆盖选项**名**。
+    ///
+    /// 这条断言的形状是「加了它输出必须变」,不是「输出等于某个具体值」—— 后者钉不住
+    /// 「被忽略」这件事本身,因为被忽略时输出也是一个合法的值。
+    /// </summary>
+    [Fact]
+    public void exact在按值反查时不被吞掉()
+    {
+        // 语料里 comps[0].compClass = RimWorld.CompShield。子串能命中,整值相等不能。
+        var (loose, _, looseCode) = Fixture.Run("find", "--value", "CompShield");
+        var (strict, _, strictCode) = Fixture.Run("find", "--value", "CompShield", "--exact");
+
+        Assert.Equal(0, looseCode);
+        Assert.NotEqual(loose, strict);
+        Assert.Equal(1, strictCode);
+        // 落空时要指出 --exact 是这次落空的成因之一,否则「没有」被读成绝对的没有。
+        Assert.Contains("--exact", strict);
+
+        // 反过来:整值给对时 --exact 必须还能命中,否则这个开关就是把路堵死而不是收窄。
+        var (hit, _, hitCode) = Fixture.Run("find", "--value", "RimWorld.CompShield", "--exact");
+        Assert.Equal(0, hitCode);
+        Assert.Contains("comps[0].compClass", hit);
+    }
+
+    /// <summary>
+    /// R6:<c>inherit</c> 的 patch 计数每个节点都要在场,不能只在非零时出现。
+    ///
+    /// 文档承诺「a node with 0 of them is exactly what the game read」—— 读者据此以为会看到
+    /// 一个数字,零就放心。实现原先只在非零时打印一句散文,于是「零」和「这件事没做」分不开,
+    /// 那个保证在实现里根本不存在。二轮 F2(三态文法的裸 N 从未渲染出来过)是同一个形状。
+    /// </summary>
+    [Fact]
+    public void inherit的patch计数在干净节点也在场()
+    {
+        // BaseBullet 被两条 patch 点名,Bullet_Revolver 一条都没有 —— 两边都要报出数字。
+        var (patched, _, _) = Fixture.Run("inherit", "BaseBullet", "--json");
+        var (clean, _, _) = Fixture.Run("inherit", "Bullet_Revolver", "--json");
+
+        static int PatchOps(string json)
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            return doc.RootElement.GetProperty("nodes")[0].GetProperty("node")
+                      .GetProperty("patch_ops").GetInt32();
+        }
+
+        Assert.Equal(2, PatchOps(patched));
+        Assert.Equal(0, PatchOps(clean));
+
+        // 后果那句散文只在非零时说 —— 0 的那一条不需要解释,而常驻声明是 00 论据 3 淘汰掉的。
+        var (patchedText, _, _) = Fixture.Run("inherit", "BaseBullet");
+        var (cleanText, _, _) = Fixture.Run("inherit", "Bullet_Revolver");
+        Assert.Contains("is targeted by name by", patchedText);
+        Assert.DoesNotContain("is targeted by name by", cleanText);
+    }
+
+    /// <summary>
     /// R2:同名提示不随 <c>--type</c> 消失。
     ///
     /// 三轮最恶劣的一处就在这个缝上 —— 提示原先挂在**过滤后**的集合上,于是按 SKILL 教的
