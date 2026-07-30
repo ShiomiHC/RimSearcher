@@ -92,8 +92,18 @@ stays local.
    row as "this def sets X" is the single most common way to get a confident wrong answer here.
    `unknown` means the type could not be constructed for comparison, so neither claim holds.
    `yes` rows are left out of the listing by default, with a line saying how many and how to see
-   them; `--defaults` lists everything, and `--path <text>` always shows a named field whichever
-   kind it is.
+   them; `--defaults` lists the rest of the indexed paths, and `--path <text>` always shows a
+   named field whichever kind it is.
+   Read the column for what it is: it answers **who set this value**, never **what the value is**.
+   The value in the row is the real one either way, so a rule that reads the value — a property
+   like `HarvestDestroys => harvestAfterGrowth <= 0f`, a threshold, a comparison — is answerable
+   from a `yes` row, and answering "cannot tell" there throws away a correct result. The same
+   goes the other way for discriminator fields: `compClass`, `thingClass` and `workerClass` are
+   assigned in their own type's constructor, so `yes` is their normal and correct state, not a
+   warning.
+   One thing neither switch reaches: a field whose value was null never entered the index at all,
+   so it is absent from `--defaults` too. Its absence is not evidence that the field does not
+   exist — read the declaring class to see the shape.
 3. **Working backwards from a class or a value.** `find` matches the field path from the end:
    `find compClass RimWorld.CompShield` needs no index and no full path.
    `values <field>` gives the whole value space, and prints which full paths and def types

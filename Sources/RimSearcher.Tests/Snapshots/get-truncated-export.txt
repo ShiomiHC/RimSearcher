@@ -2,7 +2,7 @@ $ rimsearcher get Bullet_Revolver
 exit 0
 --- stdout ---
 3 fields.
-Not listed: 1 field whose value is the one a fresh instance of the declaring type already carries, so this snapshot cannot tell whether anything set it. The def has 4 fields in all; pass --defaults to list every one, or --path <text> to see a named field either way.
+Not listed: 1 field whose value is the one a fresh instance of the declaring type already carries, so this snapshot cannot tell whether anything set it. The snapshot holds 4 field paths for this def; --defaults lists the rest of those, and --path <text> sees a named one either way. A field whose value was null is in none of them: it never entered the index, so its absence here is not evidence that the field does not exist.
 The exporter stopped short on this def: at least 3 fields were dropped at export time for depth or size, so a path missing from the list below is not proof that the def lacks it.
 
 def_name       Bullet_Revolver

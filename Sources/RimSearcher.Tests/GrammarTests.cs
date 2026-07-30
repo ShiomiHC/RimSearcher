@@ -398,6 +398,32 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 五轮 F4:默认值那句声明不许承诺它做不到的事。
+    ///
+    /// 原句是「The def has N fields in all; pass --defaults to list every one」,两处超发:
+    /// N 是**索引到的路径数**而不是 def 的字段数;而值为 null 的字段导出器见了直接 return
+    /// (DefExporter:284),那条路径从来没进过索引,<c>--defaults</c> 也召不回来。
+    /// 于是「这个字段不存在」与「它的值是 null」在输出上完全同形 —— 实测里有人跨三份
+    /// 列表交叉验证,只是把错结论**加固**了,因为缺的是同一批字段。
+    ///
+    /// 闸判**说没说**:承诺范围有没有限定在索引到的路径上,以及第四态有没有说破。
+    /// 第一分句(那句被反复点名的认识论诚实)另有字节基线钉着,这里不重复。
+    /// </summary>
+    [Fact]
+    public void 默认值声明不承诺它做不到的事()
+    {
+        var (text, _, _) = Fixture.Run("get", "Apparel_ShieldBelt");
+        Assert.Contains("Not listed:", text);
+
+        // 「列出全部字段」和「这个 def 一共有 N 个字段」都不成立,一个字都不许出现。
+        Assert.DoesNotContain("list every one", text);
+        Assert.DoesNotContain("in all", text);
+
+        // 第四态要说破,否则这两个开关的边界读起来就是「加上它们就齐了」。
+        Assert.Contains("never entered the index", text);
+    }
+
+    /// <summary>
     /// 五轮 F3:一个词同时是快照名和 scope 组名时,要说破两者不是一回事。
     ///
     /// 实测代价 22 倍:机器上恰好有一份叫 vanilla 的快照(Core + 导出器,两个 mod),
@@ -444,9 +470,11 @@ public class GrammarTests
         Assert.Equal(0, code);
         Assert.Contains("--scope vanilla (= ludeon.rimworld)", group);
 
-        // 写死 packageId:你写的就是你得到的,一个字都不多说。
+        // 写死 packageId:你写的就是你得到的,**一行都不多印**。
+        // 断言写成「不含带括号的那种形态」是不够的 —— 判据一旦退回「多于一个 mod 就播」,
+        // 印出来的是不带括号的 `--scope ludeon.rimworld.`,那样的闸红不了。
         var (literal, _, _) = Fixture.Run("find", "thingClass", "RimWorld.Bullet", "--scope", "ludeon.rimworld");
-        Assert.DoesNotContain("--scope ludeon.rimworld (", literal);
+        Assert.DoesNotContain("--scope ludeon.rimworld", literal);
 
         // 零结果那一侧原先就说,现在仍要说,但**只说一遍**:散文改用字面之后,
         // 展开只剩播报那一个产地。两遍与一遍在这里差的是「读者以为看到了两条独立证据」。

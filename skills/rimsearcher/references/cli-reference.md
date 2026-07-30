@@ -240,6 +240,8 @@ rimsearcher fields <defType> [options]
 
 Use this before 'find' when you are not sure what a field is called. The counts tell you whether a path is universal for the type or only present on a handful of defs.
 
+What is listed is every path the exporter recorded a value for. A field whose value was null on every def of the type is in none of them, so a path missing here is not proof that the field does not exist — for the shape of a nested object, read its class with 'code-search' and 'read'.
+
 | Argument | Meaning |
 |---|---|
 | `<defType>` | A def type such as ThingDef. |

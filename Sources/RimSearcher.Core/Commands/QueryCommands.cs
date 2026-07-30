@@ -430,12 +430,22 @@ public sealed class GetCommand : Command
                 // 措辞不许滑成「没人设过它」:XML 里照着默认值写一遍是常事,快照里那两种
                 // 情形完全同形。这一列能证的只有「与声明默认值无从区分」,句子就只说这个。
                 // 同理句中不出现任何与数量一致的动词或代词(名词才有登记处)。
+                // 五轮 F4:第二个分句原先说「The def has N fields in all; pass --defaults to list
+                // every one」—— 两处超发。N 是**索引到的路径数**而不是 def 的字段数;
+                // 而「list every one」在值为 null 的字段上做不到:导出器见 null 直接 return
+                // (DefExporter:284),那条路径从来没进过索引,--defaults 也召不回来。
+                // 于是「这个字段不存在」与「它的值是 null」在输出上完全同形,而实测里有人
+                // 跨三份列表交叉验证,只是把错结论**加固**了 —— 缺的是同一批字段。
+                // 第一分句逐字不动(它是被反复点名的那句认识论诚实),--path 那半句也不动
+                // (那是唯一的逃生指令),只换中间那一段。
                 if (!withDefaults && defaulted > 0)
                     ctx.Report.Notice(NoticeKind.Filter,
                         $"Not listed: {Tally.Complete(defaulted).Render("field")} whose value is the one a fresh " +
                         "instance of the declaring type already carries, so this snapshot cannot tell whether " +
-                        $"anything set it. The def has {Tally.Complete(total).Render("field")} in all; pass " +
-                        "--defaults to list every one, or --path <text> to see a named field either way.");
+                        $"anything set it. The snapshot holds {Tally.Complete(total).Render("field path")} for this " +
+                        "def; --defaults lists the rest of those, and --path <text> sees a named one either way. " +
+                        "A field whose value was null is in none of them: it never entered the index, so its " +
+                        "absence here is not evidence that the field does not exist.");
             }
 
             // 02-3:「字段被截」与「没有该字段」必须可区分。上游把这件事整个略过了,
@@ -969,7 +979,10 @@ public sealed class FieldsCommand : Command
         Summary = "List the field paths that a def type actually uses, with how often each occurs.",
         Remarks =
             "Use this before 'find' when you are not sure what a field is called. The counts tell you whether a " +
-            "path is universal for the type or only present on a handful of defs.",
+            "path is universal for the type or only present on a handful of defs.\n\n" +
+            "What is listed is every path the exporter recorded a value for. A field whose value was null on " +
+            "every def of the type is in none of them, so a path missing here is not proof that the field does " +
+            "not exist — for the shape of a nested object, read its class with 'code-search' and 'read'.",
         Positionals = [new PositionalSpec { Name = "defType", Help = "A def type such as ThingDef." }],
         Options =
         [
