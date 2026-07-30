@@ -43,6 +43,14 @@ master 方法论:观察 LLM 调用方对输出的误用 → 修措辞/文法,而
   XML 搜索旧习惯);每个场景 agent 只给任务+SKILL.md+CLI,收集全链轨迹归纳误用。
   定位 = 冷启动替代与输出改动后的回归工具;模拟方与设计者同源、措辞多样性覆盖不全,
   真实消费方会话仍是终审。
+- **归纳阶段固定两个 agent,第二个专门逆着自评复核归因**(三轮起,双向:既查该退回工具的
+  `my_own_mistake`,也查把自己疏忽记到工具头上的虚报,并单独扫 `useful: false` 里
+  连摩擦都没记的沉默缺陷)。这一条不是可选项 —— 三轮它一个人赚回 4 条被自责藏起来的
+  缺陷、2 条虚报、6 条沉默缺陷,外加「cost 被自责压低」这个二阶发现。
+- **种子改由不知情代理从 episode 池里挖**(用户提议,2026-07-30):照靶子挑出来的种子
+  形状全是「冲着某个命令表面去」,与不知情代理挑的**一条都不重合**。判据只给「难在信息
+  形状上」「藏陷阱的优先」,不告诉它们靶子是什么。可执行的种子、开场词、schema 与前置闸
+  全在 `04a-blindtest-seeds-r4.md`;episode 池落在 `tools/`(不进库)。
 
 ### 第一轮结果(2026-07-29,10 场景 / 9 答出 / 1 死路)
 
@@ -201,6 +209,104 @@ F15 `snapshot list` 把 `(active)` 塞进 name 单元格 / F16 `--path` 的过�
   它里面一句「Every command that can produce a long list takes --path, --type, --scope
   or --files」,而 `--type` 当时只挂在一条命令上。现在文中每条 `rimsearcher …` 命令行
   与收窄开关表都对着 `CommandRegistry` 验。
+
+### 第三轮结果(2026-07-30,10 场景 / 2 答出 / 0 死路 / 8 险些答错)
+
+**定位**:第二轮回修之后新增的查询侧表面首测(`inherit` / `list --scope` 空结果措辞),
+外加第二轮明确留下的三条尾巴(`search` 空结果 partial、`--limit` 压译文表与过期声明两条
+not_exercised)。种子仍取自 Vethara transcript,但换成上两轮**没用过的尾部 episode**。
+
+**死路清零**——前两轮那种「工具压根答不了」基本消失。但归因分布变了向:
+`cli_output` 56 / **`skill_doc` 17** / `cli_error_message` 10 / `data_side` 7 /
+`my_own_mistake` 5。前两轮 `skill_doc` 都只有 1 条,这一轮跳到 17,而这是本轮
+最重要的一条产出,见下方方法论第一条。
+
+#### 六个靶子的判定
+
+| 靶 | 判定 | 依据 |
+|---|---|---|
+| `inherit` 命令 | defective | 命令本身立住(S1 用 6 次、S2 用 10 次都拿到干净决断),但没有 `--type`(`inherit Basic` 静默挑一个,而 `get` 对同名字说「4 defs share the name」)、信息性回答退出码 1、抽象节点自己声明的字段值不呈现 |
+| 空结果成因分流 | defective | 两种误诊都还在且逐条复现,详见 R8 |
+| mod 不在快照的指路 | defective | 完全没修,详见 R10 |
+| scope 组筛空措辞 | **clean** | `64e82e8` 修住了:分子分母都给、没把过滤器筛空说成「快照里没有这个 def type」、指路指向 mod 装载侧 |
+| `--limit`/`--path` 压译文表 | **clean** | 机械层面立住,源码侧一致(先按 paths 过滤再 Take)。真正的问题在 `--type`,归 R2 |
+| 多快照说清用的是哪个 | defective | 名字说了(每条命令首行都打),但「这个选择会怎样把答案变形」没说,详见 R10 |
+
+#### 四条 fatal
+
+- **R1 `get` 把 C# 声明默认值、`ResolveReferences` 兜底值和作者手写的 XML 值印成
+  一模一样的行**(5 场景)。四个场景的错结论全部由这张表直接生成,而且**每次错的
+  那一行都恰好是「字段名和用户提问一字不差」的那一行**——S1 差一句话就交出
+  「只出现一次定义在 `children[0].burstCount = 1`」,而那个 1 属于另一个 child
+  (用户问的触手 burstCount 是 40),且 `burstCount` 压根不是重复限制器
+  (`SubEffecter_Sprayer.MakeMote` 读的是**每次 trigger 的 fleck 数**)。
+  修向:导出侧记下「这一行是否等于该字段的 C# 声明默认值」,`get` 把 authored / default
+  分开;做不到就退一步,凡覆盖数等于该 def type 全量的字段贴一句「值可能来自代码兜底」。
+- **R2 `inherits_from` 与译文表只按 defName 关联,`--type` 只收窄字段表**(2 场景)——
+  于是在 `def_type MentalStateDef` 标题下凭空印出 `inherits_from PsycastBase`。
+  **最恶劣的是按 SKILL 教的加了 `--type` 之后,「N defs share the name」那句提示
+  反而消失,错行留下,对冲归零。** S2 的证词要记:这次同名的那个恰好叫
+  `RitualGlowAbstract`,名字离谱到引起怀疑;若叫 `BaseKnowledge` 之类中性名,
+  错答案百分之百交出去。
+- **R3 `code-search` 被 `--max-files` 截断后照样打裸的「No line matched」+ 指路去
+  `search`/`find`**(6 场景),而默认 4000 低于单棵 vanilla 树(10222 文件)。
+  多树扫描时措辞只列「从未触及的树」,把「被触及但只读了一部分的那棵」伪装成读完了。
+- **R10 落空时从不把「可能是因为这个快照选择」说出口**(3 场景)。S1 给了最强的证据:
+  工具从别的快照知道该 def 属于 anomaly、也知道本快照的 mod 列表,「它的 mod 不在
+  这个快照里」这句话是**可算出来的**,它没说。另有一词两义:快照名 `vanilla` 不含
+  任何 DLC,而 `--scope vanilla|core|official|base` 反过来 = Core + 全部 DLC,
+  两份文档都没写。
+
+#### 其余十一条
+
+R4 `code-search` 第三道闸(每文件 20 命中,`--limit all` 抬不动、无开关、两份文档都没写) /
+R5 CLI 侧没有读文件/行区间/方法体的能力而 SKILL 把这类问题整条路由给 decompiler MCP,
+CLI-only 时读代码退化成编造正则 / R6 `inherit` 承诺的 patch 计数在干净节点不打印 /
+R7 计数的名词与实际所数的东西不一致(「N defs」数的是路径命中行) / R8 零结果四种误诊 /
+R9 多态子对象的类名不进快照,而按类反查时给的是「是真没有不是拼错」的确定性否定 /
+R11 未知**选项名**被漂亮拒绝,但选项**取值**和已接受却无效的 flag 不受保护 /
+R12 信息性回答与零命中都退出码 1 / R13 `-C` 不合并重叠窗口 /
+R14 `--json` 数据数组键名无文档,取错键得到安静的空数组 /
+R15 `code-search` 的树枚举与 `sources list` 对不上(把 `.git` 当成一棵源码树)。
+
+#### 方法论
+
+- **闸的形状不对,不是没有闸。** 第二轮给 SKILL.md 立的闸只验**命令行存在性**
+  (每条 `rimsearcher …` 对着 `CommandRegistry` 验),不验**承诺的语义**。这一轮四条
+  `skill_doc` 全是「文档承诺了、实现没做到」:R4 把闸门数成两道(封闭列举语气,实际
+  有第三道)、R6「zero means what you see is what the game read」(干净节点根本不打印
+  那个零)、R11「Unknown options are rejected rather than ignored」(只覆盖选项**名**)、
+  R14「nothing is lost」(`--json` 键名无文档,猜错静默返回空数组)。**每一条承诺句都得有
+  一份对着实现验的断言**,否则文档就是下一轮 `skill_doc` 归因的产地。
+- **归因复核要做成常设工序,而且要双向。** 上一轮的教训(七个 agent 把同一个坑报成
+  `my_own_mistake`)这一轮做成了独立的复核 agent,产出超过预期:5 条 `my_own_mistake`
+  里 **4 条应退回工具**,全是同一个动作(接管道),根因是三条参数面缺口——所有表命令
+  **没有 `--offset`/`--skip`**(S1 要 92 行里的第 61–92 行,`Select-Object -Skip 60`
+  不是图快是唯一办法)、`snapshot truncated` 没 `--type`、没有 read-file/read-member。
+  禁令句「Do not pipe the output through grep」立了规矩却没给出口——**规矩越正当,
+  违规者越倾向把成本记在自己头上**;决定性证据是唯一没踩坑的 S2 把同一件事明确记成
+  文档缺陷。反向也查出 **2 条虚报**:S4 把 `find --value '/Things/Mote'` 的失败记成
+  `cli_output`/high,真因是它自己在 Git Bash 里发的命令、MSYS 把前导斜杠改写成了
+  `C:/Program Files/Git/Things/Mote`——它自己换 PowerShell 复现证明过这一点却没更新
+  结论,**照这条去修会在一个不存在的 bug 上动刀**。
+- **`useful: false` 里藏着连摩擦都没被记下来的缺陷。** 挖出 6 条,最危险的是
+  `code-search --limit N 会静默提前终止扫描`——10 份轨迹零记录,只以一条注记存在,
+  而 SKILL.md 明写「`--limit` 只管行,扫描面是 `--max-files`」,口径直接冲突。
+- **自责不只藏缺陷,还把 cost 从 high 压成 low。** 5 条 `my_own_mistake` 的 cost
+  全部是 low,而同一个底层缺陷归给工具时一律 high。S9 的 grep 恰好吞掉了「1 file had
+  more than 20 matches」那句,空结果读起来像「文件里没有声明」——同一道闸它自己在
+  friction 里评 high,经由管道造成实际误判的那次评了 low。
+- **「把当前实现没有说成原理上没有」第三轮复发。** R1 的**症状**被四份轨迹一致评为
+  fatal,而让它无法自救的那个**能力缺口**(「给我看作者写的那层」)在多数轨迹里被归到
+  `data_side` / 原理限制。S10 甚至在同一份轨迹里自相矛盾——boundary_claims 写着
+  「这是当下没做到,`inherit` 已经证明工具有读 mod XML 的通道」,friction 里归了
+  `data_side`。这个形状已经连续三轮出现(二轮 F11 犯在设计裁决上,这轮犯在归因上)。
+- **种子改由不知情代理挖,能绕开设计者偏差。** 本轮 10 条种子是照靶子挑的,
+  形状全是「冲着某个命令表面去」;另开一组 8 个 low-effort 代理各拿 32 条 episode
+  独立粗筛(判据只给「难在信息形状上」「藏陷阱的优先」,不告诉它们靶子是什么),
+  挑出来的形状**一条都没重合**——「查到了却不生效」「伪 defName 假命中」「混编造名字
+  的存在性判定」这三类,照靶子挑挑不出来。产物见 `04a-blindtest-seeds-r4.md`,
+  留作 R1/R2/R3/R10 修完之后的回归轮种子:那时它才是真正无设计者偏差的一轮。
 
 ## 验收(迁移完成的定义)
 
