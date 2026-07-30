@@ -51,6 +51,18 @@ public sealed record TranslationRow(string DefName, string? DefType, string Path
                                    string? Original, string? Language, string? SourceMod, string Origin);
 
 /// <summary>
+/// 一条界面文案译文。<paramref name="Key"/> 是 <c>"X".Translate()</c> 里那个 X ——
+/// 与任何 def 无关,所以这张表没有 def_id、也没有 def_type。
+///
+/// <paramref name="Placeholder"/> = 语言包里有这个 key 但值是占位:它实际显示的是英文,
+/// 而在表里与真译文同形。<paramref name="Origin"/> 分层同 translations —— runtime 那一层
+/// 是游戏最终用的那一句(覆盖冲突的赢家),harvest 两层只说「磁盘上存在」。
+/// </summary>
+public sealed record KeyedRow(string Key, string? Translated, string? Original, string? Language,
+                              string? SourceFile, int SourceLine, string? SourceMod,
+                              bool Placeholder, string Origin);
+
+/// <summary>
 /// 继承层的一行:XML 里一个带 <c>Name=</c> / <c>ParentName=</c> / <c>Abstract=</c> 的节点。
 /// <paramref name="PatchOps"/> 是有多少条 PatchOperation 的 xpath 点了这个 Name —— 这一层
 /// 是打补丁**之前**的原文,那个数就是这份时间差的逐条申报。
@@ -906,6 +918,116 @@ public sealed class SnapshotDb : IDisposable
         var keys = new List<string>();
         for (var i = 0; i < names.Count; i++) { p["@n" + i] = names[i]; keys.Add("@n" + i); }
         return Scalar($"SELECT COUNT(DISTINCT def_name) FROM translations WHERE origin = @o AND def_name IN ({string.Join(",", keys)})", p);
+    }
+
+    // ---------- Keyed(界面文案)----------
+
+    /// <summary>
+    /// 这份快照里有没有 keyed 那一层。零 = 导出时游戏没有任何 keyed 译文(理论上不该发生,
+    /// 英文环境下英文语言文件自己就是数据源),所以呈现侧拿它区分「这个 key 没有」与
+    /// 「这一层整个是空的」—— 后者是数据侧的问题,不是答案。
+    /// </summary>
+    public int KeyedCount() => Scalar("SELECT COUNT(*) FROM keyed");
+
+    private const string KeyedColumns =
+        "key, translated, original, language, source_file, source_line, source_mod, placeholder, origin";
+
+    /// <summary>
+    /// 同一份列,带表别名。JOIN 到 <c>keyed_fts</c> 时 <c>key</c> / <c>translated</c> /
+    /// <c>original</c> 三个名字**两张表都有**,不加前缀是 SQL 歧义 —— 拿字符串替换从上面那份
+    /// 拼出来更省一行,但 <c>Replace("key", "k.key")</c> 会顺手改掉 <c>keyed</c> 里的 key。
+    /// </summary>
+    private const string KeyedColumnsPrefixed =
+        "k.key, k.translated, k.original, k.language, k.source_file, k.source_line, k.source_mod, " +
+        "k.placeholder, k.origin";
+
+    private IReadOnlyList<KeyedRow> ReadKeyed(string sql, Dictionary<string, object?>? p = null)
+    {
+        var rows = new List<KeyedRow>();
+        using var rd = Query(sql, p);
+        while (rd.Read())
+            rows.Add(new KeyedRow(
+                rd.GetString(0),
+                rd.IsDBNull(1) ? null : rd.GetString(1),
+                rd.IsDBNull(2) ? null : rd.GetString(2),
+                rd.IsDBNull(3) ? null : rd.GetString(3),
+                rd.IsDBNull(4) ? null : rd.GetString(4),
+                rd.IsDBNull(5) ? 0 : rd.GetInt32(5),
+                rd.IsDBNull(6) ? null : rd.GetString(6),
+                !rd.IsDBNull(7) && rd.GetInt32(7) != 0,
+                rd.GetString(8)));
+        return rows;
+    }
+
+    /// <summary>
+    /// 一个 key 的全部行。**可能多于一条**:runtime 那一条是生效值,harvest 层可以另有几条
+    /// (磁盘上别的 mod 也译了同一个 key)。挑哪条呈现、怎么说清分层,归命令层 ——
+    /// 这里不替它挑,挑了就等于发一张「谁生效」的证书,而 harvest 层证不了这件事。
+    /// </summary>
+    public IReadOnlyList<KeyedRow> KeyedByKey(string key)
+        => ReadKeyed($"SELECT {KeyedColumns} FROM keyed WHERE key = @k COLLATE NOCASE ORDER BY origin, source_mod",
+                     new Dictionary<string, object?> { ["@k"] = key });
+
+    /// <summary>
+    /// 全文检索 keyed 三列(key / 译文 / 英文原文)。中文查得到 key,英文也查得到 ——
+    /// 这一层的 original 进了 FTS(与 translations 那张表不同,那边只索引 translated),
+    /// 因为「从屏幕上的字往回走」是这一层存在的理由,而屏幕上的字两种语言都可能。
+    /// </summary>
+    public (IReadOnlyList<KeyedRow> Rows, int Total) KeyedSearch(string query, int limit, int offset = 0)
+    {
+        var p = new Dictionary<string, object?>
+        {
+            ["@m"] = FtsText.BuildMatchQuery(query),
+            ["@q"] = query,
+        };
+        var from = "FROM keyed_fts f JOIN keyed k ON k.id = f.rowid WHERE keyed_fts MATCH @m";
+        var total = Scalar($"SELECT COUNT(*) {from}", p);
+        // key 整体命中排最前,然后是生效层压过磁盘层 —— 后者只是「存在」,不是答案。
+        var order = "ORDER BY (k.key = @q COLLATE NOCASE) DESC, (k.origin = 'runtime') DESC, " +
+                    "bm25(keyed_fts, 10.0, 3.0, 3.0), LENGTH(k.key), k.key";
+        var rows = ReadKeyed($"SELECT {KeyedColumnsPrefixed} {from} {order} LIMIT {limit} OFFSET {offset}", p);
+        return (rows, total);
+    }
+
+    /// <summary>
+    /// 一批 key 各自的生效译文。<c>code-search</c> 给命中行附译文时一次问完 ——
+    /// 一行一次查询会让一次扫描变成几千次 SQL。只回 runtime 那一层:附在代码行边上的
+    /// 那句话必须是游戏真会显示的,磁盘层在这里贴上去就是伪证。
+    /// </summary>
+    public IReadOnlyDictionary<string, KeyedRow> KeyedInEffect(IEnumerable<string> keys)
+    {
+        var list = keys.Distinct(StringComparer.Ordinal).ToList();
+        var result = new Dictionary<string, KeyedRow>(StringComparer.Ordinal);
+        if (list.Count == 0) return result;
+
+        // 分批 —— SQLite 的参数上限是 999,而一次 code-search 的命中可以远超它。
+        const int batch = 500;
+        for (var start = 0; start < list.Count; start += batch)
+        {
+            var p = new Dictionary<string, object?> { ["@o"] = TranslationOrigin.Runtime };
+            var names = new List<string>();
+            for (var i = start; i < Math.Min(start + batch, list.Count); i++)
+            {
+                p["@k" + i] = list[i];
+                names.Add("@k" + i);
+            }
+            foreach (var row in ReadKeyed(
+                $"SELECT {KeyedColumns} FROM keyed WHERE origin = @o AND key IN ({string.Join(",", names)})", p))
+                result[row.Key] = row;
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// 全部 key。零结果时的模糊候选池 —— 与 def 侧同一条路子:「名字打错了」与
+    /// 「这个环境里真没有」必须分得开。
+    /// </summary>
+    public IReadOnlyList<string> AllKeyedKeys()
+    {
+        var keys = new List<string>();
+        using var rd = Query("SELECT DISTINCT key FROM keyed ORDER BY key");
+        while (rd.Read()) keys.Add(rd.GetString(0));
+        return keys;
     }
 
     // ---------- 继承层 ----------

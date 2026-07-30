@@ -357,6 +357,8 @@ public sealed class SnapshotImportCommand : Command
             new("noise_fields_dropped", stats.NoiseDropped),
             new("translations_in_effect", stats.RuntimeTranslations),
             new("translations_from_files", stats.HarvestedTranslations),
+            new("ui_text_in_effect", stats.KeyedInEffect),
+            new("ui_text_from_files", stats.KeyedHarvested),
             new("xml_nodes", stats.XmlNodes),
             new("game_version", stats.Meta.GameVersion),
             new("language", stats.Meta.Language),

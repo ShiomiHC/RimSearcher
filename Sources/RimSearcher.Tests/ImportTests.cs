@@ -69,6 +69,27 @@ public class ImportTests
         return root;
     }
 
+    /// <summary>
+    /// 同上,但写的是 <c>Keyed</c> 那一半。界面文案不挂在任何 def 上,所以这一份语料
+    /// 与 DefInjected 那一份不能共用:走的目录不同,进的表也不同。
+    /// packageId 显式传进来,因为「在不在快照的 mod 列表里」正是 origin 的判据。
+    /// </summary>
+    private static string ModRootWithKeyed(string tag, string packageId,
+                                           params (string Key, string Text)[] entries)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "import", tag + "-keyedmods");
+        if (Directory.Exists(root)) Directory.Delete(root, true);
+        var mod = Path.Combine(root, "SomeUiMod");
+        Directory.CreateDirectory(Path.Combine(mod, "About"));
+        File.WriteAllText(Path.Combine(mod, "About", "About.xml"),
+            $"<ModMetaData><packageId>{packageId}</packageId></ModMetaData>");
+        var keyed = Path.Combine(mod, "Languages", Fixture.Language, "Keyed");
+        Directory.CreateDirectory(keyed);
+        File.WriteAllText(Path.Combine(keyed, "Ui.xml"),
+            "<LanguageData>" + string.Concat(entries.Select(e => $"<{e.Key}>{e.Text}</{e.Key}>")) + "</LanguageData>");
+        return root;
+    }
+
     // ---- 完整性:半份文件必须被拒,不许静默建成一个缺行的库 ----
 
     /// <summary>
@@ -344,5 +365,88 @@ public class ImportTests
 
         var many = Enumerable.Repeat((def.Id, "comps[0].compClass"), 1200).ToList();
         Assert.Equal(one, db.AuthoredSiblings(many));
+    }
+
+    // ---- keyed(界面文案):与 def 无关的那一层 ----
+
+    /// <summary>
+    /// 运行时 <c>keyedReplacements</c> 的三条都进库,且双语两侧、占位标记、源文件行号
+    /// 都到位 —— 少了原文那一侧,「中文快照上按英文找」就整个不通(那正是修 R4 时
+    /// 记下的洞);少了占位标记,「有 key 但没译」与「译了」在库里同形。
+    /// </summary>
+    [Fact]
+    public void 运行时keyed三条都进库且双语两侧都在()
+    {
+        using var db = Build("keyed");
+        Assert.Equal(3, db.KeyedCount());
+
+        var row = db.KeyedByKey("CannotUseNoPower").Single();
+        Assert.Equal("没有电力", row.Translated);
+        Assert.Equal("No power", row.Original);
+        Assert.False(row.Placeholder);
+        Assert.Equal(TranslationOrigin.Runtime, row.Origin);
+        Assert.Equal("Misc.xml", row.SourceFile);
+        Assert.Equal(12, row.SourceLine);
+
+        var todo = db.KeyedByKey("TodoKey").Single();
+        Assert.True(todo.Placeholder);
+
+        // 英文那一侧可以缺(mod 只提供了译文),而它缺的时候不许把整条丢掉 ——
+        // 丢掉就等于「这个 key 不存在」,与真不存在同形。
+        var oneSided = db.KeyedByKey("OnlyEnglishKey").Single();
+        Assert.Equal("只有中文这一侧", oneSided.Translated);
+        Assert.True(string.IsNullOrEmpty(oneSided.Original));
+    }
+
+    /// <summary>
+    /// 磁盘收割来的 keyed 标成非生效,而且**同 key 不去重**:这一层说的是「磁盘上存在」,
+    /// 不是「哪一句会显示」。挑一个就等于凭目录枚举顺序发一张它证不了的赢家证书 ——
+    /// 「仅赢家」是运行时那一层的口径(keyedReplacements 本身已经是合并后的最终值)。
+    /// </summary>
+    [Fact]
+    public void 收割的keyed标成非生效且同key不去重()
+    {
+        var roots = ModRootWithKeyed("keyedharvest", "test.mod",
+            ("CannotUseNoPower", "电力不足"),
+            ("ModOnlyKey", "只在磁盘上"));
+        using var db = BuildAt("keyedharvest", modRoots: [roots]).Db;
+
+        var both = db.KeyedByKey("CannotUseNoPower");
+        Assert.Equal(2, both.Count);
+        Assert.Single(both, r => r.Origin == TranslationOrigin.Runtime);
+        var harvested = both.Single(r => r.Origin == TranslationOrigin.Harvested);
+        Assert.Equal("电力不足", harvested.Translated);
+        Assert.Equal("test.mod", harvested.SourceMod);
+
+        // 生效的那一句唯一 —— 两条同 key 的记录不许让 KeyedInEffect 变成二选一。
+        var inEffect = db.KeyedInEffect(["CannotUseNoPower", "ModOnlyKey"]);
+        Assert.Equal("没有电力", inEffect["CannotUseNoPower"].Translated);
+        Assert.False(inEffect.ContainsKey("ModOnlyKey"));
+    }
+
+    /// <summary>
+    /// 收割源在不在快照的 mod 列表里,决定的是 harvested 还是 harvested_outside ——
+    /// 后者连「这个环境里装着」都不成立,只够召回。两者混成一个值,读的人就无从
+    /// 判断「磁盘上有」说的是哪个磁盘。
+    /// </summary>
+    [Fact]
+    public void 快照外mod的keyed标成环境外收割()
+    {
+        var roots = ModRootWithKeyed("keyedoutside", "not.loaded", ("OutsideKey", "快照外"));
+        using var db = BuildAt("keyedoutside", modRoots: [roots]).Db;
+        var row = db.KeyedByKey("OutsideKey").Single();
+        Assert.Equal(TranslationOrigin.HarvestedOutside, row.Origin);
+    }
+
+    /// <summary>
+    /// keyed 走自己的 FTS 表,而不是蹭 <c>defs_fts</c>(那张表的 rowid 是 def id)。
+    /// 两侧文本都要能召回:中文快照上按英文原文找是这一层最主要的用法之一。
+    /// </summary>
+    [Fact]
+    public void keyed的双语文本都能召回()
+    {
+        using var db = Build("keyedfts");
+        Assert.Equal("CannotUseNoPower", db.KeyedSearch("没有电力", 25).Rows.Single().Key);
+        Assert.Equal("CannotUseNoPower", db.KeyedSearch("No power", 25).Rows.Single().Key);
     }
 }

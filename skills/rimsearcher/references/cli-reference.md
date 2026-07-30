@@ -18,6 +18,7 @@ Answers questions about RimWorld's defs and C# from a snapshot of what the game 
 | `find` | Find defs by the value of a field. This is the reverse lookup: from a C# class or a value back to the defs that use it. |
 | `get` | Show one def in full: its identity, its fields, and any translations of it. |
 | `inherit` | Show what an XML node inherits from and what inherits from it, including abstract parents. |
+| `keyed` | Look up the UI text behind a translation key, or find the key behind a piece of UI text. |
 | `list` | List every def of one type. |
 | `modlist list` | List the mod lists available on this machine. |
 | `modlist save` | Capture the mods currently enabled in the game as a named list. |
@@ -90,12 +91,14 @@ Three caps apply, and they divide in two. --limit and --max-per-file decide how 
 | `-C`, `--context` <n> | Show this many lines above and below each match. Windows that overlap or touch are merged, so no line is printed twice. Default: `0`. | `--context-lines`, `--around` |
 | `-n`, `--limit` <n|all> | How many matching lines to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `-i`, `--ignore-case` | Match without regard to letter case. | `--case-insensitive` |
+| `--no-ui-text` | Do not resolve translation keys found in the printed lines. By default, a printed line containing "SomeKey".Translate() gets its displayed text looked up in the snapshot and listed separately. | `--no-translations`, `--without-ui-text` |
 
 `--json` keys, besides the global `notes`:
 
 | Key | Holds |
 |---|---|
 | `matches` | one row per printed line — file, line, is_match, group, text. Context lines come through with is_match false, and 'group' is the merged window they belong to, so the text form's '--' separator needs no counterpart here. |
+| `ui_text` | present only when a printed matching line calls .Translate() on a literal key that the snapshot can resolve — key, translated, original, one row per distinct key. Keys that resolve to nothing, and lines whose key is assembled at runtime, are reported in the notes rather than as empty rows. Suppressed entirely by --no-ui-text. |
 
 Examples:
 
@@ -379,6 +382,44 @@ rimsearcher inherit BaseBullet
 rimsearcher inherit Bullet_Revolver
 rimsearcher inherit BaseHumanlike --limit all
 rimsearcher inherit Bullet_Revolver --path damageAmountBase
+```
+
+## `keyed`
+
+Look up the UI text behind a translation key, or find the key behind a piece of UI text.
+
+```
+rimsearcher keyed <query> [options]
+```
+
+This is the layer defs do not cover. A def's label and description are translated through DefInjected and belong to 'get' and 'search'; everything else on screen — button captions, alerts, tooltips, failure reasons — is a keyed translation, and only this command reads those.
+
+It works in both directions. Given a key it shows what the game displays for it; given a phrase in either language it shows which keys carry that text, which is how you get from a line on screen to the code that prints it: take the key from here and run 'rimsearcher code-search "\"TheKey\""'.
+
+Rows are marked 'in effect' or 'on disk'. Only 'in effect' is what the game displays: keyed translations override each other by mod load order and the snapshot keeps the winner, so an 'on disk' row is a translation that exists in some mod's language files without necessarily being the one that wins.
+
+| Argument | Meaning |
+|---|---|
+| `<query>` | A translation key, or a phrase from the interface in any language the snapshot has. |
+
+| Option | Meaning | Also accepted |
+|---|---|---|
+| `-n`, `--limit` <n|all> | How many keys to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+| `--offset` <n> | Skip this many keys before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
+| `--placeholders` | List only keys whose translation is still a placeholder — the language file has the key but not a translation, so the game falls back to English. This is what a translation-coverage question wants. | `--untranslated`, `--todo` |
+
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `keys` | one row per keyed translation — key, translated, original, origin ('in effect' or 'on disk'), placeholder, mod, source. Always an array, including when a single key matched exactly, so the shape does not change with the kind of match. |
+
+Examples:
+
+```
+rimsearcher keyed CannotUseNoPower
+rimsearcher keyed 没有电力
+rimsearcher keyed Command --limit all
 ```
 
 ## `list`

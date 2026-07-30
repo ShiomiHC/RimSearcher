@@ -177,10 +177,19 @@ public class GrammarTests
         {
             var plural = NounRegistry.Form(noun, 2);
             Assert.NotEqual(noun, plural);
-            Assert.False(plural.EndsWith("chs", StringComparison.Ordinal) ||
-                         plural.EndsWith("ys", StringComparison.Ordinal) ||
-                         plural.EndsWith("shs", StringComparison.Ordinal),
-                $"'{plural}' is what naive pluralisation of '{noun}' would produce.");
+
+            // 判据是「朴素加 s 会不会拼错这个词」,而原先它按结尾字符串直接匹配 ——
+            // 于是 `key → keys`(**正确**的英语:元音 + y 只加 s)被判成拼错。
+            // 04 记过一次「闸把一句完全正确的话判红」(GateTests 那条复数自噬),
+            // 这是同一形状的第二次:判据写成了它想表达的规则的一个粗糙代理。
+            // 现在只在**辅音 + y**(city → cities)与 -ch/-sh(match → matches)上要求
+            // 登记形态不同于朴素加 s。
+            var last = noun.Split(' ')[^1];
+            var consonantY = last.Length >= 2 && last[^1] == 'y' && !"aeiou".Contains(last[^2]);
+            var sibilant = last.EndsWith("ch", StringComparison.Ordinal) ||
+                           last.EndsWith("sh", StringComparison.Ordinal);
+            if (consonantY || sibilant)
+                Assert.NotEqual(noun + "s", plural);
         }
     }
 
@@ -887,8 +896,9 @@ public class GrammarTests
         Assert.Contains("--lines 13", page, StringComparison.Ordinal);
 
         // 一次读完时不许再劝人翻页 —— 那一句会被读成「后面还有」。
+        // 12 行而不是 9:Widgets.cs 末尾加了三行 .Translate() 语料(keyed 那一层的落点)。
         var (whole, _, _) = Fixture.Run("read", "vanilla/Verse/Widgets.cs");
-        Assert.Contains("all 9 lines", whole, StringComparison.Ordinal);
+        Assert.Contains("all 12 lines", whole, StringComparison.Ordinal);
         Assert.DoesNotContain("next page", whole, StringComparison.Ordinal);
 
         // 印刷上限咬下去时,接着读的那一段是算得出来的,就得给出来。

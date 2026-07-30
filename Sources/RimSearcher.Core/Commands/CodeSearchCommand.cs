@@ -2,6 +2,8 @@
 using RimSearcher.Cli;
 using RimSearcher.Output;
 using RimSearcher.Search;
+using RimSearcher.Snapshot;
+using RimSearcher.Storage;
 
 namespace RimSearcher.Commands;
 
@@ -118,6 +120,18 @@ public sealed class CodeSearchCommand : Command
                 Aliases = ["case-insensitive"],
                 Help = "Match without regard to letter case.",
             },
+            new OptionSpec
+            {
+                // 默认开而不是默认关。默认关等于把能力藏起来:调用方得先知道它存在,
+                // 才可能加这个开关 —— 而它要解释的恰恰是「这行代码打印的是什么字」,
+                // 那是拿着一行 .Translate() 的人下一句必然要问的。
+                Name = "no-ui-text",
+                Arity = Arity.Flag,
+                Aliases = ["no-translations", "without-ui-text"],
+                Help = "Do not resolve translation keys found in the printed lines. By default, a printed line " +
+                       "containing \"SomeKey\".Translate() gets its displayed text looked up in the snapshot and " +
+                       "listed separately.",
+            },
         ],
         Examples =
         [
@@ -132,6 +146,14 @@ public sealed class CodeSearchCommand : Command
                 What = "one row per printed line — file, line, is_match, group, text. Context lines come " +
                        "through with is_match false, and 'group' is the merged window they belong to, so the " +
                        "text form's '--' separator needs no counterpart here.",
+            },
+            new()
+            {
+                Key = "ui_text",
+                What = "present only when a printed matching line calls .Translate() on a literal key that the " +
+                       "snapshot can resolve — key, translated, original, one row per distinct key. Keys that " +
+                       "resolve to nothing, and lines whose key is assembled at runtime, are reported in the " +
+                       "notes rather than as empty rows. Suppressed entirely by --no-ui-text.",
             },
         ],
     };
@@ -359,8 +381,97 @@ public sealed class CodeSearchCommand : Command
         if (lines.Count == 0) return 1;
 
         ctx.Report.Text("matches", lines, rows);
+        if (!ctx.Args.Flag("no-ui-text")) ResolveUiText(ctx, rows);
         return 0;
     }
+
+    /// <summary>
+    /// 印出来的命中行里那些 <c>"SomeKey".Translate()</c> 显示成什么字。
+    ///
+    /// 这一节存在的理由是 07 那份分布:<c>read_code</c> 占 52%,而它总得先知道读哪儿 ——
+    /// 而提问的起点常常是屏幕上的一句话。反过来这一步是同一条路的另一半:手上已经有代码行了,
+    /// 缺的是「它到底印出什么」,而那句话在快照里躺着。
+    ///
+    /// 三条边界都要说破,因为它们的沉默各自与一句错结论同形:
+    ///
+    /// 1. **拼出来的 key**(<c>("Stat_" + x).Translate()</c>)静态取不到。实测 vanilla 8513 行
+    ///    <c>.Translate</c> 里 8283 行(97.3%)是紧邻字面量,剩下那 230 行就是这一类 ——
+    ///    不点名的话,「这一行没被解释」会被读成「这个 key 没有译文」。
+    /// 2. **字面量 key 在 keyed 层里查不到**:可能是 def 的 label key(那层走 DefInjected)、
+    ///    也可能是代码里留下的死 key。实测 7104 个字面量 key 里有 10 个属于后者。
+    /// 3. **没有可用快照**时整节缺席。code-search 本身不需要快照(它扫的是反编译落盘目录),
+    ///    所以这里不能让取不到库变成命令失败 —— 但也不能静默,静默就等于宣布这些 key 没有译文。
+    /// </summary>
+    private static void ResolveUiText(CommandContext ctx, List<IReadOnlyDictionary<string, object?>> rows)
+    {
+        var literal = new List<string>();
+        var assembled = 0;
+        foreach (var row in rows)
+        {
+            if (row["is_match"] is not true) continue;          // 上下文行不算,它们不是答案
+            var text = row["text"] as string ?? "";
+            if (!text.Contains(".Translate", StringComparison.Ordinal)) continue;
+
+            var hits = TranslateKeyPattern.Matches(text);
+            if (hits.Count == 0) { assembled++; continue; }
+            foreach (System.Text.RegularExpressions.Match m in hits) literal.Add(m.Groups[1].Value);
+        }
+
+        if (literal.Count == 0 && assembled == 0) return;
+
+        IReadOnlyDictionary<string, KeyedRow> found;
+        try
+        {
+            // 这里才第一次碰快照 —— 一行 .Translate 都没印出来时整个不碰,于是
+            // 「用哪个快照」那句播报也不会凭空出现在一次纯代码搜索的输出里。
+            found = literal.Count > 0 ? ctx.Db.KeyedInEffect(literal) : new Dictionary<string, KeyedRow>();
+        }
+        catch (Exception ex) when (ex is SnapshotFormatError or CliUsageException)
+        {
+            ctx.Report.Notice(NoticeKind.Boundary,
+                $"{Tally.Complete(literal.Distinct(StringComparer.Ordinal).Count()).Render("translation key")} " +
+                "appear in the printed lines, but no snapshot could be opened to say what they display, so " +
+                "this answer says nothing either way about them. 'rimsearcher snapshot list' shows what is " +
+                "registered; pass --no-ui-text to stop asking.");
+            return;
+        }
+
+        var distinct = literal.Distinct(StringComparer.Ordinal).OrderBy(k => k, StringComparer.Ordinal).ToList();
+        var resolved = distinct.Where(found.ContainsKey).ToList();
+        if (resolved.Count > 0)
+            ctx.Report.Table("ui_text", ["key", "translated", "original"],
+                resolved.Select(k => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+                {
+                    ["key"] = k,
+                    ["translated"] = found[k].Placeholder ? null : found[k].Translated,
+                    ["original"] = found[k].Original ?? (found[k].Placeholder ? found[k].Translated : null),
+                }).ToList());
+
+        // 下面两句的主语都是固定单数(this snapshot / the key),计数进宾语或从句 ——
+        // NounRegistry 管名词的复数,**不管主谓一致**,所以「1 key … have」这种错靠加登记项
+        // 修不掉,只能靠句子结构避开。这一课 04 记过两次(R6 与 inherit 的 patch 计数句),
+        // 写这一节时又踩了三次。
+        var missing = distinct.Count - resolved.Count;
+        if (missing > 0)
+            ctx.Report.Notice(NoticeKind.Boundary,
+                $"This snapshot has no keyed translation for " +
+                $"{Tally.Complete(missing).Render("translation key")} in these lines. A def's own label goes " +
+                "through DefInjected rather than a key ('rimsearcher get' and 'search' cover those), and a key " +
+                "no language file declares is one the code no longer reaches.");
+
+        if (assembled > 0)
+            ctx.Report.Notice(NoticeKind.Boundary,
+                $"The key is not a literal in {Tally.Complete(assembled).Render("line")} here — assembled at " +
+                "runtime, or held in a variable — so what those lines display cannot be resolved from the text. " +
+                "'rimsearcher keyed' can still show such a key by name once you know it.");
+    }
+
+    /// <summary>
+    /// <c>"SomeKey".Translate</c> 里那个 key。空白容忍是有意的:换行格式化过的调用
+    /// (<c>"Key"\n  .Translate()</c>)在按行扫描时本来就分在两行,这里只多认同一行内的空格。
+    /// </summary>
+    private static readonly Regex TranslateKeyPattern =
+        new("\"([A-Za-z0-9_.]+)\"\\s*\\.\\s*Translate", RegexOptions.Compiled);
 
     /// <summary>
     /// 文件数上限咬下去时说什么。三轮 R3 要求的四件事都在这里:

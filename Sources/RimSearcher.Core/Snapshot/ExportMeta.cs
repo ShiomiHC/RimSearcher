@@ -74,11 +74,25 @@ public sealed record ExportMeta(
                 $"The export file does not start with a {IntermediateFormat.KindMeta} line. " +
                 "Re-run the export; a file that starts mid-stream cannot be trusted.");
 
+        // 拒收的两个方向要分开说,因为下一步不同:文件旧 = 重导(游戏侧要跑一遍),
+        // 文件新 = 装的 CLI 落后于 mod。原先一句话覆盖两种,而那句话("Update the mod")
+        // 在「文件比 CLI 新」时指的方向恰好是反的。
+        //
+        // 旧文件那支点名**缺的是哪一块**:不说破的话,「为什么一份好端端的导出突然不能用了」
+        // 只能靠猜,而它要付的是分钟级的重导。
         var version = root.TryGetProperty(IntermediateFormat.KeyFormatVersion, out var fv) ? fv.GetInt32() : 0;
-        if (version != IntermediateFormat.FormatVersion)
+        if (version < IntermediateFormat.FormatVersion)
             throw new SnapshotFormatError(
-                $"Export format version {version} was produced by a different version of the in-game exporter " +
-                $"(this build reads version {IntermediateFormat.FormatVersion}). Update the mod and export again.");
+                $"This export is format version {version} and this build reads {IntermediateFormat.FormatVersion}. " +
+                "It is refused rather than imported in part: the sections it is missing would answer as " +
+                "'nothing found' instead of 'not in this file', which reads exactly like the game not having " +
+                "the thing you asked about. Export again from the game ('rimsearcher export') — re-importing " +
+                "this file cannot add what was never written into it.");
+        if (version > IntermediateFormat.FormatVersion)
+            throw new SnapshotFormatError(
+                $"This export is format version {version}, which is newer than the {IntermediateFormat.FormatVersion} " +
+                "this build reads — the in-game exporter is ahead of the CLI. Update the CLI (rebuild and " +
+                "re-publish it); exporting again would produce the same file.");
 
         var mods = new List<ModRef>();
         if (root.TryGetProperty(IntermediateFormat.KeyMods, out var modsEl) && modsEl.ValueKind == JsonValueKind.Array)

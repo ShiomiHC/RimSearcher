@@ -8,7 +8,8 @@ namespace RimSearcher.Storage;
 
 public sealed record ImportStats(
     int Defs, int FieldValues, int NoiseDropped, int RuntimeTranslations,
-    int HarvestedTranslations, int TruncatedDefs, int XmlNodes, ExportMeta Meta, string DbPath);
+    int HarvestedTranslations, int KeyedInEffect, int KeyedHarvested,
+    int TruncatedDefs, int XmlNodes, ExportMeta Meta, string DbPath);
 
 /// <summary>
 /// 中间格式 → SQLite。B 案把建库整个搬到这一侧,收益在 06「分工」一节记过:产地唯一由
@@ -38,7 +39,7 @@ public sealed class SnapshotImporter
 
         ExportMeta? meta = null;
         var defs = 0; var fieldValues = 0; var noise = 0; var runtimeTr = 0; var truncatedDefs = 0;
-        var xmlNodes = 0;
+        var xmlNodes = 0; var keyedInEffect = 0;
         long? declaredRecords = null;
         var sawEnd = false;
         var records = 0L;
@@ -61,6 +62,13 @@ public sealed class SnapshotImporter
                                        source_mod, source_file, patch_ops)
                 VALUES ($t,$n,$pn,$a,$dn,$l,$sm,$sf,$po)
                 """);
+            using var insertKeyed = Prepare(db, """
+                INSERT INTO keyed (id, key, translated, original, language, source_file, source_line,
+                                   source_mod, placeholder, origin)
+                VALUES ($id,$k,$tr,$o,$lang,$sf,$sl,$sm,$ph,$origin)
+                """);
+            using var insertKeyedFts = Prepare(db,
+                "INSERT INTO keyed_fts (rowid, key, translated, original) VALUES ($id,$k,$tr,$o)");
 
             // 一个 defName 下可能挂着**几个** def(同名跨 def 类型是 RimWorld 常态)。
             // 原先这里是 name → 单个 id,后写的把先写的顶掉,于是 `Firefoam` 的译文
@@ -71,6 +79,9 @@ public sealed class SnapshotImporter
             var ftsExtra = new Dictionary<long, List<string>>();
             var pendingInjections = new List<(string defName, string defType, string path, string translated, string original)>();
             long nextId = 1;
+            // keyed 自己的 id 序列。显式维护而不是问 last_insert_rowid():FTS 那一行要用同一个
+            // rowid,而两条 INSERT 之间夹着别的语句时,「上一次插入」是谁就不再显然。
+            long nextKeyedId = 1;
 
             foreach (var line in ReadLines(exportPath))
             {
@@ -165,6 +176,40 @@ public sealed class SnapshotImporter
                     continue;
                 }
 
+                // Keyed 行不依赖任何 def,所以不必像 definj 那样攒着等 id 表建完 —— 直接入库。
+                if (kind == IntermediateFormat.KindKeyed)
+                {
+                    var kid = nextKeyedId++;
+                    var key = Str(root, IntermediateFormat.KeyKeyedKey) ?? "";
+                    if (key.Length == 0) continue;
+                    var translated = Str(root, IntermediateFormat.KeyTranslated);
+                    var original = Str(root, IntermediateFormat.KeyOriginal);
+
+                    Bind(insertKeyed, "$id", kid);
+                    Bind(insertKeyed, "$k", key);
+                    Bind(insertKeyed, "$tr", translated);
+                    Bind(insertKeyed, "$o", string.IsNullOrEmpty(original) ? null : original);
+                    Bind(insertKeyed, "$lang", meta.Language);
+                    Bind(insertKeyed, "$sf", Str(root, IntermediateFormat.KeySourceFile));
+                    Bind(insertKeyed, "$sl", root.TryGetProperty(IntermediateFormat.KeySourceLine, out var slEl)
+                        ? slEl.GetInt32() : 0);
+                    Bind(insertKeyed, "$sm", null);
+                    Bind(insertKeyed, "$ph", root.TryGetProperty(IntermediateFormat.KeyPlaceholder, out var phEl)
+                                            && phEl.GetBoolean() ? 1 : 0);
+                    Bind(insertKeyed, "$origin", TranslationOrigin.Runtime);
+                    insertKeyed.ExecuteNonQuery();
+
+                    // key 走标识符分词(CamelCase 拆开),译文与原文按自然文本 —— 与 defs_fts
+                    // 那边同一个产地,否则「中文查得到、key 查不到」这类不一致会各自长出一套。
+                    Bind(insertKeyedFts, "$id", kid);
+                    Bind(insertKeyedFts, "$k", FtsText.ForIndex(key, identifier: true));
+                    Bind(insertKeyedFts, "$tr", FtsText.ForIndex(translated));
+                    Bind(insertKeyedFts, "$o", FtsText.ForIndex(original));
+                    insertKeyedFts.ExecuteNonQuery();
+                    keyedInEffect++;
+                    continue;
+                }
+
                 if (kind == IntermediateFormat.KindDefInjection)
                 {
                     pendingInjections.Add((
@@ -207,7 +252,8 @@ public sealed class SnapshotImporter
                 Recall(ftsExtra, owner, candidates, inj.translated);
             }
 
-            var harvested = HarvestStaticTranslations(insertTr, idsByName, meta, ftsExtra);
+            var (harvested, keyedHarvested) = HarvestStaticTranslations(
+                insertTr, insertKeyed, insertKeyedFts, ref nextKeyedId, idsByName, meta, ftsExtra);
 
             // 翻译文本回填进 FTS 的 translated 列(双语索引)
             using (var updFts = Prepare(db, "INSERT INTO defs_fts (defs_fts, rowid, def_name, label, description, translated) VALUES ('delete',$id,$n0,$l0,$d0,$t0)"))
@@ -275,7 +321,8 @@ public sealed class SnapshotImporter
             if (File.Exists(dbPath)) File.Delete(dbPath);
             File.Move(tempDb, dbPath);
 
-            return new ImportStats(defs, fieldValues, noise, runtimeTr, harvested, truncatedDefs, xmlNodes, meta, dbPath);
+            return new ImportStats(defs, fieldValues, noise, runtimeTr, harvested,
+                                   keyedInEffect, keyedHarvested, truncatedDefs, xmlNodes, meta, dbPath);
         }
     }
 
@@ -310,12 +357,15 @@ public sealed class SnapshotImporter
             (ftsExtra.TryGetValue(target, out var l) ? l : ftsExtra[target] = []).Add(text);
     }
 
-    private int HarvestStaticTranslations(SqliteCommand insertTr,
-                                          Dictionary<string, List<(long Id, string? Type)>> idsByName,
-                                          ExportMeta meta, Dictionary<long, List<string>> ftsExtra)
+    private (int DefInjected, int Keyed) HarvestStaticTranslations(
+        SqliteCommand insertTr, SqliteCommand insertKeyed, SqliteCommand insertKeyedFts,
+        ref long nextKeyedId,
+        Dictionary<string, List<(long Id, string? Type)>> idsByName,
+        ExportMeta meta, Dictionary<long, List<string>> ftsExtra)
     {
-        if (ModRoots.Count == 0) return 0;
+        if (ModRoots.Count == 0) return (0, 0);
         var count = 0;
+        var keyedCount = 0;
         var runtimeMods = meta.Mods.Select(m => m.PackageId).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         foreach (var root in ModRoots)
@@ -324,11 +374,47 @@ public sealed class SnapshotImporter
             foreach (var modDir in SafeDirs(root))
             {
                 var packageId = ReadPackageId(modDir) ?? Path.GetFileName(modDir);
-                foreach (var injDir in FindDefInjectedDirs(modDir, meta.Language))
+
+                // Keyed 那一半。同 key 多来源时**不去重、不挑一个**:这一层的语义是
+                // 「磁盘上存在这些译文」,不是「哪一句会生效」——「仅赢家」管的是运行时那一层
+                // (keyedReplacements 本身已经是合并后的最终值)。这里挑一个就等于凭
+                // 目录枚举顺序发一张它证不了的赢家证书。
+                foreach (var keyedDir in FindLanguageSubdirs(modDir, meta.Language, "Keyed"))
+                {
+                    foreach (var xml in SafeFiles(keyedDir, "*.xml"))
+                    {
+                        foreach (var (key, text) in ReadLanguageFile(xml))
+                        {
+                            var kid = nextKeyedId++;
+                            Bind(insertKeyed, "$id", kid);
+                            Bind(insertKeyed, "$k", key);
+                            Bind(insertKeyed, "$tr", text);
+                            Bind(insertKeyed, "$o", null);
+                            Bind(insertKeyed, "$lang", meta.Language);
+                            Bind(insertKeyed, "$sf", Path.GetFileName(xml));
+                            Bind(insertKeyed, "$sl", 0);
+                            Bind(insertKeyed, "$sm", packageId);
+                            Bind(insertKeyed, "$ph", 0);
+                            Bind(insertKeyed, "$origin", runtimeMods.Contains(packageId)
+                                ? TranslationOrigin.Harvested
+                                : TranslationOrigin.HarvestedOutside);
+                            insertKeyed.ExecuteNonQuery();
+
+                            Bind(insertKeyedFts, "$id", kid);
+                            Bind(insertKeyedFts, "$k", FtsText.ForIndex(key, identifier: true));
+                            Bind(insertKeyedFts, "$tr", FtsText.ForIndex(text));
+                            Bind(insertKeyedFts, "$o", "");
+                            insertKeyedFts.ExecuteNonQuery();
+                            keyedCount++;
+                        }
+                    }
+                }
+
+                foreach (var injDir in FindLanguageSubdirs(modDir, meta.Language, "DefInjected"))
                 {
                     foreach (var xml in SafeFiles(injDir, "*.xml"))
                     {
-                        foreach (var (key, text) in ReadInjectionFile(xml))
+                        foreach (var (key, text) in ReadLanguageFile(xml))
                         {
                             var dot = key.IndexOf('.');
                             if (dot <= 0) continue;
@@ -359,10 +445,18 @@ public sealed class SnapshotImporter
                 }
             }
         }
-        return count;
+        return (count, keyedCount);
     }
 
-    private static IEnumerable<string> FindDefInjectedDirs(string modDir, string language)
+    /// <summary>
+    /// mod 里 <c>Languages/&lt;语言&gt;/&lt;子目录&gt;</c> 的实际落点。<c>Keyed</c> 与
+    /// <c>DefInjected</c> 共用这一条路径规则(两种目录在同一层并列),所以规则只有一个产地。
+    ///
+    /// **官方 Data 目录不在射程内**:那边的非英文语言包是 .tar 打包的(Core 的简体中文是
+    /// 一个 4.6 MB 的 tar),游戏走 VirtualDirectory 读它,而这里只认磁盘上的普通目录。
+    /// 官方那一份由运行时导出覆盖 —— 这一层本来就只补 mod 侧。
+    /// </summary>
+    private static IEnumerable<string> FindLanguageSubdirs(string modDir, string language, string subdir)
     {
         foreach (var pattern in new[] { "Languages", "*/Languages" })
         {
@@ -377,13 +471,18 @@ public sealed class SnapshotImporter
 
             foreach (var lr in langRoots)
             {
-                var dir = Path.Combine(lr, language, "DefInjected");
+                var dir = Path.Combine(lr, language, subdir);
                 if (Directory.Exists(dir)) yield return dir;
             }
         }
     }
 
-    private static IEnumerable<(string Key, string Text)> ReadInjectionFile(string path)
+    /// <summary>
+    /// 一个 <c>&lt;LanguageData&gt;</c> 文件里的条目。Keyed 与 DefInjected 的文件形状相同
+    /// (根元素下每个子元素一条),差别只在 key 的**读法**:DefInjected 的是
+    /// <c>DefName.field</c>,Keyed 的就是 key 本身。所以解析共用,拆分留给调用点。
+    /// </summary>
+    private static IEnumerable<(string Key, string Text)> ReadLanguageFile(string path)
     {
         System.Xml.Linq.XDocument doc;
         try { doc = System.Xml.Linq.XDocument.Load(path); }

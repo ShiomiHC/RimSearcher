@@ -29,6 +29,8 @@ Options:
                               Also accepted: --max-results, --count, --top, --rows, --num, --head.
   -i, --ignore-case           Match without regard to letter case.
                               Also accepted: --case-insensitive.
+      --no-ui-text            Do not resolve translation keys found in the printed lines. By default, a printed line containing "SomeKey".Translate() gets its displayed text looked up in the snapshot and listed separately.
+                              Also accepted: --no-translations, --without-ui-text.
 
 Global options (every command takes these, written after the command):
       --snapshot <name>  Query this named snapshot instead of the one that would be picked automatically. An explicit choice always wins over auto-detection.
@@ -40,6 +42,7 @@ Global options (every command takes these, written after the command):
 
 --json keys (besides 'notes'):
   matches  one row per printed line — file, line, is_match, group, text. Context lines come through with is_match false, and 'group' is the merged window they belong to, so the text form's '--' separator needs no counterpart here.
+  ui_text  present only when a printed matching line calls .Translate() on a literal key that the snapshot can resolve — key, translated, original, one row per distinct key. Keys that resolve to nothing, and lines whose key is assembled at runtime, are reported in the notes rather than as empty rows. Suppressed entirely by --no-ui-text.
 
 Examples:
   rimsearcher code-search "class \w+ : ThingComp"

@@ -8,6 +8,7 @@
 //   第 1 行            kind=meta    —— 快照身份(指纹)与上限参数
 //   第 2..N-1 行       kind=def     —— 每 def 一行
 //                      kind=definj  —— 运行时 defInjection 一条一行(游戏语言为英文时无此类行)
+//                      kind=keyed   —— Keyed 译文一条一行(界面文案;与 def 无关,key 不带点)
 //                      kind=xmlnode —— 继承层:XML 里一个带 Name/ParentName/Abstract 的节点一行
 //   第 N 行(尾行)     kind=end     —— 记录数标记,完整性自证
 //
@@ -25,8 +26,14 @@ namespace RimSearcher.Contract
         /// 3:fields 从二元组变三元组,第三位是 <see cref="DefaultState"/>。同理必须拒收 v2:
         /// 那些文件里每一行都「没说自己是不是代码默认值」,而 <c>get</c> 会把它们全归进
         /// 「不是默认值」那一栏 —— 与一个真的处处被作者改过的 def 逐字同形。
+        ///
+        /// 4:加了 kind=keyed(界面文案译文)。拒收 v3 是**用户明确裁决**的,而理由与上面两条
+        /// 同形:v3 文件里 keyed 段整个不存在,于是 <c>keyed</c> 查询在它上面一律零结果 ——
+        /// 与「这个 key 真的没有译文」逐字同形。备选方案(meta 记一个 has_keyed 标记、
+        /// 查询时说破)被否决:那等于要求调用方永久记住一条例外,而记不住的那一次
+        /// 恰好就是它下错结论的那一次。代价(重进游戏导一次,分钟级)一次付清。
         /// </remarks>
-        public const int FormatVersion = 3;
+        public const int FormatVersion = 4;
 
         /// <summary>导出文件的推荐扩展名。</summary>
         public const string FileExtension = ".rsx.jsonl.gz";
@@ -44,6 +51,7 @@ namespace RimSearcher.Contract
         public const string KindMeta = "meta";
         public const string KindDef = "def";
         public const string KindDefInjection = "definj";
+        public const string KindKeyed = "keyed";
         public const string KindXmlNode = "xmlnode";
         public const string KindEnd = "end";
 
@@ -78,6 +86,21 @@ namespace RimSearcher.Contract
         public const string KeyTranslated = "translated";
         public const string KeyOriginal = "original";
 
+        // Keyed 层(kind=keyed)。translated / original / source_mod 与上面那批共用。
+        //
+        // 与 definj 的形状差只有一处,但它是本层全部麻烦的来源:**KeyedReplacement 不带
+        // replacedString**。def 注入那种「译文在 def 对象上、原文在注入记录里,两者同时在场」
+        // 的便宜在这里不存在,英文那一侧只能另取(见 DefExporter.BuildKeyedLines)。
+        /// <summary>Keyed 的 key。不带点,也与任何 def 无关 —— 它是 <c>"X".Translate()</c> 里那个 X。</summary>
+        public const string KeyKeyedKey = "key";
+        /// <summary>译文出自哪个文件的哪一行(<c>KeyedReplacement.fileSourceLine</c>)。</summary>
+        public const string KeySourceLine = "source_line";
+        /// <summary>
+        /// 占位译文(<c>isPlaceholder</c>)—— 语言包里有这个 key、但值是 TODO 占位。
+        /// 必须随行带出:占位与真译文在表里同形,而它实际显示的是英文。
+        /// </summary>
+        public const string KeyPlaceholder = "placeholder";
+
         // 继承层(kind=xmlnode)。def_type / def_name / source_mod / source_file / name 共用上面那批。
         /// <summary>ParentName= 的值。空 = 这个节点不继承任何东西。</summary>
         public const string KeyParentName = "parent_name";
@@ -92,6 +115,7 @@ namespace RimSearcher.Contract
         public const string KeyRecords = "records";
         public const string KeyDefs = "defs";
         public const string KeyInjections = "injections";
+        public const string KeyKeyedCount = "keyed";
         public const string KeyXmlNodes = "xml_nodes";
 
         /// <summary>ImpliedDefs 批次在 source_file 上留的事实值(03 甲:来源标记是字符串而非文件)。</summary>

@@ -134,6 +134,24 @@ public class OutputSnapshotTests
         // --source 已经给出时,补救措施里不许再列 --source(R3)。
         { "code-search-source-cap", ["code-search", "public", "--source", "vanilla", "--max-files", "1"] },
         { "code-search-no-tree",   ["code-search", "public", "--source", "HAR"] },
+        // 界面文案接上代码行。语料那三行各是一种形态,所以这一份同时钉住三件事:
+        // 查得到的 key 进表、查不到的字面量点名、运行时拼出来的 key 单独说 ——
+        // 三者混起来的话,「这一行没被解释」就与「这个 key 没有译文」同形了。
+        { "code-search-ui-text",   ["code-search", "Translate"] },
+        // 同一次调用关掉它:那三条声明必须一起消失,不许留一句孤零零的边界话。
+        { "code-search-no-ui-text", ["code-search", "Translate", "--no-ui-text"] },
+        // keyed 的两个方向。key → 显示什么;文案 → 是哪个 key(带上「拿它去搜代码」那一步,
+        // 因为这正是从屏幕回到代码的那一跳)。
+        { "keyed-hit",             ["keyed", "CannotUseNoPower"] },
+        { "keyed-text",            ["keyed", "没有电力"] },
+        // 占位:表里它与真译文同形,而游戏显示的是英文。这一份守的是那句说破在场。
+        { "keyed-placeholder",     ["keyed", "TodoKey"] },
+        // 过滤器筛空 ≠ 没有这个 key。三轮 R8 那类误诊在这条命令上的落点。
+        { "keyed-placeholder-none", ["keyed", "CannotUseNoPower", "--placeholders"] },
+        // 零结果的两种成因:代码里有这个字面量而语言文件里没有(死 key),
+        // 以及问的其实是个 def 名 —— 后者该被指回 get/search,而不是报「没有」。
+        { "keyed-miss",            ["keyed", "NoSuchUiKey"] },
+        { "keyed-miss-def",        ["keyed", "Apparel_ShieldBelt"] },
         // 三轮 R5:CLI 侧读不了文件,于是 CLI-only 时读代码退化成编造正则。read 补上这条
         // 底线,而它自己的错法集中在两处 —— 定位到哪个文件、以及配平括号找到的是不是那一段。
         // 轮廓:注释/字符串/字符字面量里的括号不许算数,方法体里的 if 不许变成成员,
@@ -221,6 +239,43 @@ public class OutputSnapshotTests
                                .Where(n => n is not null && !claimed.Contains(n))
                                .ToList();
         Assert.True(orphans.Count == 0, $"Baselines with no case: {string.Join(", ", orphans)}.");
+    }
+
+    /// <summary>
+    /// 「keyed 这一层整个是空的」与「这个 key 不在里面」是两件事,而它们的输出天然会长成
+    /// 一样 —— 首要禁令的那个形状。空层只可能来自一份缺了这一节的快照,所以这句话必须说
+    /// **快照**,不许说 key。
+    ///
+    /// 这条走不了字节级基线:它要一份自己动过手的库,而 <c>--db</c> 是绝对路径 ——
+    /// 印进基线就把本机 TEMP 路径绑死了。断言换成看两句话在不在、以及**不在**该不在的地方。
+    /// </summary>
+    [Fact]
+    public void keyed层为空时说破是快照的缘故而不是查不到()
+    {
+        var db = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "keyed-empty.db");
+        if (File.Exists(db)) File.Delete(db);
+        File.Copy(Fixture.Db, db);
+        using (var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={db}"))
+        {
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            // keyed_fts 是 contentless 的,DELETE 不认 —— 清空要走 fts5 自己那条命令。
+            cmd.CommandText = "INSERT INTO keyed_fts(keyed_fts) VALUES('delete-all'); DELETE FROM keyed;";
+            cmd.ExecuteNonQuery();
+        }
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+
+        var (empty, _, code) = Fixture.Run("keyed", "CannotUseNoPower", "--db", db);
+        Assert.Equal(1, code);
+        Assert.Contains("no keyed translations at all", empty);
+        // 这一句才是用例的全部意义:成因归到快照身上,而不是归到问的那个 key 身上。
+        Assert.Contains("property of the snapshot", empty);
+        Assert.DoesNotContain("No keyed translation matches", empty);
+
+        // 反面:库里有这一层、只是没这个 key 时,上面那句话一个字都不许出现。
+        var (missing, _, _) = Fixture.Run("keyed", "NoSuchUiKey");
+        Assert.DoesNotContain("no keyed translations at all", missing);
+        Assert.Contains("No keyed translation matches", missing);
     }
 
     internal static string SnapshotDir => Path.Combine(DeclarationTests.RepoRoot(), "Sources", "RimSearcher.Tests", "Snapshots");

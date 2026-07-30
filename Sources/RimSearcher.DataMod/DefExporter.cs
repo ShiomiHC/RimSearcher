@@ -44,6 +44,7 @@ namespace RimSearcher.DataMod
             long records = 0;
             var defs = 0;
             var injections = 0;
+            var keyed = 0;
             var xmlNodes = 0;
 
             using (var file = new FileStream(temp, FileMode.CreateNew, FileAccess.Write))
@@ -81,6 +82,13 @@ namespace RimSearcher.DataMod
                     injections++;
                 }
 
+                foreach (var line in BuildKeyedLines())
+                {
+                    writer.WriteLine(line);
+                    records++;
+                    keyed++;
+                }
+
                 // 继承层。这一节从 XML 原文再读一遍,理由见 XmlNodeExporter ——
                 // 到这个时点「谁继承谁」在内存里已经被 XmlInheritance.Clear() 抹掉了。
                 foreach (var line in XmlNodeExporter.BuildLines())
@@ -97,6 +105,7 @@ namespace RimSearcher.DataMod
                     .Int(IntermediateFormat.KeyRecords, records)
                     .Int(IntermediateFormat.KeyDefs, defs)
                     .Int(IntermediateFormat.KeyInjections, injections)
+                    .Int(IntermediateFormat.KeyKeyedCount, keyed)
                     .Int(IntermediateFormat.KeyXmlNodes, xmlNodes)
                     .ToString());
 
@@ -484,6 +493,83 @@ namespace RimSearcher.DataMod
                         .Str(IntermediateFormat.KeyOriginal, original ?? "")
                         .ToString();
                 }
+            }
+        }
+
+        /// <summary>
+        /// Keyed 译文倾倒 —— 界面文案那一层(<c>"SomeKey".Translate()</c> 里的 SomeKey)。
+        ///
+        /// **与 defInjections 的形状差只有一处,但它决定了这一节的写法**:
+        /// <c>KeyedReplacement</c> 没有 <c>replacedString</c>,所以「译文与被它替换的原文同时在场」
+        /// 那个便宜在这里不存在。英文那一侧只能从 <c>defaultLanguage</c> 另取 —— 官方自己就这么干
+        /// (<c>LanguageReportGenerator.SaveTranslationReport</c> 显式 <c>LoadData()</c> 两份语言,
+        /// 然后 <c>AppendKeyedTranslationsMatchingEnglish</c> 拿 <c>defaultLanguage.TryGetTextFromKey</c>
+        /// 对照),这一节照搬那条路。
+        ///
+        /// 与那一节还有两处**有意的**不同:
+        ///
+        /// 1. **英文环境下这一节不为空。** defInjections 在英文下自然没有记录(没有东西被替换),
+        ///    而 keyed 的数据源**就是**英文语言文件 —— 于是英文环境下 translated 是英文串本身,
+        ///    original 留空(它自己就是原文,没有「被替换的那一侧」)。
+        /// 2. **占位译文照样导出**,只是带上 placeholder 标记。defInjections 那节把
+        ///    <c>isPlaceholder</c> 整条跳过,而在这里「语言包里有这个 key 但没译」正是
+        ///    汉化对账要问的东西;丢掉它,「没译」就与「没有这个 key」同形了。
+        ///
+        /// 覆盖冲突**只记赢家**(用户裁决):keyedReplacements 是全部 mod 合并后的最终值,
+        /// 后加载的盖掉先加载的,而这个工具答的是「游戏最终用的是哪一句」。输家不建模,
+        /// <c>fileSource</c> 说清赢家出自哪个文件的哪一行就够。
+        /// </summary>
+        private static IEnumerable<string> BuildKeyedLines()
+        {
+            var lang = LanguageDatabase.activeLanguage;
+            if (lang == null || lang.keyedReplacements == null) yield break;
+
+            // 英文侧。同一个对象时不必取(译文就是原文),否则显式加载 —— TryGetTextFromKey
+            // 自己也会兜底 LoadData,但显式调用让「这里会多读一份语言数据」在代码里看得见。
+            var english = LanguageDatabase.defaultLanguage;
+            if (english != null && english != lang)
+            {
+                try { english.LoadData(); }
+                catch (Exception ex)
+                {
+                    // 英文侧取不到不该让整份导出失败:少一列 original,而 translated 那一列
+                    // 是这一层的主体。降级要说出口,否则「这份快照的 keyed 没有英文」
+                    // 会被当成数据本来如此。
+                    Log.Warning("[RimSearcher] could not load English keyed translations for the original-text " +
+                                "column; keyed rows will carry no original: " + ex.Message);
+                    english = null;
+                }
+            }
+
+            foreach (var pair in lang.keyedReplacements)
+            {
+                var rep = pair.Value;
+                if (rep == null) continue;
+
+                var key = rep.key;
+                if (string.IsNullOrEmpty(key)) key = pair.Key;
+                if (string.IsNullOrEmpty(key)) continue;
+
+                var translated = rep.value;
+                if (translated == null) translated = "";
+
+                var original = "";
+                if (english != null && english != lang)
+                {
+                    TaggedString eng;
+                    if (english.TryGetTextFromKey(key, out eng) && eng.RawText != null)
+                        original = eng.RawText;
+                }
+
+                yield return new JsonLine()
+                    .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindKeyed)
+                    .Str(IntermediateFormat.KeyKeyedKey, key)
+                    .Str(IntermediateFormat.KeyTranslated, translated)
+                    .Str(IntermediateFormat.KeyOriginal, original)
+                    .Str(IntermediateFormat.KeySourceFile, rep.fileSource ?? "")
+                    .Int(IntermediateFormat.KeySourceLine, rep.fileSourceLine)
+                    .Bool(IntermediateFormat.KeyPlaceholder, rep.isPlaceholder)
+                    .ToString();
             }
         }
 

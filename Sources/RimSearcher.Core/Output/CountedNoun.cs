@@ -70,6 +70,15 @@ public static class NounRegistry
         ["C# file"] = "C# files",
         ["mod"] = "mods",
         ["translation"] = "translations",
+        // 界面文案那一层单独登记,不借 "translation" 这个词:def 的 label 走 DefInjected、
+        // keyed 走 key,两层的来源与生效规则都不同,而输出到处在讲这条区分 —— 借词就等于
+        // 让「这个 def 的译文」与「这个 key 的译文」在计数句里同形(R7 那条教训的形状)。
+        ["keyed translation"] = "keyed translations",
+        ["key"] = "keys",
+        // code-search 那一节数的是「代码行里出现的 key」,而它与上面那个 "key"
+        // (库里的一条 keyed 记录)数的不是同一批东西 —— 一行代码里的 key 可能压根
+        // 不在库里。借同一个词就会让「三个 key 查不到」读起来像「库里有三个 key」(R7)。
+        ["translation key"] = "translation keys",
         ["source tree"] = "source trees",
         ["XML node"] = "XML nodes",
         ["direct child"] = "direct children",

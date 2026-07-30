@@ -329,6 +329,28 @@ public static class Fixture
 
         Injection("Apparel_ShieldBelt", "label", "护盾腰带", "shield belt");
 
+        void Keyed(string key, string translated, string original, bool placeholder, string file, int line)
+        {
+            w.WriteLine(new JsonLine()
+                .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindKeyed)
+                .Str(IntermediateFormat.KeyKeyedKey, key)
+                .Str(IntermediateFormat.KeyTranslated, translated)
+                .Str(IntermediateFormat.KeyOriginal, original)
+                .Str(IntermediateFormat.KeySourceFile, file)
+                .Int(IntermediateFormat.KeySourceLine, line)
+                .Bool(IntermediateFormat.KeyPlaceholder, placeholder)
+                .ToString());
+            records++;
+        }
+
+        // 界面文案语料。三种形态各一条,因为三条判据各有各的错法:
+        //   CannotUseNoPower  正常双语 —— 代码里那一行 .Translate() 附译文的落点
+        //   TodoKey           占位 —— 「有这个 key 但没译」不许与「有译文」同形
+        //   OnlyEnglishKey    没有英文那一侧(original 空)—— 双语表里缺一列不许看起来像缺数据
+        Keyed("CannotUseNoPower", "没有电力", "No power", false, "Misc.xml", 12);
+        Keyed("TodoKey", "TODO", "Not translated yet", true, "Misc.xml", 34);
+        Keyed("OnlyEnglishKey", "只有中文这一侧", "", false, "Gui.xml", 7);
+
         // 这两条的 def_type 是 ThingDef(Injection 写死的),而同名的 StatDef Firefoam
         // 连 description 都没有 —— 按 defName 关联时它们会跑到 StatDef 的输出里去。
         Injection("Firefoam", "label", "灭火泡沫", "firefoam");
@@ -342,6 +364,7 @@ public static class Fixture
                 .Int(IntermediateFormat.KeyRecords, wrongRecordCount ?? records)
                 .Int(IntermediateFormat.KeyDefs, 5)
                 .Int(IntermediateFormat.KeyInjections, 3)
+                .Int(IntermediateFormat.KeyKeyedCount, 3)
                 .Int(IntermediateFormat.KeyXmlNodes, 6)
                 .ToString());
         }
@@ -443,6 +466,10 @@ public static class Fixture
             "\t}",
             "}");
 
+        // 末尾三行是 keyed 那一层的落点,而它们**刻意不含 `public` 或 `: ThingComp`** ——
+        // 现有 12 份 code-search 基线的 pattern 只有这两个和一个必然零命中的词,
+        // 于是这三行不改动任何一份既有基线,只给新的 ui_text 一节提供语料。
+        // 三行各是一种形态:字面量能查到 / 字面量查不到 / 运行时拼出来的 key。
         File_("vanilla/Verse/Widgets.cs",
             "namespace Verse",
             "{",
@@ -450,6 +477,9 @@ public static class Fixture
             "\t{",
             "\t\tpublic static void Label(Rect rect, string label)",
             "\t\t{",
+            "\t\t\tDraw(rect, \"CannotUseNoPower\".Translate());",
+            "\t\t\tDraw(rect, \"NoSuchUiKey\".Translate());",
+            "\t\t\tDraw(rect, (\"Stat_\" + label).Translate());",
             "\t\t}",
             "\t}",
             "}");
