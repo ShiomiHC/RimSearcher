@@ -121,7 +121,20 @@ public sealed class SnapshotStatusCommand : Command
         {
             case EnvironmentMatch.Same:
                 ctx.Report.Notice(NoticeKind.SnapshotChoice,
-                    "This snapshot matches the game as installed right now: same mods, same order, same version.");
+                    "This snapshot matches the game as installed right now on the three things that are " +
+                    "compared: same mods, same order, same version.");
+                // 第七轮 T7:上面那句原先到此为止,而**八份盲测轨迹一份都没问它比的是什么** ——
+                // 一致地读成了一句「快照 = 现在的游戏数据」的背书。其中一份据此对
+                // 「我刚改了自己 mod 里的音效文件,生效没有」下了否定判决,而那恰恰是这个比较
+                // 结构上不可能察觉的那一类改动:mod 列表、顺序、版本号三样全都不变。
+                //
+                // 与上一轮「33 棵树 vs 23 棵树」同形:工具把自己的口径老老实实印在输出里,
+                // 八个人一致地把那句自我限定读成了背书。**这一次把没比的那半也印出来。**
+                ctx.Report.Notice(NoticeKind.Boundary,
+                    "Nothing inside those mods is compared. The XML, patches, textures and audio were read " +
+                    $"once, at export time ({db.Meta.ExportedAtUtc} UTC); a file edited since then leaves this " +
+                    "line reading 'matches' all the same. So this says the right mods are loaded — not that " +
+                    "what is in them is still what is on disk. Re-export to pick up edits to a mod's own files.");
                 break;
             case EnvironmentMatch.VersionDrift:
                 ctx.Report.Notice(NoticeKind.Staleness,

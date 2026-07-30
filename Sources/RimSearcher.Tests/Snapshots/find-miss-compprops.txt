@@ -1,5 +1,5 @@
 $ rimsearcher find compClass CompProperties_Shield
 exit 1
 --- stdout ---
-No def has 'compClass' set to 'CompProperties_Shield', out of the 1 value found under comps[0].compClass. Closest: RimWorld.CompShield. The XML writes Class="CompProperties_X"; this field holds the resolved CompX — 'rimsearcher find compClass RimWorld.CompShield' is the query you meant.
+No def has 'compClass' set to 'CompProperties_Shield', out of the 2 values found under comps[0].compClass. Closest: RimWorld.CompShield. The XML writes Class="CompProperties_X"; this field holds the resolved CompX — 'rimsearcher find compClass RimWorld.CompShield' is the query you meant.
 --- stderr ---

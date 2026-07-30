@@ -471,8 +471,15 @@ public sealed class GetCommand : Command
                         $"{Tally.Complete(matched).Render("field")}, out of " +
                         $"{Tally.Complete(total).Render("field")} on the def." +
                         (whole == 0
-                            ? $" None of those has {Join(paths)} as a whole path segment — each contains it " +
-                              "inside a longer name, so a field by exactly that name may not exist here."
+                            // 第七轮 T2:原句收在「so a field by exactly that name may not exist here」——
+                            // 一句关于**存在性**的强断言,而它对「前缀式列举」这个正常用法照喊。
+                            // 实测一份轨迹「差一点因为那句话就掠过去了」,而决定性的那个字段
+                            // 就躺在这句话下面那张表里。措辞改成:摆事实、两种读法都点出来、
+                            // 并说破这句话**一行都没滤掉** —— 被劝退才是它造成的真损失。
+                            ? $" None of those has {Join(paths)} as a whole path segment: each match contains " +
+                              "it inside a longer name. Either those longer names are the fields you meant, or " +
+                              "nothing here is called exactly that — this line removes none of the matched " +
+                              "fields, so read them before deciding which."
                             : whole < matched
                                 ? $" Whole path segment: {Tally.Complete(whole).Render("field")}; " +
                                   $"inside a longer name: {Tally.Complete(matched - whole).Render("field")}."
@@ -1180,8 +1187,12 @@ public sealed class FieldsCommand : Command
         if (filters.Count > 0 && whole < total)
             ctx.Report.Notice(NoticeKind.Filter,
                 whole == 0
-                    ? $"None of those has '{filters[0]}' as a whole path segment — each contains it inside a " +
-                      $"longer name, so '{filters[0]}' may not be a field of '{type}' at all."
+                    // 同上(第七轮 T2)。这一处代价更大:`fields <DefType> --path <text>` 是
+                    // 「这个类型有没有这个字段」的正式问法,于是这句话最像一句判决。
+                    ? $"None of those has '{filters[0]}' as a whole path segment: each match contains it " +
+                      $"inside a longer name. Either those longer names are the paths you meant, or '{type}' " +
+                      $"has no field called exactly '{filters[0]}' — this line removes none of the " +
+                      $"{Tally.Complete(total).Render("field path")} that matched, so read them before deciding which."
                     : $"Whole path segment: {Tally.Complete(whole).Render("field path")}; " +
                       $"inside a longer name: {Tally.Complete(total - whole).Render("field path")}.");
 
@@ -1293,7 +1304,8 @@ public sealed class ValuesCommand : Command
                 ["value"] = r.Value,
                 ["defs"] = r.Count,
             }).ToList());
-        Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(path, scope));
+        // 尾注跟着 --type 一起收:表已经滤成一个类型了,脚注还在说别的类型(第七轮 T6)。
+        Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(path, scope, type));
         return 0;
     }
 }

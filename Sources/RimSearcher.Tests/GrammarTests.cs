@@ -1184,7 +1184,11 @@ public class GrammarTests
         // 而没有任何一段整个叫 energy。
         var (get0, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--path", "energy");
         Assert.Contains("whole path segment", get0, StringComparison.Ordinal);
-        Assert.Contains("may not exist here", get0, StringComparison.Ordinal);
+        Assert.Contains("nothing here is called exactly that", get0, StringComparison.Ordinal);
+        // 第七轮 T2:这句话原先收在一句关于存在性的强断言上,而它对「前缀式列举」这个
+        // 正常用法照喊 —— 一份轨迹「差一点因为那句话就掠过去了」,而要的字段就在下面那张表里。
+        // 被劝退才是它造成的真损失,所以「这一行一条都没滤掉」这半句是承重的。
+        Assert.Contains("removes none of the matched fields", get0, StringComparison.Ordinal);
 
         // 查 "comps" 则条条整段命中 —— 这时候一个字都不许多说。
         var (getAll, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--path", "comps");
@@ -1297,10 +1301,11 @@ public class GrammarTests
         Assert.Equal(m[0], m[1] + m[2] + m[3] + m[4] + m[5]);
 
         var trees = Regex.Match(stdout,
-            @"Trees on disk \((\d+)\): (\d+) current, (\d+) stale, (\d+) never built, (\d+) from outside");
+            @"Trees on disk \((\d+)\): (\d+) current, (\d+) stale, (\d+) never built, " +
+            @"(\d+) holding no \.cs file, (\d+) from outside");
         Assert.True(trees.Success, stdout);
         var t = trees.Groups.Cast<Group>().Skip(1).Select(g => int.Parse(g.Value)).ToList();
-        Assert.Equal(t[0], t[1] + t[2] + t[3] + t[4]);
+        Assert.Equal(t[0], t[1] + t[2] + t[3] + t[4] + t[5]);
 
         // 只加注,不缩范围。把这件事实现成「默认只扫快照内的树」会让穷举论证整批作废,
         // 而降级前后的输出一模一样 —— 所以这句承诺本身要在场。
@@ -1920,6 +1925,91 @@ public class GrammarTests
         var (text, _, _) = Fixture.Run("inherit", "Bullet_Revolver", "--path", "thingClass");
         Assert.Contains("The converse does not hold", text, StringComparison.Ordinal);
         Assert.Contains("every descendant writing the field separately", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 第七轮 T7:「快照与当前安装的游戏一致」这句话要自己说清**没比的是什么**。
+    ///
+    /// 原句到「same mods, same order, same version」为止 —— 它把范围列全了,而
+    /// **八份盲测轨迹一份都没问它比的是什么**,一致地读成了「快照 = 现在的游戏数据」的背书。
+    /// 其中一份据此对「我刚改了自己 mod 里的音效文件,生效没有」下了否定判决,而那恰恰是
+    /// 这个比较结构上不可能察觉的那一类改动:mod 列表、顺序、版本号三样全都不变。
+    ///
+    /// 与上一轮「33 棵树 vs 23 棵树」同形:工具把自己的口径老老实实印出来,读的人一致
+    /// 把那句自我限定读成了背书。所以正面那半在场不算数,**没比的那半必须同时在场**。
+    ///
+    /// 这道闸能存在,靠的是 <c>mods_config</c> 进了配置层 —— 那条路径原先写死在代码里,
+    /// 于是这条分支在测试里根本到不了,而到不了的分支上挂的话红不了。
+    /// </summary>
+    [Fact]
+    public void 一致这句话要同时说清没比的是什么()
+    {
+        var (stdout, _, _) = Fixture.Run("snapshot", "status");
+
+        // 正面那半:三样东西点名,不能只说「一致」。
+        Assert.Contains("same mods, same order, same version", stdout, StringComparison.Ordinal);
+
+        // 反面那半 —— 承重的是这一半。
+        Assert.Contains("Nothing inside those mods is compared", stdout, StringComparison.Ordinal);
+        Assert.Contains("leaves this line reading 'matches' all the same", stdout, StringComparison.Ordinal);
+
+        // 导出那一刻要报出来:「自那以后改过的文件看不见」这句话没有时刻就落不了地。
+        Assert.Contains("2026-01-01T00:00:00.0000000Z UTC", stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 第七轮 T6:披露句要跟着调用方**自己已经划掉**的那一维一起收。
+    ///
+    /// 实测 `values maxSimultaneous --type SoundDef` 的表头已声明「SoundDef (1231 of 1231)」——
+    /// 已经滤干净了 —— 而脚注仍在说「the def types that carry this path (**ThingDef**) also
+    /// hold 2 defs …」。那不是噪音,是在一张与它无关的表下面挂了一个完整性告警。
+    ///
+    /// 代价看起来是 0 次调用,列进靶子是因为它侵蚀的是披露机制本身:**一旦有一句被发现
+    /// 是过期的,其余每一句都要被重新审视**,而这套输出的全部价值就在那些句子上。
+    /// </summary>
+    [Fact]
+    public void 完整性脚注要跟着自己划的类型一起收()
+    {
+        const string Note = "Counted over indexed field paths only";
+
+        // 语料:comps[0].compClass 同时落在 ThingDef 与 HediffDef 上,而只有 ThingDef
+        // 那边有被截过的 def(Bullet_Revolver)。不划类型时这句话成立,要出。
+        var (wide, _, _) = Fixture.Run("values", "compClass");
+        Assert.Contains(Note, wide, StringComparison.Ordinal);
+        Assert.Contains("ThingDef", wide, StringComparison.Ordinal);
+
+        // 划到 HediffDef 之后,表里一条 ThingDef 都没有了 —— 这句话跟着一起没。
+        var (narrow, _, _) = Fixture.Run("values", "compClass", "--type", "HediffDef");
+        Assert.Contains("HediffDef (1 of 1)", narrow, StringComparison.Ordinal);
+        Assert.DoesNotContain(Note, narrow, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 第七轮 T5:目录在而里面一个 .cs 都没有,是关于**磁盘**的事实,与「这棵树在不在这次
+    /// 的计划里」正交 —— 而实现原先把计划外的一律短路成「not in the snapshot」。
+    ///
+    /// 后果有两层。表面一层:汇总行照旧报「0 never built」,而磁盘上十棵是空的,字面为假。
+    /// 更贵的一层:<c>code-search</c> 的页脚正指着这一列(「'sources list' says which of
+    /// those have never been decompiled」),指到的是一个对这十棵永远不发声的字段 ——
+    /// **一条指路指了个空**,而 33 与 23 的差额恰好就是它们。
+    ///
+    /// 三个断言各守一段:空这件事要单成一档、files 列要把 0 与「没有这个目录」分开、
+    /// 而 `sources sync` 填不了的那些要说破(不说破就是换了一条走不通的指路)。
+    /// </summary>
+    [Fact]
+    public void 空的源码树要自成一档而不是被计划外那句话吸收掉()
+    {
+        var (stdout, _, _) = Fixture.Run("sources", "list");
+
+        // zz.emptytree 在计划外,而它是空的 —— 空压得住计划内外。
+        Assert.Matches(new Regex(@"zz\.emptytree\s+0\s+empty", RegexOptions.Multiline), stdout);
+
+        // 汇总行单列一档。少了它,「0 never built」就是这份磁盘状态的假陈述。
+        Assert.Contains("holding no .cs file", stdout, StringComparison.Ordinal);
+
+        // 指路要走得通:sync 计划里没有它们,那句「sync rebuilds them」对它们不成立。
+        Assert.Contains("will never fill them", stdout, StringComparison.Ordinal);
+        Assert.Contains("code-search' reports reading no file from", stdout, StringComparison.Ordinal);
     }
 
 }

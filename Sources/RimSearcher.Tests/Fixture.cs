@@ -222,8 +222,12 @@ public static class Fixture
             ("thingClass", "Verse.ThingWithComps", DefaultState.Differs),
             ("ingestible.foodType", "Meat", DefaultState.Differs));
 
+        // comps[0].compClass 与上面那个 ThingDef 同路径,而**只有 ThingDef 那边有被截过的 def**
+        // (Bullet_Revolver)。于是 `values compClass --type HediffDef` 是「表已经滤干净、
+        // 脚注还在说别的类型」那道闸唯一的落点(第七轮 T6)。
         Def("HediffDef", "Anesthetic", "anesthetic", "ludeon.rimworld", "Hediffs_Local.xml", false, 0,
-            ("hediffClass", "Verse.HediffWithComps", DefaultState.Differs));
+            ("hediffClass", "Verse.HediffWithComps", DefaultState.Differs),
+            ("comps[0].compClass", "Verse.HediffComp_Disappears", DefaultState.Differs));
 
         Def("ThingDef", "TestModGun", "test gun", "test.mod", "Guns.xml", false, 0,
             ("thingClass", "RimWorld.Apparel", DefaultState.Differs),
@@ -379,9 +383,18 @@ public static class Fixture
                 Directory.CreateDirectory(dir);
                 WriteSourceTree(Path.Combine(dir, "sources"));
                 _ = Db;   // 先把两份快照造出来,snapshot_dir 才指得到东西
+                // 一份与快照逐字对得上的 ModsConfig.xml —— 于是「快照与当前游戏一致吗」
+                // 那条分支在测试里到得了。到不了的分支上挂的话红不了(第七轮 T7)。
+                var modsConfig = Path.Combine(dir, "ModsConfig.xml");
+                File.WriteAllText(modsConfig,
+                    "<ModsConfigData><version>1.6.0000</version><activeMods>" +
+                    "<li>ludeon.rimworld</li><li>test.mod</li>" +
+                    "</activeMods></ModsConfigData>\n", new UTF8Encoding(false));
+
                 var path = Path.Combine(dir, "sources-config.toml");
                 File.WriteAllText(path,
                     "decompiled_dir = '" + Path.Combine(dir, "sources") + "'\n" +
+                    "mods_config = '" + modsConfig + "'\n" +
                     // 不写这一行,零结果的跨快照分流会去开 ~/.rimsearcher/snapshots 下的真快照。
                     "snapshot_dir = '" + SnapshotDir + "'\n",
                     new UTF8Encoding(false));

@@ -20,6 +20,16 @@ public sealed class RimConfig
     /// </summary>
     public string? DataModDir { get; init; }
 
+    /// <summary>
+    /// ModsConfig.xml 的位置。不配就是 Windows 上那条固定路径。
+    ///
+    /// 加它有两个理由,顺序是反的:①这条路径原先写死在代码里,于是「快照与当前游戏一致吗」
+    /// 这条分支**在测试里根本到不了** —— 而第七轮 T7 要守的正是那条分支说的话。
+    /// 一道到不了的分支上挂的那句话,红不了。②顺带解掉一个真限制:非 Steam 安装
+    /// 与非 Windows 上这个文件不在那儿。
+    /// </summary>
+    public string? ModsConfig { get; init; }
+
     public IReadOnlyList<string> ModRoots { get; init; } = [];
     public string? ActiveSnapshot { get; init; }
 
@@ -75,6 +85,7 @@ public sealed class RimConfig
             ExportDir = root.String("export_dir"),
             DecompiledDir = root.String("decompiled_dir"),
             DataModDir = root.String("datamod_dir"),
+            ModsConfig = root.String("mods_config"),
             ModRoots = root.Strings("mod_roots"),
             ActiveSnapshot = state.String("active_snapshot") ?? root.String("active_snapshot"),
             Snapshots = snapshots,
@@ -93,7 +104,7 @@ public sealed class RimConfig
 
     /// <summary>ModsConfig.xml 的位置。自动检测(快照选择第三层)读它。</summary>
     public string ModsConfigPath()
-        => System.IO.Path.Combine(
+        => ModsConfig is { Length: > 0 } p ? p : System.IO.Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "..", "LocalLow", "Ludeon Studios", "RimWorld by Ludeon Studios", "Config", "ModsConfig.xml");
 }

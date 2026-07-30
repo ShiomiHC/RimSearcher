@@ -135,6 +135,8 @@ public sealed class SourcesListCommand : Command
         var missing = 0;
         var current = 0;
         var outside = 0;
+        var empty = 0;
+        var emptyOrphan = 0;
 
         foreach (var name in onDisk.Union(plans.Keys, StringComparer.OrdinalIgnoreCase)
                                    .OrderBy(n => n, StringComparer.OrdinalIgnoreCase))
@@ -145,7 +147,20 @@ public sealed class SourcesListCommand : Command
             var files = exists ? CountFiles(dir) : 0;
 
             string status;
-            if (!plans.TryGetValue(name, out var plan))
+            // 第七轮 T5:目录在而里面一个 .cs 都没有,是关于**磁盘**的事实,与「这棵树在不在
+            // 这次的计划里」正交。原先计划外的一律短路成 "not in the snapshot",于是十棵空目录
+            // 全被那句话吸收掉,而汇总行照旧报「0 never built」—— 字面为假。
+            // 更坏的是 `code-search` 的页脚正指着这一列(「says which of those have never been
+            // decompiled」),指到的是一个对这十棵永远不发声的字段:**一条指路指了个空**,
+            // 而 33 与 23 的差额恰好就是这十棵。空这件事先判,它压得住计划内外。
+            plans.TryGetValue(name, out var plan);
+            if (exists && files == 0)
+            {
+                status = plan is null ? $"empty (not in {from})" : "empty";
+                empty++;
+                if (plan is null) emptyOrphan++;
+            }
+            else if (plan is null)
                 // 计划里没有它:这棵树对应的 mod 不在这次的列表里。不是「坏了」,
                 // 但也不该被当成当前环境的一部分 —— 说清是哪一种。
                 { status = "not in " + from; outside++; }
@@ -159,7 +174,9 @@ public sealed class SourcesListCommand : Command
             rows.Add(new Dictionary<string, object?>
             {
                 ["tree"] = name,
-                ["files"] = files == 0 ? "" : files.ToString(),
+                // 目录在而空着的印 0,目录根本不在的才留白 —— 两者原先都是空白,
+                // 而「反编译出来是空的」与「这里没有这个目录」要的下一步不是一回事。
+                ["files"] = exists ? files.ToString() : "",
                 ["assemblies"] = plan is null ? (state?.Assemblies.Count.ToString() ?? "") : plan.Assemblies.Count.ToString(),
                 ["status"] = status,
             });
@@ -207,13 +224,13 @@ public sealed class SourcesListCommand : Command
             $"{noCode} with no assembly to decompile, {notInstalled.Count} not installed here, " +
             $"{exporterIds} the exporter itself. " +
             $"Trees on disk ({rows.Count}): {current} current, {stale} stale, {missing} never built, " +
-            $"{outside} from outside {from}. " +
+            $"{empty} holding no .cs file, {outside} from outside {from}. " +
             "'code-search' reads every tree either way; this list is the only place that says which is which.");
 
         // 「N tree(s)」是登记处存在的理由本身:括号 s 把单复数问题推给读者,而这一句正是
         // 用来判断「要不要重新反编译」的。两截各自只在非零时出现 —— 「0 were never built」
         // 既占字节又要读者过滤。
-        if (stale > 0 || missing > 0)
+        if (stale > 0 || missing > 0 || empty > 0)
         {
             // 从句里不带随数变形的动词:名词有登记处,动词没有(R6 反复上的那一课)。
             var parts = new List<string>();
@@ -221,10 +238,26 @@ public sealed class SourcesListCommand : Command
                 parts.Add($"built from an assembly that has changed since — {Tally.Complete(stale).Render("source tree")}");
             if (missing > 0)
                 parts.Add($"never built at all — {Tally.Complete(missing).Render("source tree")}");
+            if (empty > 0)
+                parts.Add($"a directory holding no .cs file — {Tally.Complete(empty).Render("source tree")}");
+
             ctx.Report.Notice(NoticeKind.Staleness,
                 "Not current: " + string.Join("; ", parts) +
-                ". 'rimsearcher sources sync' rebuilds them; until then anything those trees say about code " +
-                "is from the older build.");
+                ". 'rimsearcher sources sync' rebuilds the ones it plans; until then anything those trees " +
+                "say about code is from the older build.");
+
+            // 计划里根本没有它们的那些空目录,`sources sync` 一辈子也不会去填 —— 上面那句
+            // 「sync rebuilds them」对它们是一条走不通的指路,而走不通的指路正是本项目
+            // 一直在清的东西。它们是旧命名留下的空壳,而 `code-search` 少扫的那些树就是它们。
+            if (emptyOrphan > 0)
+                // 句里不许有跟着计数变形的动词(名词有登记处,动词没有 —— R6 反复上的那一课)。
+                // 计数进破折号后的名词短语,后面一律用 each,单复数就不再是个问题。
+                ctx.Report.Notice(NoticeKind.Boundary,
+                    $"'sources sync' plans no tree under those names, so it will never fill them — " +
+                    $"{Tally.Complete(emptyOrphan).Render("source tree")} out of the ones just listed. " +
+                    "Each is an empty directory left over from an earlier naming, and each is one of the " +
+                    "trees 'code-search' reports reading no file from. Removing the directory is the only " +
+                    "thing that changes this line.");
         }
 
         if (notInstalled.Count > 0)

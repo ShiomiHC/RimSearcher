@@ -662,10 +662,19 @@ public sealed class SnapshotDb : IDisposable
     /// 那种每次返回都带的免责声明 —— 说了等于没说,读的人只能把它抄进答案里当保留意见。
     /// 收窄到「与本次结果同类型的 def」之后,它不发声时「完整」才是无条件的。
     /// </summary>
-    public TruncationScope TruncatedDefsSharingPath(string pathSuffix, ScopeFilter scope)
+    /// <param name="defType">
+    /// 调用方自己已经把结果收到这一个类型上时,尾注也得跟着收。
+    ///
+    /// 第七轮 T6:`values maxSimultaneous --type SoundDef` 的表头已声明
+    /// 「SoundDef (1231 of 1231)」—— 已经滤干净了 —— 而这条脚注仍在说
+    /// 「the def types that carry this path (**ThingDef**) also hold 2 defs …」。
+    /// 那不是噪音,是在一张与它无关的表下面挂了一个完整性告警。**一旦有一句披露被
+    /// 发现是过期的,其余每一句都要被重新审视**,所以这是比它自身代价贵得多的一条。
+    /// </param>
+    public TruncationScope TruncatedDefsSharingPath(string pathSuffix, ScopeFilter scope, string? defType = null)
     {
         var p = new Dictionary<string, object?>();
-        return TruncatedAmong(SuffixWhere(pathSuffix, scope, p), scope, p);
+        return TruncatedAmong(SuffixWhere(pathSuffix, scope, p), scope, p, defType);
     }
 
     /// <summary>
@@ -689,7 +698,8 @@ public sealed class SnapshotDb : IDisposable
     /// 于是「可能属于这里而没露面」说的是一批 scope 明明排除掉的 def。收窄的两处
     /// (类型 + scope)缺一处,这句话担保的东西就不成立。
     /// </summary>
-    private TruncationScope TruncatedAmong(string innerWhere, ScopeFilter scope, Dictionary<string, object?> p)
+    private TruncationScope TruncatedAmong(string innerWhere, ScopeFilter scope,
+                                           Dictionary<string, object?> p, string? defType = null)
     {
         // 外层用 t、内层用 d:同名别名在 SQLite 里靠作用域遮蔽也能跑,但读的人分不出
         // 哪个 d 是哪个,而这段 SQL 的全部意思都在「内外收窄的是不同的东西」上。
@@ -700,6 +710,8 @@ public sealed class SnapshotDb : IDisposable
             $"JOIN defs d ON d.id = fv.def_id {innerWhere})",
         };
         if (scope.SqlPredicate("t.source_mod", p) is { } sc) conds.Add(sc);
+        // 收窄的第三处。缺它的时候脚注说的是一批调用方**自己已经滤掉**的 def(第七轮 T6)。
+        if (defType is { Length: > 0 }) { p["@tdt"] = defType; conds.Add("t.def_type = @tdt COLLATE NOCASE"); }
 
         // 按类型分组而不是只取一个总数:尾注要把「这批是哪几个类型」说出来,
         // 读的人才接得住那条续页命令。分组同时收得更紧 —— 只有**真有被砍的 def**

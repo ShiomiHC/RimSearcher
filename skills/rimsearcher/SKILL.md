@@ -305,6 +305,12 @@ when something is off *and* this command did not name a snapshot itself. Pass `-
 it stays quiet, because you already said which environment you meant. `snapshot status` gives
 the full comparison whenever you want it.
 
+That comparison covers three things and no more: same mods, same order, same version. It is a
+check on the *load list*, not on the files. Nothing inside those mods is compared, so a mod's
+XML, patches, textures or audio can have been edited since the export and `snapshot status`
+will still say the snapshot matches. If the question is "did my edit take effect", the answer
+is never in that line — re-export, then ask.
+
 This matters for counts. A complete count is complete **for the snapshot**. If the snapshot
 covers Core only and your game has mods enabled, `find compClass X` returning `1 def` means one
 in Core, not one in your game — and the tool says so when that gap exists.
