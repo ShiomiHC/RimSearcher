@@ -439,8 +439,8 @@ public class GrammarTests
             if (!m.Success) continue;
             var counted = int.Parse(m.Groups[1].Value);
             Assert.True(counted <= total,
-                $"'{string.Join(' ', argv)}' vouches for a subset of {total} truncated defs but counted " +
-                $"{counted} — a subset larger than the whole, printed exactly like a sound count.");
+                $"'{string.Join(' ', argv)}' counted {counted}, out of a snapshot-wide truncated total of " +
+                $"{total} — a subset larger than the whole, printed exactly like a sound count.");
         }
     }
 
