@@ -156,9 +156,14 @@ internal static class NameLookup
                         ? $"'rimsearcher keyed {name}' shows the full row, and " +
                           $"'rimsearcher code-search \"\\\"{distinct[0]}\\\"\"' finds the code that prints " +
                           "that key."
-                        : "The same line on screen can come from more than one key, so which key is the one " +
-                          $"you are after is not decided here: 'rimsearcher keyed {name}' lists them with the " +
-                          "key each belongs to, and the code search goes after whichever of those you meant."));
+                        // 「同一句话可以来自多个 key」听着更具体,可 FTS 是**分词**匹配:
+                        // 命中的几行未必整句相等(真数据里 `keyed Milira --placeholders`
+                        // 命中的两行是 menu 与 button 两句不同的话)。那样写就是在暗示
+                        // 一件当场没验的事,而读的人会据此随便挑一个。说得住的只有
+                        // 「这些词出现在几个 key 的文案里」—— 两种情形下都真。
+                        : $"Those words appear in the text of more than one key, so which key is the one you " +
+                          $"are after is not decided here: 'rimsearcher keyed {name}' lists them with the key " +
+                          "each belongs to, and the code search goes after whichever of those you meant."));
             }
         }
 
