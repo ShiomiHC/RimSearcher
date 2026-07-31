@@ -2,9 +2,9 @@ CLAUDE.local.md
 /.idea/
 /tools/
 /.claude/
-# 旧世系(V2_A)那六份施工指导:不进库,但要留在磁盘上 —— 01 引的
-# 「盲测方法论」原始材料就是它们。同 /tools/ 的性质。
-/Docs/legacy/
+# Docs 整个不进库(2026-07-31):00~07 的决定与调查、以及旧世系那六份施工指导
+# (Docs/legacy/,46 万字)都留在磁盘上,不入库。同 /tools/ 的性质。
+/Docs/
 bin/
 obj/
 *.user
