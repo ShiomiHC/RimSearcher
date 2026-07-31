@@ -4,8 +4,9 @@ exit 0
 3 defs.
 That includes 1 def found by scanning names for 'VoidNode' as a substring; full-text matching alone splits names at word starts, so it misses the query in the middle of a compound name.
 
-def_name          def_type  label               matched_on  mod
-VoidNode          ThingDef  void node           def_name    test.mod
-VoidNodeShard     ThingDef  void node shard     def_name    test.mod
-GleamingVoidNode  ThingDef  gleaming void node  def_name    test.mod
+Same in every row, not repeated below: def_type=ThingDef, matched_on=def_name, mod=test.mod.
+def_name          label
+VoidNode          void node
+VoidNodeShard     void node shard
+GleamingVoidNode  gleaming void node
 --- stderr ---

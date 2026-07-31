@@ -3,7 +3,8 @@ exit 0
 --- stdout ---
 2 of 9 defs, starting at 3; pass --offset 4 for the next page, or --limit all for every one at once.
 
-def_name    label     mod
-Firefoam    firefoam  ludeon.rimworld
-FoamPopper  firefoam  ludeon.rimworld
+Same in every row, not repeated below: label=firefoam, mod=ludeon.rimworld.
+def_name
+Firefoam
+FoamPopper
 --- stderr ---

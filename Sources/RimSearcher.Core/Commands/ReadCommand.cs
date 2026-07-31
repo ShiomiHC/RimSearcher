@@ -199,7 +199,7 @@ public sealed class ReadCommand : Command
                 ["lines"] = d.Lines,
                 ["at"] = $"{d.StartLine}-{d.EndLine}",
             }).ToList());
-        SayBraceMatched(ctx, rel);
+        SayBraceMatched(ctx);
         return 0;
     }
 
@@ -280,7 +280,7 @@ public sealed class ReadCommand : Command
         }
 
         ctx.Report.Text("source", lines, rows);
-        SayBraceMatched(ctx, rel);
+        SayBraceMatched(ctx);
         return 0;
     }
 
@@ -324,6 +324,7 @@ public sealed class ReadCommand : Command
                       : "") +
                   (to < text.Length ? $" Pass --lines {to + 1}+{to - from + 1} for the next page." : ""));
 
+        // 裸行读没有任何推断,不挂那条能力边界 —— 挂上去就成了每次返回的常驻免责声明。
         ctx.Report.Text("source", lines, rows);
         return 0;
     }
@@ -331,13 +332,16 @@ public sealed class ReadCommand : Command
     // ---- 说清楚 ----
 
     /// <summary>
-    /// 配平括号不是解析,这句话必须跟着每一次成员级返回走。只在真用了轮廓的两条路上说;
-    /// 裸行读没有任何推断,不需要它。
+    /// 配平括号不是解析,这句话必须跟着每一次成员级返回走 —— 它限定的是这次返回的
+    /// **完整性**(尤其 --outline 那句「文件里的声明都在这儿」),不是一条通用教学。
+    /// 只在真用了轮廓的两条路上说;裸行读没有任何推断,不需要它。
+    ///
+    /// 压到一行:路径刚在上面印过,不再复述;「去 code-search」这条下一步写在 SKILL.md 里。
+    /// 留下的是推不出来的那半句 —— 找不到不等于没有。
     /// </summary>
-    private static void SayBraceMatched(CommandContext ctx, string rel)
+    private static void SayBraceMatched(CommandContext ctx)
         => ctx.Report.Notice(NoticeKind.Boundary,
-            "Declarations here are found by matching braces, not by parsing C#, so a name this command " +
-            $"does not see may still be in {rel}. 'rimsearcher code-search' searches the text.",
+            "Found by matching braces, not by parsing C#: a name not listed here may still be in the file.",
             footnote: true);
 
     private static void SayNoDeclaration(CommandContext ctx, string rel, string[] text,

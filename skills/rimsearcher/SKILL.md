@@ -187,6 +187,11 @@ stays local.
    `yes` rows are left out of the listing by default, with a line saying how many and how to see
    them; `--defaults` lists the rest of the indexed paths, and `--path <text>` always shows a
    named field whichever kind it is.
+   A `no` row still is not proof the *def's author* chose the value. `get` follows the table with
+   a line naming the paths whose value most defs of that type also carry, with the count in
+   brackets (`soundDrop (3347)`) — those are inherited or engine-filled far more often than
+   authored, so do not quote one as a decision this def made. When no value on the def is widely
+   shared, the line says that instead, which is the stronger reading: the values are this def's own.
    Read the column for what it is: it answers **who set this value**, never **what the value is**.
    The value in the row is the real one either way, so a rule that reads the value — a property
    like `HarvestDestroys => harvestAfterGrowth <= 0f`, a threshold, a comparison — is answerable
@@ -256,6 +261,13 @@ Counts are written three ways, and the difference matters:
 A count of matched rows under `--path` is a filter you asked for, not a truncation; in `--json`
 those carry `kind: "filter"` while a real cut-off carries `kind: "truncation"`.
 
+A line reading `Same in every row, not repeated below: def_type=ThingDef, code_default=no.` is
+part of the table, not a note about it: when every row of a column holds the same value, that
+column is stated once above the table instead of being printed on each row. The column still
+applies to every row — it has not been dropped or filtered. The first column is never folded away
+this way, because it is the row's identity and the thing you hand to the next command. `--json`
+does not fold: every row there carries every column.
+
 `--limit all` lifts the **row** cap. `code-search` has three caps rather than one, and they
 divide in two: `--limit` and `--max-per-file` decide how many matching lines are *printed*, and
 neither shortens the scan, so the match count stays exact whichever of them bites; `--max-files`
@@ -265,16 +277,27 @@ never reached at all, and the fix is to raise it — not to look somewhere else.
 from a scan that stopped short says so and does **not** point you at the snapshot.
 
 `code-search` also reports matches and files as two different numbers — a question about how many
-methods have some shape wants the first.
+methods have some shape wants the first. Its hits are grouped by file: one heading line carrying
+the path and that file's match count, then the matching lines under it with a line-number gutter,
+`:` on a match and `-` on a context line. The path is on the heading, not on every line — build
+`path:line` from the two when you need one.
+
+When it reports reading `23 of 33 source trees on disk`, the difference is trees that hold no file
+matching `--files`, which includes trees that were never decompiled at all. `rimsearcher sources
+list` says which are which; a tree listed as `empty` will never be filled by `sources sync`
+if no snapshot mod maps to it.
 
 Once `code-search` has told you *where*, `read` gives you the text. It takes a path from a
 `code-search` hit, any tail of one, or a bare file name, and then either `--member <name>` /
 `--type <name>` for one declaration or `--lines <a-b|a+n|all>` for raw lines; `--outline` lists
-every declaration in the file with its line range. It finds a declaration's end by matching
-braces, not by parsing C#, and says so on the paths where that inference happens. Two things it
-refuses to guess at, because a wrong guess here reads exactly like a right one: when a bare file
-name matches several files it lists them instead of picking, and `--lines` together with
-`--member`/`--type` is a usage error rather than a silent preference. **Give it the bare file
+every declaration in the file with its line range. **It finds a declaration's start and end by
+matching braces, not by parsing C#** — enough for decompiler output, which is machine-formatted,
+but a name `--member`, `--type` or `--outline` does not turn up is not proof the file lacks it.
+`code-search` searches the same file as text and `--lines` reads it raw; reach for one of those
+before concluding a member is absent. Two things `read` refuses to guess at, because a wrong
+guess here reads exactly like a right one: when a bare file name matches several files it lists
+them instead of picking, and `--lines` together with `--member`/`--type` is a usage error rather
+than a silent preference. **Give it the bare file
 name; do not build a path out of the namespace.** The tree's folders are not namespaces —
 `HealthCardUtility` sits under `RimWorld/` and `HealthUtility` under `Verse/` — so a guessed
 `RimWorld/HealthUtility.cs` misses a file that `HealthUtility.cs` finds at once. Reading a member of a
@@ -329,15 +352,21 @@ the tool instead, where the counts stay honest:
 | `read` | `--member`, `--type`, `--lines`, `--outline`, `--limit` |
 | `sources sync` | `--only`, `--modlist`, `--force`, `--dry-run` |
 
-That `head` habit has a replacement too. `search`, `find`, `list`, `fields`, `values` and `keyed`
-page with `--offset`, and a paged answer always states the three things a pipe would have
-destroyed: how many rows this page holds, how many exist in total, and the exact `--offset` for
-the next page. The last page says it is the
+That `head` habit has a replacement, but it is not one switch — it depends on the command, and
+the three that produce the longest output are exactly the three that do **not** page:
+
+| Command | Instead of `head` |
+|---|---|
+| `search`, `find`, `list`, `fields`, `values`, `keyed` | `--offset` — these page. |
+| `read` | `--member <name>` / `--type <name>` for one declaration, `--outline` to see what is in the file first, `--lines <a-b>` to page raw text. |
+| `get` | `--path <text>`. A def has hundreds of field paths and their order carries no meaning, so ask for the block you want (`--path comps`, `--path statBases`) rather than taking the first N of them. |
+| `code-search` | Anchor the pattern (`"class Foo\b"`, not `Foo`), then narrow the ground with `--source <tree>` and `--files <glob>`. A three-digit match count means the pattern is unanchored, and paging through it is the expensive way to discover that. |
+
+A paged answer states the three things a pipe would have destroyed: how many rows this page holds,
+how many exist in total, and the exact `--offset` for the next page. The last page says it is the
 last one rather than leaving you to do the arithmetic, and an `--offset` past the end is reported
-as an overshoot, not as "nothing found". `read` pages the same way with `--lines`. The rest do not
-page and do not take `--offset`: `get` and `inherit` narrow with `--path` or open up with
-`--limit all`, and `code-search` has its own three caps — passing `--offset` to any of them is a
-usage error naming the commands that do take it, not a silently ignored switch.
+as an overshoot, not as "nothing found". Passing `--offset` to `get`, `inherit` or `code-search`
+is a usage error naming the commands that do take it, not a silently ignored switch.
 
 `--type <DefType>` picks one def when a name is shared — which is common: `PsychicSensitivity`
 is both a `StatDef` and a `TraitDef`. `--json` keeps each of them in its own slot regardless.

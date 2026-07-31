@@ -12,5 +12,5 @@ method    Shared    Inner  3      25-27
 class     Inner     Outer  6      23-28
 class     Outer            25     5-29
 
-Declarations here are found by matching braces, not by parsing C#, so a name this command does not see may still be in vanilla/Verse/Outline.cs. 'rimsearcher code-search' searches the text.
+Found by matching braces, not by parsing C#: a name not listed here may still be in the file.
 --- stderr ---

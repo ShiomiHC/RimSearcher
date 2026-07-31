@@ -8,5 +8,5 @@ soundPickup         9
 thingClass          6
 comps[0].compClass  2
 
-Counted over indexed field paths only: the def types that carry this path (ThingDef) also hold 1 def that lost fields at export time and could belong here without showing up. 'rimsearcher snapshot truncated --type ThingDef' lists them.
+The def types carrying this path (ThingDef) also hold 1 def that lost fields at export time and could belong here without showing up. 'rimsearcher snapshot truncated --type ThingDef' lists them.
 --- stderr ---

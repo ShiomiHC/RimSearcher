@@ -9,7 +9,7 @@ exit 0
     },
     {
       "kind": "advisory",
-      "text": "'code_default' says a value differs from what a fresh instance of the class carries — not that this def chose it. These hold what most of the 9 ThingDefs hold, the count in brackets: soundDrop (9), soundImpactDefault (9), soundInteract (9), soundPickup (9)."
+      "text": "Values that most of the 9 ThingDefs in this snapshot also carry, so a 'no' on these is not that this def chose it — the count in brackets: soundDrop (9), soundImpactDefault (9), soundInteract (9), soundPickup (9)."
     },
     {
       "kind": "boundary",

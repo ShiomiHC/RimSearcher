@@ -284,7 +284,11 @@ public class GrammarTests
         var (stdout, _, _) = Fixture.Run("find", "compClass", "RimWorld.CompShield");
         var lines = stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal("2 defs.", lines[0]);
-        Assert.StartsWith("def_name", lines[1]);
+        // 折叠行是**表的一部分** —— 整列同值的列提到表上方说一次,搬的是数据不是散文。
+        // 「不许有免责声明」那一侧由上面的 kinds 断言把着:notices 里仍然只有 count 与
+        // boundary 两条,渲染器折出来的这行根本不进 notes。
+        var header = lines[1].StartsWith("Same in every row", StringComparison.Ordinal) ? lines[2] : lines[1];
+        Assert.StartsWith("def_name", header);
     }
 
     /// <summary>
@@ -489,11 +493,11 @@ public class GrammarTests
         // RimWorld.CompShield 在 test.mod 的 TestModGun 上也有 —— 收窄之后仍有结果,
         // 变的只是这句背书该不该说话。
         var (wide, _, _) = Fixture.Run("find", "--value", "CompShield");
-        Assert.Contains("Counted over indexed field paths only:", wide);
+        Assert.Contains("def types carrying this path", wide);
 
         // 收到 test.mod 之后被砍的那个不在 scope 里,这句背书就不该再提它。
         var (narrow, _, _) = Fixture.Run("find", "--value", "CompShield", "--scope", "test.mod");
-        Assert.DoesNotContain("Counted over indexed field paths only:", narrow);
+        Assert.DoesNotContain("def types carrying this path", narrow);
     }
 
     /// <summary>
@@ -577,14 +581,18 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 上下文窗口重叠时合并,同一行不许印两遍。判的是行号不重复,不是措辞。
+    /// 上下文窗口重叠时合并,同一行不许印两遍。判的是行号不重复,不是措辞 —— 所以问
+    /// 结构化那一侧:<c>file</c> + <c>line</c> 是这条意图的真契约,而文本形态(路径逐行
+    /// 重复,还是每文件一条标题)改起来不该惊动它。
     /// </summary>
     [Fact]
     public void 上下文窗口重叠时合并()
     {
-        var (stdout, _, _) = Fixture.Run("code-search", "public", "--files", "ThingComp.cs", "-C", "2");
-        var located = Regex.Matches(stdout, @"^(\S+\.cs:\d+)[:-]", RegexOptions.Multiline)
-                           .Select(m => m.Groups[1].Value).ToList();
+        var (json, _, _) = Fixture.Run("code-search", "public", "--files", "ThingComp.cs", "-C", "2", "--json");
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var located = doc.RootElement.GetProperty("matches").EnumerateArray()
+                         .Select(m => $"{m.GetProperty("file").GetString()}:{m.GetProperty("line").GetInt32()}")
+                         .ToList();
         Assert.NotEmpty(located);
         Assert.Equal(located.Count, located.Distinct().Count());
     }
@@ -1233,7 +1241,7 @@ public class GrammarTests
         var (stdout, _, _) = Fixture.Run("find", "--value", "CompShield");
 
         var m = Regex.Match(stdout,
-            @"Counted over indexed field paths only: [^']*?also hold (\d+) defs? that lost fields[^']*" +
+            @"def types carrying this path [^']*?also hold (\d+) defs? that lost fields[^']*" +
             @"'rimsearcher snapshot truncated([^']*)' lists them\.");
         Assert.True(m.Success, stdout);
 
@@ -2035,7 +2043,7 @@ public class GrammarTests
     [Fact]
     public void 完整性脚注要跟着自己划的类型一起收()
     {
-        const string Note = "Counted over indexed field paths only";
+        const string Note = "def types carrying this path";
 
         // 语料:comps[0].compClass 同时落在 ThingDef 与 HediffDef 上,而只有 ThingDef
         // 那边有被截过的 def(Bullet_Revolver)。不划类型时这句话成立,要出。

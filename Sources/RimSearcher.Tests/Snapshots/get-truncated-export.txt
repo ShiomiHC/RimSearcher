@@ -2,8 +2,8 @@ $ rimsearcher get Bullet_Revolver
 exit 0
 --- stdout ---
 7 fields.
-Not listed: 1 field whose value is the one a fresh instance of the declaring type already carries, so this snapshot cannot tell whether anything set it. The snapshot holds 8 field paths for this def; --defaults lists the rest of those, and --path <text> sees a named one either way. A field whose value was null is in none of them: it never entered the index, so its absence here is not evidence that the field does not exist. Every list index this def has does appear above, so the lists are as long as they look here.
-'code_default' says a value differs from what a fresh instance of the class carries — not that this def chose it. These hold what most of the 9 ThingDefs hold, the count in brackets: soundDrop (9), soundImpactDefault (9), soundInteract (9), soundPickup (9).
+Not listed: 1 field carrying the declaring type's own default. The snapshot holds 8 field paths for this def; --defaults lists the rest, --path <text> sees a named one either way. A null-valued field never entered the index and is in neither. Every list index this def has does appear above, so the lists are as long as they look here.
+Values that most of the 9 ThingDefs in this snapshot also carry, so a 'no' on these is not that this def chose it — the count in brackets: soundDrop (9), soundImpactDefault (9), soundInteract (9), soundPickup (9).
 The exporter stopped short on this def: at least 3 fields were dropped at export time for depth or size, so a path missing from the list below is not proof that the def lacks it.
 
 def_name       Bullet_Revolver

@@ -205,17 +205,16 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
 
         // 「这次用了哪个快照」与「这个快照过没过期」是两件事。快照选错就是答案错,
         // 所以自动选择要说出选了哪个;只有一个快照时仍然零字节 —— 那时不存在选错。
+        //
+        // 不报「还注册了哪几个」:那份名单每次调用逐字重复,而它的产地是 `snapshot list`,
+        // SKILL.md 也已写明快照可以并存。这里只留这一次真正的选择结果。
         if (selection.Source is not (SelectionSource.ExplicitAlias or SelectionSource.ExplicitDb))
         {
-            var registered = SnapshotCatalog.Enumerate(Config);
-            if (registered.Count > 1)
-            {
-                var others = registered.Where(e => !string.Equals(e.Alias, name, StringComparison.OrdinalIgnoreCase))
-                                       .Select(e => e.Alias);
+            if (SnapshotCatalog.Enumerate(Config).Count > 1)
                 Report.Notice(NoticeKind.SnapshotChoice,
-                    $"Using snapshot '{name}' ({(selection.Source == SelectionSource.Pinned ? "pinned" : "auto-detected")}); " +
-                    $"also registered: {string.Join(", ", others)}.");
-            }
+                    $"Using snapshot '{name}' " +
+                    $"({(selection.Source == SelectionSource.Pinned ? "pinned" : "auto-detected")}); " +
+                    "'rimsearcher snapshot list' names the others.");
         }
 
         // 一词两义,而两义在这一次调用里都活着:快照叫 vanilla,--scope vanilla 是另一回事。

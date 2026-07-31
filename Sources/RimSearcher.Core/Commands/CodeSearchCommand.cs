@@ -242,7 +242,7 @@ public sealed class CodeSearchCommand : Command
 
                 if (hitsHere > 0) filesWithMatches++;
                 if (hitsHere > toPrint.Count && toPrint.Count >= maxPerFile) perFileCapped++;
-                if (toPrint.Count > 0) Emit(lines, rows, rel, text, toPrint, contextLines);
+                if (toPrint.Count > 0) Emit(lines, rows, rel, text, toPrint, contextLines, hitsHere);
             }
 
             if (readHere == 0) unreached.Add((tree, treeFiles.Count));
@@ -319,18 +319,16 @@ public sealed class CodeSearchCommand : Command
 
         // 三个旋钮各自申报,因为被截的原因不同,该拧的也不同。
         // 两句都以旋钮自己作主语、计数放进从句:动词没有登记处,主谓一致只能靠句子结构避开。
+        // 「印刷闸不缩短扫描,所以总数仍是准数」这条规则搬进了 SKILL.md —— 它逐字不随
+        // 查询变。留下的是这一次的数:闸卡在几条、有几个文件超了。
         if (printed < totalMatches && printed >= limit.Effective)
             ctx.Report.Notice(NoticeKind.Truncation,
                 $"--limit stopped the printing at {Tally.Complete(limit.Effective).Render("match")}; " +
-                "raise it to see more." +
-                // 「扫描照样跑到底」只在真的跑到底时才成立:--max-files 也咬下去时说这句,
-                // 就是拿一句正确的话掩盖另一道闸。
-                (incomplete ? "" : " The scan itself ran to the end either way."));
+                "raise it to see more.");
         if (perFileCapped > 0)
             ctx.Report.Notice(NoticeKind.Truncation,
                 $"--max-per-file allows {Tally.Complete(maxPerFile).Render("match")} from any one file, and " +
-                $"{Tally.Complete(perFileCapped).Render("file")} had more than that; the count above still " +
-                "includes every one of them. Raise it to see the rest.");
+                $"{Tally.Complete(perFileCapped).Render("file")} had more than that. Raise it to see the rest.");
         if (filesCapped) SayFilesCapped(ctx, sourceName, glob, filesRead,
                                         partialTree, partialRead, partialTotal, unreached);
         if (timedOut.Count > 0)
@@ -505,13 +503,31 @@ public sealed class CodeSearchCommand : Command
     /// 上下文窗口。**重叠或相邻的窗口合并**:每条命中各印一窗的话,<c>-C 2</c> 打在连着的
     /// 命中上会把同一行印好几遍,既浪费读 stdout 的上下文预算,又让人以为那里真有好几处命中。
     /// 分隔符只在两组之间出现,不留尾巴 —— 尾部空隔符会被读成「后面还有,被截了」。
+    ///
+    /// 路径**每文件说一次**,不逐行重复:一条深路径四十几个字符,乘上 <c>-C 3</c> 的一屏行数
+    /// 就是几百字节的同一个字,而 <c>read</c> 早就是这个形态(路径一行,行号一列)。
+    /// 标题带上该文件的命中数 —— 一屏 <c>-</c> 上下文行里有几条是真命中,数出来比看出来快;
+    /// <c>--max-per-file</c> 咬下去时两个数分开报,否则「印了几行」会被当成「有几条」。
+    /// 结构化侧不受影响:<c>file</c> 本来就在每一行上,JSON 消费方拿到的东西一个字没变。
     /// </summary>
     private static void Emit(List<string> lines, List<IReadOnlyDictionary<string, object?>> rows,
-                             string rel, string[] text, List<int> hits, int context)
+                             string rel, string[] text, List<int> hits, int context, int hitsHere)
     {
         var isHit = hits.ToHashSet();
         var group = rows.Count == 0 ? 0 : (int)rows[^1]["group"]! + 1;
+
+        // 文件之间空一行,标题才不会粘在上一个文件的最后一行代码上。
+        if (lines.Count > 0) lines.Add("");
+        lines.Add($"{rel}  {Tally.Complete(hitsHere).Render("match")}" +
+                  (hits.Count < hitsHere ? $", {hits.Count} printed" : ""));
+
+        // 行号右对齐。宽度按**这次真印出来的**最大行号算,不按文件总行数:后者会让只印了
+        // 第 3 行的千行文件补出一串前导空格,与旁边只印了第 3 行的短文件参差着排。
+        // hits 升序,末项加上下文窗口的下沿就是最大的那个。
+        var pad = Math.Min(text.Length, hits[^1] + 1 + context).ToString().Length;
+
         var i = 0;
+        var firstGroup = true;
         while (i < hits.Count)
         {
             var start = Math.Max(0, hits[i] - context);
@@ -522,10 +538,13 @@ public sealed class CodeSearchCommand : Command
                 end = Math.Max(end, Math.Min(text.Length - 1, hits[i] + context));
             }
 
-            if (context > 0 && lines.Count > 0) lines.Add("--");
+            // 分隔符只在**同一文件内**的两组之间:换文件由标题自己隔开,那里再插一条 "--"
+            // 会读成标题下面还漏印了什么。
+            if (context > 0 && !firstGroup) lines.Add("--");
+            firstGroup = false;
             for (var c = start; c <= end; c++)
             {
-                lines.Add($"{rel}:{c + 1}{(isHit.Contains(c) ? ":" : "-")}{text[c].TrimEnd()}");
+                lines.Add($"{(c + 1).ToString().PadLeft(pad)}{(isHit.Contains(c) ? ":" : "-")} {text[c].TrimEnd()}");
                 // 文本侧那条 "--" 分隔符在结构化侧变成 group 序号:JSON 里不插假行表示断开。
                 rows.Add(new Dictionary<string, object?>
                 {
@@ -596,10 +615,14 @@ public sealed class CodeSearchCommand : Command
             //
             // 差额在就一定说,哪怕只剩一棵树被扫到:否则「2 files read.」与「全库就这么多」
             // 逐字同形。
+            // 差额的两种成因要分得开:glob 挑不出文件(正常),与那棵树压根没反编译过
+            // (该去 sync)。只说前者的话,一棵空树会被读成「那里的代码扫过了,没有」。
+            //
+            // 后半句是**指路**不是断言:这一次的差额里有没有空树,这里并不知道 ——
+            // 写成「其中有些从没反编译过」在差额全是 glob 不匹配时就是一句假话。
             if (treesTotal < onDisk)
                 return $" across {Tally.Of(treesTotal, onDisk).Render("source tree")} on disk — the rest hold " +
-                       $"no file matching --files '{glob}', and 'rimsearcher sources list' says which of those " +
-                       "have never been decompiled";
+                       $"no file matching --files '{glob}', and 'sources list' says which have never been decompiled";
             return onDisk > 1 ? $" across {Tally.Complete(treesTotal).Render("source tree")}" : "";
         }
 

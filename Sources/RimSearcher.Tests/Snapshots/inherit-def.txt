@@ -11,7 +11,8 @@ mod            ludeon.rimworld
 source         Projectiles_Guns.xml
 patch_ops      n/a
 
-name            def_type  abstract  mod              source
-BaseBullet      ThingDef  yes       ludeon.rimworld  Projectiles_Guns.xml
-BaseProjectile  ThingDef  yes       ludeon.rimworld  Projectiles_Guns.xml
+Same in every row, not repeated below: def_type=ThingDef, abstract=yes, mod=ludeon.rimworld, source=Projectiles_Guns.xml.
+name
+BaseBullet
+BaseProjectile
 --- stderr ---

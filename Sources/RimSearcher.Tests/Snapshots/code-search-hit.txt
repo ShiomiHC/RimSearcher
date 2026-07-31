@@ -1,8 +1,11 @@
 $ rimsearcher code-search : ThingComp
 exit 0
 --- stdout ---
-2 matches in 2 files; 9 files read across 2 of 3 source trees on disk — the rest hold no file matching --files '*.cs', and 'rimsearcher sources list' says which of those have never been decompiled.
+2 matches in 2 files; 9 files read across 2 of 3 source trees on disk — the rest hold no file matching --files '*.cs', and 'sources list' says which have never been decompiled.
 
-vanilla/RimWorld/CompShield.cs:3:	public class CompShield : ThingComp
-zz.othermod/Patches.cs:3:	public class MyComp : ThingComp
+vanilla/RimWorld/CompShield.cs  1 match
+3: 	public class CompShield : ThingComp
+
+zz.othermod/Patches.cs  1 match
+3: 	public class MyComp : ThingComp
 --- stderr ---

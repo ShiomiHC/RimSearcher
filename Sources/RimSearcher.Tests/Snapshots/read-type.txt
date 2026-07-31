@@ -11,5 +11,5 @@ vanilla/Verse/Outline.cs:23-28  class Outer.Inner
     27  			}
     28  		}
 
-Declarations here are found by matching braces, not by parsing C#, so a name this command does not see may still be in vanilla/Verse/Outline.cs. 'rimsearcher code-search' searches the text.
+Found by matching braces, not by parsing C#: a name not listed here may still be in the file.
 --- stderr ---

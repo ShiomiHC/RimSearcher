@@ -5,5 +5,5 @@ exit 0
 To find the code that prints it, search for the key as a literal: 'rimsearcher code-search "\"CannotUseNoPower\""'. Most call sites write the key inline, but not all of them do — a key assembled from parts will not appear that way.
 
 key               translated  original  origin     placeholder  mod  source
-CannotUseNoPower  没有电力        No power  in effect  no                Misc.xml:12
+CannotUseNoPower  没有电力    No power  in effect  no                Misc.xml:12
 --- stderr ---

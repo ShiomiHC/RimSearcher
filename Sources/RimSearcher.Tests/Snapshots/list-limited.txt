@@ -3,7 +3,8 @@ exit 0
 --- stdout ---
 2 of 9 defs; pass --offset 2 for the next page, or --limit all for every one at once.
 
-def_name            label            mod
-Apparel_ShieldBelt  shield belt      ludeon.rimworld
-Bullet_Revolver     revolver bullet  ludeon.rimworld
+Same in every row, not repeated below: mod=ludeon.rimworld.
+def_name            label
+Apparel_ShieldBelt  shield belt
+Bullet_Revolver     revolver bullet
 --- stderr ---

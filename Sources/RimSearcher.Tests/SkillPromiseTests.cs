@@ -116,7 +116,7 @@ public class SkillPromiseTests
             "同名文件不替调用方挑"),
         new("`--lines` together with `--member`/`--type` is a usage error rather than a silent preference",
             "两种读法同时传时当场说破"),
-        new("It finds a declaration's end by matching braces, not by parsing C#, and says so on the paths where that inference happens",
+        new("It finds a declaration's start and end by matching braces, not by parsing C#",
             "能力边界只挂在做了推断的那几条路上"),
 
         // ---- --json / 退出码 / 参数 ----

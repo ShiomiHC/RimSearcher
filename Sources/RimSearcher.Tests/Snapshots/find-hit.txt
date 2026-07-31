@@ -3,9 +3,10 @@ exit 0
 --- stdout ---
 2 defs.
 
-def_name            def_type  path                value                code_default  mod
-Apparel_ShieldBelt  ThingDef  comps[0].compClass  RimWorld.CompShield  yes           ludeon.rimworld
-TestModGun          ThingDef  comps[0].compClass  RimWorld.CompShield  yes           test.mod
+Same in every row, not repeated below: def_type=ThingDef, path=comps[0].compClass, value=RimWorld.CompShield, code_default=yes.
+def_name            mod
+Apparel_ShieldBelt  ludeon.rimworld
+TestModGun          test.mod
 
-Counted over indexed field paths only: the def types that carry this path (ThingDef) also hold 1 def that lost fields at export time and could belong here without showing up. 'rimsearcher snapshot truncated --type ThingDef' lists them.
+The def types carrying this path (ThingDef) also hold 1 def that lost fields at export time and could belong here without showing up. 'rimsearcher snapshot truncated --type ThingDef' lists them.
 --- stderr ---

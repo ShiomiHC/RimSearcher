@@ -3,7 +3,8 @@ exit 0
 --- stdout ---
 2 of 3 defs; pass --offset 2 for the next page, or --limit all for every one at once.
 
-def_name       def_type  label            matched_on  mod
-VoidNode       ThingDef  void node        def_name    test.mod
-VoidNodeShard  ThingDef  void node shard  def_name    test.mod
+Same in every row, not repeated below: def_type=ThingDef, matched_on=def_name, mod=test.mod.
+def_name       label
+VoidNode       void node
+VoidNodeShard  void node shard
 --- stderr ---

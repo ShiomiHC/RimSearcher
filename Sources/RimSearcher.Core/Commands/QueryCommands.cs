@@ -461,13 +461,15 @@ public sealed class GetCommand : Command
                                                 .Distinct(StringComparer.Ordinal)
                                                 .Where(x => !shownIdx.Contains(x))
                                                 .ToList();
+                    // 「code_default 这一列是什么意思」搬进了 SKILL.md —— 它逐字不随查询变。
+                    // 第四态那半句**不能走**:上一句刚说「这个 def 有 N 条字段路径,--defaults
+                    // 列出其余的」,不接着说破 null 字段从没进过索引,那个 N 就会被读成
+                    // 「这个 def 的全部字段」,而「字段不存在」与「值是 null」在这里同形。
                     ctx.Report.Notice(NoticeKind.Filter,
-                        $"Not listed: {Tally.Complete(defaulted).Render("field")} whose value is the one a fresh " +
-                        "instance of the declaring type already carries, so this snapshot cannot tell whether " +
-                        $"anything set it. The snapshot holds {Tally.Complete(total).Render("field path")} for this " +
-                        "def; --defaults lists the rest of those, and --path <text> sees a named one either way. " +
-                        "A field whose value was null is in none of them: it never entered the index, so its " +
-                        "absence here is not evidence that the field does not exist." +
+                        $"Not listed: {Tally.Complete(defaulted).Render("field")} carrying the declaring type's " +
+                        $"own default. The snapshot holds {Tally.Complete(total).Render("field path")} for this " +
+                        "def; --defaults lists the rest, --path <text> sees a named one either way. " +
+                        "A null-valued field never entered the index and is in neither." +
                         (hiddenIdx.Count > 0
                             ? " Nothing above shows any field of these list entries, which the def has all the " +
                               $"same: {NameList.Render(hiddenIdx, Limits.MaxSuggestions)} — so the lists run " +
@@ -1484,10 +1486,12 @@ internal static class Completeness
         var total = ctx.Db.CountDefsOfType(
             def.DefType, Snapshot.ScopeFilter.Parse("all", ctx.Db.PackageIds(), ctx.Config));
 
+        // 「code_default 这一列是什么意思」搬进了 SKILL.md —— 它逐字不随 def 变。
+        // 但「这不是这个 def 挑的」那半句得留:名单本身只是几个路径加数字,不说破的话
+        // 一行 code_default=no 就会被当成「作者在这里做了个决定」读走。
         ctx.Report.Notice(NoticeKind.Advisory, listed.Count > 0
-            ? $"'{FieldDefault.Column}' says a value differs from what a fresh instance of the class carries — " +
-              $"not that this def chose it. These hold what most of the {total} {def.DefType}s hold, " +
-              $"the count in brackets: {NameList.Render(listed, listed.Count)}."
+            ? $"Values that most of the {total} {def.DefType}s in this snapshot also carry, so a 'no' on these " +
+              $"is not that this def chose it — the count in brackets: {NameList.Render(listed, listed.Count)}."
             : $"No value above is one that most of the {total} {def.DefType}s in this snapshot also carry, " +
               $"so none of them is a class-wide default showing through '{FieldDefault.Column}'.");
     }
@@ -1517,9 +1521,11 @@ internal static class Completeness
         // 类型当场点名,不写「the same def types」—— 这里数的是「哪些 def 类型带得动这条
         // 路径」,跟表里那几行的类型可以毫无关系。主语固定成「那些 def 类型」,计数进从句:
         // 名词有登记处,动词没有。
+        // 「计数只覆盖索引到的路径」这条规则搬进了 SKILL.md。这里留的是它在**这一次**
+        // 的具体后果:哪几个 def 类型带得动这条路径、其中多少个 def 在导出时掉过字段、
+        // 以及那条已经填好参数的交叉验证命令 —— 三样都是查一次才知道的。
         ctx.Report.Notice(NoticeKind.Boundary,
-            "Counted over indexed field paths only: the def types that carry this path " +
-            $"({NameList.Render(types, Limits.MaxSuggestions)}) also hold " +
+            $"The def types carrying this path ({NameList.Render(types, Limits.MaxSuggestions)}) also hold " +
             $"{Tally.Complete(affected.Count).Render("def")} that lost fields at export time and could belong " +
             "here without showing up. " +
             $"'{cmd}' lists " +

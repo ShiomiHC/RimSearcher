@@ -91,15 +91,64 @@ public static class TextRenderer
                     OutputText.Cell(t.Rows[r].GetValueOrDefault(t.Columns[c])), MaxCellWidth);
         }
 
-        var widths = new int[t.Columns.Count];
-        for (var c = 0; c < t.Columns.Count; c++)
+        var (columns, rows, folded) = Fold(t.Columns, cells);
+
+        // 折出来的话摆在表**上方**而不是脚下:它说的是下面每一行的一部分,读到行的时候
+        // 得已经知道。措辞点明「没在下面重复」—— 只说「每行都一样」会被读成列被删了。
+        if (folded.Count > 0)
+            sb.Append("Same in every row, not repeated below: ")
+              .Append(string.Join(", ", folded.Select(f => $"{f.Column}={f.Value}")))
+              .Append('.').Append(OutputText.Newline);
+
+        var widths = new int[columns.Length];
+        for (var c = 0; c < columns.Length; c++)
         {
-            widths[c] = t.Columns[c].Length;
-            for (var r = 0; r < cells.Length; r++) widths[c] = Math.Max(widths[c], cells[r][c].Length);
+            widths[c] = OutputText.Width(columns[c]);
+            for (var r = 0; r < rows.Length; r++) widths[c] = Math.Max(widths[c], OutputText.Width(rows[r][c]));
         }
 
-        AppendRow(sb, t.Columns.ToArray(), widths);
-        for (var r = 0; r < cells.Length; r++) AppendRow(sb, cells[r], widths);
+        AppendRow(sb, columns, widths);
+        for (var r = 0; r < rows.Length; r++) AppendRow(sb, rows[r], widths);
+    }
+
+    /// <summary>
+    /// 整列同值的列不在每行重复它。一列 40 字符宽、一屏几十行,印的全是同一个字,
+    /// 而这一列真正携带的信息量是一句话。
+    ///
+    /// 四条边界:
+    ///   **第一列不折** —— 这套输出的第一列一律是那行的身份(def_name、path、key、order),
+    ///     而下一步命令要拿它当参数。两个同名 def 的 def_name 确实整列同值,折掉之后剩下的
+    ///     行不再是记录;
+    ///   **两行起**才折 —— 一行表里「每行都一样」是废话,且折叠反而多印一行;
+    ///   **空值不折** —— 一列全空折成 `label=` 会读成「这些 def 的标签是空串」,
+    ///     而实情是这一列在这批行上没有值;
+    ///   **不折光** —— 每一列都同值时(单行表之外这罕见)退回原样,只剩一句话没有表
+    ///     比重复更难读。
+    /// </summary>
+    private static (string[] Columns, string[][] Rows, List<(string Column, string Value)> Folded)
+        Fold(IReadOnlyList<string> columns, string[][] cells)
+    {
+        var folded = new List<(string, string)>();
+        var keep = new List<int>();
+        for (var c = 0; c < columns.Count; c++)
+        {
+            if (c == 0) { keep.Add(c); continue; }
+            var first = cells[0][c];
+            var same = cells.Length > 1 && first.Length > 0;
+            for (var r = 1; same && r < cells.Length; r++) same = cells[r][c] == first;
+            if (same) folded.Add((columns[c], first));
+            else keep.Add(c);
+        }
+
+        if (keep.Count == 0)
+        {
+            folded.Clear();
+            keep.AddRange(Enumerable.Range(0, columns.Count));
+        }
+
+        return (keep.Select(c => columns[c]).ToArray(),
+                cells.Select(row => keep.Select(c => row[c]).ToArray()).ToArray(),
+                folded);
     }
 
     private static void AppendRow(StringBuilder sb, string[] cells, int[] widths)
@@ -107,7 +156,10 @@ public static class TextRenderer
         for (var c = 0; c < cells.Length; c++)
         {
             if (c > 0) sb.Append("  ");
-            sb.Append(c == cells.Length - 1 ? cells[c] : cells[c].PadRight(widths[c]));
+            sb.Append(cells[c]);
+            // 末列不补:行尾空格会被 Finish 之外的比对(快照基线)当成有意义的字节。
+            if (c != cells.Length - 1)
+                sb.Append(' ', widths[c] - OutputText.Width(cells[c]));
         }
         sb.Append(OutputText.Newline);
     }

@@ -231,5 +231,56 @@ public static class OutputText
     };
 
     public static string Truncate(string s, int max)
-        => s.Length <= max ? s : s[..Math.Max(0, max - 1)] + "…";
+    {
+        if (Width(s) <= max) return s;
+        var sb = new StringBuilder();
+        var w = 0;
+        foreach (var r in s.EnumerateRunes())
+        {
+            var rw = RuneWidth(r.Value);
+            if (w + rw > max - 1) break;
+            sb.Append(r);
+            w += rw;
+        }
+        return sb.Append('…').ToString();
+    }
+
+    /// <summary>
+    /// 这段字在终端上占几格。对齐是拿空格补出来的,所以补几个得问显示宽度而不是
+    /// <c>string.Length</c> —— 后者按 UTF-16 码元数,于是 CJK 标签那一列整体左偏,
+    /// 而这套输出的读者一半是人。
+    ///
+    /// 按 rune 走不按 char 走:CJK 扩展 B(U+20000 起)是代理对,一个字两个 char,
+    /// 数 char 会把一个两格宽的字算成四格。
+    /// </summary>
+    public static int Width(string s)
+    {
+        var w = 0;
+        foreach (var r in s.EnumerateRunes()) w += RuneWidth(r.Value);
+        return w;
+    }
+
+    /// <summary>
+    /// 区间取自 Unicode East Asian Width 的 W / F 两类,外加宽度为零的组合记号。
+    /// 逐个码点判而不是查表:这里只需要「1 还是 2」,不需要完整的 EAW 属性。
+    /// </summary>
+    private static int RuneWidth(int c) => c switch
+    {
+        >= 0x0300 and <= 0x036F => 0,      // 组合用变音记号:附在前一个字上,不占格
+        >= 0x200B and <= 0x200F => 0,      // 零宽空格与方向标记
+        >= 0x1100 and <= 0x115F => 2,      // 韩文字母
+        >= 0x2E80 and <= 0x303E => 2,      // 部首、康熙部首、CJK 符号与标点
+        >= 0x3041 and <= 0x33FF => 2,      // 假名、注音、CJK 兼容
+        >= 0x3400 and <= 0x4DBF => 2,      // CJK 扩展 A
+        >= 0x4E00 and <= 0x9FFF => 2,      // CJK 统一表意
+        >= 0xA000 and <= 0xA4CF => 2,      // 彝文
+        >= 0xAC00 and <= 0xD7A3 => 2,      // 韩文音节
+        >= 0xF900 and <= 0xFAFF => 2,      // CJK 兼容表意
+        >= 0xFE30 and <= 0xFE6F => 2,      // 竖排标点、小写变体、全角标点
+        >= 0xFF00 and <= 0xFF60 => 2,      // 全角字母数字与标点
+        >= 0xFFE0 and <= 0xFFE6 => 2,      // 全角货币与符号
+        >= 0x1F300 and <= 0x1FAFF => 2,    // emoji 与符号
+        >= 0x20000 and <= 0x3FFFD => 2,    // CJK 扩展 B 及以后
+        _ => 1,
+    };
 }

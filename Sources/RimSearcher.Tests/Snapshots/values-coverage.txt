@@ -11,5 +11,5 @@ value                        defs
 RimWorld.CompShield          2
 Verse.HediffComp_Disappears  1
 
-Counted over indexed field paths only: the def types that carry this path (ThingDef) also hold 1 def that lost fields at export time and could belong here without showing up. 'rimsearcher snapshot truncated --type ThingDef' lists them.
+The def types carrying this path (ThingDef) also hold 1 def that lost fields at export time and could belong here without showing up. 'rimsearcher snapshot truncated --type ThingDef' lists them.
 --- stderr ---

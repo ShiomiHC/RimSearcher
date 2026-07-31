@@ -4,5 +4,5 @@ exit 0
 1 keyed translation.
 
 key               translated  original  origin     placeholder  mod  source
-CannotUseNoPower  没有电力        No power  in effect  no                Misc.xml:12
+CannotUseNoPower  没有电力    No power  in effect  no                Misc.xml:12
 --- stderr ---

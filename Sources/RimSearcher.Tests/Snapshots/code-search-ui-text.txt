@@ -1,14 +1,15 @@
 $ rimsearcher code-search Translate
 exit 0
 --- stdout ---
-3 matches in 1 file; 9 files read across 2 of 3 source trees on disk — the rest hold no file matching --files '*.cs', and 'rimsearcher sources list' says which of those have never been decompiled.
+3 matches in 1 file; 9 files read across 2 of 3 source trees on disk — the rest hold no file matching --files '*.cs', and 'sources list' says which have never been decompiled.
 This snapshot has no keyed translation for 1 translation key in these lines. A def's own label goes through DefInjected rather than a key ('rimsearcher get' and 'search' cover those), and a key no language file declares is one the code no longer reaches.
 The key is not a literal in 1 line here — assembled at runtime, or held in a variable — so what those lines display cannot be resolved from the text. 'rimsearcher keyed' can still show such a key by name once you know it.
 
-vanilla/Verse/Widgets.cs:7:			Draw(rect, "CannotUseNoPower".Translate());
-vanilla/Verse/Widgets.cs:8:			Draw(rect, "NoSuchUiKey".Translate());
-vanilla/Verse/Widgets.cs:9:			Draw(rect, ("Stat_" + label).Translate());
+vanilla/Verse/Widgets.cs  3 matches
+7: 			Draw(rect, "CannotUseNoPower".Translate());
+8: 			Draw(rect, "NoSuchUiKey".Translate());
+9: 			Draw(rect, ("Stat_" + label).Translate());
 
 key               translated  original
-CannotUseNoPower  没有电力        No power
+CannotUseNoPower  没有电力    No power
 --- stderr ---
