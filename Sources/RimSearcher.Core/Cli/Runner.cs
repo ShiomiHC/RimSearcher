@@ -102,15 +102,76 @@ public static class Runner
     /// <summary>工具自己的缺陷。与「用法错」「没结果」分开,脚本才不会把故障当空集。</summary>
     public const int ExitInternal = 70;
 
+    /// <summary>
+    /// <paramref name="argv"/> 的第 1 位之后,去掉全局选项(及其取值)还剩下什么。
+    ///
+    /// 匹配规则跟着 <see cref="ArgParser"/> 走 —— 长短名、别名、<c>--db=path</c> 这种
+    /// 内联取值都认。另写一套「差不多」的匹配,就是给自己开一个两处规则慢慢分家的口子。
+    /// </summary>
+    private static IReadOnlyList<string> NonGlobalArgs(IReadOnlyList<string> argv)
+    {
+        var rest = new List<string>();
+        for (var i = 1; i < argv.Count; i++)
+        {
+            var arg = argv[i];
+            if (arg.Length < 2 || arg[0] != '-') { rest.Add(arg); continue; }
+
+            var body = arg.StartsWith("--", StringComparison.Ordinal) ? arg[2..] : arg[1..];
+            var eq = body.IndexOf('=');
+            var inline = eq >= 0;
+            if (inline) body = body[..eq];
+
+            var key = ArgParser.Normalize(body);
+            var opt = GlobalOptions.All.FirstOrDefault(o =>
+                key == ArgParser.Normalize(o.Name) ||
+                o.Aliases.Any(a => key == ArgParser.Normalize(a)) ||
+                (body.Length == 1 && o.Short == body[0]));
+            if (opt is null) { rest.Add(arg); continue; }
+
+            // 取值型全局选项的值跟在下一位,它不是「多出来的一个词」。
+            if (opt.Arity != Arity.Flag && !inline && i + 1 < argv.Count) i++;
+        }
+        return rest;
+    }
+
     public static int Run(IReadOnlyList<string> argv, TextWriter stdout, TextWriter stderr)
     {
         var registry = new CommandRegistry();
 
-        if (argv.Count == 0 || argv[0] is "-h" or "--help" or "help" && argv.Count == 1)
+        if (argv.Count == 0)
         {
             stdout.Write(HelpRenderer.RenderOverview(CommandRegistry.ExeName, registry.Specs,
                 GlobalOptions.All, CommandRegistry.Tagline));
-            return argv.Count == 0 ? ExitUsage : 0;
+            return ExitUsage;
+        }
+
+        if (argv[0] is "-h" or "--help" or "help")
+        {
+            // 全局选项挂在 --help 后面要放行。原先这里要求 `argv.Count == 1`,于是
+            // `rimsearcher --help --db foo.db` 掉进下面那条「Unknown command '--help'」——
+            // 工具对着一个它明明认得的词说不认得。而这条闸门还有第二重代价:测试夹具
+            // 恒追加 --db/--config,于是 help-overview 那份字节基线从来没到过总览这一屏,
+            // 钉的一直是那句错误话 —— 一道红不了的闸比没有闸更坏。
+            var extra = NonGlobalArgs(argv);
+            if (extra.Count == 0)
+            {
+                stdout.Write(HelpRenderer.RenderOverview(CommandRegistry.ExeName, registry.Specs,
+                    GlobalOptions.All, CommandRegistry.Tagline));
+                return 0;
+            }
+
+            // 剩下的多半是个命令名。这一屏答不了「search 有哪些参数」,照印总表等于
+            // 换个问题回答,而默默把那个词扔掉是这套输出到处在清的那个形状。
+            // `help <command>` 这个写法本身不接(盲测 11 个调用方无一打它,七个求助的
+            // 全打 `<command> --help`),但该打的那一条要原样给出来,不能只说「不行」。
+            var (named, _) = registry.Resolve(extra);
+            stderr.Write(OutputText.Finish(
+                $"'{argv[0]}' prints the command list and takes no command name. " +
+                (named is not null
+                    ? $"For the arguments of '{named.Spec.Name}', run " +
+                      $"'{CommandRegistry.ExeName} {named.Spec.Name} --help'."
+                    : $"For the arguments of one command, run '{CommandRegistry.ExeName} <command> --help'.")));
+            return ExitUsage;
         }
 
         if (argv[0] is "--version")

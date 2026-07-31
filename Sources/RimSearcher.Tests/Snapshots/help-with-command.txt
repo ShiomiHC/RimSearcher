@@ -1,0 +1,5 @@
+$ rimsearcher --help search
+exit 2
+--- stdout ---
+--- stderr ---
+'--help' prints the command list and takes no command name. For the arguments of 'search', run 'rimsearcher search --help'.

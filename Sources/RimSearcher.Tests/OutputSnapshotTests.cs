@@ -105,7 +105,12 @@ public class OutputSnapshotTests
         { "json-read-member",      ["read", "vanilla/Verse/Outline.cs", "--member", "Shared", "--json"] },
         { "usage-unknown-flag",    ["search", "shield", "--lmit", "5"] },
         { "usage-unknown-command", ["serach", "shield"] },
+        // 这一份此前钉的是「Unknown command '--help'」—— 夹具恒追加 --db/--config,
+        // 而总览那条分支要求 argv 恰好一个词,于是基线看着覆盖了命令总表,实际一次都没到过。
         { "help-overview",         ["--help"] },
+        // `--help <command>` 不接(盲测:七个求助的调用方全打 `<command> --help`),
+        // 但那个词不许被默默扔掉 —— 说清这一屏是什么,并把该打的那一条原样给出来。
+        { "help-with-command",     ["--help", "search"] },
         { "help-get",              ["get", "--help"] },
         { "help-code-search",      ["code-search", "--help"] },
         { "help-sources-sync",     ["sources", "sync", "--help"] },
