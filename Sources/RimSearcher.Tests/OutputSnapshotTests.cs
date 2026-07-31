@@ -166,6 +166,17 @@ public class OutputSnapshotTests
         { "keyed-placeholder",     ["keyed", "TodoKey"] },
         // 过滤器筛空 ≠ 没有这个 key。三轮 R8 那类误诊在这条命令上的落点。
         { "keyed-placeholder-none", ["keyed", "CannotUseNoPower", "--placeholders"] },
+        // 第三条路:不给查询词的整层枚举。位置参数原先必填,于是「把还没译的全列出来」
+        // 这条意图**一种可表达的形式都没有** —— 盲测里一个调用方连试空串 / `*` / `.` /
+        // 空格八次,全被同一句 Missing required argument 挡回,最后改去猜实词,而那答的
+        // 是另一个问题。两份基线:整层第一页,以及这条意图本身。
+        { "keyed-all",             ["keyed"] },
+        { "keyed-all-placeholders", ["keyed", "--placeholders", "--limit", "all"] },
+        // 枚举走的是分页文法而不是精确 key 那一路,所以翻过头这条分支也得有。
+        { "keyed-all-past-end",    ["keyed", "--placeholders", "--offset", "9"] },
+        // --placeholders 是收窄参数,计数要念回它划的那道线 —— 不念的话「1 key.」会被
+        // 读成「filler 一共命中一条」,而真值是 2100 条里有一条占位。
+        { "keyed-text-placeholders", ["keyed", "filler", "--placeholders"] },
         // 零结果的两种成因:代码里有这个字面量而语言文件里没有(死 key),
         // 以及问的其实是个 def 名 —— 后者该被指回 get/search,而不是报「没有」。
         { "keyed-miss",            ["keyed", "NoSuchUiKey"] },
@@ -311,6 +322,45 @@ public class OutputSnapshotTests
         var (missing, _, _) = Fixture.Run("keyed", "NoSuchUiKey");
         Assert.DoesNotContain("no keyed translations at all", missing);
         Assert.Contains("No keyed translation matches", missing);
+
+        // 不给查询词那一路也要说快照,不能拿一个不存在的 query 拼进句子。
+        var (bare, _, bareCode) = Fixture.Run("keyed", "--db", db);
+        Assert.Equal(1, bareCode);
+        Assert.Contains("property of the snapshot", bare);
+        Assert.Contains("what this layer holds", bare);
+    }
+
+    /// <summary>
+    /// 「一条占位都没有」是一个**完整的肯定回答**(这份快照译全了),而按行数它走的是
+    /// exit 1 —— 读退出码的脚本会把它读成一次失败的查找。所以那句话必须自己把两件事
+    /// 都说出来:覆盖率是满的,以及退出码非零只是因为一行都没印。
+    ///
+    /// 与上面那条同理走不了字节级基线:它要一份自己动过手的库。
+    /// </summary>
+    [Fact]
+    public void 整层没有占位时说的是覆盖率满而不是查不到()
+    {
+        var db = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "keyed-no-placeholders.db");
+        if (File.Exists(db)) File.Delete(db);
+        File.Copy(Fixture.Db, db);
+        using (var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={db}"))
+        {
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "UPDATE keyed SET placeholder = 0;";
+            cmd.ExecuteNonQuery();
+        }
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+
+        var (text, _, code) = Fixture.Run("keyed", "--placeholders", "--db", db);
+        Assert.Equal(1, code);
+        Assert.Contains("carry a real translation", text);
+        // 分母是整层的行数,不是「筛剩下的零」—— 拿自己筛剩的零去否定全体正是这条开关
+        // 唯一用途上的最强否定句。
+        Assert.Contains("2105 keyed translations", text);
+        Assert.Contains("the exit code is still non-zero", text);
+        // 「没找到」的措辞一个字都不许出现:那会把「译全了」说成「查不到」。
+        Assert.DoesNotContain("No keyed translation matches", text);
     }
 
     internal static string SnapshotDir => Path.Combine(DeclarationTests.RepoRoot(), "Sources", "RimSearcher.Tests", "Snapshots");

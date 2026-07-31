@@ -31,6 +31,7 @@ is the only command that reads it, and it says so.
 | What does this inherit from / what inherits from it? | `rimsearcher inherit <name>` |
 | Which layer of the chain writes this field? | `rimsearcher inherit <def> --path <field>` |
 | What does this interface text say, or which key is behind it? | `rimsearcher keyed <key or phrase>` |
+| Which interface text is still untranslated? | `rimsearcher keyed --placeholders` with no query |
 | What does this method do? | `mcp__decompiler__get_decompiled_source` |
 | Who calls it / what does it override / what derives from it? | `mcp__decompiler__find_callers`, `get_overrides`, `find_derived_types` |
 | Where is this type? | `mcp__decompiler__search_types` |
@@ -95,6 +96,14 @@ that wins — most of them come from mods that are installed but not enabled, so
 the race at all. The `in effect` row is listed first. A `placeholder` row is a key whose language
 file declares it without a translation, so the game falls back to English there — that is what a
 translation-coverage question is asking about, and `--placeholders` lists only those.
+
+The query is optional, because `--placeholders` filters the whole layer rather than a result set:
+`rimsearcher keyed --placeholders --limit all` is "list every untranslated string", with no query
+to invent. Leaving the query out without the switch enumerates the layer itself, paged like any
+other listing. Do not reach for a stand-in query — `""`, `*` and `.` are not wildcards here, and a
+real word such as `Command` silently answers a different question. When nothing is a placeholder
+the answer says so as a coverage statement over the whole layer; the exit code is still non-zero
+because no rows were printed, which is not the same as a failed lookup.
 
 The `on disk` layer is scanned by default at import time, so a key that only some unenabled mod
 translates is still findable by its text. A snapshot built without that scan says so beside the

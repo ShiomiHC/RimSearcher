@@ -42,7 +42,10 @@ public sealed class KeyedCommand : Command
             new PositionalSpec
             {
                 Name = "query",
-                Help = "A translation key, or a phrase from the interface in any language the snapshot has.",
+                Required = false,
+                Help = "A translation key, or a phrase from the interface in any language the snapshot has. " +
+                       "Leave it out to list the layer itself — every keyed translation, or with " +
+                       "--placeholders only the untranslated ones.",
             },
         ],
         Options =
@@ -56,7 +59,11 @@ public sealed class KeyedCommand : Command
                 Aliases = ["untranslated", "todo"],
                 Help = "List only keys whose translation is still a placeholder — the language file has the " +
                        "key but not a translation, so the game falls back to English. This is what a " +
-                       "translation-coverage question wants.",
+                       "translation-coverage question wants, and it needs no query: on its own it filters " +
+                       "the whole layer.",
+                // 这个开关一给,计数就只在它划的那道线之内完整。不念回去的话,
+                // 「2 keyed translations.」会被读成「这份快照一共两条界面文案」,而真值是 2105。
+                Narrows = true,
             },
         ],
         Examples =
@@ -64,6 +71,7 @@ public sealed class KeyedCommand : Command
             "rimsearcher keyed CannotUseNoPower",
             "rimsearcher keyed 没有电力",
             "rimsearcher keyed Command --limit all",
+            "rimsearcher keyed --placeholders --limit all",
         ],
         JsonKeys =
         [
@@ -80,7 +88,7 @@ public sealed class KeyedCommand : Command
 
     public override int Run(CommandContext ctx)
     {
-        var query = ctx.Args.Positional(0)!;
+        var query = ctx.Args.Positional(0);
         var limit = ctx.Limit();
         var offset = ctx.Args.Int("offset", 0);
         var placeholdersOnly = ctx.Args.Flag("placeholders");
@@ -92,12 +100,23 @@ public sealed class KeyedCommand : Command
         {
             ctx.Report.Notice(NoticeKind.Boundary,
                 "This snapshot has no keyed translations at all, so nothing here can be looked up — that is a " +
-                "property of the snapshot, not an answer about '" + query + "'. Two exports look like this and " +
+                "property of the snapshot, " +
+                (query is null ? "not an answer about what this layer holds. " : $"not an answer about '{query}'. ") +
+                "Two exports look like this and " +
                 "this line cannot tell them apart: one written before this layer was measured at all, and one " +
                 "written from a game whose language data was not loaded. The fix is the same either way — export " +
                 "again; 'rimsearcher snapshot status' names the snapshot in use.");
             return 1;
         }
+
+        // 不给查询词就是整层枚举。原先位置参数是必填的,于是「把还没译的全列出来」这条意图
+        // 一种可表达的形式都没有 —— 而 `--placeholders` 本来就是**整层的过滤器**,不是搜索
+        // 结果上的过滤器,它单独出现是这个开关最自然的用法。实测里一个调用方为此烧了八次
+        // 调用(空串 / `*` / `.` / 空格轮着试,全被同一句 Missing required argument 挡回),
+        // 最后改去猜实词("Command" / "the"),而那答的是另一个问题、且答得像答对了。
+        // 判据与 `list` 同源:分模式看**给没给位置参数**,不看开关。
+        if (query is null)
+            return RunAll(ctx, limit, offset, placeholdersOnly);
 
         // 精确 key 命中优先。key 与界面文案不会同形,所以这一步不会抢走「按文案搜」的意图。
         var exact = ctx.Db.KeyedByKey(query);
@@ -198,21 +217,6 @@ public sealed class KeyedCommand : Command
         }
 
         var shown = limit.IsAll ? rows : rows.Take(limit.Effective).ToList();
-        ctx.Report.Table("keys", ["key", "translated", "original", "origin", "placeholder", "mod", "source"],
-            shown.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
-            {
-                ["key"] = r.Key,
-                ["translated"] = r.Translated,
-                ["original"] = r.Original,
-                // 「in effect」/「on disk」而不是 runtime/harvested:后者说的是数据怎么来的,
-                // 前者说的是读的人真正要判的那件事 —— 这一句游戏会不会显示。
-                ["origin"] = r.Origin == TranslationOrigin.Runtime ? "in effect" : "on disk",
-                // 恒在,不按有无条件出现。条件出现的列会让「量过了,不是占位」与
-                // 「这一格根本没量」印出来一模一样(R6 三次复发的那个形状)。
-                ["placeholder"] = r.Placeholder,
-                ["mod"] = r.SourceMod,
-                ["source"] = r.SourceLine > 0 ? $"{r.SourceFile}:{r.SourceLine}" : r.SourceFile,
-            }).ToList());
 
         // 名词跟着「数的是什么」变,不是跟着命令名变:按 key 精确命中时数的是这个 key 的
         // 几条来源(in effect 一条,on disk 可以另有几条),按文案搜时数的是命中了几个 key。
@@ -221,27 +225,7 @@ public sealed class KeyedCommand : Command
         // 变的只有名词。计数形态两路同一套 —— 原先按 key 那一路走 CountNotice 加一句写死的
         // 「pass --limit all for the rest」,于是 `--limit all --offset N` 会拿到一句指着
         // 调用方刚用过的那个参数的补救,而真正让它变短的是 --offset。
-        ctx.Report.PageNotice(matchedOn == "key" ? "keyed translation" : "key",
-                              shown.Count, offset, ftsTotal);
-
-        // origin 那一列印着「in effect」,读的人自然读出「另有 on disk 的没印出来」。
-        // 这份库要是没量过磁盘,那个对照根本不存在 —— 说破它。
-        DiskLayer.NoteIfUnmeasured(ctx);
-
-        // 占位译文实际显示的是英文 —— 表里它与真译文同形,所以点名说破。
-        //
-        // 主语是固定单数(the language file),计数进宾语。NounRegistry 管名词的复数,
-        // **不管主谓一致**,所以「1 keyed translation … are」这种错加不了登记项来修,
-        // 只能靠句子结构避开 —— 这一课 04 记过两次,写这一节时又踩了三次。
-        var placeholders = shown.Count(r => r.Placeholder);
-        if (placeholders > 0)
-            ctx.Report.Notice(NoticeKind.Boundary,
-                "Placeholder means the language file declares the key without a translation, so the game " +
-                "displays the English text instead of what the translated column shows: that is the case for " +
-                // 这里数的是**表里的行**,所以名词固定是 keyed translation,不跟着上面那句的
-                // 「按 key 还是按文案命中」变 —— 一个 key 可以有好几行,其中几行是占位。
-                // 顺带:名词闸是扫源码里的字面量的,交给变量它就看不见了(实测红过一次)。
-                $"{Tally.Complete(placeholders).Render("keyed translation")} above.");
+        Emit(ctx, shown, matchedOn == "key" ? "keyed translation" : "key", offset, ftsTotal, placeholdersOnly);
 
         // 命中是靠文案搜到的时候,下一步几乎总是「那么是哪段代码印的」。key 在手上,
         // 那条命令是可以直接给出来的 —— 而 97% 的调用点把 key 写成紧邻的字面量。
@@ -266,5 +250,100 @@ public sealed class KeyedCommand : Command
         }
 
         return 0;
+    }
+
+    /// <summary>
+    /// 不给查询词的那一半:整层枚举,<c>--placeholders</c> 在这里是它本来的形状 —— 作用在
+    /// 整层上的过滤器,而不是「先搜到什么再从里面筛」。
+    ///
+    /// 分页走的是文案搜索那一路的文法(LIMIT/OFFSET + <see cref="Output.Report.PageNotice"/>),
+    /// 不是精确 key 那一路 —— 那一路一个 key 就那几条来源,一次全在手上,而这里的分母是
+    /// 整层的两千多条,「这一页几条 / 总共几条 / 下一页怎么要」三件事一件都不能少。
+    /// </summary>
+    private static int RunAll(CommandContext ctx, LimitValue limit, int offset, bool placeholdersOnly)
+    {
+        // 分页在 SQL 里做,不是取全量再切 —— 整层是两千到一万几千行,`--limit 25` 却只要
+        // 二十五行,把全部读进内存再扔掉是按最坏情况付账。`--limit all` 那一档
+        // LimitValue.Effective 给的是 int.MaxValue(真的解除上限,不是夹到 2000),
+        // 于是「全给」这条承诺在这里也是字面成立的。
+        var (rows, total, layerTotal) = ctx.Db.KeyedAll(limit.Effective, offset, placeholdersOnly);
+
+        if (rows.Count == 0)
+        {
+            // 翻过头排在最前,与上面那一路同序:它与「没有」的区别最大,而一次翻页
+            // 被读成一次否定正是本项目点名清过的形状。
+            if (offset > 0 && total > 0)
+            {
+                ctx.Report.PastEnd(offset, placeholdersOnly
+                    ? $"{Tally.Complete(total).Render("keyed translation")} in this snapshot are placeholders."
+                    : $"this snapshot holds {Tally.Complete(total).Render("keyed translation")} in all.");
+                return 1;
+            }
+
+            // 整层非空(上面已经判过),枚举又空 —— 只剩一种成因:一条占位都没有。
+            // 这是一个**完整的肯定回答**,不是一次落空的查找,而按行数它照样走 exit 1
+            // (R12 约定),所以句子必须自己把这件事说清:读退出码的脚本会把它读成失败。
+            ctx.Report.Notice(NoticeKind.Filter,
+                "No keyed translation in this snapshot is a placeholder: all " +
+                $"{Tally.Complete(layerTotal).Render("keyed translation")} carry a real translation, so nothing " +
+                "in this layer is left for the game to fall back to English on. That is a complete answer about " +
+                "coverage rather than a lookup that came up empty — the exit code is still non-zero because no " +
+                "rows were printed. Coverage of a def's own label and description is a different layer: those " +
+                "are injected through DefInjected, and 'rimsearcher get <defName>' shows them.");
+            return 1;
+        }
+
+        Emit(ctx, rows, "keyed translation", offset, total, placeholdersOnly);
+        return 0;
+    }
+
+    /// <summary>
+    /// 表 + 三件分页事 + 两条说破。三条路(精确 key / 文案搜 / 整层枚举)共用一份 ——
+    /// 分开写的话,「占位是什么意思」这句只会长在想起来的那两条上。
+    /// </summary>
+    private static void Emit(CommandContext ctx, IReadOnlyList<Storage.KeyedRow> shown, string noun,
+                             int offset, int total, bool placeholdersOnly)
+    {
+        ctx.Report.Table("keys", ["key", "translated", "original", "origin", "placeholder", "mod", "source"],
+            shown.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+            {
+                ["key"] = r.Key,
+                ["translated"] = r.Translated,
+                ["original"] = r.Original,
+                // 「in effect」/「on disk」而不是 runtime/harvested:后者说的是数据怎么来的,
+                // 前者说的是读的人真正要判的那件事 —— 这一句游戏会不会显示。
+                ["origin"] = r.Origin == TranslationOrigin.Runtime ? "in effect" : "on disk",
+                // 恒在,不按有无条件出现。条件出现的列会让「量过了,不是占位」与
+                // 「这一格根本没量」印出来一模一样(R6 三次复发的那个形状)。
+                ["placeholder"] = r.Placeholder,
+                ["mod"] = r.SourceMod,
+                ["source"] = r.SourceLine > 0 ? $"{r.SourceFile}:{r.SourceLine}" : r.SourceFile,
+            }).ToList());
+
+        ctx.Report.PageNotice(noun, shown.Count, offset, total);
+
+        // origin 那一列印着「in effect」,读的人自然读出「另有 on disk 的没印出来」。
+        // 这份库要是没量过磁盘,那个对照根本不存在 —— 说破它。
+        DiskLayer.NoteIfUnmeasured(ctx);
+
+        // 占位译文实际显示的是英文 —— 表里它与真译文同形,所以点名说破。
+        //
+        // 主语是固定单数(the language file),计数进宾语。NounRegistry 管名词的复数,
+        // **不管主谓一致**,所以「1 keyed translation … are」这种错加不了登记项来修,
+        // 只能靠句子结构避开 —— 这一课 04 记过两次,写这一节时又踩了三次。
+        var placeholders = shown.Count(r => r.Placeholder);
+        if (placeholders > 0)
+            ctx.Report.Notice(NoticeKind.Boundary, placeholdersOnly
+                // --placeholders 在场时表里每一行都是占位,再报一遍数就是同一个数占两行
+                // (上面那句分页计数已经报过了)—— 这句要说的只剩「占位是什么意思」。
+                ? "Placeholder means the language file declares the key without a translation, so the game " +
+                  "displays the English text instead of what the translated column shows. Every row above is " +
+                  "one of those, which is what --placeholders selects."
+                : "Placeholder means the language file declares the key without a translation, so the game " +
+                  "displays the English text instead of what the translated column shows: that is the case for " +
+                  // 这里数的是**表里的行**,所以名词固定是 keyed translation,不跟着上面那句的
+                  // 「按 key 还是按文案命中」变 —— 一个 key 可以有好几行,其中几行是占位。
+                  // 顺带:名词闸是扫源码里的字面量的,交给变量它就看不见了(实测红过一次)。
+                  $"{Tally.Complete(placeholders).Render("keyed translation")} above.");
     }
 }

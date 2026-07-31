@@ -1058,6 +1058,34 @@ public sealed class SnapshotDb : IDisposable
     }
 
     /// <summary>
+    /// 整层枚举,不带查询词。「把还没译的全列出来」这条意图原先没有可表达的形式:
+    /// <c>keyed</c> 的位置参数是必填的,而 <c>--placeholders</c> 是**整层的过滤器**,
+    /// 不是搜索结果上的过滤器 —— 实测里一个调用方为此烧掉八次调用(空串 / <c>*</c> /
+    /// <c>.</c> / 空格全被同一句「Missing required argument」挡回),最后改去猜实词,
+    /// 而那答的是另一个问题。
+    /// </summary>
+    /// <param name="placeholdersOnly">
+    /// 与 <see cref="KeyedSearch"/> 同一条理由:必须在 SQL 里筛。取完页再筛,
+    /// 「这一页没有占位」就会被当成「一条占位都没有」说出去。
+    /// </param>
+    /// <returns><c>Total</c> 是过滤之后的行数(分页按它算),<c>LayerTotal</c> 是整层的行数
+    /// —— 「整层 N 行里一条占位都没有」那句话要的是后者。</returns>
+    public (IReadOnlyList<KeyedRow> Rows, int Total, int LayerTotal) KeyedAll(
+        int limit, int offset = 0, bool placeholdersOnly = false)
+    {
+        var where = placeholdersOnly ? " WHERE placeholder = 1" : "";
+        var layerTotal = KeyedCount();
+        var total = placeholdersOnly ? Scalar($"SELECT COUNT(*) FROM keyed{where}") : layerTotal;
+        // 同一个 key 的几条来源挨在一起,生效的那条排头 —— 与 KeyedByKey 同一套次序,
+        // 于是从枚举里挑一个 key 再单查它,两处的行序不会打架。
+        var rows = ReadKeyed(
+            $"SELECT {KeyedColumns} FROM keyed{where} " +
+            $"ORDER BY key COLLATE NOCASE, (origin <> '{TranslationOrigin.Runtime}'), origin, source_mod " +
+            $"LIMIT {limit} OFFSET {offset}");
+        return (rows, total, layerTotal);
+    }
+
+    /// <summary>
     /// 一批 key 各自的生效译文。<c>code-search</c> 给命中行附译文时一次问完 ——
     /// 一行一次查询会让一次扫描变成几千次 SQL。只回 runtime 那一层:附在代码行边上的
     /// 那句话必须是游戏真会显示的,磁盘层在这里贴上去就是伪证。

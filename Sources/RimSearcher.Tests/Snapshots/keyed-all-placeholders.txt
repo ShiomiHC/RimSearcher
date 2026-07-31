@@ -1,0 +1,10 @@
+$ rimsearcher keyed --placeholders --limit all
+exit 0
+--- stdout ---
+2 keyed translations within --placeholders.
+Placeholder means the language file declares the key without a translation, so the game displays the English text instead of what the translated column shows. Every row above is one of those, which is what --placeholders selects.
+
+key            translated  original            origin     placeholder  mod  source
+FillerKey2099  填充2099      filler line         in effect  yes               Filler.xml:2100
+TodoKey        TODO        Not translated yet  in effect  yes               Misc.xml:34
+--- stderr ---

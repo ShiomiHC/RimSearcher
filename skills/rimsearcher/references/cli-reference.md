@@ -389,7 +389,7 @@ rimsearcher inherit Bullet_Revolver --path damageAmountBase
 Look up the UI text behind a translation key, or find the key behind a piece of UI text.
 
 ```
-rimsearcher keyed <query> [options]
+rimsearcher keyed [query] [options]
 ```
 
 This is the layer defs do not cover. A def's label and description are translated through DefInjected and belong to 'get' and 'search'; everything else on screen — button captions, alerts, tooltips, failure reasons — is a keyed translation, and only this command reads those.
@@ -400,13 +400,13 @@ Rows are marked 'in effect' or 'on disk'. Only 'in effect' is what the game disp
 
 | Argument | Meaning |
 |---|---|
-| `<query>` | A translation key, or a phrase from the interface in any language the snapshot has. |
+| `<query>` | A translation key, or a phrase from the interface in any language the snapshot has. Leave it out to list the layer itself — every keyed translation, or with --placeholders only the untranslated ones. *(optional)* |
 
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n|all> | How many keys to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--offset` <n> | Skip this many keys before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
-| `--placeholders` | List only keys whose translation is still a placeholder — the language file has the key but not a translation, so the game falls back to English. This is what a translation-coverage question wants. | `--untranslated`, `--todo` |
+| `--placeholders` | List only keys whose translation is still a placeholder — the language file has the key but not a translation, so the game falls back to English. This is what a translation-coverage question wants, and it needs no query: on its own it filters the whole layer. | `--untranslated`, `--todo` |
 
 `--json` keys, besides the global `notes`:
 
@@ -420,6 +420,7 @@ Examples:
 rimsearcher keyed CannotUseNoPower
 rimsearcher keyed 没有电力
 rimsearcher keyed Command --limit all
+rimsearcher keyed --placeholders --limit all
 ```
 
 ## `list`
