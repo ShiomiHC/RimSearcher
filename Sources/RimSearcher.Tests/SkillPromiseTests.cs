@@ -28,11 +28,15 @@ public class SkillPromiseTests
         // ---- 数据边界 ----
         new("inheritance, discarded by the game before export; `inherit` alone reads it",
             nameof(继承层的来路与补丁时间差写在inherit自己的说明里)),
-        // 无 Name= 的节点拿到的是导出器硬写的 0,所以承诺收窄成「声明了 Name= 的才报数」,
-        // 另一半明说成 n/a;两半各由那道闸的两组断言证。
-        new("reports how many patch operations target it by name — zero means what you see is what the game read",
+        // 2026-08-01 第九轮盲测证伪了原来钉在这里的那句「zero means what you see is what
+        // the game read」:`Human` 声明了 Name= 因而报 patch_ops 0,而它的运行时类型是
+        // `AlienRace.ThingDef_AlienRace` —— 被一条 defName 定向 patch 换掉了。
+        // **0 只说明没有按 Name 命中的 patch**,而这道闸此前一直在守那句假话。
+        new("patches that target a node **by `Name=`**",
             "inherit的patch计数在干净节点也在场"),
-        new("no `Name=` reports `n/a`, not zero",
+        new("A `0` is not evidence the def is unpatched",
+            "inherit的patch计数在干净节点也在场"),
+        new("reports `n/a` rather than `0`",
             "inherit的patch计数在干净节点也在场"),
         new("An abstract node shows no field values",
             "抽象节点不在defs里但在继承层里"),

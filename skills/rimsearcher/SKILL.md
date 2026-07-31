@@ -125,7 +125,10 @@ so. A `--files` glob containing `/` starts at the tree name (`vanilla/**/Widgets
   still applies to every row; the first column (the row's identity) and `--json` never fold.
 - **Exit codes**: `0` ran, `1` zero rows, `2` usage error, `70` tool defect. **`1` is an
   answer, not a failure** — chain with `;`, never `&&`, or an informative zero drops what
-  you queued after it. A `;` chain reports only the last code: read stdout.
+  you queued after it. A `;` chain reports only the last code, so read the output.
+  **Everything lands on stdout except a usage error** — the reasoning behind a zero
+  included. `2` is the exception: its message is on stderr with stdout empty, so
+  `2>/dev/null` turns a mistyped option into a silent empty result.
 - **A zero result names its own cause** — hidden by `--scope`, abstract parent, def type,
   class, mod, UI text, or present in another named snapshot. Read that sentence before
   concluding: "not here" ≠ "not anywhere".
@@ -165,38 +168,46 @@ so. A `--files` glob containing `/` starts at the tree name (`vanilla/**/Widgets
 - **`get --path`/`--value` match substrings** — `--path soundImpact` also returns
   `soundImpactDefault`, opposite meaning; the output says when nothing matched as a whole
   segment. `--type <DefType>` picks between same-named defs (common).
-- **Abstract parents are not defs**: `get` cannot reach them (it says so) — use `inherit`,
-  which reads the XML layer **pre-patch**. A node declaring `Name=` reports how many patch
-  operations target it by name — zero means what you see is what the game read; no `Name=`
-  reports `n/a`, not zero — defName-targeted patches are counted nowhere. An abstract node shows no field values (all merged post-patch into
-  children), so `get` a concrete child.
+- **Abstract parents are not defs**: `get` cannot reach them (it says so) — use `inherit`.
+  What it reads from the XML is the **structure**: who inherits from whom, which nodes are
+  abstract. Field **values** are the snapshot's, already post-patch — so it is no way to
+  see a def before a PatchOperation, and nothing here is. The layer holds only nodes
+  declaring `Name=`, `ParentName=` or `Abstract=`; an ordinary def takes part in no
+  inheritance and `inherit` says that instead of reporting it absent. An abstract node
+  shows no field values of its own, so `get` a concrete child.
+- **`patch_ops` counts one narrow thing**: patches that target a node **by `Name=`**. A `0`
+  is not evidence the def is unpatched — defName-targeted patches are counted nowhere and
+  can go as deep as swapping the runtime class (`Human` reports `patch_ops 0` while running
+  `AlienRace.ThingDef_AlienRace`). No `Name=` reports `n/a` rather than `0` — the same
+  blind spot, said out loud.
 - **Which layer declares a field**: `inherit <def> --path <field>` computes evidence — a
   layer whose `with_path` falls short of `other_defs` is not the declaring one. The reverse
-  does not follow; `same_value` is what tells every-descendant-writes-it apart.
+  does not follow; `same_value` tells every-descendant-writes-it apart. A patch that added
+  the field to many defs looks exactly like a layer declaring it.
 - **A `list` def type is a storage bucket, not a runtime class.** Multi-class buckets get a
   `class` column and `--class`; `list <SomeClass>` says where to look instead of "no such
-  type". Most buckets hold one class — there `--class` narrows nothing and behaviour lives
-  on a nested `Class="…"` field: **`find Class` territory, not `--class`**, and the
-  command says so.
-- **`find Class`** (runtime type of nested `Class="…"` objects) may be missing on older
-  snapshots — the query names which exporter step your snapshot reached, so **read that
-  line before reading a zero**; re-export closes the gap.
+  type". Most buckets hold one class — there `--class` narrows nothing and the behaviour
+  lives on a nested `Class="…"` field instead: **`find Class` territory, not `--class`**.
+- **`find Class`** reaches that nested runtime type, but only where it **differs from the
+  declared type** — a field running exactly what its C# declares is not indexed under
+  `Class` at all, and older snapshots predate parts of this dimension. So a zero is about
+  the index, never "no def runs it": confirm with `code-search "class <Name>\b"`.
 - **`keyed` is the only road to screen text** — captions, alerts, tooltips are keyed
   translations belonging to no def, unreachable by `search`/`get`/`find`. Both directions:
   key → displayed text, phrase in either language → keys. Only `in effect` rows are what
   the game displays; `on disk` rows mostly come from installed-but-disabled mods.
+  **A query that is itself an exact key silently stops matching prefixes** — `CommandSettle`
+  returns one row and never mentions `CommandSettleDesc`; shorten the query to see siblings.
   `--placeholders` with no query lists every untranslated key — **do not invent a stand-in
   query**: `""`, `*`, `.` are not wildcards, and a real word silently answers a different
   question.
 - **`code-search` reports matches and files as two numbers** — "how many methods" wants
   the first. Of its three caps, `--limit` and `--max-per-file` only shape what is printed
   (the count stays exact); **only `--max-files` shortens the scan**, turning the count into
-  `at least N` — the fix is raising it, not looking elsewhere. Tree counts
-  (`23 of 33 source trees`) and empty trees: usage-notes / `rimsearcher sources list`.
+  `at least N` — raise it rather than looking elsewhere. Tree counts: `sources list`.
 - **Decompiled text has lost comments and local variable names** (parameters and members
-  survive). A member you cannot find is usually inherited — the decompiler does not repeat
-  base members; follow the `: Base`. Trees are named by packageId (`vanilla` = the game);
-  version diffs are a `git diff` question — see usage-notes.
+  survive). A member you cannot find is usually inherited — follow the `: Base`. Trees are
+  named by packageId (`vanilla` = the game); version diffs are a `git diff` question.
 
 ## Snapshots
 

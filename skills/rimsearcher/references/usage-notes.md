@@ -195,7 +195,8 @@ a query that would come back empty.
 `rimsearcher export --modlist <name>` runs the game headless, so it takes minutes on a large
 mod list and prints nothing while it works. If a loading stage sits still it says so on
 stderr and **keeps waiting** — that line is a report, not a verdict, and the only thing that
-stops the game is `--timeout`. Raise `--timeout` rather than treating a stall report as
+stops the game is `--timeout`. (This progress reporting is the one routine use of stderr;
+everywhere else stderr carries usage errors only — see the exit-code contract in SKILL.md.) Raise `--timeout` rather than treating a stall report as
 failure. The `<name>` is required, and `rimsearcher modlist list` is where it comes from:
 saved lists are the only thing an export can run against. One saved from the game's mod
 screen, one written by `modlist save`, and one typed by hand are equally valid.
