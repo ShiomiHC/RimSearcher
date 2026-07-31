@@ -1,9 +1,6 @@
 $ rimsearcher get VariantOne
 exit 0
 --- stdout ---
-1 field.
-No value above is one that most of the 2 TestBaseDefs in this snapshot also carry, so none of them is a class-wide default showing through 'code_default'.
-
 def_name       VariantOne
 def_type       TestBaseDef
 label          variant one
@@ -11,7 +8,9 @@ class          Verse.TestVariantDef
 mod            test.mod
 source         Variants.xml
 inherits_from  BaseProjectile (see 'rimsearcher inherit VariantOne')
+1 field.
 
 path         value             code_default
 workerClass  Verse.TestWorker  no
+No value above is one that most of the 2 TestBaseDefs in this snapshot also carry, so none of them is a class-wide default showing through 'code_default'.
 --- stderr ---

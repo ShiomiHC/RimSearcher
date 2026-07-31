@@ -273,6 +273,10 @@ public sealed class KeyedCommand : Command
     private static void Emit(CommandContext ctx, IReadOnlyList<Storage.KeyedRow> shown, string noun,
                              int offset, int total, bool placeholdersOnly)
     {
+        // 分页三件事在它数的那张表**上方** —— 数得清几条、是不是还有下一页,读到行的时候
+        // 得已经知道。全仓只有这一处曾是反的。
+        ctx.Report.PageNotice(noun, shown.Count, offset, total);
+
         ctx.Report.Table("keys", ["key", "translated", "original", "origin", "placeholder", "mod", "source"],
             shown.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
@@ -288,8 +292,6 @@ public sealed class KeyedCommand : Command
                 ["mod"] = r.SourceMod,
                 ["source"] = r.SourceLine > 0 ? $"{r.SourceFile}:{r.SourceLine}" : r.SourceFile,
             }).ToList());
-
-        ctx.Report.PageNotice(noun, shown.Count, offset, total);
 
         // origin 那一列印着「in effect」,读的人自然读出「另有 on disk 的没印出来」。
         // 这份库要是没量过磁盘,那个对照根本不存在 —— 说破它。

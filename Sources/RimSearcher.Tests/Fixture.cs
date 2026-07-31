@@ -46,6 +46,15 @@ public static class Fixture
     /// </summary>
     public static string CoreDb { get { _ = Db; return CoreDbPath; } }
 
+    /// <summary>
+    /// 导出器 0.4.0 那一档 —— 单字段上的 <c>Class=</c> 也量过了。主 fixture 是 0.2.0
+    /// (只量列表元素)、other 是 0.1.0(一点没量),三档的措辞必须互不相同。
+    /// </summary>
+    public static string ModernDb { get { _ = Db; return Path.Combine(SnapshotDir, "modern.db"); } }
+
+    /// <summary>0.1.0 那一档,给「这份快照根本没量过」的措辞当落点。</summary>
+    public static string OtherDb { get { _ = Db; return Path.Combine(SnapshotDir, "other.db"); } }
+
     /// <summary>语料的导出文件本身 —— 要自己跑一遍 `snapshot import` 的用例用它当输入。</summary>
     public static string ExportPath
     {
@@ -79,6 +88,14 @@ public static class Fixture
                 var coreExport = Path.Combine(dir, "core" + IntermediateFormat.FileExtension);
                 WriteOtherExport(coreExport, "OnlyInCoreSnapshot", "CoreMod.CompOnlyInCore");
                 new SnapshotImporter().Import(coreExport, CoreDbPath);
+
+                // 第四份:导出器 0.4.0,**单字段上的 Class= 也量过了**那一档。
+                // 主 fixture 停在 0.2.0(只量列表元素)、other 停在 0.1.0(一点没量),
+                // 三档各有一个落点 —— 而这三档说的话必须不一样:中间那档对
+                // `find Class <单字段上的类>` 回的零,与「量过了、没人用」逐字同形。
+                var modernExport = Path.Combine(dir, "modern" + IntermediateFormat.FileExtension);
+                WriteModernExport(modernExport);
+                new SnapshotImporter().Import(modernExport, Path.Combine(SnapshotDir, "modern.db"));
 
                 return _dbPath = db;
             }
@@ -132,6 +149,73 @@ public static class Fixture
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindEnd)
             .Int(IntermediateFormat.KeyRecords, 3)
             .Int(IntermediateFormat.KeyDefs, 1)
+            .Int(IntermediateFormat.KeyInjections, 0)
+            .Int(IntermediateFormat.KeyXmlNodes, 0)
+            .ToString());
+
+        w.Flush();
+    }
+
+    /// <summary>
+    /// 导出器 0.4.0 那一档的语料 —— **单字段上的 <c>Class=</c>**。
+    ///
+    /// 形状照抄游戏里的 GenStepDef:def 自己的 class 全是 <c>Verse.GenStepDef</c>(恒定量,
+    /// 于是 <c>--class</c> 在这个类型上区分不了任何东西),真正跑哪段代码写在 <c>genStep</c>
+    /// 那**一个字段**的 Class= 里。旧判据(路径以 <c>]</c> 收尾)对它一条都发不出,
+    /// 而 <c>list GenStepDef --class X</c> 回的那句「No def of type GenStepDef has class 'X'」
+    /// 读起来正是「没有 def 用这个类」。
+    ///
+    /// 两个 def:一个写了 Class=(多态),一个没写(只有普通字段) —— 「这个类没人用」
+    /// 与「这个 def 没写 Class=」于是分得开。
+    /// </summary>
+    private static void WriteModernExport(string path)
+    {
+        using var fs = File.Create(path);
+        using var gz = new GZipStream(fs, CompressionLevel.Optimal);
+        using var w = new StreamWriter(gz, new UTF8Encoding(false)) { NewLine = "\n" };
+
+        w.WriteLine(new JsonLine()
+            .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindMeta)
+            .Int(IntermediateFormat.KeyFormatVersion, IntermediateFormat.FormatVersion)
+            .Str(IntermediateFormat.KeyExporterVersion, "0.4.0")
+            .Str(IntermediateFormat.KeyExportedAtUtc, "2026-01-03T00:00:00.0000000Z")
+            .Str(IntermediateFormat.KeyGameVersion, GameVersion)
+            .Str(IntermediateFormat.KeyLanguage, Language)
+            .Raw(IntermediateFormat.KeyMods,
+                "[" + new JsonLine().Str("package_id", "ludeon.rimworld").Str("name", "Core").Str("version", "1.6") + "]")
+            .Raw(IntermediateFormat.KeyLimits, new JsonLine().Int("max_field_depth", 6).ToString())
+            .Str(IntermediateFormat.KeyModSettingsHash, "")
+            .ToString());
+
+        void GenStep(string name, params ExportedField[] fields)
+            => w.WriteLine(new JsonLine()
+                .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindDef)
+                .Str(IntermediateFormat.KeyDefType, "GenStepDef")
+                .Str(IntermediateFormat.KeyDefName, name)
+                .Str(IntermediateFormat.KeyLabel, "")
+                .Str(IntermediateFormat.KeyDescription, "")
+                .Str(IntermediateFormat.KeySourceMod, "ludeon.rimworld")
+                .Str(IntermediateFormat.KeySourceFile, "CommonMapGenerator.xml")
+                .Bool(IntermediateFormat.KeyGenerated, false)
+                .Str(IntermediateFormat.KeyClass, "Verse.GenStepDef")
+                .Fields(IntermediateFormat.KeyFields, [.. fields])
+                .Int(IntermediateFormat.KeyFieldsTruncated, 0)
+                .ToString());
+
+        GenStep("FixtureScatterLumps",
+            new ExportedField("order", "900", DefaultState.Differs),
+            // 这一条就是 0.2 那档发不出来的那种:路径不以 ] 收尾。
+            new ExportedField("genStep.Class", "RimWorld.GenStep_ScatterLumpsMineable", DefaultState.Differs),
+            new ExportedField("genStep.nearMapCenter", "True", DefaultState.Differs));
+
+        // 没写 Class= 的那个:genStep 是基类自己,于是这条路径整个不存在。
+        GenStep("FixturePlainStep",
+            new ExportedField("order", "200", DefaultState.Differs));
+
+        w.WriteLine(new JsonLine()
+            .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindEnd)
+            .Int(IntermediateFormat.KeyRecords, 4)
+            .Int(IntermediateFormat.KeyDefs, 2)
             .Int(IntermediateFormat.KeyInjections, 0)
             .Int(IntermediateFormat.KeyXmlNodes, 0)
             .ToString());
@@ -488,6 +572,12 @@ public static class Fixture
                     "<li>ludeon.rimworld</li><li>test.notinsnapshot</li></ids>" +
                     "<names><li>Core</li><li>Not In Snapshot</li></names>" +
                     "<gameVersion>1.6.0000</gameVersion></modList></savedModList>\n",
+                    new UTF8Encoding(false));
+                // 第三份是**坏的**(标签没闭合)。手写是这个格式的合法生产路径之一,所以
+                // 坏文件不是边角料而是常态;而它是「行消失」这条路唯一的落点 —— 两份好文件
+                // 走不到那里,于是丢行这件事在闸上一个字都不会响。
+                File.WriteAllText(Path.Combine(modlists, "fixture-damaged.rml"),
+                    "<savedModList><modList><ids><li>ludeon.rimworld</li>\n",
                     new UTF8Encoding(false));
 
                 var path = Path.Combine(dir, "sources-config.toml");

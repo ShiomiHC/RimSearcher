@@ -1,17 +1,14 @@
 $ rimsearcher get Apparel_ShieldBelt
 exit 0
 --- stdout ---
-9 fields.
-Not listed: 1 field carrying the declaring type's own default. The snapshot holds 10 field paths for this def; --defaults lists the rest, --path <text> sees a named one either way. A null-valued field never entered the index and is in neither. Every list index this def has does appear above, so the lists are as long as they look here.
-Values that most of the 9 ThingDefs in this snapshot also carry, so a 'no' on these is not that this def chose it — the count in brackets: soundDrop (9), soundImpactDefault (9), soundInteract (9), soundPickup (9).
-1 translation.
-
 def_name     Apparel_ShieldBelt
 def_type     ThingDef
 label        shield belt
 class        Verse.ThingDef
 mod          ludeon.rimworld
 source       Apparel_Belts.xml
+9 fields.
+Not listed: 1 field carrying the declaring type's own default. The snapshot holds 10 field paths for this def; --defaults lists the rest, --path <text> sees a named one either way. A null-valued field never entered the index and is in neither. Every list index this def has does appear below, so the lists are as long as they look here.
 
 Same in every row, not repeated below: code_default=no.
 path                                value
@@ -24,6 +21,8 @@ comps[0].props.energyMax            0.5
 comps[0].props.energyLossPerDamage  0.033
 statBases[0].stat                   MarketValue
 statBases[0].value                  120
+Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_default' is not this def having made a choice — the count in brackets: soundDrop (9), soundImpactDefault (9), soundInteract (9), soundPickup (9).
+1 translation.
 
 path   translated  original     language           origin
 label  护盾腰带    shield belt  ChineseSimplified  in effect

@@ -140,6 +140,24 @@ public sealed class InheritCommand : Command
                 new("patch_ops", named ? node.PatchOps : "n/a"),
             ]);
 
+            // 紧跟着 identity 块 —— 这两句解释的就是它上面那一行 patch_ops。此前它们排在
+            // 全部块之后,离所解释的那一格隔着两张表。
+            //
+            // 逐条申报,不是一句总的免责声明。计数恒在 identity 块的 patch_ops 上,
+            // 这里只在非零时补说后果 —— 0 就是游戏读到的原样,不需要解释。
+            if (!named)
+                ctx.Report.Notice(NoticeKind.Boundary,
+                    $"'{label}' declares no Name=, so patch_ops is not measured for it: only xpaths naming a " +
+                    "node with @Name= are counted, and a patch that reaches this def by defName leaves no " +
+                    "trace here.");
+            else if (node.PatchOps > 0)
+                // 主语放到句尾,免得动词跟着计数变单复数 —— NounRegistry 管名词,不管动词。
+                ctx.Report.Notice(NoticeKind.Boundary,
+                    $"'{label}' is targeted by name by " +
+                    $"{Tally.Complete(node.PatchOps).Render("patch operation")} in this snapshot. " +
+                    "This layer is the XML before patches, so what the game finally used differs from it " +
+                    "by whatever those operations did.");
+
             // 往上走到根。带环保护是必要的:XML 里写得出环,游戏在这一层之后才检出来,
             // 快照存的正是检出之前的原文。
             var chain = new List<XmlNodeRow>();
@@ -155,6 +173,11 @@ public sealed class InheritCommand : Command
                 chain.Add(up);
                 cursor = up.ParentName;
             }
+
+            // 这条链不受 --limit 管(往上走到根就是全部),所以计数恒为完整式。它一直缺着 ——
+            // 此前渲染器把全部声明提到最前,子节点那条计数顶在第一行,看着就像整份输出都有数了。
+            if (chain.Count > 0)
+                ctx.Report.CountNotice(Tally.Complete(chain.Count), "ancestor", "");
 
             if (chain.Count > 0)
                 ctx.Report.Table("ancestors", ["name", "def_type", "abstract", "mod", "source"],
@@ -181,6 +204,11 @@ public sealed class InheritCommand : Command
             {
                 var children = ctx.Db.NodesInheritingFrom(node.Name);
                 var shown = limit.IsAll ? children : children.Take(limit.Effective).ToList();
+
+                // 计数在它数的那张表**上方** —— 数得清几条、全不全,读到行的时候得已经知道。
+                ctx.Report.CountNotice(Tally.Of(shown.Count, children.Count), "direct child",
+                    "pass --limit all for the rest.");
+
                 if (shown.Count > 0)
                     ctx.Report.Table("children", ["name", "def_name", "def_type", "abstract", "mod"],
                         shown.Select(n => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
@@ -191,9 +219,6 @@ public sealed class InheritCommand : Command
                             ["abstract"] = n.Abstract,
                             ["mod"] = n.SourceMod,
                         }).ToList());
-
-                ctx.Report.CountNotice(Tally.Of(shown.Count, children.Count), "direct child",
-                    "pass --limit all for the rest.");
 
                 // 抽象节点没有自己的字段表:它写的每一条都已合并进每个子节点,且那一份是
                 // patch 之后的。
@@ -206,21 +231,6 @@ public sealed class InheritCommand : Command
                             $"already merged, post-patch, into each child: 'rimsearcher get {concrete.DefName}'.");
                 }
             }
-
-            // 逐条申报,不是一句总的免责声明。计数恒在 identity 块的 patch_ops 上,
-            // 这里只在非零时补说后果 —— 0 就是游戏读到的原样,不需要解释。
-            if (!named)
-                ctx.Report.Notice(NoticeKind.Boundary,
-                    $"'{label}' declares no Name=, so patch_ops is not measured for it: only xpaths naming a " +
-                    "node with @Name= are counted, and a patch that reaches this def by defName leaves no " +
-                    "trace here.");
-            else if (node.PatchOps > 0)
-                // 主语放到句尾,免得动词跟着计数变单复数 —— NounRegistry 管名词,不管动词。
-                ctx.Report.Notice(NoticeKind.Boundary,
-                    $"'{label}' is targeted by name by " +
-                    $"{Tally.Complete(node.PatchOps).Render("patch operation")} in this snapshot. " +
-                    "This layer is the XML before patches, so what the game finally used differs from it " +
-                    "by whatever those operations did.");
         }
 
         ctx.Report.EndItems();

@@ -28,9 +28,18 @@ public enum NoticeKind
     NextStep,
 }
 
-public sealed record Notice(NoticeKind Kind, string Text, bool Footnote = false);
+/// <summary>
+/// 一次输出里排得出先后的东西:声明与数据块共用这一条序列。
+///
+/// 共用是为了让**位置成为写命令时的显式选择** —— 此前渲染器无条件把全部声明提到最前,
+/// 于是一句只讲字段表的话与一句只讲译文表的话挨在一起,而调用方 pipe 一个 head
+/// 切掉的恰好是数据。现在 Add 的先后就是印出来的先后。
+/// </summary>
+public abstract record ReportEntry;
 
-public abstract record Block
+public sealed record Notice(NoticeKind Kind, string Text, bool Footnote = false) : ReportEntry;
+
+public abstract record Block : ReportEntry
 {
     /// <summary>
     /// 属于哪个重复项集合。为 null 时块直接挂在 JSON 顶层;非 null 时它是
@@ -67,12 +76,14 @@ public sealed record TextBlock(string Name, IReadOnlyList<string> Lines,
 /// </summary>
 public sealed class Report
 {
-    private readonly List<Notice> _notices = [];
-    private readonly List<Block> _blocks = [];
+    private readonly List<ReportEntry> _entries = [];
     private readonly List<string> _promised = [];
 
-    public IReadOnlyList<Notice> Notices => _notices;
-    public IReadOnlyList<Block> Blocks => _blocks;
+    /// <summary>声明与数据块按 Add 的先后排在一起 —— 文本渲染器读这一份。</summary>
+    public IReadOnlyList<ReportEntry> Entries => _entries;
+
+    public IReadOnlyList<Notice> Notices => _entries.OfType<Notice>().ToList();
+    public IReadOnlyList<Block> Blocks => _entries.OfType<Block>().ToList();
 
     /// <summary>这条命令答应过要有的顶层数据键,哪怕这次一行都没有。</summary>
     public IReadOnlyList<string> Promised => _promised;
@@ -108,7 +119,7 @@ public sealed class Report
 
     public Report Notice(NoticeKind kind, string text, bool footnote = false)
     {
-        _notices.Add(new Notice(kind, text, footnote));
+        _entries.Add(new Notice(kind, text, footnote));
         return this;
     }
 
@@ -190,7 +201,7 @@ public sealed class Report
 
     public Report Add(Block block)
     {
-        _blocks.Add(_collection is null ? block : block with { Collection = _collection, Item = _item });
+        _entries.Add(_collection is null ? block : block with { Collection = _collection, Item = _item });
         return this;
     }
 

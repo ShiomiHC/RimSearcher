@@ -1,9 +1,6 @@
 $ rimsearcher inherit TestModGun
 exit 0
 --- stdout ---
-The chain stops at 'BaseFromSomeDisabledMod', which no mod in this snapshot declares. The mod that defines it was not enabled when the snapshot was taken, so what it contributed is not visible here.
-'TestModGun' declares no Name=, so patch_ops is not measured for it: only xpaths naming a node with @Name= are counted, and a patch that reaches this def by defName leaves no trace here.
-
 def_name       TestModGun
 def_type       ThingDef
 abstract       no
@@ -11,4 +8,6 @@ inherits_from  BaseFromSomeDisabledMod
 mod            test.mod
 source         Guns.xml
 patch_ops      n/a
+'TestModGun' declares no Name=, so patch_ops is not measured for it: only xpaths naming a node with @Name= are counted, and a patch that reaches this def by defName leaves no trace here.
+The chain stops at 'BaseFromSomeDisabledMod', which no mod in this snapshot declares. The mod that defines it was not enabled when the snapshot was taken, so what it contributed is not visible here.
 --- stderr ---

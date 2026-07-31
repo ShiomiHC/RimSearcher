@@ -377,7 +377,7 @@ public sealed class SnapshotDb : IDisposable
         => s.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
 
     public (IReadOnlyList<DefRow> Rows, int Total) ListByType(
-        string defType, ScopeFilter scope, int limit, int offset, string? className = null)
+        string defType, ScopeFilter scope, int limit, int offset, string? className = null, string? nameLike = null)
     {
         var p = new Dictionary<string, object?> { ["@t"] = defType };
         var conds = new List<string> { "d.def_type = @t COLLATE NOCASE" };
@@ -385,6 +385,14 @@ public sealed class SnapshotDb : IDisposable
         {
             p["@c"] = className;
             conds.Add("(d.class = @c COLLATE NOCASE OR d.class LIKE '%.' || @c COLLATE NOCASE)");
+        }
+        // 筛在 LIMIT **之前**发生 —— 这正是它存在的理由。管道接 grep 是筛在之后,
+        // 而那会连同「25 of 167 defs」那句计数一起吃掉,于是「这一页里没有」与
+        // 「整个快照里没有」在一个空结果上完全同形。
+        if (nameLike is { Length: > 0 })
+        {
+            p["@n"] = "%" + Escape(nameLike) + "%";
+            conds.Add("(d.def_name LIKE @n ESCAPE '\\' COLLATE NOCASE OR d.label LIKE @n ESCAPE '\\' COLLATE NOCASE)");
         }
         if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
         var where = "WHERE " + string.Join(" AND ", conds);

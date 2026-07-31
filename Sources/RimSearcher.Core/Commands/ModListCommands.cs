@@ -16,6 +16,15 @@ namespace RimSearcher.Commands;
 /// </summary>
 public sealed record ModListFile(string Name, string Path, IReadOnlyList<string> Ids, IReadOnlyList<string> Names, string? GameVersion);
 
+/// <summary>
+/// 目录里的一个 <c>.rml</c>,读通了与没读通都算数。
+///
+/// 没读通的也进枚举结果,是因为吞掉它之后「你没存过这个列表」与「存了、文件坏了」
+/// 在输出上一个字都不差 —— 而这两件事读者的下一步完全不同(重存一遍 / 去改那个文件)。
+/// </summary>
+/// <param name="List">读通了才有;为 null 时 <paramref name="Problem"/> 是 <c>Read</c> 的原话。</param>
+public sealed record ModListEntry(string Name, string Path, ModListFile? List, string? Problem);
+
 public static class ModListIo
 {
     public const string Extension = ".rml";
@@ -34,16 +43,18 @@ public static class ModListIo
         return dirs;
     }
 
-    public static IReadOnlyList<ModListFile> Enumerate(RimConfig config)
+    public static IReadOnlyList<ModListEntry> Enumerate(RimConfig config)
     {
-        var result = new List<ModListFile>();
+        var result = new List<ModListEntry>();
         foreach (var dir in Directories(config))
         {
             if (!Directory.Exists(dir)) continue;
             foreach (var file in Directory.EnumerateFiles(dir, "*" + Extension))
             {
-                try { result.Add(Read(file)); }
-                catch (CliUsageException) { /* 坏文件不该让列表整个失败 */ }
+                var name = System.IO.Path.GetFileNameWithoutExtension(file);
+                // 坏文件不让整个列表失败,但也不消失 —— 缘由留在条目里,由调用方说破。
+                try { result.Add(new ModListEntry(name, file, Read(file), null)); }
+                catch (CliUsageException ex) { result.Add(new ModListEntry(name, file, null, ex.Message)); }
             }
         }
         return result;
@@ -57,6 +68,8 @@ public static class ModListIo
             var candidate = System.IO.Path.Combine(dir, nameOrPath + Extension);
             if (File.Exists(candidate)) return Read(candidate);
         }
+        // 读不通的也进 Known lists:它的名字**是**一条能走的路 —— 上面那圈 File.Exists
+        // 会命中它并让 Read 抛出具体哪里坏了。把它从这里摘掉,才是把人引向死路。
         var known = Enumerate(config).Select(m => m.Name).ToList();
         throw new CliUsageException(
             $"No mod list named '{nameOrPath}'." +
@@ -128,7 +141,8 @@ public sealed class ModListListCommand : Command
                   "'modlist save', or a text editor — is equally valid input.",
         Options = [],
         Examples = ["rimsearcher modlist list"],
-        JsonKeys = [new() { Key = "modlists", Rows = true, What = "one row per saved mod list: name, mods, saved, path." }],
+        JsonKeys = [new() { Key = "modlists", Rows = true, What = "one row per saved mod list: name, mods, game_version, path. " +
+                                                                 "'mods' is text, not a number — a file that does not parse still gets its row, with 'unreadable' there." }],
     };
 
     public override int Run(CommandContext ctx)
@@ -142,12 +156,22 @@ public sealed class ModListListCommand : Command
             return 1;
         }
 
+        // 说破在表**前**:读者碰到那格 'unreadable' 之前就得知道它是个什么东西。
+        var bad = lists.Count(e => e.List is null);
+        if (bad > 0)
+            ctx.Report.Notice(NoticeKind.Boundary,
+                $"{Tally.Complete(bad).Render("mod list")} below could not be read; the mods column says " +
+                "'unreadable' there. Each such file exists and merely fails to parse — that is not a list with " +
+                $"no mods in it. '{CommandRegistry.ExeName} modlist show <name>' says what is wrong with one.");
+
         ctx.Report.Table("modlists", ["name", "mods", "game_version", "path"],
             lists.Select(m => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
                 ["name"] = m.Name,
-                ["mods"] = m.Ids.Count,
-                ["game_version"] = m.GameVersion,
+                // 整列是文本,不是数字 —— 读不出的那格要能说出「读不出」,而这一列多一个
+                // 「0」的读法就是把坏文件报成空列表。快照那张表同理,两处口径一致。
+                ["mods"] = m.List is { } l ? l.Ids.Count.ToString() : "unreadable",
+                ["game_version"] = m.List?.GameVersion,
                 ["path"] = m.Path,
             }).ToList());
         return 0;
@@ -227,12 +251,11 @@ public sealed class ModListShowCommand : Command
     {
         var rows = new List<IReadOnlyDictionary<string, object?>>();
         var searched = 0;
+        var skipped = new List<string>();
 
         foreach (var entry in ModListIo.Enumerate(ctx.Config))
         {
-            ModListFile list;
-            try { list = ModListIo.Resolve(ctx.Config, entry.Name); }
-            catch (CliUsageException) { continue; }
+            if (entry.List is not { } list) { skipped.Add(entry.Name); continue; }
             searched++;
             for (var i = 0; i < list.Ids.Count; i++)
             {
@@ -248,16 +271,30 @@ public sealed class ModListShowCommand : Command
             }
         }
 
+        // 「一份都没点它的名」是个完整性断言,而它只覆盖打得开的那些。跳过了几份就得
+        // 当场说破,否则那句话把一批没看过的文件算进了「看过了」。
+        void NoteSkipped()
+        {
+            if (skipped.Count == 0) return;
+            ctx.Report.Notice(NoticeKind.Boundary,
+                $"{Tally.Complete(skipped.Count).Render("mod list")} could not be read and so was not searched " +
+                $"({NameList.Render(skipped, 5)}). A match could be sitting in there.");
+        }
+
         if (rows.Count == 0)
         {
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"No mod matching '{filter}' appears in any of the {searched} lists on this machine. " +
                 "That says nothing about whether it is installed — only that no saved list names it.");
+            NoteSkipped();
             return 1;
         }
 
+        // hint 不说 "all":打不开的那几份也在这台机器上,而这里数的是打得开的。
+        // (它只在截断态才印,而这个 Tally 恒完整 —— 但一句不印的话说错了,照样是错的。)
         ctx.Report.CountNotice(Tally.Complete(rows.Count), "mod",
-            $"searched all {searched} lists.");
+            $"searched {Tally.Complete(searched).Render("mod list")}.");
+        NoteSkipped();
         ctx.Report.Table("mods", ["modlist", "order", "package_id", "name"], rows);
         return 0;
     }

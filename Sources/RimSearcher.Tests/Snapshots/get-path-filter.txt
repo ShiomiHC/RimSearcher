@@ -1,18 +1,17 @@
 $ rimsearcher get Apparel_ShieldBelt --path comps
 exit 0
 --- stdout ---
-Matching 'comps': 3 fields, out of 10 fields on the def.
-No value above is one that most of the 9 ThingDefs in this snapshot also carry, so none of them is a class-wide default showing through 'code_default'.
-
 def_name     Apparel_ShieldBelt
 def_type     ThingDef
 label        shield belt
 class        Verse.ThingDef
 mod          ludeon.rimworld
 source       Apparel_Belts.xml
+Matching 'comps': 3 fields, out of 10 fields on the def.
 
 path                                value                code_default
 comps[0].compClass                  RimWorld.CompShield  yes
 comps[0].props.energyMax            0.5                  no
 comps[0].props.energyLossPerDamage  0.033                no
+No value above is one that most of the 9 ThingDefs in this snapshot also carry, so none of them is a class-wide default showing through 'code_default'.
 --- stderr ---

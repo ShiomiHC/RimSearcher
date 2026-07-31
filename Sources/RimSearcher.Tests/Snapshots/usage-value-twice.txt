@@ -1,0 +1,5 @@
+$ rimsearcher find compClass RimWorld.CompShield --value Other
+exit 2
+--- stdout ---
+--- stderr ---
+The value is given twice and the two differ: 'RimWorld.CompShield' as an argument and 'Other' as --value. With a field path they mean the same thing — 'rimsearcher find compClass RimWorld.CompShield' is 'rimsearcher find compClass --value RimWorld.CompShield'. Drop one.

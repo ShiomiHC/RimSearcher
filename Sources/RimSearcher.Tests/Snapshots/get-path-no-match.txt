@@ -1,12 +1,11 @@
 $ rimsearcher get Apparel_ShieldBelt --path zzzz
 exit 0
 --- stdout ---
-No field path contains 'zzzz'; the def does have 10 fields. Drop --path to see them.
-
 def_name     Apparel_ShieldBelt
 def_type     ThingDef
 label        shield belt
 class        Verse.ThingDef
 mod          ludeon.rimworld
 source       Apparel_Belts.xml
+No field path contains 'zzzz'; the def does have 10 fields. Drop --path to see them.
 --- stderr ---

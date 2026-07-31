@@ -2,8 +2,8 @@ $ rimsearcher keyed TodoKey
 exit 0
 --- stdout ---
 1 keyed translation.
-Placeholder means the language file declares the key without a translation, so the game displays the English text instead of what the translated column shows: that is the case for 1 keyed translation above.
 
 key      translated  original            origin     placeholder  mod  source
 TodoKey  TODO        Not translated yet  in effect  yes               Misc.xml:34
+Placeholder means the language file declares the key without a translation, so the game displays the English text instead of what the translated column shows: that is the case for 1 keyed translation above.
 --- stderr ---

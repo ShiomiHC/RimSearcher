@@ -1,10 +1,6 @@
 $ rimsearcher get Bullet_Revolver --defaults
 exit 0
 --- stdout ---
-8 fields.
-Values that most of the 9 ThingDefs in this snapshot also carry, so a 'no' on these is not that this def chose it — the count in brackets: soundDrop (9), soundImpactDefault (9), soundInteract (9), soundPickup (9).
-The exporter stopped short on this def: at least 3 fields were dropped at export time for depth or size, so a path missing from the list below is not proof that the def lacks it.
-
 def_name       Bullet_Revolver
 def_type       ThingDef
 label          revolver bullet
@@ -12,6 +8,8 @@ class          Verse.ThingDef
 mod            ludeon.rimworld
 source         Projectiles_Guns.xml
 inherits_from  BaseBullet (see 'rimsearcher inherit Bullet_Revolver')
+8 fields.
+The exporter stopped short on this def: at least 3 fields were dropped at export time for depth or size, so a path missing from the list below is not proof that the def lacks it.
 
 path                         value                code_default
 soundImpactDefault           BulletImpact_Ground  no
@@ -22,4 +20,5 @@ thingClass                   RimWorld.Bullet      no
 projectile.damageAmountBase  12                   no
 projectile.burstCount        1                    yes
 projectile.speed             70                   unknown
+Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_default' is not this def having made a choice — the count in brackets: soundDrop (9), soundImpactDefault (9), soundInteract (9), soundPickup (9).
 --- stderr ---

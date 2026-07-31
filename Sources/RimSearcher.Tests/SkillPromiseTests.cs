@@ -217,6 +217,9 @@ public class SkillPromiseTests
             ["search", "shield"], ["list", "ThingDef"], ["get", "Apparel_ShieldBelt"],
             ["find", "compClass", "RimWorld.CompShield"], ["values", "thingClass"],
             ["fields", "ThingDef"], ["list"], ["mods"], ["inherit", "BaseBullet"],
+            // 界面文案那一层此前不在这份名单里,而它恰是全仓唯一一处把分页句 Add 在表
+            // 之后的命令 —— 名单漏了谁,谁就可以一直反着来。
+            ["keyed", "CannotUseNoPower"], ["keyed", "--limit", "3"],
         ];
 
         // 「N noun」/「N of M noun」/「at least N noun」—— 三态各自的开头形状。
@@ -224,10 +227,68 @@ public class SkillPromiseTests
 
         foreach (var argv in queries)
         {
+            var what = string.Join(' ', argv);
             var (stdout, _, _) = Fixture.Run(argv);
-            var first = stdout.Split('\n')[0];
-            Assert.True(counted.IsMatch(first),
-                $"'{string.Join(' ', argv)}' opens with \"{first}\", which is not a count.");
+            var lines = stdout.Split('\n');
+
+            var countAt = Array.FindIndex(lines, counted.IsMatch);
+            Assert.True(countAt >= 0, $"'{what}' printed no count at all.");
+
+            // 承诺的原话是「a plain table with a count **above it**」—— 判的是计数与表的
+            // 相对位置,不是「输出的第一行」。两者此前分不开,是因为渲染器把全部声明无条件
+            // 提到最前,那时候每条命令的第一行必然是声明;现在 get 先端出这个 def 自己、
+            // values 先端出概览,表都在后面,而承诺照旧成立。
+            //
+            // 表头从 --json 的列名反查,不靠猜文本形状:详情块渲染出来也是「名字 空格 值」。
+            var (json, _, _) = Fixture.Run([.. argv, "--json"]);
+            var columns = FirstTableColumns(System.Text.Json.JsonDocument.Parse(json).RootElement);
+            Assert.True(columns is not null, $"'{what}' produced no table.");
+
+            // 文本侧的表头是 JSON 列名的**子集**:整列同值的列被折进表上方那一行了。
+            // 第一列永不折(它是行的身份),所以拿它锚定,其余的词只要求出自列名。
+            var wanted = string.Join(' ', columns!);
+            var header = Array.FindIndex(lines, l =>
+            {
+                var words = Regex.Replace(l, @"\s+", " ").Trim().Split(' ');
+                return words[0] == columns[0] && words.All(columns.Contains);
+            });
+            Assert.True(header >= 0, $"'{what}' has columns [{wanted}] in --json but no such header in the text.");
+            Assert.True(countAt < header,
+                $"'{what}' puts its count below the table: count on line {countAt + 1}, header on line {header + 1}.");
+        }
+    }
+
+    /// <summary>
+    /// 这份输出里第一张**表**的列名。
+    ///
+    /// 「对象数组」还不够判:<c>defs</c> 那种集合也是对象数组,而它的每一项装的是别的块。
+    /// 表的判据是行里全为标量。
+    /// </summary>
+    private static string[]? FirstTableColumns(System.Text.Json.JsonElement el)
+    {
+        switch (el.ValueKind)
+        {
+            case System.Text.Json.JsonValueKind.Array:
+                if (el.GetArrayLength() == 0) return null;
+                if (el[0].ValueKind != System.Text.Json.JsonValueKind.Object) return null;
+                if (el[0].EnumerateObject().All(p => p.Value.ValueKind
+                        is not (System.Text.Json.JsonValueKind.Object or System.Text.Json.JsonValueKind.Array)))
+                    return el[0].EnumerateObject().Select(p => p.Name).ToArray();
+                foreach (var item in el.EnumerateArray())
+                    if (FirstTableColumns(item) is { } nested) return nested;
+                return null;
+
+            case System.Text.Json.JsonValueKind.Object:
+                foreach (var p in el.EnumerateObject())
+                {
+                    // 声明区不是数据 —— 它也是对象数组,形状与表逐字同构。
+                    if (p.Name == "notes") continue;
+                    if (FirstTableColumns(p.Value) is { } nested) return nested;
+                }
+                return null;
+
+            default:
+                return null;
         }
     }
 

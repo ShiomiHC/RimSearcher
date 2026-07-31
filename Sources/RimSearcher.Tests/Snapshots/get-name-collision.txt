@@ -1,12 +1,6 @@
 $ rimsearcher get Firefoam
 exit 0
 --- stdout ---
-6 fields.
-Values that most of the 9 ThingDefs in this snapshot also carry, so a 'no' on these is not that this def chose it — the count in brackets: soundDrop (9), soundImpactDefault (9), soundInteract (9), soundPickup (9).
-2 translations.
-0 fields.
-2 defs share the name 'Firefoam' across different def types; all of them are shown. Pass --type <DefType> for just one.
-
 def_name       Firefoam
 def_type       ThingDef
 label          firefoam
@@ -14,6 +8,7 @@ class          Verse.ThingDef
 mod            ludeon.rimworld
 source         Buildings_Special.xml
 inherits_from  BaseProjectile (see 'rimsearcher inherit Firefoam')
+6 fields.
 
 Same in every row, not repeated below: code_default=no.
 path                value
@@ -23,6 +18,8 @@ soundPickup         Standard_Pickup
 soundInteract       Standard_Pickup
 thingClass          RimWorld.Building
 statBases[0].stat   MarketValue
+Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_default' is not this def having made a choice — the count in brackets: soundDrop (9), soundImpactDefault (9), soundInteract (9), soundPickup (9).
+2 translations.
 
 Same in every row, not repeated below: language=ChineseSimplified, origin=in effect.
 path         translated      original
@@ -34,4 +31,6 @@ def_type     StatDef
 class        Verse.StatDef
 mod          ludeon.rimworld
 source       Stats_Basics.xml
+0 fields.
+2 defs share the name 'Firefoam' across different def types; all of them are shown. Pass --type <DefType> for just one.
 --- stderr ---

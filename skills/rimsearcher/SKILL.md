@@ -21,11 +21,13 @@ is the only command that reads it, and it says so.
 | The question | Where it is answered |
 |---|---|
 | What does this def actually contain? | `rimsearcher get <defName>` |
+| Which C# class does this def actually run? | `rimsearcher get <defName>` — the `Class` and `*Class` rows name it |
 | What is this thing called? I only know part of it. | `rimsearcher search <words>` |
 | Which defs use this C# class / this value? | `rimsearcher find <field> <value>` |
+| Which defs pick this class with `Class="…"`? | `rimsearcher find Class <ClassName>` |
 | What can this field be set to? | `rimsearcher values <field>` |
 | What fields does this def type have? | `rimsearcher fields <DefType>` |
-| Everything of one kind | `rimsearcher list <DefType>` |
+| Everything of one kind | `rimsearcher list <DefType>`, narrowed with `--find <text>` |
 | What kinds of def does this snapshot hold at all? | `rimsearcher list` with no type |
 | Which saved mod lists name this mod? | `rimsearcher modlist show --find <text>` |
 | What does this inherit from / what inherits from it? | `rimsearcher inherit <name>` |
@@ -126,6 +128,7 @@ Translate the intent instead:
 |---|---|
 | grep `<defName>Bullet_` | `rimsearcher search Bullet_` |
 | grep `<li Class="CompProperties_AmbientSound">` | `rimsearcher find compClass CompAmbientSound` |
+| grep a `Class="…"` to see which defs pick that class | `rimsearcher find Class <ClassName>` |
 | grep for a `<thingClass>` to see who uses it | `rimsearcher find thingClass <ClassName>` |
 | grep to find what values a tag takes | `rimsearcher values <tag>` |
 | grep `Name="BaseBullet"` to find the abstract parent | `rimsearcher inherit BaseBullet` |
@@ -204,11 +207,15 @@ stays local.
    exist — read the declaring class to see the shape.
 3. **Working backwards from a class or a value.** `find` matches the field path from the end:
    `find compClass RimWorld.CompShield` needs no index and no full path.
-   The runtime type of a nested `<li Class="…">` is queryable the same way, under the field name
-   `Class`: `find Class RimWorld.CompProperties_Shield` is how you ask which defs carry that
-   node. This is one dimension the index only started measuring at exporter 0.2.0, and on an
-   older snapshot the query says so rather than returning a bare zero — if you see that line,
-   re-export before reading the zero as an answer.
+   The runtime type of a nested `Class="…"` object is queryable the same way, under the field
+   name `Class`: `find Class RimWorld.CompProperties_Shield` is how you ask which defs carry
+   that node. This dimension arrived in two steps — list elements (`<li Class="…">`) at exporter
+   0.2.0, a single field that picks a class (`GenStepDef.genStep`, `ThinkTreeDef.thinkRoot`) at
+   0.4.0 — and the query names which step the snapshot you are on has reached rather than
+   returning a bare zero. **Read that line before reading the zero as an answer**: a def type
+   whose own class never varies keeps its whole behaviour on such a field, so on a pre-0.4
+   snapshot `find Class` and `list --class` are both structurally blind to it and only
+   `code-search` can say. Re-export to close the gap.
    `values <field>` gives the whole value space, and prints which full paths and def types
    contributed — a bare name like `damageAmountBase` can match several unrelated paths, and
    that header is how you tell which ones you are actually looking at.
@@ -224,7 +231,11 @@ stays local.
    under their base's database, so `CreepJoinerAggressiveDef` instances live under
    `CreepJoinerBaseDef`. When a bucket holds more than one class, `list` adds a `class` column,
    and `--class <ClassName>` filters to one. `list <SomeClass>` tells you where to look rather
-   than claiming the type does not exist.
+   than claiming the type does not exist. Most buckets hold exactly **one** class, though, and
+   there `--class` narrows nothing: such a def type keeps its whole behaviour on a nested
+   `Class="…"` field instead — all 167 `GenStepDef`s are `Verse.GenStepDef`, and which `GenStep`
+   each runs is on `genStep`. That is `find Class` territory, not `--class`, and the command
+   says so instead of answering a bare zero that reads as "no def uses that class".
 5. **Inheritance.** Every other command answers from the objects the game had in memory, where
    inheritance is already resolved and invisible. `inherit` is the one exception: it reads the
    mods' XML, so it can show abstract parents, `ParentName` chains, and what inherits from a
@@ -234,7 +245,16 @@ stays local.
    its defName are counted nowhere, so for those defs "has a mod patched it?" stays unanswered.
    And an abstract node has no field values of its own here; everything it declares is already
    merged, post-patch, into each child, so read a concrete child with `get`.
-6. **Moving into the code.** Once you have a class name from a def, hand it to
+6. **Moving into the code.** The class name comes out of `get`, and there are two kinds of row:
+   the `class` line in the identity block is the def's **own** type (usually the same for every
+   def of that type, so rarely the interesting one), while `*.Class` and `*Class` rows are the
+   classes the def picks for its parts — `genStep.Class`, `comps[0].compClass`, `thingClass`.
+   That second kind is what actually runs. **Do not guess it from the defName** — in Core alone,
+   98 of the 167 `GenStepDef`s have a class whose name is not the defName: `RocksFromGrid` does
+   run `GenStep_RocksFromGrid`, but `AncientExostriderRemains` runs `GenStep_ScatterLayout` and
+   `AncientJunkClusters` runs `GenStep_ScatterGroup`. A guess that lands looks exactly like one
+   that does not, and `code-search "class GenStep_<defName>"` returning nothing is evidence
+   about the name you invented, not about the def. Hand the real name to
    `mcp__decompiler__search_types` and read the member you need — or, with no MCP,
    `code-search "class <Name>\b"` to land on the file and `read <file> --member <name>` for the
    body. This is the common path: most def questions end in a C# question.
@@ -335,8 +355,10 @@ eat the backslashes first, and `code-search "class \w+"` then searches for `clas
 matches nothing and looks exactly like an honest zero result.
 
 Do not pipe the output through `grep`. The sentence saying the result was cut short is on the
-same stream as the table, so filtering it away turns "truncated" into "absent". Narrow inside
-the tool instead, where the counts stay honest:
+same stream as the table, so filtering it away turns "truncated" into "absent" — and worse, the
+filter runs *after* `--limit`, so `list GenStepDef | grep -i lump` searches only the first page
+and comes back empty on a def that is right there. Narrow inside the tool instead, where the
+filter runs first and the counts stay honest:
 
 | Command | Narrow with |
 |---|---|
@@ -344,7 +366,7 @@ the tool instead, where the counts stay honest:
 | `fields` | `--path`, `--offset`, `--limit` |
 | `values` | `--type`, `--scope`, `--offset`, `--limit` |
 | `search` | `--type`, `--scope`, `--offset`, `--limit` |
-| `list` | `--class`, `--scope`, `--offset`, `--limit` (`--class` and `--offset` need a def type) |
+| `list` | `--find`, `--class`, `--scope`, `--offset`, `--limit` (`--class` and `--offset` need a def type) |
 | `inherit` | `--path`, `--limit` |
 | `keyed` | `--placeholders`, `--offset`, `--limit` |
 | `find` | `--scope`, `--exact`, `--offset`, `--limit` |
@@ -425,10 +447,10 @@ treating a stall report as failure.
 That `<name>` is required, and `rimsearcher modlist list` is where it comes from: those saved lists
 are the only thing an export can be run against. One saved from the game's mod screen, one written
 by `modlist save`, and one typed by hand are equally valid. `modlist show <name>` prints a single
-list in load order, and `modlist show --find <text>` searches every list on this machine at once.
-That search answers **which saved lists name a mod**, which is not the same question as whether the
-mod is installed — nothing here reads the game's mod folder, and a zero result says so in those
-words rather than leaving you to read it as "not installed".
+list in load order, and `modlist show --find <text>` searches every list it can open, naming any it
+could not. That search answers **which saved lists name a mod**, which is not the same question as
+whether the mod is installed — nothing here reads the game's mod folder, and a zero result says so
+in those words rather than leaving you to read it as "not installed".
 
 ## Parameters
 

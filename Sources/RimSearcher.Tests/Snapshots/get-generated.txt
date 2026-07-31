@@ -1,15 +1,13 @@
 $ rimsearcher get Meat_Muffalo
 exit 0
 --- stdout ---
-6 fields.
-Values that most of the 9 ThingDefs in this snapshot also carry, so a 'no' on these is not that this def chose it — the count in brackets: soundDrop (9), soundImpactDefault (9), soundInteract (9), soundPickup (9).
-
 def_name     Meat_Muffalo
 def_type     ThingDef
 label        muffalo meat
 class        Verse.ThingDef
 mod          ludeon.rimworld
 source       ImpliedDefs (created in code, not from an XML file)
+6 fields.
 
 Same in every row, not repeated below: code_default=no.
 path                 value
@@ -19,4 +17,5 @@ soundPickup          Standard_Pickup
 soundInteract        Standard_Pickup
 thingClass           Verse.ThingWithComps
 ingestible.foodType  Meat
+Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_default' is not this def having made a choice — the count in brackets: soundDrop (9), soundImpactDefault (9), soundInteract (9), soundPickup (9).
 --- stderr ---

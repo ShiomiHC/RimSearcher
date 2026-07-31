@@ -64,6 +64,8 @@ public static class NounRegistry
         ["file"] = "files",
         ["C# file"] = "C# files",
         ["mod"] = "mods",
+        // 数的是 .rml 文件本身,与「列表里有几个 mod」不是一回事。
+        ["mod list"] = "mod lists",
         ["translation"] = "translations",
         // 界面文案那一层单独登记,不借 "translation":def 的 label 走 DefInjected、
         // keyed 走 key,两层的来源与生效规则都不同。
@@ -75,6 +77,8 @@ public static class NounRegistry
         ["source tree"] = "source trees",
         ["XML node"] = "XML nodes",
         ["direct child"] = "direct children",
+        // 往上那条链数的是层数,与 "direct child"(往下一层的宽度)不是一回事。
+        ["ancestor"] = "ancestors",
         ["patch operation"] = "patch operations",
         ["assembly"] = "assemblies",
         ["directory"] = "directories",

@@ -79,7 +79,11 @@ public static class ArgParser
 
                 if (opt is null)
                 {
-                    errors.Add(UnknownOptionMessage(arg, body, options, spec, siblings));
+                    // 那个词后面挂着的取值。判据与下面跳过它的那条一致 —— 报错要把它填进
+                    // 正确的写法里,而不是让人对着 <占位符> 自己再拼一遍。
+                    var attached = inlineValue ??
+                        (i + 1 < argv.Count && !argv[i + 1].StartsWith('-') ? argv[i + 1] : null);
+                    errors.Add(UnknownOptionMessage(arg, body, options, spec, siblings, attached));
                     // 未知 flag 后面若跟着一个非 flag 的词,大概率是它的取值,一并跳过,
                     // 免得那个词又被当成位置参数引出第二条无关报错。
                     if (inlineValue is null && i + 1 < argv.Count && !argv[i + 1].StartsWith('-')) i++;
@@ -146,8 +150,31 @@ public static class ArgParser
     }
 
     private static string UnknownOptionMessage(string raw, string body, IReadOnlyList<OptionSpec> options,
-                                               CommandSpec spec, IReadOnlyList<CommandSpec>? siblings)
+                                               CommandSpec spec, IReadOnlyList<CommandSpec>? siblings,
+                                               string? attachedValue = null)
     {
+        var scored = Scored(body, options);
+        var candidates = Ranked(scored);
+
+        // 同一个词在这条命令上是**位置参数**。这一档排在「别的命令有」之前:那句只说得出
+        // 「这里不行」,而这里说得出「这里该怎么写」,还能把值填进去 —— 而且落空的多半正是
+        // 跨命令搬过来的写法(--field 是 get / inherit / read 认的,find 把它放在位置上)。
+        //
+        // 与选项比分,严格更近才赢,两边同分让给选项:`--values` 在位置参数 <value> 与
+        // 选项 --value 上都是前缀命中,而它想要的显然是拼错了的那个选项。反过来 `--field`
+        // 是 <fieldPath> 的前缀(0 分),在选项那边只是别名 any-field 的子串(1 分) ——
+        // 不比分只看「选项那边有没有候选」的话,这一条会被那个别名挡掉。
+        var positional = MatchPositional(body, spec.Positionals);
+        var bestOption = scored.Count == 0 ? int.MaxValue : scored.Min(t => t.Score);
+        if (positional is { } hit && hit.Score < bestOption)
+        {
+            var at = Array.IndexOf(spec.Positionals, hit.Spec);
+            var shape = string.Join(" ", spec.Positionals.Select(
+                (p, idx) => idx == at && attachedValue is not null ? attachedValue : $"<{p.Name}>"));
+            return $"Unknown option '{raw}'. On '{spec.Name}' it is an argument rather than an option: " +
+                   $"'{CommandRegistry.ExeName} {spec.Name} {shape}'.";
+        }
+
         // 「别的命令有、这条没有」比任何编辑距离候选都准,优先报这一种。
         var n = Normalize(body);
         var elsewhere = (siblings ?? [])
@@ -161,7 +188,6 @@ public static class ArgParser
             return $"Unknown option '{raw}'. It is accepted by " +
                    NameList.Render(elsewhere, Limits.MaxSuggestions) + $", but not by '{spec.Name}'.";
 
-        var candidates = Suggest(body, options);
         var msg = $"Unknown option '{raw}'.";
         if (candidates.Count > 0)
             msg += $" Did you mean {string.Join(" or ", candidates.Select(c => "--" + c))}?";
@@ -171,13 +197,51 @@ public static class ArgParser
         return msg;
     }
 
+    /// <summary>
+    /// 打进来的名字指的是不是这条命令的某个位置参数,以及有多近。
+    ///
+    /// 分数与 <see cref="Scored"/> 同尺:0 是前缀关系、1 是包含关系。不吃编辑距离 ——
+    /// 位置参数一共就一两个,距离一放宽,随便一个拼错的选项都会撞上其中一个。
+    /// </summary>
+    private static (PositionalSpec Spec, int Score)? MatchPositional(
+        string typed, IReadOnlyList<PositionalSpec> positionals)
+    {
+        var n = Normalize(typed);
+        if (n.Length == 0) return null;
+        (PositionalSpec Spec, int Score)? best = null;
+        foreach (var p in positionals)
+        {
+            var k = Normalize(p.Name);
+            int score;
+            if (k.StartsWith(n, StringComparison.Ordinal) || n.StartsWith(k, StringComparison.Ordinal))
+                score = 0;
+            else if (k.Contains(n, StringComparison.Ordinal) || n.Contains(k, StringComparison.Ordinal))
+                score = 1;
+            else
+                continue;
+            if (best is null || score < best.Value.Score) best = (p, score);
+        }
+        return best;
+    }
+
     /// <summary>按归一化后的编辑距离给候选。前缀/包含关系优先,拼错次之。</summary>
     public static List<string> Suggest(string typed, IReadOnlyList<OptionSpec> options)
+        => Ranked(Scored(typed, options));
+
+    private static List<string> Ranked(List<(int Score, string Name)> scored)
+        => scored.OrderBy(t => t.Score).ThenBy(t => t.Name, StringComparer.Ordinal)
+                 .Take(Limits.MaxSuggestions).Select(t => t.Name).ToList();
+
+    /// <summary>
+    /// 候选与它们的分数。分数要出得来,是因为「这个词其实是位置参数」那一档得跟选项比远近,
+    /// 而只看「选项那边有没有候选」会被一条别名的子串关系挡掉。
+    /// </summary>
+    private static List<(int Score, string Name)> Scored(string typed, IReadOnlyList<OptionSpec> options)
     {
         var n = Normalize(typed);
         if (n.Length == 0) return [];
 
-        var scored = new List<(int score, string name)>();
+        var scored = new List<(int Score, string Name)>();
         foreach (var o in options)
         {
             // 别名只认前缀/包含关系,不参与编辑距离打分:距离是给「打错规范名」用的,
@@ -202,8 +266,7 @@ public static class ArgParser
                 scored.Add((best, o.Name));
         }
 
-        return scored.OrderBy(t => t.score).ThenBy(t => t.name, StringComparer.Ordinal)
-                     .Take(Limits.MaxSuggestions).Select(t => t.name).ToList();
+        return scored;
     }
 
     /// <summary>Levenshtein 距离。</summary>

@@ -2,9 +2,9 @@ $ rimsearcher keyed filler --placeholders
 exit 0
 --- stdout ---
 1 key within --placeholders.
-Placeholder means the language file declares the key without a translation, so the game displays the English text instead of what the translated column shows. Every row above is one of those, which is what --placeholders selects.
-To find the code that prints it, search for the key as a literal: 'rimsearcher code-search "\"FillerKey2099\""'. Most call sites write the key inline, but not all of them do — a key assembled from parts will not appear that way.
 
 key            translated  original     origin     placeholder  mod  source
 FillerKey2099  填充2099    filler line  in effect  yes               Filler.xml:2100
+Placeholder means the language file declares the key without a translation, so the game displays the English text instead of what the translated column shows. Every row above is one of those, which is what --placeholders selects.
+To find the code that prints it, search for the key as a literal: 'rimsearcher code-search "\"FillerKey2099\""'. Most call sites write the key inline, but not all of them do — a key assembled from parts will not appear that way.
 --- stderr ---

@@ -2158,13 +2158,13 @@ public class GrammarTests
     {
         // --limit 2 把 statBases[0] 那一族整个挤出视野 —— 藏了就点名。
         var (hidden, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--limit", "2");
-        Assert.Contains("Nothing above shows any field of these list entries", hidden, StringComparison.Ordinal);
+        Assert.Contains("Nothing below shows any field of these list entries", hidden, StringComparison.Ordinal);
         Assert.Contains("statBases[0]", hidden, StringComparison.Ordinal);
 
         // 不截时每个下标都露过面 —— 这时候要给正面那句话,不能沉默。
         var (whole, _, _) = Fixture.Run("get", "Apparel_ShieldBelt");
-        Assert.Contains("Every list index this def has does appear above", whole, StringComparison.Ordinal);
-        Assert.DoesNotContain("Nothing above shows any field", whole, StringComparison.Ordinal);
+        Assert.Contains("Every list index this def has does appear below", whole, StringComparison.Ordinal);
+        Assert.DoesNotContain("Nothing below shows any field", whole, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -2210,8 +2210,14 @@ public class GrammarTests
     {
         // fixture 的九个 ThingDef 全带 soundImpactDefault —— 与真实的引擎级默认同形。
         var (shared, _, _) = Fixture.Run("get", "Apparel_ShieldBelt");
-        Assert.Contains("not that this def chose it", shared, StringComparison.Ordinal);
+        // 指的是那一列的**名字**,不是它印出来的取值:整列同值时渲染器会把它折进表上方
+        // 那一行,于是「上面的一个 no」在表里根本不存在。
+        Assert.Contains($"their '{FieldDefault.Column}' is not this def having made a choice", shared,
+            StringComparison.Ordinal);
         Assert.Contains("soundImpactDefault (9)", shared, StringComparison.Ordinal);
+        // 这句话与折叠行同时在场时才有意义 —— 折叠没发生的话,它指的列就该在表里。
+        Assert.Contains($"Same in every row, not repeated below: {FieldDefault.Column}=no", shared,
+            StringComparison.Ordinal);
         // 名单不许截 —— 截了的话「不在名单里」同时意味着两件事。
         var brackets = shared.Split("the count in brackets:")[1].Split('\n')[0];
         Assert.DoesNotContain("more", brackets, StringComparison.Ordinal);
@@ -2219,7 +2225,7 @@ public class GrammarTests
         // 另一个类型上没有这种值 —— 这时候要明说没有,不能靠沉默。
         var (own, _, _) = Fixture.Run("get", "VariantOne");
         Assert.Contains("No value above is one that most of the", own, StringComparison.Ordinal);
-        Assert.DoesNotContain("not that this def chose it", own, StringComparison.Ordinal);
+        Assert.DoesNotContain("is not this def having made a choice", own, StringComparison.Ordinal);
     }
 
     // ---- mod 列表这一层(收束时才发现它一道闸都没有)----
@@ -2246,6 +2252,153 @@ public class GrammarTests
         var (miss, _, mcode) = Fixture.Run("modlist", "show", "--find", "zzznotamodanywhere");
         Assert.Equal(1, mcode);
         Assert.Contains("says nothing about whether it is installed", miss, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 读不通的 <c>.rml</c> 不许从名单里消失。
+    ///
+    /// 消失了的话,「你没存过这个列表」与「存了、但那个文件坏了」输出一个字都不差,
+    /// 而读者的下一步是相反的两件事(重存一遍 / 去改那个文件)。
+    ///
+    /// 三处都判:<c>list</c> 的行还在且格子说得出「读不出」、<c>show --find</c> 的
+    /// 完整性断言把跳过的那份算在外、按名字直接问它时说得出坏在哪。
+    /// </summary>
+    [Fact]
+    public void 读不通的列表文件留在名单里而不是消失()
+    {
+        var (list, _, code) = Fixture.Run("modlist", "list");
+        Assert.Equal(0, code);
+        Assert.Contains("fixture-damaged", list, StringComparison.Ordinal);
+        Assert.Contains("unreadable", list, StringComparison.Ordinal);
+        // 「读不出」与「零个 mod」是两件事,那一格不许退化成 0。
+        var row = list.Split('\n').Single(l => l.Contains("fixture-damaged", StringComparison.Ordinal));
+        Assert.Contains("unreadable", row, StringComparison.Ordinal);
+
+        // 搜遍所有列表时,「没有哪份点它的名」这句话覆盖不到打不开的那份 —— 得说破。
+        var (miss, _, mcode) = Fixture.Run("modlist", "show", "--find", "zzznotamodanywhere");
+        Assert.Equal(1, mcode);
+        Assert.Contains("could not be read and so was not searched", miss, StringComparison.Ordinal);
+        Assert.Contains("fixture-damaged", miss, StringComparison.Ordinal);
+
+        // 有命中那一支同样要说破 —— 命中了不等于搜全了。
+        var (found, _, fcode) = Fixture.Run("modlist", "show", "--find", "test.notinsnapshot");
+        Assert.Equal(0, fcode);
+        Assert.Contains("could not be read and so was not searched", found, StringComparison.Ordinal);
+        Assert.Contains("A match could be sitting in there.", found, StringComparison.Ordinal);
+
+        // 名字是条走得通的路:直接问它,答的是坏在哪,不是「没有这份列表」。
+        var (show, showErr, scode) = Fixture.Run("modlist", "show", "fixture-damaged");
+        Assert.Equal(2, scode);
+        Assert.DoesNotContain("No mod list named", show + showErr, StringComparison.Ordinal);
+        Assert.Contains("not readable XML", show + showErr, StringComparison.Ordinal);
+    }
+
+    // ---- 嵌套 Class= 那一维:三档快照各说各的话 ----
+
+    /// <summary>
+    /// <c>--class</c> 查的是 def **自己**的运行时类。在那个类恒定的类型上,它区分不了
+    /// 任何东西 —— 而「确实没有 def 用这个类」与「这个选项问的根本不是这件事」
+    /// 在一句 "No def of type X has class 'Y'" 上逐字同形。
+    ///
+    /// 实证:一次真实会话里,这句话把调用方送进了连续十条命令的死胡同 —— 它据此
+    /// 认定「没有 GenStepDef 用 GenStep_ScatterLumpsMineable」,而事实是有,
+    /// 只是那个信息当时不在库里。
+    /// </summary>
+    [Fact]
+    public void 类恒定的类型上class选项要说破自己区分不了()
+    {
+        // modern 那份里 GenStepDef 的两个 def 都是 Verse.GenStepDef。
+        var (miss, _, code) = Fixture.Run("list", "GenStepDef", "--class", "RimWorld.GenStep_Nothing",
+                                          "--db", Fixture.ModernDb);
+        Assert.Equal(1, code);
+        Assert.Contains("--class cannot tell them apart", miss, StringComparison.Ordinal);
+        Assert.Contains("is not evidence about", miss, StringComparison.Ordinal);
+        // 转向要指到真正能查到多态的那条路上。
+        Assert.Contains("find Class RimWorld.GenStep_Nothing", miss, StringComparison.Ordinal);
+
+        // 类不止一种时,原来那句照旧 —— 它在那里是准的。
+        var (multi, _, mcode) = Fixture.Run("list", "TestBaseDef", "--class", "NoSuchClass");
+        Assert.Equal(1, mcode);
+        Assert.Contains("That type holds", multi, StringComparison.Ordinal);
+        Assert.DoesNotContain("cannot tell them apart", multi, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 三档快照对「嵌套类型查得到吗」说的话必须互不相同。
+    ///
+    /// 中间那档(0.2~0.3,只量列表元素)最险:<c>find Class &lt;单字段上的类&gt;</c> 照样回零,
+    /// 而一句 "is the query that reaches it" 会把人送去查一条对 <c>genStep</c> 根本不存在
+    /// 的路径 —— 走空了,落空句再把同一条规则念一遍,闭环。
+    /// </summary>
+    [Fact]
+    public void 嵌套类型这一维按快照量到哪一步说话()
+    {
+        // 0.4:量全了,那条查询是真路。
+        var (modern, _, _) = Fixture.Run("find", "Class", "RimWorld.NotAnyClassHere", "--db", Fixture.ModernDb);
+        Assert.Contains("in a list or on a single field", modern, StringComparison.Ordinal);
+
+        // 0.2:只量了列表元素 —— 必须点名它够不着的是哪一类,且不许说成「查得到」。
+        var (mid, _, _) = Fixture.Run("find", "Class", "RimWorld.NotAnyClassHere");
+        Assert.Contains("for list elements only", mid, StringComparison.Ordinal);
+        Assert.Contains("GenStepDef.genStep", mid, StringComparison.Ordinal);
+        Assert.Contains("not evidence about it", mid, StringComparison.Ordinal);
+        Assert.DoesNotContain("in a list or on a single field", mid, StringComparison.Ordinal);
+
+        // 0.1:一点没量。
+        var (old, _, _) = Fixture.Run("find", "Class", "RimWorld.NotAnyClassHere", "--db", Fixture.OtherDb);
+        Assert.Contains("not in this snapshot at all", old, StringComparison.Ordinal);
+        Assert.DoesNotContain("for list elements only", old, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 单字段上的 <c>Class=</c> 在 0.4 那档要真查得到 —— 这是整条 def→代码 的桥。
+    /// </summary>
+    [Fact]
+    public void 单字段上的类在量全了的快照里查得到()
+    {
+        var (hit, _, code) = Fixture.Run("find", "Class", "RimWorld.GenStep_ScatterLumpsMineable",
+                                         "--db", Fixture.ModernDb);
+        Assert.Equal(0, code);
+        Assert.Contains("FixtureScatterLumps", hit, StringComparison.Ordinal);
+        // 路径不以 ] 收尾 —— 旧判据对它一条都发不出。
+        Assert.Contains("genStep.Class", hit, StringComparison.Ordinal);
+    }
+
+    // ---- list --find:把 `list X | grep y` 挤掉 ----
+
+    /// <summary>
+    /// 管道接 grep 筛在 <c>--limit</c> **之后**,页外的东西压根到不了 grep,而计数句
+    /// 也一起被吃掉 —— 于是「这一页里没有」与「整个快照里没有」在一个空结果上同形。
+    /// <c>--find</c> 筛在之前,并且把分母说出来。
+    /// </summary>
+    [Fact]
+    public void list的find筛在截断之前且报得出分母()
+    {
+        var (all, _, _) = Fixture.Run("list", "ThingDef", "--limit", "all");
+        var total = System.Text.RegularExpressions.Regex.Match(all, @"(\d+) defs?\b").Groups[1].Value;
+
+        // 只留一行的过滤 + 一个小得离谱的 limit:grep 那条路在这里必然落空。
+        var (found, _, code) = Fixture.Run("list", "ThingDef", "--find", "shieldbelt", "--limit", "1");
+        Assert.Equal(0, code);
+        Assert.Contains("Apparel_ShieldBelt", found, StringComparison.Ordinal);
+        // 分母不许丢:筛后的 total 单独摆着会被读成「这个类型总共就这些」。
+        Assert.Contains($"this type holds {total} defs in all", found, StringComparison.Ordinal);
+
+        // 筛空 ≠ 类型不存在。
+        var (miss, _, mcode) = Fixture.Run("list", "ThingDef", "--find", "zzznotathing");
+        Assert.Equal(1, mcode);
+        Assert.Contains("in its name or label, out of", miss, StringComparison.Ordinal);
+        Assert.DoesNotContain("No def type named", miss, StringComparison.Ordinal);
+
+        // 不给 def 类型时筛的是**类型名** —— 这条路不退 2,它在这一半真的生效。
+        var (types, _, tcode) = Fixture.Run("list", "--find", "Thing");
+        Assert.Equal(0, tcode);
+        Assert.Contains("ThingDef", types, StringComparison.Ordinal);
+        Assert.Contains("def types in all", types, StringComparison.Ordinal);
+
+        var (noType, _, ncode) = Fixture.Run("list", "--find", "zzznotatype");
+        Assert.Equal(1, ncode);
+        Assert.Contains("No def type in this snapshot has", noType, StringComparison.Ordinal);
     }
 
     // ---- types 并入 list(功能收束)----
@@ -2316,5 +2469,90 @@ public class GrammarTests
         var (holder, _, hcode) = Fixture.Run("list", "TestVariantDef");
         Assert.Equal(1, hcode);
         Assert.Contains("--class TestVariantDef", holder, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <c>--value</c> 与位置上的那个值说的是同一件事。
+    ///
+    /// 此前 <c>find</c> 的分支判据挂在「给没给 --value」上,于是
+    /// <c>find --field X --value Y</c> 被拒掉 --field 之后,剩下的半条命令照样跑得通、
+    /// 答的却是「哪些字段路径装着 Y」—— 一个语法正常、语义全错、还长得像正常结果的东西。
+    /// 判据改成「给没给字段」之后,两种写法必须逐字节同形。
+    /// </summary>
+    [Fact]
+    public void 字段在场时value与位置上的值是同一件事()
+    {
+        var (inline, _, inlineCode) = Fixture.Run("find", "compClass", "RimWorld.CompShield");
+        var (named, _, namedCode) = Fixture.Run("find", "compClass", "--value", "RimWorld.CompShield");
+        Assert.Equal(0, inlineCode);
+        Assert.Equal(namedCode, inlineCode);
+        Assert.Equal(inline, named);
+
+        // 没有字段时 --value 仍是「搜遍所有字段」那一问,两种问法的表不许混成一张。
+        var (anyField, _, _) = Fixture.Run("find", "--value", "RimWorld.CompShield", "--json");
+        Assert.Contains("\"paths\"", anyField, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"matches\"", anyField, StringComparison.Ordinal);
+
+        var (byField, _, _) = Fixture.Run("find", "compClass", "--value", "RimWorld.CompShield", "--json");
+        Assert.Contains("\"matches\"", byField, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"paths\"", byField, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 打进来的名字是这条命令的**位置参数**时,报错要说破它该怎么写,并把值填进去 ——
+    /// 「别的命令认这个选项」只说得出这里不行,说不出这里该怎么办。
+    ///
+    /// 让位于本命令的近似选项那一条也在这里判:位置参数一共就一两个,前缀匹配太容易撞上,
+    /// 撞上就是把拼错了选项的人往沟里带。
+    /// </summary>
+    [Fact]
+    public void 位置参数被当成选项打进来时给出填好的写法()
+    {
+        var (_, err, code) = Fixture.Run("find", "--field", "compClass");
+        Assert.Equal(2, code);
+        Assert.Contains("rimsearcher find compClass <value>", err, StringComparison.Ordinal);
+        // 这一档取代了「别的命令有」那句 —— 两句一起说,长度翻倍而信息没多。
+        Assert.DoesNotContain("It is accepted by", err, StringComparison.Ordinal);
+
+        // 没有值可填时就摆出形状,不许凭空捏一个。
+        var (_, bare, _) = Fixture.Run("find", "--field");
+        Assert.Contains("rimsearcher find <fieldPath> <value>", bare, StringComparison.Ordinal);
+
+        // 拼错的选项仍走近似候选:`--values` 前缀命中位置参数 <value>,而它要的显然是 --value。
+        var (_, typo, _) = Fixture.Run("find", "compClass", "--values", "x");
+        Assert.Contains("Did you mean --value?", typo, StringComparison.Ordinal);
+        Assert.DoesNotContain("is an argument rather than an option", typo, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 同名冲突那句的三档。语料里同名的只有 Firefoam 一对,于是端到端只走得到「剩一个别的」
+    /// 那档 —— 剩好几个的那档在真数据里天天出现(`Space` 挂着六个 def),却一直没有落点,
+    /// 复数形态在那里错了很久。
+    /// </summary>
+    [Fact]
+    public void 同名冲突那句在剩几个别的类型上都成句()
+    {
+        // 全都在场:不点名任何一个,只说怎么收窄。
+        var all = NameCollision.Say("Space", 6, ["MapGeneratorDef"], []);
+        Assert.Contains("6 defs share the name 'Space' across different def types", all, StringComparison.Ordinal);
+        Assert.Contains("all of them are shown", all, StringComparison.Ordinal);
+
+        var one = NameCollision.Say("Firefoam", 2, ["StatDef"], ["ThingDef"]);
+        Assert.Contains("The other is a ThingDef, shown only without --type.", one, StringComparison.Ordinal);
+
+        var many = NameCollision.Say("Space", 6, ["MapGeneratorDef"],
+            ["GenStepDef", "RoomStatDef", "TerrainDef", "BiomeDef", "WorldObjectDef"]);
+        Assert.Contains(
+            "The others are GenStepDef, RoomStatDef, TerrainDef, BiomeDef, WorldObjectDef, shown only without --type.",
+            many, StringComparison.Ordinal);
+
+        // 类型名本身以 Def 收尾,尾缀再接一个名词就是「WorldObjectDef def」——
+        // 两支都不许长出这个尾巴。名单本身也不许用 and 串联(五个类型串起来是
+        // 「A and B and C and D and E」),而句尾那句固定话里的 and 不算。
+        foreach (var line in new[] { one, many })
+        {
+            Assert.DoesNotContain("Def def", line, StringComparison.Ordinal);
+            Assert.DoesNotContain("Def and ", line, StringComparison.Ordinal);
+        }
     }
 }

@@ -19,18 +19,25 @@ public static class TextRenderer
     {
         var sb = new StringBuilder();
 
-        foreach (var n in report.Notices.Where(n => !n.Footnote))
-            sb.Append(n.Text).Append(OutputText.Newline);
-
-        var first = true;
-        foreach (var block in report.Blocks)
+        // 按 Add 的先后走,声明与数据块交错 —— 每句话就落在它所讲的那个块旁边,而调用方
+        // pipe 一个 head 先拿到的是数据。位置由写命令的人决定,不由这里统一提到最前。
+        foreach (var entry in report.Entries)
         {
-            // 空块直接跳过,连分隔空行都不留:连着的两个空行会被读成「后面还有,被截断了」。
-            if (IsEmpty(block)) continue;
-            if (sb.Length > 0 && !first) sb.Append(OutputText.Newline);
-            if (sb.Length > 0 && first && report.Notices.Any(n => !n.Footnote)) sb.Append(OutputText.Newline);
-            first = false;
-            RenderBlock(sb, block);
+            switch (entry)
+            {
+                case Notice n:
+                    // 脚注另有归处,在最后统一收。
+                    if (!n.Footnote) sb.Append(n.Text).Append(OutputText.Newline);
+                    break;
+
+                case Block block:
+                    // 空块直接跳过,连分隔空行都不留:连着的两个空行会被读成「后面还有,被截断了」。
+                    if (IsEmpty(block)) continue;
+                    // 块与它上面的东西之间空一行;声明之间不空 —— 连着的几句话是一段。
+                    if (sb.Length > 0) sb.Append(OutputText.Newline);
+                    RenderBlock(sb, block);
+                    break;
+            }
         }
 
         var footnotes = report.Notices.Where(n => n.Footnote).ToList();

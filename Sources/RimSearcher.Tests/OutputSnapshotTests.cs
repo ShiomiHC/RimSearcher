@@ -104,6 +104,12 @@ public class OutputSnapshotTests
         { "json-read-member",      ["read", "vanilla/Verse/Outline.cs", "--member", "Shared", "--json"] },
         { "usage-unknown-flag",    ["search", "shield", "--lmit", "5"] },
         { "usage-unknown-command", ["serach", "shield"] },
+        // 同一个词在别的命令上是选项、在这条上是位置参数。--field 是 get / inherit / read
+        // 认的写法,搬到 find 上就落空,而「这里怎么写」是算得出来的 —— 连值一起填好。
+        { "usage-field-is-positional", ["find", "--field", "compClass"] },
+        // 值给了两遍且不一样。位置参数与 --value 说的是同一件事,挑一个跑下去的话
+        // 另一个被丢了在输出里看不出来。
+        { "usage-value-twice",     ["find", "compClass", "RimWorld.CompShield", "--value", "Other"] },
         // 夹具恒追加 --db/--config,而总览那条分支要求 argv 恰好一个词。
         { "help-overview",         ["--help"] },
         // `--help <command>` 不接,但那个词不许被默默扔掉 —— 说清这一屏是什么,

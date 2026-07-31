@@ -1,11 +1,10 @@
 $ rimsearcher values compClass
 exit 0
 --- stdout ---
-2 values.
-
 matched_paths    comps[0].compClass (3)
 def_types        ThingDef (2 of 9), HediffDef (1 of 1)
 defs_with_field  3
+2 values.
 
 value                        defs
 RimWorld.CompShield          2

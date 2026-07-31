@@ -283,8 +283,8 @@ The field path is matched from the end, so 'compClass' finds 'comps[3].compClass
 
 | Argument | Meaning |
 |---|---|
-| `<fieldPath>` | A field path or just its last segment, such as compClass or defaultProjectile. Omit it when you pass --value. *(optional)* |
-| `<value>` | The value to look for. Omit it to list every def that has the field at all. *(optional)* |
+| `<fieldPath>` | A field path or just its last segment, such as compClass or defaultProjectile. Omit it to search every field instead. *(optional)* |
+| `<value>` | The value to look for. '--value' spells out this same argument, so give it one way or the other. Omit it to list every def that has the field at all. *(optional)* |
 
 | Option | Meaning | Also accepted |
 |---|---|---|
@@ -292,19 +292,20 @@ The field path is matched from the end, so 'compClass' finds 'comps[3].compClass
 | `--offset` <n> | Skip this many defs before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
 | `--exact` | Require the whole value to match, with either a field path or --value. Without it, the value is matched as a substring. | `--exact-match`, `--whole` |
-| `--value` <text> | Search every field for this value and report which paths hold it, instead of naming a field yourself. | `--any-field`, `--search-values`, `--holding` |
+| `--value` <text> | The value to look for, same as giving it as an argument. Without a field path, every field is searched and the report names which paths hold it. | `--any-field`, `--search-values`, `--holding` |
 
 `--json` keys, besides the global `notes`:
 
 | Key | Holds |
 |---|---|
 | `matches` | with a field path: one row per def that has it — def_name, def_type, value, mod. |
-| `paths` | with --value: one row per field path that holds the value — path, def_type, defs, example_value. This is the key --value produces; 'matches' is absent then. |
+| `paths` | without a field path: one row per field path that holds the value — path, def_type, defs, example_value. This is the key that question produces; 'matches' is absent then. |
 
 Examples:
 
 ```
 rimsearcher find compClass RimWorld.CompShield
+rimsearcher find compClass --value RimWorld.CompShield
 rimsearcher find defaultProjectile Bullet_Revolver
 rimsearcher find --value World/WorldObjects/Expanding
 ```
@@ -440,7 +441,8 @@ rimsearcher list [defType] [options]
 | `-n`, `--limit` <n|all> | How many defs to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
 | `--offset` <n> | Skip this many defs before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
-| `--class` <ClassName> | Only defs whose own class is this. Def types that hold several classes list them below the count. | `--def-class`, `--runtime-class` |
+| `--class` <ClassName> | Only defs whose own class is this. Def types that hold several classes list them below the count. Many def types hold just one class and pick their behaviour in a nested field instead — GenStepDef is all Verse.GenStepDef, with the GenStep subclass on 'genStep' — and this option cannot see that. 'rimsearcher find Class <ClassName>' can. | `--def-class`, `--runtime-class` |
+| `--find` <text> | Only defs whose name or label contains this. The filter runs before --limit, so a count of what matched is always reported — unlike piping to grep, which only ever sees the current page. | `--filter`, `--grep`, `--search`, `--match` |
 
 `--json` keys, besides the global `notes`:
 
@@ -454,6 +456,7 @@ Examples:
 ```
 rimsearcher list
 rimsearcher list HediffDef
+rimsearcher list GenStepDef --find scatter
 rimsearcher list CreepJoinerBaseDef --class CreepJoinerAggressiveDef
 rimsearcher list ThingDef --scope all,-vanilla --limit all
 ```
@@ -472,7 +475,7 @@ Mod lists are the game's own .rml files. Anything that produces one — the game
 
 | Key | Holds |
 |---|---|
-| `modlists` | one row per saved mod list: name, mods, saved, path. |
+| `modlists` | one row per saved mod list: name, mods, game_version, path. 'mods' is text, not a number — a file that does not parse still gets its row, with 'unreadable' there. |
 
 Examples:
 
