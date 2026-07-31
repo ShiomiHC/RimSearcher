@@ -201,8 +201,11 @@ public sealed class ReadCommand : Command
             shown.Select(d => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
                 ["kind"] = d.Kind,
-                ["name"] = d.Name,
-                ["in"] = d.Owner,
+                // 带元数的显示名。裸名留给匹配 —— --type 写 ThingOwner 要能同时命中
+                // ThingOwner 与 ThingOwner<T>,因为反编译树的文件名不带元数,
+                // 调用方没有任何地方可以知道该写几个类型参数。
+                ["name"] = d.Display,
+                ["in"] = d.Owner is { Length: > 0 } ? d.Owner + d.OwnerTypeParams : null,
                 ["lines"] = d.Lines,
                 ["at"] = $"{d.StartLine}-{d.EndLine}",
             }).ToList());
@@ -266,11 +269,29 @@ public sealed class ReadCommand : Command
 
         // 同名多份时说破这是**同一个文件里的**几份,而不是几个文件 —— 重载与嵌套类里的同名
         // 成员长得一样,不点名归属就分不出手里这段属于谁。
-        if (picked.Count > 1 && type is not { Length: > 0 })
+        //
+        // 这句话原先只在 --type 缺席时说,而那个门恰好把最需要它的一种挡在外面:
+        // 一个文件里同时住着 ThingOwner<T> 与 ThingOwner(vanilla 真有),两边的 Count
+        // 归属逐字相同,--type 无论写什么都同时命中两条 —— 于是照提示加上 --type 之后,
+        // 结果一条没少,**警告反而消失了**,读的人得到一个「已经消歧」的外观和两段代码。
+        // 现在的判据换成「--type 还能不能收敛」,收敛不了就换一条走得通的下一步。
+        if (picked.Count > 1)
+        {
+            var ownersDiffer = picked.Select(d => d.Owner ?? "")
+                                     .Distinct(StringComparer.Ordinal).Count() > 1;
+            var typeCanHelp = ownersDiffer && type is not { Length: > 0 };
+            // 放宽发声条件之前,这句只走 --member 那条路,于是 member 必然在场。
+            // 现在 --type 落到这里时 member 是 null,照原样插值会印出一对空引号。
+            var what = member is { Length: > 0 } ? member : type;
             ctx.Report.Notice(NoticeKind.Filter,
-                $"'{member}' is declared more than once here: " +
-                string.Join(", ", picked.Select(d => d.Qualified)) +
-                ". '--type <name>' narrows it to one.");
+                $"'{what}' is declared more than once here: " +
+                string.Join(", ", picked.Select(d => $"{d.Qualified} (line {d.StartLine})")) + ". " +
+                (typeCanHelp
+                    ? "'--type <name>' narrows it to one."
+                    : "They differ by more than the name, so --type cannot pick between them — " +
+                      "read one alone with --lines " +
+                      string.Join(" or --lines ", picked.Select(d => $"{d.StartLine}-{d.EndLine}")) + "."));
+        }
 
         ctx.Report.Text("source", lines, rows);
         SayBraceMatched(ctx, rel);

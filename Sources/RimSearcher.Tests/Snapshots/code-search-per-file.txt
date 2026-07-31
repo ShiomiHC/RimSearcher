@@ -1,7 +1,7 @@
 $ rimsearcher code-search public --max-per-file 1
 exit 0
 --- stdout ---
-13 matches in 5 files (5 printed); 6 files read across 2 of 3 source trees on disk — the rest hold no file matching --files '*.cs', and 'rimsearcher sources list' says which of those have never been decompiled.
+13 matches in 5 files (5 printed); 9 files read across 2 of 3 source trees on disk — the rest hold no file matching --files '*.cs', and 'rimsearcher sources list' says which of those have never been decompiled.
 --max-per-file allows 1 match from any one file, and 3 files had more than that; the count above still includes every one of them. Raise it to see the rest.
 
 vanilla/RimWorld/CompShield.cs:3:	public class CompShield : ThingComp

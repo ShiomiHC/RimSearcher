@@ -1,0 +1,11 @@
+$ rimsearcher read vanilla/Verse/Pair.cs --outline
+exit 0
+--- stdout ---
+2 declarations.
+
+kind   name     in  lines  at
+class  Pair         3      3-5
+class  Pair<T>      3      7-9
+
+Declarations here are found by matching braces, not by parsing C#, so a name this command does not see may still be in vanilla/Verse/Pair.cs. 'rimsearcher code-search' searches the text.
+--- stderr ---

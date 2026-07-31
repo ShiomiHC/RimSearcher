@@ -599,6 +599,71 @@ public static class Fixture
             "\t}",
             "}");
 
+        // 全树自检(OutlineAuditTests)撞出来的三种形态,一种一段。三段都用 internal 而不是
+        // public,也不继承 ThingComp —— 它们进 code-search 的候选集,含那两个词就会动到
+        // 那边十几份基线的数字,而这里要钉的是 read 的轮廓,不是搜索的计数。
+        //
+        //   Tuples      元组类型:声明头里第一个顶层 '(' 是**类型**不是参数表。
+        //               取它左边的标识符就取到修饰符,真名字整个消失。vanilla 23 个文件。
+        //   Constrained 泛型约束连写:`where T : class where U : struct` 里 `class where`
+        //               长得像一个类型声明。误判成类型后 Declarable 放行,
+        //               **整个方法体的语句都变成声明** —— 崩塌型,不是单点错。
+        //   Pair        泛型元数不同的同名类型。不是错,是歧义:两条轮廓逐字相同。
+        // 四种写法一个都不能少:裸元组、元组数组、可空元组,以及带基构造调用的构造函数。
+        // 前三种是同一个判据的三档(')' 右边分别跟标识符、'['、'?'),最后一种是**反向**
+        // 落点 —— 它的 ')' 右边是 `: base(…)`,跳过冒号就会把构造函数认成 base。
+        File_("vanilla/Verse/Tuples.cs",
+            "namespace Verse",
+            "{",
+            "\tinternal class Tuples",
+            "\t{",
+            "\t\tprivate (int lo, int hi) bounds;",
+            "",
+            "\t\tprivate (int lo, int hi)[] spans;",
+            "",
+            "\t\tinternal Tuples(int at) : base(at)",
+            "\t\t{",
+            "\t\t}",
+            "",
+            "\t\tinternal (int left, int right) Split(int at)",
+            "\t\t{",
+            "\t\t}",
+            "",
+            "\t\tinternal (int lo, int hi)? Maybe(int at)",
+            "\t\t{",
+            "\t\t}",
+            "\t}",
+            "}");
+
+        File_("vanilla/Verse/Constrained.cs",
+            "using System;",
+            "",
+            "namespace Verse",
+            "{",
+            "\tinternal class Constrained",
+            "\t{",
+            "\t\tinternal void Both<T, U>(T a, U b) where T : class where U : struct",
+            "\t\t{",
+            "\t\t\tif (a != null)",
+            "\t\t\t{",
+            "\t\t\t\tConsole.WriteLine(b);",
+            "\t\t\t}",
+            "\t\t}",
+            "\t}",
+            "}");
+
+        File_("vanilla/Verse/Pair.cs",
+            "namespace Verse",
+            "{",
+            "\tinternal class Pair",
+            "\t{",
+            "\t}",
+            "",
+            "\tinternal class Pair<T>",
+            "\t{",
+            "\t}",
+            "}");
+
         // 同名文件的第二份。read 收基名,而基名在两棵树里撞车时选错的代价是整条结论作废
         // (mod 的覆盖版被当成原版读下去,输出里逐字看不出区别)—— 所以那条路不选,只列。
         // 正文刻意不含 "public" 与 ": ThingComp":它进了 code-search 的候选集,内容一撞

@@ -1,7 +1,7 @@
 $ rimsearcher code-search Translate
 exit 0
 --- stdout ---
-3 matches in 1 file; 6 files read across 2 of 3 source trees on disk — the rest hold no file matching --files '*.cs', and 'rimsearcher sources list' says which of those have never been decompiled.
+3 matches in 1 file; 9 files read across 2 of 3 source trees on disk — the rest hold no file matching --files '*.cs', and 'rimsearcher sources list' says which of those have never been decompiled.
 This snapshot has no keyed translation for 1 translation key in these lines. A def's own label goes through DefInjected rather than a key ('rimsearcher get' and 'search' cover those), and a key no language file declares is one the code no longer reaches.
 The key is not a literal in 1 line here — assembled at runtime, or held in a variable — so what those lines display cannot be resolved from the text. 'rimsearcher keyed' can still show such a key by name once you know it.
 

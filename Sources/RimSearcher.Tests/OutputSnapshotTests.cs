@@ -185,6 +185,23 @@ public class OutputSnapshotTests
         { "read-no-file",          ["read", "NoSuchFile.cs"] },
         // 两种读法同时传:不排优先级,当场说破这是两件事(旧世系在这里是静默择一的)。
         { "read-two-modes",        ["read", "Outline.cs", "--lines", "1-3", "--member", "Shared"] },
+        // 全树自检撞出来的三种形态(语料见 Fixture.WriteSourceTree)。这三份基线的作用不是
+        // 保护现状 —— 它们先钉下**错的**输出,再让修法的 diff 把错处逐字显出来。
+        //
+        // 元组类型:`internal (int left, int right) Split(int at)` 的第一个顶层 '(' 是类型。
+        // 取它左边的标识符 = 取到修饰符,于是 Split 与 bounds 双双消失,列里剩两个
+        // 叫 internal / private 的「方法」,而**行号是对的** —— 错答案穿着对答案的衣服。
+        { "read-outline-tuple",    ["read", "vanilla/Verse/Tuples.cs", "--outline"] },
+        // 同一件事在 --member 上的样子:名字白纸黑字在文件里,命令说没有,
+        // 而它给的理由(「配平括号不是解析」)会把人引去改拼写。
+        { "read-member-tuple",     ["read", "vanilla/Verse/Tuples.cs", "--member", "Split"] },
+        // 约束连写:`where T : class where U : struct` 里的 `class where` 被认成类型声明,
+        // 压栈之后 Declarable 放行,方法体里的 if 跟着变成成员 —— 崩塌型,一处误判毁一整块。
+        { "read-outline-constrained", ["read", "vanilla/Verse/Constrained.cs", "--outline"] },
+        // 泛型元数不同的同名类型。这一条不是错,是歧义:两行轮廓逐字相同,
+        // --type 会把两段都给出来而消歧提示发不出(它只在 --type 缺席时说话)。
+        { "read-outline-arity",    ["read", "vanilla/Verse/Pair.cs", "--outline"] },
+        { "read-type-arity",       ["read", "vanilla/Verse/Pair.cs", "--type", "Pair"] },
         // 三轮 R5 的另一半:没有 --offset 的表把调用方逼去接管道,而管道会把声明区
         // 连同计数一起截掉。四条盯分页的三个位置 —— 中间页要说自己从第几条起、
         // 末页不许再给下一页的参数、翻过头不是「没有这个东西」。

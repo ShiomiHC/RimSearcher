@@ -9,7 +9,7 @@ exit 0
     },
     {
       "kind": "filter",
-      "text": "'Shared' is declared more than once here: Outer.Shared, Inner.Shared. '--type <name>' narrows it to one."
+      "text": "'Shared' is declared more than once here: Outer.Shared (line 15), Inner.Shared (line 25). '--type <name>' narrows it to one."
     },
     {
       "kind": "boundary",

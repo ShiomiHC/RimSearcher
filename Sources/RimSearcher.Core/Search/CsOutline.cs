@@ -9,8 +9,26 @@ namespace RimSearcher.Search;
 /// </summary>
 public sealed record CsDecl(string Kind, string Name, string? Owner, int StartLine, int EndLine)
 {
-    /// <summary>`Pawn.Kill` 这样的显示名;顶层类型就是它自己的名字。</summary>
-    public string Qualified => Owner is { Length: > 0 } ? $"{Owner}.{Name}" : Name;
+    /// <summary>
+    /// 自己的泛型参数原文(<c>&lt;T&gt;</c>);非泛型是空串。
+    ///
+    /// 存原文而不是个数,因为 <c>ThingOwner&lt;T&gt;</c> 比 <c>ThingOwner`1</c> 认得出来,
+    /// 而反编译产物的参数名一律很短(T / TKey / TElement)。
+    /// </summary>
+    public string TypeParams { get; init; } = "";
+
+    /// <summary>
+    /// <see cref="Owner"/> 的泛型参数原文。成员**必须**带着它 —— 一个文件里可以同时住着
+    /// <c>ThingOwner&lt;T&gt;</c> 与 <c>ThingOwner</c>(vanilla 真有),而两边的成员
+    /// 光看 Owner 名字一模一样。
+    /// </summary>
+    public string OwnerTypeParams { get; init; } = "";
+
+    /// <summary>带元数的自己。<see cref="Name"/> 保持裸名 —— 那是**匹配**用的。</summary>
+    public string Display => Name + TypeParams;
+
+    /// <summary>`ThingOwner&lt;T&gt;.Count` 这样的显示名;顶层类型就是它自己。</summary>
+    public string Qualified => Owner is { Length: > 0 } ? $"{Owner}{OwnerTypeParams}.{Display}" : Display;
 
     public int Lines => EndLine - StartLine + 1;
 }
@@ -21,6 +39,11 @@ public sealed record CsDecl(string Kind, string Name, string? Owner, int StartLi
 /// 为什么不接 Roslyn:这一支从头到尾没有它,而为了「读一个方法体」把整个编译器前端拉进
 /// 一个查快照的 CLI,代价与收益差着量级。反编译产物的形状又恰好是所有 C# 里最规整的一种
 /// (ILSpy 生成,没有奇诡的格式化),配平括号足够把方法体的边界找准。
+///
+/// 这句话被量过一次(2026-07-31,全树 19467 文件 / 212829 条声明):当时有两类真错 ——
+/// 元组类型与泛型约束连写,合计 67 个文件 —— 而它们都是 <see cref="Classify"/> 的**局部判据**
+/// 缺陷,不是「没有解析」造成的,修完真错归零。判据见 <c>OutlineAuditTests</c>;
+/// 那次自检也是这条注释目前唯一的证据,再有人想换实现,先把它重跑一遍。
 ///
 /// 但它的**边界必须说出去**,不能让调用方以为拿到的是一次解析(R51:能力边界写进它作用的
 /// 那个块)。三件事这里做不到,<see cref="ReadCommand"/> 会在用到时说:
@@ -165,8 +188,12 @@ public static class CsOutline
 
     private sealed record Frame(CsDecl? Decl, int Start);
 
-    private static string? OwnerOf(Stack<Frame> open)
-        => open.FirstOrDefault(f => f.Decl is not null && IsType(f.Decl.Kind))?.Decl?.Name;
+    /// <summary>
+    /// 最近的类型祖先本身,不只是它的名字 —— 成员要从它身上取走泛型参数,
+    /// 否则同名不同元数的两个类型下的成员在输出里逐字相同。
+    /// </summary>
+    private static CsDecl? OwnerOf(Stack<Frame> open)
+        => open.FirstOrDefault(f => f.Decl is not null && IsType(f.Decl.Kind))?.Decl;
 
     /// <summary>当前位置能不能住一个声明:根、namespace 里、类型里三处。</summary>
     private static bool Declarable(Stack<Frame> open)
@@ -213,9 +240,16 @@ public static class CsOutline
     /// 一段声明头是什么。判不出来就回 null —— 判不出来的东西不该编一个名字给它,
     /// 那会让 <c>--member</c> 命中一堆语句碎片。
     /// </summary>
-    private static CsDecl? Classify(string header, string? owner, bool bodyless = false)
+    private static CsDecl? Classify(string header, CsDecl? owner, bool bodyless = false)
     {
         if (header.Length == 0) return null;
+
+        // 成员一律带着 owner 的泛型参数走。少了它,`ThingOwner<T>.Count` 与
+        // `ThingOwner.Count`(同一个文件里的两个类,vanilla 真有)在输出里逐字相同,
+        // 于是 --member 列出两条一模一样的候选,再教一次 --type 也选不动 ——
+        // 而那正是 --type 唯一收敛不了的形状。
+        var ownerName = owner?.Name;
+        var ownerParams = owner?.TypeParams ?? "";
 
         // `=> expr;` 的成员没有大括号,走的是无体那条路,可它是属性/方法而不是字段。
         // 箭头右边是实现,与「这是什么」无关,先切掉。
@@ -236,17 +270,30 @@ public static class CsOutline
         // 曾经是 MatFrom。先切,再判。
         if (bodyless) header = StripInitializer(header);
 
+        // 泛型约束同理:那一段里没有正在被声明的名字。而它不只是「多认一个」——
+        // `where T : class where U : struct` 里的 `class where` 正好是
+        // 「class 关键字 + 空格 + 标识符」,AfterKeyword 会认成一个叫 where 的类型,
+        // 于是这个**方法**以类型身份压栈,Declarable 跟着放行,方法体里的每条语句
+        // 都变成声明(全树自检 8 个文件,整块崩)。必须在找 TypeKeywords 之前切。
+        header = StripConstraints(header);
+
         // 类型。关键字必须后接一个标识符,于是 `where T : class` 这种约束文本不会命中
         // (它后面是 `,` 或行尾)。取第一处,因为 `class Foo : IEnumerable<Bar>` 里
         // 后面的都不是本体。
         foreach (var kw in TypeKeywords)
         {
             var name = AfterKeyword(header, kw);
-            if (name is not null) return new CsDecl(kw, name, owner, 0, 0);
+            if (name is not null)
+                return new CsDecl(kw, name, ownerName, 0, 0)
+                {
+                    TypeParams = TypeParamsAfter(header, kw, name),
+                    OwnerTypeParams = ownerParams,
+                };
         }
 
         if (header.StartsWith("namespace ", StringComparison.Ordinal))
-            return new CsDecl("namespace", header["namespace ".Length..].Trim().TrimEnd(';'), owner, 0, 0);
+            return new CsDecl("namespace", header["namespace ".Length..].Trim().TrimEnd(';'), ownerName, 0, 0)
+                { OwnerTypeParams = ownerParams };
 
         // 方法一族:看第一个顶层 '('。lambda、强制转换与调用都在语句里,而这里只在
         // 「直接住在类型里」的位置被调用,所以不必再防它们。
@@ -255,17 +302,18 @@ public static class CsOutline
         {
             var name = IdentifierBefore(header, paren);
             if (name is null) return null;
-            var kind = name == owner ? "constructor" : "method";
-            return new CsDecl(kind, name, owner, 0, 0);
+            var kind = name == ownerName ? "constructor" : "method";
+            return new CsDecl(kind, name, ownerName, 0, 0) { OwnerTypeParams = ownerParams };
         }
 
         // 剩下的:属性 / 事件 / 索引器 / 字段。索引器的名字就是 `this`,与 C# 说法一致。
         if (header.EndsWith("this", StringComparison.Ordinal) || header.Contains("this["))
-            return new CsDecl("indexer", "this", owner, 0, 0);
+            return new CsDecl("indexer", "this", ownerName, 0, 0) { OwnerTypeParams = ownerParams };
 
         var last = LastIdentifier(header);
         if (last is null || Keywords.Contains(last)) return null;
-        return new CsDecl(bodyless ? "field" : "property", last, owner, 0, 0);
+        return new CsDecl(bodyless ? "field" : "property", last, ownerName, 0, 0)
+            { OwnerTypeParams = ownerParams };
     }
 
     private static readonly string[] TypeKeywords = ["class", "struct", "interface", "record", "enum"];
@@ -276,6 +324,29 @@ public static class CsOutline
         "get", "set", "init", "add", "remove", "return", "else", "do", "try", "finally",
         "unsafe", "checked", "unchecked", "fixed", "lock", "using", "switch", "base", "this",
     };
+
+    /// <summary>
+    /// 类型名后面紧跟的 <c>&lt;…&gt;</c> 原文;非泛型回空串。
+    ///
+    /// 取原文而不是数个数:同名不同元数的类型要靠这段区分开,而
+    /// <c>Row&lt;T1, T2&gt;</c> 与 <c>Row&lt;T1, T2, T3&gt;</c> 一眼分得出,
+    /// 元数 2 与 3 还要读的人自己换算。
+    /// </summary>
+    private static string TypeParamsAfter(string header, string keyword, string name)
+    {
+        var at = header.IndexOf($"{keyword} {name}", StringComparison.Ordinal);
+        if (at < 0) return "";
+        var i = at + keyword.Length + 1 + name.Length;
+        if (i >= header.Length || header[i] != '<') return "";
+
+        var angle = 0;
+        for (var j = i; j < header.Length; j++)
+        {
+            if (header[j] == '<') angle++;
+            else if (header[j] == '>' && --angle == 0) return header[i..(j + 1)];
+        }
+        return "";
+    }
 
     /// <summary>`class Foo` → `Foo`。关键字必须是独立的词,后面必须真的跟一个标识符。</summary>
     private static string? AfterKeyword(string header, string keyword)
@@ -299,7 +370,20 @@ public static class CsOutline
         }
     }
 
-    /// <summary>圆括号嵌套为 0 时的第一个 '('。尖括号里的不算(泛型实参可以带元组)。</summary>
+    /// <summary>
+    /// **参数表**那个 '('。尖括号里的不算(泛型实参可以带元组)。
+    ///
+    /// 第一个顶层 '(' 不一定就是它 —— 元组类型自带一对括号,而它写在名字**左边**:
+    /// <c>internal (int left, int right) Split(int at)</c> 的第一个 '(' 是返回类型。
+    /// 取错的代价不是少认一个成员:<see cref="IdentifierBefore"/> 会往左取到修饰符,
+    /// 于是这个方法在轮廓里叫 <c>internal</c>,真名字 Split 一个字都不剩,
+    /// 而行号仍然是对的 —— 错答案穿着对答案的衣服。字段同理
+    /// (<c>private (int lo, int hi) bounds;</c> 曾报出一个叫 private 的方法)。
+    /// 全树自检:vanilla 23 个文件,含 CellRect 的三个 Split* 与 Dialog_FormCaravan 的缓存字段。
+    ///
+    /// 判据:一个顶层 '(' 若其配对 ')' 后面还跟着标识符,它就是类型不是参数表 ——
+    /// 参数表右边只可能是泛型约束、基构造调用、'=>' 或行尾,都不以标识符打头。
+    /// </summary>
     private static int TopLevelParen(string header)
     {
         var angle = 0;
@@ -309,8 +393,33 @@ public static class CsOutline
             {
                 case '<': angle++; break;
                 case '>': if (angle > 0) angle--; break;
-                case '(' when angle == 0: return i;
+                case '(' when angle == 0:
+                {
+                    var close = MatchParen(header, i);
+                    if (close < 0) return i;          // 没配上,按参数表处理
+                    // ')' 右边还可能挂类型后缀:数组 `[]`、多维 `[,]`、可空 `?`,以及它们的
+                    // 组合(`(int, int)?[] xs`)。跳过这些再看是不是标识符 —— 漏掉它们,
+                    // `private (T Element, T Priority)[] _nodes;` 又会报成一个叫 private 的方法。
+                    // **冒号不跳**:`Foo(int a) : base(a)` 的右边是基构造调用,
+                    // 那个 '(' 属于 base,跳过去就把构造函数认成了 base。
+                    var j = close + 1;
+                    while (j < header.Length && header[j] is ' ' or '[' or ']' or '?' or ',') j++;
+                    if (j < header.Length && IsIdentChar(header[j])) { i = close; continue; }
+                    return i;
+                }
             }
+        }
+        return -1;
+    }
+
+    /// <summary>'(' 的配对 ')';没配上回 -1。</summary>
+    private static int MatchParen(string header, int open)
+    {
+        var depth = 0;
+        for (var i = open; i < header.Length; i++)
+        {
+            if (header[i] == '(') depth++;
+            else if (header[i] == ')' && --depth == 0) return i;
         }
         return -1;
     }
@@ -336,6 +445,31 @@ public static class CsOutline
         while (i >= 0 && IsIdentChar(header[i])) i--;
         var name = header[(i + 1)..end];
         return name.Length == 0 ? null : name;
+    }
+
+    /// <summary>
+    /// 切掉第一个顶层 <c>where </c> 起的全部文本。约束子句里只有类型参数和它被约束到的
+    /// 类型,正在声明的那个名字一定在它左边。
+    ///
+    /// 顶层判定按尖括号深度:泛型实参里可以出现任意标识符,不该被当成约束的起点。
+    /// <c>where</c> 是上下文关键字、理论上能做标识符,但要在声明头里后接一个空格才会
+    /// 命中这里,那个形状不存在于反编译产物。
+    /// </summary>
+    private static string StripConstraints(string header)
+    {
+        var angle = 0;
+        for (var i = 0; i < header.Length; i++)
+        {
+            switch (header[i])
+            {
+                case '<': angle++; continue;
+                case '>': if (angle > 0) angle--; continue;
+            }
+            if (angle != 0 || header[i] != 'w') continue;
+            if (i > 0 && IsIdentChar(header[i - 1])) continue;
+            if (header.AsSpan(i).StartsWith("where ")) return header[..i].TrimEnd();
+        }
+        return header;
     }
 
     /// <summary>`int hitPoints = 30` → `int hitPoints`。初值里的标识符不是字段名。</summary>
