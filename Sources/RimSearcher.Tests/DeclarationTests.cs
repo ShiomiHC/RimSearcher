@@ -5,10 +5,7 @@ namespace RimSearcher.Tests;
 
 /// <summary>
 /// 声明层的名单侧闸。事实侧(真跑进程读 stdout)在 <see cref="ProcessTests"/>。
-///
-/// 01 的教训:「两侧立闸」的另一侧不许是另一份声明 —— schema 验 schema,两边同时错照绿。
-/// 所以这里只判那些能从声明本身判定的性质(唯一性、冲突、措辞纪律),凡是「实际行为对不对」
-/// 一律推给事实侧。
+/// 这里只判能从声明本身判定的性质(唯一性、冲突、措辞纪律),「实际行为对不对」一律推给事实侧。
 /// </summary>
 public class DeclarationTests
 {
@@ -38,8 +35,8 @@ public class DeclarationTests
     }
 
     /// <summary>
-    /// 别名的产地唯一:同一条命令里,归一化之后两个参数不许撞名。撞了就是「调用方写对了名字
-    /// 却打到了另一个参数上」,比未知 flag 更隐蔽。
+    /// 同一条命令里,归一化之后两个参数不许撞名 —— 撞了就是「名字写对了却打到另一个参数上」,
+    /// 比未知 flag 更隐蔽。
     /// </summary>
     [Fact]
     public void 同一命令内参数名与别名归一化后互不冲突()
@@ -85,8 +82,7 @@ public class DeclarationTests
     }
 
     /// <summary>
-    /// 声明里出现的上限数字必须来自 <see cref="Limits"/>(master SearchRegexTool.Description 范式)。
-    /// 判据是「散文里那个数与常量当前值一致」——改了常量忘了改散文,这条会红。
+    /// 声明散文里出现的上限数字必须与 <see cref="Limits"/> 的当前值一致。
     /// </summary>
     [Fact]
     public void 散文里的上限数字与常量同步()
@@ -100,7 +96,7 @@ public class DeclarationTests
     }
 
     /// <summary>
-    /// 发布缝(需求口径 1):错误与声明文本不写死本机路径。写死了,别人机器上照抄就是错的。
+    /// 错误与声明文本不写死本机路径 —— 写死了,别人机器上照抄就是错的。
     /// </summary>
     [Fact]
     public void 声明文本不含本机绝对路径()
@@ -116,8 +112,7 @@ public class DeclarationTests
     }
 
     /// <summary>
-    /// 04 验收条款:skill 与声明都不许教调用方绕自家缺陷。上游的
-    /// 「Always prefix-search shield*」是反例 —— 那种句子出现,说明该修的是 CLI。
+    /// skill 与声明都不许教调用方绕自家缺陷 —— 出现那种句子,说明该修的是 CLI。
     /// </summary>
     [Fact]
     public void 声明不教调用方绕过自家缺陷()
@@ -155,14 +150,10 @@ public class DeclarationTests
     }
 
     /// <summary>
-    /// 每个 <c>Render("noun")</c> 用到的名词都必须登记过。
+    /// 每个 <c>Render("noun")</c> 用到的名词都必须登记过。登记处「没登记就抛」那一抛发生在
+    /// 用户面前,所以闸提前到这里,漏登记在提交前就是红的。
     ///
-    /// 登记处的设计是「没登记就抛」,方向对,但落点错了:那一抛发生在**用户面前**,
-    /// 表现为一条裸栈追踪。加一个名词是件小事,它却让一条正常查询整个失败 ——
-    /// 实测里就是这样炸的。把闸挪到这里,漏登记在提交前就是红的。
-    ///
-    /// 扫源码是有意的:名词是字符串字面量,没有类型系统能替它把关,
-    /// 而「跑一遍所有命令的所有分支」根本做不到 —— 报错分支恰恰是最难跑到的那些。
+    /// 扫源码是有意的:名词是字符串字面量,类型系统管不着,而报错分支跑不全。
     /// </summary>
     [Fact]
     public void 代码里渲染过的每个名词都登记过()
@@ -185,10 +176,8 @@ public class DeclarationTests
 
     /// <summary>
     /// 名词有**三个**入口:直接 <c>Render("x")</c>,以及交给 <c>CountNotice</c> /
-    /// <c>TruncationNotice</c> 由它们去渲染。漏掉任何一个,走那条路的名词都会被判成
-    /// 「没人用」—— 第一版漏了 TruncationNotice 就红过一次,这一版拆出 CountNotice 时又红了一次。
-    /// 每加一个会渲染名词的方法,这里都得跟上;判据是「代码里有没有把名词交出去」,
-    /// 不是「哪个方法名」。
+    /// <c>TruncationNotice</c> 由它们去渲染;漏掉一个,走那条路的名词会被判成「没人用」。
+    /// 每加一个会渲染名词的方法,这里都得跟上。
     /// </summary>
     private static SortedSet<string> NounsUsedInCode()
     {

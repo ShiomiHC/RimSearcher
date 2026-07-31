@@ -4,13 +4,11 @@ using RimSearcher.Output;
 namespace RimSearcher.Cli;
 
 /// <summary>
-/// 严格解析器。CLI 形态的第一新雷区是「未知 flag 被静默吞掉」——调用方以为过滤生效了,
-/// 实际拿到的是未过滤结果(master ExtraAcceptedKeys 教训的同构体,01)。这里的立场:
+/// 严格解析器。未知 flag 绝不静默吞掉 —— 那会让调用方以为过滤生效、实际拿到未过滤结果。
 ///
 ///   1. 归一化吃掉纯拼写差异(大小写、<c>-</c>/<c>_</c>/无分隔),这些**有意接受**;
 ///   2. 声明过的同义词按别名接受;
-///   3. 其余一律报错,且必须给近似候选 —— 07-② 实证参数名发明是常态,
-///      光说「不认识」等于让调用方再猜一轮。
+///   3. 其余一律报错,且必须给近似候选。
 /// </summary>
 public static class ArgParser
 {
@@ -150,9 +148,7 @@ public static class ArgParser
     private static string UnknownOptionMessage(string raw, string body, IReadOnlyList<OptionSpec> options,
                                                CommandSpec spec, IReadOnlyList<CommandSpec>? siblings)
     {
-        // 「别的命令有、这条没有」比任何编辑距离候选都准。实测:四个调用方各自对 get / values
-        // 敲了 --type(那时它只挂在 search 上),吃到的却是「Did you mean --limit?」——
-        // 两个词既不形近也不同义,而真相「--type 是别的命令的参数」一个字没提。
+        // 「别的命令有、这条没有」比任何编辑距离候选都准,优先报这一种。
         var n = Normalize(body);
         var elsewhere = (siblings ?? [])
             .Where(s => !string.Equals(s.Name, spec.Name, StringComparison.Ordinal))
@@ -160,9 +156,8 @@ public static class ArgParser
             .Select(s => $"'{s.Name}'")
             .ToList();
         if (elsewhere.Count > 0)
-            // 截断经由 NameList,不在这里自己 Take:`--limit` 挂在十一条命令上,而只列前三条
-            // 的那句话与「一共就这三条认」逐字同形 —— 被省掉的数量正是「几乎每条都认,
-            // 不认的偏偏是你敲的这条」这半句,也正是让人改对的那半句。
+            // 截断走 NameList 而非自己 Take:它会带出被省掉的数量,
+            // 否则「只列前三条」与「一共就这三条认」逐字同形。
             return $"Unknown option '{raw}'. It is accepted by " +
                    NameList.Render(elsewhere, Limits.MaxSuggestions) + $", but not by '{spec.Name}'.";
 
@@ -171,8 +166,7 @@ public static class ArgParser
         if (candidates.Count > 0)
             msg += $" Did you mean {string.Join(" or ", candidates.Select(c => "--" + c))}?";
         else
-            // 没有近似候选时把接受的名字直接列出来。07-② 实证参数名发明是常态,让调用方
-            // 为了看一眼选项再跑一次 --help,是白白多花一个来回。
+            // 没有近似候选时直接列出接受的名字,省掉一次 --help 往返。
             msg += $" This command accepts: {string.Join(", ", options.Select(o => "--" + o.Name).OrderBy(s => s, StringComparer.Ordinal))}.";
         return msg;
     }
@@ -186,9 +180,8 @@ public static class ArgParser
         var scored = new List<(int score, string name)>();
         foreach (var o in options)
         {
-            // 别名只认前缀/包含关系,不参与编辑距离打分。距离是给「打错规范名」用的,
-            // 而别名本来就是同义词列表 —— 让它也吃距离,`--type` 会经由别名 `top`
-            // (距离 2,恰好压线)被判成 `--limit` 的近似,把人推向一个毫不相干的参数。
+            // 别名只认前缀/包含关系,不参与编辑距离打分:距离是给「打错规范名」用的,
+            // 别名吃距离会把毫不相干的参数拉成近似候选(`--type` 经别名 `top` 命中 `--limit`)。
             var best = int.MaxValue;
             foreach (var (key, isAlias) in new[] { (o.Name, false) }.Concat(o.Aliases.Select(a => (a, true))))
             {
@@ -262,9 +255,6 @@ public sealed class ParseResult(
     /// <summary>
     /// 这一次真给了的**收窄参数**,按声明层的 <see cref="OptionSpec.Narrows"/> 认,
     /// 渲染成可以原样贴回命令行的一串(<c>--type MentalStateDef --exact</c>)。
-    ///
-    /// 判据在声明里而不在这里:哪个参数会让结果集变小,是那个参数自己的性质,
-    /// 写在这里就成了第二份产地,而两份产地迟早各自正确地不一致。
     /// </summary>
     public string Narrowing()
     {
@@ -279,7 +269,7 @@ public sealed class ParseResult(
     }
 
     /// <summary>
-    /// --limit 的取值。<c>all</c> 是正式取值(07-② 实证:真实调用方高频使用),不是错误;
+    /// --limit 的取值。<c>all</c> 是正式取值,不是错误;
     /// 超过 <see cref="Limits.MaxLimit"/> 的数被夹紧,夹紧事实由调用方在输出里声明。
     /// </summary>
     public LimitValue Limit(string name = "limit", int? fallback = null)
@@ -297,8 +287,7 @@ public sealed class ParseResult(
     }
 
     /// <summary>
-    /// --offset 的取值,产地唯一。负数在 SQL 里等同于 0 —— 那会让 <c>--offset -5</c> 出
-    /// 第一页而输出里没有半点异样,即「我少给了一个负号」和「这就是第一页」逐字相同。
+    /// --offset 的取值。负数在 SQL 里等同于 0,会让 <c>--offset -5</c> 静默出第一页,故拒收。
     /// </summary>
     public int Offset(string name = "offset")
     {
@@ -328,5 +317,5 @@ public readonly record struct LimitValue(int? Count, bool Clamped)
     public int Effective => Count ?? int.MaxValue;
 }
 
-/// <summary>用法错误。CLI 无 schema 兜底,错误消息是一等公民(06 输出契约)。</summary>
+/// <summary>用法错误。CLI 无 schema 兜底,错误消息是一等公民。</summary>
 public sealed class CliUsageException(string message) : Exception(message);

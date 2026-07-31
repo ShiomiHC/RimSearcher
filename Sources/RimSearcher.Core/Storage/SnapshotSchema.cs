@@ -11,9 +11,9 @@ public static class SnapshotSchema
     /// <summary>schema 版本。表结构变化时 +1。</summary>
     /// <remarks>
     /// 3:加了 xml_nodes 继承层。
-    /// 4:field_values 加了 is_default —— 一条值与 C# 声明默认值的关系(R1)。
+    /// 4:field_values 加了 is_default —— 一条值与 C# 声明默认值的关系。
     /// 5:加了 keyed 表 —— 界面文案那一层译文。
-    /// 6:加了 shared_values —— 一条值在同类型里有多普遍(第八轮 ep34)。
+    /// 6:加了 shared_values —— 一条值在同类型里有多普遍。
     /// 7:加了 harvested_roots —— 磁盘那一层**量没量过**,见下。
     /// </remarks>
     public const int Version = 7;
@@ -28,11 +28,9 @@ public static class SnapshotSchema
     /// <summary>
     /// 这次导入扫了几个 mod 根目录去收割磁盘上的语言文件。<c>0</c> 就是**一个都没扫**。
     ///
-    /// 没有这一格的时候,「磁盘那一层一行都没有」有两个成因而它们印出来一模一样:根本没量过,
-    /// 和量过了确实没有。前者的下一步是重导,后者的下一步是别再找了 —— 差得最远的两句话
-    /// 共用一个形状,正是本项目一路在清的那件事。收割从 v7 起是默认行为,但默认可以被
-    /// <c>--no-harvest-translations</c> 关掉,也可能因为没配 <c>mod_roots</c> 而没得扫,
-    /// 所以「默认开」并不能替代把它记下来。
+    /// 「磁盘那一层一行都没有」有两个成因:根本没量过(下一步重导),和量过了确实没有。
+    /// 收割虽是默认行为,但可被 <c>--no-harvest-translations</c> 关掉,也可能因没配
+    /// <c>mod_roots</c> 而没得扫,所以要记下来。
     /// </summary>
     public const string MetaKeyHarvestedRoots = "harvested_roots";
 
@@ -119,20 +117,16 @@ public static class SnapshotSchema
 
         -- 一条「与新实例不同」的值,在同类型的 def 里有多普遍。
         --
-        -- 非有它不可:code_default 那一列能证的只有「与刚 new 出来的实例不同」,而读的人
-        -- 一律读成「有人给这个 def 挑了这个值」。第八轮 ep34 就栽在这:
-        -- `soundImpactDefault  BulletImpact_Ground  no` —— 四条线索全指向「这就是命中音的
-        -- 挂点」,而真相是 ThingDef.ResolveReferences 给**每一个** ThingDef 都塞了这个值。
-        -- 那是本轮最贵的一次险出错(cost 3)。
+        -- code_default 只证得了「与刚 new 出来的实例不同」,而 ResolveReferences 会给
+        -- 同类型的每个 def 都塞上同一个值(如 ThingDef.soundImpactDefault)—— 那种行读起来
+        -- 与「有人专门给这个 def 挑了这个值」一模一样。
         --
-        -- 为什么是这张表而不是导出侧多采一次:要分辨「XML 写的」与「引擎事后填的」得在
-        -- ResolveReferences 前后各取一次值,而导出跑在 StaticConstructorOnStartup,那时
-        -- resolve 早已做完;要插进去只能上 Harmony,而 DataMod 是刻意无依赖的
-        -- (vanilla 快照只有 2 个 mod,里面没有 Harmony)。所以不猜成因,只报**可核对的
-        -- 事实**:这个值同类型里有多少个 def 也是它。3538 分之 2658,读的人自己判。
+        -- 分不清「XML 写的」与「引擎事后填的」:那要在 ResolveReferences 前后各取一次值,
+        -- 而导出跑在 StaticConstructorOnStartup、resolve 早已做完,插进去只能上 Harmony,
+        -- 而 DataMod 刻意无依赖。所以不猜成因,只报可核对的事实:同类型里有多少个 def
+        -- 也是这个值。
         --
         -- 只收「过半且不少于 8 个」的组 —— 类型只有三五个 def 时「大多数」不成话。
-        -- 实测全库 1303 行,一次扫 1.0s。
         CREATE TABLE shared_values (
             def_type TEXT NOT NULL,
             path     TEXT NOT NULL,

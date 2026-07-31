@@ -1,21 +1,17 @@
 namespace RimSearcher.Output;
 
 /// <summary>
-/// 三态截断文法(01 的头号资产,master 被盲测反复验证过的第一优先级问题)。
+/// 三态截断文法 —— 这套输出的头号资产。
 ///
 ///   裸 N          —— 这就是完整集合,没有更多了
 ///   N of M        —— 被上限截断,M 是总数
 ///   at least N    —— 只知道下界(没数全就停了)
 ///
-/// 教训(01):表头没有行数时,「裸 N = 完整」曾被盲测方归纳成假规则再交付给用户。所以
 /// 三态必须是**同一个产地渲染出来的三种形态**,不能有哪条路径绕开它自己拼句子。
 ///
-/// 第二轮盲测推翻了「完整态一个字都不说」这条口径(四个 agent 独立踩,其中一个据此
-/// **二次确认**了一个错答案)。省字节的做法是让「完整」由**沉默**承载,而沉默只在
-/// 「输出可能变短的原因有且只有一个」时才无歧义。实际有两个:行数上限,以及匹配级
-/// 提前停(search 命中第一级就不跑后面的)。两条路都通向同一片空白,于是
-/// `search VoidNode` 与 `search VoidNode --limit all` 逐字相同,读者只能归纳出「完整」——
-/// 而真值是漏了一条。**计数恒在**,三态在同一位置用同一文法区分,代价是十来个字节。
+/// 「完整」不能由沉默承载:输出变短有两个成因(行数上限,以及匹配级提前停 ——
+/// search 命中第一级就不跑后面的),两条路通向同一片空白,读者只能归纳出「完整」。
+/// **计数恒在**,三态在同一位置用同一文法区分。
 /// </summary>
 public readonly record struct Tally
 {
@@ -50,8 +46,8 @@ public readonly record struct Tally
 }
 
 /// <summary>
-/// 可数名词登记处。闸(CountedNounRegistryTests 的对应物)要求:输出里出现的每个被计数名词
-/// 都在这里登记过复数形式 —— 防止某条新写的路径自己拼 "s" 拼出 "matchs"。
+/// 可数名词登记处。输出里出现的每个被计数名词都必须在这里登记复数形式 ——
+/// 防止某条新写的路径自己拼 "s" 拼出 "matchs"。
 /// </summary>
 public static class NounRegistry
 {
@@ -59,8 +55,7 @@ public static class NounRegistry
     {
         ["def"] = "defs",
         ["def type"] = "def types",
-        // 运行时 class 与存储桶不是一回事,而这套输出到处在讲这条区分 ——
-        // 数 class 的地方就不能借「def type」这个词(R7)。
+        // 运行时 class 与存储桶不是一回事:数 class 的地方不能借「def type」这个词。
         ["def class"] = "def classes",
         ["field"] = "fields",
         ["field path"] = "field paths",
@@ -70,14 +65,12 @@ public static class NounRegistry
         ["C# file"] = "C# files",
         ["mod"] = "mods",
         ["translation"] = "translations",
-        // 界面文案那一层单独登记,不借 "translation" 这个词:def 的 label 走 DefInjected、
-        // keyed 走 key,两层的来源与生效规则都不同,而输出到处在讲这条区分 —— 借词就等于
-        // 让「这个 def 的译文」与「这个 key 的译文」在计数句里同形(R7 那条教训的形状)。
+        // 界面文案那一层单独登记,不借 "translation":def 的 label 走 DefInjected、
+        // keyed 走 key,两层的来源与生效规则都不同。
         ["keyed translation"] = "keyed translations",
         ["key"] = "keys",
-        // code-search 那一节数的是「代码行里出现的 key」,而它与上面那个 "key"
-        // (库里的一条 keyed 记录)数的不是同一批东西 —— 一行代码里的 key 可能压根
-        // 不在库里。借同一个词就会让「三个 key 查不到」读起来像「库里有三个 key」(R7)。
+        // code-search 数的是「代码行里出现的 key」,与上面那个 "key"(库里的一条 keyed
+        // 记录)不是同一批东西 —— 一行代码里的 key 可能压根不在库里。
         ["translation key"] = "translation keys",
         ["source tree"] = "source trees",
         ["XML node"] = "XML nodes",

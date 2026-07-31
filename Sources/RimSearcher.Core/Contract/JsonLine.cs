@@ -1,8 +1,7 @@
 // 中间格式的写侧原语 —— 与 IntermediateFormat 同属共享契约文件,net472 可编译。
 //
-// 为什么手写而不用序列化库:游戏侧(net472,进程里跑在 RimWorld 内)不引入任何运行时依赖是
-// B 案的核心收益(02-8 整条消失)。转义规则写在这里一份,读侧用 System.Text.Json,
-// 两边对 JSON 标准的理解不会漂。
+// 手写而不用序列化库:游戏侧(net472,跑在 RimWorld 进程内)不引入任何运行时依赖。
+// 转义规则写在这里一份,读侧用 System.Text.Json。
 
 using System;
 using System.Collections.Generic;
@@ -60,8 +59,7 @@ namespace RimSearcher.Contract
         /// <summary>
         /// 字段表:<c>[["path","value",默认态],…]</c>。数组比对象省字节,且允许同路径重复。
         ///
-        /// 默认态跟着自己那一行走,而不是另开一个「哪些路径是默认值」的并行数组 ——
-        /// 并行数组一旦错位,产出的行与没错位的逐字同形,而这正是本轮反复在拆的那个形状。
+        /// 默认态跟着自己那一行走,不另开并行数组 —— 并行数组错位后与没错位的输出同形。
         /// </summary>
         public JsonLine Fields(string key, IEnumerable<ExportedField> fields)
         {

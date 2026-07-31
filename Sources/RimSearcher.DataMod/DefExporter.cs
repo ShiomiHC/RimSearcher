@@ -13,25 +13,21 @@ using Verse;
 namespace RimSearcher.DataMod
 {
     /// <summary>
-    /// 游戏侧导出器。**只做反射遍历 + 写中间格式**,不建库、不过滤噪声、不分词
-    /// (B 案分工,06 层 1)。这样它是纯托管的几十 KB,没有 SQLite.Interop、没有 LoadLibrary
-    /// hack,上游 02-8 那一整条问题在这里不存在。
+    /// 游戏侧导出器。**只做反射遍历 + 写中间格式**,不建库、不过滤噪声、不分词。
+    /// 这样它是纯托管的几十 KB,不需要 SQLite.Interop,也不需要在游戏进程里做 LoadLibrary。
     ///
-    /// 不过滤噪声是有意的:过滤策略归 import 侧单一产地(02-2),策略变了重跑 import 就行,
-    /// 不必再进一次游戏。
+    /// 过滤策略归 import 侧单一产地:策略变了重跑 import 就行,不必再进一次游戏。
     /// </summary>
     public static class DefExporter
     {
         /// <summary>
-        /// 0.2.0 起,列表元素的运行时类型也进索引(见 <see cref="Emit"/> 里 <c>.Class</c> 那一段)。
         /// 读取侧靠这个数分辨「这份快照里没人引用它」与「这份快照根本没量过这件事」——
         /// 两者在结果上逐字同形,而那正是本项目唯一不许留的形状。
         ///
-        /// 0.3.0 起两处:keyed 那一层(界面文案 key → 显示文字)进导出;
-        /// 基类声明的私有字段不再整条消失(<see cref="FieldWalk.InstanceFields"/> 自己走基类链)。
-        /// 两处都没配版本能力位,理由各自不同 —— keyed 的在场判定是数据驱动的
-        /// (<c>KeyedCount()==0</c>,任何成因都接得住,比版本号强);私有字段那处的落空句
-        /// 已经把成因列全,而重导之后本机不再存在 0.3.0 以下的快照。
+        /// 0.2.0 起列表元素的运行时类型进索引(见 <see cref="Emit"/> 里 <c>.Class</c> 那一段);
+        /// 0.3.0 起 keyed 那一层(界面文案 key → 显示文字)进导出,且基类声明的私有字段不再
+        /// 整条消失(<see cref="FieldWalk.InstanceFields"/> 自己走基类链)。keyed 的在场判定
+        /// 是数据驱动的(<c>KeyedCount()==0</c>),不配版本能力位。
         /// </summary>
         public const string ExporterVersion = "0.3.0";
 
@@ -42,8 +38,7 @@ namespace RimSearcher.DataMod
             var dir = Path.GetDirectoryName(Path.GetFullPath(targetPath));
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
 
-            // 原子性的游戏侧一半(02-6):先写临时文件,完成后 rename。
-            // 上游是 File.Delete 旧库再从头写,中途崩就一个库都没有。
+            // 原子性的游戏侧一半:先写临时文件,完成后 rename —— 中途崩不会毁掉已有的那一份。
             var temp = targetPath + ".partial";
             if (File.Exists(temp)) File.Delete(temp);
 
@@ -95,8 +90,8 @@ namespace RimSearcher.DataMod
                     keyed++;
                 }
 
-                // 继承层。这一节从 XML 原文再读一遍,理由见 XmlNodeExporter ——
-                // 到这个时点「谁继承谁」在内存里已经被 XmlInheritance.Clear() 抹掉了。
+                // 继承层从 XML 原文再读一遍:到这个时点「谁继承谁」在内存里已经被
+                // XmlInheritance.Clear() 抹掉了(详见 XmlNodeExporter)。
                 foreach (var line in XmlNodeExporter.BuildLines())
                 {
                     writer.WriteLine(line);
@@ -168,8 +163,7 @@ namespace RimSearcher.DataMod
         }
 
         /// <summary>
-        /// mod 设置会改 patch 结果(03 甲),所以它属于数据身份的一部分。第一批只存哈希留缝,
-        /// 不参与寻址比对 —— 06 开放点记着这条。
+        /// mod 设置会改 patch 结果,所以它属于数据身份的一部分。目前只存哈希留缝,不参与寻址比对。
         /// </summary>
         private static string ModSettingsHash()
         {
@@ -212,8 +206,7 @@ namespace RimSearcher.DataMod
         }
 
         /// <summary>
-        /// ImpliedDefs 那一批没有 XML 文件,来源标记是字符串(00 论据 1 / 03 甲)。
-        /// 这里如实记下事实,呈现侧再按 R51 在作用块里说清「代码生成,无 XML 源文件」。
+        /// ImpliedDefs 那一批由代码生成,没有 XML 文件 —— 这里记一个占位来源,由呈现侧说清。
         /// </summary>
         private static string ResolveSourceFile(Def def)
         {
@@ -232,21 +225,19 @@ namespace RimSearcher.DataMod
         /// 绑定口径照抄游戏自己的 def 遍历(`DirectXmlSaver` / `DefInjectionUtility` 都是
         /// `Instance | Public | NonPublic`)。只绑 Public 会漏掉一整类**能从 XML 写进去、
         /// 却是私有字段**的数据 —— 1.6 的 `ThingDef.verbs` 与 `ProjectileProperties.damageAmountBase`
-        /// 都是私有的,漏掉它们意味着「这把枪打什么弹、这颗弹多少伤害」在快照里根本不存在,
-        /// 而输出侧无从区分「没这个字段」和「没看见这个字段」—— 缺席会被读成事实。
+        /// 都是私有的。
         ///
         /// 两类要滤掉:编译器生成的自动属性后备字段(名字里带尖括号,不是数据),
-        /// 以及游戏亲自标了 `[Unsaved]` 的运行期字段 —— 那是游戏自己声明的「这不是数据」,
-        /// `DirectXmlSaver.XElementFromField` 就是照这条跳过的,直接沿用而不是另立一套判据。
+        /// 以及游戏标了 `[Unsaved]` 的运行期字段 —— 沿用 `DirectXmlSaver.XElementFromField`
+        /// 的判据,不另立一套。
         /// </summary>
         private static void Walk(object obj, string prefix, int depth,
                                  List<ExportedField> output, WalkState state)
         {
             var type = obj.GetType();
-            // 比较基准:同一个运行时类型刚 new 出来的样子。整个 R1 的判据就这一句 ——
-            // 它答的是「C# 声明里这个字段初始是什么」,包括集合元素:走到 comps[0] 时基准
-            // 换成新 new 的那个 CompProperties 子类,于是 props.energyMax 比的是它自己的初始值,
-            // 而不是「ThingDef 上有没有 comps」。
+            // 比较基准:同一个运行时类型刚 new 出来的样子,答的是「C# 声明里这个字段初始是
+            // 什么」。集合元素同理 —— 走到 comps[0] 时基准换成新 new 的那个 CompProperties
+            // 子类,于是 props.energyMax 比的是它自己的初始值,不是「ThingDef 上有没有 comps」。
             var pristine = Pristine(type);
             foreach (var field in FieldWalk.InstanceFields(type))
             {
@@ -269,9 +260,8 @@ namespace RimSearcher.DataMod
         /// <summary>
         /// 一个类型新 new 出来的样子,按类型缓存(失败也缓存,免得同一个坏类型被反复试)。
         ///
-        /// 用 nonPublic:true 是因为数据类里私有/保护无参构造并不罕见;构造函数有副作用的
-        /// 类型理论上存在,所以整段包在 try 里 —— 新不出来就返回 null,那一路的字段进
-        /// <see cref="DefaultState.Unknown"/>,呈现侧照常显示。
+        /// 用 nonPublic:true 是因为数据类里私有/保护无参构造并不罕见;构造函数可能有副作用,
+        /// 所以整段包在 try 里 —— 新不出来那一路的字段进 <see cref="DefaultState.Unknown"/>。
         /// </summary>
         private static object Pristine(Type type)
         {
@@ -291,8 +281,8 @@ namespace RimSearcher.DataMod
         private static readonly Dictionary<Type, object> PristineCache = new Dictionary<Type, object>();
 
         /// <summary>
-        /// 叶子不占深度 —— 上游 ExtractFieldValuesRecursive 的语义(03 乙的换算口径)。
-        /// 只有「往下钻进一个复合对象」才消耗深度预算,所以同一个数值下覆盖比按节点计深要深得多。
+        /// 叶子不占深度 —— 沿用上游 ExtractFieldValuesRecursive 的语义:只有「往下钻进一个
+        /// 复合对象」才消耗深度预算,所以同一个数值下覆盖比按节点计深要深得多。
         /// </summary>
         private static void Emit(object value, string path, int depth,
                                  List<ExportedField> output, WalkState state,
@@ -326,9 +316,9 @@ namespace RimSearcher.DataMod
             var enumerable = value as IEnumerable;
             if (enumerable != null)
             {
-                // 基准里对应位置的元素。基准列表是 null 或更短 = 这一项代码里根本没有,
-                // 于是 baseline 为 null 而 known 仍为 true —— 「代码默认里没这一项」是一句
-                // 判得出来的话,不该退化成「没法比」。
+                // 基准里对应位置的元素。基准列表是 null 或更短 = 这一项代码默认里根本没有,
+                // 于是 baseline 为 null 而 known 仍为 true —— 那是一句判得出来的话,
+                // 不该退化成「没法比」。
                 var baselineItems = baselineKnown ? AsList(baseline) : null;
                 var i = 0;
                 foreach (var item in enumerable)
@@ -342,17 +332,12 @@ namespace RimSearcher.DataMod
                 return;
             }
 
-            // 列表元素的**运行时类型**单发一条 `<path>.Class`(0.2.0 起)。
+            // 列表元素的**运行时类型**单发一条 `<path>.Class`,否则 `<li Class="JobGiver_
+            // AnimalFlee">` 这类多态子对象的类型一条也不进索引(类型不是字段),而「哪些
+            // ThinkTreeDef 挂了这个节点」是 def 侧最常见的反查之一。
             //
-            // 第七轮 T1:`<li Class="JobGiver_AnimalFlee">` 这一类多态子对象的类型此前一条也
-            // 不进索引 —— 类型不是字段,Emit 走到这里就直接钻进去了。于是「哪些 ThinkTreeDef
-            // 挂了这个节点」这类反查在工具内**无解**,而这是 def 侧最常见的反查之一:
-            // 思维树节点、各种 worker/li 全在这个形状上。一份盲测轨迹为此半题答不出,
-            // 另花 6 次调用只为确认「这是边界,不是我不会查」。
-            //
-            // 只发给列表元素(路径以 ] 收尾),不是每个复合对象都发:`<li Class=>` 只出现在
-            // 列表里,而给每个嵌套对象都加一行会把 MaxFieldValuesPerDef 提前撞穿 ——
-            // 换来的是更多 def 被截,那是让一层看着「没有」的方向。
+            // 只发给列表元素(路径以 ] 收尾):`<li Class=>` 只出现在列表里,而给每个嵌套
+            // 对象都加一行会把 MaxFieldValuesPerDef 提前撞穿,换来更多 def 被截。
             if (path.Length > 0 && path[path.Length - 1] == ']')
             {
                 if (state.Emitted >= Limits.MaxFieldValuesPerDef) { state.Truncated++; return; }
@@ -368,7 +353,7 @@ namespace RimSearcher.DataMod
 
             // 钻进复合对象时基准换成**它自己类型**新 new 的一个,不沿用外层传下来的那个:
             // comps[0].props.energyMax 问的是「CompProperties_Shield 声明里 energyMax 是多少」,
-            // 与「ThingDef 默认有没有 comps」是两个问题,混为一谈正是 R1 的形状。
+            // 与「ThingDef 默认有没有 comps」是两个问题。
             Walk(value, path, depth + 1, output, state);
         }
 
@@ -415,7 +400,7 @@ namespace RimSearcher.DataMod
                 return true;
             }
 
-            // Def 引用记 defName —— 这一条把「哪些 def 用了它」从文本匹配变成精确反查(00 论据 4)。
+            // Def 引用记 defName —— 这一条把「哪些 def 用了它」从文本匹配变成精确反查。
             var def = value as Def;
             if (def != null) { text = def.defName; return true; }
 
@@ -451,8 +436,8 @@ namespace RimSearcher.DataMod
         }
 
         /// <summary>
-        /// defInjections 倾倒。反编译实证:导出时刻**译文已经在 def 对象上**,而**被替换的原文
-        /// 留在注入记录的 replacedString 里** —— 两者同时在场,所以一次导出就能拿到双语。
+        /// defInjections 倾倒。导出时刻**译文已经在 def 对象上**,而**被替换的原文留在注入记录的
+        /// replacedString 里** —— 两者同时在场,一次导出就能拿到双语。
         /// 游戏语言为英文时这一节自然为空,不需要分支。
         /// </summary>
         private static IEnumerable<string> BuildInjectionLines()
@@ -502,42 +487,36 @@ namespace RimSearcher.DataMod
         /// <summary>
         /// Keyed 译文倾倒 —— 界面文案那一层(<c>"SomeKey".Translate()</c> 里的 SomeKey)。
         ///
-        /// **与 defInjections 的形状差只有一处,但它决定了这一节的写法**:
-        /// <c>KeyedReplacement</c> 没有 <c>replacedString</c>,所以「译文与被它替换的原文同时在场」
-        /// 那个便宜在这里不存在。英文那一侧只能从 <c>defaultLanguage</c> 另取 —— 官方自己就这么干
-        /// (<c>LanguageReportGenerator.SaveTranslationReport</c> 显式 <c>LoadData()</c> 两份语言,
-        /// 然后 <c>AppendKeyedTranslationsMatchingEnglish</c> 拿 <c>defaultLanguage.TryGetTextFromKey</c>
-        /// 对照),这一节照搬那条路。
+        /// <c>KeyedReplacement</c> 没有 <c>replacedString</c>,所以 defInjections 那个「译文与原文
+        /// 同时在场」的便宜在这里不存在:英文侧只能从 <c>defaultLanguage</c> 另取,官方自己
+        /// 就这么干(<c>LanguageReportGenerator.SaveTranslationReport</c> 显式 <c>LoadData()</c>
+        /// 两份语言,再用 <c>defaultLanguage.TryGetTextFromKey</c> 对照)。
         ///
-        /// 与那一节还有两处**有意的**不同:
+        /// 与 defInjections 两处**有意的**不同:
         ///
-        /// 1. **英文环境下这一节不为空。** defInjections 在英文下自然没有记录(没有东西被替换),
-        ///    而 keyed 的数据源**就是**英文语言文件 —— 于是英文环境下 translated 是英文串本身,
-        ///    original 留空(它自己就是原文,没有「被替换的那一侧」)。
-        /// 2. **占位译文照样导出**,只是带上 placeholder 标记。defInjections 那节把
-        ///    <c>isPlaceholder</c> 整条跳过,而在这里「语言包里有这个 key 但没译」正是
-        ///    汉化对账要问的东西;丢掉它,「没译」就与「没有这个 key」同形了。
+        /// 1. **英文环境下这一节不为空** —— keyed 的数据源就是英文语言文件,于是 translated
+        ///    是英文串本身,original 留空。
+        /// 2. **占位译文照样导出**,带 placeholder 标记:「语言包里有这个 key 但没译」正是
+        ///    汉化对账要问的东西,丢掉它就与「没有这个 key」同形了。
         ///
-        /// 覆盖冲突**只记赢家**(用户裁决):keyedReplacements 是全部 mod 合并后的最终值,
-        /// 后加载的盖掉先加载的,而这个工具答的是「游戏最终用的是哪一句」。输家不建模,
-        /// <c>fileSource</c> 说清赢家出自哪个文件的哪一行就够。
+        /// 覆盖冲突**只记赢家**:keyedReplacements 是全部 mod 合并后的最终值,后加载的盖掉
+        /// 先加载的,而这个工具答的是「游戏最终用的是哪一句」。<c>fileSource</c> 说清赢家出处。
         /// </summary>
         private static IEnumerable<string> BuildKeyedLines()
         {
             var lang = LanguageDatabase.activeLanguage;
             if (lang == null || lang.keyedReplacements == null) yield break;
 
-            // 英文侧。同一个对象时不必取(译文就是原文),否则显式加载 —— TryGetTextFromKey
-            // 自己也会兜底 LoadData,但显式调用让「这里会多读一份语言数据」在代码里看得见。
+            // 英文侧。TryGetTextFromKey 自己也会兜底 LoadData,显式调用是为了让「这里会多读
+            // 一份语言数据」在代码里看得见。
             var english = LanguageDatabase.defaultLanguage;
             if (english != null && english != lang)
             {
                 try { english.LoadData(); }
                 catch (Exception ex)
                 {
-                    // 英文侧取不到不该让整份导出失败:少一列 original,而 translated 那一列
-                    // 是这一层的主体。降级要说出口,否则「这份快照的 keyed 没有英文」
-                    // 会被当成数据本来如此。
+                    // 英文侧取不到不该让整份导出失败,但降级要说出口 —— 否则「这份快照的
+                    // keyed 没有英文」会被当成数据本来如此。
                     Log.Warning("[RimSearcher] could not load English keyed translations for the original-text " +
                                 "column; keyed rows will carry no original: " + ex.Message);
                     english = null;

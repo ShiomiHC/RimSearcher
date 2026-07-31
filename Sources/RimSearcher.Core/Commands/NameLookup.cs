@@ -10,24 +10,10 @@ namespace RimSearcher.Commands;
 /// <summary>
 /// 「这个名字到底在哪儿」—— 零结果的成因分流,产地唯一。
 ///
-/// 三轮 R8(四种误诊)与 R10 fatal(三个场景)是同一个形状:落空的时候,**答案就在
-/// 工具自己手里,它没去算**。逐条对照:
-///
-///   · <c>search BuildingNaturalBase</c> 说「That looks like a class」并指向 find /
-///     code-search 两条必然空手的路 —— 而 <c>inherit BuildingNaturalBase</c> 当场给出
-///     5 个子节点。它是继承层里的抽象 <c>Name=</c>,这一层就在同一个库里。
-///   · <c>search Milira</c> 走另一条分支,被指向 <c>types</c> —— 而 <c>types</c> 列的是
-///     def 类型,与「某个 mod 在不在」毫无关系。真因是这个 **mod** 不在快照覆盖里,
-///     该指的是 <c>mods</c> / <c>snapshot status</c>。三轮把它单列为 R10 的一半。
-///   · <c>search SubSoundDef</c>(三轮评为整轮最贵的那次)两条分支都答不对:它既不是
-///     def、也不是 def 类型,而是只出现在嵌套 <c>&lt;li Class="…"&gt;</c> 里的类 ——
-///     那一层不进快照(R9 的边界)。这里六档全落空之后交回调用方,由它说出这条边界。
-///   · R10:工具知道本快照的 mod 列表,也读得到别的已注册快照,「它在 modded 那份里」
-///     这句话是**可算出来的**,它从来没说过。
-///
-/// 于是这里把「名字的落点」做成一次有序判定,谁落空都问它。顺序即结论强度:先说
-/// 确定的(它在这儿,只是被你的过滤器挡住了),再说换个命令能拿到的,最后才是换环境。
-/// 每条都只在**当场算得出来**时才出现 —— 算不出来就一个字都不说,免得又变成免责声明。
+/// 顺序即结论强度:先说确定的(它在这儿,只是被你的过滤器挡住了),再说换个命令能拿到的,
+/// 最后才是换环境。每条都只在**当场算得出来**时才出现 —— 算不出来就一个字都不说,
+/// 免得变成免责声明。只出现在嵌套 <c>&lt;li Class="…"&gt;</c> 里的类不进快照,
+/// 九档全落空之后交回调用方,由它说出这条边界。
 /// </summary>
 internal static class NameLookup
 {
@@ -66,8 +52,8 @@ internal static class NameLookup
     {
         if (name.Length == 0) return null;
 
-        // (1) 它就在这份快照里,只是被 --scope 挡住了。这是最强的一条:数据在手边,
-        //     缺的只是一个参数。放第一位,因为把「过滤掉了」说成「没有」是最贵的那种错。
+        // (1) 它就在这份快照里,只是被 --scope 挡住了。放第一位:把「过滤掉了」说成
+        //     「没有」是最贵的那种错。
         var defs = ctx.Db.GetDefsNamed(name);
         if (defs.Count > 0 && scope is { IsAll: false })
         {
@@ -81,8 +67,8 @@ internal static class NameLookup
             }
         }
 
-        // (2) 继承层。抽象父节点从头到尾没有 Def 实例,所以 search / get / find 三条路
-        //     全都找不到它 —— 而它就在同一个库的另一张表里,inherit 一问就有。
+        // (2) 继承层。抽象父节点从头到尾没有 Def 实例,search / get / find 三条路都够不着,
+        //     只有 inherit 走的那张表里有。
         var node = ctx.Db.NodesNamed(name).FirstOrDefault();
         if (node is not null)
             return new Sighting(Where.XmlNode,
@@ -108,8 +94,8 @@ internal static class NameLookup
         {
             var total = holders.Sum(h => h.Count);
             var where = string.Join(", ", holders.Take(3).Select(h => h.DefType));
-            // 计数放句尾的从句里,主句不带随数变形的动词,末句也不带回指代词 ——
-            // 「1 def … lists them」同样是数一致性(R6 同一课:名词有登记处,动词与代词都没有)。
+            // 计数放句尾从句,主句不带随数变形的动词,末句不带回指代词:名词的数有
+            // Tally 兜着,动词与代词没有。
             return new Sighting(Where.Class,
                 $"'{name}' is a class rather than a def name. This snapshot holds " +
                 $"{Output.Tally.Complete(total).Render("def")} of that class, filed under {where}" +
@@ -119,23 +105,19 @@ internal static class NameLookup
                 $"; the query is 'rimsearcher list {holders[0].DefType} --class {name}'.");
         }
 
-        // (5) 界面文案。上面每一档判的都是「这个**名字**是什么」,而这一档判的是
-        //     「这句**话**是什么」—— keyed 那一层与 def 无关,所以前四档原理上都碰不到它。
-        //     它恰恰是 search 落空最常见的真实成因之一:把屏幕上看到的一句话打进 search,
-        //     而 search 只索引 def 的 label / description / 注入译文,零结果出来的样子与
-        //     「游戏里没有这句话」逐字同形。R4 把这条记成「索引口径的洞」,当时降级成纯文档
-        //     处理;这一档是它算得出来的那一半。
+        // (5) 界面文案。上面每一档判的是「这个**名字**是什么」,这一档判的是「这句**话**
+        //     是什么」—— keyed 那一层与 def 无关。search 只索引 def 的 label / description /
+        //     注入译文,把屏幕上看到的一句话打进 search,零结果的样子与「游戏里没有这句话」
+        //     逐字同形。
         //
-        //     排在 mod 与字段值之前:那两档都只对标识符形态的查询成立,而进到这里的
-        //     phrase 形态查询它们一个都判不到 —— 反过来,标识符形态的查询也几乎不会
-        //     FTS 命中界面文案,两边抢不到彼此的活。
+        //     排在 mod 与字段值之前:那两档只对标识符形态的查询成立,而标识符形态的查询
+        //     也几乎不会 FTS 命中界面文案,两边抢不到彼此的活。
         if (ctx.Db.KeyedCount() > 0)
         {
-            // 取一批而不是一条:同一句界面文案由**几个 key 各自承载**是常态,不是边角
-            // ——真数据里「转至事件发生地点」同时是 JumpToLocation 与 ClickToJumpToProblem。
-            // 只取一条就只能说「最接近的是 X」,而两条整句相等时那是一张证不了的赢家证书
-            // (这套输出到处在修的正是这个形状)。取满 25 条,distinct 就在总数 ≤ 25 时
-            // 是准数;超了就只知道下界,措辞跟着退到不指定唯一的那一支。
+            // 取一批而不是一条:同一句界面文案由**几个 key 各自承载**是常态(「转至事件
+            // 发生地点」同时是 JumpToLocation 与 ClickToJumpToProblem),只取一条就得挑一个
+            // 证不了的赢家。取满 25 条,distinct 在总数 ≤ 25 时是准数;超了只知下界,
+            // 措辞退到不指定唯一的那一支。
             const int probe = 25;
             var (keyedRows, keyedTotal, _) = ctx.Db.KeyedSearch(name, probe);
             if (keyedRows.Count > 0)
@@ -143,9 +125,8 @@ internal static class NameLookup
                 var distinct = keyedRows.Select(r => r.Key).Distinct(StringComparer.Ordinal).ToList();
                 var oneKeyForSure = distinct.Count == 1 && keyedTotal <= probe;
 
-                // 主语固定单数(this snapshot),计数进宾语,末句不带回指代词 ——
-                // 名词有登记处,主谓一致与「them / one」这类回指都没有(R6 同一课;
-                // 这一句第一版写的就是「shows them」,而计数是 1)。
+                // 主语固定单数(this snapshot),计数进宾语,末句不带回指代词:名词的数有
+                // Tally 兜着,主谓一致与「them / one」这类回指没有。
                 var head = $"'{name}' is interface text rather than a def name: this snapshot holds " +
                            $"{Output.Tally.Complete(keyedTotal).Render("keyed translation")} matching it" +
                            (oneKeyForSure ? $", under the key '{distinct[0]}'" : "") +
@@ -156,40 +137,29 @@ internal static class NameLookup
                         ? $"'rimsearcher keyed {name}' shows the full row, and " +
                           $"'rimsearcher code-search \"\\\"{distinct[0]}\\\"\"' finds the code that prints " +
                           "that key."
-                        // 「同一句话可以来自多个 key」听着更具体,可 FTS 是**分词**匹配:
-                        // 命中的几行未必整句相等(真数据里 `keyed Milira --placeholders`
-                        // 命中的两行是 menu 与 button 两句不同的话)。那样写就是在暗示
-                        // 一件当场没验的事,而读的人会据此随便挑一个。说得住的只有
-                        // 「这些词出现在几个 key 的文案里」—— 两种情形下都真。
+                        // 不说「同一句话来自多个 key」:FTS 是**分词**匹配,命中的几行未必
+                        // 整句相等(`keyed Milira --placeholders` 命中的两行是 menu 与 button
+                        // 两句不同的话)。说得住的只有「这些词出现在几个 key 的文案里」。
                         : $"Those words appear in the text of more than one key, so which key is the one you " +
                           $"are after is not decided here: 'rimsearcher keyed {name}' lists them with the key " +
                           "each belongs to, and the code search goes after whichever of those you meant."));
             }
         }
 
-        // (6) mod,而且是**报全名报对了**的那种。R8 的第二种误诊死在这:`search Milira`
-        //     被指向 `types`,而 types 列的是 def 类型,与「某个 mod 在不在」毫无关系。
-        //
-        //     它分成两半夹住下一条:整名(packageId / 末段 / 显示名)相等排在字段值**之前**
-        //     —— 实测 `search ludeon.rimworld` 在 `linkedMod` 里有一个整值命中,可把
-        //     packageId 打进 search 的人要的是 `--scope`,不是那个偏僻字段;而外号子串排在
-        //     字段值**之后**,它只是猜得比较准,没资格抢一条算得出来的。
-        //     本机 mod 目录只扫一次:这一档与模糊那一档都要用它,而扫盘是这条落空路径上
-        //     最贵的一步。
+        // (6) mod,而且是**报全名报对了**的那种。这一档分成两半夹住下一条:整名
+        //     (packageId / 末段 / 显示名)相等排在字段值**之前** —— `ludeon.rimworld`
+        //     在 `linkedMod` 里有一个整值命中,可把 packageId 打进 search 的人要的是
+        //     `--scope`,不是那个偏僻字段;外号子串排在字段值**之后**,猜的没资格抢一条
+        //     算得出来的。本机 mod 目录只扫一次:扫盘是这条落空路径上最贵的一步。
         var installed = new Lazy<Dictionary<string, InstalledMod>?>(() => TryScanInstalled(ctx.Config));
         if (Mod(ctx, name, installed, fuzzy: false) is { } named) return named;
 
         // (7) 字段值。最常见的形态就是类名:`CompShield` 不是 def、不是 def 的 class,
         //     而是某些 def 的 comps[N].compClass **取值**。
         //
-        //     这一条是写这次修复时补回来的:原先那句「像类名 → 去跑 find compClass X」
-        //     虽然是猜的,可它猜对的那一半是真能用的(语料里 find compClass CompShield
-        //     命中 2 个 def)。第一版把猜话换成了「no class」—— 把一句有用的猜测换成了
-        //     一句错误的断言,正是本条修复要修的那类错本身。于是把它变成可算的:
-        //     直接问哪些字段路径装着这个值,连路径一起端出来。
-        //     只认整值与限定形态(ValueMatch.Identifier):子串在这里会把更强的解释挤掉 ——
-        //     实测 `search ludeon.rimworld` 被 `showIfModsLoaded[0]` 装的
-        //     `ludeon.rimworld.royalty` 抢答,而正确答案是下一档的「它是本快照覆盖的 mod」。
+        //     只认整值与限定形态(ValueMatch.Identifier):子串会把更强的解释挤掉 ——
+        //     `ludeon.rimworld` 会被 `showIfModsLoaded[0]` 装的 `ludeon.rimworld.royalty`
+        //     抢答,而正确答案是下一档的「它是本快照覆盖的 mod」。
         var (holdingPaths, holdingTotal, _) = ctx.Db.PathsWithValue(name, unscoped, 3, ValueMatch.Identifier);
         if (holdingPaths.Count > 0)
         {
@@ -208,10 +178,10 @@ internal static class NameLookup
                 $"'rimsearcher find --value {name}' covers every path at once.");
         }
 
-        // (8) mod,报的是外号。实测那次输入就是 `Milira`,而 packageId 是 Ancot.MiliraRace。
+        // (8) mod,报的是外号(输入 `Milira`,packageId 是 Ancot.MiliraRace)。
         if (Mod(ctx, name, installed, fuzzy: true) is { } nicknamed) return nicknamed;
 
-        // (9) 别的快照。R10 的核心:这句话一直是可算出来的。
+        // (9) 别的快照。
         return InOtherSnapshot(ctx, name);
     }
 
@@ -239,10 +209,6 @@ internal static class NameLookup
 
     /// <summary>
     /// 零结果时问一遍别的已注册快照:同一个问题在那边有没有答案。
-    ///
-    /// R10 原先只覆盖「按名字取一个 def」那条路。第五轮实测里 `find` 落空、而
-    /// races 那份快照里明明有 6 条 —— 同一句「本快照没有」在这里说出来,读的人只能
-    /// 读成「这东西不存在」。
     ///
     /// **叠加不替换**:本快照那句成因分流仍然要说完,这条只在后面补一句「别处有」。
     /// 只数不取行;而且**一律不带 scope** —— 别的快照装的 mod 不一样,把这里的
@@ -319,17 +285,15 @@ internal static class NameLookup
     /// <summary>
     /// packageId 全名、它的末段、mod 的显示名 —— 三者任一相等都算把名字报对了。
     ///
-    /// 模糊档再往下放到包含关系,因为人记得的是外号:三轮实测的那一次输入是 <c>Milira</c>,
-    /// 而 packageId 是 <c>Ancot.MiliraRace</c>、显示名是 <c>Milira Race</c>,三者互不相等,
-    /// 只认相等等于这条判定永远不触发(<c>--source HAR</c> 那条注释里写过同一件事:
-    /// 外号不在任何数据里)。四字符下限挡住 <c>Core</c> 这类会乱撞的短词。
+    /// 模糊档再往下放到包含关系,因为人记得的是外号,而外号不在任何数据里:输入
+    /// <c>Milira</c> 时 packageId 是 <c>Ancot.MiliraRace</c>、显示名是 <c>Milira Race</c>,
+    /// 三者互不相等,只认相等这条判定就永远不触发。四字符下限挡住 <c>Core</c> 这类短词。
     /// </summary>
     private const int NicknameMinLength = 4;
 
     /// <summary>
     /// 外号命中时补一个 packageId,原样命中时什么都不补 —— 「'ludeon.rimworld' is a mod
-    /// this snapshot covers (ludeon.rimworld)」这种把输入原样念一遍的括号是纯噪音,
-    /// 而调用方的上下文预算是这轮所有取舍的第一约束。
+    /// this snapshot covers (ludeon.rimworld)」这种把输入原样念一遍的括号是纯噪音。
     /// </summary>
     private static string Spell(string typed, string packageId)
         => string.Equals(typed, packageId, StringComparison.OrdinalIgnoreCase) ? "" : $" ({packageId})";

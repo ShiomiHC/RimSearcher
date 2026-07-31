@@ -3,16 +3,15 @@ namespace RimSearcher.Cli;
 /// <summary>
 /// CLI 侧的数值上限 —— 声明层的数字产地。
 ///
-/// 纪律(01 声明政策 / master SearchRegexTool.Description 范式):散文里出现的每个数字都从
-/// 这里插值,改上限时 --help、cli-reference.md、输出里的自证句子同时跟着变。任何地方写死
-/// 一个与此处不同的数,就是把产地劈成了两份。
+/// 散文里出现的每个数字都从这里插值(--help、cli-reference.md、输出里的自证句子),
+/// 不要在别处写死。
 /// </summary>
 public static class Limits
 {
     /// <summary>列表类命令未指定 --limit 时的默认条数。</summary>
     public const int DefaultLimit = 25;
 
-    /// <summary>--limit 允许的最大值;超出会被夹紧(夹紧不声明成硬约束,把数写进散文 —— 01 声明政策)。</summary>
+    /// <summary>--limit 允许的最大值;超出会被夹紧。</summary>
     public const int MaxLimit = 2000;
 
     /// <summary>
@@ -24,10 +23,8 @@ public static class Limits
     /// <summary>
     /// code-search 最多**读**的文件数;超出即停,计数降级成 at least 形态。
     ///
-    /// 4000 → 50000(三轮 R3):旧值低于单棵 vanilla 树(本机 10222 个 .cs,全部 24 棵树
-    /// 合计 19467),于是任何一条不带 --source 的问句都在默认配置下被截掉八成,而截断
-    /// 恰恰是本命令最贵的错法。实测全量扫一遍 120 MB 树是 1.6 秒 —— 这道闸原本挡的成本
-    /// 根本不存在,它只是在制造假的零结果。留着是当失控兜底(一棵畸形大树),不是当预算。
+    /// 取值远高于真实规模(全部源码树合计约两万个 .cs,全量扫 120 MB 只需 1.6 秒):
+    /// 这是失控兜底(一棵畸形大树),不是预算闸。
     /// </summary>
     public const int CodeSearchMaxFiles = 50000;
 
@@ -40,9 +37,8 @@ public static class Limits
     /// <summary>
     /// read 一次最多印多少行(--limit 的默认值,也是它的上限)。
     ///
-    /// 一个反编译出来的大类动辄四五千行,而这份输出是被整个读进上下文的 —— 这道闸挡的是
-    /// 「一次调用吃掉整个预算」。它只管印:总行数与该翻到哪一页恒在,所以被它咬到不会
-    /// 变成一个看不出来的截断。
+    /// 反编译出的大类动辄四五千行,而输出被整个读进上下文 —— 这道闸挡的是
+    /// 「一次调用吃掉整个上下文预算」。
     /// </summary>
     public const int ReadMaxLines = 2000;
 
@@ -52,7 +48,7 @@ public static class Limits
     /// <summary>get 命令默认展开的字段条数;超出以三态文法声明。</summary>
     public const int DefaultFieldsPerDef = 60;
 
-    /// <summary>声明区(散文)最多行数。超出即聚合成尾注,防止声明挤占上下文(06 上下文预算硬约束)。</summary>
+    /// <summary>声明区(散文)最多行数。超出即聚合成尾注,防止声明挤占上下文。</summary>
     public const int MaxNoticeLines = 6;
 
     /// <summary>未知 flag 报错时最多给出的近似候选数。</summary>

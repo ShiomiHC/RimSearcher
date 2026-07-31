@@ -8,19 +8,14 @@ using RimSearcher.Storage;
 namespace RimSearcher.Tests;
 
 /// <summary>
-/// 文法闸。
-///
-/// 写法教训(01,master 提交 1338603):规则判**说没说**,不许用 Contains 短子串重新声明
-/// 「该怎么说」—— 那样同一句话红不红取决于成因措辞。所以这里判的是产地渲染出来的形态与
-/// 语义类别,不是逐字比对渲染完的句子。
+/// 文法闸:判产地渲染出来的形态与语义类别,不逐字比对渲染完的句子。
 /// </summary>
 public class GrammarTests
 {
     // ---- 举例子的名单(NameList)----
 
     /// <summary>
-    /// 举例子这一层与三态文法是同一条纪律的两个位置:被截掉的部分**必须有数**。
-    /// 这道闸守的是产地本身,而 <c>名单截断时不许把数量省成省略号</c> 守的是没人绕开它。
+    /// 被截掉的部分**必须有数**。
     /// </summary>
     [Fact]
     public void 举例子的名单说清没举出来的有几条()
@@ -28,7 +23,7 @@ public class GrammarTests
         string[] five = ["a", "b", "c", "d", "e"];
         Assert.Equal("a, b, c, and 2 more", NameList.Render(five, 3));
 
-        // 装得下就一个字都不多说 —— 「and 0 more」比沉默更糟,它让人以为有下文。
+        // 装得下就一个字都不多说 ——「and 0 more」让人以为有下文。
         Assert.Equal("a, b, c, d, e", NameList.Render(five, 5));
         Assert.Equal("a, b, c, d, e", NameList.Render(five, 99));
         Assert.Equal("", NameList.Render([], 3));
@@ -38,9 +33,8 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 近似候选**不报**被截掉的数量,这与上面那条相反,是有意的:排在第 4 位往后的
-    /// 按定义就不是「最近的」,补一句「还有 37 个」会让人以为答案可能在那 37 个里。
-    /// 「Closest」这个词本身声明了它是个 top-N。
+    /// 近似候选**不报**被截掉的数量:「Closest」本身声明了它是个 top-N,
+    /// 补一句「还有 37 个」会让人以为答案可能在那 37 个里。
     /// </summary>
     [Fact]
     public void 近似候选不谎报也不追加数量()
@@ -90,8 +84,7 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 正常态零声明字节(06 上下文预算硬约束):完整集合不触发任何截断声明。
-    /// 这正是三态文法「省字节」的那一半 —— 它不是修辞,是预算。
+    /// 完整集合不触发任何截断声明 —— 上下文预算的硬约束。
     /// </summary>
     [Fact]
     public void 完整集合不产生截断声明()
@@ -109,12 +102,8 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 「N of M」里的 M 是**总数**,不许随 `--limit` 变。
-    ///
-    /// 这一条是自家踩出来的,两个方向都踩过:search 的子串补扫先按已显示的行去重
-    /// (`--limit 3` 把没显示出来的 FTS 命中当成新增,报 3 of 41),改完又先 Take 再累加
-    /// (M 跟着 limit 缩,报 3 of 22,真值 23)。两种写法都让调用方按小 limit 试一次就
-    /// 拿到一个**错的总数**,而三态文法的全部价值就在那个 M 上。
+    /// 「N of M」里的 M 是**总数**,不许随 `--limit` 变 —— 三态文法的全部价值就在那个 M 上。
+    /// 两个易错点:子串补扫按已显示的行去重,以及先 Take 再累加。
     /// </summary>
     [Fact]
     public void 总数不随limit变()
@@ -137,12 +126,8 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// scope 筛空了不许说成「快照里没有」。
-    ///
-    /// 装机验收时当场撞见的:`list ThingDef --scope zh`(汉化包一个 def 都不加)报了
-    /// 「No def type named 'ThingDef' in this snapshot」—— 一句彻头彻尾的假话,
-    /// 而 ThingDef 在同一份快照里有 3538 个。零结果分流的每条判据当时都是 scope 过滤过的,
-    /// 于是分不清成因就报了最强的那种,与 list CreepJoinerAggressiveDef 那条同形。
+    /// scope 筛空了不许说成「快照里没有」:零结果分流的判据都是 scope 过滤过的,
+    /// 分不清成因就会报最强的那一种。
     /// </summary>
     [Fact]
     public void scope筛空时不说成快照里没有()
@@ -179,12 +164,8 @@ public class GrammarTests
             var plural = NounRegistry.Form(noun, 2);
             Assert.NotEqual(noun, plural);
 
-            // 判据是「朴素加 s 会不会拼错这个词」,而原先它按结尾字符串直接匹配 ——
-            // 于是 `key → keys`(**正确**的英语:元音 + y 只加 s)被判成拼错。
-            // 04 记过一次「闸把一句完全正确的话判红」(GateTests 那条复数自噬),
-            // 这是同一形状的第二次:判据写成了它想表达的规则的一个粗糙代理。
-            // 现在只在**辅音 + y**(city → cities)与 -ch/-sh(match → matches)上要求
-            // 登记形态不同于朴素加 s。
+            // 只在**辅音 + y**(city → cities)与 -ch/-sh(match → matches)上要求登记形态
+            // 不同于朴素加 s —— 元音 + y 只加 s(key → keys)本就正确。
             var last = noun.Split(' ')[^1];
             var consonantY = last.Length >= 2 && last[^1] == 'y' && !"aeiou".Contains(last[^2]);
             var sibilant = last.EndsWith("ch", StringComparison.Ordinal) ||
@@ -252,8 +233,7 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 声明区行数上限(06 上下文预算)。超了就该聚合成尾注,而不是逐条铺开 ——
-    /// OutputVolumeCapTests 的落点。
+    /// 声明区行数上限。超了就该聚合成尾注,而不是逐条铺开。
     /// </summary>
     [Fact]
     public void 声明区不超过行数上限()
@@ -267,8 +247,6 @@ public class GrammarTests
             ["types"],
             ["list", "ThingDef", "--limit", "2"],
             // code-search 的最坏情形:三道闸同时咬,四句申报加一句计数。
-            // 这一条是补上来的 —— 本轮把印刷闸拆成两个旋钮,声明条数跟着涨了一条,
-            // 而这道闸原先根本没覆盖这条命令。
             ["code-search", "public", "--limit", "1", "--max-per-file", "1", "--max-files", "1"],
         ];
 
@@ -282,12 +260,9 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 00 论据 3 淘汰掉的「每次返回挂一段免责声明」不得以任何形式重生。
-    ///
-    /// 判据在第二轮盲测后改过一次。原来判的是「完整结果集里一个句子都不许有」,那把
-    /// **计数**也一并禁掉了 —— 而靠沉默传达「这就是全部」正是那轮最贵的一条错误来源
-    /// (四个 agent 独立踩,一个据此二次确认了错答案)。现在判的是:完整态只准出现
-    /// 计数那一句(kind=count),不准有边界/建议类散文。禁的是免责声明,不是数字。
+    /// 「每次返回挂一段免责声明」不得以任何形式重生:完整态只准出现计数那一句
+    /// (kind=count),不准有边界/建议类散文。禁的是免责声明,不是数字 ——
+    /// 靠沉默传达「这就是全部」同样会被读错。
     /// </summary>
     [Fact]
     public void 结果完整时只有计数一句而没有免责声明()
@@ -313,9 +288,8 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 上一条的另一半:没有可申报的边界时,完整结果集只有计数一句,一个字的散文都没有。
-    /// 两条合起来才是「禁的是免责声明,不是数字」—— 少了这一条,那条 boundary 就可能
-    /// 悄悄变成每次都挂的常驻声明,而这正是 00 论据 3 淘汰掉的东西。
+    /// 上一条的另一半:没有可申报的边界时,完整结果集只有计数一句,一个字的散文都没有 ——
+    /// 少了这一条,那条 boundary 就可能悄悄变成每次都挂的常驻声明。
     /// </summary>
     [Fact]
     public void 没有边界可申报时完整结果集只有计数()
@@ -330,15 +304,11 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// R11:被接受的开关不许被吞。
+    /// 被接受的开关不许被吞。SKILL 承诺的「Unknown options are rejected rather than ignored」
+    /// 只覆盖选项**名**,不覆盖收下之后不读。
     ///
-    /// `find --value X --exact` 原先接受 --exact 然后完全不读它,输出与不加时一字不差 ——
-    /// 三轮唯一一处既成的静默吞掉,而它最坏的地方是让人以为拿到的是精确匹配计数。
-    /// SKILL 承诺的是「Unknown options are rejected rather than ignored … so a wrong guess
-    /// costs one line, not a wrong answer」,而那层保护只覆盖选项**名**。
-    ///
-    /// 这条断言的形状是「加了它输出必须变」,不是「输出等于某个具体值」—— 后者钉不住
-    /// 「被忽略」这件事本身,因为被忽略时输出也是一个合法的值。
+    /// 断言的形状是「加了它输出必须变」而不是「输出等于某个具体值」—— 被忽略时输出也是
+    /// 一个合法的值。
     /// </summary>
     [Fact]
     public void exact在按值反查时不被吞掉()
@@ -360,17 +330,12 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// R6:<c>inherit</c> 的 patch 计数每个节点都要在场,不能只在非零时出现。
+    /// <c>inherit</c> 的 patch 计数每个节点都要在场,不能只在非零时出现 —— 只在非零时说话,
+    /// 「零」与「这件事没做」就分不开,而文档承诺「a node with 0 of them is exactly what the
+    /// game read」。
     ///
-    /// 文档承诺「a node with 0 of them is exactly what the game read」—— 读者据此以为会看到
-    /// 一个数字,零就放心。实现原先只在非零时打印一句散文,于是「零」和「这件事没做」分不开,
-    /// 那个保证在实现里根本不存在。二轮 F2(三态文法的裸 N 从未渲染出来过)是同一个形状。
-    ///
-    /// 五轮修正:这道闸原先拿 <c>Bullet_Revolver</c> 当「测得零」的样本,**而那个节点根本
-    /// 没有 Name=** —— 导出器对它硬写 0(XmlNodeExporter:66,计数正则只认 <c>@Name=</c>)。
-    /// 于是闸自己把假零当成了真零去守,四份盲测轨迹独立栽在这一格上。真正的测得零在
-    /// <c>BaseProjectile</c>(有 Name=、零条 patch 点名),无名那一侧另立断言:
-    /// 必须印出一个**非数字**,并说破计数口径。
+    /// 计数正则只认 <c>@Name=</c>(XmlNodeExporter),没有 Name= 的节点导出器硬写 0 ——
+    /// 那一侧必须印一个**非数字**并说破计数口径,真正的测得零在 <c>BaseProjectile</c>。
     /// </summary>
     [Fact]
     public void inherit的patch计数在干净节点也在场()
@@ -396,7 +361,7 @@ public class GrammarTests
         Assert.Equal(System.Text.Json.JsonValueKind.String, unmeasured.ValueKind);
         Assert.Equal("n/a", unmeasured.GetString());
 
-        // 后果那句散文只在非零时说 —— 真的 0 不需要解释,而常驻声明是 00 论据 3 淘汰掉的。
+        // 后果那句散文只在非零时说 —— 真的 0 不需要解释。
         // 无名那一条要的是另一句话:说破口径,不是说后果。
         var (patchedText, _, _) = Fixture.Run("inherit", "BaseBullet");
         var (cleanText, _, _) = Fixture.Run("inherit", "BaseProjectile");
@@ -408,16 +373,9 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 五轮 F4:默认值那句声明不许承诺它做不到的事。
-    ///
-    /// 原句是「The def has N fields in all; pass --defaults to list every one」,两处超发:
-    /// N 是**索引到的路径数**而不是 def 的字段数;而值为 null 的字段导出器见了直接 return
-    /// (DefExporter:284),那条路径从来没进过索引,<c>--defaults</c> 也召不回来。
-    /// 于是「这个字段不存在」与「它的值是 null」在输出上完全同形 —— 实测里有人跨三份
-    /// 列表交叉验证,只是把错结论**加固**了,因为缺的是同一批字段。
-    ///
-    /// 闸判**说没说**:承诺范围有没有限定在索引到的路径上,以及第四态有没有说破。
-    /// 第一分句(那句被反复点名的认识论诚实)另有字节基线钉着,这里不重复。
+    /// 默认值那句声明不许承诺它做不到的事:承诺范围要限定在**索引到的路径**上,并说破
+    /// 第四态 —— 值为 null 的字段导出器见了直接 return(DefExporter),那条路径从来没进过
+    /// 索引,<c>--defaults</c> 也召不回来,于是「字段不存在」与「值是 null」在输出上同形。
     /// </summary>
     [Fact]
     public void 默认值声明不承诺它做不到的事()
@@ -434,16 +392,11 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 五轮 F3:一个词同时是快照名和 scope 组名时,要说破两者不是一回事。
+    /// 一个词同时是快照名和 scope 组名时,要说破两者不是一回事:一份**叫** vanilla 的快照
+    /// 可能只有 Core 加导出器,而 <c>--scope vanilla</c> 是六个 Ludeon 模块(含 DLC)。
     ///
-    /// 实测代价 22 倍:机器上恰好有一份叫 vanilla 的快照(Core + 导出器,两个 mod),
-    /// 而提问问的是「原版怎么算」,顺手 <c>--snapshot vanilla</c> —— 唯一烧油的那个
-    /// 穿梭机来自 Odyssey,整个不在射程里,而输出一个字不提。
-    /// <c>--scope vanilla</c> 则是六个 Ludeon 模块(含 DLC),第三义是提问者嘴里的「原版」。
-    ///
-    /// 「显式指定就闭嘴,你已经说了要哪个环境」这条原则在这里恰好不成立:
-    /// 它的前提是调用方知道自己选的环境是什么,而这一格正是他以为知道其实不知道的。
-    /// 只在撞名时说,所以平常一次都不出现 —— 下面第二组断言守的就是这个。
+    /// 「显式指定就闭嘴」在这里不成立 —— 它的前提是调用方知道自己选的环境是什么。
+    /// 只在撞名时说,平常一次都不出现。
     /// </summary>
     [Fact]
     public void 快照名与scope组名撞车时说破()
@@ -462,15 +415,10 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 五轮 F2:scope 展开成了什么,在**有结果时**也要说。
+    /// scope 展开成了什么,在**有结果时**也要说 —— 口径直接决定答案怎么写。
     ///
-    /// 文档两处承诺过,而 <c>Describe()</c> 的七个调用点原先全嵌在零结果句里 ——
-    /// 查到东西时不告诉你范围,查不到时才告诉你,方向正好反了。四份轨迹撞上,
-    /// 其中一份连着五次 <c>--scope vanilla</c> 零次播报,而那个词实际展开成六个
-    /// Ludeon 模块(含 DLC),口径直接决定答案怎么写。
-    ///
-    /// 判据是「展开与字面不同」,不是「多于一个 mod」:写死 packageId 的调用
-    /// 一个字都不该多收。同一次输出里也只说一遍 —— 散文里一律写调用方输入的字面。
+    /// 判据是「展开与字面不同」,不是「多于一个 mod」:写死 packageId 的调用一个字都不该
+    /// 多收。同一次输出里也只说一遍 —— 散文里一律写调用方输入的字面。
     /// </summary>
     [Fact]
     public void scope展开在有结果时也播报()
@@ -480,35 +428,24 @@ public class GrammarTests
         Assert.Equal(0, code);
         Assert.Contains("--scope vanilla (= ludeon.rimworld)", group);
 
-        // 写死 packageId:你写的就是你得到的,**播报那一行不多印**。
-        // 断言写成「不含带括号的那种形态」是不够的 —— 判据一旦退回「多于一个 mod 就播」,
-        // 印出来的是不带括号的 `--scope ludeon.rimworld.`,那样的闸红不了。所以钉的是
-        // 「有没有一条**以它开头的声明行**」:计数句里那句 `1 def within --scope
-        // ludeon.rimworld.` 是另一件事的产地(用户侧收窄要念回去),不在这条闸的射程内。
+        // 写死 packageId:你写的就是你得到的,**播报那一行不多印**。钉的是「有没有一条
+        // 以它开头的声明行」—— 计数句里那句 `1 def within --scope ludeon.rimworld.`
+        // 是另一件事(用户侧收窄要念回去),不在这条闸的射程内。
         var (literal, _, _) = Fixture.Run("find", "thingClass", "RimWorld.Bullet", "--scope", "ludeon.rimworld");
         Assert.DoesNotMatch(new Regex(@"^--scope ludeon\.rimworld", RegexOptions.Multiline), literal);
 
-        // 零结果那一侧原先就说,现在仍要说,但**只说一遍**:散文改用字面之后,
-        // 展开只剩播报那一个产地。两遍与一遍在这里差的是「读者以为看到了两条独立证据」。
+        // 零结果那一侧也要说,但**只说一遍** —— 两遍会被读成两条独立证据。
         var (miss, _, _) = Fixture.Run("find", "--value", "NoSuchValueXyz", "--scope", "vanilla");
         Assert.Single(Regex.Matches(miss, @"= ludeon\.rimworld\)"));
     }
 
     /// <summary>
-    /// 五轮 F1:截断尾注是给「这就是全部」背书的那句话,而它自己算错了。
+    /// 截断尾注是给「这就是全部」背书的那句话,两处易错:按结果里的每条路径各查一次再
+    /// 求和(同一个被砍的 def 被数几次),以及子查询问成「用过这条路径的 def 类型」——
+    /// 结果里只要有一条路径叫 <c>defName</c> 它就退化成全体类型。
     ///
-    /// 两处根因。一是 <c>find --value</c> 按**结果里的每条路径**各查一次再求和,同一个被砍的
-    /// def 出现在几条路径上就被数几次;二是那个子查询问的是「用过这条路径的 def 类型」,
-    /// 而结果里只要有一条路径叫 <c>defName</c> —— 命中一个 def 名时必然有 —— 它就退化成
-    /// 全体类型,这一项独自等于全库。真数据上报出 251 与 242,而快照总共 239 个被砍的 def。
-    ///
-    /// 闸按**数学上不可能**立,不按具体数字立:尾注说的是「同类型里还有几个」,那是全库
-    /// 被砍总数的一个子集,任何时候都不许超过它。子集大于全集,这句背书就作废了,而它
-    /// 印出来与一个正常计数逐字同形 —— 八份盲测轨迹里没有一份当场看出来。
-    ///
-    /// 红不红验过:把调用改回 <c>rows.Select(r =&gt; r.Path).Distinct().Sum(...)</c>,
-    /// <c>find --value RimWorld</c> 命中两条路径(thingClass 与 comps[0].compClass),
-    /// 在夹具上报 2 而全库只有 1 个被砍的 def,当场红。
+    /// 闸按**数学上不可能**立,不按具体数字立:尾注说的是全库被砍总数的一个子集,
+    /// 任何时候都不许超过它,而超了印出来与一个正常计数逐字同形。
     /// </summary>
     [Fact]
     public void 截断尾注的计数不许超过全库被砍的总数()
@@ -542,9 +479,8 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 同一句尾注的第二处:它原先只在内层收窄 scope,外层的 COUNT 不带谓词,于是
-    /// <c>--scope</c> 把结果收进一个 mod 之后,「可能属于这里而没露面」说的仍是一批
-    /// scope 明明排除掉的 def。四份轨迹各自报过「计数不跟随 --scope」。
+    /// 同一句尾注的第二处:外层 COUNT 也要带 scope 谓词,否则「可能属于这里而没露面」
+    /// 说的是一批 scope 明明排除掉的 def。
     /// </summary>
     [Fact]
     public void 截断尾注跟随scope收窄()
@@ -561,11 +497,8 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// R2:同名提示不随 <c>--type</c> 消失。
-    ///
-    /// 三轮最恶劣的一处就在这个缝上 —— 提示原先挂在**过滤后**的集合上,于是按 SKILL 教的
-    /// 加了 --type,提示走了、按名字关联来的错行留下,对冲归零。而调用方主动收窄这个动作
-    /// 恰恰说明它知道有歧义:这是最需要那句提示的时刻,不是最不需要的。
+    /// 同名提示不随 <c>--type</c> 消失:提示要挂在**过滤前**的集合上。调用方主动收窄恰恰
+    /// 说明它知道有歧义,这是最需要那句提示的时刻。
     /// </summary>
     [Fact]
     public void 同名提示不随type消失()
@@ -584,12 +517,11 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// R2 的另一半,也是这条修复自己最容易犯的错:收窄之后**不许**把该显示的弄丢。
+    /// 上一条的另一半:收窄之后**不许**把该显示的弄丢。
     ///
     /// 继承层的 def_type 是 XML 根元素名,defs 表的是 AllDefTypesWithDatabases 的桶名,
-    /// 两者会不一致(实测本机快照 26 个,如 Blindhealer 的 CreepJoinerFormKindDef →
-    /// PawnKindDef)。语料里 VariantOne 就是这个形状:硬要求 def_type 相等,它的
-    /// inherits_from 会整批消失 —— 串味换成丢数据,正是 R2 要修的那类错本身。
+    /// 两者会不一致(如 CreepJoinerFormKindDef → PawnKindDef)。硬要求 def_type 相等,
+    /// 异构桶的 inherits_from 会整批消失。
     /// </summary>
     [Fact]
     public void 桶名不一致时父节点仍在场()
@@ -608,13 +540,8 @@ public class GrammarTests
     // ---- code-search 的三道闸(三轮 R3 / R4 / R13 / R15 与「--limit 静默提前终止扫描」)----
 
     /// <summary>
-    /// **印几行**的两道闸都不许缩短扫描。
-    ///
-    /// 这一条守的是 SKILL 里那句「--limit 只管行,code-search 另有一道管文件数的闸」——
-    /// 三轮盲测十份轨迹一次都没记下它是假的:实现里 --limit 一到就 break 掉整个扫描,
-    /// 于是「有多少个这种形状的方法」这类问题拿到的是「印满为止的那个数」,
-    /// 而它还被写成 at least 形态,读起来像是闸的锅。字节基线钉不住这条 ——
-    /// 措辞一改就跟着改,而这里判的是三种调法必须给出同一个总数。
+    /// **印几行**的两道闸都不许缩短扫描 —— SKILL 承诺「--limit 只管行,code-search 另有
+    /// 一道管文件数的闸」。判的是三种调法必须给出同一个总数,不判措辞。
     /// </summary>
     [Fact]
     public void 印刷上限不缩短扫描()
@@ -638,7 +565,7 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// R15:点开头的目录不是源码树。判据在 SourcesShared.TreeNames,这里守的是
+    /// 点开头的目录不是源码树。判据在 SourcesShared.TreeNames,这里守的是
     /// code-search 真的走了那一份 —— 语料里 .git 下摆着一个匹配 *.cs 的文件。
     /// </summary>
     [Fact]
@@ -650,7 +577,7 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// R13:上下文窗口重叠时合并,同一行不许印两遍。判的是行号不重复,不是措辞。
+    /// 上下文窗口重叠时合并,同一行不许印两遍。判的是行号不重复,不是措辞。
     /// </summary>
     [Fact]
     public void 上下文窗口重叠时合并()
@@ -663,10 +590,8 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// R3 fatal(六个场景):没读完的零结果不是零结果。
-    ///
-    /// 两件事必须分开说 —— 「扫完了,代码里没有」该指路去 search / find(问错了数据源),
-    /// 「没扫完」则一个字都不许提别的数据源,该做的是把闸抬开。原先两条路说同一句话。
+    /// 没读完的零结果不是零结果。「扫完了,代码里没有」该指路去 search / find(问错了
+    /// 数据源),「没扫完」则一个字都不许提别的数据源,该做的是把闸抬开。
     /// </summary>
     [Fact]
     public void 没读完的零结果与真零结果分得开()
@@ -691,8 +616,8 @@ public class GrammarTests
         Assert.Contains("No file matched", empty);
         Assert.DoesNotContain("rimsearcher search", empty);
 
-        // 第四种成因:树在名单里、目录也在磁盘上,里面一个文件都没有(从没反编译过)。
-        // 它此前落进上面那条 glob 分支,于是读的人去改 glob,而真因是这棵树该 sync 一遍。
+        // 第四种成因:树在名单里、目录也在磁盘上,里面一个文件都没有(从没反编译过)——
+        // 真因是这棵树该 sync 一遍,不是 glob 写错。
         var (bare, _, bareCode) = Fixture.Run("code-search", "public", "--source", "zz.emptytree");
         Assert.Equal(1, bareCode);
         Assert.Contains("holds no decompiled files", bare);
@@ -700,8 +625,8 @@ public class GrammarTests
         Assert.DoesNotContain("No file matched", bare);   // 不许再赖到 glob 头上
         Assert.DoesNotContain("rimsearcher search", bare);
 
-        // glob 那条的子形状:别名 --file-extension 收下裸扩展名,值却按 glob 解。
-        // 「这里没有 .cs 文件」与「你的值不是 glob」此前逐字同形。
+        // glob 那条的子形状:别名 --file-extension 收下裸扩展名,值却按 glob 解 ——
+        // 「这里没有 .cs 文件」与「你的值不是 glob」不许同形。
         var (ext, _, extCode) = Fixture.Run("code-search", "public", "--file-extension", "cs");
         Assert.Equal(1, extCode);
         Assert.Contains("no wildcard", ext);
@@ -716,12 +641,9 @@ public class GrammarTests
     // ---- 零结果的成因分流(三轮 R8 四种误诊 + R10 fatal)----
 
     /// <summary>
-    /// 六种落点各说各的,而且**说的是算出来的那一条**,不是猜的那一条。
-    ///
-    /// 三轮 R8 的四种误诊全部出自同两句猜话:「像类名」→ find/code-search,否则 → types。
-    /// 于是抽象父节点、def 类型、mod 名三种输入都被推去了必然空手的地方,其中两种的答案
-    /// 就在同一个库的另一张表里。字节基线钉住措辞,这一条钉住的是**分流本身**:
-    /// 每种输入必须落到自己那一支,而不是落到别人那一支。
+    /// 六种落点各说各的,而且**说的是算出来的那一条**,不是猜的那一条 —— 靠「像类名」
+    /// 之类的猜测分流,抽象父节点、def 类型、mod 名会被推去必然空手的地方,而答案就在
+    /// 同一个库的另一张表里。这一条钉的是分流本身,不是措辞。
     /// </summary>
     [Fact]
     public void 零结果按算得出来的落点分流()
@@ -732,13 +654,10 @@ public class GrammarTests
             ("BaseBullet",        "rimsearcher inherit BaseBullet", "find compClass"),
             // 存储桶的名字,不是一个 def
             ("ThingDef",          "is a def type in this snapshot", "find compClass"),
-            // def 自己的运行时 class
-            //
-            // MustNot 这一串原先写的是 "rimsearcher types" —— 那条命令并进 list 之后
-            // 整份输出里再没有这几个字,断言于是恒真、闸再也红不了。锚点改成那句
-            // **兜底话自己**的措辞:它才是这一条要挡的东西(算得出落点就不许退回猜)。
+            // def 自己的运行时 class。MustNot 锚在那句**兜底话自己**的措辞上 ——
+            // 算得出落点就不许退回猜。
             ("TestVariantDef",    "--class TestVariantDef",         "lists what kinds of def this snapshot holds"),
-            // 字段取值(comps[N].compClass 那一类)—— 这一支是修这条时自己弄丢又补回来的
+            // 字段取值(comps[N].compClass 那一类)
             ("CompShield",        "rimsearcher find compClass CompShield", "no class"),
             // 快照覆盖的 mod
             ("ludeon.rimworld",   "is a mod this snapshot covers",  "lists what kinds of def this snapshot holds"),
@@ -754,8 +673,7 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 被自己的 <c>--scope</c> 挡住,不是「没有」。这一条排在分流的第一位,因为
-    /// 把「过滤掉了」说成「不存在」是这批误诊里最贵的一种:数据就在手边。
+    /// 被自己的 <c>--scope</c> 挡住,不是「没有」。这一条排在分流的第一位。
     /// </summary>
     [Fact]
     public void 被scope挡住时说破是过滤器干的()
@@ -766,8 +684,7 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// R10 fatal(三个场景):「它在别的快照里」这句话一直是可算出来的,工具从没说过。
-    /// get 与 inherit 两条路都要说 —— 三轮踩到的是 get 那条,而两条落空的成因同源。
+    /// 「它在别的快照里」是可算出来的,get / inherit / search 三条路都要说。
     /// </summary>
     [Fact]
     public void 别的快照里有时点名说出来()
@@ -791,13 +708,13 @@ public class GrammarTests
         var (absent, _, _) = Fixture.Run("get", "NoSuchDefAnywhere");
         Assert.Contains("not a def type, a class, a mod", absent, StringComparison.Ordinal);
         Assert.DoesNotContain("--snapshot", absent, StringComparison.Ordinal);
-        // 那六种落点全在快照里,而快照只装 def 侧。听上去穷尽、其实没查代码树 ——
-        // 第四轮 B6 的 MapPortal 就活在 vanilla 树里。没查的那一半必须自己说破。
+        // 那六种落点全在快照里,而快照只装 def 侧 —— 听上去穷尽、其实没查代码树。
+        // 没查的那一半必须自己说破。
         Assert.Contains("code-search \"class NoSuchDefAnywhere\"", absent, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// R10 的一词两义:<c>--scope vanilla</c> 展开成每个 ludeon.rimworld* 模块,而一份
+    /// 一词两义:<c>--scope vanilla</c> 展开成每个 ludeon.rimworld* 模块,而一份
     /// **叫** vanilla 的快照可能只有 Core。展开当场算得出来,那就写进句子里。
     /// </summary>
     [Fact]
@@ -808,8 +725,7 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// R3 的第四件事:<c>--source</c> 已经给出时,补救措施里不许再列它 ——
-    /// 实测 <c>--source vanilla</c> 换来的是一模一样的警告,而那句话仍在建议加 <c>--source</c>。
+    /// <c>--source</c> 已经给出时,补救措施里不许再列它。
     /// 顺带守住单树也要说破「只读了一部分」。
     /// </summary>
     [Fact]
@@ -824,12 +740,12 @@ public class GrammarTests
         Assert.DoesNotContain("narrow with", both);
     }
 
-    // ---- read(三轮 R5:CLI 侧读不了文件)----
+    // ---- read ----
 
     /// <summary>
     /// 配平括号得躲开四种「看起来是括号」:注释里的、字符串里的、字符字面量里的、
-    /// 逐字字符串里双写引号后面的。躲不开的后果不是少认一个成员,而是**认错边界** ——
-    /// 交出去的那段代码从中间截断,而它看上去是完整的一段。
+    /// 逐字字符串里双写引号后面的。躲不开就**认错边界**,交出去的代码从中间截断
+    /// 而看上去完整。
     /// </summary>
     [Fact]
     public void 括号只在真的是括号时算数()
@@ -890,8 +806,7 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 分页:总行数与下一页的参数恒在。R5 的成因不是「读不到」,是**没有读的路**,
-    /// 于是调用方去编正则;给了路还得让它走得下去,不然第二页又回到编的老路上。
+    /// 分页:总行数与下一页的参数恒在 —— 走不下去的第二页会把调用方逼回自己编正则。
     /// </summary>
     [Fact]
     public void 裸行读随时说得出总数与下一页()
@@ -901,7 +816,7 @@ public class GrammarTests
         Assert.Contains("--lines 13", page, StringComparison.Ordinal);
 
         // 一次读完时不许再劝人翻页 —— 那一句会被读成「后面还有」。
-        // 12 行而不是 9:Widgets.cs 末尾加了三行 .Translate() 语料(keyed 那一层的落点)。
+        // Widgets.cs 末尾有三行 .Translate() 语料(keyed 那一层的落点),所以是 12 行。
         var (whole, _, _) = Fixture.Run("read", "vanilla/Verse/Widgets.cs");
         Assert.Contains("all 12 lines", whole, StringComparison.Ordinal);
         Assert.DoesNotContain("next page", whole, StringComparison.Ordinal);
@@ -912,8 +827,7 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 两种读法同时传时不排优先级。旧世系在这里是静默择一的,后果不是「少了点什么」,
-    /// 而是拿回**完全另一块代码**,而返回里一个字都不提被丢掉的那个参数。
+    /// 两种读法同时传时不排优先级 —— 静默择一拿回的是**完全另一块代码**。
     /// </summary>
     [Fact]
     public void 两种读法同时传时当场说破()
@@ -926,8 +840,8 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 配平括号不是解析,这句边界必须跟着**用了轮廓的**那几条路走(R51:写进它作用的
-    /// 那个块)。裸行读没有任何推断,那里不该多这一句 —— 常驻免责声明对手上这一条什么也没说。
+    /// 配平括号不是解析,这句边界只跟着**用了轮廓的**那几条路走。裸行读没有任何推断,
+    /// 那里不该多这一句。
     /// </summary>
     [Fact]
     public void 能力边界只挂在做了推断的那几条路上()
@@ -946,10 +860,8 @@ public class GrammarTests
 
     /// <summary>
     /// 分页的三个位置各说各的话:中间页说得出自己从第几条起,末页**不给**下一页的参数,
-    /// 翻过了头是一句「翻过头了」而不是一句「没有这个东西」。
-    ///
-    /// 第三条是这一组里最贵的:R8 那批误诊的形状就是「分不清缺席的成因就报最强的那种」,
-    /// 而分页给缺席添了一种全新的成因。
+    /// 翻过了头是一句「翻过头了」而不是一句「没有这个东西」—— 分页给「缺席」添了一种
+    /// 新成因,分不清就会报最强的那种。
     /// </summary>
     [Fact]
     public void 分页的三个位置各说各的话()
@@ -974,7 +886,7 @@ public class GrammarTests
 
     /// <summary>
     /// 负偏移当场拒绝。SQL 把负的 OFFSET 当 0,于是「我少给了一个负号」与「这就是第一页」
-    /// 逐字相同 —— 又一处「错的输出与对的输出同形」。
+    /// 逐字相同。
     /// </summary>
     [Fact]
     public void 负偏移不被悄悄当成零()
@@ -986,10 +898,8 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 参数被改写就要说破。<c>LimitValue.Clamped</c> 与 <c>NoticeKind.Clamp</c> 从落地起
-    /// 一个引用点都没有:解析器老实记下了「这个数被我改了」,却没有任何一条路把它印出来,
-    /// 于是 <c>--limit 5000</c> 与 <c>--limit 2000</c> 的输出逐字相同 —— 又一处
-    /// 「静默改写调用方给的参数」,与 R11 吞掉 --exact 同形。
+    /// 参数被改写就要说破:<c>LimitValue.Clamped</c> 记下了「这个数被我改了」,得有一条路
+    /// 把它印出来,否则 <c>--limit 5000</c> 与 <c>--limit 2000</c> 的输出逐字相同。
     /// </summary>
     [Fact]
     public void 超过上限的limit不被悄悄夹紧()
@@ -1007,9 +917,8 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 声明了 --offset 的命令必须真的翻得动。声明层与实现层各写一份是这套代码里最容易
-    /// 长出来的漂移:参数表上挂着,Run 里没读,于是 <c>--offset 2</c> 与不给一模一样 ——
-    /// 静默忽略一个参数,正是本轮 R11 修过的那个错。
+    /// 声明了 --offset 的命令必须真的翻得动 —— 声明层与实现层各写一份,最容易长出
+    /// 「参数表上挂着、Run 里没读」的漂移。
     /// </summary>
     [Fact]
     public void 声明了offset的命令都真的翻得动()
@@ -1036,12 +945,11 @@ public class GrammarTests
         }
     }
 
-    // ---- R1:C# 声明默认值与被人设过的值不许同形 ----
+    // ---- C# 声明默认值与被人设过的值不许同形 ----
 
     /// <summary>
-    /// R1 报告里那一行的形状:**字段名与提问一字不差,值却是声明默认值**。四个错结论
-    /// 全是这么生成的。所以 <c>--path</c> 点了名的字段绝不许因为「是默认值」而消失 ——
-    /// 藏起来会把回答变成「没有路径含 burstCount」,那是比印错值更彻底的假话。
+    /// <c>--path</c> 点了名的字段绝不许因为「是默认值」而消失 —— 藏起来会把回答变成
+    /// 「没有路径含 burstCount」,比印错值更彻底。
     /// </summary>
     [Fact]
     public void 点了名的字段不因为是默认值而消失()
@@ -1049,15 +957,14 @@ public class GrammarTests
         var (named, _, code) = Fixture.Run("get", "Bullet_Revolver", "--path", "burstCount");
         Assert.Equal(0, code);
         Assert.Contains("projectile.burstCount", named, StringComparison.Ordinal);
-        // 印出来还不够,还得说清它是哪一种 —— 只印值就退回了 R1 本身。
+        // 印出来还不够,还得说清它是哪一种 —— 只印值就与「有人设过」同形。
         Assert.Contains(FieldDefault.Column, named, StringComparison.Ordinal);
         Assert.Contains("yes", named, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// <c>--path</c> 筛空的两种成因不许同形:def 真没有这条路径,与**给进来的文本是个值**。
-    /// 第四轮回归实测的形状(B5):stat 名装在 <c>statBases[N].stat</c> 里,按它筛路径必空,
-    /// 而「值在不在这个 def 上」是算得出来的 —— 算出来再说,不猜。
+    /// <c>--path</c> 筛空的两种成因不许同形:def 真没有这条路径,与**给进来的文本是个值**
+    /// (stat 名装在 <c>statBases[N].stat</c> 里,按它筛路径必空)。
     /// </summary>
     [Fact]
     public void 把值当成路径筛时说破它是个值()
@@ -1094,9 +1001,7 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 三态里「没法比」最容易被顺手并进某一边。它必须**照常显示**(少省一点篇幅,
-    /// 换「不会有值凭空消失」),而且在列里与「有人改过」分得开 —— 把没比成印成
-    /// 有人改过,正是 R1 本身,只是换了个入口。
+    /// 三态里「没法比」不许并进某一边:必须**照常显示**,而且在列里与「有人改过」分得开。
     /// </summary>
     [Fact]
     public void 没法比的那一档照常显示且不与被改过的同形()
@@ -1130,11 +1035,9 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 一个 defName 对应几行是常态(Firefoam 既是 ThingDef 又是 StatDef,mod 覆盖原版时同理)。
-    /// 模糊回退在这里建过「名字 → 一行」的字典,同名处当场抛 —— 用户打错一个字母,
-    /// 换回来一个 exit 70。闸判三件事:不许崩、两行都在、页脚的数按**行**算。
-    ///
-    /// 第三件是前两件的陪嫁:只留一行也「不崩」,而那份输出与正确输出逐字同形。
+    /// 一个 defName 对应几行是常态(Firefoam 既是 ThingDef 又是 StatDef,mod 覆盖原版时同理),
+    /// 所以模糊回退里不许建「名字 → 一行」的字典。闸判三件事:不许崩、两行都在、
+    /// 页脚的数按**行**算 —— 只留一行也「不崩」,而那份输出与正确输出逐字同形。
     /// </summary>
     [Fact]
     public void 同名两个def不许把模糊兜底打成内部错误()
@@ -1142,7 +1045,7 @@ public class GrammarTests
         var (stdout, _, code) = Fixture.Run("search", "Firefoan");
         Assert.Equal(0, code);
 
-        // 两条 Firefoam 各是一个 def,都得出现 —— 少一条正是「同形的错答案」。
+        // 两条 Firefoam 各是一个 def,都得出现。
         Assert.Contains("ThingDef", stdout, StringComparison.Ordinal);
         Assert.Contains("StatDef", stdout, StringComparison.Ordinal);
 
@@ -1155,9 +1058,8 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// FTS 只索引译文的**译过来的那一侧**。于是一份中文快照上,每个 def 的英文原文都在库里
-    /// 躺着,却一个也搜不到 —— 而落空那句话当时还写着「covers … and translations」,
-    /// 把只覆盖一半说成覆盖全部。
+    /// FTS 要连译文的**原文那一侧**一起索引:否则中文快照上每个 def 的英文原文都在库里
+    /// 躺着却一个也搜不到,而落空句还写着「covers … and translations」。
     ///
     /// 语料里 "A blob of firefoam." 只在 original 侧,label 与 description 都不含 blob。
     /// </summary>
@@ -1168,8 +1070,7 @@ public class GrammarTests
         Assert.Equal(0, code);
         Assert.Contains("Firefoam", stdout, StringComparison.Ordinal);
 
-        // 兜底必须**排在模糊回退之前**:不然拼写噪声会把真答案挤掉,
-        // 而那份输出看起来就是「没有,这是几个拼写相近的」。
+        // 兜底必须**排在模糊回退之前**,不然拼写噪声会把真答案挤掉。
         Assert.DoesNotContain("closest names by spelling", stdout, StringComparison.Ordinal);
 
         // 命中来自哪一侧要说破 —— 不说,这一行在中文快照上无从解释。
@@ -1184,10 +1085,8 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 子串匹配不留痕 —— 第五轮盲测里直接产出错结论的那一条。
-    /// `get X --path soundImpact` 只回一行 `soundImpactDefault`(语义相反的另一个字段,
-    /// `code_default=no` 让它看着像作者刻意设的),而输出里没有一处说过「你打的这个词
-    /// 作为完整的一段一次都没命中」。
+    /// 子串匹配要留痕:`get X --path soundImpact` 只回 `soundImpactDefault`(语义相反的另一个
+    /// 字段)时,得说出「你打的这个词作为完整的一段一次都没命中」。
     ///
     /// 三个落点都要判,因为改一处剩两处的输出一字不变:`get --path` / `fields --path` /
     /// `find --value`。每处判两档:一条整段都没有 → 说破;有整段也有子串 → 给拆分。
@@ -1200,9 +1099,8 @@ public class GrammarTests
         var (get0, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--path", "energy");
         Assert.Contains("whole path segment", get0, StringComparison.Ordinal);
         Assert.Contains("nothing here is called exactly that", get0, StringComparison.Ordinal);
-        // 第七轮 T2:这句话原先收在一句关于存在性的强断言上,而它对「前缀式列举」这个
-        // 正常用法照喊 —— 一份轨迹「差一点因为那句话就掠过去了」,而要的字段就在下面那张表里。
-        // 被劝退才是它造成的真损失,所以「这一行一条都没滤掉」这半句是承重的。
+        // 这句话不许收在关于存在性的强断言上 —— 「前缀式列举」是正常用法,要的字段就在
+        // 下面那张表里,所以「这一行一条都没滤掉」这半句是承重的。
         Assert.Contains("removes none of the matched fields", get0, StringComparison.Ordinal);
 
         // 查 "comps" 则条条整段命中 —— 这时候一个字都不许多说。
@@ -1228,8 +1126,7 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 「本快照没有」在读的人眼里就是「这东西不存在」。R10 原先只覆盖「按名字取一个 def」
-    /// 那条路,而第五轮实测里落空的是 `find` —— races 那份快照里明明有 6 条。
+    /// 「本快照没有」在读的人眼里就是「这东西不存在」,所以 `find` 落空也要说破别处有。
     ///
     /// 叠加不替换:本快照那句成因分流一个字不许少,别处那句排在它**后面**。
     /// </summary>
@@ -1260,8 +1157,8 @@ public class GrammarTests
     /// 「像不像类名」这个判据决定要不要说一句**猜测**,而猜错的代价是把未经验证的
     /// 「如果 X 是抽象基类……」摆在输出位置,读的人当结论用。
     ///
-    /// 旧判据三处各写各的,`IsUpper(v[0]) || Contains('.')` 会把 XML 里最常见的两种值
-    /// 一并算进来:`True`(首字母大写)、`Sounds/Foo.ogg`(含点)。
+    /// 判据要一处产地:`IsUpper(v[0]) || Contains('.')` 会把 XML 里最常见的两种值一并算进来
+    /// —— `True`(首字母大写)与 `Sounds/Foo.ogg`(含点)。
     /// </summary>
     [Fact]
     public void 像不像类名的判据挡得住字面量与资源路径()
@@ -1296,9 +1193,7 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// `sources list` 的表头报「33 棵树 / 24 个 mod」,两个数怎么合上原先要读者自己数 33 行。
-    /// 对账行把两边各自拆到桶里,而闸判的正是**加得起来** —— 一句对不上的对账比没有更坏,
-    /// 它让人以为自己看懂了。
+    /// `sources list` 的表头报的树数与 mod 数各有一行对账,闸判的是它们**加得起来**。
     ///
     /// 两条等式各只用一个单位:混着数会得出一个凑巧对得上的和(树侧的 vanilla 那一棵
     /// 同时又代表 mod 侧那几个 packageId,重复计一次照样「相等」)。
@@ -1322,17 +1217,15 @@ public class GrammarTests
         var t = trees.Groups.Cast<Group>().Skip(1).Select(g => int.Parse(g.Value)).ToList();
         Assert.Equal(t[0], t[1] + t[2] + t[3] + t[4] + t[5]);
 
-        // 只加注,不缩范围。把这件事实现成「默认只扫快照内的树」会让穷举论证整批作废,
+        // 只加注,不缩范围:实现成「默认只扫快照内的树」会让穷举论证整批作废,
         // 而降级前后的输出一模一样 —— 所以这句承诺本身要在场。
         Assert.Contains("reads every tree either way", stdout, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// 完整性尾注末尾那条命令,要走得到**它刚说的那一批**。
-    ///
-    /// 原先一律给裸 `snapshot truncated`,而它列的是全库(真快照上 239 条),尾注刚说的
-    /// 却是「与本次结果同类型」的一小批。照着跑一遍拿到的是另一个集合,而两份输出的
-    /// 形状一模一样 —— 上一道闸只验了那条命令**存在**,这一道验它**走得到**。
+    /// 完整性尾注末尾那条命令,要走得到**它刚说的那一批**:裸 `snapshot truncated` 列的是
+    /// 全库,而尾注说的是「与本次结果同类型」的一小批,两份输出的形状一模一样。
+    /// 上一道闸只验那条命令**存在**,这一道验它**走得到**。
     /// </summary>
     [Fact]
     public void 完整性尾注指的命令要走得到它刚说的那批()
@@ -1349,16 +1242,14 @@ public class GrammarTests
         Assert.NotEmpty(argv);   // 裸命令走到的是全库,不是刚说的那批
 
         var (listed, _, _) = Fixture.Run(["snapshot", "truncated", .. argv, "--limit", "all"]);
-        // 计数句现在会把用户自己划的那道线念回去(`1 def within --type ThingDef.`)——
-        // 数还是同一个数,取数的正则跟着放宽,不是把那半句当噪音滤掉。
+        // 计数句会把用户自己划的那道线念回去(`1 def within --type ThingDef.`),
+        // 取数的正则跟着放宽,不是把那半句当噪音滤掉。
         var got = Regex.Match(listed, @"^(\d+) defs?( within [^.]*)?\.", RegexOptions.Multiline);
         Assert.True(got.Success, listed);
         Assert.Equal(claimed, int.Parse(got.Groups[1].Value));
 
-        // 第六轮:句子原先写「defs of **the same def types**」,而它指的是「哪些类型能带这条
-        // 路径」,与表里那几行的类型没有任何关系 —— 实测 `find label 狂暴 --exact` 四行全是
-        // MentalStateDef,脚注却建议 `--type BodyDef --type DutyDef --type ThingDef`。
-        // 「the same」是句子里唯一让人去对照的那个词,而它对照的东西不存在。
+        // 句子不许写「defs of **the same def types**」:它指的是「哪些类型能带这条路径」,
+        // 与表里那几行的类型没有关系,而「the same」是唯一让人去对照的那个词。
         Assert.DoesNotContain("the same def types", stdout, StringComparison.Ordinal);
 
         // 类型要在散文里点名,而且与命令里那几个逐字一致 —— 不点名就没法核对。
@@ -1367,9 +1258,8 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 收窄之后的零结果与「整份快照都没有」不是一回事,而两句话原先是同一句 ——
-    /// 「counts over field paths are complete for it」在收窄时担保的是整份快照,
-    /// 而它只查了其中一小块。
+    /// 收窄之后的零结果与「整份快照都没有」不是一回事:
+    /// 「counts over field paths are complete for it」在收窄时只查了其中一小块。
     /// </summary>
     [Fact]
     public void 收窄之后的零结果不许担保整份快照()
@@ -1382,8 +1272,8 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 同一块 `comps[N]` 里的字段互相约束。第五轮实测:`minFuelCost=50` 盖掉同块的
-    /// `fuelPerTile=3`,差 16 倍 —— 而只列出后者的那张表干净、计数明确、一条警告都没有。
+    /// 同一块 `comps[N]` 里的字段互相约束(如 `minFuelCost` 盖掉同块的 `fuelPerTile`),
+    /// 所以只列其中一条的那张表看着干净、其实结论会错。
     ///
     /// 语料里 Apparel_ShieldBelt 的 comps[0] 有三条:compClass(默认值,不点名)、
     /// props.energyMax(有人设过)、index(默认值)。
@@ -1405,8 +1295,8 @@ public class GrammarTests
         Assert.Contains("energyLossPerDamage", find, StringComparison.Ordinal);
 
         // 但**你看的这一行自己**是声明默认值时不提示:判别字段按定义就是默认值,
-        // 而 `find compClass CompShield` 是文档推荐的那条主查询 —— 在它上面挂一句
-        // 「同块还有 energyMax」是纯噪音,而噪音要在所有调用上收税。
+        // 而 `find compClass CompShield` 是文档推荐的那条主查询,在它上面挂一句
+        // 「同块还有 energyMax」是纯噪音。
         var (disc, _, _) = Fixture.Run("find", "compClass", "RimWorld.CompShield");
         Assert.DoesNotContain("same block as the rows above", disc, StringComparison.Ordinal);
 
@@ -1419,15 +1309,13 @@ public class GrammarTests
         var (quiet, _, _) = Fixture.Run("get", "TestModGun", "--path", "compClass");
         Assert.DoesNotContain("same block as the rows above", quiet, StringComparison.Ordinal);
 
-        // 第六轮:块名不许写死成 comps[N] —— ContainerPrefix 对任何带下标的层都成立,
-        // 而实测里 statBases[8]、corePart.parts[6]、degreeDatas[0].statFactors[0]
-        // 三种块上都挂出了「Fields in one comps[N] entry」。8 份轨迹里 3 份撞上。
+        // 块名不许写死成 comps[N] —— ContainerPrefix 对任何带下标的层都成立
+        // (statBases[8]、corePart.parts[6]、degreeDatas[0].statFactors[0] 都是块)。
         var (stat, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--path", "statBases[0].stat");
         Assert.Contains("statBases[0]", stat.Split("same block")[1], StringComparison.Ordinal);
         Assert.DoesNotContain("comps[N]", stat, StringComparison.Ordinal);
 
-        // 而且指的那条路要**填好**再发出去。原先发的是字面量
-        // `rimsearcher get <defName> --path <block>`,两个占位符一个没填。
+        // 而且指的那条路要**填好**再发出去,不许留 <defName> / <block> 这种占位符。
         Assert.DoesNotContain("<defName>", stat, StringComparison.Ordinal);
         Assert.DoesNotContain("<block>", stat, StringComparison.Ordinal);
         Assert.Contains("rimsearcher get Apparel_ShieldBelt --path statBases[0]", stat, StringComparison.Ordinal);
@@ -1440,10 +1328,7 @@ public class GrammarTests
 
     /// <summary>
     /// 块级 `--path` 上那句「整段命中」是**必然误报**:判据把 `[N]` 从段里剥掉,
-    /// 于是 `comps[0]` 这种带下标的写法永远不可能等于任何一段,而三条命中明明全在
-    /// 那个块里。第六轮实测 `get Apparel_ShieldBelt --path "comps[0]"` 回
-    /// 「None of those has 'comps[0]' as a whole path segment … so a field by exactly
-    /// that name may not exist here」—— 每个字都在把人推离正确答案。
+    /// 于是 `comps[0]` 这种带下标的写法永远不可能等于任何一段,而命中明明全在那个块里。
     /// </summary>
     [Fact]
     public void 块级路径不许被判成子串误命中()
@@ -1453,7 +1338,7 @@ public class GrammarTests
         Assert.DoesNotContain("whole path segment", block, StringComparison.Ordinal);
         Assert.Contains("comps[0].props.energyMax", block, StringComparison.Ordinal);
 
-        // 不带下标的裸名字照旧走整段判定 —— 这一改只放过「本来就是块前缀」的写法。
+        // 不带下标的裸名字照旧走整段判定 —— 只放过「本来就是块前缀」的写法。
         var (leaf, _, _) = Fixture.Run("get", "Bullet_Revolver", "--path", "damageAmount");
         Assert.Contains("whole path segment", leaf, StringComparison.Ordinal);
     }
@@ -1467,19 +1352,16 @@ public class GrammarTests
         var (stdout, _, code) = Fixture.Run("search", "NoSuchThingAnywhere");
         Assert.Equal(1, code);
 
-        // 「translations」不带限定就是承诺两侧都覆盖。真覆盖到了才准这么写;
-        // 而覆盖到了,上面那道闸就得是绿的 —— 两条互为对方的证明。
+        // 「translations」不带限定就是承诺两侧都覆盖,真覆盖到了才准这么写。
         var (blob, _, _) = Fixture.Run("search", "blob");
         if (!blob.Contains("Firefoam", StringComparison.Ordinal))
             Assert.DoesNotContain("translations", stdout, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// 「别的命令认这个参数」那句话原先只列前三条就收尾。`--limit` 挂在十一条命令上,
-    /// 而 `snapshot list --limit 5` 吃到的回话是
-    /// 「It is accepted by 'search' and 'get' and 'find'」—— 与「一共就这三条认」逐字同形,
-    /// 而真相是「几乎每条都认,不认的偏偏是你敲的这条」。后半句才是让人改对的那半句,
-    /// 也正好是被省略号吃掉的那个数量,与 <see cref="NameList"/> 那一轮清的是同一个形状。
+    /// 「别的命令认这个参数」那句话不许只列前三条就收尾:`--limit` 挂在十来条命令上,
+    /// 而「It is accepted by 'search' and 'get' and 'find'」与「一共就这三条认」逐字同形。
+    /// 被省略的那个数量正是让人改对的那半句(同 <see cref="NameList"/>)。
     /// </summary>
     [Fact]
     public void 别处认这个参数的名单不许悄悄截断()
@@ -1495,13 +1377,10 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 零行就是 exit 1,列 def 类型的那一支也不例外。R12 的退出码约定被四条命令守着、
-    /// 被这一支破着:`list --scope brrainz.harmony` 印「0 def types.」然后 exit 0 ——
-    /// 脚本按退出码分流会把它当成「查到了」,而唯一能纠正的信息在那一行散文里。
+    /// 零行就是 exit 1,列 def 类型的那一支也不例外 —— 印「0 def types.」再 exit 0,
+    /// 脚本按退出码分流会把它当成「查到了」。
     ///
-    /// 顺带:那句话也不许把 scope 造成的空说成快照的空。`values` 原先回
-    /// 「No def in this snapshot has a field path ending in 'defName'」——
-    /// 而不带 scope 时 defName 每个 def 都有。
+    /// 顺带:那句话也不许把 scope 造成的空说成快照的空(不带 scope 时 defName 每个 def 都有)。
     /// </summary>
     [Fact]
     public void 零行一律exit1且不把scope的空说成快照的空()
@@ -1520,7 +1399,7 @@ public class GrammarTests
                               values, StringComparison.Ordinal);
         Assert.Contains("--scope all,-ludeon.rimworld,-test.mod", values, StringComparison.Ordinal);
 
-        // 真不存在的路径照旧说「这快照里没有」,不许被上面那一改冲掉。
+        // 真不存在的路径照旧说「这快照里没有」。
         var (gone, _, gcode) = Fixture.Run("values", "zzznotafield");
         Assert.Equal(1, gcode);
         Assert.Contains("No def in this snapshot has a field path ending in 'zzznotafield'",
@@ -1528,12 +1407,8 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// `get` 的 `source` 行印的是**没有目录的裸文件名**,而文档此前一个字都没提这一列。
-    ///
-    /// 第六轮 C11 与 C41 各自浪费一轮在它上面:SKILL 的「What is out of range」宣称
-    /// 「没有从 def 回到可编写源码的路」,而这一列一直在打印文件名 —— 该有的预期没建立,
-    /// 不该有的期望也没掐掉,**给一半最费人**。承诺进了 SKILL,这里钉住它说的那件事:
-    /// 有这一列、值里没有目录分隔符、代码生成的 def 走的是占位符那一档。
+    /// `get` 的 `source` 行印的是**没有目录的裸文件名**。SKILL 承诺了这一列,这里钉住它说的
+    /// 那三件事:有这一列、值里没有目录分隔符、代码生成的 def 走的是占位符那一档。
     /// </summary>
     [Fact]
     public void source列印的是没有目录的裸文件名()
@@ -1556,14 +1431,13 @@ public class GrammarTests
     /// <summary>
     /// 用户自己划的那道线,计数句要念回去。
     ///
-    /// 三态计数(Tally)覆盖的是**工具造成的**收窄:行数上限、扫描没跑完。`--scope`
-    /// `--type` `--exact` `--path` 这些造成的收窄不在其中,于是
-    /// `search 狂暴 --type MentalStateDef` 报一个完整式的「52 defs.」—— 字面完整,
-    /// 实则「在我自己划的范围内完整」,而第六轮有三份轨迹据此下了「一个不漏」的结论。
+    /// 三态计数(Tally)覆盖的只是**工具造成的**收窄:行数上限、扫描没跑完。`--scope`
+    /// `--type` `--exact` `--path` 不在其中,于是那些查询报出一个字面完整的计数,
+    /// 实则「在我自己划的范围内完整」。
     ///
     /// 三头都要钉:给了就念、没给就一个字不多、**而且不许念错东西** ——
-    /// `get --type` 挑的是哪个 def 不是从字段里筛,念回去会被读成「去掉它还有更多字段」,
-    /// 而去掉它得到的是另一个 def。判据在声明层(OptionSpec.Narrows),不在这里。
+    /// `get --type` 挑的是哪个 def 不是从字段里筛,念回去会被读成「去掉它还有更多字段」。
+    /// 判据在声明层(OptionSpec.Narrows),不在这里。
     /// </summary>
     [Fact]
     public void 用户自己划的收窄要在计数句里念回去()
@@ -1595,11 +1469,7 @@ public class GrammarTests
 
     /// <summary>
     /// 值侧是**单语**的:`find` 查的是游戏加载时那一份文本,译文的另一侧只活在文本索引里。
-    ///
-    /// 第六轮实测的形状:中文快照上 `find --value "shield belt"` 回「本快照没有任何字段
-    /// 装着这段文本」,而 `search "shield belt"` 当场命中 —— 两句话都对,而前者与
-    /// 「这东西真不存在」逐字同形。C41 差点据此答错(AbilityDef Berserk 的简中 label
-    /// 是「激怒」而不是「狂暴」),C42 是同一族的另一面。
+    /// 于是 `find --value` 落空与「这东西真不存在」逐字同形,而 `search` 同一个词当场命中。
     ///
     /// 夹具是反过来的一份(英文值 + 中文注入),形状一样:`find --value 护盾腰带` 空手,
     /// 而文本索引里躺着 Apparel_ShieldBelt。真不存在的那种不许挂这句 ——
@@ -1625,15 +1495,11 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 表里两行的 label **与 def 类型都一样**,而问的人只想要其中一个。
+    /// 两行的 label **与 def 类型都一样**时要点出来:查询技术上成功了、表是完整的、
+    /// 没有任何异常信号,只是看得见的那几列不足以分辨(如 StatDef 的 TrapSpringChance
+    /// 与 PawnTrapSpringChance 简中 label 都是「陷阱触发率」)。
     ///
-    /// 第六轮 C42:`TrapSpringChance` 与 `PawnTrapSpringChance` 的简中 label 都是
-    /// 「陷阱触发率」,def_type 都是 StatDef,mod 都是 Core。这一类不能靠「多说一句边界」修
-    /// —— 查询技术上成功了,表是完整的,没有任何异常信号,只是看得见的那几列不足以判。
-    ///
-    /// 跨类型的那种(ConceptDef 与 ThingDef 都叫「护盾腰带」)表里当场分得开,不许出声:
-    /// 那时「表里没有列分得开」这半句本身是**假的**,一句为防误读而加的话自己先说错,
-    /// 比不说更坏。
+    /// 跨类型的那种表里当场分得开,不许出声 —— 那时「表里没有列分得开」这半句本身是假的。
     /// </summary>
     [Fact]
     public void 同类型里label逐字相同的行要点出来()
@@ -1649,15 +1515,11 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 一次 `find` 的命中横跨几种**路径形状**,得当场说出来。
+    /// 一次 `find` 的命中横跨几种**路径形状**,得当场说出来:`find stat Mass` 的上千行里
+    /// 混着一行 `statFactors[N].stat`,其余是 `statBases[N].stat`,而默认视图下没人会逐行
+    /// 核对 path 列 —— `find` 又恰恰是这套命令里用来做集合运算的那一个。
     ///
-    /// 第六轮 C31:`find stat Mass` 的 1229 行里混着 1 行 `statFactors[N].stat`,其余是
-    /// `statBases[N].stat`。拿这个结果集做集合差时那一行是个**静默假阴性** —— 表里确实印了
-    /// path 列,但默认 25 行的视图下没人会逐行核对形状,而 `find` 恰恰是这套命令里
-    /// 用来做集合运算的那一个。`values` 早有 matched_paths 表头,这是把同一条补到 find 上。
-    ///
-    /// 数的是**整个结果集**不是这一页:翻一页换一句结论是同一个病换个位置。
-    /// 只有一种形状时一个字不说。
+    /// 数的是**整个结果集**不是这一页。只有一种形状时一个字不说。
     /// </summary>
     [Fact]
     public void find的命中横跨多种路径形状时要说破()
@@ -1672,15 +1534,12 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// `--json` 里那个数据键**恒在**,零行时是空数组,不是整个消失。
-    ///
-    /// 第六轮实测:`find … --offset 9000 --json` 回的对象里根本没有 `matches`,消费方拿到的
-    /// 不是空数组而是 KeyError。而这份 JSON 上「翻过头了」「快照里没有」「工具崩了」
-    /// 形状完全一样 —— 都是那个键不在。翻页越界只是它最容易撞到的一副面孔,
-    /// 所以闸按**命令**过一遍七条查询命令的各种零行成因,而不是只钉越界那一种。
+    /// `--json` 里那个数据键**恒在**,零行时是空数组,不是整个消失 —— 键不在时消费方拿到的
+    /// 是 KeyError,而「翻过头了」「快照里没有」「工具崩了」在这份 JSON 上形状完全一样。
+    /// 闸按**命令**逐条过各种零行成因,不只钉越界那一种。
     ///
     /// 反向也要钉:`find` 的两张表互斥,认领的那张有、另一张不许平白出现 ——
-    /// 空数组在机器侧读作「查过了,没有」,凭空多一个就是凭空多一句假话。
+    /// 空数组在机器侧读作「查过了,没有」。
     /// </summary>
     [Fact]
     public void json的数据键零行时是空数组而不是整个消失()
@@ -1697,10 +1556,8 @@ public class GrammarTests
             ("types",     ["list", "--scope", "all,-ludeon.rimworld,-test.mod"]),
             ("truncated", ["snapshot", "truncated", "--def", "zzznothing"]),
             ("matches",   ["code-search", "zzzznothing"]),
-            // 八轮审计:上面这张表原先到此为止,而**表里没有的命令恰恰是没兑现的那几条**。
-            // get / keyed / inherit / read 四条一个都没认领过键,零行时 --json 只回 notes ——
-            // 闸全绿的同时,SKILL.md 那句「missing key 只可能是你问错了键」在四条命令上是假的。
-            // 用例表按命令补齐,认领动作本身也挪进了声明层(JsonKeySpec.Rows)。
+            // 用例表按命令补齐:漏掉一条命令,SKILL.md 那句「missing key 只可能是你问错了键」
+            // 在它上面就是假的。认领动作本身在声明层(JsonKeySpec.Rows)。
             ("defs",      ["get", "zzznosuchdef"]),
             ("keys",      ["keyed", "zzznosuchkey"]),
             ("nodes",     ["inherit", "zzznosuchnode"]),
@@ -1736,12 +1593,8 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// <c>--path</c> 重复给是**并集**,而计数句念回去的那几个必须都真的生效过。
-    ///
-    /// 八轮审计:`fields` 声明的是 Multi + 「Repeat it to widen the selection」,
-    /// 拿到手却只用了第一个 —— 而 <c>Narrows</c> 让两个 --path 都被念进
-    /// 「within --path A --path B」。于是输出声称两个过滤器都在,结果只按 A 算,
-    /// 且与一个正确结果逐字同形:第二个 --path 独有的那些行一条不剩,没有任何痕迹。
+    /// <c>--path</c> 重复给是**并集**,而计数句念回去的那几个必须都真的生效过 ——
+    /// 只用第一个而把两个都念进「within --path A --path B」,输出与一个正确结果逐字同形。
     ///
     /// 判据是**总数的单调性**:并集不可能小于任一单项。数在分页之前数,所以与 --limit 无关。
     /// </summary>
@@ -1776,11 +1629,9 @@ public class GrammarTests
 
     /// <summary>
     /// <c>--limit all</c> 解除**行上限**,这是全系统一句话的总纲(SKILL.md),不分命令。
-    ///
-    /// 八轮审计:`keyed` 是唯一把 <c>all</c> 翻译成 <see cref="Limits.MaxLimit"/> 的地方,
-    /// 于是 4353 条命中回 2000 条,而截断句给的补救是「pass --limit all for the rest」——
-    /// 指着调用方刚刚用过的那个参数。夹紧本身也不合口径:MaxLimit 管的是「--limit 收多大的
-    /// 数字」,而 <c>all</c> 根本不走那条路。
+    /// 把 <c>all</c> 翻译成 <see cref="Limits.MaxLimit"/> 是错的:MaxLimit 管的是「--limit 收
+    /// 多大的数字」,而截断句给的补救「pass --limit all for the rest」会指着调用方刚用过的
+    /// 那个参数。
     /// </summary>
     [Fact]
     public void limit_all在keyed上也解除行上限()
@@ -1800,12 +1651,9 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// <c>--placeholders</c> 在**取页之前**筛。
-    ///
-    /// 八轮审计:原先是取完这一页再在页内 <c>Where(r =&gt; r.Placeholder)</c>,于是
-    /// 「第一页里没有占位」被当成「一条占位都没有」说了出去,而那句话的分母还是全体命中数。
-    /// 默认 25 行时它覆盖的是两千多条里的前二十五条 —— 这个开关唯一的用途就是回答
-    /// 「这批有没有没译的」,而它给的是一个假阴性,形状与真阴性逐字相同。
+    /// <c>--placeholders</c> 在**取页之前**筛:页内 <c>Where(r =&gt; r.Placeholder)</c> 会把
+    /// 「第一页里没有占位」说成「一条占位都没有」,而这个开关唯一的用途就是回答
+    /// 「这批有没有没译的」,假阴性与真阴性逐字相同。
     ///
     /// 语料把唯一那条占位排在 2100 条的最末,页内筛必然摸不到它。
     /// </summary>
@@ -1829,12 +1677,9 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// <c>--offset</c> 在 <c>keyed</c> 的**精确 key 命中**那一路也要生效。
-    ///
-    /// 八轮审计的后续:那一路把 offset 读进来就再没用过,于是 <c>--offset 1</c> 与
-    /// <c>--offset 0</c> 印出逐字相同的表 —— 参数没生效这件事没有任何一个字承载,
-    /// 读的人只能默认它生效了。翻过头也一样要说破,不能落回「没有这个 key」那句
-    /// (一次翻页读成一次否定,是这一轮反复清的形状)。
+    /// <c>--offset</c> 在 <c>keyed</c> 的**精确 key 命中**那一路也要生效 —— 读进来不用,
+    /// <c>--offset 1</c> 与 <c>--offset 0</c> 印出逐字相同的表。
+    /// 翻过头也要说破,不能落回「没有这个 key」(一次翻页会被读成一次否定)。
     /// </summary>
     [Fact]
     public void keyed精确命中那一路的offset也生效()
@@ -1852,14 +1697,11 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 一份没量过磁盘那一层的库,不许让「磁盘上没有」由沉默来承载。
+    /// 一份没量过磁盘那一层的库,不许让「磁盘上没有」由沉默来承载:<c>--no-harvest-translations</c>
+    /// 与没配 <c>mod_roots</c> 都造得出这种库,而 origin 那一列照样写着「in effect」。
     ///
-    /// 收割从 v7 起默认开,但 <c>--no-harvest-translations</c> 与没配 <c>mod_roots</c> 还能造出
-    /// 没量过的库,而它印出来的 origin 那一列照样写着「in effect」—— 读的人自然读出「另有
-    /// on disk 的没印出来」,可那一层一行也没有。
-    ///
-    /// 反向也要成立:没配 mod_roots 的机器上根本没有第二层,那句话就是每次查询都跟着的
-    /// 一句废话 —— 全套基线都是在这种配置下录的,它们不许动。
+    /// 反向也要成立:没配 mod_roots 的机器上根本没有第二层,那句话就成了每次查询都跟着的
+    /// 一句废话。
     /// </summary>
     [Fact]
     public void 没量过磁盘那一层的库要说破而不是沉默()
@@ -1919,13 +1761,11 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 上一条的**声明侧**:一个键要么在声明里就说明白它恒在(<see cref="JsonKeySpec.Rows"/>),
-    /// 要么在它自己那句 <c>What</c> 的开头说明白它是有条件的。两者都不占的键会掉进裂缝 ——
-    /// 上一条那张用例表按命令逐条走,而漏掉一条命令的代价正是八轮审计翻出来的那四条。
+    /// 数据键的**声明侧**:一个键要么在声明里就说明白它恒在(<see cref="JsonKeySpec.Rows"/>),
+    /// 要么在它自己那句 <c>What</c> 的开头说明白它是有条件的 —— 两者都不占的键会掉进裂缝。
     ///
-    /// 判据取措辞的开头而不是全文搜关键词:那句话是写给消费方读的,「with --outline: …」
-    /// 这种前置从句本身就是「没给这个开关时它不在」的说明,把它与 Rows 钉成同一件事,
-    /// 文档与行为就没有各自漂移的余地。
+    /// 判据取措辞的开头而不是全文搜关键词:「with --outline: …」这种前置从句本身就是
+    /// 「没给这个开关时它不在」的说明,与 Rows 钉成同一件事就没有各自漂移的余地。
     /// </summary>
     [Fact]
     public void 每个行数组键要么声明恒在要么在措辞开头说明它有条件()
@@ -1952,12 +1792,8 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 扫了几棵树,要跟 `sources list` 列的那几棵对得上账。
-    ///
-    /// 第六轮实测:`code-search` 说「across 23 source trees」,`sources list` 同一台机器上
-    /// 列 33 棵 —— 两个数谁也不解释谁,而八份答卷里有四份把「23 棵里一次都没出现」
-    /// 当成「全库唯一」用掉了。差额是十棵空目录(旧别名残留,从没反编译过),
-    /// 但读的人无从知道它不是「十棵没扫的代码」。
+    /// 扫了几棵树,要跟 `sources list` 列的那几棵对得上账 —— 两个数谁也不解释谁时,
+    /// 「扫过的树里一次都没出现」会被当成「全库唯一」用掉,而差额可能只是空目录。
     ///
     /// 闸盯两头:数要写成「N of M」而不是光秃秃一个 N,并且要说破差额是什么;
     /// 树都非空时(M == N)不许多话,否则这句话退化成每次都挂的免责声明。
@@ -1972,7 +1808,7 @@ public class GrammarTests
         Assert.Contains("the rest hold no file matching --files '*.cs'", miss, StringComparison.Ordinal);
         Assert.Contains("never been decompiled", miss, StringComparison.Ordinal);
 
-        // 有命中的那句用的是同一个取景,不许只修零结果那一支。
+        // 有命中的那句用同一个取景。
         var (hit, _, hcode) = Fixture.Run("code-search", "props");
         Assert.Equal(0, hcode);
         Assert.Contains("2 of 3 source trees on disk", hit, StringComparison.Ordinal);
@@ -1989,14 +1825,12 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// `code-search` 零命中时原先只给一种别的解释:「你要找的其实是 def 吧,去 search/find」。
-    /// 而这棵树是反编译产物 —— 作者写的注释一条都没留下(本机 23 棵树 19467 个文件里
-    /// `///` 零条,`^\s*//` 的 1369 条里 1334 条是 ILSpy 自己的备注),局部变量名也没留下
-    /// (`numN = ` 有 17212 条)。**照注释或照记忆里的局部变量名去 grep,永远零命中**,
-    /// 而那句话把人推去换数据源,是把已知盲区指成了别的方向。
+    /// `code-search` 零命中时要说破反编译抹掉了什么:树是 ILSpy 产物,作者写的注释一条不剩
+    /// (剩下的 `//` 基本是 ILSpy 自己的备注),局部变量名也没了(一律 `numN`)。
+    /// **照注释或照记忆里的局部变量名去 grep,永远零命中** —— 只说「你要找的其实是 def 吧」
+    /// 是把已知盲区指成了别的方向。
     ///
-    /// 两条触发都要有落点,而不该触发的那条也要证明它闭着嘴 —— 否则这句话退化成
-    /// 每次落空都挂的免责声明。
+    /// 两条触发都要有落点,而不该触发的那条也要证明它闭着嘴。
     /// </summary>
     [Fact]
     public void 代码零命中要说破反编译抹掉了什么()
@@ -2020,11 +1854,8 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 反编译产物**不重复父类的成员**,于是 `read MapPortal.cs --member Destroy` 落空,
-    /// 而 Destroy 就在两跳之外的 Thing 里 —— `MapPortal : Building`,一行之内看得见。
-    /// 原先那句话只给「跑 --outline 看看这文件有什么」和一句没带参数的
-    /// 「code-search 搜的是文本本身」:前者确认它不在,后者指了条路却不说往哪走,
-    /// 而「这文件里没有」与「这个类型没有这个成员」是两件事,读的人会读成后者。
+    /// 反编译产物**不重复父类的成员**,于是按成员名读一个文件会落空,而它就在基类里 ——
+    /// 「这文件里没有」与「这个类型没有这个成员」是两件事,读的人会读成后者。
     ///
     /// 基类型就在类声明那一行上,算得出来就算,不猜。
     /// </summary>
@@ -2046,9 +1877,8 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 「Global options」这个词本身就在暗示位置自由,而解析器要求它写在命令**之后**。
-    /// `rimsearcher --json types` 于是 exit 2 —— 而人是照着 --help 那个小标题写的。
-    /// 错误消息上一轮已经说清了(Runner 那段注释就是为它写的),抵触的那一头没动。
+    /// 「Global options」这个词本身在暗示位置自由,而解析器要求它写在命令**之后** ——
+    /// 位置约束要写在那个小标题自己那一行上。
     /// </summary>
     [Fact]
     public void 全局参数的位置约束要写在它自己的标题上()
@@ -2065,24 +1895,23 @@ public class GrammarTests
             Assert.Contains("after the command", line, StringComparison.Ordinal);
         }
 
-        // 而写在前面时那条纠正话里不许留多余空格 —— --json 没有占位符。
+        // 纠正话里不许留多余空格 —— --json 没有占位符。
         var (_, err, code) = Fixture.Run("--json", "types");
         Assert.Equal(2, code);
         Assert.Contains("... --json'.", err, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// 第六轮 C31:「这个值是哪一层写的」完全无解 —— <c>get</c> 给合并后的值,<c>inherit</c>
-    /// 明说抽象节点在快照里没有自己的字段表,两条命令各自诚实、拼起来正面答不了。绕法
-    /// (证人兄弟法)可靠但要自己发明。<c>inherit --path</c> 把那个绕法收进命令,而它的
-    /// 全部价值就在**分母**上:分母算错,每一层都看着「后代全都带」,于是每一层都像声明者。
+    /// <c>inherit --path</c> 用证人兄弟法回答「这个值是哪一层写的」(<c>get</c> 给的是合并后的
+    /// 值,抽象节点在快照里没有自己的字段表),而它的全部价值就在**分母**上:分母算错,
+    /// 每一层都看着「后代全都带」,于是每一层都像声明者。
     ///
-    /// 两个方向各有各的错法,红法也不同:
+    /// 两个方向各有各的错法:
     ///   ① 被问的那个 def 算进自己的分母 —— 它当然带着这条路径,于是最近那一层
     ///      恒为「1 of 1」,而那正是读的人最想拿来定罪的一行。
     ///   ② 异构桶的后代掉出分母 —— <c>xml_nodes.def_type</c> 是 XML 根元素名,
-    ///      <c>defs.def_type</c> 是桶名,硬要求相等会把整批异构桶的后代丢掉(R2 已经
-    ///      为 inherits_from 踩过同一脚)。分母小了,结论就往「是这一层」偏。
+    ///      <c>defs.def_type</c> 是桶名,硬要求相等会把整批异构桶的后代丢掉。
+    ///      分母小了,结论就往「是这一层」偏。
     /// </summary>
     [Fact]
     public void 证人的分母既不算上自己也不许漏掉异构桶的后代()
@@ -2113,8 +1942,7 @@ public class GrammarTests
     /// 参照值不在场时,<c>same_value</c> 这一列整个不出。
     ///
     /// 抽象节点自己没有字段表,于是没有「这个 def 上的那个值」可比。照印一列恒为 0 的数,
-    /// 读起来是「一个兄弟都不同意」—— 一个比不印强烈得多的结论,而它是凭空的。
-    /// 这是「错的输出与对的输出同形」的又一例:0 既可以是量过为零,也可以是没量。
+    /// 读起来是「一个兄弟都不同意」—— 而 0 既可以是量过为零,也可以是没量。
     /// </summary>
     [Fact]
     public void 没有参照值时证人表不许印一列恒零的同值数()
@@ -2139,7 +1967,7 @@ public class GrammarTests
     ///
     /// 字段表在导出时被截过的 def 会「没有这条路径」而其实有 —— 正好是让一层被误判成
     /// 「没声明」的那个方向,所以这句话非说不可。但拿整库的数来说就恒为非零,而恒真的
-    /// 免责声明会被学着跳过(00 论据 3),那句话也就等于没说。
+    /// 免责声明会被学着跳过。
     /// </summary>
     [Fact]
     public void 截断免责只在这次的分母真被截时才说()
@@ -2152,7 +1980,7 @@ public class GrammarTests
         Assert.Contains(Caveat, withTruncated, StringComparison.Ordinal);
 
         // 换成问 Bullet_Revolver 自己,它被排除在分母外,剩下的两条都没被截 —— 不许出。
-        // 整库照旧有被截的 def,所以拿整库计数的实现在这一格就是红的。
+        // 整库照旧有被截的 def,所以拿整库计数的实现在这一格红。
         var (clean, _, _) = Fixture.Run("inherit", "Bullet_Revolver", "--path", "thingClass");
         Assert.DoesNotContain(Caveat, clean, StringComparison.Ordinal);
     }
@@ -2161,9 +1989,8 @@ public class GrammarTests
     /// 证人表必须自己说破逆命题不成立。
     ///
     /// 「with_path 追平 other_defs」只与「这一层声明了它」相容,并不蕴含它 —— 每个后代
-    /// 各写各的一份,印出来逐字相同。实测 vanilla 的 <c>BaseBullet --path damageAmountBase</c>
-    /// 就是 61 of 61,而 61 个子弹各写各的伤害;same_value 只有 9 才是那句话的证据。
-    /// 一张只出数不说读法的表,读的人默认会往强的那边读。
+    /// 各写各的一份,印出来逐字相同(vanilla 的 <c>BaseBullet --path damageAmountBase</c>
+    /// 是 61 of 61,而 61 个子弹各写各的伤害)。真正的证据是 same_value。
     /// </summary>
     [Fact]
     public void 证人表要说破全都带着并不等于这一层写的()
@@ -2174,18 +2001,10 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 第七轮 T7:「快照与当前安装的游戏一致」这句话要自己说清**没比的是什么**。
-    ///
-    /// 原句到「same mods, same order, same version」为止 —— 它把范围列全了,而
-    /// **八份盲测轨迹一份都没问它比的是什么**,一致地读成了「快照 = 现在的游戏数据」的背书。
-    /// 其中一份据此对「我刚改了自己 mod 里的音效文件,生效没有」下了否定判决,而那恰恰是
-    /// 这个比较结构上不可能察觉的那一类改动:mod 列表、顺序、版本号三样全都不变。
-    ///
-    /// 与上一轮「33 棵树 vs 23 棵树」同形:工具把自己的口径老老实实印出来,读的人一致
-    /// 把那句自我限定读成了背书。所以正面那半在场不算数,**没比的那半必须同时在场**。
-    ///
-    /// 这道闸能存在,靠的是 <c>mods_config</c> 进了配置层 —— 那条路径原先写死在代码里,
-    /// 于是这条分支在测试里根本到不了,而到不了的分支上挂的话红不了。
+    /// 「快照与当前安装的游戏一致」这句话要自己说清**没比的是什么**:比的只有 mod 列表、
+    /// 顺序、版本号,而改动 mod 内部的文件三样全都不变 —— 一句范围列全了的自我限定
+    /// 照样会被读成「快照 = 现在的游戏数据」的背书。正面那半在场不算数,
+    /// **没比的那半必须同时在场**。
     /// </summary>
     [Fact]
     public void 一致这句话要同时说清没比的是什么()
@@ -2204,14 +2023,9 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 第七轮 T6:披露句要跟着调用方**自己已经划掉**的那一维一起收。
-    ///
-    /// 实测 `values maxSimultaneous --type SoundDef` 的表头已声明「SoundDef (1231 of 1231)」——
-    /// 已经滤干净了 —— 而脚注仍在说「the def types that carry this path (**ThingDef**) also
-    /// hold 2 defs …」。那不是噪音,是在一张与它无关的表下面挂了一个完整性告警。
-    ///
-    /// 代价看起来是 0 次调用,列进靶子是因为它侵蚀的是披露机制本身:**一旦有一句被发现
-    /// 是过期的,其余每一句都要被重新审视**,而这套输出的全部价值就在那些句子上。
+    /// 披露句要跟着调用方**自己已经划掉**的那一维一起收 —— 在一张已经滤干净的表下面挂
+    /// 一个针对别的类型的完整性告警,不是噪音而是错话,而一句被发现过期,其余每一句
+    /// 都要被重新审视。
     /// </summary>
     [Fact]
     public void 完整性脚注要跟着自己划的类型一起收()
@@ -2231,16 +2045,12 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 第七轮 T5:目录在而里面一个 .cs 都没有,是关于**磁盘**的事实,与「这棵树在不在这次
-    /// 的计划里」正交 —— 而实现原先把计划外的一律短路成「not in the snapshot」。
-    ///
-    /// 后果有两层。表面一层:汇总行照旧报「0 never built」,而磁盘上十棵是空的,字面为假。
-    /// 更贵的一层:<c>code-search</c> 的页脚正指着这一列(「'sources list' says which of
-    /// those have never been decompiled」),指到的是一个对这十棵永远不发声的字段 ——
-    /// **一条指路指了个空**,而 33 与 23 的差额恰好就是它们。
+    /// 目录在而里面一个 .cs 都没有,是关于**磁盘**的事实,与「这棵树在不在这次的计划里」
+    /// 正交 —— 把计划外的一律短路成「not in the snapshot」,汇总行的「0 never built」就是
+    /// 假的,而 <c>code-search</c> 的页脚正指着这一列。
     ///
     /// 三个断言各守一段:空这件事要单成一档、files 列要把 0 与「没有这个目录」分开、
-    /// 而 `sources sync` 填不了的那些要说破(不说破就是换了一条走不通的指路)。
+    /// 而 `sources sync` 填不了的那些要说破。
     /// </summary>
     [Fact]
     public void 空的源码树要自成一档而不是被计划外那句话吸收掉()
@@ -2250,7 +2060,7 @@ public class GrammarTests
         // zz.emptytree 在计划外,而它是空的 —— 空压得住计划内外。
         Assert.Matches(new Regex(@"zz\.emptytree\s+0\s+empty", RegexOptions.Multiline), stdout);
 
-        // 汇总行单列一档。少了它,「0 never built」就是这份磁盘状态的假陈述。
+        // 汇总行单列一档。
         Assert.Contains("holding no .cs file", stdout, StringComparison.Ordinal);
 
         // 指路要走得通:sync 计划里没有它们,那句「sync rebuilds them」对它们不成立。
@@ -2259,14 +2069,11 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 第七轮 T3:反查落空时要说破**这个索引里装的只是值**。
+    /// 反查落空时要说破**这个索引里装的只是值**:导出器见 null 直接 return(DefExporter),
+    /// 那条路径从来没进过索引,于是「这个字段不存在」与「它在,只是每个 def 上都是 null」
+    /// 在输出上完全同形。
     ///
-    /// 导出器见 null 直接 return(DefExporter:284),那条路径从来没进过索引。于是
-    /// 「这个字段不存在」与「它在,只是每个 def 上都是 null」在输出上完全同形 ——
-    /// 六份轨迹独立踩,其中三次差点交出反向结论(「本体标了但没人用」「没被挡,是运气」)。
-    ///
-    /// <c>get</c> 早就为**单个 def** 说过这句话(五轮 F4),而 find / values / fields
-    /// 三条反查路一直没说。三处都判,因为补一处剩两处的输出一字不变。
+    /// find / values / fields 三条反查路都判,因为补一处剩两处的输出一字不变。
     /// </summary>
     [Fact]
     public void 反查落空要说破索引里装的只是值()
@@ -2289,13 +2096,11 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 第七轮 T4:默认值折叠按「谁设的值」筛,而提问常常是「这个列表有几项」——
-    /// 两个维度正交,却归同一个开关管。
+    /// 默认值折叠按「谁设的值」筛,而提问常常是「这个列表有几项」—— 两个维度正交,
+    /// 却归同一个开关管。一整个列表项被折光时,「这个列表只有一项」就成了看得见的形状。
     ///
-    /// 一整个列表项被折光时,「这个列表只有一项」就成了看得见的形状,而真值是它更长。
-    /// 实测一份轨迹正是这么判的 subSound 数量。下标前缀不受折叠影响(matchedPaths 是
-    /// 折叠前的),所以这件事算得出来 —— **两边都要说**:藏了就点名,没藏就把那句
-    /// 正面的话给出来。靠沉默承载「没藏」正是这套输出一直在清的东西。
+    /// 下标前缀不受折叠影响(matchedPaths 是折叠前的),所以这件事算得出来 ——
+    /// **两边都要说**:藏了就点名,没藏就把那句正面的话给出来。
     /// </summary>
     [Fact]
     public void 折叠藏掉整个列表项时要点名没藏时要说没藏()
@@ -2312,12 +2117,10 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 第七轮 T1:嵌套 <c>&lt;li Class="…"&gt;</c> 的运行时类型这一维,要按导出器版本分说。
-    ///
-    /// 0.2.0 起导出器给列表元素发一条 <c>&lt;path&gt;.Class</c>,于是「哪些 ThingDef 挂了
-    /// 这个节点」这类 def 侧最常见的反查第一次有了查法。而**老快照对 `find Class X` 回的
-    /// 那个零,与「量过了、确实没人用它」逐字同形** —— 给索引加一维恰恰是最容易造出
-    /// 这个形状的改动,所以两个世界各要一个落点:主快照标 0.2.0,other 那份标 0.1.0。
+    /// 嵌套 <c>&lt;li Class="…"&gt;</c> 的运行时类型这一维,要按导出器版本分说:0.2.0 起
+    /// 导出器给列表元素发一条 <c>&lt;path&gt;.Class</c>,而**老快照对 `find Class X` 回的那个零,
+    /// 与「量过了、确实没人用它」逐字同形**。两个世界各要一个落点:主快照标 0.2.0,
+    /// other 那份标 0.1.0。
     /// </summary>
     [Fact]
     public void 嵌套类型这一维量没量过要按导出器版本分说()
@@ -2340,21 +2143,16 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 第八轮 ep34,全场最贵的一次险出错(cost 3)。
+    /// <c>ThingDef.ResolveReferences</c> 之类的引擎代码会给**每一个** def 塞上同一个值
+    /// (如 <c>soundImpactDefault</c>),而 <c>code_default</c> 那一列能证的只有「与刚 new
+    /// 出来的实例不同」,读的人一律读成「有人挑了它」。
     ///
-    /// <c>get Bullet_BeamRepeater</c> 打出 <c>soundImpactDefault  BulletImpact_Ground  no</c>,
-    /// 四条线索(字段名带 Impact、值叫 BulletImpact_Ground、官方光束有、用户自己的光束
-    /// 一模一样)全指向「这就是命中音的挂点」,而真相是 <c>ThingDef.ResolveReferences</c>
-    /// 给**每一个** ThingDef 都塞了这个值,字段语义还是反的。
-    ///
-    /// <c>code_default</c> 那一列能证的只有「与刚 new 出来的实例不同」,读的人一律读成
-    /// 「有人挑了它」。分辨「XML 写的」与「引擎填的」在这份快照里没有产地 —— 导出跑在
+    /// 分辨「XML 写的」与「引擎填的」在这份快照里没有产地:导出跑在
     /// <c>StaticConstructorOnStartup</c>,resolve 早已做完,要插进去只能上 Harmony,
     /// 而 DataMod 是刻意无依赖的。所以不猜成因,**只报可核对的事实**:同类型里有几个
     /// def 也是这个值。
     ///
-    /// 两边都判。少了负面那半,「没说」就成了「都是这个 def 自己的」的沉默担保 ——
-    /// 那正是这套输出一直在清的东西。
+    /// 两边都判 —— 少了负面那半,「没说」就成了「都是这个 def 自己的」的沉默担保。
     /// </summary>
     [Fact]
     public void 同类型大多数都有的值要当场说破而不是让人读成有人挑过()
@@ -2363,8 +2161,7 @@ public class GrammarTests
         var (shared, _, _) = Fixture.Run("get", "Apparel_ShieldBelt");
         Assert.Contains("not that this def chose it", shared, StringComparison.Ordinal);
         Assert.Contains("soundImpactDefault (9)", shared, StringComparison.Ordinal);
-        // 名单不许截:实测第一版把 ep34 那一条(2658)截进了「and 2 more」,
-        // 于是「不在名单里」同时意味着两件事。这一条守的就是那个。
+        // 名单不许截 —— 截了的话「不在名单里」同时意味着两件事。
         var brackets = shared.Split("the count in brackets:")[1].Split('\n')[0];
         Assert.DoesNotContain("more", brackets, StringComparison.Ordinal);
 
@@ -2382,8 +2179,6 @@ public class GrammarTests
     ///
     /// 落空那一句是这条的要害。`modlist show --find` 找不到时,唯一诚实的话是
     /// 「没有哪份列表点它的名」,**不是**「本机没装」—— 后者这条命令根本没看过。
-    /// 实现里那句话写对了,而这道闸是它的产地凭据:说宽一格,读的人就会拿一次
-    /// exit 1 当成「这个 mod 不存在」,而那正是这套输出一直在清的那种同形。
     /// </summary>
     [Fact]
     public void 列表点没点名与快照覆没覆盖是两个问题()
@@ -2405,8 +2200,8 @@ public class GrammarTests
     // ---- types 并入 list(功能收束)----
 
     /// <summary>
-    /// <c>types</c> 与 <c>list</c> 问的是同一张表的两个层级:「有哪些桶」与「桶里有哪些 def」。
-    /// 并成一条之后,**不给 def 类型**就是问上面那一层 —— 而这一层原先只有 exit 2。
+    /// <c>types</c> 与 <c>list</c> 问的是同一张表的两个层级:「有哪些桶」与「桶里有哪些 def」,
+    /// **不给 def 类型**就是问上面那一层。
     ///
     /// 判的是这条路走得通且答的是 def 类型:退出码、计数句的名词、表头。
     /// 不判逐字措辞 —— 那一份在字节基线里。
@@ -2420,7 +2215,7 @@ public class GrammarTests
         Assert.Matches(@"^\d+( of \d+)? def types?\.", bare);
         Assert.Contains("def_type", bare, StringComparison.Ordinal);
 
-        // 老名字还认(别名),且与裸 list 逐字同形 —— 两个拼法一个产地。
+        // 老名字还认(别名),且与裸 list 逐字同形。
         var (aliased, _, acode) = Fixture.Run("types");
         Assert.Equal(0, acode);
         Assert.Equal(bare, aliased);
@@ -2431,8 +2226,7 @@ public class GrammarTests
     /// **开查之前**声明 —— 否则零行时那个键整个消失,消费方拿到的不是空数组而是 KeyError,
     /// 与「工具崩了」同形(<see cref="Report.Promises"/> 的产地注释)。
     ///
-    /// 反向也判:认领的那张有、另一张不许平白出现。空数组在机器侧读作「查过了,没有」,
-    /// 凭空多一个就是凭空多一句假话。
+    /// 反向也判:认领的那张有、另一张不许平白出现 —— 空数组在机器侧读作「查过了,没有」。
     /// </summary>
     [Fact]
     public void list按有没有给def类型换数据键且两边互斥()
@@ -2449,10 +2243,9 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// <c>--class</c> 与 <c>--offset</c> 只在给了 def 类型时才有意义。并条之后它们仍然
-    /// 声明在这条命令上,于是「不给类型还传了它们」有了一个新的沉默口子:照单收下、
-    /// 悄悄不生效,输出里没有任何迹象 —— 与 <see cref="CommandContext.Limit"/> 那条注释
-    /// 记的 <c>--limit 5000</c> 被静默夹紧是同一种事故。
+    /// <c>--class</c> 与 <c>--offset</c> 只在给了 def 类型时才有意义,而它们仍然声明在这条
+    /// 命令上 —— 「不给类型还传了它们」不许照单收下再悄悄不生效
+    /// (同 <see cref="CommandContext.Limit"/> 那条静默夹紧)。
     ///
     /// 所以当场退 2,并且**说清该往哪走**:桶归属这个问题下面那条零行分流早就会答。
     /// </summary>

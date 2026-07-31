@@ -49,16 +49,12 @@ public sealed class SearchCommand : Command
         var how = "full-text";
         var addedBySubstring = 0;
 
-        // 三级匹配「命中第一级就停」曾把答案漏在第二级里:FTS 分词按分隔符与驼峰**词首**切,
-        // `VoidNode` 于是找不到 `MonolithGleamingVoidNode` —— 查询词落在名字中段。
-        // 实测里这条漏洞的后果不是「少一行」,而是调用方拿 `--limit all` 复跑、看到逐字相同的
-        // 输出,反而**二次确认**了「22 条即全集」这个错结论。补一遍子串扫描,别让人自己去拆词。
+        // FTS 分词按分隔符与驼峰**词首**切,查询词落在名字中段时命中不了
+        // (`VoidNode` 找不到 `MonolithGleamingVoidNode`),所以补一遍子串扫描。
         if (IsCompoundToken(query))
         {
             // 去重在 SQL 侧对**整个 FTS 命中集**做,不是对已显示的行做;全量算进 total,
-            // 只取得下的进 rows。两条都不能省:按已显示的行去重会把没显示出来的 FTS 命中
-            // 当成新增(`--limit 3` 报「3 of 41」),先 Take 再累加则让 M 跟着 --limit 缩
-            // (报「3 of 22」而真值 23)—— 两种都是这条补丁本身要修的那个错结论的翻版。
+            // 只取得下的进 rows —— 否则 total 会跟着 --limit 变形。
             var extra = ctx.Db.NamesContainingUnmatched(query, scope, type);
             if (extra.Count > 0)
             {
@@ -66,10 +62,8 @@ public sealed class SearchCommand : Command
                 var room = Math.Max(0, limit.Effective - rows.Count);
                 if (room > 0)
                 {
-                    // 结果集是「FTS 命中」接着「子串补扫」两段拼起来的,翻页要在**拼好的那一条
-                    // 序列**上走。FTS 段已经在 SQL 里跳过了 offset;跳完还有剩,就说明这一页
-                    // 落在了第二段里,余下的偏移量从这里接着扣。两段各自跳一次 offset 是最容易
-                    // 犯的那个错 —— 第二页会把第一页的补扫结果原样再印一遍。
+                    // 结果集是「FTS 命中」接「子串补扫」两段拼起来的,翻页走的是拼好的那一条
+                    // 序列:FTS 段已经在 SQL 里跳过 offset,余下的偏移量从这里接着扣。
                     var skipHere = Math.Max(0, offset - ftsTotal);
                     var (more, _) = ctx.Db.ByNames([.. extra.Skip(skipHere).Take(room)], room);
                     rows = [.. rows, .. more];
@@ -78,11 +72,8 @@ public sealed class SearchCommand : Command
             }
         }
 
-        // 译文原文那一侧的兜底。FTS 只索引 translated,于是一份中文快照上,每个 def 的英文
-        // 原名都在库里躺着却一个也搜不到 —— 而落空那句话还写着「covers … and translations」。
-        //
-        // **必须排在模糊回退之前**:反过来的话,英文查询会先撞上一批「拼写相近的中文名」,
-        // 而那份输出读起来就是「这东西没有」。真答案被拼写噪声挤掉,是同形错答案的又一种。
+        // 译文原文那一侧的兜底:FTS 只索引 translated,中文快照上英文原名一个也搜不到。
+        // **必须排在模糊回退之前** —— 否则英文查询会先被一批拼写相近的中文名挤掉真答案。
         if (rows.Count == 0 && offset == 0)
         {
             var byOriginal = ctx.Db.NamesByTranslationOriginal(query, scope, type);
@@ -98,20 +89,18 @@ public sealed class SearchCommand : Command
             }
         }
 
-        // 模糊回退只在**第一页**做。翻到末页之后 rows 自然为空,那时改口给一批「拼写相近的
-        // 名字」,读起来就像前面那些命中不作数了 —— 而它们明明是同一次查询的前几页。
+        // 模糊回退只在**第一页**做:末页之后 rows 也为空,那时给一批「拼写相近的名字」
+        // 会读成前面那些命中不作数。
         if (rows.Count == 0 && offset == 0)
         {
-            // 02-7 的对策:调用方不该需要知道 '*' 才搜得到复合名,更不该知道打错一个字母就归零。
-            // 候选先去重再打分:AllDefNames 是**按 def 一行**给的,而 Firefoam 那样一名两 def
-            // 的名字在候选集里会出现两次,于是 `--limit 5` 里有一格花在同一个名字上。
+            // 候选先去重再打分:AllDefNames 是**按 def 一行**给的,一名两 def 的名字
+            // (如 Firefoam)在候选集里会出现两次。
             var names = ctx.Db.AllDefNames(scope).Distinct(StringComparer.Ordinal).ToList();
             var (bare, kind) = FuzzyMatcher.StripKindPrefix(query);
             var ranked = FuzzyMatcher.Rank(names, bare).Take(limit.Effective).Select(t => t.Text).ToList();
             if (ranked.Count > 0)
             {
-                // total 用 ByNames 报的**行数**,不是名字数 —— 一个名字带两行时,
-                // 按名字数报会让页脚的 M 比表里的行还少。
+                // total 用 ByNames 报的**行数**而不是名字数 —— 一个名字可以带两行。
                 (rows, total) = ctx.Db.ByNames(ranked, limit.Effective);
                 how = kind is null ? "fuzzy" : $"fuzzy (ignoring the '{kind}:' prefix, which defs do not use)";
                 ctx.Report.Notice(NoticeKind.Boundary,
@@ -131,24 +120,14 @@ public sealed class SearchCommand : Command
         }
         if (rows.Count == 0 && offset > 0)
         {
-            // 翻过了头不是「没有这个东西」。分开说,否则一次翻页会被读成一次否定 ——
-            // 这正是 R8 那批误诊的形状换个位置再来一遍。
+            // 翻过了头不是「没有这个东西」,分开说,否则一次翻页会被读成一次否定。
             ctx.Report.PastEnd(offset, $"'{query}' matched {Tally.Complete(total).Render("def")} in all.");
         }
         else if (rows.Count == 0)
         {
-            // 值域必须说清。search 覆盖的是 defName / label / description / 译文 ——
-            // **不含** C# 类名。实测里有人拿 CompShield 来搜,零结果被读成「模糊匹配坏了」,
-            // 而错误消息当时把他指向 code-search:那条路找得到类,却永远找不到用它的 def。
-            //
-            // 「译文」这个词本身在超发:快照的 translations 表是 def 侧的注入
-            // (def_type + def_name + field),Languages/*/Keyed 那一整套 UI 字符串
-            // 不在这条命令的射程里。照这句话字面读,「屏幕上这个 UI 词对应什么」会被当成
-            // 查得到的问题,而 search 查不到 —— 一个 schema 级的硬边界,写清比让人试出来便宜。
-            //
-            // 边界的**位置**变过一次(keyed 那一层落地之后):它现在在库里,只是在另一张表上。
-            // 所以这一句不能停在「不覆盖」——「这条命令不覆盖」与「这个工具没有」差着一条
-            // 走得通的路,而下面 NameLookup 只在那句话真的命中时才点名说出来。
+            // 值域必须说清:search 覆盖 defName / label / description / def 侧译文,
+            // **不含** C# 类名,也不含 Languages/*/Keyed 那一整套 UI 字符串 —— 后者在库里,
+            // 只是在另一张表上,所以句子要指向 keyed,而不是停在「不覆盖」。
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"Nothing matched '{query}' in this snapshot" +
                 (scope.IsAll ? "" : $" within --scope {scope.Expression}") +
@@ -156,9 +135,7 @@ public sealed class SearchCommand : Command
                 "defs — not C# class names, and not the UI strings under Languages/*/Keyed, which sit on a " +
                 "layer of their own that 'rimsearcher keyed' reads.");
 
-            // R8:剩下那半句原先是**猜**的 —— 「像个类名」就指向 find/code-search,
-            // 否则指向 types。两条猜法各自造出一种误诊,而名字的真实落点是可以当场算的。
-            // 算得出来就说算出来的那一条,算不出来才退回猜(而猜也只在真像类名时才猜)。
+            // 名字的真实落点当场算得出来:算得出就说算出来的那一条,算不出才退回按形状猜。
             var sighting = NameLookup.Locate(ctx, query, scope);
             var looksLikeClass = ClassNameShape.Looks(query);
             ctx.Report.Notice(NoticeKind.NextStep,
@@ -172,10 +149,8 @@ public sealed class SearchCommand : Command
                       "and 'rimsearcher mods' lists which mods it covers."));
         }
 
-        // 「靠什么命中的」必须在表里。实测:`search 心灵迟钝` 命中 TraitDef PsychicSensitivity,
-        // 是因为它某一档 degreeData 的 label 就叫这个 —— 但 TraitDef 自己没有 label,那一行
-        // 于是一片空白,而排在它上面的 GeneDef 的 label 恰恰就是「心灵迟钝」。读到这一屏的
-        // 第一反应是「心灵迟钝是个基因,不是特性」,而那正是本题的错误答案。
+        // 「靠什么命中的」必须在表里:命中可以来自子结构(如 TraitDef 某一档 degreeData 的
+        // label),而那一行自己的 label 是空的 —— 不说清就会被归到邻行上。
         ctx.Report.Table("defs", ["def_name", "def_type", "label", "matched_on", "mod"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
@@ -194,9 +169,8 @@ public sealed class SearchCommand : Command
     }
 
     /// <summary>
-    /// 这一行靠什么命中。判据只认「肉眼能在这一行上验证的」:名字、label、描述里含查询词。
-    /// 都不含时说明命中来自不在表里的东西(译文,或 label 挂在子结构上),那正是最需要说的
-    /// 一种 —— 不说,这一行就是没有解释的空白。
+    /// 这一行靠什么命中。判据只认「肉眼能在这一行上验证的」:名字、label、描述里含查询词;
+    /// 都不含时命中来自不在表里的东西(译文,或挂在子结构上的 label)。
     /// </summary>
     private static string MatchedOn(CommandContext ctx, DefRow r, string query)
     {
@@ -208,10 +182,9 @@ public sealed class SearchCommand : Command
         if (Has(r.Description)) parts.Add("description");
         if (parts.Count > 0) return string.Join("+", parts);
 
-        // R2 的同族:这里也只按 defName 取过译文,于是同名跨 def 类型时会把**别人的**译文
-        // 路径报成「这一行靠什么命中」。F18 加这一列正是为了让 label 空的行有个解释,
-        // 给错的解释比不给更坏。def_type 为空的(语言文件收割,注入 key 不带类型)仍算,
-        // 因为游戏也是按名字注入的 —— 那条译文确实作用在这个 def 上。
+        // 译文要按 def_type 过滤,否则同名跨 def 类型时会把**别人的**译文路径报成
+        // 「这一行靠什么命中」。def_type 为空的(语言文件收割,注入 key 不带类型)仍算 ——
+        // 游戏也是按名字注入的,那条译文确实作用在这个 def 上。
         var all = ctx.Db.Translations(r.DefName);
         var t = all.Where(x => x.DefType is null || DefTypes.Same(x.DefType, r.DefType))
                    .FirstOrDefault(x => Has(x.Translated) || Has(x.Original));
@@ -242,9 +215,7 @@ public sealed class GetCommand : Command
             "Field paths are the merged, post-patch shape the game actually had in memory when the snapshot was " +
             "taken, so PatchOperations and inheritance are already applied. A def created in code rather than XML " +
             "says so on its source line.\n\n" +
-            // 第六轮:C11 与 C41 各自浪费一轮在这一列上。文档一个字没提它,而「What is out of
-            // range」还宣称没有回到可编写源码的路 —— 一列一直在印文件名,该有的预期没建立,
-            // 不该有的期望也没掐掉。**给一半最费人**,所以这里把它是什么、不是什么一次说完。
+            // source 这一列一直在印文件名,把它是什么、不是什么一次说完。
             "The 'source' line is the bare file name the game reported for that def — no directory, because " +
             "the game does not keep one. It names the file inside that mod's Defs folder ('mod' above says " +
             "which mod); it is not a path, and nothing here reads the file system to confirm the file is " +
@@ -255,8 +226,7 @@ public sealed class GetCommand : Command
             CommonOptions.Limit("fields") with { Default = Limits.DefaultFieldsPerDef.ToString() },
             new OptionSpec
             {
-                // 实测:一个 295 字段的 def 里找 statBases,唯一的办法是 --limit all 再 grep 输出。
-                // 那既烧上下文,又正好是这套工具劝人别做的事。
+                // 没有它,在几百字段的 def 里找一条路径只能 --limit all 再 grep 输出。
                 Name = "path",
                 Arity = Arity.Multi,
                 Aliases = ["paths", "field", "field-path", "only", "filter", "grep"],
@@ -265,11 +235,8 @@ public sealed class GetCommand : Command
                 Narrows = true,
             },
             // 同名跨 def 类型是 RimWorld 常态(PsychicSensitivity 既是 StatDef 又是 TraitDef)。
-            // 工具自己都在输出「N defs share the name」,却没有任何开关能挑一个 —— 实测里
-            // 四个 agent 各自敲了 `--type` 然后吃同一句「Unknown option」。
-            // `get` 的 --type 挑的是**哪个 def**,不是从这个 def 的字段里筛 ——
-            // 计数句里念一句「within --type StatDef」会被读成「去掉它还有更多字段」,
-            // 而去掉它得到的是另一个 def。收窄要念回去,前提是它真的在收窄这次数的东西。
+            // `get` 的 --type 挑的是**哪个 def**,不是从这个 def 的字段里筛,所以计数句里
+            // 不念它 —— 念了会被读成「去掉它还有更多字段」,而去掉它得到的是另一个 def。
             CommonOptions.Type with { Narrows = false },
             new OptionSpec
             {
@@ -313,9 +280,7 @@ public sealed class GetCommand : Command
     {
         var name = ctx.Args.Positional(0)!;
         var wantType = ctx.Args.Value("type");
-        // 过滤前的全量要留住:同名提示必须按**这个名字一共有几个 def** 说话,而不是按
-        // 这次显示了几个。R2 最恶劣的一半正是这里 —— 提示原先挂在过滤后的集合上,
-        // 于是按 SKILL 教的加了 --type 之后提示消失、串味的行留下,对冲归零。
+        // 过滤前的全量要留住:同名提示按**这个名字一共有几个 def** 说话,不是按这次显示了几个。
         var allMatches = ctx.Db.GetDefsNamed(name);
         var matches = allMatches;
 
@@ -335,10 +300,7 @@ public sealed class GetCommand : Command
 
         if (matches.Count == 0)
         {
-            // 抽象父节点原先只能靠一句**无条件**的边界句糊过去,因为快照里一点痕迹都没有 ——
-            // 那句话每次 get 落空都要说一遍,而十有八九问的根本不是抽象节点。继承层落地之后
-            // 这件事变成可判定的,而它只是「名字在哪儿」的一种落点:判据搬进 NameLookup,
-            // 六种落点一起判(R8/R10),这里不再自己只查一张表。
+            // 「名字在哪儿」的六种落点统一由 NameLookup 判,抽象父节点是其中一种。
             var sighting = NameLookup.Locate(ctx, name);
             if (sighting is not null)
             {
@@ -349,15 +311,9 @@ public sealed class GetCommand : Command
             var names = ctx.Db.AllDefNames(Snapshot.ScopeFilter.Parse("all", ctx.Db.PackageIds(), ctx.Config));
             var close = Suggestion.Closest(names, name);
 
-            // 走到这里,六种落点都算过了,别的快照也问过了 —— 这时候「没有」才是个结论,
-            // 而不是「我只查了一张表」。把这层意思说出来,否则读的人无从判断该不该相信它。
-            //
-            // 但六种落点全在**快照**里,而快照只装 def 侧。第四轮回归实测(B6):
-            // `get MapPortal` 走到这一句,而 MapPortal 是 RimWorld 的一个 C# 类,
-            // 就在 vanilla 树的 MapPortal.cs 里。「a class」指的是「某个 def 的 class 列」,
-            // 读的人不会这么读 —— 这一句听上去穷尽了,于是归属被判成「不存在」,
-            // 正是 B6 那道题的靶子。不去扫代码树(一万多个文件,每次落空都扫太贵),
-            // 而是把没查的那一半说出来,并指名唯一那条能查的命令。
+            // 六种落点全在**快照**里,而快照只装 def 侧:句中的「a class」指的是某个 def 的
+            // class 列,不是代码树里的 C# 类型(`MapPortal` 就是这样一个类)。代码树上万个
+            // 文件,不为每次落空去扫,只把没查的那一半说出来并指名能查的那条命令。
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"No def is named '{name}' in this snapshot, and it is not a def type, a class, a mod, " +
                 "an abstract XML parent, or a name held by any other registered snapshot." +
@@ -372,12 +328,11 @@ public sealed class GetCommand : Command
 
         foreach (var def in matches)
         {
-            // 恒定形状:即使只有一个 def,JSON 里也是 defs[0]。单数/复数两种形状会让
-            // 照着一次输出写的解析器在下一次撞名时静默拿到别的东西。
+            // 恒定形状:即使只有一个 def,JSON 里也是 defs[0] —— 形状随数据变会让照着一次
+            // 输出写的解析器在下一次撞名时静默拿到别的东西。
             ctx.Report.Item("defs");
 
-            // --path 说的是「这次我只要这些」。description 动辄几百字,精确提问反而被它
-            // 淹掉 —— 实测里 7 个 def 一批投影出 36KB 落盘,前 2KB 预览一个目标值都没有。
+            // --path 说的是「这次我只要这些」,而 description 动辄几百字,会把它淹掉。
             var pairs = new List<KeyValuePair<string, object?>>
             {
                 new("def_name", def.DefName),
@@ -391,17 +346,13 @@ public sealed class GetCommand : Command
                     : def.SourceFile),
             };
 
-            // 有父节点才出这一行。没有的那九成 def 平白多一行空值,就是把上下文预算
-            // 花在「这里什么也没有」上 —— 而恒 null 的 parent 字段正是 F13 删掉的那个东西。
+            // 有父节点才出这一行,没有的不平白多一行空值。
             //
-            // R2:原先只按 defName 取,于是同名跨 def 类型时把**别人的**父节点印在自己的
-            // 标题块下(实测 def_type MentalStateDef 底下印出 inherits_from PsycastBase)。
-            // 但不能改成「def_type 必须相等」就完事:`xml_nodes.def_type` 是 XML 根元素名,
-            // `defs.def_type` 是 AllDefTypesWithDatabases 的桶名,F5 已经证明这两者会不一致
-            // (CreepJoinerAggressiveDef 的 def 落在 CreepJoinerBaseDef 桶里)。硬要求相等
-            // 会把「串味」换成「丢数据」—— 正是它要修的那类错。
-            // 收法:先要相等的;没有相等的,只在这个名字**没有同名歧义**时才回退到唯一候选,
-            // 有歧义就不显示(不显示比显示错的强,而 `inherit` 那条路照样答得出)。
+            // 取父节点要按 def_type 收,否则同名跨 def 类型时会印**别人的**父节点。但不能
+            // 硬要求相等:`xml_nodes.def_type` 是 XML 根元素名,`defs.def_type` 是
+            // AllDefTypesWithDatabases 的桶名,两者会不一致(CreepJoinerAggressiveDef 的 def
+            // 落在 CreepJoinerBaseDef 桶里),硬要求相等会把「串味」换成「丢数据」。
+            // 收法:先要相等的;没有相等的,只在这个名字**没有同名歧义**时才回退到唯一候选。
             var named = ctx.Db.NodesNamed(def.DefName)
                               .Where(n => string.Equals(n.DefName, def.DefName, StringComparison.OrdinalIgnoreCase))
                               .ToList();
@@ -412,14 +363,9 @@ public sealed class GetCommand : Command
 
             ctx.Report.Detail("def", pairs);
 
-            // R1:默认不列「与 C# 声明默认值无从区分」的那些行 —— 四个错结论全是从它们
-            // 生成的,而且每次错的都恰好是「字段名与提问一字不差」的那一行。
-            //
-            // 两个例外,都指向同一条:**调用方点了名的东西不许消失**。
-            //   --path <text> 已经点名了要哪些路径:此时把其中一条藏起来,回答会变成
-            //     「没有路径含 burstCount」—— 比印错值更坏,因为它是一句彻底的假话。
-            //   --defaults 是明说要全量。
-            // 于是过滤只发生在「什么都没点名」的那一次,而那一次省下的正是纯篇幅。
+            // 默认不列「与 C# 声明默认值无从区分」的那些行。两个例外都指向同一条:
+            // **调用方点了名的东西不许消失** —— --path 已经点名了要哪些路径,--defaults
+            // 是明说要全量。于是过滤只发生在什么都没点名的那一次。
             var withDefaults = ctx.Args.Flag("defaults") || paths.Count > 0;
             var (fields, matched, total, defaulted, matchedPaths) =
                 ctx.Db.Fields(def.Id, limit.Effective, paths, includeDefaults: withDefaults);
@@ -430,7 +376,7 @@ public sealed class GetCommand : Command
                     ["value"] = f.Value,
                     // 这一列恒在,不随「本次有没有默认值行」出现或消失:表的形状随数据变,
                     // 照着一次输出写的解析器下一次就取不到键。unknown 也必须能与 no 分开 ——
-                    // 把「没比成」印成「有人改过」正是 R1 本身。
+                    // 「没比成」不是「有人改过」。
                     [FieldDefault.Column] = FieldDefault.Render(f.Default),
                 }).ToList());
 
@@ -443,16 +389,13 @@ public sealed class GetCommand : Command
                 // 这两件事在输出上长得一样,所以必须由声明区把它们分开。
                 if (matched == 0)
                 {
-                    // 第二种成因,第四轮回归实测撞到的:给进来的文本不是路径,是**值**
-                    // (`--path TrapSpringChance` —— 它是 statBases[6].stat 装着的那个值)。
-                    // 「这个 def 没有这条路径」与「你把值当成了路径」的输出此前逐字同形,
-                    // 而后者算得出来,所以算出来再说 —— 猜出来的下一步正是 R8 那批误诊。
+                    // 第二种成因:给进来的文本不是路径而是**值**(`--path TrapSpringChance`
+                    // 是 statBases[6].stat 装着的那个值)。这一档算得出来,就算出来再说。
                     var asValue = paths.Where(t => ctx.Db.ValueHits(def.Id, t) > 0).ToList();
                     ctx.Report.Notice(NoticeKind.Boundary,
                         $"No field path{whose} contains {PathFilterText.Say(paths)}; the def does have " +
                         $"{Tally.Complete(total).Render("field")}. Drop --path to see them." +
-                        // 动词不进登记处,所以句子里不能有随 asValue 数量变形的成分 ——
-                        // 冒号在前、名单在后,主句就没有跟着计数走的动词(R6 的同一条教训)。
+                        // 动词不进登记处:冒号在前、名单在后,主句就没有随数量变形的成分。
                         (asValue.Count > 0
                             ? " Found on this def as a field's value rather than anywhere in a path: " +
                               $"{PathFilterText.Say(asValue)}. 'rimsearcher find --value {asValue[0]}' names every path holding it."
@@ -460,27 +403,21 @@ public sealed class GetCommand : Command
                 }
                 else
                 {
-                    // 这是调用方自己要的过滤,不是截断。机器侧靠 kind 分类,混用会让
+                    // 这是调用方自己要的过滤,不是截断:机器侧靠 kind 分类,混用会让
                     // 「我主动只要 driverClass」被扫 notes 的下一位读成「结果不完整」。
-                    // 动词不进登记处,所以句子不能让动词跟着计数走 —— 原先是
-                    // 「{N} fields{whose} match …」,N 为 1 时读出「1 field match」。
-                    // 把计数挪到冒号后,主句就不再有随数量变形的成分(R6 的同一条教训)。
-                    // 子串匹配不留痕:`--path soundImpact` 只回一行 `soundImpactDefault` ——
-                    // 语义相反的另一个字段,`code_default=no` 让它看着像作者刻意设的,而输出里
-                    // 没有一处说过「你打的这个词作为完整的一段一次都没命中」。第五轮盲测里
-                    // 这一条直接产出了错结论。整段命中的数在**截断之前**数(matchedPaths 不受
-                    // --limit 影响),否则同一个 --path 换个 --limit 就换一句结论。
+                    // 动词不进登记处,计数一律挪到冒号后。
+                    // 子串匹配不留痕:`--path soundImpact` 只回 `soundImpactDefault` 这个语义
+                    // 相反的字段,所以要说破「整段一次都没命中」。整段命中的数在**截断之前**
+                    // 数(matchedPaths 不受 --limit 影响),否则换个 --limit 就换一句结论。
                     var whole = matchedPaths.Count(x => PathSegments.IsWholeSegment(x, paths));
                     ctx.Report.Notice(NoticeKind.Filter,
                         $"Matching {PathFilterText.Say(paths)}{whose}: " +
                         $"{Tally.Complete(matched).Render("field")}, out of " +
                         $"{Tally.Complete(total).Render("field")} on the def." +
                         (whole == 0
-                            // 第七轮 T2:原句收在「so a field by exactly that name may not exist here」——
-                            // 一句关于**存在性**的强断言,而它对「前缀式列举」这个正常用法照喊。
-                            // 实测一份轨迹「差一点因为那句话就掠过去了」,而决定性的那个字段
-                            // 就躺在这句话下面那张表里。措辞改成:摆事实、两种读法都点出来、
-                            // 并说破这句话**一行都没滤掉** —— 被劝退才是它造成的真损失。
+                            // 这里不能下存在性的强断言:「前缀式列举」是正常用法,而要找的
+                            // 字段往往就在这句话下面那张表里。只摆事实、两种读法都点出来,
+                            // 并说破这句话**一行都没滤掉**。
                             ? $" None of those has {PathFilterText.Say(paths)} as a whole path segment: each match contains " +
                               "it inside a longer name. Either those longer names are the fields you meant, or " +
                               "nothing here is called exactly that — this line removes none of the matched " +
@@ -500,32 +437,24 @@ public sealed class GetCommand : Command
             }
             else
             {
-                // 分母是**列出来的那一群**的总数,不是 def 的字段总数 —— 否则「3 of 120」里
-                // 那 117 条既包含被 limit 截的、也包含被默认值过滤掉的,读者无从拆开。
-                // 两者各自一句,再由 total 把账对上。
+                // 分母是**列出来的那一群**的总数,不是 def 的字段总数 —— 否则被 limit 截的
+                // 与被默认值过滤掉的混在同一个差额里,拆不开。两者各自一句,再由 total 对账。
                 var listable = withDefaults ? total : total - defaulted;
                 ctx.Report.CountNotice(Tally.Of(fields.Count, listable), "field",
                     $"pass --limit all{(matches.Count == 1 ? "" : $" (this is {def.DefName})")} " +
                     "for the rest, or --path <text> to pick out the ones you want.");
 
                 // 措辞不许滑成「没人设过它」:XML 里照着默认值写一遍是常事,快照里那两种
-                // 情形完全同形。这一列能证的只有「与声明默认值无从区分」,句子就只说这个。
-                // 同理句中不出现任何与数量一致的动词或代词(名词才有登记处)。
-                // 五轮 F4:第二个分句原先说「The def has N fields in all; pass --defaults to list
-                // every one」—— 两处超发。N 是**索引到的路径数**而不是 def 的字段数;
-                // 而「list every one」在值为 null 的字段上做不到:导出器见 null 直接 return
-                // (DefExporter:284),那条路径从来没进过索引,--defaults 也召不回来。
-                // 于是「这个字段不存在」与「它的值是 null」在输出上完全同形,而实测里有人
-                // 跨三份列表交叉验证,只是把错结论**加固**了 —— 缺的是同一批字段。
-                // 第一分句逐字不动(它是被反复点名的那句认识论诚实),--path 那半句也不动
-                // (那是唯一的逃生指令),只换中间那一段。
+                // 情形完全同形。这一列能证的只有「与声明默认值无从区分」,句子就只说这个,
+                // 且句中不出现任何随数量变形的动词或代词(名词才有登记处)。
+                // 数字说的是**索引到的路径数**,不是 def 的字段数:导出器见 null 直接 return,
+                // 那条路径从来没进过索引,--defaults 也召不回来 —— 于是「这个字段不存在」
+                // 与「它的值是 null」在输出上完全同形。
                 if (!withDefaults && defaulted > 0)
                 {
-                    // 第七轮 T4:折叠按「谁设的值」筛,而提问常常是「有几条 / 列表多长」——
-                    // 两个维度正交,却归同一个开关管。一整个列表项被折光时,「这个列表只有
-                    // 一项」就成了看得见的形状,而真值是它更长。这件事算得出来(下标前缀不受
-                    // 折叠影响),所以两边都说破:藏了就点名,没藏就把那句正面的话给出来 ——
-                    // 靠沉默承载「没藏」正是这套输出一直在清的东西。
+                    // 折叠按「谁设的值」筛,而提问常常是「列表多长」—— 两个维度正交却归同一个
+                    // 开关管,一整个列表项被折光时列表看着就变短了。下标前缀不受折叠影响,
+                    // 所以两边都说破:藏了就点名,没藏也把那句正面的话给出来。
                     var shownIdx = fields.SelectMany(f => PathSegments.IndexPrefixes(f.Path))
                                          .ToHashSet(StringComparer.Ordinal);
                     var hiddenIdx = matchedPaths.SelectMany(PathSegments.IndexPrefixes)
@@ -548,26 +477,19 @@ public sealed class GetCommand : Command
                 }
             }
 
-            // --path 那条分支同样要说 —— 按 path 收窄恰恰是最容易只盯着一行读的用法,
-            // 而这句话的全部用处就是让那一行读得对。
+            // --path 那条分支同样要说 —— 按 path 收窄恰恰是最容易只盯着一行读的用法。
             Completeness.NoteWidelySharedValues(ctx, def, fields);
 
-            // 02-3:「字段被截」与「没有该字段」必须可区分。上游把这件事整个略过了,
-            // 于是深层字段查不到时调用方会得出「没有这个字段」的错误结论。
+            // 「字段被截」与「没有该字段」必须可区分。
             if (def.FieldsTruncated > 0)
                 ctx.Report.Notice(NoticeKind.Boundary,
                     $"The exporter stopped short on this def: {Tally.AtLeast(def.FieldsTruncated).Render("field")} " +
                     "were dropped at export time for depth or size, so a path missing from the list below is not " +
                     "proof that the def lacks it.");
 
-            // --limit 说的是「这次调用我要多少行」,不是「字段表要多少行」。译文表不听它的话,
-            // 就出现过 `get Muffalo --limit 5` 吐出八十行的实测 —— 限额说了不算,预算就是空话。
-            // --path 同理:实测里字段表正确地报了「一个都没匹配上」,紧接着三份内容相同的
-            // 译文块把这个真结论淹掉,第一眼读成「找到了一堆东西」。精确提问不该更吵。
-            // R2 的另一半:译文原先也只按 defName 取,于是字段表刚说完「这个 def 没有
-            // description」,紧接着就印出同名**别的 def type** 的 description 译文并标
-            // 「origin: in effect」—— 读者只能读成「描述由翻译文件注入」。
-            // 策略与 inherits_from 同源:def_type 对得上的归自己;对不上的一律不要;
+            // --limit 与 --path 同样管译文表:不管的话,`get Muffalo --limit 5` 会吐出八十行,
+            // 而字段表刚报的「一个都没匹配上」会被一批译文块淹掉。
+            // 归属策略与 inherits_from 同源:def_type 对得上的归自己;对不上的一律不要;
             // def_type 为空的(语言文件收割,注入 key 不带类型)留着,但要自证它是按名字匹配的。
             var allTranslations = (IReadOnlyList<TranslationRow>)ctx.Db.Translations(def.DefName)
                 .Where(t => t.DefType is null || DefTypes.Same(t.DefType, def.DefType))
@@ -584,8 +506,8 @@ public sealed class GetCommand : Command
                 : allTranslations.Take(limit.Effective).ToList();
             if (translations.Count > 0)
             {
-                // original 是被替换掉的原文。它值得占一列:导出时刻 def 上留的是译文,
-                // 原文只在注入记录里 —— 两者同时在场是运行时导出独有的便宜(06 层 2 翻译节)。
+                // original 是被替换掉的原文:导出时刻 def 上留的是译文,原文只在注入记录里 ——
+                // 两者同时在场是运行时导出独有的便宜。
                 ctx.Report.Table("translations",
                     ["path", "translated", "original", "language", "origin"],
                     translations.Select(t => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
@@ -622,9 +544,8 @@ public sealed class GetCommand : Command
 
         ctx.Report.EndItems();
 
-        // R2:这句原先挂在**过滤后**的集合上,于是 --type 一给就消失 —— 而那正是最需要它的
-        // 时候:调用方主动收窄了,恰恰说明它知道有歧义、并打算只读一个。提示走了,读者就
-        // 没有任何迹象去怀疑标题块里那些按名字关联来的行。改成按全量说话,两种情形各自措辞。
+        // 按全量说话,不按过滤后的集合 —— --type 在场时最需要这句提示:调用方主动收窄了,
+        // 恰恰说明它知道有歧义、并打算只读一个。
         if (allMatches.Count > 1)
         {
             var others = allMatches.Where(d => !matches.Contains(d))
@@ -685,8 +606,8 @@ public sealed class FindCommand : Command
             },
             new OptionSpec
             {
-                // 「别 grep XML」拿走了一种能力,就得给回等价的一种。没有它,不知道字段
-                // 叫什么的人只能猜 —— 而猜偏了会拿到一个语法正常、语义全错的结果集。
+                // 「别 grep XML」拿走了一种能力,就得给回等价的一种:不知道字段叫什么时
+                // 靠猜会拿到一个语法正常、语义全错的结果集。
                 Name = "value",
                 Aliases = ["any-field", "search-values", "holding"],
                 Placeholder = "<text>",
@@ -756,9 +677,8 @@ public sealed class FindCommand : Command
 
         if (rows.Count == 0)
         {
-            // 别的快照里有没有,是**算得出来**的,而本快照那句「没有」在读的人眼里就是
-            // 「这东西不存在」。叠加不替换:成因分流照说,这一句排在它后面。
-            // 放在成因分流之前算、之后印 —— 它对四条分支一视同仁,而每条分支各自 return。
+            // 别的快照里有没有是**算得出来**的,叠加不替换:成因分流照说,这一句排在它后面。
+            // 声明在分流之前 —— 它对四条分支一视同仁,而每条分支各自 return。
             void NoteElsewhere()
             {
                 if (NameLookup.Elsewhere(ctx, db => db.FindByField(
@@ -772,9 +692,8 @@ public sealed class FindCommand : Command
             //   (1) 这个字段路径根本不存在 → 该去找字段叫什么
             //   (2) 字段存在,但这个值不在它的值域里 → 该去看值域
             //   (3) 名字是 def 的身份而不是字段(class / def_type / mod / source)→ 该换命令
-            // 原先只有 value 为 null 时才查(1),带 value 的分支直接去算近似项,于是
-            // `find zzznotafield somevalue` 会报「No def has 'zzznotafield' set to ...」——
-            // 这句话预设了字段存在,而下一条 `values zzznotafield` 立刻说它不存在,自相矛盾。
+            // (1) 要先于近似项算:跳过它,`find zzznotafield somevalue` 会报
+            // 「No def has 'zzznotafield' set to ...」,一句预设了字段存在的话。
             var fieldExists = ctx.Db.FieldPathExists(path, scope);
 
             if (!fieldExists)
@@ -799,9 +718,9 @@ public sealed class FindCommand : Command
                         : "'rimsearcher fields <DefType> --path <text>' lists the paths that a def type actually has" +
                           (value is null ? "." : $", and 'rimsearcher find --value {value}' finds which field holds that value.")));
                 // identity 那一档不说:那时候答案已经给全了,再挂一句索引边界是纯噪音。
-                // `class` 是例外,而且是**唯一**的例外:导出器 0.2.0 起 `<path>.Class` 是一条
-                // 真路径,于是敲 `find Class X` 的人问的多半是嵌套子对象的类型,而 identity 那句
-                // 只答了「def 自己的 class」—— 答了半边,另半边恰恰是这次要修的那个洞。
+                // `class` 是**唯一**的例外:导出器 0.2.0 起 `<path>.Class` 是一条真路径,
+                // 敲 `find Class X` 的人问的多半是嵌套子对象的类型,而 identity 那句只答了
+                // 「def 自己的 class」。
                 if (!identity.ContainsKey(path) || string.Equals(path, "class", StringComparison.OrdinalIgnoreCase))
                     Completeness.NoteIndexHoldsValuesOnly(ctx);
                 NoteElsewhere();
@@ -817,19 +736,17 @@ public sealed class FindCommand : Command
                 return 1;
             }
 
-            // 直接把真实值域里的近似项端出来。指一条「去跑 values」的路是不够的:
-            // 实测里 compClass 有 175 个取值,默认只出 25 个,照着建议跑一遍照样看不见答案,
-            // 只能 --limit all 再自己 grep。近似项本来就在库里,算一次比让人跑两趟便宜。
+            // 直接把真实值域里的近似项端出来:一条字段的取值动辄上百(compClass 有 175 个),
+            // 指一条「去跑 values」的路照样看不见答案。
             var space = ctx.Db.DistinctValues(path, scope, Limits.MaxLimit).Rows.Select(v => v.Value).ToList();
 
             // RimWorld 的约定:XML 里写的是 `Class="CompProperties_X"`,而落到 def 上的
-            // comps[N].compClass 存的是被解析出来的 `CompX`。照 XML 抄过来的名字必然查不到,
-            // 而这恰恰是从 grep XML 迁过来的人最先敲的那一条 —— skill 自己的示范就栽在这。
+            // comps[N].compClass 存的是被解析出来的 `CompX` —— 照 XML 抄的名字必然查不到。
             var alt = value.Contains("CompProperties_") ? value.Replace("CompProperties_", "Comp") : null;
 
             // 先做精确关系:值域里存的是全限定名,调用方给的常是末段。这是**同一个名字**,
-            // 不是「长得像」,所以不该交给模糊打分 —— 实测里 CompAmbientSound 对
-            // RimWorld.CompAmbientSound 打分低于阈值,近似项一条都没出来。
+            // 不是「长得像」—— 交给模糊打分会低于阈值而漏掉(CompAmbientSound 对
+            // RimWorld.CompAmbientSound 就是如此)。
             var close = space.Where(v => Tail(v).Equals(alt ?? value, StringComparison.OrdinalIgnoreCase))
                              .Concat(space.Where(v => alt is not null &&
                                                       Tail(v).Contains(Tail(alt), StringComparison.OrdinalIgnoreCase)))
@@ -840,9 +757,8 @@ public sealed class FindCommand : Command
             if (close.Count == 0)
                 close = FuzzyMatcher.Rank(space, alt ?? value).Take(Limits.MaxSuggestions).Select(t => t.Text).ToList();
 
-            // 值域计数没有产地就是负资产:「out of 207 values」被读成「值的形态有讲究」,
-            // 于是有人去试全限定名,而真因是 MapPortal 是**抽象基类**,6 个 def 用的是它的
-            // 5 个子类。数字得连着「这些值来自哪些路径/哪些 def 类型」一起说。
+            // 值域计数没有产地就是负资产:「out of 207 values」会被读成「值的形态有讲究」。
+            // 数字得连着「这些值来自哪些路径 / 哪些 def 类型」一起说。
             var cov = space.Count > 0 ? ctx.Db.ValueCoverage(path, scope, 3) : default;
             var provenance = space.Count == 0 ? "" :
                 $", out of the {Tally.Complete(space.Count).Render("value")} found under " +
@@ -856,18 +772,14 @@ public sealed class FindCommand : Command
                 (close.Count > 0
                     ? $" Closest: {string.Join(", ", close)}." +
                       (alt is not null && close.FirstOrDefault(c => Tail(c).Equals(alt, StringComparison.OrdinalIgnoreCase)) is { } resolved
-                          // 说破规律,不只是给一个名字 —— 否则同一个人下一个 comp 还会再敲错一次。
-                          // 规律之外还得把**那条命令**给出来:读的人手上有了正确的名字,却还要
-                          // 自己把它拼回一条命令行,而这一步正是「指了路却没给路」的老形状。
+                          // 说破规律,并把**那条命令**一起给出来,不只是给一个名字。
                           ? " The XML writes Class=\"CompProperties_X\"; this field holds the resolved CompX — " +
                             $"'rimsearcher find {path} {resolved}' is the query you meant."
-                          // 有近似项时原先就到此为止,而没有近似项的那一支反倒指了路 ——
-                          // 「给了个名字」不等于「说了下一步」:那三条只是最近的,真值域没看过。
+                          // 「给了个名字」不等于「说了下一步」:那几条只是最近的,真值域没看过。
                           : $" 'rimsearcher values {path} --limit all' lists the whole value domain.")
-                    // 「如果 X 是抽象基类」原先无条件说,而它是一句**未经验证的猜测摆在
-                    // 输出位置**,读的人会当结论用。判据从严(ClassNameShape:`True`、
-                    // `.ogg`、`1.5` 全挡在外面),而且指的路换成本工具自己那条 ——
-                    // 一条 code-search 就能证实或证伪,不必外包给别的东西。
+                    // 「如果 X 是抽象基类」是一句**未经验证的猜测摆在输出位置**,读的人会当
+                    // 结论用。判据从严(ClassNameShape 把 `True`、`.ogg`、`1.5` 挡在外面),
+                    // 并指向一条能当场证实或证伪它的 code-search。
                     : $" 'rimsearcher values {path} --limit all' lists them." +
                       (ClassNameShape.Looks(value)
                           ? $" If '{value}' is an abstract base class, no def names it directly, and its " +
@@ -926,14 +838,11 @@ public sealed class FindCommand : Command
 
         if (rows.Count == 0)
         {
-            // R9:原先这句以「so this means the text is absent, not misspelt」收尾 —— 它特意
-            // 堵掉了「你拼错了」这条退路,可快照索引的是叶子标量与 comps 的 compClass,
-            // **嵌套 li / 多态子对象的运行时类型不在其中**(modExtensions[0] 的 Class=、
-            // paramMappings[0].inParam 的 Class=)。于是「类真实存在且正在被这个 def 使用」
-            // 与「这个类根本不存在」在输出上完全一样,而它只报了后者。
-            // 类名形状的查询词最容易撞这一条,所以这时候必须把索引边界说出来。
-            // 判据归一到 ClassNameShape:旧写法 `IsUpper(v[0]) || Contains('.')` 会把
-            // `True`、`.ogg`、`1.5` 一并算成类名,于是这段索引边界跑到值查询上去说。
+            // 快照索引的是叶子标量与 comps 的 compClass,**嵌套 li / 多态子对象的运行时类型
+            // 不在其中**(modExtensions[0] 的 Class=、paramMappings[0].inParam 的 Class=)。
+            // 于是「类真实存在且正在被这个 def 使用」与「这个类根本不存在」在输出上完全一样,
+            // 而类名形状的查询词最容易撞这一条,所以这时候必须把索引边界说出来。
+            // 判据归一到 ClassNameShape,它把 `True`、`.ogg`、`1.5` 挡在外面。
             var looksLikeType = ClassNameShape.Looks(value);
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"No field in this snapshot holds a value {(exact ? "equal to" : "containing")} '{value}'" +
@@ -959,9 +868,8 @@ public sealed class FindCommand : Command
 
         ctx.Report.PageNotice("field path", rows.Count, offset, total);
 
-        // 子串命中不留痕,与 `--path` 是同一条纪律的值侧。`find --value Bullet` 命中
-        // 每一个 `Bullet_*` 的字符串,而问的人多半只想要「值就是 Bullet 的那些」——
-        // 拆不开这两档,「有一个字段的值就是它」与「有一堆值里碰巧含这几个字母」逐字同形。
+        // 子串命中不留痕,与 `--path` 是同一条纪律的值侧:`find --value Bullet` 命中每一个
+        // `Bullet_*`,而问的人多半只想要「值就是 Bullet 的那些」。
         if (!exact && exactTotal < total)
             ctx.Report.Notice(NoticeKind.Filter,
                 exactTotal == 0
@@ -980,13 +888,10 @@ public sealed class FindCommand : Command
                 ["example_value"] = r.Sample,
             }).ToList());
 
-        // 五轮 F1:这里原先按**结果里的每条路径**各查一次再求和。两处都错。
-        // 一是求和把同一个被砍的 def 按它出现在几条路径上重复计数;二是只要结果里有一条
-        // 路径叫 defName —— 而 `find --value` 命中一个 def 名时必然有 —— 那条路径的
-        // 「同类型」就退化成全体 def 类型,这一项独自等于全库。实测报出 251 与 242,
-        // 而快照总共 239:**子集计数大于全集**,却与一个正常计数逐字同形。
-        // 按值一次问清,不按路径拆:表里那批 def 是「取到过这个值」选出来的,
-        // 尾注担保的也必须是同一批。
+        // 按值一次问清,不按结果里的每条路径各查一次再求和:求和会把同一个被砍的 def 按它
+        // 出现在几条路径上重复计数,而路径 defName(`find --value` 命中 def 名时必然有)的
+        // 「同类型」等于全体 def 类型,单这一项就等于全库 —— 于是子集计数会大于全集。
+        // 表里那批 def 是「取到过这个值」选出来的,尾注担保的也必须是同一批。
         Completeness.NoteIndexedPathsOnly(ctx,
             ctx.Db.TruncatedDefsSharingValue(value, exact ? ValueMatch.Exact : ValueMatch.Substring, scope));
         return 0;
@@ -1051,9 +956,8 @@ public sealed class ListCommand : Command
 
     public override int Run(CommandContext ctx)
     {
-        // 「有哪些桶」与「桶里装了哪些 def」是同一张表的两个层级,原先是两条命令。
-        // 分模式的判据是**给没给 def 类型**,而不是一个开关参数:落空分流里那句
-        // 「没有这个 def 类型」现在指得回同一条命令,恢复路径少一跳。
+        // 分模式的判据是**给没给 def 类型**,而不是一个开关参数 —— 落空分流里那句
+        // 「没有这个 def 类型」于是指得回同一条命令。
         var type = ctx.Args.Positional(0);
         return type is null ? RunTypes(ctx) : RunDefs(ctx, type);
     }
@@ -1061,16 +965,14 @@ public sealed class ListCommand : Command
     /// <summary>
     /// 不给 def 类型的那一半:列出这份快照有哪些 def 类型。
     ///
-    /// <c>--class</c> 与 <c>--offset</c> 只对另一半有意义。它们仍然声明在这条命令上,
-    /// 于是「不给类型还传了它们」是一个新开的沉默口子 —— 照单收下、悄悄不生效,
-    /// 输出里没有任何迹象,与 <see cref="CommandContext.Limit"/> 记的 <c>--limit</c>
-    /// 被静默夹紧同形。所以当场退 2,并把该走的那条路说出来。
+    /// <c>--class</c> 与 <c>--offset</c> 只对另一半有意义,却仍然声明在这条命令上 ——
+    /// 照单收下、悄悄不生效是个沉默口子(与 <see cref="CommandContext.Limit"/> 记的
+    /// <c>--limit</c> 被静默夹紧同形),所以当场退 2 并把该走的那条路说出来。
     /// </summary>
     private static int RunTypes(CommandContext ctx)
     {
-        // 指的那条路只在名字**真是** def class 时才落到桶上。第一版这里写的是
-        // 「it names the bucket」—— 而 `list CompShield` 实测回的是「No def type named
-        // 'CompShield'」:一句无条件的许诺,指路指了个空。所以两种落点都说出来。
+        // 指的那条路只在名字**真是** def class 时才落到桶上(`list CompShield` 回的是
+        // 「No def type named 'CompShield'」),所以两种落点都说出来。
         if (ctx.Args.Value("class") is { } cls)
             throw new CliUsageException(
                 $"--class needs a def type to narrow inside. If you do not know which def type holds " +
@@ -1078,7 +980,7 @@ public sealed class ListCommand : Command
                 $"is a def class, and reports no such def type when it is not — a class that defs only " +
                 $"reference in a field is found by 'rimsearcher find <field> {cls}' instead.");
 
-        // 数量不许猜。第一版写的是「a few dozen def types」,而实测的一份快照有 232 个。
+        // 数量不许猜:一份快照能有两百多个 def 类型。
         if (ctx.Args.Offset() > 0)
             throw new CliUsageException(
                 "--offset needs a def type to page through. Without one this lists the def types " +
@@ -1088,9 +990,8 @@ public sealed class ListCommand : Command
         ctx.Report.Promises("types");
         var all = ctx.Db.Types(scope);
 
-        // 零行是 exit 1(R12 约定),这一支原先无条件 return 0 —— 按退出码分流的脚本
-        // 会把「0 def types.」读成「查到了」。而那句话本身也不许把 scope 造成的空
-        // 说成快照的空:整份快照的数就在手边,算一次比让人再跑一趟便宜。
+        // 零行一律 exit 1,否则按退出码分流的脚本会把「0 def types.」读成「查到了」。
+        // 句子也不许把 scope 造成的空说成快照的空 —— 整份快照的数就在手边。
         if (all.Count == 0)
         {
             if (scope.IsAll)
@@ -1105,7 +1006,7 @@ public sealed class ListCommand : Command
             return 1;
         }
 
-        // 缺省全给(理由的产地在 LimitOrAll):问的是「一共有哪些」,截一刀就答不完整。
+        // 缺省全给:问的是「一共有哪些」,截一刀就答不完整。
         var limit = ctx.LimitOrAll();
         var rows = limit.IsAll ? all : all.Take(limit.Effective).ToList();
 
@@ -1126,9 +1027,8 @@ public sealed class ListCommand : Command
         var wantClass = ctx.Args.Value("class");
         var scope = ctx.Scope();
 
-        // 认领要赶在查询**之前**:下面每一条零行分流都是提前 return,认领写在后面就只有
-        // 有结果时才发得出去,而那正好是不需要它的那一次。`defs` 与 `types` 互斥,
-        // 所以不能靠声明层的 Rows 统一认领(空数组在机器侧读作「这一路也查过了」),
+        // 认领要赶在查询**之前**:下面每一条零行分流都是提前 return。`defs` 与 `types`
+        // 互斥,不能靠声明层的 Rows 统一认领(空数组在机器侧读作「这一路也查过了」),
         // 只能由两支各自认领 —— 另一支在 RunTypes 里。
         ctx.Report.Promises("defs");
 
@@ -1136,9 +1036,8 @@ public sealed class ListCommand : Command
 
         if (rows.Count == 0)
         {
-            // 翻过头**先**判。它下面每一条分流问的都是「这个名字是什么」,而翻过头时
-            // 那个名字明明查得好好的 —— 实测 `list ThingDef --offset 900` 从这里掉进
-            // 「ThingDef 不是 def 类型」那一条,把一次翻页答成了一句彻头彻尾的假话。
+            // 翻过头**先**判:下面每一条分流问的都是「这个名字是什么」,而翻过头时
+            // 那个名字查得好好的。
             if (offset > 0 && total > 0)
             {
                 ctx.Report.PastEnd(offset,
@@ -1147,10 +1046,9 @@ public sealed class ListCommand : Command
                 return 1;
             }
 
-            // 「这个 scope 里没有」不等于「快照里没有」。下面每一条判据都是 scope 过滤过的,
-            // 所以 `--scope zh`(汉化包,一个 def 都不加)会让 `list ThingDef` 报出
-            // 「No def type named 'ThingDef' in this snapshot」—— 一句彻头彻尾的假话。
-            // 这与 CreepJoinerAggressiveDef 那条同形:分不清缺席的成因就报最强的那种。
+            // 「这个 scope 里没有」不等于「快照里没有」:下面每一条判据都是 scope 过滤过的,
+            // 而 `--scope zh`(汉化包,一个 def 都不加)会让 `list ThingDef` 报成
+            // 「No def type named 'ThingDef' in this snapshot」。
             if (!scope.IsAll && offset == 0)
             {
                 var (_, everywhere) = ctx.Db.ListByType(type, ctx.Unscoped(), 1, 0, wantClass);
@@ -1165,9 +1063,8 @@ public sealed class ListCommand : Command
                 }
             }
 
-            // 「不是分桶键」不等于「不存在」。游戏只给「祖先链上没有非抽象 Def」的类型建库,
-            // 于是 CreepJoinerAggressiveDef 的 def 全躺在 CreepJoinerBaseDef 桶里 —— 照直报
-            // 「No def type named ...」就是把缺席说成了事实,而调用方没有任何办法看出区别。
+            // 「不是分桶键」不等于「不存在」:游戏只给「祖先链上没有非抽象 Def」的类型建库,
+            // 于是 CreepJoinerAggressiveDef 的 def 全躺在 CreepJoinerBaseDef 桶里。
             var holders = ctx.Db.TypesHoldingClass(type, scope);
             if (wantClass is null && holders.Count > 0)
             {
@@ -1195,7 +1092,7 @@ public sealed class ListCommand : Command
             return 1;
         }
 
-        // 上游有 --offset 分页却拿不到总数,不知道翻到哪算到头(02-1)。这里总数恒在。
+        // 分页必须给总数,否则不知道翻到哪算到头。
         ctx.Report.PageNotice("def", rows.Count, offset, total);
 
         // 桶里只有一种 class 时不平白多一列(ThingDef 一万多个 def 都是 Verse.ThingDef);
@@ -1204,9 +1101,8 @@ public sealed class ListCommand : Command
         var heterogeneous = wantClass is null && classes.Count > 1;
         if (heterogeneous)
             ctx.Report.Notice(NoticeKind.Boundary,
-                // 数的是 class,名词原先写的是「def type」—— R7 的形状:计数的名词
-                // 与实际所数的东西不是一回事,而这一句正长在「def 类型不等于运行时 class」
-                // 那条区分上,说反了等于把要讲清的两件事又搅回一起。
+                // 数的是 class,名词就得写「def class」—— 这一句正长在
+                // 「def 类型不等于运行时 class」那条区分上。
                 $"Type {type} holds {Tally.Complete(classes.Count).Render("def class")}: " +
                 NameList.Render([.. classes.Select(c => $"{Tail(c.Class)} ({c.Count})")], Limits.MaxSuggestions) +
                 ". Pass --class to pick one.");
@@ -1253,9 +1149,9 @@ public sealed class FieldsCommand : Command
             CommonOptions.Limit("field paths"),
             new OptionSpec
             {
-                // ThingDef 有 2973 条路径,默认只出 25 条。没有这个开关,调用方只能
-                // `fields ThingDef | grep comps` —— 而 grep 会连同截断声明一起滤掉,
-                // 于是「被截了」变成「没有」。管道会把声明区吃掉,所以筛选必须在工具里做。
+                // ThingDef 有近三千条路径,默认只出 25 条。没有这个开关只能
+                // `fields ThingDef | grep comps`,而管道会把截断声明一起滤掉,
+                // 于是「被截了」变成「没有」—— 筛选必须在工具里做。
                 Name = "path",
                 Arity = Arity.Multi,
                 Aliases = ["paths", "contains", "match", "filter", "grep", "only"],
@@ -1311,8 +1207,6 @@ public sealed class FieldsCommand : Command
         if (filters.Count > 0 && whole < total)
             ctx.Report.Notice(NoticeKind.Filter,
                 whole == 0
-                    // 同上(第七轮 T2)。这一处代价更大:`fields <DefType> --path <text>` 是
-                    // 「这个类型有没有这个字段」的正式问法,于是这句话最像一句判决。
                     ? $"None of those has {PathFilterText.Say(filters)} as a whole path segment: each match contains it " +
                       $"inside a longer name. Either those longer names are the paths you meant, or '{type}' " +
                       $"has no field called exactly {PathFilterText.Say(filters)} — this line removes none of the " +
@@ -1380,9 +1274,8 @@ public sealed class ValuesCommand : Command
                 return 1;
             }
 
-            // 三种成因,要的下一步不同 —— 与 `find` 的分流同形。原先只分了 --type 那一档,
-            // 于是 `values defName --scope <没有 def 的 mod>` 回「本快照没有 defName」,
-            // 而不带 scope 时每个 def 都有它:空是 scope 造的,句子却记在了快照头上。
+            // 三种成因,要的下一步不同 —— 与 `find` 的分流同形:字段不存在 / 不在这个
+            // --type 上 / 不在这个 --scope 里。空是 scope 造的就不能记在快照头上。
             var withoutType = type is not null && ctx.Db.FieldPathExists(path, scope);
             var wideScope = ScopeFilter.Parse("all", ctx.Db.PackageIds(), ctx.Config);
             var outsideScope = !withoutType && !scope.IsAll && ctx.Db.FieldPathExists(path, wideScope);
@@ -1401,8 +1294,8 @@ public sealed class ValuesCommand : Command
             return 1;
         }
 
-        // 值的产地。后缀匹配天然会把语义不同的路径并进一张表,不说清就会被读成
-        // 「这个字段到处都是这个值」—— 实测里 `values damageAmountBase` 正是这样险些骗到人。
+        // 值的产地:后缀匹配天然会把语义不同的路径并进一张表,不说清就会被读成
+        // 「这个字段到处都是这个值」。
         var cov = ctx.Db.ValueCoverage(path, scope, Limits.MaxSuggestions, type);
 
         // 这里的省略不是 NameList 那种「我取了前几条」—— cov.Paths 已经在 SQL 侧截过,
@@ -1410,8 +1303,8 @@ public sealed class ValuesCommand : Command
         var pathList = string.Join(", ", cov.Paths.Select(x => $"{x.Path} ({x.Count})"));
         if (cov.PathTotal > cov.Paths.Count) pathList += $", and {cov.PathTotal - cov.Paths.Count} more";
 
-        // 「N of M」是覆盖率的分母。少了它,一条 `Verse.Thing (7)` 分不清是「只有 7 个 def
-        // 这么写」还是「导出漏了一千多个」—— 实测里有人靠手工把 110 行加起来才敢下结论。
+        // 「N of M」是覆盖率的分母:少了它,一条 `Verse.Thing (7)` 分不清是「只有 7 个 def
+        // 这么写」还是「导出漏了一千多个」。
         var typeList = string.Join(", ", cov.DefTypes.Select(x =>
             $"{x.DefType} ({x.Count} of {ctx.Db.CountDefsOfType(x.DefType, scope)})"));
 
@@ -1428,7 +1321,7 @@ public sealed class ValuesCommand : Command
                 ["value"] = r.Value,
                 ["defs"] = r.Count,
             }).ToList());
-        // 尾注跟着 --type 一起收:表已经滤成一个类型了,脚注还在说别的类型(第七轮 T6)。
+        // 尾注跟着 --type 一起收:表已经滤成一个类型了,脚注不能还在说别的类型。
         Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(path, scope, type));
         return 0;
     }
@@ -1442,8 +1335,8 @@ public sealed class ModsCommand : Command
         Summary = "List the mods that were active when the snapshot was taken, in load order.",
         Remarks = "Load order matters: it is the order in which PatchOperations were applied, so it is part of the snapshot's identity.",
         // 默认全出:装了什么 mod 是快照身份的一部分,截一半没有意义。但 --limit 还是收 ——
-        // 07 实证里它是被发明得最多的参数,而对一条列举命令拒绝它,读起来像「这里不能限量」,
-        // 实际只是「这里不需要」。严格模式该拦的是拼错的名字,不是合理的期待。
+        // 对一条列举命令拒绝它,读起来像「这里不能限量」,而实际只是「这里不需要」。
+        // 严格模式该拦的是拼错的名字,不是合理的期待。
         Options = [CommonOptions.Limit("mods") with { Default = "all" }],
         Examples = ["rimsearcher mods"],
         JsonKeys = [new() { Key = "mods", Rows = true, What = "one row per mod, in load order: order, package_id, name, version." }],
@@ -1470,8 +1363,7 @@ public sealed class ModsCommand : Command
 }
 
 /// <summary>
-/// 一串 <c>--path</c> 念回给读的人时的写法。产地唯一 —— `get` 与 `fields` 说的是同一件事,
-/// 两份逐字相同的措辞只有一个结局:改一处、忘一处。
+/// 一串 <c>--path</c> 念回给读的人时的写法。产地唯一 —— `get` 与 `fields` 说的是同一件事。
 /// </summary>
 internal static class PathFilterText
 {
@@ -1482,9 +1374,8 @@ internal static class PathFilterText
 internal static class DefTypeMiss
 {
     /// <summary>
-    /// 「这个快照里没有这个 def 类型」的唯一产地。<c>list</c> 与 <c>fields</c> 原先各写一份,
-    /// 逐字相同 —— 两份逐字相同的句子只有一个结局:改一处、忘一处,而两条命令回答同一个
-    /// 问题时口径不一致,读的人会以为差别有意义。
+    /// 「这个快照里没有这个 def 类型」的唯一产地:<c>list</c> 与 <c>fields</c> 共用一份措辞,
+    /// 两条命令回答同一个问题时口径不许不一致,否则读的人会以为差别有意义。
     /// </summary>
     public static string Say(string typed, IEnumerable<string> known)
         => $"No def type named '{typed}' in this snapshot." +
@@ -1499,32 +1390,24 @@ internal static class Completeness
     /// 快照里有两套「完整」在互相打架:get 会为**单个 def** 声明「导出时砍掉了 N 个字段」,
     /// 而 find / values / fields 的计数以**已索引路径**为界 —— 某个 def 的 comps 在导出时被砍,
     /// 它就从 find 的结果里静默消失,而这恰恰是「一共有哪些」这类问题的致命伤。
-    /// 实测里五条轨迹各自带着一句消不掉的免责声明交了答案。
     ///
-    /// 但尾注本身也不能变成新的免责声明(00 论据 3)。所以它收窄到「与本次结果**同类型**的 def
-    /// 里真有被砍的」才出声:不出声时,「完整」就是无条件的,而不是「大概吧」。
+    /// 但尾注本身也不能变成新的免责声明,所以收窄到「与本次结果**同类型**的 def 里真有被
+    /// 砍的」才出声:不出声时,「完整」就是无条件的,而不是「大概吧」。
     /// </summary>
     /// <summary>
-    /// 末尾那条命令要**走得到刚才说的那批**。原先一律给裸命令,而它列的是全库 239 条,
-    /// 尾注刚说的却是其中某几个类型的一小批 —— 照着跑一遍拿到的是另一个集合,
-    /// 而两者的输出形状一模一样。类型不多时逐个带上 --type;多到列不下就说清列不下。
+    /// 末尾那条命令要**走得到刚才说的那批**:裸命令列的是全库,而尾注说的只是其中几个类型
+    /// 的一小批,两者输出形状一模一样。类型不多时逐个带上 --type;多到列不下就说清列不下。
     /// </summary>
     /// <summary>
-    /// 「这条路径不在索引里」有几种互不相同的成因,而反查侧那句话原先只覆盖「你拼错了」。
+    /// 「这条路径不在索引里」有几种互不相同的成因,句子要把它们列全 —— 它本身就是
+    /// 「为什么是零」的答案。
     ///
-    /// 导出器见 null 直接 return(DefExporter:284),那条路径从来没进过索引;嵌套
-    /// <c>&lt;li Class="…"&gt;</c> 的运行时类型也一样不进。于是「这个字段不存在」与
-    /// 「它在,只是每个 def 上都是 null」在输出上完全同形。
+    /// 导出器见 null 直接 return,那条路径从来没进过索引;嵌套 <c>&lt;li Class="…"&gt;</c>
+    /// 的运行时类型也一样不进;基类上声明的字段(如 <c>weight = 1f</c>)在 def 的运行时类
+    /// 是子类时反射默认拿不到(见 <c>FieldWalk</c>)。于是「这个字段不存在」与「它在,
+    /// 只是每个 def 上都是 null」在输出上完全同形。
     ///
-    /// <c>get</c> 早就为**单个 def** 说过这句话(五轮 F4),而 find / values / fields
-    /// 三条反查路一直没说 —— 第七轮六份轨迹独立踩,其中三次差点交出反向结论。
-    /// 一件事一个产地:三处调同一份措辞,不各写各的。
-    ///
-    /// **第八轮修正:原先这句话只说了 null 一种成因,而它把成因说错过。** ep118 问
-    /// <c>fields CreepJoinerBaseDef --path weight</c>,拿到的是「每个 def 上都是 null」——
-    /// 真因是 <c>weight = 1f</c> 声明在基类上而 def 的运行时类是子类,反射默认拿不到
-    /// (见 <c>FieldWalk</c>)。成因既然有好几种,就把它们列全:这句话本身就是「为什么是零」
-    /// 的答案,列全才是精确,不是啰嗦。
+    /// 一件事一个产地:find / values / fields 三处调同一份措辞,不各写各的。
     /// </summary>
     public static void NoteIndexHoldsValuesOnly(CommandContext ctx)
         => ctx.Report.Notice(NoticeKind.Boundary,
@@ -1538,26 +1421,21 @@ internal static class Completeness
     /// <summary>
     /// 上面这些行里,哪些的值是**同类型大多数 def 都有的那个**。
     ///
-    /// 第八轮 ep34 是全场最贵的一次险出错(cost 3):
-    /// <c>soundImpactDefault  BulletImpact_Ground  no</c> —— 字段名带 Impact、值叫
-    /// BulletImpact_Ground、官方光束有、用户自己的光束也一模一样,四条线索全指向
-    /// 「这就是命中音的挂点」。真相是 <c>ThingDef.ResolveReferences</c> 给**每一个**
-    /// ThingDef 都塞了这个值,而且字段语义还是反的。
+    /// 引擎会成批塞值(<c>ThingDef.ResolveReferences</c> 给**每一个** ThingDef 都塞了
+    /// <c>soundImpactDefault</c>,而那个字段的语义还是反的),而这一列能证的只有
+    /// 「与刚 new 出来的实例不同」,读的人却一律读成「有人挑了它」。分辨「XML 写的」与
+    /// 「引擎填的」在这份快照里没有产地(见 shared_values 建表注释),所以**不猜成因,
+    /// 只报可核对的事实**,读的人自己判。
     ///
-    /// 这一列能证的只有「与刚 new 出来的实例不同」,读的人却一律读成「有人挑了它」。
-    /// 分辨「XML 写的」与「引擎填的」在这份快照里没有产地(见 shared_values 建表注释),
-    /// 所以**不猜成因,只报可核对的事实**:3538 分之 2658,读的人自己判。
-    ///
-    /// 两边都说 —— 靠沉默承载「都是这个 def 自己的」正是这套输出一直在清的东西。
+    /// 两边都说 —— 不靠沉默承载「都是这个 def 自己的」。
     /// </summary>
     public static void NoteWidelySharedValues(
         CommandContext ctx, DefRow def, IReadOnlyList<FieldRow> fields)
     {
         if (fields.Count == 0) return;
         var shared = ctx.Db.SharedValues(def.DefType, fields.Select(f => (f.Path, f.Value)));
-        // 这张名单**不许截**。读的人是拿着某一行来对的,而「不在名单里」必须只有一个意思。
-        // 截了之后「没共享」与「被 and N more 吃掉了」在这一行上完全同形 —— 实测第一版就把
-        // ep34 的 soundImpactDefault (2658) 截进了 and 2 more 里,把这句话的用处整个吃掉。
+        // 这张名单**不许截**:读的人是拿着某一行来对的,而截了之后「没共享」与
+        // 「被 and N more 吃掉了」在这一行上完全同形。
         // 共享数大的排前面:越接近全类型,越像引擎填的。
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var listed = fields
@@ -1566,8 +1444,7 @@ internal static class Completeness
             .OrderByDescending(x => x.N).ThenBy(x => x.Path, StringComparer.Ordinal)
             .Select(x => $"{x.Path} ({x.N})")
             .ToList();
-        // 分母必须与 shared_values 同口径 —— 那张表是全库算的。get 不收 --scope(收了就会
-        // 印出「3 分之 9」这种加不起来的账),所以这里写死 all 是唯一正确的口径,不是偷懒。
+        // 分母必须与 shared_values 同口径 —— 那张表是全库算的,所以这里写死 all。
         var total = ctx.Db.CountDefsOfType(
             def.DefType, Snapshot.ScopeFilter.Parse("all", ctx.Db.PackageIds(), ctx.Config));
 
@@ -1582,9 +1459,8 @@ internal static class Completeness
     /// <summary>
     /// 嵌套 <c>&lt;li Class="…"&gt;</c> 的运行时类型这一维,手上这份快照量没量过。
     ///
-    /// 导出器 0.2.0 起发 <c>&lt;path&gt;.Class</c>(第七轮 T1)。而**老快照对
-    /// <c>find Class X</c> 回的那个零,与「量过了、确实没人用它」逐字同形** ——
-    /// 给索引加一维恰恰是最容易造出这个形状的改动,所以两种世界各说各的话,一处产地。
+    /// 导出器 0.2.0 起发 <c>&lt;path&gt;.Class</c>。而**老快照对 <c>find Class X</c> 回的
+    /// 那个零,与「量过了、确实没人用它」逐字同形**,所以两种世界各说各的话,一处产地。
     /// </summary>
     public static string NestedClassLine(CommandContext ctx)
         => ctx.Db.Meta.IndexesNestedClass
@@ -1602,13 +1478,9 @@ internal static class Completeness
         var shown = types.Take(Limits.MaxSuggestions).ToList();
         var cmd = "rimsearcher snapshot truncated" +
                   string.Concat(shown.Select(t => $" --type {t}"));
-        // 第六轮实测:原句写「defs of **the same def types**」,而它指的是「哪些 def 类型
-        // 带得动这条路径」,与表里那几行的类型没有任何关系 —— `find label 狂暴 --exact`
-        // 四行全是 MentalStateDef,脚注却建议 `--type BodyDef --type DutyDef --type ThingDef`。
-        // 「the same」是句子里唯一让人去对照的那个词,而它对照的东西不存在。
-        // 类型当场点名,读的人自己就能看出它跟表里那几行是不是一回事。
-        // 主语固定成「那些 def 类型」,计数进从句 —— 名词有登记处,动词没有,
-        // 「1 def … are of a def type」这种不一致靠加登记项修不掉(R6 的同一条)。
+        // 类型当场点名,不写「the same def types」—— 这里数的是「哪些 def 类型带得动这条
+        // 路径」,跟表里那几行的类型可以毫无关系。主语固定成「那些 def 类型」,计数进从句:
+        // 名词有登记处,动词没有。
         ctx.Report.Notice(NoticeKind.Boundary,
             "Counted over indexed field paths only: the def types that carry this path " +
             $"({NameList.Render(types, Limits.MaxSuggestions)}) also hold " +
@@ -1629,10 +1501,8 @@ internal static class Advisory
     /// 值侧是**单语**的:field_values 存的是游戏加载时的那一份文本(这份快照的语言),
     /// 而另一侧只活在 translations 表里,只有 `search` 看得见。
     ///
-    /// 第六轮实测的形状:中文快照上 `find --value "shield belt"` 回「本快照没有任何字段
-    /// 装着这段文本」,而 `search "shield belt"` 当场命中两个 def —— 两句话都对,
-    /// 而前者与「这东西真不存在」逐字同形。C41 差点据此把「显示成狂暴的技能」答错
-    /// (AbilityDef Berserk 的简中 label 是「激怒」),C42 是同一族的另一面。
+    /// 于是中文快照上 `find --value "shield belt"` 回「本快照没有任何字段装着这段文本」,
+    /// 而 `search "shield belt"` 当场命中 —— 两句话都对,而前者与「这东西真不存在」逐字同形。
     ///
     /// 只在文本索引**真的命中**时出声,并且点名命中了谁 —— 一句无条件的「值侧是单语的」
     /// 就是免责声明,而这一句自带可验证的下一步。
@@ -1657,10 +1527,10 @@ internal static class Advisory
     /// <summary>
     /// 这一屏里有两行的 label **逐字相同**。
     ///
-    /// 第六轮 C42:`TrapSpringChance` 与 `PawnTrapSpringChance` 的简中 label 都是
-    /// 「陷阱触发率」,def_type 也都是 StatDef,mod 也都是 Core —— 表里没有任何一列
-    /// 分得开它们,而问的人只想要其中一个。这一类不能靠「多说一句边界」修:查询技术上
-    /// 成功了,表是完整的,没有任何异常信号,只是**看得见的那几列不足以判**。
+    /// 同 label 同 def_type 同 mod 是常态(`TrapSpringChance` 与 `PawnTrapSpringChance` 的
+    /// 简中 label 都是「陷阱触发率」),此时表里没有任何一列分得开它们,而问的人只想要
+    /// 其中一个。这一类不能靠「多说一句边界」修:查询技术上成功了,表是完整的,
+    /// 没有任何异常信号,只是**看得见的那几列不足以判**。
     ///
     /// 所以这一句只做一件事:把撞在一起的那几组点出来,并指向真正分得开它们的东西
     /// (description 不在表里)。没撞就一个字不说。
@@ -1668,10 +1538,9 @@ internal static class Advisory
     /// <summary>
     /// 这一次命中横跨了不止一种路径形状。
     ///
-    /// 第六轮 C31:`find stat Mass` 的 1229 行里混着 1 行 <c>statFactors[].stat</c>,
-    /// 拿它做集合差时那一行是个**静默假阴性** —— 表里确实印了 path 列,但默认 25 行的
-    /// 视图下没人会逐行核对路径形状,而 `find` 恰恰是这套命令里用来做集合运算的那一个。
-    /// `values` 早有 matched_paths 表头,这是把同一条保护补到 `find` 上。
+    /// `find stat Mass` 的上千行里会混进几行 <c>statFactors[].stat</c>,拿它做集合差时
+    /// 那几行是**静默假阴性** —— 表里确实印了 path 列,但默认 25 行的视图下没人会逐行核对
+    /// 路径形状,而 `find` 恰恰是这套命令里用来做集合运算的那一个。
     ///
     /// 只有一种形状时一个字不说 —— 那时「结果集是齐的」是无条件的。
     /// </summary>
@@ -1694,8 +1563,8 @@ internal static class Advisory
     public static void NoteSameLabel(CommandContext ctx, IReadOnlyList<DefRow> rows)
     {
         // 同 label **且同 def 类型**才算撞。类型不同的那种(ConceptDef 与 ThingDef 都叫
-        // 「护盾腰带」)表里那一列当场分得开,再说一句就是废话 —— 而且「表里没有列分得开」
-        // 那半句在那种情形下是**假的**,一句为防误读而加的话自己先说错,比不说更坏。
+        // 「护盾腰带」)表里 def_type 列当场分得开,而句中「表里没有列分得开」那半句
+        // 在那种情形下是**假的**。
         var clashes = rows.Where(r => r.Label is { Length: > 0 })
                           .GroupBy(r => (r.Label!, r.DefType), TupleComparer)
                           .Where(g => g.Count() > 1)
@@ -1715,7 +1584,7 @@ internal static class Advisory
     }
 
     /// <summary>
-    /// 环境外翻译的聚合尾注(06 上下文预算:逐条标注聚合成一行,不是每行挂一句)。
+    /// 环境外翻译的聚合尾注:逐条标注聚合成一行,不是每行挂一句。
     /// </summary>
     public static void NoteOutsideTranslations(CommandContext ctx, IEnumerable<string> defNames)
     {
@@ -1730,15 +1599,14 @@ internal static class Advisory
     /// <summary>
     /// 同一块 <c>comps[N]</c> 里、有人设过的兄弟字段(同样是聚合成一行,不是每行挂一句)。
     ///
-    /// 第五轮实测:`minFuelCost=50` 盖掉同块的 `fuelPerTile=3`,差 16 倍,而只列出后者的
-    /// 那张表干净、计数明确、一条警告都没有 —— 错结论就是从那张表上读出来的。
-    /// 一句话只做一件事:**点名**,不解释谁盖谁。工具证得了「这几个字段有人设过、
-    /// 而且与你看的这个同处一块」,证不了「它们的关系是什么」,后者要读源码。
+    /// 同块字段会互相覆盖(`minFuelCost=50` 盖掉同块的 `fuelPerTile=3`),而只列出后者的
+    /// 那张表干净、计数明确、一条警告都没有。一句话只做一件事:**点名**,不解释谁盖谁 ——
+    /// 工具证得了「这几个字段有人设过、而且与你看的这个同处一块」,证不了它们的关系。
     ///
-    /// 第三道收窄在调用侧(<paramref name="shown"/> 已经筛过):只有当**你看的这一行自己**
-    /// 是有人设过的值时才提示。判别字段(compClass / thingClass / workerClass)按定义
-    /// 就是声明默认值,而 `find compClass CompShield` 恰恰是文档推荐的那条主查询 ——
-    /// 在它上面挂一句「同块还有 energyMax」是纯噪音,而噪音要在所有调用上收税。
+    /// 收窄在调用侧(<paramref name="shown"/> 已经筛过):只有当**你看的这一行自己**是有人
+    /// 设过的值时才提示。判别字段(compClass / thingClass / workerClass)按定义就是声明
+    /// 默认值,而 `find compClass CompShield` 恰恰是推荐的那条主查询 —— 在它上面挂一句
+    /// 「同块还有 energyMax」是纯噪音,而噪音要在所有调用上收税。
     /// </summary>
     public static void NoteAuthoredSiblings(CommandContext ctx,
                                             IEnumerable<(string DefName, long DefId, string Path)> shown)
@@ -1747,11 +1615,9 @@ internal static class Advisory
         var names = ctx.Db.AuthoredSiblings(rows.Select(r => (r.DefId, r.Path)));
         if (names.Count == 0) return;
 
-        // 第六轮实测的两处:块名写死成 `comps[N]`,而 ContainerPrefix 对**任何**带下标的
-        // 层都成立 —— `statBases[8]`、`corePart.parts[6]`、`degreeDatas[0].statFactors[0]`
-        // 三种块上都挂出了「Fields in one comps[N] entry」(8 份轨迹里 3 份撞上);
-        // 而那条命令发出去时 `<defName>` 与 `<block>` 两个占位符一个没填 —— 「指的路要走得通」
-        // 这道规矩在自家新写的句子上先破了。两样都当场算得出来,那就算出来。
+        // 块名不能写死成 `comps[N]`:ContainerPrefix 对**任何**带下标的层都成立
+        // (`statBases[8]`、`corePart.parts[6]`、`degreeDatas[0].statFactors[0]`)。
+        // 块名与 defName 都当场算得出来,句中的占位符一个都不许留。
         var first = rows.FirstOrDefault(r => PathSegments.ContainerPrefix(r.Path) is not null);
         var block = first.Path is null ? null : PathSegments.ContainerPrefix(first.Path)?.TrimEnd('.');
 

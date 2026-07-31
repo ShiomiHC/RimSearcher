@@ -36,22 +36,15 @@ public sealed record CsDecl(string Kind, string Name, string? Owner, int StartLi
 /// <summary>
 /// 大括号配平出来的 C# 轮廓 —— **不是**语法分析。
 ///
-/// 为什么不接 Roslyn:这一支从头到尾没有它,而为了「读一个方法体」把整个编译器前端拉进
-/// 一个查快照的 CLI,代价与收益差着量级。反编译产物的形状又恰好是所有 C# 里最规整的一种
-/// (ILSpy 生成,没有奇诡的格式化),配平括号足够把方法体的边界找准。
+/// 不接 Roslyn:为了「读一个方法体」把整个编译器前端拉进一个查快照的 CLI,代价与收益差着
+/// 量级。反编译产物(ILSpy 生成)的格式最规整,配平括号足够把方法体的边界找准。
 ///
-/// 这句话被量过一次(2026-07-31,全树 19467 文件 / 212829 条声明):当时有两类真错 ——
-/// 元组类型与泛型约束连写,合计 67 个文件 —— 而它们都是 <see cref="Classify"/> 的**局部判据**
-/// 缺陷,不是「没有解析」造成的,修完真错归零。判据见 <c>OutlineAuditTests</c>;
-/// 那次自检也是这条注释目前唯一的证据,再有人想换实现,先把它重跑一遍。
-///
-/// 但它的**边界必须说出去**,不能让调用方以为拿到的是一次解析(R51:能力边界写进它作用的
-/// 那个块)。三件事这里做不到,<see cref="ReadCommand"/> 会在用到时说:
+/// 三件事这里做不到,<see cref="ReadCommand"/> 会在用到时说:
 ///   · 预处理指令里的括号照样算数 —— <c>#if</c> 两侧各带半个 <c>{</c> 的写法会配歪;
 ///   · 泛型约束、`where T : class` 这类文本里的关键字靠位置规避,不靠语义;
 ///   · 找不到一个名字,只说明**文本扫描**没看见它,不等于它不在文件里。
 ///
-/// 字符串、字符、注释里的括号一律不算 —— 逐字符的状态机就是为这件事存在的。
+/// 字符串、字符、注释里的括号一律不算。
 /// </summary>
 public static class CsOutline
 {
@@ -152,8 +145,7 @@ public static class CsOutline
                     case ';':
                     {
                         // 无体成员:字段、常量、abstract/extern 方法、`=> expr;` 的属性,
-                        // 以及带主构造函数的 `record Foo(int X);`。同样只认声明能住的地方 ——
-                        // 否则方法体里的每一条语句都会被当成一个字段。
+                        // 以及带主构造函数的 `record Foo(int X);`。同样只认声明能住的地方。
                         if (Declarable(open))
                         {
                             var decl = Classify(Normalize(pending.ToString()), OwnerOf(open), bodyless: true);
@@ -167,9 +159,8 @@ public static class CsOutline
                     }
                 }
 
-                // 声明从第一个**非空白**字符开始。原先这里先记行号再无条件 append,于是
-                // 每行开头那个缩进 tab 会把 pending 变成非空,起始行号从此再也不更新 ——
-                // 整份文件的声明全部报成同一个起点。
+                // 声明从第一个**非空白**字符开始:空白要在记行号**之前**跳掉,否则行首缩进
+                // 就把 pending 变成非空,起始行号再也不更新。
                 if (pending.Length == 0)
                 {
                     if (char.IsWhiteSpace(ch)) continue;
@@ -205,8 +196,7 @@ public static class CsOutline
 
     /// <summary>
     /// 声明行往上收编紧挨着的注释与特性行。文档注释与 <c>[Attribute]</c> 是声明的一部分,
-    /// 而词法器把注释整个吞掉了,特性又常常自成一行 —— 不收编,读到的方法体会缺掉
-    /// 「这个方法是干什么的」那几行,而那正是读它的理由。
+    /// 而词法器把注释整个吞掉了,特性又常常自成一行。
     /// </summary>
     private static int Backfill(IReadOnlyList<string> lines, int start)
     {
@@ -246,8 +236,7 @@ public static class CsOutline
 
         // 成员一律带着 owner 的泛型参数走。少了它,`ThingOwner<T>.Count` 与
         // `ThingOwner.Count`(同一个文件里的两个类,vanilla 真有)在输出里逐字相同,
-        // 于是 --member 列出两条一模一样的候选,再教一次 --type 也选不动 ——
-        // 而那正是 --type 唯一收敛不了的形状。
+        // --member 给出两条无从区分的候选,--type 也收敛不了。
         var ownerName = owner?.Name;
         var ownerParams = owner?.TypeParams ?? "";
 
@@ -266,15 +255,15 @@ public static class CsOutline
         if (header.StartsWith('#')) return null;
 
         // 无体声明的等号右边是初值,不是声明的一部分 —— 而初值里的圆括号会把一个字段
-        // 认成方法:`readonly Material BubbleMat = MaterialPool.MatFrom(…)` 报出来的名字
-        // 曾经是 MatFrom。先切,再判。
+        // 认成方法:`readonly Material BubbleMat = MaterialPool.MatFrom(…)` 会报成 MatFrom。
+        // 先切,再判。
         if (bodyless) header = StripInitializer(header);
 
         // 泛型约束同理:那一段里没有正在被声明的名字。而它不只是「多认一个」——
         // `where T : class where U : struct` 里的 `class where` 正好是
         // 「class 关键字 + 空格 + 标识符」,AfterKeyword 会认成一个叫 where 的类型,
-        // 于是这个**方法**以类型身份压栈,Declarable 跟着放行,方法体里的每条语句
-        // 都变成声明(全树自检 8 个文件,整块崩)。必须在找 TypeKeywords 之前切。
+        // 于是这个**方法**以类型身份压栈,方法体里的每条语句都变成声明。
+        // 必须在找 TypeKeywords 之前切。
         header = StripConstraints(header);
 
         // 类型。关键字必须后接一个标识符,于是 `where T : class` 这种约束文本不会命中
@@ -376,10 +365,8 @@ public static class CsOutline
     /// 第一个顶层 '(' 不一定就是它 —— 元组类型自带一对括号,而它写在名字**左边**:
     /// <c>internal (int left, int right) Split(int at)</c> 的第一个 '(' 是返回类型。
     /// 取错的代价不是少认一个成员:<see cref="IdentifierBefore"/> 会往左取到修饰符,
-    /// 于是这个方法在轮廓里叫 <c>internal</c>,真名字 Split 一个字都不剩,
-    /// 而行号仍然是对的 —— 错答案穿着对答案的衣服。字段同理
-    /// (<c>private (int lo, int hi) bounds;</c> 曾报出一个叫 private 的方法)。
-    /// 全树自检:vanilla 23 个文件,含 CellRect 的三个 Split* 与 Dialog_FormCaravan 的缓存字段。
+    /// 这个方法在轮廓里就叫 <c>internal</c>,而行号仍然是对的 —— 错答案穿着对答案的衣服。
+    /// 字段同理(<c>private (int lo, int hi) bounds;</c>)。
     ///
     /// 判据:一个顶层 '(' 若其配对 ')' 后面还跟着标识符,它就是类型不是参数表 ——
     /// 参数表右边只可能是泛型约束、基构造调用、'=>' 或行尾,都不以标识符打头。
@@ -398,8 +385,7 @@ public static class CsOutline
                     var close = MatchParen(header, i);
                     if (close < 0) return i;          // 没配上,按参数表处理
                     // ')' 右边还可能挂类型后缀:数组 `[]`、多维 `[,]`、可空 `?`,以及它们的
-                    // 组合(`(int, int)?[] xs`)。跳过这些再看是不是标识符 —— 漏掉它们,
-                    // `private (T Element, T Priority)[] _nodes;` 又会报成一个叫 private 的方法。
+                    // 组合(`(int, int)?[] xs`)。跳过这些再看是不是标识符。
                     // **冒号不跳**:`Foo(int a) : base(a)` 的右边是基构造调用,
                     // 那个 '(' 属于 base,跳过去就把构造函数认成了 base。
                     var j = close + 1;

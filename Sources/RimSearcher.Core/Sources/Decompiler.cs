@@ -11,8 +11,7 @@ public sealed record DecompileRequest
     public required string OutputDirectory { get; init; }
 
     /// <summary>
-    /// 类型解析用的搜索目录。缺了它泛型约束和继承链会退化成 object ——
-    /// 而那正是「看得懂代码」与「看得见代码」的差别。
+    /// 类型解析用的搜索目录。缺了它泛型约束和继承链会退化成 object。
     /// </summary>
     public IReadOnlyList<string> ReferencePaths { get; init; } = [];
 }
@@ -26,20 +25,15 @@ public sealed record DecompileOutcome
 }
 
 /// <summary>
-/// 一个程序集 → 一棵 .cs 目录树。从旧世系 <c>DecompileService</c> 原样带走。
+/// 一个程序集 → 一棵 .cs 目录树。只依赖 ICSharpCode.Decompiler 这个 NuGet 包。
 ///
-/// 这是那一支唯一非搬不可的东西:它只依赖 ICSharpCode.Decompiler 这个 NuGet 包,
-/// 与 MCP 的任何管线都无关。旧世系剩下的九百行(事务、历史、自制 diff)不搬 ——
-/// 版本间差异交给 git,那是它的本职,而且**严格强于**自制 diff(重命名检测、跨版本回溯)。
+/// 反编译到此为止:事务、历史、版本间 diff 一概不做 —— 差异交给 git。
 /// </summary>
 public static class Decompiler
 {
     /// <summary>
-    /// RimWorld 跑在 Unity 2022.3 上,官方语言档位是 C# 9(record/init 因缺 IsExternalInit 实际不可用)。
-    /// 锁在 CSharp9_0 是为了让产物贴近 Ludeon 真实能写出的形态,而不是让反编译器用 C# 11 语法糖重写。
-    ///
-    /// 它还是**字节级稳定**的前提:档位一变,整棵树的每个文件都会重排,git diff 里就是
-    /// 一万四千个文件全红,而真正的游戏改动淹在里面。
+    /// RimWorld 对应 Unity 2022.3 - C# 9(缺 IsExternalInit),锁 CSharp9_0。
+    /// 档位一变整棵树重排,字节级稳定也依赖它锁死。
     /// </summary>
     public static DecompilerSettings CreateSettings() => new(LanguageVersion.CSharp9_0)
     {
@@ -94,13 +88,8 @@ public static class Decompiler
     /// <summary>
     /// 把 <c>.csproj</c> 里的 <c>ProjectGuid</c> 换成由项目名算出的固定值。
     ///
-    /// 反编译器每跑一次都生成一个新的随机 GUID,而那是整棵树里**唯一**不确定的东西:
-    /// 实测一次「什么都没变」的重跑,一万四千个 .cs 逐字节相同,29 个 .csproj 全红,红的
-    /// 只有这一行。留着它,每次同步的 diff 里都躺着二十九条假改动 —— 而这个仓存在的
-    /// 唯一目的就是让真改动一眼可见。
-    ///
-    /// 不直接删掉 .csproj:它记着这个程序集引用了谁,而引用集合变了是**真**改动,
-    /// 是值得在 diff 里看见的那一类。
+    /// 反编译器每跑一次都生成新的随机 GUID,是整棵树里唯一不确定的东西,会在每次同步的
+    /// diff 里造出假改动。不删 .csproj:它记着程序集引用了谁,引用集合变了是真改动。
     /// </summary>
     private static void StabilizeProjectGuids(string directory)
     {

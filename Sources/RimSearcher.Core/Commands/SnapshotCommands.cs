@@ -48,8 +48,7 @@ public sealed class SnapshotListCommand : Command
                 mods = game = exported = defs = "unreadable";
             }
 
-            // 状态不进名字格。凡是要被复制回命令行的单元格都只放能原样粘贴的东西 ——
-            // 实测里有人把 `modded (active)` 整个抄进 --snapshot,吃了一句「No snapshot named」。
+            // 状态不进名字格:要被复制回命令行的单元格只放能原样粘贴的东西。
             rows.Add(new Dictionary<string, object?>
             {
                 ["name"] = e.Alias,
@@ -123,13 +122,8 @@ public sealed class SnapshotStatusCommand : Command
                 ctx.Report.Notice(NoticeKind.SnapshotChoice,
                     "This snapshot matches the game as installed right now on the three things that are " +
                     "compared: same mods, same order, same version.");
-                // 第七轮 T7:上面那句原先到此为止,而**八份盲测轨迹一份都没问它比的是什么** ——
-                // 一致地读成了一句「快照 = 现在的游戏数据」的背书。其中一份据此对
-                // 「我刚改了自己 mod 里的音效文件,生效没有」下了否定判决,而那恰恰是这个比较
-                // 结构上不可能察觉的那一类改动:mod 列表、顺序、版本号三样全都不变。
-                //
-                // 与上一轮「33 棵树 vs 23 棵树」同形:工具把自己的口径老老实实印在输出里,
-                // 八个人一致地把那句自我限定读成了背书。**这一次把没比的那半也印出来。**
+                // 「matches」只覆盖 mod 列表、顺序、版本号三样,容易被读成「快照 = 当前游戏
+                // 数据」的背书,所以把没比的那半也印出来。
                 ctx.Report.Notice(NoticeKind.Boundary,
                     "Nothing inside those mods is compared. The XML, patches, textures and audio were read " +
                     $"once, at export time ({db.Meta.ExportedAtUtc} UTC); a file edited since then leaves this " +
@@ -206,8 +200,6 @@ public sealed class SnapshotTruncatedCommand : Command
                 Aliases = ["def-type", "deftype", "kind"],
                 Placeholder = "<DefType>",
                 Arity = Arity.Multi,
-                // 别处的尾注点名的是「与本次结果同类型的那批」,而这条命令原先只有全库一档:
-                // 照着尾注跑一遍拿到的是另一个集合,输出形状却一模一样。
                 Help = "Only defs of this type. Repeat it for several — the completeness footnotes elsewhere " +
                        "name the types they mean, and this is the switch that carries them over.",
                 Narrows = true,
@@ -240,9 +232,8 @@ public sealed class SnapshotTruncatedCommand : Command
 
         if (rows.Count == 0)
         {
-            // 收窄之后的零结果与「整份快照都没有」不是一回事,而两句话原先是同一句 ——
-            // 「so counts over field paths are complete for it」在收窄时担保的是整份快照,
-            // 而它只查了其中一小块。收窄了就把收窄的条件念回去,并且把全库那个数一起给出。
+            // 收窄之后的零结果与「整份快照都没有」不是一回事:收窄了就把条件念回去,
+            // 并把全库那个数一起给出。
             var narrowed = types.Count > 0 || defName is { Length: > 0 };
             var parts = new List<string>();
             if (types.Count > 0) parts.Add("--type " + string.Join(" --type ", types));
@@ -350,12 +341,8 @@ public sealed class SnapshotImportCommand : Command
         var name = ctx.Args.Value("name") ?? StripExtensions(Path.GetFileName(file));
         var dbPath = Path.Combine(ctx.Config.ResolveSnapshotDir(), name + ".db");
 
-        // 收割默认开。实测这一步在 16787 def 的快照上多花 0.75s(总 35s 的 2%),换来的是
-        // 3815 个只在磁盘上存在的 key —— 关着的时候这些 key 查出来是「没有」,而那是假的。
-        //
-        // 默认关的时候还有一个更深的问题:一份没收割的库对「磁盘上有没有」这个问题**根本
-        // 没有资格回答**,可它印出来的是一句普通的「没有」。默认开只是把这种库变少,
-        // 消灭不了它(--no-harvest 和没配 mod_roots 都还在),所以扫了几个根目录要记进 meta。
+        // 收割默认开:代价约 2% 导入耗时,换来只在磁盘上存在的 key 不被答成「没有」。
+        // 没收割的库对「磁盘上有没有」没有资格回答,所以扫了几个根目录要记进 meta。
         if (ctx.Args.Flag("harvest-translations") && ctx.Args.Flag("no-harvest-translations"))
             throw new CliUsageException(
                 "--harvest-translations and --no-harvest-translations ask for opposite things. Picking one " +
@@ -391,9 +378,7 @@ public sealed class SnapshotImportCommand : Command
                 $"{Tally.Complete(stats.TruncatedDefs).Render("def")} had fields dropped at export time for depth " +
                 "or size. 'get' says so per def, so that a missing path is never mistaken for an absent field.");
 
-        // 没收割的时候要说破,而且两个成因分开说 —— 补救不一样(收回参数 / 去配 mod_roots)。
-        // 这句话真正防的是往后:这份库对「磁盘上有没有这一句」没有资格回答,而它印出来的
-        // 会是一句普通的「没有」。
+        // 没收割要说破,两个成因分开说 —— 补救不一样(收回参数 / 去配 mod_roots)。
         if (!harvest)
             ctx.Report.Notice(NoticeKind.Boundary,
                 "--no-harvest-translations: only the translations the game actually had are indexed, so this " +

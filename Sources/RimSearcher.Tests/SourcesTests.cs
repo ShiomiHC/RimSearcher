@@ -8,9 +8,9 @@ namespace RimSearcher.Tests;
 /// <summary>
 /// 反编译谁、放在哪、叫什么名字。
 ///
-/// 这一批闸看的是**选择**,不是反编译本身 —— 后者是 ILSpy 的活儿,跑一次几十秒。
-/// 而选错的代价恰恰更大:多反编译一份旧版本的 dll,<c>code-search</c> 就会拿出根本没在跑的
-/// 代码,而它长得跟真答案一模一样。实测代价已经付过:HAR 装了六年,20 个 dll 里在用的只有 2 个。
+/// 这一批闸看的是**选择**,不是反编译本身(那是 ILSpy 的活儿,跑一次几十秒):
+/// 多反编译一份旧版本的 dll,<c>code-search</c> 就会拿出根本没在跑的代码,
+/// 而它长得跟真答案一模一样。实测 HAR 的 20 个 dll 里在用的只有 2 个。
 /// </summary>
 public class SourcesTests
 {
@@ -33,8 +33,8 @@ public class SourcesTests
         => Assert.True(AssemblyFilter.IsRuntimeAssembly(name));
 
     /// <summary>
-    /// 裸前缀 StartsWith 会把这些正常 mod 程序集整批当成运行时库排掉,它们的源码就永远
-    /// 进不了树 —— 而查不到的人看不出原因。所以精确名与「点分家族」是两档,不是一档。
+    /// 裸前缀 StartsWith 会把这些正常 mod 程序集整批当成运行时库排掉。
+    /// 所以精确名与「点分家族」是两档,不是一档。
     /// </summary>
     [Theory]
     [InlineData("SystematicWeapons.dll")]
@@ -52,7 +52,7 @@ public class SourcesTests
 
     /// <summary>
     /// 同一个 dll 在根 <c>Assemblies/</c> 与版本目录里各一份时,游戏用版本目录那份
-    /// (实测 HAR 就是这样)。取错的后果是反编译出好几年前的代码。
+    /// (实测 HAR 就是这样)。
     /// </summary>
     [Fact]
     public void 版本目录里的dll顶掉根目录的同名dll()
@@ -80,7 +80,7 @@ public class SourcesTests
 
     /// <summary>
     /// <c>1.6_unofficial</c> 不是「1.6 的另一种写法」,而是一条靠 <c>IfModActive</c> 开关的
-    /// 互斥分支(实测:RatkinGene)。把它当版本目录会让两套代码同时进树。
+    /// 互斥分支。把它当版本目录会让两套代码同时进树。
     /// </summary>
     [Fact]
     public void 带后缀的目录名不算版本目录()
@@ -108,8 +108,8 @@ public class SourcesTests
     // ---- loadFolders.xml ----
 
     /// <summary>
-    /// 互斥分支由**启用了哪些 mod** 裁定,而那件事快照里已经记着。旧世系靠 config 里手写一条
-    /// <c>active_mods</c>,而手写清单会漂 —— 这个错刚在 export 上付过一次代价。
+    /// 互斥分支由**启用了哪些 mod** 裁定,而那件事快照里已经记着 ——
+    /// 不走 config 里手写的清单,手写清单会漂。
     /// </summary>
     [Fact]
     public void 互斥分支按启用的mod裁()
@@ -137,7 +137,7 @@ public class SourcesTests
 
     /// <summary>
     /// Steam 订阅那份 id 尾巴上挂 <c>_steam</c>,而 loadFolders 里写的是裸 id。
-    /// 游戏比对时忽略这个后缀(<c>ignorePostfix</c>),不忽略就等于整条分支永远关着。
+    /// 游戏比对时忽略这个后缀(<c>ignorePostfix</c>)。
     /// </summary>
     [Fact]
     public void steam后缀不影响启用判定()
@@ -155,8 +155,8 @@ public class SourcesTests
     }
 
     /// <summary>
-    /// 声明了本版本的目录列表,就**只**用它 —— 根目录、Common、版本目录一概不再自动补。
-    /// 这一条最容易想当然地补上,而补了就等于让被条件关掉的那套又漏进来。
+    /// 声明了本版本的目录列表,就**只**用它 —— 根目录、Common、版本目录一概不再自动补,
+    /// 补了就等于让被条件关掉的那套又漏进来。
     /// </summary>
     [Fact]
     public void loadFolders声明过就不再自动补根目录()
@@ -175,8 +175,8 @@ public class SourcesTests
     }
 
     /// <summary>
-    /// 游戏的完整版本号是 <c>1.6.4871</c>,而 mod 写的键几乎总是 <c>1.6</c>。
-    /// 只做精确匹配的话,**每一个** loadFolders.xml 都会被判成不适用 —— 于是这个回退不是花活。
+    /// 游戏的完整版本号是 <c>1.6.4871</c>,而 mod 写的键几乎总是 <c>1.6</c>:
+    /// 只做精确匹配的话,**每一个** loadFolders.xml 都会被判成不适用。
     /// </summary>
     [Fact]
     public void 版本键回退到小于等于当前的最高一个()
@@ -225,7 +225,7 @@ public class SourcesTests
 
     /// <summary>
     /// 树名就是 packageId —— <c>rimsearcher mods</c> 第二列那个,<c>--scope</c> 认的那个。
-    /// 另起一套短名字等于给同一件事造第二个产地,而两套名字迟早对不上。
+    /// 不另起一套短名字:那是同一件事的第二个产地,两套名字迟早对不上。
     /// </summary>
     [Fact]
     public void 树名取packageId()
@@ -262,7 +262,7 @@ public class SourcesTests
         Assert.Equal([game.Path("RimWorldWin64_Data/Managed/Assembly-CSharp.dll")], vanilla.Assemblies);
     }
 
-    /// <summary>纯 XML mod 不建树。一棵空目录只是噪音,而 <c>sources list</c> 还得为它编一行状态。</summary>
+    /// <summary>纯 XML mod 不建树 —— 一棵空目录只是噪音。</summary>
     [Fact]
     public void 不加载程序集的mod不建树()
     {
@@ -287,7 +287,7 @@ public class SourcesTests
         Assert.Empty(plans);
     }
 
-    /// <summary>没装的 mod 单独报,不能默默漏掉 —— 漏掉就是一棵本该有的树无声地不存在。</summary>
+    /// <summary>没装的 mod 单独报,不能默默漏掉。</summary>
     [Fact]
     public void 没装的mod单独报()
     {
@@ -304,16 +304,15 @@ public class SourcesTests
 
     /// <summary>
     /// 语言档位锁在 C# 9:RimWorld 跑在 Unity 2022.3,这是 Ludeon 真能写出的形态。
-    /// 它还是字节级稳定的前提 —— 档位一变,一万四千个文件全重排,真正的改动就淹了。
+    /// 它也是字节级稳定的前提 —— 档位一变,整棵树重排。
     /// </summary>
     [Fact]
     public void 反编译语言档位锁在csharp9()
         => Assert.Equal(LanguageVersion.CSharp9_0, Decompiler.CreateSettings().GetMinimumRequiredVersion());
 
     /// <summary>
-    /// 产出必须逐次相同。反编译器给每个 .csproj 生成一个新的随机 ProjectGuid,而那是整棵树里
-    /// 唯一不确定的东西 —— 实测一次「什么都没变」的重跑:一万四千个 .cs 逐字节相同,
-    /// 29 个 .csproj 全红,红的只有那一行。二十九条假改动会把真改动埋掉,而这个仓只为真改动存在。
+    /// 产出必须逐次相同。反编译器给每个 .csproj 生成一个新的随机 ProjectGuid,
+    /// 那是整棵树里唯一不确定的东西 —— 每次重跑每个 .csproj 都会假红一行。
     /// </summary>
     [Fact]
     public void 项目GUID由项目名定而不是每次随机()
@@ -325,8 +324,8 @@ public class SourcesTests
     }
 
     /// <summary>
-    /// 清单里的路径相对 mod 根,而且**没有时间戳**。绝对路径会让库一搬家每棵树都变红;
-    /// 时间戳会让每次同步都无端改一行 —— 而那件事 git 的提交时间已经记着了。
+    /// 清单里的路径相对 mod 根,而且**没有时间戳**:绝对路径会让库一搬家每棵树都变红;
+    /// 时间戳会让每次同步都无端改一行,而 git 的提交时间已经记着那件事。
     /// </summary>
     [Fact]
     public void 清单不含绝对路径与时间戳()
@@ -354,8 +353,7 @@ public class SourcesTests
     }
 
     /// <summary>
-    /// 同一批 dll 再算一遍,清单必须逐字相同 —— 否则「没变就不重跑」这条判据就是假的,
-    /// 每次同步都会重建整棵树,而 git diff 里全是噪音。
+    /// 同一批 dll 再算一遍,清单必须逐字相同 —— 「没变就不重跑」这条判据靠它成立。
     /// </summary>
     [Fact]
     public void 同一批dll算出同一份清单()
@@ -390,10 +388,9 @@ public class SourcesTests
     }
 
     /// <summary>
-    /// 树里不再写一个 <c>*</c> 的 .gitignore。旧世系写它是为了防止使用者的 mod 工程仓库
-    /// 顺手把产物一起提交 —— 那个顾虑是对的,但现在这棵树**自己就是一个 git 仓**,
-    /// 嵌套的 .git 本来就让外层仓库看不进来,而且比 ignore 规则更硬(外层改不掉它)。
-    /// 留着那个文件反而会屏蔽掉这棵树自己的版本控制,也就屏蔽掉唯一的 diff 能力。
+    /// 树里不写 <c>*</c> 的 .gitignore:这棵树**自己就是一个 git 仓**,嵌套的 .git 已经
+    /// 让外层仓库看不进来(比 ignore 规则更硬,外层改不掉),而那个文件会连带屏蔽掉
+    /// 这棵树自己的版本控制 —— 也就是唯一的 diff 能力。
     /// </summary>
     [Fact]
     public void 清单落地时不写屏蔽自己的gitignore()
@@ -410,10 +407,8 @@ public class SourcesTests
 
     /// <summary>
     /// <c>--source</c> 打不中时不许只给一个「看起来像」的答案。树名是 packageId(全名),
-    /// 而人记得的往往是外号 —— 外号不在任何数据里,打分器只能给出看似合理却错的那一个。
-    /// 实测:<c>--source HAR</c> 换来 <c>brrainz.harmony</c>,而真正要的是
-    /// <c>erdelf.humanoidalienraces</c>。错的独家建议比没有建议更坏:它看着像答案,
-    /// 于是没人再去看名单。
+    /// 而人记得的往往是外号,外号不在任何数据里 —— 实测 <c>--source HAR</c> 打分打出
+    /// <c>brrainz.harmony</c>,真正要的是 <c>erdelf.humanoidalienraces</c>。
     /// </summary>
     [Fact]
     public void 树名打不中时要指向完整名单而不是只给一个看起来像的()
@@ -430,7 +425,7 @@ public class SourcesTests
         => mods.ToDictionary(m => m.Id, m => new InstalledMod(m.Id, m.Id, m.Dir),
                              StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>一次性的假 mod 目录。真 mod 目录随订阅内容变,拿它当输入闸会天天红。</summary>
+    /// <summary>一次性的假 mod 目录 —— 真 mod 目录随订阅内容变,拿它当输入闸会天天红。</summary>
     private sealed class TempMod : IDisposable
     {
         public string Root { get; } = System.IO.Path.Combine(

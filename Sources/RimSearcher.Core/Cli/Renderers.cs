@@ -6,16 +6,13 @@ namespace RimSearcher.Cli;
 /// <summary>
 /// 声明层的两个渲染器之一:<c>--help</c>。
 /// 另一个是 <see cref="MarkdownRenderer"/>(生成 references/cli-reference.md)。
-/// 两个渲染器读同一份 <see cref="CommandSpec"/> —— 上游的反面对照是三份声明零同步
-/// (贫瘠 --help + SKILL.md 速查表 + 手写 cli-reference)。
+/// 两个渲染器读同一份 <see cref="CommandSpec"/>。
 /// </summary>
 public static class HelpRenderer
 {
     /// <summary>
-    /// 「Global options」这个词本身在暗示位置自由,而解析器要求它写在**命令之后** ——
-    /// `rimsearcher --json types` 于是 exit 2,而人正是照着这个小标题写的。
-    /// 上一轮补的是那条纠正话(<see cref="Runner"/> 里),抵触的这一头一直没动:
-    /// 约束要与标题同行,隔一段再说等于没说。
+    /// 「Global options」这个词暗示位置自由,而解析器要求它写在**命令之后**
+    /// (`rimsearcher --json types` 是 exit 2),所以约束必须与标题同行。
     /// </summary>
     internal const string GlobalsHeading = "Global options (every command takes these, written after the command):";
 
@@ -74,8 +71,7 @@ public static class HelpRenderer
             AppendOptions(sb, globals);
         }
 
-        // R14:键名此前只活在代码里,于是消费方先猜键再发命令。猜错拿到的是 null,
-        // 而那与「查到了但确实没有」在下游同形 —— 这套输出里最不该留的那种形状。
+        // 键名要写出来:猜错读到的 null 与「查到了但确实没有」在下游同形。
         if (spec.JsonKeys.Length > 0)
         {
             sb.Append(OutputText.Newline).Append("--json keys (besides 'notes'):").Append(OutputText.Newline);
@@ -124,8 +120,7 @@ public static class HelpRenderer
 
 /// <summary>
 /// 声明层的第二个渲染器:markdown。产物是 <c>skills/rimsearcher/references/cli-reference.md</c>,
-/// 由 <c>docs</c> 命令生成、由字节级闸守着 —— 手改无效,闸会红
-/// (master 七份 tools/list 基线的同一纪律,判据零新写)。
+/// 由 <c>docs</c> 命令生成、由字节级测试守着 —— 手改会让测试变红。
 /// </summary>
 public static class MarkdownRenderer
 {
@@ -145,9 +140,7 @@ public static class MarkdownRenderer
             sb.Append("| `").Append(c.Name).Append("` | ").Append(Escape(c.Summary)).Append(" |").Append(OutputText.Newline);
         sb.Append(OutputText.Newline);
 
-        // R12:退出码原先在任何文档里都没有出现过 —— 三份盲测轨迹各自撞上「正文是一句正确、
-        // 有信息量的结论,退出码却说失败」,而参考页花了很多篇幅讲不要管道过滤,却没防住
-        // 同样会丢信息的 `&&`。约定本身是清晰的(Runner 的三个常量),缺的只是把它写下来。
+        // 退出码要写进参考页:exit 1 是「查到了但没有」而不是失败,不写下来会被当失败读。
         sb.Append("## Exit codes").Append(OutputText.Newline).Append(OutputText.Newline);
         sb.Append("| Code | Meaning |").Append(OutputText.Newline);
         sb.Append("|---|---|").Append(OutputText.Newline);
@@ -161,9 +154,7 @@ public static class MarkdownRenderer
           .Append("`;` rather than `&&`, or a `1` on a query that answered your question will silently drop ")
           .Append("whatever you queued after it.").Append(OutputText.Newline).Append(OutputText.Newline);
 
-        // R14:「nothing is lost」这句承诺此前只兑现了一半 —— notes 确实在,而**数据键叫什么**
-        // 一个字都没写。于是消费方只能先猜一个键名再发命令,猜错读到 null,而 null 与
-        // 「查到了但确实没有」在下游长得一模一样。每条命令自己那一节列出它的键。
+        // 数据键名同样要写出来:猜错读到的 null 与「查到了但确实没有」在下游同形。
         sb.Append("## `--json`").Append(OutputText.Newline).Append(OutputText.Newline);
         sb.Append("The root is an object. Every prose sentence the text output would have printed moves into ")
           .Append("`notes`, an array of `{kind, text}` — `kind` is one of ")

@@ -8,17 +8,16 @@ public sealed record DefRow(long Id, string DefType, string DefName, string? Lab
                             int FieldsTruncated);
 
 /// <summary>
-/// 一条字段值。<paramref name="Default"/> 取 <see cref="Contract.DefaultState"/> 三值之一 ——
-/// 「这一行是不是 C# 声明默认值」是 R1 的全部内容,而它必须**随行**走到呈现层:
-/// 摊平成 bool 会把「没法比」并进某一边,而那一边说出来的话它证不了。
+/// 一条字段值。<paramref name="Default"/> 取 <see cref="Contract.DefaultState"/> 三值之一,
+/// 不摊平成 bool —— 「没法比」并进任一边都会说出证不了的话。
 /// </summary>
 public sealed record FieldRow(string Path, string Leaf, string? Value, int Default);
 
 /// <summary>
 /// 完整性尾注要说的两件事:与本次结果同类型的 def 里被砍过的**有几个**,以及**是哪几个类型**。
 ///
-/// 只回一个数不够 —— 尾注末尾那条续页命令得带上收窄开关,否则它指向的是全库 239 条,
-/// 而尾注刚说的是其中某几个类型的一小批。指的路走不到刚说的地方,与不指路是同一种错。
+/// 只回一个数不够 —— 尾注末尾那条续页命令得带上收窄开关,否则它指向的是全库,
+/// 而尾注刚说的是其中某几个类型的一小批。
 /// </summary>
 public sealed record TruncationScope(int Count, IReadOnlyList<string> Types);
 
@@ -35,8 +34,7 @@ public enum ValueMatch
     /// 值**就是**这个标识符,或者是它的限定形态(<c>RimWorld.CompShield</c> 之于
     /// <c>CompShield</c>)。
     ///
-    /// 子串在这一档会骗人:<c>ludeon.rimworld</c> 命中 <c>ludeon.rimworld.royalty</c>,
-    /// 于是「它是某个字段的取值」把「它是这份快照覆盖的一个 mod」这个更强的解释挤掉了。
+    /// 不用子串:<c>ludeon.rimworld</c> 会命中 <c>ludeon.rimworld.royalty</c>。
     /// 只有落空成因分流(<see cref="Commands.NameLookup"/>)用它 —— 那里要问的是
     /// 「这个名字就是它」,不是「这个名字出现在它里面」。
     /// </summary>
@@ -65,7 +63,7 @@ public sealed record KeyedRow(string Key, string? Translated, string? Original, 
 /// <summary>
 /// 继承层的一行:XML 里一个带 <c>Name=</c> / <c>ParentName=</c> / <c>Abstract=</c> 的节点。
 /// <paramref name="PatchOps"/> 是有多少条 PatchOperation 的 xpath 点了这个 Name —— 这一层
-/// 是打补丁**之前**的原文,那个数就是这份时间差的逐条申报。
+/// 是打补丁**之前**的原文。
 /// </summary>
 public sealed record XmlNodeRow(string DefType, string? Name, string? ParentName, bool Abstract,
                                 string? DefName, string? Label, string? SourceMod, string? SourceFile,
@@ -73,8 +71,7 @@ public sealed record XmlNodeRow(string DefType, string? Name, string? ParentName
 
 /// <summary>
 /// 快照库的只读查询面。所有带上限的查询都同时回传总数 —— 三态文法要求调用方能区分
-/// 「就这么多」与「被截了」(02-1:上游全 CLI 返回裸数组,LIMIT 命中与否不可区分,
-/// 这是 master 上被盲测反复验证过的第一优先级问题)。
+/// 「就这么多」与「被截了」(上游全 CLI 返回裸数组,LIMIT 命中与否不可区分)。
 /// </summary>
 public sealed class SnapshotDb : IDisposable
 {
@@ -149,7 +146,7 @@ public sealed class SnapshotDb : IDisposable
                                     rd.IsDBNull(2) ? null : rd.GetString(2)));
         }
 
-        // 版本闸在上面,所以这一格从 v7 起必然写过 —— 读不出来只可能是别的工具伪造的库。
+        // 版本闸在上面,这一格必然写过 —— 读不出来只可能是别的工具伪造的库。
         var harvested = meta.TryGetValue(SnapshotSchema.MetaKeyHarvestedRoots, out var hr) &&
                         int.TryParse(hr, out var roots) && roots > 0;
 
@@ -201,16 +198,9 @@ public sealed class SnapshotDb : IDisposable
 
         var total = Scalar($"SELECT COUNT(*) {from}", p);
 
-        // 排序:名字整体命中 > 名字里某一段命中 > bm25 相关度 > 名字短的在前。
-        // 光按名字长度排,查 "shield" 会把 ResearchProjectDef 排在 Apparel_ShieldBelt 前面 ——
-        // 对调用方来说那是错的答案排在了对的答案前面。列权重让 def_name 压过 description。
-        // 「有 label」是一条真信号而不是权宜:带 label 的是玩家看得见的东西,不带的是
-        // EffecterDef/SoundDef 一类基础设施。搜 "shield" 的人要的是护盾腰带,不是护盾音效。
-        //
-        // 这一档必须压在**名字前缀**之上。反过来排过一版,结果是 `search shield` 把没有 label 的
-        // Shield_Break(EffecterDef)排到了 Apparel_ShieldBelt 前面 —— 只因为它的名字以
-        // shield 开头。前缀命中说明的是「名字长得像」,有没有 label 说明的是「这东西给人看」,
-        // 后者才是提问的人真正在筛的东西。
+        // 排序:名字整体命中 > 有 label > 名字前缀命中 > bm25 相关度 > 名字短的在前。
+        // 列权重让 def_name 压过 description。「有 label」压在前缀之上:带 label 的是玩家
+        // 看得见的东西,不带的是 EffecterDef/SoundDef 一类基础设施,而前缀只说明「名字长得像」。
         var order = "ORDER BY (d.def_name = @q COLLATE NOCASE) DESC, " +
                     "(d.label IS NOT NULL AND d.label != '') DESC, " +
                     "(d.def_name LIKE @q || '%' COLLATE NOCASE) DESC, " +
@@ -223,7 +213,7 @@ public sealed class SnapshotDb : IDisposable
     /// 名字里含 <paramref name="query"/>、但 FTS **没**匹配上的 def 名。
     ///
     /// FTS 分词按分隔符与驼峰词首切,查询词落在名字中段就漏(`VoidNode` 找不到
-    /// `MonolithGleamingVoidNode`)。补扫必须在这里做减法而不是在调用方按已显示的行去重 ——
+    /// `MonolithGleamingVoidNode`)。减法在这里做而不是在调用方按已显示的行去重 ——
     /// 那样 `--limit` 一小,没显示出来的 FTS 命中就会被当成新增重复计进总数。
     /// </summary>
     public IReadOnlyList<string> NamesContainingUnmatched(string query, ScopeFilter scope, string? defType)
@@ -243,10 +233,10 @@ public sealed class SnapshotDb : IDisposable
     /// 译文**原文那一侧**含这段文本的 def 名。
     ///
     /// FTS 只索引 translated —— 一份中文快照上,每个 def 的英文原名都在 translations.original
-    /// 里躺着,却一个也搜不到,而落空那句话还说自己 covers translations。这条把另一半接上。
+    /// 里躺着却一个也搜不到。这条把另一半接上。
     ///
-    /// 走 LIKE 不走 FTS 是有意的:original 侧没进 FTS,而为它建索引要改 schema、逼所有人
-    /// 重新导入一次 —— 用一条只在**零结果时**才跑的扫描换掉那笔账。
+    /// 走 LIKE 不走 FTS:为 original 建索引要改 schema、逼所有人重新导入一次,
+    /// 而这条扫描只在**零结果时**才跑。
     /// 连接只按 def_name:译文的 def_type 来自 DefInjected 的目录名(XML 根元素),
     /// 而 defs.def_type 是运行时的桶名,两者对不上是常态,拿它做条件会漏。
     /// </summary>
@@ -269,9 +259,8 @@ public sealed class SnapshotDb : IDisposable
     /// 按名字取行,顺序照传入的名次排(模糊打分的排序不能被 SQL 打乱)。
     ///
     /// 一个 defName 带**几行**是常态:Firefoam 既是 ThingDef 又是 StatDef,mod 覆盖原版时
-    /// 同理。所以这里不建「名字 → 一行」的字典 —— 建了就在同名处当场抛,而抛出去是 exit 70,
-    /// 一次「你是不是想找」的兜底把整条命令打死。同名的几行**都出**:只留一行也不崩,
-    /// 但那份输出与正确输出逐字同形,读的人无从知道自己少看了一个 def。
+    /// 同理。同名的几行**都出** —— 只留一行的输出与正确输出逐字同形,读的人无从知道自己
+    /// 少看了一个 def。
     ///
     /// <c>Total</c> 数的是行不是名字,而且在截断**之前**数 —— 页脚那句「N of M」的 M
     /// 若按名字算,同名处就会比表里的行还少。
@@ -311,17 +300,15 @@ public sealed class SnapshotDb : IDisposable
     }
 
     /// <summary>
-    /// 一个 def 的字段。<paramref name="pathFilter"/> 非空时只留路径含该子串的行 ——
-    /// 没有它,调用方拿一个 295 字段的 def 找 statBases 只能把整份输出 grep 一遍,
-    /// 而「别拿文本匹配 def」正是这套工具存在的理由,自己逼出这个动作是自相矛盾。
+    /// 一个 def 的字段。<paramref name="pathFilter"/> 非空时只留路径含该子串的行。
     /// <c>Matched</c> 是过滤后的总数,<c>Total</c> 是这个 def 的字段总数 —— 两个都给,
     /// 调用方才分得清「过滤掉了多少」和「被 limit 截了多少」。
     /// </summary>
     /// <summary>
     /// <paramref name="includeDefaults"/> 为 false 时,与 C# 声明默认值无从区分的那些行
-    /// **不进 Rows**,但照样计进 <c>Defaulted</c> —— 调用方据此说清「有多少条没列出来、
-    /// 为什么」。滤掉的判据只认 <see cref="Contract.DefaultState.Same"/>:「没法比」的
-    /// 一律留下,少省一点篇幅换「不会有值凭空消失」。
+    /// **不进 Rows**,但照样计进 <c>Defaulted</c>。滤掉的判据只认
+    /// <see cref="Contract.DefaultState.Same"/>:「没法比」的一律留下,少省一点篇幅换
+    /// 「不会有值凭空消失」。
     /// </summary>
     public (IReadOnlyList<FieldRow> Rows, int Matched, int Total, int Defaulted,
             IReadOnlyList<string> MatchedPaths) Fields(
@@ -350,8 +337,7 @@ public sealed class SnapshotDb : IDisposable
             $"SELECT COUNT(*) FROM field_values {where} AND is_default = {Contract.DefaultState.Same}", p);
 
         // 命中的**全部**路径,不受 limit 与 includeDefaults 影响 —— 「其中几条是整段命中」
-        // 这句话必须在截断之前数完,否则同一个 --path 换个 --limit 就换一句结论。
-        // 只取 path 一列,一个 def 至多几百条,比再跑一趟计数查询便宜。
+        // 必须在截断之前数完,否则同一个 --path 换个 --limit 就换一句结论。
         var allPaths = new List<string>();
         using (var pr = Query($"SELECT path FROM field_values {where} ORDER BY rowid", p))
             while (pr.Read()) allPaths.Add(pr.GetString(0));
@@ -368,8 +354,7 @@ public sealed class SnapshotDb : IDisposable
 
     /// <summary>
     /// 这个 def 上有几个字段**把这段文本当值**装着。只服务一句话:<c>--path</c> 筛空时,
-    /// 「路径里没有它」与「它其实是个值」是两种成因,而后者是可以当场算出来的 ——
-    /// 猜出来的下一步正是 R8 那批误诊的来源。
+    /// 「路径里没有它」与「它其实是个值」是两种成因,而后者可以当场算出来。
     /// </summary>
     public int ValueHits(long defId, string text)
     {
@@ -403,9 +388,7 @@ public sealed class SnapshotDb : IDisposable
     ///
     /// 游戏的 <c>GenDefDatabase.AllDefTypesWithDatabases()</c> 只产出「祖先链上没有非抽象 Def」
     /// 的类型,所以 <c>CreepJoinerAggressiveDef</c> 这种继承自具体类的子类型没有自己的库,
-    /// 它的 def 全落在 <c>CreepJoinerBaseDef</c> 桶里。def_type 记的是桶,不是运行时类型 ——
-    /// 桶异构时不把 class 摆出来,「列出所有 CreepJoinerAggressiveDef」就会得到
-    /// 「这个类型不存在」,而缺席会被读成事实。
+    /// 它的 def 全落在 <c>CreepJoinerBaseDef</c> 桶里。def_type 记的是桶,不是运行时类型。
     /// </summary>
     public IReadOnlyList<(string Class, int Count)> ClassesInType(string defType, ScopeFilter scope)
     {
@@ -504,10 +487,9 @@ public sealed class SnapshotDb : IDisposable
     /// 同一次 <see cref="FindByField"/> 的命中横跨几种**路径形状**(下标归一后的路径),
     /// 每种几条。数在分页之前数,所以它说的是整个结果集,不是这一页。
     ///
-    /// 起因(第六轮 C31):`find stat Mass` 的 1229 行里混着 1 行 <c>statFactors[N].stat</c>,
-    /// 其余是 <c>statBases[N].stat</c>。拿这个结果集做集合差时那一行是个**静默假阴性**,
-    /// 而默认 25 行的视图下没人会去逐行核对 path 列。`values` 早就有 matched_paths 表头,
-    /// 而 `find` 恰恰是用来做集合运算的那一个。
+    /// 后缀匹配会把语义不同的路径混进同一个结果集(`find stat Mass` 的上千行里混着一行
+    /// <c>statFactors[N].stat</c>,其余是 <c>statBases[N].stat</c>),拿它做集合差时
+    /// 那一行是**静默假阴性**。
     ///
     /// 归一到形状而不是列出原始路径:`statBases[0..109].stat` 一百多条各列一遍是噪音,
     /// 而「两种形状」才是做集合运算的人要判的那件事。
@@ -554,13 +536,10 @@ public sealed class SnapshotDb : IDisposable
     /// <summary>
     /// <c>WholeSegment</c> 是 <c>Total</c> 里有几条把 <paramref name="pathFilter"/> 用作**完整的一段**。
     /// 子串匹配不留痕:不拆开这两档,「你要的那个字段根本不在」与「它在,旁边还有一堆别的」
-    /// 逐字同形。数在分页**之前**数 —— 翻一页换一句结论是同一个病换个位置。
+    /// 逐字同形。数在分页**之前**数。
     /// </summary>
     /// <param name="pathFilters">
     /// 多个一起给是**并集**(声明层的措辞就是 "Repeat it to widen the selection")。
-    /// 原先这里只收单个,而命令侧照收不误地把整串念进计数句 —— 于是
-    /// `--path A --path B` 印出「within --path A --path B」却只按 A 查,
-    /// 而结果与一个正确结果逐字同形。
     /// </param>
     public (IReadOnlyList<(string Path, int Count)> Rows, int Total, int WholeSegment) FieldPathsForType(
         string defType, int limit, IReadOnlyList<string>? pathFilters = null, int offset = 0)
@@ -603,11 +582,10 @@ public sealed class SnapshotDb : IDisposable
 
     /// <summary>
     /// 后缀匹配的 WHERE 子句 —— <c>values</c> 与 <c>ValueCoverage</c> 必须用同一个,
-    /// 否则「覆盖面」描述的就不是「值表」实际统计的那批行,而这正是最容易骗人的一种不一致。
+    /// 否则「覆盖面」描述的就不是「值表」实际统计的那批行。
     /// </summary>
     /// <summary>
-    /// 「取到过这个值」的谓词。抽出来是因为截断尾注要按**同一批 def** 收窄 ——
-    /// 两处各写一份的话,尾注担保的集合与表里那批就会悄悄分家。
+    /// 「取到过这个值」的谓词。抽出来是因为截断尾注要按**同一批 def** 收窄。
     /// </summary>
     private static string ValueWhere(string value, ValueMatch match, ScopeFilter scope,
                                      Dictionary<string, object?> p)
@@ -653,10 +631,10 @@ public sealed class SnapshotDb : IDisposable
     /// <summary>
     /// 值表的归属面:这批值实际由哪些**完整路径**贡献,落在哪些 def 类型上,盖住多少 def。
     ///
-    /// 没有这一层,后缀匹配会静默地把语义不同的路径混成一张表 —— 实测里
-    /// <c>values damageAmountBase</c> 报出「-1 / 37 defs」,读起来像「到处都是 -1」,
-    /// 实际上 37 条全是 <c>comps[N].damageAmountBase</c>(爆炸物),而问的那条
-    /// <c>projectile.damageAmountBase</c> 压根不在表里。值本身没错,错的是省掉了它的产地。
+    /// 没有这一层,后缀匹配会静默地把语义不同的路径混成一张表 ——
+    /// <c>values damageAmountBase</c> 报出的「-1 / 37 defs」全是
+    /// <c>comps[N].damageAmountBase</c>(爆炸物),而问的那条
+    /// <c>projectile.damageAmountBase</c> 压根不在表里。
     /// </summary>
     public (IReadOnlyList<(string Path, int Count)> Paths, int PathTotal,
             IReadOnlyList<(string DefType, int Count)> DefTypes, int DefsCovered)
@@ -665,7 +643,7 @@ public sealed class SnapshotDb : IDisposable
         var p = new Dictionary<string, object?>();
         var where = SuffixWhere(pathSuffix, scope, p);
         // 产地块必须描述**值表实际统计的那批行**。--type 只筛值表而不筛产地块,就会出现
-        // 「表里只有 ThingDef,产地却说还有 HediffDef 和 AbilityDef」—— 那是最容易骗人的一种不一致。
+        // 「表里只有 ThingDef,产地却说还有 HediffDef 和 AbilityDef」。
         if (defType is { Length: > 0 }) { p["@cdt"] = defType; where += " AND d.def_type = @cdt COLLATE NOCASE"; }
         const string join = "FROM field_values fv JOIN defs d ON d.id = fv.def_id";
 
@@ -686,10 +664,10 @@ public sealed class SnapshotDb : IDisposable
     /// 这些 (路径, 值) 里,哪些在同类型的 def 上是**大多数都有的那个值**,以及有多少个。
     ///
     /// 答的是 <c>code_default</c> 那一列答不了的问题:<c>no</c> 只证得了「与刚 new 出来的
-    /// 实例不同」,读的人却一律读成「有人给这个 def 挑了这个值」。3538 分之 2658 是可核对的
-    /// 事实,而「谁挑的」在这份快照里没有产地(见 shared_values 的建表注释)。
+    /// 实例不同」,读的人却一律读成「有人给这个 def 挑了这个值」,而「谁挑的」在这份快照里
+    /// 没有产地(见 shared_values 的建表注释)。
     ///
-    /// 走预计算表 —— 现算要 0.5s,而 <c>get</c> 整条现在是 0.156s。
+    /// 走预计算表 —— 现算要 0.5s,而 <c>get</c> 整条是 0.156s。
     /// </summary>
     public IReadOnlyDictionary<(string Path, string Value), int> SharedValues(
         string defType, IEnumerable<(string Path, string? Value)> rows)
@@ -722,18 +700,12 @@ public sealed class SnapshotDb : IDisposable
     /// <summary>
     /// 用到某字段路径的那些 def 类型里,有几个 def 在导出时被砍过。
     ///
-    /// 「快照里一共有 N 个 def 被砍过」这个数字挂在每一次反查上,就成了 00 论据 3 淘汰掉的
-    /// 那种每次返回都带的免责声明 —— 说了等于没说,读的人只能把它抄进答案里当保留意见。
-    /// 收窄到「与本次结果同类型的 def」之后,它不发声时「完整」才是无条件的。
+    /// 「快照里一共有 N 个 def 被砍过」这个数字挂在每一次反查上,就成了恒真的免责声明 ——
+    /// 说了等于没说。收窄到「与本次结果同类型的 def」之后,它不发声时「完整」才是无条件的。
     /// </summary>
     /// <param name="defType">
-    /// 调用方自己已经把结果收到这一个类型上时,尾注也得跟着收。
-    ///
-    /// 第七轮 T6:`values maxSimultaneous --type SoundDef` 的表头已声明
-    /// 「SoundDef (1231 of 1231)」—— 已经滤干净了 —— 而这条脚注仍在说
-    /// 「the def types that carry this path (**ThingDef**) also hold 2 defs …」。
-    /// 那不是噪音,是在一张与它无关的表下面挂了一个完整性告警。**一旦有一句披露被
-    /// 发现是过期的,其余每一句都要被重新审视**,所以这是比它自身代价贵得多的一条。
+    /// 调用方自己已经把结果收到这一个类型上时,尾注也得跟着收 —— 否则会在一张与它无关的表
+    /// 下面挂一个完整性告警,而**一旦有一句披露被发现是过期的,其余每一句都要被重新审视**。
     /// </param>
     public TruncationScope TruncatedDefsSharingPath(string pathSuffix, ScopeFilter scope, string? defType = null)
     {
@@ -745,9 +717,8 @@ public sealed class SnapshotDb : IDisposable
     /// 同上,但这批 def 是「取到过某个值」而不是「有某条路径」选出来的。
     ///
     /// <c>find --value</c> 非有它不可:那条路上的结果行是**路径**,而按路径逐条求和
-    /// 会把 <c>defName</c> 这种每个 def 类型都有的路径整个放大成全库 —— 五轮实测
-    /// 报出 251 与 242,而快照总共只有 239 个被砍的 def。**子集计数大于全集**,
-    /// 数学上不可能,而它印出来与一个正常计数逐字同形。
+    /// 会把 <c>defName</c> 这种每个 def 类型都有的路径整个放大成全库 —— 报出来的是
+    /// **子集计数大于全集**,而它印出来与一个正常计数逐字同形。
     /// </summary>
     public TruncationScope TruncatedDefsSharingValue(string value, ValueMatch match, ScopeFilter scope)
     {
@@ -758,15 +729,14 @@ public sealed class SnapshotDb : IDisposable
     /// <summary>
     /// 「落在这批 def 类型上、且被砍过」的 def 有几个。
     ///
-    /// 外层原先不带 scope 谓词:<c>--scope</c> 把结果收到一个 mod 里,尾注却仍按全库报数,
-    /// 于是「可能属于这里而没露面」说的是一批 scope 明明排除掉的 def。收窄的两处
-    /// (类型 + scope)缺一处,这句话担保的东西就不成立。
+    /// 收窄的两处(类型 + scope)缺一处,「可能属于这里而没露面」这句话担保的东西就不成立:
+    /// 少了 scope,它说的是一批 <c>--scope</c> 明明排除掉的 def。
     /// </summary>
     private TruncationScope TruncatedAmong(string innerWhere, ScopeFilter scope,
                                            Dictionary<string, object?> p, string? defType = null)
     {
-        // 外层用 t、内层用 d:同名别名在 SQLite 里靠作用域遮蔽也能跑,但读的人分不出
-        // 哪个 d 是哪个,而这段 SQL 的全部意思都在「内外收窄的是不同的东西」上。
+        // 外层用 t、内层用 d:同名别名在 SQLite 里靠作用域遮蔽也能跑,但这段 SQL 的全部
+        // 意思都在「内外收窄的是不同的东西」上。
         var conds = new List<string>
         {
             "t.fields_truncated > 0",
@@ -774,12 +744,12 @@ public sealed class SnapshotDb : IDisposable
             $"JOIN defs d ON d.id = fv.def_id {innerWhere})",
         };
         if (scope.SqlPredicate("t.source_mod", p) is { } sc) conds.Add(sc);
-        // 收窄的第三处。缺它的时候脚注说的是一批调用方**自己已经滤掉**的 def(第七轮 T6)。
+        // 收窄的第三处。缺它的时候脚注说的是一批调用方**自己已经滤掉**的 def。
         if (defType is { Length: > 0 }) { p["@tdt"] = defType; conds.Add("t.def_type = @tdt COLLATE NOCASE"); }
 
-        // 按类型分组而不是只取一个总数:尾注要把「这批是哪几个类型」说出来,
-        // 读的人才接得住那条续页命令。分组同时收得更紧 —— 只有**真有被砍的 def**
-        // 的类型才进名单,而内层那个 DISTINCT 列的是「用到这条路径的所有类型」。
+        // 按类型分组而不是只取一个总数:尾注要把「这批是哪几个类型」说出来。分组同时收得
+        // 更紧 —— 只有**真有被砍的 def** 的类型才进名单,而内层那个 DISTINCT 列的是
+        // 「用到这条路径的所有类型」。
         var types = new List<string>();
         var count = 0;
         using var rd = Query(
@@ -808,22 +778,18 @@ public sealed class SnapshotDb : IDisposable
     /// <summary>
     /// 按值反查字段路径:给一段文本,回答「哪些字段取到过含它的值」。
     ///
-    /// 「别再 grep XML」拿走了一种能力,就必须给回等价的一种,否则唯一的出路是猜字段名 ——
-    /// 而猜偏了,<c>--path</c> 会返回一个语法上完全正常、语义上完全错误的结果集。实测里
-    /// 有人用 <c>fields FactionDef --path texture</c> 拿到唯一命中 <c>settlementTexturePath</c>
-    /// 并准备据此下结论,真正管事的 <c>factionIconPath</c> 因为名字里没有 "texture" 被整个滤掉。
+    /// 没有它,唯一的出路是猜字段名 —— 猜偏了,<c>--path</c> 会返回一个语法上完全正常、
+    /// 语义上完全错误的结果集(<c>fields FactionDef --path texture</c> 只命中
+    /// <c>settlementTexturePath</c>,真正管事的 <c>factionIconPath</c> 被整个滤掉)。
     /// </summary>
     /// <remarks>
     /// <c>Exact</c> 是 <c>Total</c> 里有几组**整值就等于**这段文本。子串命中不留痕:
     /// 不拆开这两档,「有一个字段的值就是它」与「有一堆字段的值里碰巧含这几个字母」
-    /// 逐字同形,而后者常常一条都不是提问的人要的东西。
+    /// 逐字同形。
     /// </remarks>
     public (IReadOnlyList<(string Path, string DefType, int Defs, string Sample)> Rows, int Total, int Exact)
         PathsWithValue(string value, ScopeFilter scope, int limit, ValueMatch match = ValueMatch.Substring, int offset = 0)
     {
-        // R11:`--exact` 原先在这条路上被接受、被忽略、输出与不加时一字不差 —— 三轮唯一一处
-        // 既成的静默吞掉。它在这里是有意义的(整值相等 vs 含子串),所以实现它,而不是拒绝它:
-        // 少一条要记的例外,对拼命令行的调用方就少一次踩空。
         var p = new Dictionary<string, object?>();
         var where = ValueWhere(value, match, scope, p);
         const string join = "FROM field_values fv JOIN defs d ON d.id = fv.def_id";
@@ -849,9 +815,8 @@ public sealed class SnapshotDb : IDisposable
     /// <summary>
     /// 与这些行同处一个带下标容器、而且**有人设过**(<c>is_default &lt;&gt; Same</c>)的兄弟字段。
     ///
-    /// 一块 <c>comps[1]</c> 里的字段互相约束:实测里 <c>minFuelCost=50</c> 盖掉了同块的
-    /// <c>fuelPerTile=3</c>,差 16 倍,而只列出后者的输出一个字都没提前者 —— 一张干净的、
-    /// 计数明确、无警告的表,而它带出的结论是错的。
+    /// 一块 <c>comps[1]</c> 里的字段互相约束:<c>minFuelCost=50</c> 盖掉同块的
+    /// <c>fuelPerTile=3</c>,差 16 倍,而只列出后者的输出一个字都没提前者。
     ///
     /// 两道收窄都是有意的。只认带下标的容器:不带下标的层是分类不是实例,兄弟太多且不成组,
     /// 提示会退化成免责声明。只点 <c>code_default=no</c>:声明默认值那一批没人挑过,
@@ -859,8 +824,7 @@ public sealed class SnapshotDb : IDisposable
     /// </summary>
     /// <remarks>
     /// 回**全部**,不在这里截:截了再交给 NameList,它就以为名单是完整的,于是
-    /// 「and N more」一个字都不说 —— 静默截断正是这一轮在修的东西,不许从这里漏回来。
-    /// 一块 comps[N] 的字段数是个位到几十,不设上限也不会失控。
+    /// 「and N more」一个字都不说。一块 comps[N] 的字段数是个位到几十,不设上限也不会失控。
     ///
     /// 上面那条只管**回多少**;行数本身要分批发,见 <see cref="BatchedOrTerms"/>。
     /// </remarks>
@@ -879,9 +843,7 @@ public sealed class SnapshotDb : IDisposable
 
     /// <summary>
     /// 一次 SQL 里挂几个 OR 项。SQLite 的表达式树深度上限是 1000,而这条查询每行一个 OR ——
-    /// 第六轮实测 <c>find stat Mass --scope vanilla --limit all</c> 的 1229 行当场 exit 70。
-    /// 崩点藏在一条**尾注**里:主表早就算好了,却因为一句可有可无的提示整条命令崩掉;
-    /// 而 <c>--limit</c> 的文档只说「2000 以上截到 2000」,反向担保了 2000 以内安全。
+    /// 上千行的结果集会让主表早就算好的一条命令,因为一句可有可无的尾注整条 exit 70。
     /// </summary>
     private const int BatchedOrTerms = 200;
 
@@ -906,8 +868,8 @@ public sealed class SnapshotDb : IDisposable
             "SELECT fv.def_id, fv.path, fv.leaf FROM field_values fv " +
             $"WHERE ({string.Join(" OR ", ors)}) AND fv.is_default <> {Contract.DefaultState.Same} " +
             // 按 rowid 排 = 导出器写入的顺序 = 这一块在 XML/类声明里的顺序。
-            // 按 path 字典序排会让同一块里语义最近的几个字段散到各处 —— 实测里
-            // fuelPerTile 就是这样被 cooldown* 挤出前三名的,而它正是要点名的那一个。
+            // 按 path 字典序排会让同一块里语义最近的几个字段散到各处(fuelPerTile 就是
+            // 这样被 cooldown* 挤出前三名的)。
             "ORDER BY fv.rowid", p);
         while (rd.Read())
         {
@@ -940,11 +902,11 @@ public sealed class SnapshotDb : IDisposable
 
     /// <summary>
     /// 一个 defName 的全部译文,连 <c>def_type</c> 一起回 —— 同名跨 def 类型时,挑哪些
-    /// 归这个 def 的判断要在命令层做,因为那里才知道有没有同名歧义(R2)。
+    /// 归这个 def 的判断要在命令层做,因为那里才知道有没有同名歧义。
     ///
     /// <c>def_type</c> 可能为 null:收割自语言文件的行,注入 key 是 <c>DefName.field</c>,
     /// 不带类型,游戏自己也是按 defName 注入的 —— 那条译文属于哪个同名 def,在数据源里
-    /// 就是不确定的,不是这里丢了信息。
+    /// 就是不确定的。
     /// </summary>
     public IReadOnlyList<TranslationRow> Translations(string defName)
     {
@@ -986,8 +948,8 @@ public sealed class SnapshotDb : IDisposable
 
     /// <summary>
     /// 同一份列,带表别名。JOIN 到 <c>keyed_fts</c> 时 <c>key</c> / <c>translated</c> /
-    /// <c>original</c> 三个名字**两张表都有**,不加前缀是 SQL 歧义 —— 拿字符串替换从上面那份
-    /// 拼出来更省一行,但 <c>Replace("key", "k.key")</c> 会顺手改掉 <c>keyed</c> 里的 key。
+    /// <c>original</c> 三个名字**两张表都有**,不加前缀是 SQL 歧义;而拿
+    /// <c>Replace("key", "k.key")</c> 从上面那份拼会顺手改掉 <c>keyed</c> 里的 key。
     /// </summary>
     private const string KeyedColumnsPrefixed =
         "k.key, k.translated, k.original, k.language, k.source_file, k.source_line, k.source_mod, " +
@@ -1017,9 +979,8 @@ public sealed class SnapshotDb : IDisposable
     /// 这里不替它挑,挑了就等于发一张「谁生效」的证书,而 harvest 层证不了这件事。
     /// </summary>
     public IReadOnlyList<KeyedRow> KeyedByKey(string key)
-        // 生效的那一条排头。原先是 `ORDER BY origin`,而字典序里 harvested < harvested_outside
-        // < runtime —— 唯一权威的那一行被排到最后。收割默认开之后这不是排版问题:一个 key
-        // 常有三五条来源,第一眼看到的会是一条没生效的译文,分页时它还会被挤到第二页去。
+        // 生效的那一条排头:字典序里 harvested < harvested_outside < runtime,只按 origin
+        // 排会把唯一权威的那行甩到最后,而一个 key 常有三五条来源。
         => ReadKeyed($"SELECT {KeyedColumns} FROM keyed WHERE key = @k COLLATE NOCASE " +
                      $"ORDER BY (origin <> '{TranslationOrigin.Runtime}'), origin, source_mod",
                      new Dictionary<string, object?> { ["@k"] = key });
@@ -1031,8 +992,7 @@ public sealed class SnapshotDb : IDisposable
     /// </summary>
     /// <param name="placeholdersOnly">
     /// 只要占位译文。**必须在这里筛,不能等取完页再筛** —— 页内筛出来的
-    /// 「这一页没有占位」会被当成「一条占位都没有」说出去,而分母还是全体命中数
-    /// (八轮审计:默认 25 行时那句最强否定句覆盖的是 2337 条里的前 25 条)。
+    /// 「这一页没有占位」会被当成「一条占位都没有」说出去,而分母还是全体命中数。
     /// </param>
     /// <returns>
     /// <c>Total</c> 是**过滤之后**的命中数,分页三件事按它算;<c>MatchedTotal</c> 忽略
@@ -1058,11 +1018,9 @@ public sealed class SnapshotDb : IDisposable
     }
 
     /// <summary>
-    /// 整层枚举,不带查询词。「把还没译的全列出来」这条意图原先没有可表达的形式:
-    /// <c>keyed</c> 的位置参数是必填的,而 <c>--placeholders</c> 是**整层的过滤器**,
-    /// 不是搜索结果上的过滤器 —— 实测里一个调用方为此烧掉八次调用(空串 / <c>*</c> /
-    /// <c>.</c> / 空格全被同一句「Missing required argument」挡回),最后改去猜实词,
-    /// 而那答的是另一个问题。
+    /// 整层枚举,不带查询词。<c>keyed</c> 的位置参数是必填的,而 <c>--placeholders</c> 是
+    /// **整层的过滤器**、不是搜索结果上的过滤器 —— 没有这条,「把还没译的全列出来」
+    /// 这条意图没有可表达的形式。
     /// </summary>
     /// <param name="placeholdersOnly">
     /// 与 <see cref="KeyedSearch"/> 同一条理由:必须在 SQL 里筛。取完页再筛,
@@ -1148,15 +1106,13 @@ public sealed class SnapshotDb : IDisposable
     /// 一个具名节点底下,**别的**后代 def 里有多少条带着某个字段路径、其中多少条的值
     /// 与给定值逐字相同。
     ///
-    /// 起因(第六轮 C31,「这个值是哪一层写的」完全无解):<c>get</c> 给的是合并后的值,
-    /// <c>inherit</c> 明说抽象节点在快照里没有自己的字段表 —— 两条命令各自诚实,
-    /// 拼起来正面答不了「Mass 是 BuildingBase 写的还是这个 def 自己写的」。而这是抄
-    /// vanilla 的人最常问的一件事。
+    /// 答的是「这个值是哪一层写的」:<c>get</c> 给的是合并后的值,而抽象节点在快照里
+    /// 没有自己的字段表,两条命令拼起来正面答不了「Mass 是 BuildingBase 写的还是这个
+    /// def 自己写的」。
     ///
     /// 快照里没有「哪一层声明了它」这条事实(游戏在 <c>LoadAllActiveMods</c> 末尾就把继承
     /// 解完丢了),但它**推得出来**:某一层若真声明了这个字段,它的后代应当**都**带着;
-    /// 后代里有一条不带,那一层就没声明。这里只出数,推论留给读的人 —— 工具替读的人
-    /// 下结论,读的人就没法判断这个结论有多硬。
+    /// 后代里有一条不带,那一层就没声明。这里只出数,推论留给读的人。
     ///
     /// <paramref name="pathFilter"/> 用子串语义,与 <c>get --path</c> 同一套:同一个词
     /// 在两条命令里选中同一批字段,否则两边的数对不上账而没人看得出为什么。
@@ -1191,7 +1147,7 @@ public sealed class SnapshotDb : IDisposable
             // 关联口径与 get 的 inherits_from 同源:`xml_nodes.def_type` 是 XML 根元素名,
             // `defs.def_type` 是桶名,两者会不一致(异构桶)。硬要求相等会把整批异构桶的
             // 后代丢出分母 —— 分母小了,每一层都更容易看着「全都带」。先要相等的,
-            // 名字没有歧义时才回退到唯一候选;有歧义又对不上,宁可不算(算错的比不算更坏)。
+            // 名字没有歧义时才回退到唯一候选;有歧义又对不上宁可不算。
             "     AND (d.def_type = x.def_type COLLATE NOCASE " +
             "          OR (SELECT COUNT(*) FROM defs d2 WHERE d2.def_name = x.def_name COLLATE NOCASE) = 1) ";
         if (exclude is { } ex)
@@ -1201,8 +1157,8 @@ public sealed class SnapshotDb : IDisposable
         }
         cte += ") ";
 
-        // 三个数一趟取回:分母、带这条路径的、值也一样的。分开跑三趟的话递归 CTE 也跑三趟,
-        // 而 BuildingBase 这种量级的后代集是这条命令里最贵的一件事。
+        // 三个数一趟取回:分开跑三趟的话递归 CTE 也跑三趟,而 BuildingBase 这种量级的
+        // 后代集是这条命令里最贵的一件事。
         var same = value is null
             ? "0"
             : "(SELECT COUNT(DISTINCT fv.def_id) FROM field_values fv JOIN kin k ON k.id = fv.def_id " +

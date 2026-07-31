@@ -14,7 +14,7 @@ public enum EnvironmentMatch
 {
     /// <summary>快照与当前 ModsConfig.xml 完全一致。</summary>
     Same,
-    /// <summary>同一套 mod、同一顺序,但版本或游戏 build 变了 —— 02-4 的过期。</summary>
+    /// <summary>同一套 mod、同一顺序,但版本或游戏 build 变了。</summary>
     VersionDrift,
     /// <summary>启用的 mod 清单或顺序不同。</summary>
     DifferentModlist,
@@ -29,7 +29,7 @@ public sealed record EnvironmentReport(EnvironmentMatch Match, IReadOnlyList<str
 }
 
 /// <summary>
-/// 快照寻址 —— **显式恒胜自动**(用户裁决:当前游戏启用的不一定是正在查询的目标环境)。
+/// 快照寻址 —— **显式恒胜自动**(当前游戏启用的不一定是正在查询的目标环境)。
 ///
 ///   1. 本次调用显式指定:<c>--db &lt;path&gt;</c> 或 <c>--snapshot &lt;别名&gt;</c>
 ///   2. <c>snapshot use</c> 固定的活动快照
@@ -149,9 +149,8 @@ public static class SnapshotCatalog
         var env = ReadActiveMods(config);
         if (env.ActiveMods.Count == 0) return env with { Match = EnvironmentMatch.Unknown };
 
-        // 导出器两侧都不算数。它是导出时临时塞进去的工具,快照里有、玩家的 ModsConfig 里
-        // 通常没有 —— 拿它参与比对,每一次导出都会给自己造出一条「有 1 个 mod 不再启用」的
-        // 假过期。声明必须描述**内容**的差异,不能把工具自己的脚印算进去。
+        // 导出器两侧都不算数:它是导出时临时塞进去的工具,快照里有、玩家的 ModsConfig 里
+        // 通常没有,参与比对会造出「有 1 个 mod 不再启用」的假过期。
         var snapshotIds = WithoutExporter(db.Mods.Select(m => m.PackageId));
         var activeIds = WithoutExporter(env.ActiveMods);
 

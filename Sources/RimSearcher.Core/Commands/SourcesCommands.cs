@@ -24,12 +24,8 @@ internal static class SourcesShared
     }
 
     /// <summary>
-    /// 「没配反编译目录」这句话的**查询侧**产地(code-search / read 各写过一份,逐字相同)。
-    ///
-    /// <see cref="Root"/> 里那一份不并进来:它是**写**侧(sync 要往哪儿放 C#),
-    /// 后半截也不同 —— 那里说不出「MCP 能替你回答」,因为 MCP 读元数据,替不了落盘。
-    /// 两句话长得像而说的是两件事,合并只会逼出一个 bool 参数,然后两种措辞在一个方法里
-    /// 分叉 —— 产地还是两个,只是藏进了 if。
+    /// 「没配反编译目录」这句话的**查询侧**产地。<see cref="Root"/> 那份是写侧,措辞不同:
+    /// MCP 读元数据,替不了落盘。
     /// </summary>
     internal static string NotConfiguredToRead(string verb)
         => $"No decompiled source tree is configured, so there is nothing to {verb}. " +
@@ -40,13 +36,8 @@ internal static class SourcesShared
     internal static bool IsGitRoot(string dir) => Directory.Exists(Path.Combine(dir, ".git"));
 
     /// <summary>
-    /// 根目录下哪些子目录算一棵源码树。判据只此一处。
-    ///
-    /// 三轮 R15 的成因就是这条判据有过两份:<c>StagingDir</c> 的注释早就写下「以点开头,
-    /// 不会被当成一棵树」,<c>sources list</c> 也照此滤过,而 <c>code-search</c> 自己
-    /// <c>EnumerateDirectories</c> 一把抓 —— 于是同一个根目录,一个命令说有 3 棵树,
-    /// 另一个把 <c>.git</c> 连同它的一万个对象文件当成第 4 棵扫进去并点名报给调用方。
-    /// 顺序不共用(list 要纯字母序,code-search 要 vanilla 优先),但**什么算树**必须共用。
+    /// 根目录下哪些子目录算一棵源码树。判据只此一处 —— 顺序不共用(list 要纯字母序,
+    /// code-search 要 vanilla 优先),但**什么算树**必须共用,否则 <c>.git</c> 会被当成一棵树。
     /// </summary>
     internal static IEnumerable<string> TreeNames(string root)
         => Directory.EnumerateDirectories(root)
@@ -54,11 +45,8 @@ internal static class SourcesShared
                     .Where(n => n.Length > 0 && !n.StartsWith('.'));
 
     /// <summary>
-    /// 「版本间差异去问 git」这句话只有一个产地。
-    ///
-    /// 本命令刻意**不实现 diff**:一棵一万四千文件的生成源码树要看版本间差异,那正是版本控制的
-    /// 本职,而 git 顺带给出自制 diff 给不了的三样东西 —— 重命名检测、跨多个游戏版本回溯、
-    /// 单文件演化史。自己写一份只会得到它的一个子集。
+    /// 「版本间差异去问 git」这句话只有一个产地。本命令刻意**不实现 diff**:git 顺带给出
+    /// 自制 diff 给不了的重命名检测、跨版本回溯与单文件演化史。
     /// </summary>
     internal static void SayHowToDiff(CommandContext ctx, string root)
     {
@@ -147,12 +135,8 @@ public sealed class SourcesListCommand : Command
             var files = exists ? CountFiles(dir) : 0;
 
             string status;
-            // 第七轮 T5:目录在而里面一个 .cs 都没有,是关于**磁盘**的事实,与「这棵树在不在
-            // 这次的计划里」正交。原先计划外的一律短路成 "not in the snapshot",于是十棵空目录
-            // 全被那句话吸收掉,而汇总行照旧报「0 never built」—— 字面为假。
-            // 更坏的是 `code-search` 的页脚正指着这一列(「says which of those have never been
-            // decompiled」),指到的是一个对这十棵永远不发声的字段:**一条指路指了个空**,
-            // 而 33 与 23 的差额恰好就是这十棵。空这件事先判,它压得住计划内外。
+            // 目录在而里面一个 .cs 都没有,是关于**磁盘**的事实,与「这棵树在不在这次的计划里」
+            // 正交 —— 所以空这件事先判,它压得住计划内外。
             plans.TryGetValue(name, out var plan);
             if (exists && files == 0)
             {
@@ -161,8 +145,7 @@ public sealed class SourcesListCommand : Command
                 if (plan is null) emptyOrphan++;
             }
             else if (plan is null)
-                // 计划里没有它:这棵树对应的 mod 不在这次的列表里。不是「坏了」,
-                // 但也不该被当成当前环境的一部分 —— 说清是哪一种。
+                // 这棵树对应的 mod 不在这次的列表里 —— 不是「坏了」,但也不算当前环境的一部分。
                 { status = "not in " + from; outside++; }
             else if (state is null)
                 { status = exists ? "no manifest" : "never built"; missing++; }
@@ -174,8 +157,8 @@ public sealed class SourcesListCommand : Command
             rows.Add(new Dictionary<string, object?>
             {
                 ["tree"] = name,
-                // 目录在而空着的印 0,目录根本不在的才留白 —— 两者原先都是空白,
-                // 而「反编译出来是空的」与「这里没有这个目录」要的下一步不是一回事。
+                // 目录在而空着的印 0,目录根本不在的才留白 ——
+                // 「反编译出来是空的」与「这里没有这个目录」要的下一步不是一回事。
                 ["files"] = exists ? files.ToString() : "",
                 ["assemblies"] = plan is null ? (state?.Assemblies.Count.ToString() ?? "") : plan.Assemblies.Count.ToString(),
                 ["status"] = status,
@@ -194,24 +177,14 @@ public sealed class SourcesListCommand : Command
             $"checked against {from} ({Tally.Complete(ids.Count).Render("mod")}, " +
             $"game {SourcePlanner.NormalizeGameVersion(gameVersion)}).");
 
-        // 对账。表头报「33 棵树 / 24 个 mod」,两个数怎么合上原先要读者自己数 33 行 ——
-        // 而 status 那一列的五种取值里,只有一种说的是「这棵树不属于这份快照」。
+        // 对账。四个桶都得点名,不许留「余数」:没进树的 mod 不是坏了,而是**根本没有 C#**
+        // (纯 XML 的 mod,SourcePlanner 见 dlls.Count == 0 直接 continue),或者被并进了
+        // vanilla 那一棵(每个 DLC 各是一个 packageId,树只有一棵)。
         //
-        // 四个桶都得点名,不许留「余数」:光报「12 棵是当前的」时,另外 12 个 mod
-        // 去哪儿了一个字都没有 —— 而它们不是坏了,是**根本没有 C#**(纯 XML 的 mod,
-        // SourcePlanner 见 dlls.Count == 0 直接 continue),或者被并进了 vanilla 那一棵
-        // (每个 DLC 各是一个 packageId,树只有一棵)。这两件事说不清,读的人只能读成
-        // 「一半的 mod 反编译失败了」。
-        //
-        // 最后半句是有承重的:**只加注,不缩范围**。把这件事实现成「默认只扫快照内的树」
-        // 会让穷举论证整批作废,而降级前后的输出一模一样 —— 本轮候选里最危险的同形。
+        // 两条等式各自封闭,而且**各只用一个单位** —— 树与 mod 混着数会重复计入 vanilla 那一棵。
         // 句中不出现随计数变形的动词:冒号在前,数在后。
-        // 两条等式各自封闭,而且**各只用一个单位**。混着数会得出一个凑巧对得上的和:
-        // 「12 棵当前的树 + 6 个并进 vanilla 的 mod + 6 个没代码的 mod = 24 个 mod」——
-        // 左边前一项数的是树,vanilla 那一棵同时又代表右边那 6 个 mod,重复计了一次。
-        // 「并进 vanilla 那一棵」只在那一棵真被计划出来时才说得通。没配 game_dir 时
-        // 一个 DLL 都找不到,于是并没有那么一棵树可并 —— 这时候这几个 packageId 的
-        // 真实处境就是「没有可反编译的程序集」,归到下面那个桶里去。
+        // 「并进 vanilla 那一棵」只在那一棵真被计划出来时才说得通:没配 game_dir 时一个 DLL 都
+        // 找不到,这几个 packageId 的真实处境是「没有可反编译的程序集」,归到下面那个桶里。
         var vanillaIds = plans.ContainsKey(SourcePlanner.VanillaTree) ? ids.Count(SourcePlanner.IsVanilla) : 0;
         var exporterIds = ids.Count(i => string.Equals(i, Contract.IntermediateFormat.ExporterPackageId,
                                                        StringComparison.OrdinalIgnoreCase));
@@ -227,12 +200,10 @@ public sealed class SourcesListCommand : Command
             $"{empty} holding no .cs file, {outside} from outside {from}. " +
             "'code-search' reads every tree either way; this list is the only place that says which is which.");
 
-        // 「N tree(s)」是登记处存在的理由本身:括号 s 把单复数问题推给读者,而这一句正是
-        // 用来判断「要不要重新反编译」的。两截各自只在非零时出现 —— 「0 were never built」
-        // 既占字节又要读者过滤。
+        // 两截各自只在非零时出现 —— 「0 were never built」既占字节又要读者过滤。
         if (stale > 0 || missing > 0 || empty > 0)
         {
-            // 从句里不带随数变形的动词:名词有登记处,动词没有(R6 反复上的那一课)。
+            // 从句里不带随数变形的动词:名词有登记处,动词没有。
             var parts = new List<string>();
             if (stale > 0)
                 parts.Add($"built from an assembly that has changed since — {Tally.Complete(stale).Render("source tree")}");
@@ -247,11 +218,10 @@ public sealed class SourcesListCommand : Command
                 "say about code is from the older build.");
 
             // 计划里根本没有它们的那些空目录,`sources sync` 一辈子也不会去填 —— 上面那句
-            // 「sync rebuilds them」对它们是一条走不通的指路,而走不通的指路正是本项目
-            // 一直在清的东西。它们是旧命名留下的空壳,而 `code-search` 少扫的那些树就是它们。
+            // 「sync rebuilds them」对它们是一条走不通的指路。
             if (emptyOrphan > 0)
-                // 句里不许有跟着计数变形的动词(名词有登记处,动词没有 —— R6 反复上的那一课)。
-                // 计数进破折号后的名词短语,后面一律用 each,单复数就不再是个问题。
+                // 句里不许有跟着计数变形的动词。计数进破折号后的名词短语,后面一律用 each,
+                // 单复数就不再是个问题。
                 ctx.Report.Notice(NoticeKind.Boundary,
                     $"'sources sync' plans no tree under those names, so it will never fill them — " +
                     $"{Tally.Complete(emptyOrphan).Render("source tree")} out of the ones just listed. " +
@@ -381,12 +351,10 @@ public sealed class SourcesSyncCommand : Command
         var force = ctx.Args.Flag("force");
         var dryRun = ctx.Args.Flag("dry-run");
 
-        // 两张表互斥,`--dry-run` 一给就定了哪一张 —— 同 read,不走声明层的统一认领
-        // (见 JsonKeySpec.Rows):凭空多一个空数组等于说「那一路也做过了」。
+        // 两张表互斥,`--dry-run` 一给就定了哪一张:凭空多一个空数组等于说「那一路也做过了」。
         ctx.Report.Promises(dryRun ? "plan" : "rebuilt");
 
-        // 哈希整批来源 dll。vanilla 那几个大文件实测不到一秒,而它换来的是「没变就不重跑」——
-        // 少一次重跑就少一屏假 diff。
+        // 哈希整批来源 dll(vanilla 那几个大文件不到一秒),换来「没变就不重跑」。
         var work = new List<(SourceTreePlan Plan, SourceTreeState Manifest, string Reason)>();
         var skipped = new List<string>();
         var blocked = new List<string>();
@@ -460,8 +428,7 @@ public sealed class SourcesSyncCommand : Command
         foreach (var (plan, manifest, _) in work)
         {
             var target = Path.Combine(root, plan.Name);
-            // 暂存后转正。一次失败留下半棵树的后果不是「少了点东西」,而是 code-search 从此
-            // 在一棵残缺的树上给出看起来完整的答案。
+            // 暂存后转正:半棵树会让 code-search 在残缺的树上给出看起来完整的答案。
             var staging = Path.Combine(root, SourcesShared.StagingDir, plan.Name);
             TryDeleteDir(staging);
             Directory.CreateDirectory(staging);

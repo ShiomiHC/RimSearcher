@@ -5,21 +5,14 @@ using RimSearcher.Cli;
 namespace RimSearcher.Tests;
 
 /// <summary>
-/// SKILL.md 的**承诺闸**。
+/// SKILL.md 的**承诺闸**:验的是承诺的**语义**,不是命令行的存在性。
 ///
-/// 三轮的方法论一条:第二轮给 SKILL.md 立的闸只验命令行**存在性**(每条 `rimsearcher …`
-/// 对着 CommandRegistry 验),不验**承诺的语义**。于是那一轮四条 skill_doc 全是同一个形状 ——
-/// 文档承诺了、实现没做到:R4 把闸门数成两道(封闭列举语气,实际有第三道)、
-/// R6「zero means what you see is what the game read」(干净节点根本不打印那个零)、
-/// R11「Unknown options are rejected rather than ignored」(只覆盖选项**名**)、
-/// R14「nothing is lost」(--json 键名无文档,猜错静默返回空数组)。
-///
-/// 所以这里立的是一张**索引**:每条承诺句连着一道守它的闸,两个方向都被机器盯着 ——
+/// 立的是一张索引 —— 每条承诺句连着一道守它的闸,两个方向都被机器盯着:
 ///   <see cref="承诺句都还在原地"/>       原文被改写就红,逼人重新确认实现还兑不兑现;
 ///   <see cref="每条承诺都指名了守它的那道闸"/> 指的那道闸不存在就红(改名、删掉都算)。
 ///
 /// **往 SKILL.md 里加一句承诺,就要往 <see cref="Promises"/> 里加一行。** 这条规矩没法由
-/// 机器强制(「哪句是承诺」不可判定),但漏掉的代价写在上面那四条里了。
+/// 机器强制 ——「哪句是承诺」不可判定。
 /// </summary>
 public class SkillPromiseTests
 {
@@ -32,9 +25,8 @@ public class SkillPromiseTests
         // ---- 数据边界 ----
         new("`inherit` is the only command that reads it, and it says so",
             nameof(继承层的来路与补丁时间差写在inherit自己的说明里)),
-        // 五轮:原承诺是「each named node reports … zero means what you see is what the game read」,
-        // 而无 Name= 的节点拿到的是导出器硬写的 0 —— 承诺照字面读在那些 def 上是假的。
-        // 收窄成「声明了 Name= 的才报数」并把另一半明说成 n/a,两半各由那道闸的两组断言证。
+        // 无 Name= 的节点拿到的是导出器硬写的 0,所以承诺收窄成「声明了 Name= 的才报数」,
+        // 另一半明说成 n/a;两半各由那道闸的两组断言证。
         new("reports how many patch operations target it by name — zero means what you see is what\n   the game read",
             "inherit的patch计数在干净节点也在场"),
         new("A node without a `Name=` reports `n/a`, not zero",
@@ -57,9 +49,8 @@ public class SkillPromiseTests
             "分页的三个位置各说各的话"),
 
         // ---- search / find / values 的分工 ----
-        // 五轮:原承诺写「translations」不带限定,而快照的 translations 表是 def 侧的注入,
-        // Languages/*/Keyed 那一整套 UI 字符串一条都不在库里 —— 「收获这个 UI 词对应什么」
-        // 照字面读会被当成查得到的问题。收窄成「注入到 def 上的译文」并把 Keyed 明说成不覆盖。
+        // 快照的 translations 表只有 def 侧的注入,Languages/*/Keyed 那一整套 UI 字符串
+        // 一条都不在库里 —— 承诺必须限定成「注入到 def 上的译文」并明说不覆盖 Keyed。
         new("It covers def names, labels, descriptions and the translations injected onto defs — **not C# class names**, and **not the UI strings under `Languages/*/Keyed`**",
             nameof(search只认名字标签与译文而不认C类名)),
         new("an English term still finds its def on a\n   Chinese snapshot",
@@ -67,7 +58,7 @@ public class SkillPromiseTests
         new("`values <field>` gives the whole value space, and prints which full paths and def types contributed",
             nameof(values说清这些值来自哪些路径与def类型)),
 
-        // ---- 界面文案那一层(R4 记下的「索引口径的洞」,这一轮落地) ----
+        // ---- 界面文案那一层 ----
         new("they belong to no def at all,\nwhich is why no amount of `search`, `get` or `find` reaches them",
             nameof(界面文案不在search的射程里而keyed认它)),
         new("a zero result here names whichever of the two it turns out to be",
@@ -81,7 +72,7 @@ public class SkillPromiseTests
         new("if the exporting game had no language data loaded there are no keyed translations at\nall. `keyed` says that in those words instead of reporting your key absent",
             nameof(OutputSnapshotTests.keyed层为空时说破是快照的缘故而不是查不到)),
 
-        // ---- 五轮:子串匹配与同块兄弟 ----
+        // ---- 子串匹配与同块兄弟 ----
         new("The output says when nothing matched as a whole path segment",
             nameof(GrammarTests.子串匹配要说破自己不是整段命中)),
         new("the output names any hand-set field in the same `comps[N]` block as the rows it printed",
@@ -90,20 +81,17 @@ public class SkillPromiseTests
             nameof(GrammarTests.完整性尾注指的命令要走得到它刚说的那批)),
         new("The global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the command name",
             nameof(GrammarTests.全局参数的位置约束要写在它自己的标题上)),
-        // R11 那处唯一既成的静默吞掉(find --value --exact)在 SKILL 里没有专属句子,
-        // 兜住它的是下面那条「Unknown options are rejected rather than ignored」。
-        // 这里不给它单独立一行:能钉住的原文只有收窄表里孤零零一个 `--exact`,
-        // 那样的 pin 无论实现怎么变都不会红 —— 一道红不了的闸比没有更坏,它看起来像覆盖。
+        // find --value --exact 在 SKILL 里没有专属句子,兜住它的是下面那条
+        // 「Unknown options are rejected rather than ignored」。不给它单独立一行:
+        // 能钉住的原文只有收窄表里孤零零一个 `--exact`,那样的 pin 无论实现怎么变都不会红。
 
         // ---- mod 列表:导出的**输入**那一侧 ----
-        // 这一句是收束时才补上的:SKILL 原先只说 `export --modlist <name>`,而 <name> 的
-        // 合法取值从哪来一个字没写 —— 一个必填参数在 skill 这一层指路指了个空。
-        // 补的时候措辞取的是实现里那句窄的(SearchAll 的落空话),不是代码注释里那句宽的
-        // (「这个 mod 在本机装了没」)—— 两者差着这条命令根本没看过的一整个游戏目录。
+        // 措辞取的是实现里那句窄的(SearchAll 的落空话),不是「这个 mod 在本机装了没」——
+        // 两者差着这条命令根本没看过的一整个游戏目录。
         new("That search\nanswers **which saved lists name a mod**, which is not the same question as whether the mod is\ninstalled",
             nameof(GrammarTests.列表点没点名与快照覆没覆盖是两个问题)),
 
-        // ---- R1:代码默认值 ----
+        // ---- 代码默认值 ----
         new("`yes` rows are left out of the listing by default, with a line saying how many and how to see them",
             nameof(GrammarTests.默认值行被拿掉时当场说清有多少条)),
         new("`--path <text>` always shows a named field whichever kind it is",
@@ -136,19 +124,17 @@ public class SkillPromiseTests
             "json模式下声明区搬进notes一条不丢"),
         new("Do not guess: `<command> --help` lists that command's keys",
             nameof(skill列出的json键与声明一致)),
-        // 第六轮:越界 offset 时那个键整个消失,消费方拿到 KeyError 而不是空数组。
+        // 越界 offset 时那个键不许整个消失 —— 消费方会拿到 KeyError 而不是空数组。
         new("The key the command does produce is always there, empty array and all",
             "json的数据键零行时是空数组而不是整个消失"),
-        // 第六轮:C11 与 C41 各自浪费一轮 —— 文档从不承认这一列,而它一直在印文件名。
         new("`get` does print a `source` line, and it is less than it looks: the bare file name the game reported, no directory, unverified",
             "source列印的是没有目录的裸文件名"),
         new("Exit codes carry four distinct meanings",
             "退出码如实传给shell"),
         new("Unknown options are rejected rather than ignored, with the nearest accepted spelling — or, if another command takes that option, which one",
             nameof(未知选项的报错点名接受它的那条命令)),
-        // 八轮审计:代码的判据早换成「展开与你输入的字面不同」,而 SKILL 那句停在
-        // 「多于一个 mod」—— `--scope ludeon.rimworld` 展开成一个 mod 也不播报,
-        // 照字面读是假的;实现里那条「文档要跟着改」的注释挂了一轮。
+        // 播报判据是「展开与你输入的字面不同」,不是「多于一个 mod」——
+        // `--scope ludeon.rimworld` 展开成一个 mod 时也要播报。
         new("the output spells out what a scope resolved to whenever the expansion is not word for word what you typed",
             "scope在散文里展开成实际圈住的mod"),
 
@@ -258,19 +244,19 @@ public class SkillPromiseTests
         // 只说「没有」不够:得把该去哪儿问说出来,否则这条承诺帮不到任何人。
         Assert.Contains("find", byClass, StringComparison.Ordinal);
 
-        // 「译文」这个词不带限定就在超发。快照的 translations 表只有 def 侧的注入
-        // (def_type + def_name + field 三列),Languages/*/Keyed 那一整套 UI 字符串
-        // 一条都进不来 —— 这是 schema 级的硬边界,不是覆盖率问题。
+        // 快照的 translations 表只有 def 侧的注入(def_type + def_name + field 三列),
+        // Languages/*/Keyed 那一整套 UI 字符串一条都进不来 —— schema 级的硬边界,
+        // 不是覆盖率问题。
         Assert.Contains("Languages/*/Keyed", byClass, StringComparison.Ordinal);
         Assert.Contains("injected onto defs", byClass, StringComparison.Ordinal);
     }
 
     /// <summary>
     /// 界面文案那一层与 def 无关,于是 search / get / find 三条路原理上都到不了它 ——
-    /// 而「到不了」的样子与「游戏里没有这句话」逐字同形,这正是 R4 记下的洞。
+    /// 而「到不了」的样子与「游戏里没有这句话」天然同形。
     ///
     /// 两个方向都验:search 打进一句界面文案确实落空(而且落空时**点名**说出该问 keyed),
-    /// 而 keyed 认它。少了后半句,这条承诺就只是一句免责声明。
+    /// 而 keyed 认它。
     /// </summary>
     [Fact]
     public void 界面文案不在search的射程里而keyed认它()
@@ -278,8 +264,7 @@ public class SkillPromiseTests
         // 语料里 CannotUseNoPower 的译文是「没有电力」,而它不是任何 def 的 label。
         var (bySearch, _, searchCode) = Fixture.Run("search", "没有电力");
         Assert.Equal(1, searchCode);
-        // 落空的那一句必须把落点算出来,而不是停在「不覆盖」——「这条命令不覆盖」与
-        // 「这个工具没有」差着一条走得通的路。
+        // 落空的那一句必须把落点算出来,而不是停在「不覆盖」。
         Assert.Contains("rimsearcher keyed", bySearch, StringComparison.Ordinal);
         Assert.Contains("interface text", bySearch, StringComparison.Ordinal);
 
@@ -313,8 +298,7 @@ public class SkillPromiseTests
         Assert.Contains("no keyed translation for", stdout, StringComparison.Ordinal);
         Assert.Contains("not a literal", stdout, StringComparison.Ordinal);
 
-        // 关得掉,而且关掉之后一个字都不多说 —— 默认开着的东西必须有开关,否则
-        // 「我只想看命中行」这个诉求只能靠 grep 满足,而 grep 会把截断句一起滤掉。
+        // 关得掉,而且关掉之后一个字都不多说。
         var (off, _, _) = Fixture.Run("code-search", "Translate", "--no-ui-text");
         Assert.DoesNotContain("ui_text", off, StringComparison.Ordinal);
         Assert.DoesNotContain("没有电力", off, StringComparison.Ordinal);
@@ -387,9 +371,9 @@ public class SkillPromiseTests
     }
 
     /// <summary>
-    /// SKILL 把 --json 的数据键当场列了一遍(R14 的修法),而那份清单与声明层是两处产地。
-    /// 两个方向都验:文档里出现的键必须真被声明过,而 SKILL 教的那几条命令声明的键
-    /// 必须都在文档里 —— 后者才是 R14 的形状(加了个键,文档没跟上,猜错静默拿到空数组)。
+    /// SKILL 里那份 --json 数据键清单与声明层是两处产地。两个方向都验:文档里出现的键
+    /// 必须真被声明过,而 SKILL 教的那几条命令声明的键必须都在文档里 —— 后者漏了,
+    /// 猜错键就静默拿到空数组。
     /// </summary>
     [Fact]
     public void skill列出的json键与声明一致()

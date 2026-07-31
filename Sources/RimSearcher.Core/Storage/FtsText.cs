@@ -5,13 +5,11 @@ namespace RimSearcher.Storage;
 /// <summary>
 /// FTS 文本处理。
 ///
-/// CJK bigram 展开(02-8:与去噪清单是同一个提交进来的,改 FTS 结构时别顺手丢了):
-/// unicode61 分词器把一整串汉字当一个 token,「热量」搜不到「营养热量上限」。把 CJK 连续段
-/// 展开成相邻二元组,中文检索才有召回。
+/// CJK bigram 展开:unicode61 分词器把一整串汉字当一个 token,「热量」搜不到「营养热量上限」。
+/// 把 CJK 连续段展开成相邻二元组,中文检索才有召回。
 ///
-/// 前缀问题(02-7):unicode61 下 <c>Apparel_ShieldBelt</c> 搜 <c>shield</c> 不中,上游 SKILL.md
-/// 专门教用户手加 <c>*</c> —— 教用户绕自家缺陷是反模式。这里的对策是查询侧自动补前缀
-/// 加下划线切分,调用方不需要知道 <c>*</c> 的存在。
+/// 前缀问题:unicode61 下 <c>Apparel_ShieldBelt</c> 搜 <c>shield</c> 不中。对策是查询侧
+/// 自动补前缀通配加下划线切分,调用方不需要知道 <c>*</c> 的存在。
 /// </summary>
 public static class FtsText
 {
@@ -65,8 +63,8 @@ public static class FtsText
     private static readonly char[] FtsSpecials = ['"', '*', ':', '(', ')', '^', '-', '+', ',', '\''];
 
     /// <summary>
-    /// 把用户输入变成 MATCH 表达式。每个词都自动补 <c>*</c> 前缀通配 —— 调用方不该需要
-    /// 知道这件事(02-7)。CJK 段展开成 bigram,与索引侧同一口径。
+    /// 把用户输入变成 MATCH 表达式。每个词都自动补 <c>*</c> 前缀通配,
+    /// CJK 段展开成 bigram,与索引侧同一口径。
     /// </summary>
     public static string BuildMatchQuery(string userQuery, bool prefix = true)
     {

@@ -5,20 +5,15 @@ using RimSearcher.Cli;
 namespace RimSearcher.Tests;
 
 /// <summary>
-/// 事实侧。别的测试都在进程内调 <c>Runner.Run</c>,这里真起一个进程、真读它的 stdout。
-///
-/// 01 的教训是「两侧立闸,另一侧不许是另一份声明」。声明侧已经把名单、措辞、文法都判过了;
-/// 唯独有一批东西只有真进程才暴露:控制台编码、退出码怎么传给 shell、程序集名跟文档里
-/// 写的可执行文件名对不对得上。这几件里任何一件错了,调用方照文档敲的第一条命令就失败,
-/// 而进程内测试会全绿。
+/// 事实侧。别的测试都在进程内调 <c>Runner.Run</c>,这里真起一个进程、真读它的 stdout ——
+/// 控制台编码、退出码怎么传给 shell、程序集名与文档里的可执行文件名是否一致,
+/// 这三件只有真进程才暴露。
 /// </summary>
 public class ProcessTests
 {
     /// <summary>
-    /// 可执行文件跟测试程序集躺在同一个输出目录里 —— 测试工程 ProjectReference 了 CLI,
-    /// 所以只要测试编得出来,它就在。因此这里**不做「找不到就跳过」**:
-    /// 会静默跳过的闸不是闸,而 xunit 2.x 也没有真正的跳过,拿 Assert.True 冒充
-    /// 只会把「没跑」记成「跑过且通过」。找不到就是真出了问题,该红。
+    /// 测试工程 ProjectReference 了 CLI,可执行文件必与测试程序集同目录,
+    /// 所以找不到就该红,**不做「找不到就跳过」**。
     /// </summary>
     private static string Exe
     {
@@ -54,8 +49,7 @@ public class ProcessTests
     }
 
     /// <summary>
-    /// 文档、skill、报错消息里写的都是 <c>rimsearcher</c>。程序集名跟它对不上,
-    /// 调用方照着敲的第一条命令就找不到文件 —— 而这件事进程内一次也测不出来。
+    /// 文档、skill、报错消息里写的都是 <c>rimsearcher</c>,程序集名必须与之一致。
     /// </summary>
     [Fact]
     public void 可执行文件就叫rimsearcher()
@@ -73,9 +67,8 @@ public class ProcessTests
     }
 
     /// <summary>
-    /// 中文标签必须能原样出到 stdout。Windows 控制台默认不是 UTF-8,
-    /// 少设一行 <c>Console.OutputEncoding</c> 就会变成一串问号 —— 而那时
-    /// 「查不到」和「查到了但显示不出来」在调用方眼里长得一模一样。
+    /// 中文标签必须能原样出到 stdout。Windows 控制台默认不是 UTF-8,少设一行
+    /// <c>Console.OutputEncoding</c> 就会变成一串问号,与「查不到」在调用方眼里同形。
     /// </summary>
     [Fact]
     public void 中文原样出到标准输出()
@@ -122,11 +115,7 @@ public class ProcessTests
     }
 
     /// <summary>
-    /// --json 出来的必须是能解析的 JSON,而不是「看起来像」。
-    ///
-    /// 形状必须**恒定**:单个 def 也是长度 1 的 defs 数组。原先单数一种形状、多数另一种,
-    /// 且多数时把名字拼进键里(<c>fields:{DefName}</c>),同名跨 def 类型就撞键、后写的
-    /// 静默覆盖 —— 照着一次输出写的解析器会在下一次撞名时拿到别的东西还不报错。
+    /// --json 出来的必须是能解析的 JSON,且形状**恒定**:单个 def 也是长度 1 的 defs 数组。
     /// </summary>
     [Fact]
     public void json模式输出可解析()
@@ -141,8 +130,7 @@ public class ProcessTests
     }
 
     /// <summary>
-    /// 同名跨 def 类型时每个 def 都保住自己的槽位。这是上面那条形状约定唯一真正要挡的事故:
-    /// 撞键的那一版会一边在 notes 里说「匹配到 N 个字段」,一边给出空数组。
+    /// 同名跨 def 类型时每个 def 都保住自己的槽位 —— 上面那条形状约定要挡的就是这种撞键覆盖。
     /// </summary>
     [Fact]
     public void 同名def在json里各占一个槽位()

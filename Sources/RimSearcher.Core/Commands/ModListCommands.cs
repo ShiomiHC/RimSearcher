@@ -6,13 +6,13 @@ using RimSearcher.Output;
 namespace RimSearcher.Commands;
 
 /// <summary>
-/// 游戏原生的 <c>.rml</c> 模组列表。不发明新格式(第二轮裁决 7)。
+/// 游戏原生的 <c>.rml</c> 模组列表,不发明新格式。
 ///
 /// 结构三块:meta 存档头(仅告警用)/ **有序 ids(唯一效力载体)** / names(展示糖)。
 /// 合法生产者三个:游戏界面、<c>modlist save</c>、**手写(含 LLM)**。
 ///
-/// **宽读严写**:读只要求 ids —— 手写门槛就是一列 packageId,不得强制依赖游戏内操作
-/// (用户裁决);写时补全 names 与 meta 头,保证游戏自己的载入对话框认得。
+/// **宽读严写**:读只要求 ids,手写门槛就是一列 packageId;写时补全 names 与 meta 头,
+/// 保证游戏自己的载入对话框认得。
 /// </summary>
 public sealed record ModListFile(string Name, string Path, IReadOnlyList<string> Ids, IReadOnlyList<string> Names, string? GameVersion);
 
@@ -165,9 +165,6 @@ public sealed class ModListShowCommand : Command
         [
             new OptionSpec
             {
-                // 「这个 mod 在本机装了没」原本无解:mods 只讲快照里已启用的,modlist show
-                // 一次只讲一个列表且不收窄,于是要把十个列表全 dump 一遍才敢下结论 ——
-                // 实测里为此还被逼着违反 skill 去 pipe grep,循环 exit 1 分不清是没匹配还是挂了。
                 Name = "find",
                 Aliases = ["filter", "grep", "search", "match"],
                 Placeholder = "<text>",
@@ -335,9 +332,8 @@ public sealed record InstalledMod(string PackageId, string Name, string Director
     /// <summary>
     /// About.xml 里 <c>modDependencies</c> 声明的硬依赖(含 <c>modDependenciesByVersion</c>)。
     ///
-    /// 只取这一节。<c>loadAfter</c> / <c>loadBefore</c> 是排序提示,<c>incompatibleWith</c>
-    /// 是反向关系 —— 三者的元素形状跟依赖一模一样,粗暴地全收会把「不兼容」当成「必需」,
-    /// 于是自动补进去一个游戏明确说了不能同时开的 mod。
+    /// 只取这一节:<c>loadAfter</c> / <c>loadBefore</c> 是排序提示,<c>incompatibleWith</c>
+    /// 是反向关系,三者的元素形状与依赖一模一样,全收会把「不兼容」当成「必需」。
     /// </summary>
     public IReadOnlyList<string> Dependencies { get; init; } = [];
 }

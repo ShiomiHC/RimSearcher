@@ -4,15 +4,11 @@ using RimSearcher.Output;
 namespace RimSearcher.Snapshot;
 
 /// <summary>
-/// scope = **快照内按 mod 维度筛结果**。语法从 master 带走(01;上游只有 <c>--mod</c> 单值),
-/// 实现新写。
-///
-/// 同一语法符号不背两种语义(06):<c>--scope</c> 只管过滤,**不选快照**。选哪次导出是
-/// <c>--snapshot</c> / <c>snapshot use</c> / 自动检测那三层的事。
+/// scope = **快照内按 mod 维度筛结果**。<c>--scope</c> 只管过滤,**不选快照** ——
+/// 选哪次导出是 <c>--snapshot</c> / <c>snapshot use</c> / 自动检测那三层的事。
 ///
 /// 语法:逗号分隔;<c>-x</c> 表示排除;组名在 config.toml 的 [scope_groups] 里定义。
-/// 首个词是排除时,起点集合为全部(<c>all,-vanilla</c> 与 <c>-vanilla</c> 同义 —— 07 实证
-/// 排除语法有真实使用记录)。
+/// 首个词是排除时,起点集合为全部(<c>all,-vanilla</c> 与 <c>-vanilla</c> 同义)。
 /// </summary>
 public sealed class ScopeFilter
 {
@@ -40,15 +36,12 @@ public sealed class ScopeFilter
     /// <summary>
     /// 这个 scope 实际圈住了谁 —— 写进散文时用这个,不要用裸的 <see cref="Expression"/>。
     ///
-    /// 三轮 R10 的一词两义:<c>--scope vanilla|base|core|official</c> 展开成**每个**
-    /// <c>ludeon.rimworld*</c> 模块,也就是 Core 加全部已装 DLC;而一份**叫** vanilla 的
-    /// 快照可能只有 Core。两份文档都没写这件事,而两者在句子里长得一模一样。
-    /// 展开是当场算得出来的,那就算出来 —— 让读者去记一份对照表,等于把工具的活推给他。
+    /// 「vanilla」一词两义:<c>--scope vanilla|base|core|official</c> 展开成每个
+    /// <c>ludeon.rimworld*</c> 模块(Core 加全部已装 DLC),而一份**叫** vanilla 的
+    /// 快照可能只有 Core。
     ///
-    /// 五轮:这个方法原先七个调用点**全在零结果句里**,于是查到东西时不告诉你范围、
-    /// 查不到时才告诉你 —— 承诺与实现正好反了向。现在它只有一个调用点
-    /// (<c>CommandBase.AnnounceScope</c>,展开与字面不同时无条件说一句),
-    /// 散文里一律写调用方输入的字面。展开一句话说一次,别在同一次输出里重复两遍。
+    /// 只有一个调用点(<c>CommandBase.AnnounceScope</c>,展开与字面不同时无条件说一句):
+    /// 展开一句话说一次,别在同一次输出里重复两遍。
     /// </summary>
     public string Describe()
     {
@@ -120,15 +113,14 @@ public sealed class ScopeFilter
 
     private static readonly string[] VanillaPrefixes = ["ludeon.rimworld"];
 
-    /// <summary>内置组名。与 <see cref="Resolve"/> 用同一份,免得两处各记一份而漂移。</summary>
+    /// <summary>内置组名。与 <see cref="Resolve"/> 共用一份。</summary>
     private static readonly string[] BuiltinGroups = ["vanilla", "base", "core", "official"];
 
     /// <summary>
     /// 这个词是不是一个 scope **组名**(而不是一个 packageId)。
     ///
-    /// 用处只有一个:一份快照恰好也叫这个名字时要说破两者不是一回事。上面 <see cref="Describe"/>
-    /// 的注释已经把这一词两义写下来了,而它当时只解决了「散文里写 scope」那一半 ——
-    /// 另一半是 <c>--snapshot vanilla</c>,而那一半在五轮里差点造成 22 倍的错答案。
+    /// 用处只有一个:一份快照恰好也叫这个名字时(<c>--snapshot vanilla</c>)
+    /// 要说破两者不是一回事。
     /// </summary>
     public static bool IsGroupName(string? name, RimConfig config)
         => name is { Length: > 0 } &&

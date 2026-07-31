@@ -3,15 +3,10 @@ using System.Text.RegularExpressions;
 namespace RimSearcher.Search;
 
 /// <summary>
-/// 模糊打分器 —— 从 master 移植(01 特例条目:取数层里唯一值得带走的实现)。
+/// 模糊打分器。候选集是快照内的 def 名(万级),直接全量打分,不做预筛。
 ///
-/// **只搬打分器,不搬索引层配套**(06):master 那边还有一套 EditDistanceAtMost 带状预筛与
-/// n-gram 表,是为 SourceIndexer 的区间查询服务的;这里的候选集是快照内的 def 名(万级),
-/// 直接全量打分即可,把预筛搬来只会带进一套没有对应索引的判据。
-///
-/// 用途(与另外两把刀分工,06 三分格局):FTS 管自然语言,正则管代码内容,这里管**标识符**
-/// —— 07-⑤ 实证:真实调用方打错字(CompTikRare / CompTickRar)、用驼峰缩写、用文件名式查询,
-/// 这些在 FTS 上一律零命中。
+/// 三把刀的分工:FTS 管自然语言,正则管代码内容,这里管**标识符** —— 打错字
+/// (CompTikRare)、驼峰缩写、文件名式查询在 FTS 上一律零命中。
 /// </summary>
 public static class FuzzyMatcher
 {
@@ -29,11 +24,9 @@ public static class FuzzyMatcher
 
         if (textLower == queryLower) return 100.0;
 
-        // 必须显式写 Ordinal。StartsWith(string) 的默认重载是 CurrentCulture,而 ICU 的语言学
-        // 比较会**整体忽略 default-ignorable 码点**(U+00AD 软连字符、U+200B/U+200D 零宽、
-        // C0 控制符、变体选择符……)。于是 query 整串都是可忽略字符时它 collate 成空串,
-        // **任意** text 都「以它开头」—— 一次查询把整个候选集当成 90 分命中,上面的非空判断
-        // 拦不住。master 侧三路独立验算只找到这一个破口,且全部落在这一行上。
+        // 必须显式写 Ordinal:StartsWith(string) 默认是 CurrentCulture,而 ICU 会整体忽略
+        // default-ignorable 码点(U+00AD、U+200B/U+200D、C0 控制符、变体选择符……),
+        // 于是全由可忽略字符组成的 query collate 成空串,任意 text 都「以它开头」。
         if (textLower.StartsWith(queryLower, StringComparison.Ordinal)) return 90.0;
 
         var editDistance = LevenshteinDistance(textLower, queryLower);
@@ -60,8 +53,7 @@ public static class FuzzyMatcher
         if (editDistance <= 3 && similarity >= 0.75) return 70.0 * similarity;
         if (similarity >= 0.6) return 55.0 * similarity;
 
-        // 同上:IndexOf(string) 的默认重载也是 CurrentCulture。这一支被夹在 [30,50] 够不到
-        // 分数线,但一个文件里两处同类比较只改一处,下一个人只会以为另一处是有意为之。
+        // 同上:IndexOf(string) 的默认重载也是 CurrentCulture。
         var substringIndex = textLower.IndexOf(queryLower, StringComparison.Ordinal);
         if (substringIndex >= 0)
         {
@@ -81,7 +73,7 @@ public static class FuzzyMatcher
                      .ThenBy(t => t.Item1, StringComparer.Ordinal);
 
     /// <summary>
-    /// <c>method:CompTick</c> / <c>field:id</c> 这类 kind 前缀(07-⑤ 实证真实存在)。
+    /// <c>method:CompTick</c> / <c>field:id</c> 这类 kind 前缀。
     /// 返回剥掉前缀后的查询与 kind;不带前缀时 kind 为 null。
     /// </summary>
     public static (string Query, string? Kind) StripKindPrefix(string query)

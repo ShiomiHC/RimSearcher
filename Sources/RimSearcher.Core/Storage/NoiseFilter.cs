@@ -3,10 +3,8 @@ namespace RimSearcher.Storage;
 /// <summary>
 /// 噪声字段清单 —— **唯一产地**。
 ///
-/// 02-2 是这个项目里被治过的同一种病的原样重演:上游把清单写了两份(导出侧按全路径匹配、
-/// 查询侧按末段匹配),内容今天恰好相同而判据已经不同,于是嵌套噪声全部入库、只有顶层被拦。
-/// B 案把它结构性消解掉:游戏侧根本不过滤,清单只在这里存在一份,判据也只有一个 ——
-/// **按路径末段匹配**。策略要改就改这里,改完重跑 import(秒级),不进游戏重导。
+/// 游戏侧根本不过滤,清单只在这里存在一份,判据只有一个:**按路径末段匹配**。
+/// 策略要改就改这里,改完重跑 import,不进游戏重导。
 /// </summary>
 public static class NoiseFilter
 {
@@ -19,7 +17,7 @@ public static class NoiseFilter
         "index",
         "ignoreConfigErrors",
         "ignoreIllegalLabelCharacterConfigError",
-        // 注意:generated 不在清单里 —— 它是 ImpliedDefs 的判据,是有用信号而非噪声(03 甲)。
+        // 注意:generated 不在清单里 —— 它是 ImpliedDefs 的判据,是有用信号而非噪声。
     };
 
     /// <summary>整段丢弃的路径前缀。</summary>

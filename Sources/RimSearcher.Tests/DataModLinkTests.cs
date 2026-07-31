@@ -5,17 +5,14 @@ using RimSearcher.Config;
 namespace RimSearcher.Tests;
 
 /// <summary>
-/// 接挂点的闸。这里判的是**文件系统上真的发生了什么** —— 真建联接、真断开、真在旁边放一份
-/// 假的「使用者手工装的 mod」看它会不会被删掉。用假 IO 抽象替掉的话,这一批里最要紧的那条
-/// (真目录不许被删)就退化成「我写的判断和我写的桩一致」,而那什么也没证明。
+/// 接挂点的闸。判的是**文件系统上真的发生了什么**,不用假 IO 抽象 ——
+/// 换成桩,「真目录不许被删」那条就退化成自证。
 /// </summary>
 public class DataModLinkTests
 {
     /// <summary>
-    /// 最坏结局的闸:接挂点上是使用者自己拷进去的一份 mod 时,谁也不许删它。
-    ///
-    /// 这条排在最前面,因为它是本功能唯一**不可逆**的失手方式。其余每一种错都只是
-    /// 「mod 列表里多一行」或「导出跑不起来」,而这一种是把别人的东西弄没了。
+    /// 最坏结局的闸:接挂点上是使用者自己拷进去的一份 mod 时,谁也不许删它 ——
+    /// 本功能唯一**不可逆**的失手方式。
     /// </summary>
     [Fact]
     public void 真目录不许被当成联接删掉()
@@ -35,8 +32,7 @@ public class DataModLinkTests
     }
 
     /// <summary>
-    /// 断开是**后置条件**,不是尽力而为:跑完之后接挂点一定不在。
-    /// 用户要的就是这一条 —— 平常玩游戏时看不见导出器。
+    /// 断开是**后置条件**,不是尽力而为:跑完之后接挂点一定不在,平常玩游戏时看不见导出器。
     /// </summary>
     [Fact]
     public void 接上再离开作用域就断干净()
@@ -47,8 +43,7 @@ public class DataModLinkTests
         {
             Assert.Equal(DataModLink.LinkState.Attached, attachment.State);
             Assert.True(Directory.Exists(env.LinkPath));
-            // 接上之后游戏能读到 About.xml —— 否则它会静默忽略这个目录,
-            // 而那表现成一次跑到超时的导出,不是一句报错。
+            // 游戏读不到 About.xml 就静默忽略这个目录,表现成一次跑到超时的导出。
             Assert.True(File.Exists(Path.Combine(env.LinkPath, "About", "About.xml")));
         }
 
@@ -68,9 +63,8 @@ public class DataModLinkTests
     }
 
     /// <summary>
-    /// 上一次被强杀留下的残骸要能自愈。<c>--timeout</c> 杀进程是设计内的行为,
-    /// 而那条路上 <c>Dispose</c> 跑不到 —— 所以下一次 Attach 必须能接管已经在的那个联接,
-    /// 并且照旧在结束时断掉。
+    /// 上一次被强杀留下的残骸要能自愈:<c>--timeout</c> 杀进程是设计内行为,那条路上
+    /// <c>Dispose</c> 跑不到,下一次 Attach 必须接管已在的联接并照旧断掉。
     /// </summary>
     [Fact]
     public void 接管上次留下的联接并照样断开()
@@ -89,8 +83,8 @@ public class DataModLinkTests
     }
 
     /// <summary>
-    /// 指向已删除目标的坏联接照样是联接。它是残骸里最毒的一种:目录在、About.xml 读不到,
-    /// 于是游戏静默忽略,而「导出器没装」这句话永远不会被说出来。清理必须够得着它。
+    /// 指向已删除目标的坏联接照样是联接,清理必须够得着它:目录在但 About.xml 读不到,
+    /// 游戏会静默忽略。
     /// </summary>
     [Fact]
     public void 坏联接也认得出来并被清掉()
@@ -106,8 +100,8 @@ public class DataModLinkTests
     }
 
     /// <summary>
-    /// <c>datamod_dir</c> 指着一个不是 mod 的目录时当场报错。接上去的话游戏会**静默忽略**它,
-    /// 而那一路的表现是导出跑到超时 —— 一次几十秒到几分钟的加载换一句本来在毫秒级就能说的话。
+    /// <c>datamod_dir</c> 指着一个不是 mod 的目录时当场报错:接上去游戏会**静默忽略**它,
+    /// 表现成一次跑到超时的导出。
     /// </summary>
     [Fact]
     public void 目标不是mod结构就当场报错()
@@ -120,7 +114,7 @@ public class DataModLinkTests
         Assert.False(Directory.Exists(env.LinkPath));
     }
 
-    /// <summary>没配 datamod_dir 就什么也不做 —— 老的常驻安装方式必须继续能用。</summary>
+    /// <summary>没配 datamod_dir 就什么也不做 —— 常驻安装方式照样能用。</summary>
     [Fact]
     public void 没配就不接不断()
     {
@@ -132,8 +126,7 @@ public class DataModLinkTests
     }
 
     /// <summary>
-    /// <c>datamod attach</c> 接上之后要留着 —— 它存在的全部理由就是让人能进游戏用设置页那个
-    /// 按钮。离开作用域就断的话,这条命令等于没跑。
+    /// <c>datamod attach</c> 接上之后要留着 —— 它存在的理由就是让人能进游戏用设置页那个按钮。
     /// </summary>
     [Fact]
     public void 显式留下的联接不随作用域断开()

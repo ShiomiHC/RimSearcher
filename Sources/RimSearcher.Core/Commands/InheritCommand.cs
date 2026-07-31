@@ -8,14 +8,12 @@ namespace RimSearcher.Commands;
 /// <summary>
 /// 继承层的出口。
 ///
-/// 这是快照里唯一**不是**「游戏内存里的对象」的一层,而它非存不可的理由恰恰是别处存不下:
-/// 游戏在 <c>LoadAllActiveMods</c> 末尾就 <c>XmlInheritance.Clear()</c>,导出跑在
-/// <c>StaticConstructorOnStartup</c>,那时「谁继承谁」已经应用完并丢弃;抽象父节点更是
-/// 从头到尾没有 Def 实例。所以 <c>get</c> 永远找不到 BaseBullet 不是工具的缺陷,
-/// 是它问错了层 —— 本命令就是那另一层。
+/// 这是快照里唯一**不是**「游戏内存里的对象」的一层:游戏在 <c>LoadAllActiveMods</c> 末尾就
+/// <c>XmlInheritance.Clear()</c>,而导出跑在 <c>StaticConstructorOnStartup</c>,那时继承关系
+/// 已经应用完并丢弃;抽象父节点更是从头到尾没有 Def 实例,所以 <c>get</c> 永远找不到 BaseBullet。
 ///
 /// 边界写在每一条结果上而不是挂一段总的免责声明:这一层是**打补丁之前**的 XML,
-/// 而每个具名节点带着「有多少条 xpath 点了它的名」,读的人自己判断这一条准不准。
+/// 而每个具名节点带着「有多少条 xpath 点了它的名」。
 /// </summary>
 public sealed class InheritCommand : Command
 {
@@ -84,7 +82,7 @@ public sealed class InheritCommand : Command
         {
             var close = Suggestion.Closest(ctx.Db.AllXmlNodeNames(), name);
 
-            // 三种互斥成因,分清楚再说。名字错了 / 这个 def 不参与继承 / 它根本不在快照里 ——
+            // 三种互斥成因分清楚:名字错了 / 这个 def 不参与继承 / 它根本不在快照里。
             // 报成同一句「没有」会让前两种被读成第三种,而第三种是最强的那个结论。
             var isDef = ctx.Db.GetDefsNamed(name).Count > 0;
             if (isDef)
@@ -92,24 +90,22 @@ public sealed class InheritCommand : Command
                 ctx.Report.Notice(NoticeKind.NextStep,
                     $"'{name}' is a def in this snapshot but its XML declares no Name=, ParentName= or " +
                     "Abstract=, so it takes part in no inheritance. 'rimsearcher get " + name + "' shows it.");
-                // 「有没有 mod 用 PatchOperation 改过这个 def」是另一个问题,而读的人很容易把
-                // 上面那句「不参与继承」当成把它一起答了 —— 本命令别处报的 patch 计数只盖得住
-                // 声明了 Name= 的节点。不说破,这一格就是空着而看起来像填了。
+                // 「有没有 mod 用 PatchOperation 改过这个 def」是另一个问题:本命令别处报的
+                // patch 计数只盖得住声明了 Name= 的节点。不说破,这一格空着而看起来像填了。
                 ctx.Report.Notice(NoticeKind.Boundary,
                     "Whether a PatchOperation edits it is a separate question this snapshot does not answer: " +
                     "the patch counts reported elsewhere here cover only nodes that declare Name=.");
                 return 1;
             }
 
-            // 第三种成因原先到「本快照里没有」为止,而那正是 R10 说的可算而未算:
-            // 别的已注册快照里有没有它、它是不是个 def 类型 / class / mod,都是当场问得出的。
+            // 第三种成因:别的已注册快照里有没有它、它是不是个 def 类型 / class / mod,
+            // 都是当场问得出的。
             var sighting = NameLookup.Locate(ctx, name);
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"No XML node named '{name}' is in this snapshot." +
                 Suggestion.Say(close) +
-                // 六种落点全落空、拼写也不近时,这句话原先到此为止 —— 一条死路。
-                // 继承层只装带 Name=/ParentName=/Abstract= 的节点,**普通 def 不在里面**,
-                // 而这正是敲 inherit 落空最常见的成因,却要读的人自己想到。
+                // 继承层只装带 Name=/ParentName=/Abstract= 的节点,**普通 def 不在里面** ——
+                // 这是敲 inherit 落空最常见的成因。
                 (sighting is null
                     ? " Only nodes that declare Name=, ParentName= or Abstract= are in this layer, so a def " +
                       "that inherits from nothing never shows up here: 'rimsearcher get " + name + "' looks it " +
@@ -137,23 +133,15 @@ public sealed class InheritCommand : Command
                 new("inherits_from", node.ParentName),
                 new("mod", node.SourceMod),
                 new("source", node.SourceFile),
-                // R6:这个数原先只在非零时以一句散文出现,而文档承诺的是「每个具名节点都报
-                // 一个数,0 就意味着你看到的正是游戏读到的」。于是「零」和「这件事没做」
-                // 分不开 —— 那个承诺给出的保证在实现里根本不存在。
-                // 二轮 F2(三态文法的裸 N 从未渲染出来过)是同一个形状,**这是第二次犯**。
-                // 放进 identity 块而不是补一句散文:数字每次都在场且可机读,占一行;
-                // 需要警示的后果仍由下面那句边界话说,只在非零时出现。
-                //
-                // 五轮:上面那个「0」是**第三次**同一形状 —— 导出器 (XmlNodeExporter:66)
-                // 对无 Name= 的节点硬写 0,而计数正则只认 `@Name=`。于是「量过了、确实没人
-                // patch」与「这一格根本没量」印出来逐字相同,四份盲测轨迹独立栽在这里。
-                // 印 n/a 而不是留空:留空会让整行在文本面消失(Renderers 跳过空值),
-                // 那就退回 R6 修掉的那个形状了。口径由下面那句边界话说破。
+                // 数字每次都在场且可机读,于是 0 = 「量过、没人 patch」,与「这一格没量」分得开:
+                // 导出器对无 Name= 的节点硬写 0(计数正则只认 `@Name=`),所以那种情况印 n/a。
+                // 印 n/a 而不是留空 —— 留空会让整行在文本面消失(Renderers 跳过空值)。
+                // 需要警示的后果由下面那句边界话说,只在非零时出现。
                 new("patch_ops", named ? node.PatchOps : "n/a"),
             ]);
 
-            // 往上走到根。带环保护不是防御性编程 —— XML 里写出环是可能的,而游戏自己
-            // 是在这一层之后才检出来的,快照存的正是检出之前的原文。
+            // 往上走到根。带环保护是必要的:XML 里写得出环,游戏在这一层之后才检出来,
+            // 快照存的正是检出之前的原文。
             var chain = new List<XmlNodeRow>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             string? unresolved = null;
@@ -207,8 +195,8 @@ public sealed class InheritCommand : Command
                 ctx.Report.CountNotice(Tally.Of(shown.Count, children.Count), "direct child",
                     "pass --limit all for the rest.");
 
-                // 抽象节点没有自己的字段表,而这不是缺陷:它写的每一条都已经合并进每个子节点,
-                // 并且那一份是 patch 之后的。指路到子节点比在这里复制一份 patch 前的原文强。
+                // 抽象节点没有自己的字段表:它写的每一条都已合并进每个子节点,且那一份是
+                // patch 之后的。
                 if (node.Abstract && children.Count > 0)
                 {
                     var concrete = children.FirstOrDefault(c => !c.Abstract && c.DefName is { Length: > 0 });
@@ -219,16 +207,15 @@ public sealed class InheritCommand : Command
                 }
             }
 
-            // 逐条申报,不是一句总的免责声明。计数本身现在恒在 identity 块的 patch_ops 上
-            // (R6),这里只在非零时补说后果 —— 0 的那一条不需要解释,它就是游戏读到的原样。
+            // 逐条申报,不是一句总的免责声明。计数恒在 identity 块的 patch_ops 上,
+            // 这里只在非零时补说后果 —— 0 就是游戏读到的原样,不需要解释。
             if (!named)
                 ctx.Report.Notice(NoticeKind.Boundary,
                     $"'{label}' declares no Name=, so patch_ops is not measured for it: only xpaths naming a " +
                     "node with @Name= are counted, and a patch that reaches this def by defName leaves no " +
                     "trace here.");
             else if (node.PatchOps > 0)
-                // 主语放到句尾,免得动词跟着计数变单复数 —— NounRegistry 管名词,不管动词,
-                // 「1 patch operation … target」这种主谓不一致靠加登记项是修不掉的。
+                // 主语放到句尾,免得动词跟着计数变单复数 —— NounRegistry 管名词,不管动词。
                 ctx.Report.Notice(NoticeKind.Boundary,
                     $"'{label}' is targeted by name by " +
                     $"{Tally.Complete(node.PatchOps).Render("patch operation")} in this snapshot. " +
@@ -248,13 +235,9 @@ public sealed class InheritCommand : Command
     /// <summary>
     /// 「这个值是哪一层写的」—— 证人兄弟法。
     ///
-    /// 第六轮 C31:<c>get</c> 给合并后的值,本命令明说抽象节点在快照里没有自己的字段表,
-    /// 两条命令各自诚实、拼起来正面答不了这个问题。而抄 vanilla 的人最常问的就是它。
-    ///
-    /// 快照里确实没有「哪一层声明了它」这条事实,但它推得出来:某一层若真声明了这个字段,
+    /// 快照里没有「哪一层声明了它」这条事实,但它推得出来:某一层若真声明了这个字段,
     /// 它的后代应当**都**带着;后代里有一条不带,那一层就没声明。这里出数,不下结论 ——
-    /// 工具替读的人下结论,读的人就没法判断这个结论有多硬,而这条推论恰恰是有洞的
-    /// (子节点可以覆写,导出时字段表可能被截)。洞逐条说破,判断权留在外面。
+    /// 这条推论有洞(子节点可以覆写,导出时字段表可能被截),洞逐条说破,判断权留在外面。
     /// </summary>
     private static void Witnesses(CommandContext ctx, XmlNodeRow node,
                                   IReadOnlyList<XmlNodeRow> chain, string pathFilter)
@@ -342,8 +325,8 @@ public sealed class InheritCommand : Command
             "fact — the game resolves inheritance while loading and then discards it — so these counts are what " +
             "the answer has to be read off.");
 
-        // 逆命题不成立,而这张表长得很像在给逆命题作证 —— 不说破的话,「61 of 61」会被
-        // 直接读成「这一层写的」,而每个后代各写各的一份长得一模一样。
+        // 逆命题不成立,而这张表长得很像在给逆命题作证:「61 of 61」与「每个后代各写各的一份」
+        // 在数上无法分辨。
         ctx.Report.Notice(NoticeKind.Boundary,
             "The converse does not hold: with_path reaching other_defs is equally consistent with every " +
             "descendant writing the field separately" +
@@ -360,7 +343,7 @@ public sealed class InheritCommand : Command
             "this field to many defs is indistinguishable from a layer declaring it.");
 
         // 导出时被截字段表的 def 会「没有这条路径」而其实有 —— 那正好是让一层被误判成
-        // 「没声明」的方向。数的是分母里的那些,不是整库:整库的数恒为非零,而恒真的
+        // 「没声明」的方向。数的是分母里的那些,不是整库:整库的数恒为非零,恒真的
         // 免责声明会被学着跳过。
         if (truncated > 0)
             ctx.Report.Notice(NoticeKind.Boundary,

@@ -5,19 +5,15 @@ namespace RimSearcher.Sources;
 /// <summary>
 /// 一个 mod 里游戏**真会加载**的那些程序集。
 ///
-/// 这不是「找出所有 dll」——那件事很容易,也很容易错。一个装了多年的 mod 目录里,
-/// 属于旧游戏版本的 dll 通常比在用的多(HAR 实测:20 个 dll,在用的 2 个),
-/// 而互斥分支(RatkinGene 的 <c>1.6</c> 与 <c>1.6_unofficial</c>)更是两套只该进一套。
-/// 反编译进错的那一套,后果是 <c>code-search</c> 找出根本没在跑的代码 ——
-/// 而它长得跟真答案一模一样。
+/// 不是「找出所有 dll」:一个装了多年的 mod 目录里,属于旧游戏版本的 dll 通常比在用的多
+/// (HAR 实测:20 个 dll,在用的 2 个),而互斥分支(RatkinGene 的 <c>1.6</c> 与
+/// <c>1.6_unofficial</c>)两套只该进一套。
 ///
 /// 所以这里**复刻游戏自己的算法**,而不是另立一套启发式:
 /// <see cref="LoadFolders"/> 对应 <c>ModContentPack.InitLoadFolders()</c>,
 /// <see cref="Assemblies"/> 对应 <c>GetAllFilesForModPreserveOrder(mod, "Assemblies/")</c> 的去重。
-/// 判据不是「看起来对」,而是「与那两个方法读同一份 loadFolders.xml 得出同一个答案」。
 ///
-/// 复刻得起来的前提是**知道哪些 mod 是启用的** —— <c>IfModActive</c> 这类条件靠它才判得动。
-/// 而那件事快照里已经记着(游戏亲自答的),不必再手写一份会漂的列表。
+/// <c>IfModActive</c> 这类条件要求知道哪些 mod 启用,该名单取自快照(游戏亲自答的)。
 /// </summary>
 public static class ModFolders
 {
@@ -31,8 +27,7 @@ public static class ModFolders
     /// </summary>
     /// <param name="gameVersion">
     /// 游戏的 <c>CurrentVersionString</c>,即 <c>major.minor.build</c>(如 <c>1.6.4871</c>)。
-    /// loadFolders.xml 的键几乎总是 <c>major.minor</c>,故它一般走「小于等于当前的最高一个」那条分支 ——
-    /// 这与游戏的顺序一致,不是巧合:那两级回退就是照抄的。
+    /// loadFolders.xml 的键几乎总是 <c>major.minor</c>,故一般走「小于等于当前的最高一个」那条分支。
     /// </param>
     public static List<string> LoadFolders(string rootDir, string gameVersion, IReadOnlySet<string> activeIds)
     {
@@ -50,8 +45,8 @@ public static class ModFolders
                     if (!ShouldLoad(e, activeIds)) continue;
                     result.Add(e.Folder.Length == 0 ? rootDir : Path.Combine(rootDir, e.Folder));
                 }
-                // 声明了本版本的 folder 列表就**只**用它:根目录、Common、版本目录一概不再自动补。
-                // 这一条最容易想当然地补上,而补了就等于让 IfModActive 关掉的那套又漏进来。
+                // 声明了本版本的 folder 列表就**只**用它:根目录、Common、版本目录一概不再自动补,
+                // 否则 IfModActive 关掉的那套会漏进来。
                 if (result.Count > 0) return result;
             }
         }
@@ -80,7 +75,7 @@ public static class ModFolders
     /// 该 mod 里游戏会加载的 dll,绝对路径。按 <c>Assemblies/</c> 下的相对路径去重,高优先级目录赢。
     ///
     /// 实测 HAR:根 <c>Assemblies/</c> 与 <c>1.6/Assemblies/</c> 各有一份 AlienRace.dll 与 0Harmony.dll,
-    /// 游戏用的是 1.6 那份。少了这一步,反编译出来的会是好几年前的代码。
+    /// 游戏用的是 1.6 那份。
     /// </summary>
     public static List<string> Assemblies(string rootDir, string gameVersion, IReadOnlySet<string> activeIds)
     {
@@ -99,7 +94,7 @@ public static class ModFolders
                 // 键是 Assemblies/ 起算的相对路径 —— 游戏用的正是这个粒度,而不是文件名:
                 // Assemblies/a/x.dll 与 Assemblies/b/x.dll 在游戏看来是两个文件,都会加载。
                 var key = Path.GetRelativePath(folder, file).Replace('\\', '/');
-                // 先到先得:LoadFolders 已经按优先级从高到低排好了。
+                // LoadFolders 已按优先级从高到低排好,先到先得。
                 byRelative.TryAdd(key, Path.GetFullPath(file));
             }
         }
@@ -161,8 +156,7 @@ public static class ModFolders
     /// 版本键的两级回退,与 <c>InitLoadFolders</c> 一致:先精确匹配完整版本号,
     /// 再取「小于等于当前版本的最高一个」,最后 <c>default</c>。
     ///
-    /// 第二级不是可选的花活:游戏的完整版本号是 <c>1.6.4871</c>,而 mod 写的键是 <c>1.6</c> ——
-    /// 只做精确匹配的话,**每一个** loadFolders.xml 都会被判成不适用。
+    /// 第二级不可省:游戏的完整版本号是 <c>1.6.4871</c>,而 mod 写的键是 <c>1.6</c>。
     /// </summary>
     private static List<Entry>? PickVersion(Dictionary<string, List<Entry>> declared, string gameVersion)
     {
@@ -216,8 +210,8 @@ public static class ModFolders
     }
 
     /// <summary>
-    /// 版本目录名 → 版本。<c>1.6_unofficial</c> **解析不出来**,于是它永远不会被当成版本目录 ——
-    /// 这正是要的:那是一条靠 <c>IfModActive</c> 开关的互斥分支,不是「1.6 的另一种写法」。
+    /// 版本目录名 → 版本。<c>1.6_unofficial</c> 解析不出来,于是不会被当成版本目录 ——
+    /// 那是一条靠 <c>IfModActive</c> 开关的互斥分支,不是「1.6 的另一种写法」。
     /// </summary>
     private static Version? ParseVersion(string raw)
     {

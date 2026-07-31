@@ -6,10 +6,9 @@ namespace RimSearcher.Output;
 /// <summary>
 /// 默认渲染器:紧凑文本。
 ///
-/// 为什么默认不是裸 JSON(06「与 JSON 主体的缝合格式」开放点的定稿):这条管线的实际消费方
-/// 是读 stdout 的 LLM,而不是 jq。同一批数据渲染成对齐表比 JSON 省一半以上的字节,这直接
-/// 服务于上下文预算硬约束;散文声明区也需要一个不破坏结构的落点。要机器可组合的那一份用
-/// <c>--json</c>,那时声明区搬进 <c>notes</c> 数组,一个字都不丢。
+/// 默认不是裸 JSON:实际消费方是读 stdout 的 LLM 而不是 jq,同一批数据渲染成对齐表比
+/// JSON 省一半以上的字节。要机器可组合的那一份用 <c>--json</c>,那时声明区搬进
+/// <c>notes</c> 数组,一个字都不丢。
 /// stderr 不用于声明 —— 管道场景下 LLM 调用方会漏读。
 /// </summary>
 public static class TextRenderer
@@ -26,9 +25,7 @@ public static class TextRenderer
         var first = true;
         foreach (var block in report.Blocks)
         {
-            // 空块直接跳过,连分隔空行都不留。分隔符原本写在渲染**之前**,于是一个空表
-            // 会留下两个连着的空行 —— 而空行会被读成「后面还有,被截断了」,正是文法闸
-            // 明令要躲开的那个误读。空块不是「渲染成空」,是根本不存在。
+            // 空块直接跳过,连分隔空行都不留:连着的两个空行会被读成「后面还有,被截断了」。
             if (IsEmpty(block)) continue;
             if (sb.Length > 0 && !first) sb.Append(OutputText.Newline);
             if (sb.Length > 0 && first && report.Notices.Any(n => !n.Footnote)) sb.Append(OutputText.Newline);
@@ -148,8 +145,7 @@ public static class JsonRenderer
             {
                 TableBlock t => (t.Name, (object?)t.Rows),
                 DetailBlock d => (d.Name, d.Pairs.ToDictionary(p => p.Key, p => p.Value)),
-                // 有结构化形态就用它:让消费方去拆 "path:line:text" 是把一个我们已经
-                // 知道答案的解析问题外包出去(R14)。
+                // 有结构化形态就用它,不要让消费方去拆 "path:line:text"。
                 TextBlock x => (x.Name, x.Rows is null ? x.Lines : (object)x.Rows),
                 _ => ("", null),
             };
@@ -178,9 +174,8 @@ public static class JsonRenderer
     }
 
     /// <summary>
-    /// 覆盖式赋值是这套输出唯一一处会**静默丢数据**的地方(第二轮盲测实证:同名 def 的
-    /// fields 被后一个覆盖成空,而 notes 还在说匹配到了)。宁可当场炸,也不许交出一份
-    /// 自洽度不明的 JSON —— 消费方没有任何办法从结果里看出少了东西。
+    /// 覆盖式赋值是这套输出唯一一处会**静默丢数据**的地方(同名 def 的 fields 被后一个
+    /// 覆盖成空,而 notes 还在说匹配到了),消费方无从看出少了东西 —— 所以当场炸。
     /// </summary>
     private static void Put(Dictionary<string, object?> target, string key, object? value, string where)
     {
@@ -191,9 +186,8 @@ public static class JsonRenderer
     }
 
     /// <summary>
-    /// <see cref="NoticeKind"/> → JSON 里的 kind 值。参考页要列出这份取值集合,
-    /// 而那份列表必须与真写进 JSON 的那一份同源 —— 否则文档里的 kind 与输出里的 kind
-    /// 可以各自正确地不一致。
+    /// <see cref="NoticeKind"/> → JSON 里的 kind 值。参考页列出的取值集合必须走这里,
+    /// 不要另抄一份。
     /// </summary>
     internal static string SnakeCase(string s)
     {

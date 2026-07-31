@@ -12,11 +12,10 @@ public sealed record ImportStats(
     int TruncatedDefs, int XmlNodes, ExportMeta Meta, string DbPath);
 
 /// <summary>
-/// 中间格式 → SQLite。B 案把建库整个搬到这一侧,收益在 06「分工」一节记过:产地唯一由
-/// 进程边界保证、策略变化免重导、建库逻辑进得了测试闸。
+/// 中间格式 → SQLite。建库整个在这一侧:产地唯一由进程边界保证,策略变化免重导。
 ///
-/// 原子性(02-6)的 import 侧一半:先写 temp db,建完 rename 替换。游戏侧那一半是尾行
-/// 记录数标记 —— 这里读到尾标记才认账。
+/// 原子性的 import 侧一半:先写 temp db,建完 rename 替换。游戏侧那一半是尾行记录数标记 ——
+/// 这里读到尾标记才认账。
 /// </summary>
 public sealed class SnapshotImporter
 {
@@ -70,17 +69,14 @@ public sealed class SnapshotImporter
             using var insertKeyedFts = Prepare(db,
                 "INSERT INTO keyed_fts (rowid, key, translated, original) VALUES ($id,$k,$tr,$o)");
 
-            // 一个 defName 下可能挂着**几个** def(同名跨 def 类型是 RimWorld 常态)。
-            // 原先这里是 name → 单个 id,后写的把先写的顶掉,于是 `Firefoam` 的译文
-            // 一律绑到导出文件里最后出现的那个 Firefoam 上 —— 绑对绑错取决于导出顺序,
-            // 而输出里没有任何迹象。查询侧已经改成按名字取、由命令层判归属(R2),
-            // 于是这个 def_id 反倒成了一个没人读、又一直是错的字段:留着就是给下一个人挖坑。
+            // 一个 defName 下可能挂着**几个** def(同名跨 def 类型是 RimWorld 常态),
+            // 所以是 name → 列表:取单个 id 会让归属取决于导出顺序。
             var idsByName = new Dictionary<string, List<(long Id, string? Type)>>(StringComparer.Ordinal);
             var ftsExtra = new Dictionary<long, List<string>>();
             var pendingInjections = new List<(string defName, string defType, string path, string translated, string original)>();
             long nextId = 1;
             // keyed 自己的 id 序列。显式维护而不是问 last_insert_rowid():FTS 那一行要用同一个
-            // rowid,而两条 INSERT 之间夹着别的语句时,「上一次插入」是谁就不再显然。
+            // rowid,而两条 INSERT 之间夹着别的语句。
             long nextKeyedId = 1;
 
             foreach (var line in ReadLines(exportPath))
@@ -200,7 +196,7 @@ public sealed class SnapshotImporter
                     insertKeyed.ExecuteNonQuery();
 
                     // key 走标识符分词(CamelCase 拆开),译文与原文按自然文本 —— 与 defs_fts
-                    // 那边同一个产地,否则「中文查得到、key 查不到」这类不一致会各自长出一套。
+                    // 同一个产地。
                     Bind(insertKeyedFts, "$id", kid);
                     Bind(insertKeyedFts, "$k", FtsText.ForIndex(key, identifier: true));
                     Bind(insertKeyedFts, "$tr", FtsText.ForIndex(translated));
@@ -313,11 +309,11 @@ public sealed class SnapshotImporter
 
             tx.Commit();
 
-            // shared_values 的一次扫。放在 commit 之后、建索引之前:它只读刚写完的两张表,
-            // 而 GROUP BY 全表在事务里做会把 journal 撑大一圈,没有必要。
+            // shared_values 的一次扫。放在 commit 之后、建索引之前:GROUP BY 全表在事务里做
+            // 会把 journal 撑大一圈。
             //
-            // 「不少于 8 个」不是调出来的阈值,是「大多数」这个词成不成话的下限 —— 类型只有
-            // 三五个 def 时,「其中两个也是这个值」不构成任何提示。过半是同一个词的另一半。
+            // 「不少于 8 个」是「大多数」这个词成不成话的下限 —— 类型只有三五个 def 时,
+            // 「其中两个也是这个值」不构成任何提示。过半是同一个词的另一半。
             using (var fill = db.CreateCommand())
             {
                 fill.CommandText =
@@ -351,9 +347,8 @@ public sealed class SnapshotImporter
         => idsByName.TryGetValue(defName, out var list) ? list : [];
 
     /// <summary>
-    /// 这条译文归哪个 def。**判不出来就写 null**,不挑一个 —— 挑错的那一行与挑对的
-    /// 长得一模一样,而 null 至少是一句真话(游戏自己也是按 defName 注入的,
-    /// 语言文件的 key 里根本没有类型这一维)。
+    /// 这条译文归哪个 def。**判不出来就写 null**,不挑一个:游戏自己也是按 defName 注入的,
+    /// 语言文件的 key 里根本没有类型这一维。
     /// </summary>
     private static long? Owner(IReadOnlyList<(long Id, string? Type)> candidates, string? defType)
     {
@@ -364,9 +359,8 @@ public sealed class SnapshotImporter
     }
 
     /// <summary>
-    /// 译文进双语 FTS。归属判不出来时**每个同名 def 都收**:这一列是召回用的,
-    /// 而漏掉一个的后果是「用中文名搜不到那个 def」—— 比多召回一个同名 def 贵得多,
-    /// 后者读者一眼就分得清(get 的输出会把同名歧义说破)。
+    /// 译文进双语 FTS。归属判不出来时**每个同名 def 都收**:这一列是召回用的,漏掉一个
+    /// 就「用中文名搜不到那个 def」,比多召回一个同名 def 贵得多。
     /// </summary>
     private static void Recall(Dictionary<long, List<string>> ftsExtra, long? owner,
                                IReadOnlyList<(long Id, string? Type)> candidates, string text)
@@ -395,9 +389,8 @@ public sealed class SnapshotImporter
                 var packageId = ReadPackageId(modDir) ?? Path.GetFileName(modDir);
 
                 // Keyed 那一半。同 key 多来源时**不去重、不挑一个**:这一层的语义是
-                // 「磁盘上存在这些译文」,不是「哪一句会生效」——「仅赢家」管的是运行时那一层
-                // (keyedReplacements 本身已经是合并后的最终值)。这里挑一个就等于凭
-                // 目录枚举顺序发一张它证不了的赢家证书。
+                // 「磁盘上存在这些译文」,不是「哪一句会生效」—— 后者由运行时那一层回答
+                // (keyedReplacements 本身已经是合并后的最终值)。
                 foreach (var keyedDir in FindLanguageSubdirs(modDir, meta.Language, "Keyed"))
                 {
                     foreach (var xml in SafeFiles(keyedDir, "*.xml"))
@@ -442,8 +435,8 @@ public sealed class SnapshotImporter
                             var candidates = Candidates(idsByName, defName);
                             if (candidates.Count == 0) continue;
 
-                            // 收割来的 key 是 `DefName.field`,一个字的类型信息都没有 ——
-                            // 所以这里能判出归属的只有「这个名字下只有一个 def」那一种。
+                            // 收割来的 key 是 `DefName.field`,没有类型信息,所以能判出归属的
+                            // 只有「这个名字下只有一个 def」那一种。
                             var owner = Owner(candidates, null);
                             Bind(insertTr, "$id", owner);
                             Bind(insertTr, "$t", null);
@@ -471,9 +464,8 @@ public sealed class SnapshotImporter
     /// mod 里 <c>Languages/&lt;语言&gt;/&lt;子目录&gt;</c> 的实际落点。<c>Keyed</c> 与
     /// <c>DefInjected</c> 共用这一条路径规则(两种目录在同一层并列),所以规则只有一个产地。
     ///
-    /// **官方 Data 目录不在射程内**:那边的非英文语言包是 .tar 打包的(Core 的简体中文是
-    /// 一个 4.6 MB 的 tar),游戏走 VirtualDirectory 读它,而这里只认磁盘上的普通目录。
-    /// 官方那一份由运行时导出覆盖 —— 这一层本来就只补 mod 侧。
+    /// **官方 Data 目录不在射程内**:那边的非英文语言包是 .tar 打包的,游戏走 VirtualDirectory
+    /// 读它,而这里只认磁盘上的普通目录。官方那一份由运行时导出覆盖。
     /// </summary>
     private static IEnumerable<string> FindLanguageSubdirs(string modDir, string language, string subdir)
     {
@@ -511,10 +503,9 @@ public sealed class SnapshotImporter
         {
             var text = el.Value;
             if (string.IsNullOrWhiteSpace(text)) continue;
-            // 游戏读这两种文件时都会把字面 `\n` 换成真换行(Keyed 走
-            // DirectXmlLoaderSimple、DefInjected 走 DefInjectionPackage,两处都只换 `\n`)。
-            // 不跟着换,收割层与运行时层就会为**同一句译文**存下两个不同的字符串 ——
-            // 于是「两层不一致」这个信号里混进了一批纯表示差异,读的人无从分辨哪些是真覆盖。
+            // 游戏读这两种文件时都会把字面 `\n` 换成真换行(Keyed 走 DirectXmlLoaderSimple、
+            // DefInjected 走 DefInjectionPackage,两处都只换 `\n`)。不跟着换,收割层与运行时层
+            // 就会为**同一句译文**存下两个不同的字符串,「两层不一致」这个信号里就混进纯表示差异。
             yield return (el.Name.LocalName, text.Replace("\\n", "\n"));
         }
     }

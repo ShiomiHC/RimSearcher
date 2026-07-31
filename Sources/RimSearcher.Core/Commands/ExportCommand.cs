@@ -12,13 +12,11 @@ namespace RimSearcher.Commands;
 /// <summary>
 /// 导出编排 —— 起游戏、拿数据、建库、自校,全程无人值守。
 ///
-/// **真实 ModsConfig.xml 永不触碰**(第二轮裁决 6)。备份还原方案被否决过:换入之后、还原
-/// 之前的那段窗口里一崩,用户的 mod 配置就留在了被改写的状态;而且游戏退出时自己也会回写
-/// ModsConfig,和还原动作是竞争关系。取而代之的是 <c>-savedatafolder</c> 隔离:整个 SaveData
-/// 重定向到临时目录,真配置连打开都没打开过。
+/// **真实 ModsConfig.xml 永不触碰**:整个 SaveData 经 <c>-savedatafolder</c> 重定向到临时目录。
+/// 游戏退出时自己会回写 ModsConfig,所以「备份 - 换入 - 还原」与它是竞争关系。
 ///
 /// Config/ 是**整体复制**而不是只造一个 ModsConfig.xml:各 mod 的 Mod_*.xml 设置会改 patch
-/// 结果(03 甲的 ConditionalSettings/EasyMode),丢掉它们导出的就是另一份数据。
+/// 结果,丢掉它们导出的就是另一份数据。
 /// </summary>
 public sealed class ExportCommand : Command
 {
@@ -112,10 +110,10 @@ public sealed class ExportCommand : Command
     /// <summary>
     /// 把每个 mod 声明的硬依赖补进发射列表,返回补了哪些。就地改 <paramref name="ids"/>。
     ///
-    /// 依赖插在**第一个需要它的 mod 之前** —— 前置必须先加载,否则补了等于没补。
+    /// 依赖插在**第一个需要它的 mod 之前** —— 游戏要求前置先加载。
     /// 依赖自己还有依赖(AncotLibrary 要 Harmony),所以反复扫到不动为止。
     ///
-    /// 没装的依赖不在这里报错:那由调用方那段「缺 mod」的检查统一报,消息里能一并列出。
+    /// 没装的依赖不在这里报错,由调用方那段「缺 mod」的检查一并列出。
     /// </summary>
     public static List<string> ResolveDependencies(List<string> ids, IReadOnlyDictionary<string, InstalledMod> installed)
     {
@@ -142,8 +140,7 @@ public sealed class ExportCommand : Command
     }
 
     /// <summary>
-    /// 起游戏的命令行。**唯一产地** —— <c>--dry-run</c> 报的和真跑用的是同一份,
-    /// 否则 dry-run 就成了「报告一件与实际不同的事」,而它存在的全部意义就是先看清楚。
+    /// 起游戏的命令行。**唯一产地** —— <c>--dry-run</c> 报的和真跑用的必须是同一份。
     ///
     /// 无头是默认,理由在调用处的注释里(渲染零帧、注册表隔离不到)。
     /// </summary>
@@ -153,9 +150,8 @@ public sealed class ExportCommand : Command
         {
             $"-savedatafolder={temp}",
             $"-{IntermediateFormat.CommandLineSwitch}={outFile}",
-            // 日志必须落在我们指定的地方。Unity 默认写 LocalLow 那份 Player.log,而**这次跑
-            // 有可能一个字都不写进去**(实测:一次挂死的导出,那个文件的时间戳停在半小时前)。
-            // 没有日志,「游戏卡住了」就只剩一句没有下文的话。
+            // 日志必须落在我们指定的地方:Unity 默认那份 LocalLow\Player.log 在挂死的一次跑里
+            // 可能一个字都不写。
             $"-logfile={Path.Combine(temp, GameLogName)}",
         };
         if (!showWindow) { argv.Add("-batchmode"); argv.Add("-nographics"); }
@@ -168,11 +164,8 @@ public sealed class ExportCommand : Command
     /// <summary>
     /// 一个阶段停多久开始说话。**这是软限制** —— 到点只出一句提醒,不碰进程。
     ///
-    /// 硬停自始至终只有 <c>--timeout</c> 一个,因为这个阈值**注定选不准**:
-    /// 「读定义」那一段随 mod 数量放大,20 个 mod 实测 35 秒,几十上百个 mod 的整备列表
-    /// 要几分钟是正常的。拿它去杀进程,就是拿一个猜出来的数去毁掉一次已经付过的加载 ——
-    /// 而误杀不可逆,误报只花一行字。所以选可逆的那一侧:到点报,不到点闭嘴,杀不杀交给
-    /// 人显式给的 --timeout。
+    /// 硬停只有 <c>--timeout</c> 一个:这个阈值选不准 ——「读定义」那一段随 mod 数量放大,
+    /// 20 个 mod 约 35 秒,上百个要几分钟都算正常。误杀不可逆,误报只花一行字。
     /// </summary>
     public const int StageStallSeconds = 120;
 
@@ -189,26 +182,22 @@ public sealed class ExportCommand : Command
 
     /// <summary>
     /// 等待循环里每 500ms 做一次的裁决。抽成纯函数是因为**这是本命令唯一会主动杀进程的
-    /// 地方**,而它必须判得了 —— 起一次游戏要几十秒,靠实测覆盖不到「什么时候不该杀」。
+    /// 地方**,而起一次游戏要几十秒,端到端覆盖不到「什么时候不该杀」。
     /// </summary>
     public static WaitAction Decide(bool pastDeadline, string? stage, double stageSeconds, bool warned)
     {
         if (pastDeadline) return WaitAction.GiveUp;
         if (warned || stageSeconds < StageStallSeconds) return WaitAction.KeepWaiting;
-        // 导出跑起来之后不提醒:那一段本来就长,而这里对它没有任何下一步可说 ——
-        // 一句没有下文的提醒只是噪音,还会把上面那两句真有下文的稀释掉。
+        // 导出阶段不提醒:那一段本来就长,而且对它没有任何下一步可说。
         if (stage == IntermediateFormat.StageExporting) return WaitAction.KeepWaiting;
         return WaitAction.Warn;
     }
 
     /// <summary>
-    /// 停在某一阶段意味着什么。提醒和超时报错共用这一句 —— 两处说的是同一件事,
-    /// 分两处写迟早会各说各的。
+    /// 停在某一阶段意味着什么。提醒和超时报错共用这一句。
     ///
-    /// **判据是游戏侧自报的阶段,不是 CPU 占用。**曾经想用「加载完了 CPU 却贴近零」来认
-    /// 卡在对话框上的样子 —— 那是代理指标,而代理会撒谎:一段真的很慢的 I/O 会被判成卡死,
-    /// 一个空转的 mod 又会把真卡死盖过去。改由 DataMod 在两个分界点写进度文件,
-    /// 于是「停在哪一步」是**事实**,只有「这一步为什么久」才是推测。
+    /// **判据是 DataMod 在两个分界点写的进度文件,不是 CPU 占用** —— 后者是代理指标,
+    /// 会把很慢的 I/O 判成卡死,也会被空转的 mod 盖住真卡死。
     /// </summary>
     public static string StageDiagnosis(string? stage) => stage switch
     {
@@ -241,8 +230,7 @@ public sealed class ExportCommand : Command
         {
             var now = DateTime.UtcNow;
 
-            // 只认往前走的阶段。游戏正在写那个文件的一瞬间会读到 null,而那不是「退回到没有
-            // 阶段」—— 把它当成变化会白白重置计时器,把真卡住的那一次拖成超时。
+            // 只认往前走的阶段:游戏正在写那个文件的一瞬间会读到 null,那不是「退回到没有阶段」。
             var seen = ReadStage(progressFile);
             if (seen is not null && seen != stage) { stage = seen; stageSince = now; warned = false; }
 
@@ -254,9 +242,8 @@ public sealed class ExportCommand : Command
 
                 case WaitAction.Warn:
                     warned = true;
-                    // 措辞不许把「还没走完」说成「卡死了」:这个阈值选不准,而一句断言错了
-                    // 就会教人去中止一次本来能成的导出。说事实(停在哪一步、多久),
-                    // 说下一步(要看对话框就 --show-window),然后明说还在等。
+                    // 措辞不许把「还没走完」说成「卡死了」:阈值选不准,断言错了会教人去中止
+                    // 一次本来能成的导出。只说事实、下一步,并明说还在等。
                     warn($"still at stage '{stage ?? "none"}' after {stageSeconds:0} seconds. " +
                          StageDiagnosis(stage) +
                          $" Still waiting — nothing is stopped until --timeout ({timeout.TotalSeconds:0}s).");
@@ -282,8 +269,8 @@ public sealed class ExportCommand : Command
     }
 
     /// <summary>
-    /// 失败时才从游戏日志里取最后几行。成功路径一个字节都不带 —— 平常那几十行
-    /// Unity 启动横幅对调用方没有任何价值,只在什么都没产出时才是唯一线索。
+    /// 失败时才从游戏日志里取最后几行 —— 平常那几十行是 Unity 启动横幅,只在什么都没产出时
+    /// 才构成线索。
     /// </summary>
     private static string LastLines(StringBuilder log, int n = 5)
     {
@@ -313,8 +300,8 @@ public sealed class ExportCommand : Command
 
         // 导出器接挂。必须在扫描之前 —— 扫描要看见它,才判得了「导出器装没装」。
         //
-        // using 是本命令唯一的断开产地:下面每一条 throw、每一个 return 都会经过它。
-        // 唯一漏得掉的是进程被强杀,而那一种由**下一次** Attach 清理(它照样接管已存在的联接)。
+        // using 是本命令唯一的断开产地。漏得掉的只有进程被强杀,那一种由**下一次** Attach
+        // 清理(它接管已存在的联接)。
         using var exporterLink = DataModLink.Attach(ctx.Config);
         if (exporterLink.WasAlreadyThere && exporterLink.State == DataModLink.LinkState.Attached)
             ctx.Report.Notice(NoticeKind.Advisory,
@@ -322,13 +309,12 @@ public sealed class ExportCommand : Command
                 "could detach, or it was attached by hand. It has been re-attached and will be detached when this " +
                 "command finishes.");
 
-        // 步骤 2:启动前验证。缺一个 mod 就失败并报候选,不烧一轮游戏启动。
+        // 启动前验证:缺一个 mod 就失败并报候选,不烧一轮游戏启动。
         var installed = InstalledMods.Scan(ctx.Config);
         var missing = list.Ids.Where(id => !installed.ContainsKey(id)).ToList();
 
         // 声明了却没装的**依赖**和列表里没装的 mod 是一回事:两者都让游戏在加载定义之前
-        // 弹一个点不掉的对话框。分成两条消息报,第二条就会在第一条通过之后才出现 ——
-        // 那等于让人白跑一次几十秒的加载。
+        // 弹一个点不掉的对话框。所以一条消息一并报,不分两轮。
         var uninstalledDeps = list.Ids
             .Where(installed.ContainsKey)
             .SelectMany(id => installed[id].Dependencies.Select(d => (Needs: id, Dep: d)))
@@ -353,21 +339,17 @@ public sealed class ExportCommand : Command
                     : $"Searched: {string.Join(", ", InstalledMods.Roots(ctx.Config))}."));
 
         // 导出器不在列表里,游戏会照常起来、走到主菜单,然后**什么也不做** —— 没有人处理
-        // 那个命令行开关。这件事在启动前一毫秒就能知道,原来却要等到超时(实测:23 个 mod
-        // 的列表挂了二十分钟)才由一条事后消息告诉你。发射前就该拦住。
+        // 那个命令行开关,于是只能挂到超时。发射前就拦住。
         //
-        // 拦住之后是补上而不是拒绝:导出器是工具而不是内容,跟 Harmony 一样属于基础设施。
-        // 让每一份 mod 列表都记得带上它,只是把工具的实现细节摊派给了使用者 ——
-        // 而 `modlist save` 从游戏里捕获的列表天然就不会有它。
+        // 拦住之后是补上而不是拒绝:导出器跟 Harmony 一样属于基础设施,而 `modlist save`
+        // 从游戏里捕获的列表天然不会有它。
         var launchIds = list.Ids.ToList();
 
         // 依赖补全。缺一个硬依赖,游戏会在**加载定义之前**弹一个「缺少前置」的对话框 ——
-        // 无头模式下它既看不见也点不掉,于是加载完就永久等待。实测:手写的 races 列表漏了
-        // Ancot.AncotLibrary,挂到超时才收场。这与「导出器不在列表里」是同一个缺陷的同一种
-        // 形状,当时只堵了那一个具体条目而没有推广,于是换个条目又踩一遍。
+        // 无头模式下既看不见也点不掉,于是加载完就永久等待。
         //
-        // 补而不是拒:依赖是列表作者的疏漏,不是意图。`modlist save` 从游戏里捕获的列表
-        // 天然是全的,手写的才会漏,而手写正是这条路存在的理由。
+        // 补而不是拒:依赖是列表作者的疏漏,不是意图。`modlist save` 捕获的列表天然是全的,
+        // 手写的才会漏。
         var added = ResolveDependencies(launchIds, installed);
         if (added.Count > 0)
             ctx.Report.Notice(NoticeKind.Advisory,
@@ -417,8 +399,7 @@ public sealed class ExportCommand : Command
 
         if (File.Exists(outFile)) File.Delete(outFile);
 
-        // 进度文件也要先删。留着上一次的,这一次就会带着一个陈旧的阶段开跑 ——
-        // 与探针那次「读到上一轮的日志签名、把上次的失败当成这次的结论」是同一个错。
+        // 进度文件也要先删:留着上一次的,这一次就会带着一个陈旧的阶段开跑。
         var progressFile = outFile + IntermediateFormat.ProgressFileSuffix;
         if (File.Exists(progressFile)) File.Delete(progressFile);
 
@@ -426,21 +407,16 @@ public sealed class ExportCommand : Command
         {
             WorkingDirectory = gameDir,
             UseShellExecute = false,
-            // 游戏的 stdout(Unity 的启动横幅、几十行 memorysetup-*)会顺着我们的 stdout 一起
-            // 流给调用方,把一条 6 行的结果冲成 80 行。它既不是本命令的输出,也不构成契约的
-            // 一部分 —— 接过来丢掉,需要的话再走 --verbose 交给日志文件。
+            // 游戏的 stdout(Unity 启动横幅、几十行 memorysetup-*)不接管的话会混进本命令的
+            // 输出。接过来丢掉,需要的话看日志文件。
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
         // 无头是默认。导出在 StaticConstructorOnStartup 里做完就 Root.Shutdown(),整条路径
-        // 一帧都不渲染 —— 于是 Unity 的图形设备纯属额外开销,而那个抢焦点、能被误关的窗口
-        // 更是纯粹的副作用。实测(23 mod + 导出器):无头 26 秒、窗口 27 秒,产出 defs /
-        // field_values / translations 逐项相同。
+        // 一帧都不渲染,于是图形设备纯属额外开销,而窗口还会抢焦点、能被误关。
         //
-        // 不走「开个 640x480 小窗」那条路,虽然它也能跑通:-screen-width/-screen-height
-        // 会写进 HKCU\...\Screenmanager*,而那是 -savedatafolder **隔离不到**的地方
-        // (实测确实改了 Window Position Y)。导出不许在真实配置上留下任何痕迹,注册表
-        // 也算真实配置。无头两次实测注册表零改动。
+        // 也不走「开个 640x480 小窗」:-screen-width/-screen-height 会写进
+        // HKCU\...\Screenmanager*,而注册表是 -savedatafolder **隔离不到**的地方。
         foreach (var a in argv) psi.ArgumentList.Add(a);
 
         var timeout = TimeSpan.FromSeconds(ctx.Args.Int("timeout", 900));
@@ -459,8 +435,7 @@ public sealed class ExportCommand : Command
             proc.BeginErrorReadLine();
 
             var stall = WaitForGame(proc, timeout, outFile, progressFile,
-                // 当场刷出去。攒在缓冲里等命令结束才吐,就跟把它放进 Report 里一样没用 ——
-                // 这句话的全部价值就在于人还在等的时候能看见。
+                // 当场刷出去 —— 这句话的全部价值就在于人还在等的时候能看见。
                 warn: line =>
                 {
                     ctx.Progress.Write(OutputText.Finish($"{CommandRegistry.ExeName}: {line}"));
@@ -470,8 +445,7 @@ public sealed class ExportCommand : Command
             {
                 try { proc.Kill(entireProcessTree: true); } catch { /* 已经退了 */ }
 
-                // 失败时临时目录留着 —— 抛异常就走不到末尾那段清理,而游戏日志在里面,
-                // 是唯一的现场。出了事还清理证物,等于让下一次调查从零开始。
+                // 失败时临时目录留着 —— 游戏日志在里面,是唯一的现场。
                 throw new CliUsageException(stall + LastLines(gameLog) +
                     $" The game's own log was kept at {Path.Combine(temp, GameLogName)}.");
             }
@@ -482,8 +456,8 @@ public sealed class ExportCommand : Command
                 $"The game exited after {sw.Elapsed.TotalSeconds:0} seconds without writing an export file. " +
                 "The usual cause is that the exporter mod is not enabled in this list: it has to be one of the " +
                 $"entries in '{list.Name}'." +
-                // 无头是默认之后多了第二种成因。不指出来的话,一个在加载期碰 GUI 的 mod 会
-                // 一路把人往「导出器没装上」那条错路上引 —— 而那条路上什么也查不出来。
+                // 第二种成因:一个在加载期碰 GUI 的 mod。不指出来的话会一路把人往
+                // 「导出器没装上」那条查不出东西的路上引。
                 (ctx.Args.Flag("show-window")
                     ? ""
                     : " If it is enabled, a mod in the list may need a graphics device while loading: " +
@@ -491,8 +465,7 @@ public sealed class ExportCommand : Command
                 LastLines(gameLog) +
                 $" The game's own log was kept at {Path.Combine(temp, GameLogName)}.");
 
-        // 与 `snapshot import` 同一个口径:收割默认开,只有显式否定才关。两条路都能造快照,
-        // 口径分家的话「这份库量没量过磁盘」就取决于当初是哪条路造的它。
+        // 与 `snapshot import` 同一个口径:收割默认开,只有显式否定才关 —— 两条路都能造快照。
         var importer = new SnapshotImporter
         {
             ModRoots = ctx.Args.Flag("no-harvest-translations") ? [] : ctx.Config.ModRoots,
@@ -500,11 +473,9 @@ public sealed class ExportCommand : Command
         var dbPath = Path.Combine(ctx.Config.ResolveSnapshotDir(), snapshotName + ".db");
         var stats = importer.Import(outFile, dbPath);
 
-        // 步骤 6:指纹自校 —— 请求的 ids 序列必须等于产出 meta 的 ids 序列。
-        // 期望环境由 CLI 主动制造并验证过,自动检测就只剩「手动导出归属谁」一个用途了。
+        // 指纹自校 —— 请求的 ids 序列必须等于产出 meta 的 ids 序列。
         //
-        // 比的是**发射用的**列表,不是原始列表:导出器是这一轮临时加进去的基础设施,
-        // 拿原始列表去比,每一次自动补全都会报一条假的「游戏加载的和要求的不一样」。
+        // 比的是**发射用的**列表,不是原始列表:导出器与补全的依赖是这一轮临时加进去的。
         var produced = stats.Meta.Mods.Select(m => m.PackageId).ToList();
         if (ExportMeta.ComputeModlistFingerprint(launchIds) != ExportMeta.ComputeModlistFingerprint(produced))
             ctx.Report.Notice(NoticeKind.Staleness,

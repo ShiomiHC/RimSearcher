@@ -20,12 +20,8 @@ public sealed record SourceTreePlan
 }
 
 /// <summary>
-/// 「该建哪些树」这个问题的答案来自**快照**,不来自另一份手写清单。
-///
-/// 判据:快照的 mod 列表是游戏亲自答的,而手写清单会漂 —— 这一点刚付过代价,
-/// 手写的 races 列表漏了一个前置,换来一次挂死的无头导出。同一个错误不值得在
-/// 另一个命令上再犯一次。附带的好处是名字统一:树名就是 <c>rimsearcher mods</c>
-/// 第二列那个 packageId,也就是 <c>--scope</c> 认的那个,整个工具里只有一套名字。
+/// 「该建哪些树」的答案来自**快照**(游戏亲自答的 mod 列表),不来自手写清单。
+/// 树名就是 <c>rimsearcher mods</c> 第二列那个 packageId,也是 <c>--scope</c> 认的那个。
 /// </summary>
 public static class SourcePlanner
 {
@@ -55,11 +51,10 @@ public static class SourcePlanner
     /// <summary>
     /// 快照里的 mod 列表 → 树计划。
     ///
-    /// 三类会被摘掉,各有各的理由:
-    ///   - Ludeon 系(本体与五个 DLC)合成一棵 <c>vanilla</c>:游戏代码就是一套程序集,
-    ///     DLC 只加数据。摊成六棵会把同一份 Assembly-CSharp 反编译六遍。
-    ///   - 导出器自己:它的源码就在本仓,反编译自己的产物没有意义。
-    ///   - 一个 dll 都不加载的 mod:纯 XML mod 是多数,给它建一棵空目录只是噪音。
+    /// 三类被摘掉:
+    ///   - Ludeon 系(本体与五个 DLC)合成一棵 <c>vanilla</c> —— 游戏代码就是一套程序集,DLC 只加数据;
+    ///   - 导出器自己 —— 源码就在本仓;
+    ///   - 一个 dll 都不加载的 mod(纯 XML mod)。
     /// </summary>
     public static List<SourceTreePlan> Plan(
         RimConfig config,
@@ -118,8 +113,7 @@ public static class SourcePlanner
     }
 
     /// <summary>
-    /// 计划 → 清单。哈希在这里算,所以它是**这次要花的时间**里最贵的一小段
-    /// (vanilla 那几个大 dll 实测不到一秒),换来的是「没变就不重跑」。
+    /// 计划 → 清单。哈希在这里算,换来的是「没变就不重跑」。
     /// </summary>
     public static SourceTreeState Manifest(SourceTreePlan plan, string gameVersion) => new()
     {
@@ -138,8 +132,7 @@ public static class SourcePlanner
 
     private static string SafeHash(string path)
     {
-        // 读不动一个 dll 不该让整次同步失败:哈希空掉的后果是这棵树每次都被判成变了,
-        // 也就是多跑几次反编译 —— 比无声跳过它便宜得多。
+        // 读不动一个 dll 不该让整次同步失败;空哈希只是让这棵树每次都被判成变了。
         try { return AssemblyFilter.Sha256(path); }
         catch { return ""; }
     }

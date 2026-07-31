@@ -5,20 +5,16 @@ using System.Security.Cryptography;
 namespace RimSearcher.Sources;
 
 /// <summary>
-/// 哪些 dll 不值得反编译,以及一个 dll 引用了谁。
-///
-/// 从旧世系 <c>AssemblyScanner</c> 带走的两件事。其余(全量哈希预筛、catalog 指纹、
-/// 目录遮蔽集合)不带:变更判据改成逐树一份 <see cref="SourceTreeState"/>,
-/// 遮蔽由 <see cref="ModFolders"/> 复刻游戏算法算准。
+/// 哪些 dll 不值得反编译,以及一个 dll 引用了谁 —— 只这两件事。
+/// 变更判据在 <see cref="SourceTreeState"/>,目录遮蔽在 <see cref="ModFolders"/>。
 /// </summary>
 public static class AssemblyFilter
 {
     // 运行时与引擎程序集:反编译它们既无意义又会让产物膨胀十倍。
     //
-    // 判定分「精确名」与「点分家族」两档,不能一律 StartsWith:裸前缀 StartsWith 会把
+    // 判定分「精确名」与「点分家族」两档,不能一律 StartsWith:裸前缀会把
     // SystematicWeapons.dll / UnityEngineTweaks.dll / I18NPlus.dll 这类正常 mod 程序集
-    // 整批当成运行时库排掉,它们的源码永远进不了索引,而用户查不到还看不出原因。
-    // 精确名只匹配整个程序集名;家族前缀带结尾的点,只吃 "Foo." 开头的真·子命名空间。
+    // 一并排掉。家族前缀带结尾的点,只吃 "Foo." 开头的真·子命名空间。
     //
     // 逐条判断依据:
     //   mscorlib        只有 mscorlib.dll 这一个,没有 mscorlib.* 家族 → 精确
@@ -57,10 +53,9 @@ public static class AssemblyFilter
     }
 
     /// <summary>
-    /// 这个 dll 的 AssemblyRef 名字集合。反编译只需要编译期类型解析,而 AssemblyRef 恰好
-    /// 就是编译期确定的引用集合 —— 比 About.xml 的 modDependencies(含纯 XML patch 依赖)
-    /// 更贴合这个用途。读不出来返回空集:解析目录少一个的后果是泛型约束退化成 object,
-    /// 不是整次反编译失败。
+    /// 这个 dll 的 AssemblyRef 名字集合。反编译只需要编译期类型解析,AssemblyRef 正是
+    /// 编译期引用集合 —— 比 About.xml 的 modDependencies(含纯 XML patch 依赖)更贴合。
+    /// 读不出来返回空集:解析目录少一个只是让泛型约束退化成 object,不是整次反编译失败。
     /// </summary>
     public static HashSet<string> References(string assemblyPath)
     {

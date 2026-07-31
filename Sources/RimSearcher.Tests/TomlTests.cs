@@ -3,8 +3,7 @@ using RimSearcher.Config;
 namespace RimSearcher.Tests;
 
 /// <summary>
-/// 配置解析。这是唯一一处**用户手写**的输入,所以它的报错质量直接决定「工具坏了」
-/// 和「我第 8 行写错了」在用户眼里分不分得开。
+/// 配置解析。唯一一处**用户手写**的输入,报错质量决定「工具坏了」与「我写错了」分不分得开。
 /// </summary>
 public class TomlTests
 {
@@ -19,9 +18,8 @@ public class TomlTests
     }
 
     /// <summary>
-    /// Windows 路径里的反斜杠必须原样保留。TOML 严格说应该报「未知转义 \S」,但对一份
-    /// 配置文件来说,**静默吃掉**那个反斜杠是最坏的结果 —— 路径变成 D:SteamLibrary,
-    /// 后面每一条「找不到目录」都指着一个用户根本没写过的路径。宁可留着。
+    /// Windows 路径里的反斜杠原样保留。严格 TOML 应报「未知转义 \S」,但静默吃掉反斜杠会
+    /// 把路径变成 D:SteamLibrary,后面每条「找不到目录」都指着用户没写过的路径。
     /// </summary>
     [Fact]
     public void windows路径里的反斜杠不被吃掉()
@@ -39,8 +37,7 @@ public class TomlTests
     }
 
     /// <summary>
-    /// 路径列表天然要换行写。曾经的实现要求数组写在一行,报错措辞精确却规则本身是错的 ——
-    /// 「消息说得清楚」不能替代「规则该不该存在」。
+    /// 路径列表天然要换行写,数组必须允许跨行。
     /// </summary>
     [Fact]
     public void 数组可以跨行写()
@@ -86,8 +83,7 @@ public class TomlTests
     // ---- 报错 ----
 
     /// <summary>
-    /// 每条报错都要带行号。一份几十行的配置里报「语法错误」而不说第几行,
-    /// 用户只能整份重读 —— 那正是错误消息本该替他做的事。
+    /// 每条报错都要带行号,否则用户只能整份重读。
     /// </summary>
     [Theory]
     [InlineData("a = \"unterminated\ngame_dir = \"x\"\n")]

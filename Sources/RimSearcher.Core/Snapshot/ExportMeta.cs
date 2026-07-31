@@ -10,8 +10,8 @@ public sealed record ModRef(string PackageId, string? Name, string? Version);
 /// <summary>
 /// 快照身份。指纹 = **有序** packageId + 各 mod 版本 + 游戏 build + 语言。
 ///
-/// 顺序必须入指纹:激活顺序就是 patch 应用顺序(03 甲),同一批 mod 换个顺序得到的是
-/// 另一份数据。语言入指纹是因为 label 列存的是该语言下的运行时值。
+/// 顺序必须入指纹:激活顺序就是 patch 应用顺序,同一批 mod 换个顺序得到的是另一份数据。
+/// 语言入指纹是因为 label 列存的是该语言下的运行时值。
 /// </summary>
 public sealed record ExportMeta(
     int FormatVersion,
@@ -28,9 +28,7 @@ public sealed record ExportMeta(
     /// <summary>
     /// 这份快照量过嵌套 <c>&lt;li Class="…"&gt;</c> 的运行时类型吗(导出器 0.2.0 起)。
     ///
-    /// 非有它不可:老快照对 <c>find Class X</c> 回一个干干净净的零,而那与「量过了、
-    /// 确实没人用它」逐字同形 —— 「错的输出与对的输出同形」是这套输出唯一不许留的形状,
-    /// 而给索引加一维恰恰是最容易造出它的那种改动。
+    /// 老快照对 <c>find Class X</c> 回零,而那与「量过了、确实没人用它」同形。
     /// </summary>
     public bool IndexesNestedClass => AtLeast(ExporterVersion, 0, 2);
 
@@ -74,12 +72,8 @@ public sealed record ExportMeta(
                 $"The export file does not start with a {IntermediateFormat.KindMeta} line. " +
                 "Re-run the export; a file that starts mid-stream cannot be trusted.");
 
-        // 拒收的两个方向要分开说,因为下一步不同:文件旧 = 重导(游戏侧要跑一遍),
-        // 文件新 = 装的 CLI 落后于 mod。原先一句话覆盖两种,而那句话("Update the mod")
-        // 在「文件比 CLI 新」时指的方向恰好是反的。
-        //
-        // 旧文件那支点名**缺的是哪一块**:不说破的话,「为什么一份好端端的导出突然不能用了」
-        // 只能靠猜,而它要付的是分钟级的重导。
+        // 拒收双原因和应对:文件旧 = 重导
+        // 文件新 = 当前 CLI 落后于 mod
         var version = root.TryGetProperty(IntermediateFormat.KeyFormatVersion, out var fv) ? fv.GetInt32() : 0;
         if (version < IntermediateFormat.FormatVersion)
             throw new SnapshotFormatError(

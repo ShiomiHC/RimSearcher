@@ -10,7 +10,7 @@ public class ArgParserTests
     private static ParseResult Parse(params string[] argv)
         => ArgParser.Parse(Spec, GlobalOptions.All, argv);
 
-    // ---- 未知 flag 严格模式(CLI 形态的第一新雷区,06 输出契约)----
+    // ---- 未知 flag 严格模式 ----
 
     [Fact]
     public void 未知flag报错而不是静默吞掉()
@@ -42,7 +42,7 @@ public class ArgParserTests
         Assert.Single(r.Errors);
     }
 
-    // ---- 有意接受的拼写变体(07-② 实证:参数名发明是常态)----
+    // ---- 有意接受的拼写变体(调用方发明参数名是常态)----
 
     [Theory]
     [InlineData("--limit")]
@@ -59,7 +59,7 @@ public class ArgParserTests
         Assert.Equal(7, r.Limit().Count);
     }
 
-    // ---- limit 的取值(07-②:limit "all" 高频出现)----
+    // ---- limit 的取值 ----
 
     [Fact]
     public void limit接受all为正式取值()

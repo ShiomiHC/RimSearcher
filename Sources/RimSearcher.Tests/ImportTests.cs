@@ -5,8 +5,7 @@ using RimSearcher.Storage;
 namespace RimSearcher.Tests;
 
 /// <summary>
-/// 建库侧的闸。B 案把建库从游戏里搬到 CLI 侧,换来的正是这个:
-/// 「一份中间格式进去,库里应该长什么样」可以在测试里跑,不用启动游戏。
+/// 建库侧的闸:「一份中间格式进去,库里应该长什么样」在测试里跑,不用启动游戏。
 /// </summary>
 public class ImportTests
 {
@@ -70,8 +69,7 @@ public class ImportTests
     }
 
     /// <summary>
-    /// 同上,但写的是 <c>Keyed</c> 那一半。界面文案不挂在任何 def 上,所以这一份语料
-    /// 与 DefInjected 那一份不能共用:走的目录不同,进的表也不同。
+    /// 同上,但写的是 <c>Keyed</c> 那一半:界面文案不挂在任何 def 上,目录与表都不同。
     /// packageId 显式传进来,因为「在不在快照的 mod 列表里」正是 origin 的判据。
     /// </summary>
     private static string ModRootWithKeyed(string tag, string packageId,
@@ -93,9 +91,8 @@ public class ImportTests
     // ---- 完整性:半份文件必须被拒,不许静默建成一个缺行的库 ----
 
     /// <summary>
-    /// 游戏中途崩了、磁盘写满了,产出的就是一份没有结束标记的文件。把它导进去会得到一个
-    /// **看起来正常但内容不全**的库 —— 后面每一次「没查到」都无从判断是真没有还是被截断了。
-    /// 宁可拒绝。
+    /// 游戏中途崩了、磁盘写满了,产出的就是一份没有结束标记的文件。导进去得到的库
+    /// 看起来正常但内容不全 —— 「没查到」再也分不出是真没有还是被截断。宁可拒绝。
     /// </summary>
     [Fact]
     public void 缺结束标记的导出文件被拒绝()
@@ -117,8 +114,8 @@ public class ImportTests
     }
 
     /// <summary>
-    /// 上一版导出器写的文件必须被拒,而不是当成「这些字段都不是默认值」导进来 ——
-    /// 那样建出来的库,每个 def 都长得像「处处被作者改过」,与真的处处被改过逐字同形(R1)。
+    /// 旧版导出器写的文件必须被拒,而不是当成「这些字段都不是默认值」导进来 ——
+    /// 那样每个 def 都长得像处处被作者改过,与真的处处被改过逐字同形。
     /// 消息要同时带两个版本号,否则读的人不知道该更新哪一边。
     /// </summary>
     [Fact]
@@ -142,7 +139,7 @@ public class ImportTests
         Assert.False(File.Exists(db), "A rejected import left a database behind.");
     }
 
-    // ---- 噪声过滤(02-2:唯一产地在 import 侧)----
+    // ---- 噪声过滤(唯一产地在 import 侧)----
 
     [Fact]
     public void 噪声字段不进库()
@@ -169,8 +166,8 @@ public class ImportTests
     }
 
     /// <summary>
-    /// generated 是 ImpliedDefs 的信号,**不是**噪声。滤掉它,00 论据 1 的那批
-    /// 代码生成 def 就再也说不清自己从哪来。
+    /// generated 是 ImpliedDefs 的信号,**不是**噪声 —— 滤掉它,代码生成的 def
+    /// 就再也说不清自己从哪来。
     /// </summary>
     [Fact]
     public void 代码生成的def保留其来源标记()
@@ -200,7 +197,7 @@ public class ImportTests
     }
 
     /// <summary>
-    /// 译文带着被替换掉的原文一起进库 —— 这是运行时导出独有的便宜(06 层 2),
+    /// 译文带着被替换掉的原文一起进库 —— 这是运行时导出独有的便宜,
     /// 丢了它就只剩译文,反查英文名要另起一套。
     /// </summary>
     [Fact]
@@ -213,7 +210,7 @@ public class ImportTests
         Assert.Equal(TranslationOrigin.Runtime, t.Origin);
     }
 
-    /// <summary>导出时被截的 def 要留下记号,否则 02-3 那条区分无从谈起。</summary>
+    /// <summary>导出时被截的 def 要留下记号,否则「字段被截」与「没有该字段」分不开。</summary>
     [Fact]
     public void 导出侧截断标记随def入库()
     {
@@ -257,7 +254,7 @@ public class ImportTests
 
     // ---- FTS ----
 
-    /// <summary>02-7:调用方不该需要知道 '*'。这条是它在建库侧的落点。</summary>
+    /// <summary>调用方不该需要知道 '*'。</summary>
     [Fact]
     public void 复合名的中间段不加星号也搜得到()
     {
@@ -267,7 +264,7 @@ public class ImportTests
         Assert.Contains(rows, r => r.DefName == "Apparel_ShieldBelt");
     }
 
-    /// <summary>02-8:CJK 双字切分不许在重建里被顺手丢掉。</summary>
+    /// <summary>CJK 双字切分必须在建库侧到位。</summary>
     [Fact]
     public void 中文标签搜得到()
     {
@@ -277,12 +274,11 @@ public class ImportTests
         Assert.Contains(rows, r => r.DefName == "Apparel_ShieldBelt");
     }
 
-    // ---- 同名 def 的译文归属(R2 的建库侧;盲测没碰到,是修 R2 时实测查出的)----
+    // ---- 同名 def 的译文归属 ----
 
     /// <summary>
     /// 一个 defName 下挂着几个 def 时,带类型的运行时注入要绑到**类型对得上**的那个。
-    /// 原先这里是「名字 → 最后写的那个 id」,绑对绑错全看导出顺序 —— 语料特意把
-    /// ThingDef 写在前面,让「后写的赢」当场赢错。
+    /// 语料特意把 ThingDef 写在前面,让「按名字取最后写的那个」当场绑错。
     /// </summary>
     [Fact]
     public void 同名def的译文按类型绑到对的那个()
@@ -348,11 +344,8 @@ public class ImportTests
     }
 
     /// <summary>
-    /// 兄弟字段那条尾注每行挂一个 OR,而 SQLite 的表达式树深度上限是 1000 ——
-    /// 第六轮实测 `find stat Mass --scope vanilla --limit all` 的 1229 行当场 exit 70。
-    ///
-    /// 最坏的地方是崩点的位置:主表早就算好了,却因为一句**可有可无的提示**整条命令崩掉,
-    /// 而 `--limit` 的文档只说「2000 以上截到 2000」,反向担保了 2000 以内安全。
+    /// 兄弟字段那条尾注每行挂一个 OR,而 SQLite 的表达式树深度上限是 1000 —— 超了整条
+    /// 命令崩在一句可有可无的提示上,而 `--limit` 的文档反向担保了 2000 以内安全。
     /// 闸给 1200 行(过阈值),同时核对答案与一行时逐字相同 —— 分批不许换答案。
     /// </summary>
     [Fact]
@@ -371,8 +364,8 @@ public class ImportTests
 
     /// <summary>
     /// 运行时 <c>keyedReplacements</c> 的五条都进库,且双语两侧、占位标记、源文件行号
-    /// 都到位 —— 少了原文那一侧,「中文快照上按英文找」就整个不通(那正是修 R4 时
-    /// 记下的洞);少了占位标记,「有 key 但没译」与「译了」在库里同形。
+    /// 都到位 —— 少了原文那一侧,「中文快照上按英文找」整个不通;
+    /// 少了占位标记,「有 key 但没译」与「译了」在库里同形。
     /// </summary>
     [Fact]
     public void 运行时keyed五条都进库且双语两侧都在()
@@ -392,8 +385,8 @@ public class ImportTests
         var todo = db.KeyedByKey("TodoKey").Single();
         Assert.True(todo.Placeholder);
 
-        // 英文那一侧可以缺(mod 只提供了译文),而它缺的时候不许把整条丢掉 ——
-        // 丢掉就等于「这个 key 不存在」,与真不存在同形。
+        // 英文那一侧可以缺(mod 只提供了译文),缺的时候不许把整条丢掉 ——
+        // 丢掉与「这个 key 真不存在」同形。
         var oneSided = db.KeyedByKey("OnlyEnglishKey").Single();
         Assert.Equal("只有中文这一侧", oneSided.Translated);
         Assert.True(string.IsNullOrEmpty(oneSided.Original));
@@ -401,7 +394,7 @@ public class ImportTests
 
     /// <summary>
     /// 磁盘收割来的 keyed 标成非生效,而且**同 key 不去重**:这一层说的是「磁盘上存在」,
-    /// 不是「哪一句会显示」。挑一个就等于凭目录枚举顺序发一张它证不了的赢家证书 ——
+    /// 不是「哪一句会显示」—— 挑一个就是凭目录枚举顺序发一张证不了的赢家证书。
     /// 「仅赢家」是运行时那一层的口径(keyedReplacements 本身已经是合并后的最终值)。
     /// </summary>
     [Fact]
@@ -427,8 +420,7 @@ public class ImportTests
 
     /// <summary>
     /// 收割源在不在快照的 mod 列表里,决定的是 harvested 还是 harvested_outside ——
-    /// 后者连「这个环境里装着」都不成立,只够召回。两者混成一个值,读的人就无从
-    /// 判断「磁盘上有」说的是哪个磁盘。
+    /// 后者连「这个环境里装着」都不成立,只够召回。
     /// </summary>
     [Fact]
     public void 快照外mod的keyed标成环境外收割()
@@ -442,8 +434,7 @@ public class ImportTests
     /// <summary>
     /// 收割层要和运行时层存下**同一个字符串**。游戏读语言文件时把字面 <c>\n</c> 换成真换行
     /// (Keyed 走 DirectXmlLoaderSimple、DefInjected 走 DefInjectionPackage),收割不跟着换,
-    /// 同一句译文在两层就长得不一样 —— 于是「两层不一致」这个信号里混进一批纯表示差异,
-    /// 「磁盘上那句和生效的那句不同」这句话再也分不出真覆盖和假告警。
+    /// 「两层不一致」这个信号里就混进一批纯表示差异。
     /// </summary>
     [Fact]
     public void 收割把字面n还原成换行和运行时一致()

@@ -6,9 +6,8 @@ using RimSearcher.Storage;
 namespace RimSearcher.Tests;
 
 /// <summary>
-/// 确定性语料。字节级基线要有对照物,就不能拿真快照当输入 —— 真快照随游戏与 mod 更新而变,
-/// 基线会天天红。这里用中间格式手工造一份小语料,走的是与真导出**完全同一条 import 路径**,
-/// 所以建库逻辑本身照样被闸住(B 案把建库搬到 CLI 侧才有的便宜,06 分工一节)。
+/// 确定性语料。真快照随游戏与 mod 更新而变,字节级基线会天天红,所以用中间格式手工造一份
+/// 小语料,走的是与真导出**完全同一条 import 路径**,建库逻辑本身照样被闸住。
 /// </summary>
 public static class Fixture
 {
@@ -20,7 +19,7 @@ public static class Fixture
 
     /// <summary>
     /// 两份快照住在一起的目录。<c>snapshot_dir</c> 指着它 ——
-    /// 不指,零结果的跨快照分流(R10)就会去开**本机真实**的快照,测试从此依赖这台机器。
+    /// 不指,零结果的跨快照分流就会去开**本机真实**的快照,测试从此依赖这台机器。
     /// </summary>
     public static string SnapshotDir
     {
@@ -42,11 +41,8 @@ public static class Fixture
 
     /// <summary>
     /// 名字本身就是一个 scope 组名的那份快照 —— 撞名提示的落点。
-    ///
-    /// 取路径就把库建出来。原先它只拼路径,靠调用方经由 <see cref="Run"/> 缺省的
-    /// <c>--config</c> 走到 <see cref="SourcesConfigPath"/> 里那句 <c>_ = Db</c> 才有库 ——
-    /// 一条同时显式传 <c>--db</c> 与 <c>--config</c> 的用例就会拿到一个不存在的文件,
-    /// 而那看起来会像一次偶发。
+    /// 取路径就把库建出来 —— 同时显式传 <c>--db</c> 与 <c>--config</c> 的用例不经过
+    /// <see cref="SourcesConfigPath"/> 里那句 <c>_ = Db</c>,否则会拿到一个不存在的文件。
     /// </summary>
     public static string CoreDb { get { _ = Db; return CoreDbPath; } }
 
@@ -71,15 +67,15 @@ public static class Fixture
                 var db = Path.Combine(SnapshotDir, "fixture.db");
                 new SnapshotImporter().Import(export, db);
 
-                // 第二份快照:R10 的落点。它有一个 fixture 里没有的 def,
+                // 第二份快照。它有一个 fixture 里没有的 def,
                 // 于是「这个名字不在你问的这份里,但在 other 那份里」这句话有地方可验。
                 var otherExport = Path.Combine(dir, "other" + IntermediateFormat.FileExtension);
                 WriteOtherExport(otherExport);
                 new SnapshotImporter().Import(otherExport, Path.Combine(SnapshotDir, "other.db"));
 
-                // 第三份:文件名就是一个 scope 组名。五轮 F3 的落点 —— 快照叫 core/vanilla
-                // 与 `--scope core` 是两回事,而两者在句子里长得一模一样。内容刻意与 other
-                // 不同名,免得跨快照点名那句话多出一个落点。
+                // 第三份:文件名就是一个 scope 组名 —— 快照叫 core/vanilla 与 `--scope core`
+                // 是两回事,而两者在句子里长得一模一样。内容刻意与 other 不同名,免得跨快照
+                // 点名那句话多出一个落点。
                 var coreExport = Path.Combine(dir, "core" + IntermediateFormat.FileExtension);
                 WriteOtherExport(coreExport, "OnlyInCoreSnapshot", "CoreMod.CompOnlyInCore");
                 new SnapshotImporter().Import(coreExport, CoreDbPath);
@@ -90,8 +86,8 @@ public static class Fixture
     }
 
     /// <summary>
-    /// 另一份快照的语料。刻意只有一个 def,而且是 fixture 里没有的名字 ——
-    /// 它存在的唯一理由是让「换一份快照就能拿到」这句话可判定。
+    /// 另一份快照的语料。刻意只有一个 def,而且是 fixture 里没有的名字,
+    /// 让「换一份快照就能拿到」可判定。
     /// </summary>
     private static void WriteOtherExport(string path, string defName = "OnlyInOtherSnapshot",
                                          string compClass = "OtherMod.CompOnlyElsewhere")
@@ -124,8 +120,8 @@ public static class Fixture
             .Str(IntermediateFormat.KeySourceFile, "Other.xml")
             .Bool(IntermediateFormat.KeyGenerated, false)
             .Str(IntermediateFormat.KeyClass, "Verse.ThingDef")
-            // 第二个字段是跨快照兜底的落点:这个值在 fixture 那份里一次都不出现,于是
-            // 「本快照没有」与「哪儿都没有」在 find 的输出上分不分得开,有地方可验。
+            // 第二个字段的值在 fixture 那份里一次都不出现 —— 让 find 的「本快照没有」与
+            // 「哪儿都没有」分不分得开有地方可验。
             .Fields(IntermediateFormat.KeyFields,
                 [new ExportedField("thingClass", "Verse.ThingWithComps", DefaultState.Differs),
                  new ExportedField("comps[0].compClass", compClass, DefaultState.Differs)])
@@ -193,14 +189,12 @@ public static class Fixture
             records++;
         }
 
-        // 第三位是 R1 的语料:一条值与「这个类型刚 new 出来时」的关系。
-        //   compClass 取 Same —— CompProperties_Shield 的声明里就写着 typeof(CompShield),
-        //   没有任何人在 XML 里挑过它;而 energyMax 是作者写的。两条挨在一起、在旧输出里
-        //   逐字同形,正是四个错结论的产地。
+        // compClass 取 Same —— CompProperties_Shield 的声明里就写着 typeof(CompShield),
+        // 没有任何人在 XML 里挑过它;而 energyMax 是作者写的。两条挨在一起,用来分开这两种来源。
         Def("ThingDef", "Apparel_ShieldBelt", "shield belt", "ludeon.rimworld", "Apparel_Belts.xml", false, 0,
             // 引擎级默认:ThingDef.ResolveReferences 给**每一个** ThingDef 都塞这个值,
-            // 于是 code_default 印 no 而没有任何人挑过它。第八轮 ep34 全场最贵的一次
-            // 险出错就在这上面 —— 九个 ThingDef 全都带着它,shared_values 才有落点。
+            // 于是 code_default 印 no 而没有任何人挑过它。语料里九个 ThingDef 都带着它,
+            // shared_values 才有落点。
             ("soundImpactDefault", "BulletImpact_Ground", DefaultState.Differs),
             ("soundDrop", "Standard_Drop", DefaultState.Differs),
             ("soundPickup", "Standard_Pickup", DefaultState.Differs),
@@ -208,21 +202,19 @@ public static class Fixture
             ("thingClass", "RimWorld.Apparel", DefaultState.Differs),
             ("comps[0].compClass", "RimWorld.CompShield", DefaultState.Same),
             ("comps[0].props.energyMax", "0.5", DefaultState.Differs),
-            // 同块的第二个「有人设过」的字段 —— 兄弟提示的落点。实测里
-            // minFuelCost=50 盖掉同块的 fuelPerTile=3(16 倍),而只列出后者的那张表
-            // 干净、计数明确、一条警告都没有。
+            // 同块的第二个「有人设过」的字段 —— 兄弟提示的落点。
             ("comps[0].props.energyLossPerDamage", "0.033", DefaultState.Differs),
-            // 第二个**不叫 comps** 的块,同样有两个有人设过的字段 —— 兄弟提示的措辞
-            // 原先把块名写死成 comps[N],而 ContainerPrefix 对任何带下标的层都成立。
+            // 第二个**不叫 comps** 的块,同样有两个有人设过的字段 ——
+            // ContainerPrefix 对任何带下标的层都成立,兄弟提示不许把块名写死成 comps[N]。
             ("statBases[0].stat", "MarketValue", DefaultState.Differs),
             ("statBases[0].value", "120", DefaultState.Differs),
-            // 噪声:末段匹配应把这两条挡掉(02-2 的唯一产地在 import 侧)
+            // 噪声:末段匹配应把这两条挡掉
             ("shortHash", "12345", DefaultState.Differs),
             ("comps[0].index", "0", DefaultState.Same),
             ("modContentPack.name", "Core", DefaultState.Differs));
 
-        // burstCount 是 R1 报告里那一行的形状:**字段名与提问一字不差,值却是代码默认值**。
-        // 它必须在语料里,否则「--path 点了名的东西不许被过滤掉」那道闸没有落点。
+        // burstCount 的形状:**字段名与提问一字不差,值却是代码默认值** ——
+        // 「--path 点了名的东西不许被过滤掉」那道闸的落点。
         // speed 取 Unknown —— 三态里最容易被顺手并进某一边的那个。
         Def("ThingDef", "Bullet_Revolver", "revolver bullet", "ludeon.rimworld", "Projectiles_Guns.xml", false, 3,
             ("soundImpactDefault", "BulletImpact_Ground", DefaultState.Differs),
@@ -245,7 +237,7 @@ public static class Fixture
 
         // comps[0].compClass 与上面那个 ThingDef 同路径,而**只有 ThingDef 那边有被截过的 def**
         // (Bullet_Revolver)。于是 `values compClass --type HediffDef` 是「表已经滤干净、
-        // 脚注还在说别的类型」那道闸唯一的落点(第七轮 T6)。
+        // 脚注还在说别的类型」那道闸唯一的落点。
         Def("HediffDef", "Anesthetic", "anesthetic", "ludeon.rimworld", "Hediffs_Local.xml", false, 0,
             ("hediffClass", "Verse.HediffWithComps", DefaultState.Differs),
             ("comps[0].compClass", "Verse.HediffComp_Disappears", DefaultState.Differs));
@@ -256,23 +248,21 @@ public static class Fixture
             ("soundPickup", "Standard_Pickup", DefaultState.Differs),
             ("soundInteract", "Standard_Pickup", DefaultState.Differs),
             ("thingClass", "RimWorld.Apparel", DefaultState.Differs),
-            // 列表元素的运行时类型(导出器 0.2.0 起发的那一维,第七轮 T1)。这是主快照里
-            // 唯一一条 `.Class`,而 other 那份标着 0.1.0 —— 于是「量过了、没人用」与
-            // 「这份快照根本没量」两个世界各有一个落点,不然那道闸只守得住一半。
+            // 列表元素的运行时类型(导出器 0.2.0 起才发这一维)。这是主快照里唯一一条
+            // `.Class`,而 other 那份标着 0.1.0 —— 「量过了、没人用」与「这份快照根本
+            // 没量」各有一个落点。
             ("comps[0].Class", "RimWorld.CompProperties_Shield", DefaultState.Differs),
             ("comps[0].compClass", "RimWorld.CompShield", DefaultState.Same));
 
         // 同名跨 def 类型 —— RimWorld 常态,也是 JSON 撞键静默丢数据那条的唯一语料。
         // 一个有字段一个没有,是为了让「后写的把先写的盖成空」当场暴露。
         //
-        // 三轮 R2 还要求这两边**资产不对称**:下面的 XML 节点与两条译文都只挂在 ThingDef
-        // 那一边,StatDef 这边一无所有。于是 `get Firefoam --type StatDef` 一旦按 defName
-        // 关联,就会在 StatDef 的标题块下印出 ThingDef 的父节点与描述译文 —— 那正是
-        // S8 险些交出的错答案(字段表刚说完「没有 description」,紧接着一条 description 译文)。
+        // 这两边还**资产不对称**:下面的 XML 节点与两条译文都只挂在 ThingDef 那一边,
+        // StatDef 这边一无所有。于是 `get Firefoam --type StatDef` 一旦按 defName 关联,
+        // 就会在 StatDef 的标题块下印出 ThingDef 的父节点与描述译文。
         //
-        // **这两行的先后是有承重的**:两条译文的 def_type 是 ThingDef,而 ThingDef 写在前面。
-        // 导入侧原先按 defName 建「名字 → 单个 id」的表,后写的顶掉先写的,于是译文会绑到
-        // 后写的 StatDef 上 —— 反过来写,同一份错代码就碰巧绑对了,闸也就白立了。
+        // **这两行的先后是有承重的**:两条译文的 def_type 是 ThingDef,而 ThingDef 写在前面 ——
+        // 按 defName 建「名字 → 单个 id」的错实现要靠这个顺序才暴露,反过来写会碰巧绑对。
         Def("ThingDef", "Firefoam", "firefoam", "ludeon.rimworld", "Buildings_Special.xml", false, 0,
             ("soundImpactDefault", "BulletImpact_Ground", DefaultState.Differs),
             ("soundDrop", "Standard_Drop", DefaultState.Differs),
@@ -285,11 +275,11 @@ public static class Fixture
 
         // 两件事一份语料,而两件事都是「表看着齐全,分不开的那一维不在表里」:
         //
-        // ① label 与上面那个 ThingDef Firefoam **逐字相同、def 类型也相同** —— 第六轮 C42
-        //    的形状(TrapSpringChance 与 PawnTrapSpringChance 的简中 label 都是「陷阱触发率」)。
+        // ① label 与上面那个 ThingDef Firefoam **逐字相同、def 类型也相同**(真数据里
+        //    TrapSpringChance 与 PawnTrapSpringChance 的简中 label 都是「陷阱触发率」)。
         //    同名跨类型的那一对(Firefoam 自己)在表里当场分得开,不是同一件事,所以要各一份。
-        // ② statFactors 这一条让 `find stat MarketValue` 横跨两种路径形状 —— C31 的
-        //    静默假阴性:1229 行里混着 1 行 statFactors,而拿它做集合差的人不会逐行核对 path。
+        // ② statFactors 这一条让 `find stat MarketValue` 横跨两种路径形状 —— 大批 statBases
+        //    行里混着一行 statFactors,拿它做集合差的人不会逐行核对 path。
         Def("ThingDef", "FoamPopper", "firefoam", "ludeon.rimworld", "Buildings_Special.xml", false, 0,
             ("soundImpactDefault", "BulletImpact_Ground", DefaultState.Differs),
             ("soundDrop", "Standard_Drop", DefaultState.Differs),
@@ -299,8 +289,7 @@ public static class Fixture
             ("statFactors[0].stat", "MarketValue", DefaultState.Differs));
 
         // 三级匹配的语料:查 "VoidNode" 时 FTS 命中前两个(词首对齐),第三个只有子串扫描找得到。
-        // 混合命中是「N of M 的 M 不许随 --limit 变」那道闸唯一的落点 —— 少了它,
-        // 「把没显示出来的 FTS 命中当成新增」与「先截断再累加」两个方向的错都没人守。
+        // 混合命中是「N of M 的 M 不许随 --limit 变」那道闸唯一的落点。
         Def("ThingDef", "VoidNode", "void node", "test.mod", "Anomaly.xml", false, 0,
             ("soundImpactDefault", "BulletImpact_Ground", DefaultState.Differs),
             ("soundDrop", "Standard_Drop", DefaultState.Differs),
@@ -350,13 +339,12 @@ public static class Fixture
         XmlNode("ThingDef", "", "BaseBullet", false, "Bullet_Revolver", "ludeon.rimworld", "Projectiles_Guns.xml", 0);
         XmlNode("ThingDef", "", "BaseFromSomeDisabledMod", false, "TestModGun", "test.mod", "Guns.xml", 0);
 
-        // R2 的语料另一半:只有 ThingDef 那个 Firefoam 有父节点,StatDef 那个没有。
+        // 同名 Firefoam 的另一半:只有 ThingDef 那个有父节点,StatDef 那个没有。
         XmlNode("ThingDef", "", "BaseProjectile", false, "Firefoam", "ludeon.rimworld", "Buildings_Special.xml", 0);
 
         // 桶名不一致:VariantOne 的 def 落在 TestBaseDef 桶(异构桶语料),而它的 XML 根元素
-        // 是 TestVariantDef。实测本机快照有 26 个这种 def(Blindhealer 的
-        // CreepJoinerFormKindDef → PawnKindDef 等),R2 若改成「def_type 必须相等」就会
-        // 把它们的 inherits_from 整批弄丢 —— 串味换成丢数据,正是它要修的那类错。
+        // 是 TestVariantDef。真快照里有成批这种 def(CreepJoinerFormKindDef → PawnKindDef 等),
+        // 关联若要求 def_type 相等就会把它们的 inherits_from 整批弄丢。
         XmlNode("TestVariantDef", "", "BaseProjectile", false, "VariantOne", "test.mod", "Variants.xml", 0);
 
         void Injection(string defName, string path, string translated, string original)
@@ -392,10 +380,9 @@ public static class Fixture
         //   CannotUseNoPower  正常双语 —— 代码里那一行 .Translate() 附译文的落点
         //   TodoKey           占位 —— 「有这个 key 但没译」不许与「有译文」同形
         //   OnlyEnglishKey    没有英文那一侧(original 空)—— 双语表里缺一列不许看起来像缺数据
-        //   JumpToLocation / ClickToJump  同一句中文由两个 key 各自承载。这不是边角:
-        //     真数据(vanilla 1.6)里「转至事件发生地点」就同时是 JumpToLocation 与
-        //     ClickToJumpToProblem。少了它,「按文案反查」那两条路都会挑第一个说成
-        //     「就是这个 key」—— 而表里另一行长得一模一样,挑错了看不出来。
+        //   JumpToLocation / ClickToJump  同一句中文由两个 key 各自承载 —— 真数据
+        //     (vanilla 1.6)里「转至事件发生地点」就同时是 JumpToLocation 与
+        //     ClickToJumpToProblem。按文案反查不许挑第一个说成「就是这个 key」。
         Keyed("CannotUseNoPower", "没有电力", "No power", false, "Misc.xml", 12);
         Keyed("TodoKey", "TODO", "Not translated yet", true, "Misc.xml", 34);
         Keyed("OnlyEnglishKey", "只有中文这一侧", "", false, "Gui.xml", 7);
@@ -405,7 +392,7 @@ public static class Fixture
         // 过线的填充批。两道闸共用,而两道都**必须**有一批过 Limits.MaxLimit(2000)的语料:
         //   `--limit all` 解除行上限 —— 语料不过线,「夹到 2000」与「全给」印出来一模一样;
         //   `--placeholders` 在 SQL 里筛 —— 占位排在这批的最末一条,于是「取完这一页再筛」
-        //     会拿着第一页的零去否定全部 2100 条,而那正是这个开关唯一用途上的最强否定句。
+        //     会拿着第一页的零去否定全部 2100 条。
         // 全部共用 original 里的 filler 一词,与上面五条的查询词不相交(基线不受牵连)。
         for (var i = 0; i < 2100; i++)
             Keyed($"FillerKey{i:0000}", $"填充{i}", "filler line", i == 2099, "Filler.xml", i + 1);
@@ -434,9 +421,9 @@ public static class Fixture
     /// <summary>
     /// 跑一次 CLI(进程内),返回 stdout / stderr / 退出码。
     ///
-    /// <c>--db</c> 与 <c>--config</c> 追加在**后面**,而用例自己写的同名参数在前面 ——
-    /// 于是「这条用例要一份别的配置」不必新开一个跑法,写进 argv 就行,而且基线里的
-    /// 命令行回显是逐字的那一份(追加的绝对路径含机器名,不能进基线)。
+    /// <c>--db</c> 与 <c>--config</c> 追加在**后面**,用例自己写的同名参数在前面 ——
+    /// 于是「这条用例要一份别的配置」写进 argv 就行,而基线里回显的是用例那一份
+    /// (追加的绝对路径含机器名,不能进基线)。
     /// </summary>
     public static (string Stdout, string Stderr, int Code) Run(params string[] argv)
     {
@@ -470,20 +457,18 @@ public static class Fixture
                 WriteSourceTree(Path.Combine(dir, "sources"));
                 _ = Db;   // 先把两份快照造出来,snapshot_dir 才指得到东西
                 // 一份与快照逐字对得上的 ModsConfig.xml —— 于是「快照与当前游戏一致吗」
-                // 那条分支在测试里到得了。到不了的分支上挂的话红不了(第七轮 T7)。
+                // 那条分支在测试里到得了。
                 var modsConfig = Path.Combine(dir, "ModsConfig.xml");
                 File.WriteAllText(modsConfig,
                     "<ModsConfigData><version>1.6.0000</version><activeMods>" +
                     "<li>ludeon.rimworld</li><li>test.mod</li>" +
                     "</activeMods></ModsConfigData>\n", new UTF8Encoding(false));
 
-                // 两份 mod 列表。`ModListIo.Directories` 取的是**配置文件旁边**的
-                // modlists/,不需要新配置键 —— 于是这一层进得了测试,而 modlist 这一族
-                // 此前一道闸都没有(407 行、export 的必填输入、冷启动路径上的那一跳)。
+                // 两份 mod 列表。`ModListIo.Directories` 取的是**配置文件旁边**的 modlists/,
+                // 不需要新配置键,于是这一层进得了测试。
                 //
-                // 形状是刻意的:extra 里那个 packageId **不在快照里**。「某份列表点了它的名」
-                // 与「快照覆盖了它」是两个问题,而它们的答案在这里必须分得开 ——
-                // 两份列表都只装快照里那两个 mod 的话,这条区分就没有落点。
+                // 形状是刻意的:extra 里那个 packageId **不在快照里** ——「某份列表点了它的名」
+                // 与「快照覆盖了它」是两个问题,必须分得开。
                 //
                 // id 取得刁钻是因为 Directories 还会扫本机真实的 LocalLow ModLists:
                 // 断言只挂在这几个名字上,才不会随本机装了什么而变。
@@ -550,9 +535,8 @@ public static class Fixture
             "\t}",
             "}");
 
-        // 末尾三行是 keyed 那一层的落点,而它们**刻意不含 `public` 或 `: ThingComp`** ——
-        // 现有 12 份 code-search 基线的 pattern 只有这两个和一个必然零命中的词,
-        // 于是这三行不改动任何一份既有基线,只给新的 ui_text 一节提供语料。
+        // 末尾三行是 keyed 那一层的落点,**刻意不含 `public` 或 `: ThingComp`** ——
+        // code-search 基线的 pattern 就是这两个词,含了就会动到那批基线的计数。
         // 三行各是一种形态:字面量能查到 / 字面量查不到 / 运行时拼出来的 key。
         File_("vanilla/Verse/Widgets.cs",
             "namespace Verse",
@@ -590,7 +574,7 @@ public static class Fixture
         // read 的语料。轮廓靠配平大括号,于是每一种「括号看起来在那儿其实不在」的写法
         // 都要有一份:字符串里的 }、注释里的 {、字符字面量、逐字字符串里的双写引号。
         // 另外三件事各要一个落点:方法体里的 if(…){ 不许变成一个叫 if 的成员;
-        // 带初值的字段不许被初值里的括号认成方法(`= Make(…)` 曾经报出 Make);
+        // 带初值的字段不许被初值里的括号认成方法(`= Make(…)`);
         // 同名成员分属两个类型 —— --type 就是为分开它们存在的。
         File_("vanilla/Verse/Outline.cs",
             "using System;",
@@ -624,12 +608,11 @@ public static class Fixture
             "\t}",
             "}");
 
-        // 全树自检(OutlineAuditTests)撞出来的三种形态,一种一段。三段都用 internal 而不是
-        // public,也不继承 ThingComp —— 它们进 code-search 的候选集,含那两个词就会动到
-        // 那边十几份基线的数字,而这里要钉的是 read 的轮廓,不是搜索的计数。
+        // 轮廓判错的三种形态,一种一段。三段都用 internal 而不是 public,也不继承 ThingComp ——
+        // 它们进 code-search 的候选集,含那两个词就会动到那边基线的数字。
         //
         //   Tuples      元组类型:声明头里第一个顶层 '(' 是**类型**不是参数表。
-        //               取它左边的标识符就取到修饰符,真名字整个消失。vanilla 23 个文件。
+        //               取它左边的标识符就取到修饰符,真名字整个消失。
         //   Constrained 泛型约束连写:`where T : class where U : struct` 里 `class where`
         //               长得像一个类型声明。误判成类型后 Declarable 放行,
         //               **整个方法体的语句都变成声明** —— 崩塌型,不是单点错。
@@ -691,8 +674,7 @@ public static class Fixture
 
         // 同名文件的第二份。read 收基名,而基名在两棵树里撞车时选错的代价是整条结论作废
         // (mod 的覆盖版被当成原版读下去,输出里逐字看不出区别)—— 所以那条路不选,只列。
-        // 正文刻意不含 "public" 与 ": ThingComp":它进了 code-search 的候选集,内容一撞
-        // 那几份基线就不只是数字变化了。
+        // 正文刻意不含 "public" 与 ": ThingComp",免得动到 code-search 的基线。
         File_("zz.othermod/Outline.cs",
             "namespace OtherMod",
             "{",

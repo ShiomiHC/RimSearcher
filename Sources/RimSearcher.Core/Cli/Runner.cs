@@ -79,8 +79,7 @@ public sealed class CommandRegistry
         var family = names.Where(n => n.StartsWith(typed + " ", StringComparison.OrdinalIgnoreCase)).ToList();
         if (family.Count > 0) return family;
 
-        // 打分器与编辑距离并列。字母换位(serach → search)在打分器上恰好落在分数线下方,
-        // 而它正是最常见的一类手误 —— 只用一把尺子就会漏掉。
+        // 打分器与编辑距离并列:字母换位(serach → search)在打分器上落在分数线下方。
         var norm = ArgParser.Normalize(typed);
         var byDistance = names
             .Select(n => (name: n, d: ArgParser.Distance(norm, ArgParser.Normalize(n))))
@@ -106,7 +105,7 @@ public static class Runner
     /// <paramref name="argv"/> 的第 1 位之后,去掉全局选项(及其取值)还剩下什么。
     ///
     /// 匹配规则跟着 <see cref="ArgParser"/> 走 —— 长短名、别名、<c>--db=path</c> 这种
-    /// 内联取值都认。另写一套「差不多」的匹配,就是给自己开一个两处规则慢慢分家的口子。
+    /// 内联取值都认。
     /// </summary>
     private static IReadOnlyList<string> NonGlobalArgs(IReadOnlyList<string> argv)
     {
@@ -147,11 +146,9 @@ public static class Runner
 
         if (argv[0] is "-h" or "--help" or "help")
         {
-            // 全局选项挂在 --help 后面要放行。原先这里要求 `argv.Count == 1`,于是
-            // `rimsearcher --help --db foo.db` 掉进下面那条「Unknown command '--help'」——
-            // 工具对着一个它明明认得的词说不认得。而这条闸门还有第二重代价:测试夹具
-            // 恒追加 --db/--config,于是 help-overview 那份字节基线从来没到过总览这一屏,
-            // 钉的一直是那句错误话 —— 一道红不了的闸比没有闸更坏。
+            // 判据是「除全局选项之外还剩什么」,**不是** `argv.Count == 1`:后者会让
+            // `rimsearcher --help --db foo.db` 掉进下面那条「Unknown command '--help'」。
+            // 测试夹具也恒追加 --db/--config。
             var extra = NonGlobalArgs(argv);
             if (extra.Count == 0)
             {
@@ -160,10 +157,8 @@ public static class Runner
                 return 0;
             }
 
-            // 剩下的多半是个命令名。这一屏答不了「search 有哪些参数」,照印总表等于
-            // 换个问题回答,而默默把那个词扔掉是这套输出到处在清的那个形状。
-            // `help <command>` 这个写法本身不接(盲测 11 个调用方无一打它,七个求助的
-            // 全打 `<command> --help`),但该打的那一条要原样给出来,不能只说「不行」。
+            // 剩下的多半是个命令名。`help <command>` 这个写法不接(真实调用方打的一律是
+            // `<command> --help`),但该打的那一条要原样给出来,不能只说「不行」。
             var (named, _) = registry.Resolve(extra);
             stderr.Write(OutputText.Finish(
                 $"'{argv[0]}' prints the command list and takes no command name. " +
@@ -183,8 +178,8 @@ public static class Runner
         var (command, rest) = registry.Resolve(argv);
         if (command is null)
         {
-            // 帮助里管它叫 "Global options",那这个词本身就在暗示位置自由。放在命令前是
-            // 很自然的写法,而「Unknown command --snapshot」只说了它不是命令,没说它是什么。
+            // 帮助里管它叫 "Global options",这个词本身暗示位置自由,放在命令前是很自然的
+            // 写法 —— 于是要说破它是什么,而不是只说它不是命令。
             var asGlobal = argv[0].StartsWith('-')
                 ? GlobalOptions.All.FirstOrDefault(o =>
                       ArgParser.Normalize(argv[0].TrimStart('-')) == ArgParser.Normalize(o.Name) ||
@@ -194,8 +189,7 @@ public static class Runner
             {
                 stderr.Write(OutputText.Finish(
                     $"'{argv[0]}' is a global option, not a command, and it goes after the command: " +
-                    // 开关型全局参数没有占位符,拼上去就多一个空格 —— 一条给人照抄的命令,
-                    // 尾巴上挂个空格是它自己不该有的东西。
+                    // 开关型全局参数没有占位符,无条件拼接会给这条照抄用的命令留个尾空格。
                     $"'{CommandRegistry.ExeName} <command> ... --{asGlobal.Name}" +
                     (asGlobal.Placeholder is { Length: > 0 } ph ? " " + ph : "") + "'."));
                 return ExitUsage;
@@ -232,9 +226,8 @@ public static class Runner
         var ctx = new CommandContext(config, parsed) { Progress = stderr };
         try
         {
-            // 数据键恒在,产地在声明层(<see cref="JsonKeySpec.Rows"/>)。在**开查之前**发,
-            // 而不是在零行分支里补 —— 补的那种漏一条分支就漏一个形状,而分支恰恰是这套输出
-            // 最爱加的东西。条件性的键(互斥的那几对)仍由命令在自己那条分支上认领。
+            // 数据键恒在,产地在声明层(JsonKeySpec.Rows)。在**开查之前**发,而不是在
+            // 零行分支里补。条件性的键(互斥的那几对)仍由命令在自己那条分支上认领。
             foreach (var key in command.Spec.JsonKeys.Where(k => k.Rows))
                 ctx.Report.Promises(key.Key);
 
@@ -254,9 +247,8 @@ public static class Runner
         }
         catch (Exception ex)
         {
-            // 兜底。没有它,一个内部错误就是一堆裸栈追踪直接糊到调用方脸上,而调用方
-            // 分不清「我用错了」和「这工具坏了」—— 两者的下一步完全不同。退出码也要分开,
-            // 否则脚本会把内部故障当成「没查到」。栈保留头几帧:读输出的是要复述缺陷的人。
+            // 兜底:调用方要分得清「我用错了」和「这工具坏了」,退出码也分开,
+            // 否则脚本会把内部故障当成「没查到」。栈保留头几帧供复述缺陷。
             var frames = (ex.StackTrace ?? "").Split('\n').Take(3).Select(l => l.Trim());
             stderr.Write(OutputText.Finish(
                 $"rimsearcher {BuildInfo.Version} hit an internal error; this is a defect in the tool, " +
