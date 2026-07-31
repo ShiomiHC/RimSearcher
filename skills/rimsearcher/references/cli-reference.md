@@ -577,7 +577,7 @@ Read source out of the decompiled tree — one member, one type, or a line range
 rimsearcher read <file> [options]
 ```
 
-The file is named by its path relative to the decompiled root ('vanilla/Assembly-CSharp/Verse/Pawn.cs'), by any tail of that path, or by its bare name. When a bare name matches several files, the answer lists them instead of picking one.
+The file is named by its path relative to the decompiled root ('vanilla/Assembly-CSharp/Verse/Pawn.cs'), by any tail of that path, or by its bare name. A path that is not there falls back to the bare name and says so; when a bare name matches several files, the answer lists them instead of picking one.
 
 --member and --type find the declaration by matching braces, not by parsing C#. That is enough for decompiled output, which is machine-formatted, but it means a name this command cannot see is not proof the file lacks it — 'code-search' searches the text and --lines reads it raw.
 

@@ -23,8 +23,9 @@ public sealed class ReadCommand : Command
         Summary = "Read source out of the decompiled tree — one member, one type, or a line range.",
         Remarks =
             "The file is named by its path relative to the decompiled root ('vanilla/Assembly-CSharp/Verse/" +
-            "Pawn.cs'), by any tail of that path, or by its bare name. When a bare name matches several " +
-            "files, the answer lists them instead of picking one.\n\n" +
+            "Pawn.cs'), by any tail of that path, or by its bare name. A path that is not there falls back " +
+            "to the bare name and says so; when a bare name matches several files, the answer lists them " +
+            "instead of picking one.\n\n" +
             "--member and --type find the declaration by matching braces, not by parsing C#. That is enough " +
             "for decompiled output, which is machine-formatted, but it means a name this command cannot see " +
             "is not proof the file lacks it — 'code-search' searches the text and --lines reads it raw.\n\n" +
@@ -154,10 +155,30 @@ public sealed class ReadCommand : Command
             throw new CliUsageException(CodeSearchCommand.NoSuchTree(sourceName, SourcesShared.TreeNames(root)));
 
         var hits = Resolve(root, wanted, sourceName);
-        if (hits.Count == 0) { SayNoFile(ctx, root, wanted, sourceName); return 1; }
-        if (hits.Count > 1) { SayAmbiguous(ctx, wanted, hits); return 1; }
 
-        var rel = hits[0];
+        // 路径的中间段写错、文件名对,是最常见的一种落空 —— 而这条命令**已经能**按裸文件名
+        // 定位。不重试的话,答案是一句「没有这个文件」外加一个不能直接粘贴的裸名候选,
+        // 调用方得再跑一次 code-search 才拿得到路径:一个文件三次往返,而路径就在手上。
+        var bare = Path.GetFileName(wanted.Replace('\\', '/').TrimEnd('/'));
+        var byName = hits.Count == 0 && bare.Length > 0 && bare != wanted
+            ? Resolve(root, bare, sourceName)
+            : [];
+
+        if (hits.Count == 0 && byName.Count == 0) { SayNoFile(ctx, root, wanted, sourceName); return 1; }
+        if (hits.Count > 1) { SayAmbiguous(ctx, wanted, hits); return 1; }
+        // 名字还是撞车就照旧不选。此时连「这条路径不存在」都不必单说 —— 名单里一条都不是
+        // 调用方写的那条,这件事名单自己就说清了。
+        if (hits.Count == 0 && byName.Count > 1) { SayAmbiguous(ctx, bare, byName); return 1; }
+
+        var rel = hits.Count == 1 ? hits[0] : byName[0];
+
+        // 说破是硬要求,不是礼貌:下面每一句印的都是解析出来的 rel,不说的话这次输出与
+        // 「路径本来就写对了」逐字同形,而调用方会把那条错路径记下来接着用。
+        // 真路径不在这句里复述 —— 紧接着的计数句就以它开头。
+        if (hits.Count == 0)
+            ctx.Report.Notice(NoticeKind.NextStep,
+                $"'{wanted}' is not a path under the decompiled root, but exactly one file is named " +
+                $"'{bare}', and that is the one read here.");
         string[] text;
         try { text = File.ReadAllLines(Path.Combine(root, rel)); }
         catch (Exception ex) { throw new CliUsageException($"'{rel}' could not be read: {ex.Message}"); }

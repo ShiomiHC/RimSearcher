@@ -198,6 +198,11 @@ public class OutputSnapshotTests
         // 基名撞车时不选,只列 —— 选错的输出与选对的逐字同形。
         { "read-ambiguous",        ["read", "Outline.cs"] },
         { "read-no-file",          ["read", "NoSuchFile.cs"] },
+        // 路径的中间段写错、文件名对。名字唯一时读下去 —— 但**必须说破**:后面每一句
+        // 印的都是解析出来的那条路径,不说的话这次输出与「路径本来就写对了」逐字同形,
+        // 而调用方会把那条错路径记下来接着用。名字仍撞车时照旧不选。
+        { "read-wrong-dir",        ["read", "vanilla/RimWorld/Widgets.cs"] },
+        { "read-wrong-dir-ambiguous", ["read", "vanilla/RimWorld/Outline.cs"] },
         // 两种读法同时传:不排优先级,当场说破这是两件事。
         { "read-two-modes",        ["read", "Outline.cs", "--lines", "1-3", "--member", "Shared"] },
         // 括号配平法认错声明的三种形态(语料见 Fixture.WriteSourceTree)。
