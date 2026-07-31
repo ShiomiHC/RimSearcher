@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ModMetaData>
+  <packageId>rimsearcher.datamod</packageId>
+  <name>RimSearcher Exporter</name>
+  <author>RimSearcher</author>
+  <description>Exports every def the game has loaded — including the ones generated in code — to a file that the rimsearcher CLI turns into a searchable snapshot. Adds no gameplay behaviour: it only reads what is already in memory.</description>
+  <supportedVersions>
+    <li>1.6</li>
+  </supportedVersions>
+</ModMetaData>

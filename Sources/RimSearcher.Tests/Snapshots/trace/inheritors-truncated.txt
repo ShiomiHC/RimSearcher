@@ -1,7 +1,0 @@
-## 'ZzBase' — 5 of 12 subclasses (in scope 'all', transitive — indirect descendants included; 12 direct, deepest 1 level down):
-- `Zz.ZzSub00`
-- `Zz.ZzSub01`
-- `Zz.ZzSub02`
-- `Zz.ZzSub03`
-- `Zz.ZzSub04`
-... +7 more subclasses (shallowest first, pass limit:'all' to expand)

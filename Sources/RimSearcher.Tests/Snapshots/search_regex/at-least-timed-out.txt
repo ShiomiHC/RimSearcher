@@ -1,6 +1,0 @@
-Regex matches for '(a+)+b' (at least 1 matching line in scope 'all', case-insensitive; 'at least' comes from the trailing 'not scanned in full' note, not from limit):
-
-`ZzQuick.cs`
-  L1: aaab
-
-... some files were not scanned in full (1 file was abandoned mid-scan because the pattern timed out on it (catastrophic backtracking) — its per-file match count is missing (ZzBacktrack.cs); matches in the unscanned parts would not be listed)

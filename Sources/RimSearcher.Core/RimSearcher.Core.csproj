@@ -1,30 +1,20 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-    <PropertyGroup>
-        <TargetFramework>net10.0</TargetFramework>
-        <LangVersion>14</LangVersion>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
-        <RootNamespace>RimSearcher.Core</RootNamespace>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
 
-        <!-- packages.lock.json 里 `net10.0/win-x64` 那一段的归属声明。Server 无条件钉着
-             RuntimeIdentifier=win-x64（见那边的注释），于是构建 Server 会给本项目还原出该段；
-             而 `dotnet test` 经 Tests 引用本项目时是无 RID 还原，又把它删掉。两条命令交替跑，
-             锁文件就在「有这段/没这段」之间来回翻，每次都变成一条待提交改动。
-             用复数式 RuntimeIdentifiers 把目标声明在项目里：它只登记「本项目要为哪些 RID 还原」，
-             不像单数式那样把构建输出切成 RID 专属目录，故 Debug/test 的产物路径不受影响。 -->
-        <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
-    </PropertyGroup>
-
-    <ItemGroup>
-      <!-- PathSecurity 的白名单是静态且只追加的，测试之间必须能重置它 -->
-      <InternalsVisibleTo Include="RimSearcher.Tests" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <PackageReference Include="DiffPlex" Version="1.9.0" />
-      <PackageReference Include="ICSharpCode.Decompiler" Version="8.2.0.7535" />
-      <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
-    </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.10" />
+    <!-- Microsoft.Data.Sqlite 10.0.10 传递引入 SQLitePCLRaw 2.1.11,而 2.1.11 带一个已知高危
+         漏洞(GHSA-2m69-gcr7-jv3q,NU1903)。直接钉到 3.x 把传递版本顶上去 ——
+         这条依赖负责解析我们喂给它的每一个快照文件,不是可以先欠着的那类债。 -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
+    <!-- ILSpy 的反编译器。`sources sync` 唯一非自己实现不可的部分 —— 它是个普通库,
+         与旧世系的 MCP 管线无关,所以那一支只剩这一个东西值得搬。 -->
+    <PackageReference Include="ICSharpCode.Decompiler" Version="8.2.0.7535" />
+  </ItemGroup>
 
 </Project>

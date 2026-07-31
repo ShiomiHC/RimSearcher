@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>RimSearcher.DataMod</AssemblyName>
+    <RootNamespace>RimSearcher.DataMod</RootNamespace>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <!-- 02-8:编译产物不进库。构建直接拼出一个**完整的 mod 目录** ModStaging/ ——
+         About/ 与 Assemblies/ 各就各位,于是 config 的 datamod_dir 指着它就能被 export
+         临时接进游戏。分两处放(About 在源码树、dll 在 bin/)的时候,部署只能靠手工拷贝,
+         而手工拷贝就是「改完代码忘了重发布」的产地。 -->
+    <ModStagingDir>$(MSBuildProjectDirectory)\ModStaging\</ModStagingDir>
+    <OutputPath>$(ModStagingDir)Assemblies\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
+    <DebugType>none</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- CLAUDE.local.md 机器事实:不需要本地游戏 DLL -->
+    <!-- Harmony 不引:主导出路径不打补丁。patch 溯源(03 拦截点)若兑现,它进独立源文件位,
+         不把 Harmony 依赖搅进这条路径 —— 06 层 1 的「patch 溯源拦截」条目记着这个边界。 -->
+    <PackageReference Include="Krafs.Rimworld.Ref" Version="1.6.4535" PrivateAssets="all" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 中间格式契约:与 CLI 侧共享同一份源文件(产地唯一跨进程边界) -->
+    <Compile Include="..\RimSearcher.Core\Contract\*.cs" LinkBase="Contract" />
+  </ItemGroup>
+
+  <!-- About/ 跟着一起就位。少了它 ModStaging 就不是一个 mod,而游戏对「不是 mod 的目录」
+       的反应是**静默忽略** —— 那会表现成一次跑到超时的导出,而不是一句报错。 -->
+  <ItemGroup>
+    <AboutFiles Include="About\**\*" />
+  </ItemGroup>
+
+  <Target Name="StageAbout" AfterTargets="Build" Inputs="@(AboutFiles)"
+          Outputs="@(AboutFiles->'$(ModStagingDir)About\%(RecursiveDir)%(Filename)%(Extension)')">
+    <Copy SourceFiles="@(AboutFiles)"
+          DestinationFiles="@(AboutFiles->'$(ModStagingDir)About\%(RecursiveDir)%(Filename)%(Extension)')" />
+  </Target>
+
+</Project>

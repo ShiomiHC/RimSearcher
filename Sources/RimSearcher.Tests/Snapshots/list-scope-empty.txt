@@ -1,0 +1,5 @@
+$ rimsearcher list HediffDef --scope test.mod
+exit 1
+--- stdout ---
+No def of type HediffDef is in scope 'test.mod', but this snapshot has 1 def of it overall. Drop --scope, or run 'rimsearcher mods' to see which mods the scope selects.
+--- stderr ---

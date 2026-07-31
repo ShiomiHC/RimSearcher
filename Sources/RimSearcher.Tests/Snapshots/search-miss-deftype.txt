@@ -1,0 +1,6 @@
+$ rimsearcher search ThingDef
+exit 1
+--- stdout ---
+Nothing matched 'ThingDef' in this snapshot. This command covers def names, labels, descriptions and the translations injected onto defs — not C# class names, and not the UI strings under Languages/*/Keyed, which sit on a layer of their own that 'rimsearcher keyed' reads.
+'ThingDef' is a def type in this snapshot, not a def: it holds 9 defs. 'rimsearcher list ThingDef' lists them and 'rimsearcher fields ThingDef' shows what fields they can have.
+--- stderr ---

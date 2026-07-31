@@ -1,9 +1,0 @@
-## C# Type: ZzWidget
-Inheritance chain: ZzWidget <- ZzBase — inherited members are not in the outline below at any limit; inspect a base name for its own.
-
-**Outline** (`<ROOT>/Core/ZzWidget.cs`):
-Class: Zz.ZzWidget
-  Fields:
-    public int ZzEnergy
-  Methods:
-    public override void ZzTick()

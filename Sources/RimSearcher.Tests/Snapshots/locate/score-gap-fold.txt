@@ -1,5 +1,0 @@
-## 'type:ZzWidget' — 1 of 5 C# types (1 at 100%)
-
-**C# Types**:
-- `ZzWidget` (100%)
-  ... +4 more C# types (lower relevance, use a shorter, less specific query; folding is relative to the top score, so narrowing never brings these back and limit does not expand them)

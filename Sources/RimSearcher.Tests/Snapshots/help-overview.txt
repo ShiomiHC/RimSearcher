@@ -1,0 +1,45 @@
+$ rimsearcher --help
+exit 0
+--- stdout ---
+Answers questions about RimWorld's defs and C# from a snapshot of what the game actually loaded.
+
+Usage: rimsearcher <command> [arguments] [options]
+
+Commands:
+  code-search         Search the decompiled C# with a regular expression.
+  datamod attach      Make the exporter mod visible to the game until it is detached again.
+  datamod detach      Hide the exporter mod from the game again.
+  datamod status      Report whether the game can currently see the exporter mod.
+  docs                Render the command reference from the declarations in the code.
+  export              Run the game unattended with a chosen mod list and import what it exports.
+  fields              List the field paths that a def type actually uses, with how often each occurs.
+  find                Find defs by the value of a field. This is the reverse lookup: from a C# class or a value back to the defs that use it.
+  get                 Show one def in full: its identity, its fields, and any translations of it.
+  inherit             Show what an XML node inherits from and what inherits from it, including abstract parents.
+  keyed               Look up the UI text behind a translation key, or find the key behind a piece of UI text.
+  list                List every def of one type — or, with no type given, every def type in the snapshot.
+  modlist list        List the mod lists available on this machine.
+  modlist save        Capture the mods currently enabled in the game as a named list.
+  modlist show        Show the mods in one list, in load order.
+  mods                List the mods that were active when the snapshot was taken, in load order.
+  read                Read source out of the decompiled tree — one member, one type, or a line range.
+  search              Find defs by name, label, description, or translated text.
+  snapshot import     Build a queryable snapshot database out of a file the in-game exporter wrote.
+  snapshot list       List the snapshots this machine knows about.
+  snapshot status     Explain in full which snapshot is in use and how it compares with the game as installed right now.
+  snapshot truncated  List the defs whose fields the exporter stopped short on.
+  snapshot use        Pin a snapshot so later commands use it without being told each time.
+  sources list        List the decompiled source trees and say which ones no longer match the installed assemblies.
+  sources sync        Decompile the assemblies the game actually loads into the configured source tree.
+  values              List the distinct values a field takes, most common first.
+
+Global options (every command takes these, written after the command):
+      --snapshot <name>  Query this named snapshot instead of the one that would be picked automatically. An explicit choice always wins over auto-detection.
+                         Also accepted: --snap, --env.
+      --db <path>        Query the snapshot database at this path directly, bypassing the registry.
+                         Also accepted: --database, --snapshot-path.
+      --json             Emit machine-readable JSON. Anything the text output would have said in prose moves into a 'notes' array, so nothing is lost. The command's own table key is always present — an empty array when nothing matched, never a missing key.
+      --config <path>    Use this config file instead of the default one.
+
+Run 'rimsearcher <command> --help' for the arguments of one command.
+--- stderr ---

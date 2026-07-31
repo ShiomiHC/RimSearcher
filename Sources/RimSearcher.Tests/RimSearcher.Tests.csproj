@@ -1,8 +1,7 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <LangVersion>14</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
@@ -16,12 +15,22 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\RimSearcher.Core\RimSearcher.Core.csproj" />
-    <ProjectReference Include="..\RimSearcher.Server\RimSearcher.Server.csproj" />
+    <Using Include="Xunit" />
   </ItemGroup>
 
   <ItemGroup>
-    <Using Include="Xunit" />
+    <ProjectReference Include="..\RimSearcher.Core\RimSearcher.Core.csproj" />
+    <ProjectReference Include="..\RimSearcher.Cli\RimSearcher.Cli.csproj" />
+  </ItemGroup>
+
+  <!--
+    导出器整个跑在游戏进程里,是这套代码唯一没有闸的一层 —— 而第八轮盲测里 data_side
+    的摩擦单价最高(1.00,是 cli_output 的 1.4 倍)。DataMod 是 net472、这里是 net10.0,
+    ProjectReference 引不动;所以只把**不碰 RimWorld 类型的那一个文件**编进来验。
+    往这里加文件前先确认它同样不 using RimWorld/Verse,否则会在还原时才炸。
+  -->
+  <ItemGroup>
+    <Compile Include="..\RimSearcher.DataMod\FieldWalk.cs" Link="Exporter\FieldWalk.cs" />
   </ItemGroup>
 
 </Project>

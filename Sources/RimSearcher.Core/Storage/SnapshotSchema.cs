@@ -1,0 +1,195 @@
+using Microsoft.Data.Sqlite;
+
+namespace RimSearcher.Storage;
+
+/// <summary>
+/// 快照库 schema。**不兼容上游 db** —— 自立 schema_version,读到无 meta 或版本不符的库
+/// 就拒读并指导重导(错误消息不含本机路径,留发布缝)。
+/// </summary>
+public static class SnapshotSchema
+{
+    /// <summary>schema 版本。表结构变化时 +1。</summary>
+    /// <remarks>
+    /// 3:加了 xml_nodes 继承层。
+    /// 4:field_values 加了 is_default —— 一条值与 C# 声明默认值的关系(R1)。
+    /// 5:加了 keyed 表 —— 界面文案那一层译文。
+    /// 6:加了 shared_values —— 一条值在同类型里有多普遍(第八轮 ep34)。
+    /// 7:加了 harvested_roots —— 磁盘那一层**量没量过**,见下。
+    /// </remarks>
+    public const int Version = 7;
+
+    public const string MetaKeySchemaVersion = "schema_version";
+    public const string MetaKeyRaw = "export_meta_json";
+    public const string MetaKeyFingerprint = "fingerprint";
+    public const string MetaKeyImportedAtUtc = "imported_at_utc";
+    public const string MetaKeyDefCount = "def_count";
+    public const string MetaKeySourcePath = "source_file";
+
+    /// <summary>
+    /// 这次导入扫了几个 mod 根目录去收割磁盘上的语言文件。<c>0</c> 就是**一个都没扫**。
+    ///
+    /// 没有这一格的时候,「磁盘那一层一行都没有」有两个成因而它们印出来一模一样:根本没量过,
+    /// 和量过了确实没有。前者的下一步是重导,后者的下一步是别再找了 —— 差得最远的两句话
+    /// 共用一个形状,正是本项目一路在清的那件事。收割从 v7 起是默认行为,但默认可以被
+    /// <c>--no-harvest-translations</c> 关掉,也可能因为没配 <c>mod_roots</c> 而没得扫,
+    /// 所以「默认开」并不能替代把它记下来。
+    /// </summary>
+    public const string MetaKeyHarvestedRoots = "harvested_roots";
+
+    public const string Ddl = """
+        PRAGMA journal_mode = OFF;
+        PRAGMA synchronous  = OFF;
+
+        CREATE TABLE meta (
+            key   TEXT PRIMARY KEY,
+            value TEXT
+        );
+
+        CREATE TABLE defs (
+            id               INTEGER PRIMARY KEY,
+            def_type         TEXT NOT NULL,
+            def_name         TEXT NOT NULL,
+            label            TEXT,
+            description      TEXT,
+            source_mod       TEXT,
+            source_file      TEXT,
+            generated        INTEGER NOT NULL DEFAULT 0,
+            class            TEXT,
+            fields_truncated INTEGER NOT NULL DEFAULT 0
+        );
+
+        -- is_default:这一行与「这个类型刚 new 出来时」的关系,取值见 IntermediateFormat.DefaultState
+        -- (0 一定被改过 / 1 与代码默认值无从区分 / 2 没法比)。存原样而不是存 bool ——
+        -- 「没法比」并进任何一边都会让呈现侧说出一句它证不了的话(R1)。
+        CREATE TABLE field_values (
+            def_id     INTEGER NOT NULL,
+            path       TEXT NOT NULL,
+            leaf       TEXT NOT NULL,
+            value      TEXT,
+            is_default INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE TABLE translations (
+            def_id     INTEGER,
+            def_type   TEXT,
+            def_name   TEXT NOT NULL,
+            path       TEXT NOT NULL,
+            translated TEXT,
+            original   TEXT,
+            language   TEXT,
+            source_mod TEXT,
+            origin     TEXT NOT NULL
+        );
+
+        -- Keyed 译文 —— 界面文案。**这张表里一行都不属于任何 def**:key 是
+        -- `"SomeKey".Translate()` 里那个 SomeKey,不带点、没有类型维、与 defName 无关。
+        -- 所以它不能挤进 translations(那张表的主键形状是 def_name + path),也没有 def_id。
+        --
+        -- placeholder:语言包里有这个 key 但值是占位 —— 它实际显示的是英文,而在表里
+        -- 与真译文同形。不带出来的话,「没译」就与「没有这个 key」分不开了。
+        -- 覆盖冲突只存赢家(用户裁决):source_file/source_line 说清最终生效的那一句出自哪里。
+        CREATE TABLE keyed (
+            id          INTEGER PRIMARY KEY,
+            key         TEXT NOT NULL,
+            translated  TEXT,
+            original    TEXT,
+            language    TEXT,
+            source_file TEXT,
+            source_line INTEGER NOT NULL DEFAULT 0,
+            source_mod  TEXT,
+            placeholder INTEGER NOT NULL DEFAULT 0,
+            origin      TEXT NOT NULL
+        );
+
+        -- 继承层。**唯一一张不是「游戏内存里的对象」的表** —— 它是打补丁之前的 XML 原文,
+        -- 因为「谁继承谁」在导出时点已经被 XmlInheritance.Clear() 抹掉了。
+        -- patch_ops 让这份时间差逐条可见,而不是靠一句总的免责声明糊过去。
+        CREATE TABLE xml_nodes (
+            id          INTEGER PRIMARY KEY,
+            def_type    TEXT NOT NULL,
+            name        TEXT,
+            parent_name TEXT,
+            abstract    INTEGER NOT NULL DEFAULT 0,
+            def_name    TEXT,
+            label       TEXT,
+            source_mod  TEXT,
+            source_file TEXT,
+            patch_ops   INTEGER NOT NULL DEFAULT 0
+        );
+
+        -- 一条「与新实例不同」的值,在同类型的 def 里有多普遍。
+        --
+        -- 非有它不可:code_default 那一列能证的只有「与刚 new 出来的实例不同」,而读的人
+        -- 一律读成「有人给这个 def 挑了这个值」。第八轮 ep34 就栽在这:
+        -- `soundImpactDefault  BulletImpact_Ground  no` —— 四条线索全指向「这就是命中音的
+        -- 挂点」,而真相是 ThingDef.ResolveReferences 给**每一个** ThingDef 都塞了这个值。
+        -- 那是本轮最贵的一次险出错(cost 3)。
+        --
+        -- 为什么是这张表而不是导出侧多采一次:要分辨「XML 写的」与「引擎事后填的」得在
+        -- ResolveReferences 前后各取一次值,而导出跑在 StaticConstructorOnStartup,那时
+        -- resolve 早已做完;要插进去只能上 Harmony,而 DataMod 是刻意无依赖的
+        -- (vanilla 快照只有 2 个 mod,里面没有 Harmony)。所以不猜成因,只报**可核对的
+        -- 事实**:这个值同类型里有多少个 def 也是它。3538 分之 2658,读的人自己判。
+        --
+        -- 只收「过半且不少于 8 个」的组 —— 类型只有三五个 def 时「大多数」不成话。
+        -- 实测全库 1303 行,一次扫 1.0s。
+        CREATE TABLE shared_values (
+            def_type TEXT NOT NULL,
+            path     TEXT NOT NULL,
+            value    TEXT,
+            defs     INTEGER NOT NULL
+        );
+
+        CREATE TABLE mods (
+            ordinal    INTEGER PRIMARY KEY,
+            package_id TEXT NOT NULL,
+            name       TEXT,
+            version    TEXT
+        );
+
+        CREATE VIRTUAL TABLE defs_fts USING fts5(
+            def_name, label, description, translated,
+            content = '', prefix = '2 3', tokenize = 'unicode61'
+        );
+
+        -- keyed 自己的 FTS。**不能并进 defs_fts**:那张表的 rowid 是 def 的 id,
+        -- 而 keyed 的行没有 def —— 借用别人的 rowid 空间会让两边的命中互相冒充。
+        CREATE VIRTUAL TABLE keyed_fts USING fts5(
+            key, translated, original,
+            content = '', prefix = '2 3', tokenize = 'unicode61'
+        );
+        """;
+
+    /// <summary>索引在批量插入之后才建 —— 导入是一次性写,先建索引会显著变慢。</summary>
+    public const string Indexes = """
+        CREATE INDEX idx_defs_name  ON defs(def_name);
+        CREATE INDEX idx_defs_type  ON defs(def_type);
+        CREATE INDEX idx_defs_mod   ON defs(source_mod);
+        CREATE INDEX idx_fv_def     ON field_values(def_id);
+        CREATE INDEX idx_fv_leaf    ON field_values(leaf);
+        CREATE INDEX idx_fv_value   ON field_values(value);
+        CREATE INDEX idx_tr_defname ON translations(def_name);
+        CREATE INDEX idx_keyed_key   ON keyed(key);
+        CREATE INDEX idx_xn_name    ON xml_nodes(name);
+        CREATE INDEX idx_xn_parent  ON xml_nodes(parent_name);
+        CREATE INDEX idx_xn_defname ON xml_nodes(def_name);
+        CREATE INDEX idx_sv_type    ON shared_values(def_type);
+        """;
+
+    public static void Create(SqliteConnection db)
+    {
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = Ddl;
+        cmd.ExecuteNonQuery();
+    }
+
+    public static void CreateIndexes(SqliteConnection db)
+    {
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = Indexes;
+        cmd.ExecuteNonQuery();
+    }
+}
+
+/// <summary>库不可读时抛这个 —— 消息面向调用方,指出下一步做什么。</summary>
+public sealed class SnapshotFormatException(string message) : Exception(message);

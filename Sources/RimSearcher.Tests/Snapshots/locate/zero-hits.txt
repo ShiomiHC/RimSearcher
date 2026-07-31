@@ -1,3 +1,0 @@
-No results for 'ZzAbsentThing' in scope 'vanilla'. Only sources in scope 'vanilla' were searched — retry with scope:'all' before concluding it does not exist.
-
-Try: partial names, query filters (type:, method:, field:, def:), or search_regex for patterns.

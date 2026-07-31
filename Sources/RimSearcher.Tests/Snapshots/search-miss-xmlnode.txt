@@ -1,0 +1,6 @@
+$ rimsearcher search BaseBullet
+exit 1
+--- stdout ---
+Nothing matched 'BaseBullet' in this snapshot. This command covers def names, labels, descriptions and the translations injected onto defs — not C# class names, and not the UI strings under Languages/*/Keyed, which sit on a layer of their own that 'rimsearcher keyed' reads.
+'BaseBullet' is an XML node in ludeon.rimworld (Projectiles_Guns.xml) but never becomes a def — it is Abstract="True". 'rimsearcher inherit BaseBullet' shows what it inherits from, what inherits from it, and which concrete child carries the merged values.
+--- stderr ---

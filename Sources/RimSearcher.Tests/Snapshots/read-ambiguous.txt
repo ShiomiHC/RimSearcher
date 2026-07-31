@@ -1,0 +1,5 @@
+$ rimsearcher read Outline.cs
+exit 1
+--- stdout ---
+'Outline.cs' matches 2 files, and reading the wrong one gives an answer that looks right: vanilla/Verse/Outline.cs, zz.othermod/Outline.cs. Name one of those paths, or narrow with --source.
+--- stderr ---

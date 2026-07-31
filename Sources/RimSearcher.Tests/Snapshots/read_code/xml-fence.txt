@@ -1,8 +1,0 @@
-```xml
-<!-- <ROOT>/Core/ZzDefs.xml (lines 1-5 of 5) -->
-L1: <Defs>
-L2:   <ZzWidgetDef>
-L3:     <defName>ZzWidgetAlpha</defName>
-L4:   </ZzWidgetDef>
-L5: </Defs>
-```

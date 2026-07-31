@@ -1,6 +1,0 @@
-Regex matches for 'ZzNeedle' (at least 1 matching line in scope 'all', case-insensitive; 'at least' comes from the trailing 'not scanned in full' note, not from limit):
-
-`ZzOpen.cs`
-  L1: // ZzNeedle
-
-... some files were not scanned in full (1 file could not be read and was skipped entirely (ZzLocked.cs); matches in the unscanned parts would not be listed)

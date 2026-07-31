@@ -1,0 +1,12 @@
+$ rimsearcher read vanilla/Verse/Tuples.cs --member Split
+exit 0
+--- stdout ---
+1 declaration in vanilla/Verse/Tuples.cs, 3 lines.
+
+vanilla/Verse/Tuples.cs:13-15  method Tuples.Split
+    13  		internal (int left, int right) Split(int at)
+    14  		{
+    15  		}
+
+Declarations here are found by matching braces, not by parsing C#, so a name this command does not see may still be in vanilla/Verse/Tuples.cs. 'rimsearcher code-search' searches the text.
+--- stderr ---

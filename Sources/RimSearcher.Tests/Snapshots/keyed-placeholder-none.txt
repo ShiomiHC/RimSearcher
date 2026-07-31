@@ -1,0 +1,5 @@
+$ rimsearcher keyed CannotUseNoPower --placeholders
+exit 1
+--- stdout ---
+--placeholders filtered out every match: 1 key matched 'CannotUseNoPower', and none of them is a placeholder — each has a real translation. Drop --placeholders to see them.
+--- stderr ---

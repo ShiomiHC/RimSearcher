@@ -1,6 +1,0 @@
-Regex matches for 'ZzNeedle' (first 1 preview line in scope 'all', case-insensitive):
-
-`ZzFile000.cs`
-  L1: // ZzNeedle
-
-... more matches exist (scan stopped at the 1-preview cap; pass limit:'all' to raise the cap to 200, or narrow the query or the scope)

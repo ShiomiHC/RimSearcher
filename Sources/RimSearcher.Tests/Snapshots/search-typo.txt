@@ -1,0 +1,9 @@
+$ rimsearcher search Aparel_ShieldBelt
+exit 0
+--- stdout ---
+No def matched 'Aparel_ShieldBelt' as written; these are the closest names by spelling.
+1 def.
+
+def_name            def_type  label        matched_on        mod
+Apparel_ShieldBelt  ThingDef  shield belt  closest spelling  ludeon.rimworld
+--- stderr ---

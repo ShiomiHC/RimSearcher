@@ -1,0 +1,5 @@
+$ rimsearcher code-search public --source HAR
+exit 2
+--- stdout ---
+--- stderr ---
+No decompiled source tree named 'HAR'. 'rimsearcher sources list' names every tree. Here they are: vanilla, zz.emptytree, zz.othermod.

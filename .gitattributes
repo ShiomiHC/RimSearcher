@@ -1,10 +1,7 @@
-# 输出快照基线必须在工作区里也保持 LF。
-#
-# 本仓的 core.autocrlf=true：源码在仓库里存 LF、签出时转 CRLF，这对 .cs 无害。但基线是
-# **被逐字比较的数据**——工具输出的行尾一律是 LF（ToolResult 构造时统一收口），基线被签出成
-# CRLF 之后每一份都对不上，于是这道闸会在任何一次干净 clone 或 checkout 之后全红，而红的原因
-# 与被测代码无关。
-#
-# 用 `text eol=lf` 而不是 `-text`：前者仍是文本文件（diff 与 merge 照常工作，基线要被人读、被
-# review 审），只是工作区行尾钉死成 LF。
-Sources/RimSearcher.Tests/Snapshots/**/*.txt text eol=lf
+# 行尾一律 LF。这不是风格偏好:输出收口纪律要求 LF(01 ToolResult 条目),
+# 而 cli-reference.md 是字节级闸的对照物 —— 让 git 在 checkout 时改行尾,
+# 等于每次拉代码都把基线弄脏一次。
+* text=auto eol=lf
+*.png binary
+*.db binary
+*.gz binary

@@ -1,0 +1,6 @@
+$ rimsearcher find noSuchField x
+exit 1
+--- stdout ---
+No def in this snapshot has a field path ending in 'noSuchField'. 'rimsearcher fields <DefType> --path <text>' lists the paths that a def type actually has, and 'rimsearcher find --value x' finds which field holds that value.
+Two things keep a field out of this index without any sign here: a value that was null on every def, and a field the game marks as an unsaved runtime cache. A third, hitting the per-def field cap, does leave a sign — 'rimsearcher snapshot truncated' lists those defs. The runtime type of a nested <li Class="..."> object is indexed as '<path>.Class', so 'rimsearcher find Class <ClassName>' is the query that reaches it. So this says no indexed value sits at that path — not that no such field exists. 'rimsearcher code-search' reads the class declaration, which does say.
+--- stderr ---

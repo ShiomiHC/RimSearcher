@@ -1,0 +1,5 @@
+$ rimsearcher read vanilla/Verse/Outline.cs --lines 900
+exit 1
+--- stdout ---
+vanilla/Verse/Outline.cs has 30 lines, so --lines 900 starts past the end of it.
+--- stderr ---

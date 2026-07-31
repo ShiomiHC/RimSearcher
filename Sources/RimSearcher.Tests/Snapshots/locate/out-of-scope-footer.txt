@@ -1,6 +1,0 @@
-## 'ZzWidget' — 1 C# type _(scope: vanilla)_
-
-**C# Types**:
-- `ZzWidget` (100%)
-
-_Outside scope 'vanilla': milira 1. Pass scope to include them (e.g. scope:'all')._

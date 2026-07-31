@@ -1,9 +1,0 @@
-Regex matches for 'ZzNeedle' (2 matching lines in scope 'vanilla', case-insensitive):
-
-`ZzOne.cs`
-  L1: // ZzNeedle
-
-`ZzThree.cs`
-  L1: // ZzNeedle
-
-_Files outside scope 'vanilla' were never opened, so this tool cannot tell you whether there are matches there; pass scope:'all' to include them. (locate and trace inheritors do count out-of-scope hits; this tool never prints such a line.)_

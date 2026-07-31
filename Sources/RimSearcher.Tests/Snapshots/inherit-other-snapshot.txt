@@ -1,0 +1,6 @@
+$ rimsearcher inherit OnlyInOtherSnapshot
+exit 1
+--- stdout ---
+No XML node named 'OnlyInOtherSnapshot' is in this snapshot.
+'OnlyInOtherSnapshot' is not in the snapshot this query used, but it is in 'other' (a ThingDef from other.mod). Add '--snapshot other' to ask there instead.
+--- stderr ---

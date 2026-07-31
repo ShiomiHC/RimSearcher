@@ -1,31 +1,13 @@
-﻿# .gitignore for RimSearcher
-
-# Build artifacts
-.build/
-Publish/
+CLAUDE.local.md
+/.idea/
+/tools/
+/.claude/
+# 旧世系(V2_A)那六份施工指导:不进库,但要留在磁盘上 —— 01 引的
+# 「盲测方法论」原始材料就是它们。同 /tools/ 的性质。
+/Docs/legacy/
 bin/
 obj/
-
-/.claude/
-
-# IDE settings
-.idea/
-.vs/
 *.user
-*.userosscache
-*.sln.docstates
-
-# NuGet
-packages/
-*.nuget.props
-*.nuget.targets
-
-# OS generated files
-.DS_Store
-Thumbs.db
-
-# MCP project specific logs or temp files
-*.log
-/config.toml
-# 三份「指导」是活的施工文档，进仓；输出审计那批历史记录不进（cdc4aa6 删过一次）。
-/Docs/
+/.junie/
+.build/
+ModStaging/

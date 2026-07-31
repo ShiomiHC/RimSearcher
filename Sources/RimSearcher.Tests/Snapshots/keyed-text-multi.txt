@@ -1,0 +1,10 @@
+$ rimsearcher keyed 转至此处
+exit 0
+--- stdout ---
+2 keys.
+These rows do not all carry the same key, so the code search goes after whichever row is the one you meant: 'rimsearcher code-search "\"<key>\""' with the key from that row. Most call sites write the key inline, but not all of them do — a key assembled from parts will not appear that way.
+
+key             translated  original          origin     placeholder  mod  source
+ClickToJump     转至此处        Click to jump     in effect  no                Alerts.xml:5
+JumpToLocation  转至此处        Jump to location  in effect  no                Letters.xml:6
+--- stderr ---

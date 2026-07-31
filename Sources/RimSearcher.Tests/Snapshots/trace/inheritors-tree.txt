@@ -1,4 +1,0 @@
-## 'ZzBase' — 3 subclasses (in scope 'all', transitive — indirect descendants included; 2 direct, deepest 2 levels down, untagged = direct (depth 1)):
-- `Zz.ZzMid`
-- `Zz.ZzOther`
-- `Zz.ZzLeaf` [depth 2]

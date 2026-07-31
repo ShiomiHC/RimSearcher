@@ -1,0 +1,5 @@
+$ rimsearcher list ThingDef --offset -2
+exit 2
+--- stdout ---
+--- stderr ---
+--offset expects a whole number of rows to skip, zero or more (got '-2').

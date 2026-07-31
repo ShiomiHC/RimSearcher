@@ -1,0 +1,6 @@
+$ rimsearcher serach shield
+exit 2
+--- stdout ---
+--- stderr ---
+Unknown command 'serach'. Did you mean 'search'?
+Run 'rimsearcher --help' for the full list.

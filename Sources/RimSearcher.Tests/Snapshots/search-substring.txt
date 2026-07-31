@@ -1,0 +1,11 @@
+$ rimsearcher search VoidNode
+exit 0
+--- stdout ---
+3 defs.
+That includes 1 def found by scanning names for 'VoidNode' as a substring; full-text matching alone splits names at word starts, so it misses the query in the middle of a compound name.
+
+def_name          def_type  label               matched_on  mod
+VoidNode          ThingDef  void node           def_name    test.mod
+VoidNodeShard     ThingDef  void node shard     def_name    test.mod
+GleamingVoidNode  ThingDef  gleaming void node  def_name    test.mod
+--- stderr ---

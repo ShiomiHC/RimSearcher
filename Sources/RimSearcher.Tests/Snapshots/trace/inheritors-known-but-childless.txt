@@ -1,1 +1,0 @@
-'ZzLone' is indexed, and nothing in scope 'all' derives from it (this is an answer, not a lookup failure).

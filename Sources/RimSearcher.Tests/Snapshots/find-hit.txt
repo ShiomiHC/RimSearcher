@@ -1,0 +1,11 @@
+$ rimsearcher find compClass RimWorld.CompShield
+exit 0
+--- stdout ---
+2 defs.
+
+def_name            def_type  path                value                code_default  mod
+Apparel_ShieldBelt  ThingDef  comps[0].compClass  RimWorld.CompShield  yes           ludeon.rimworld
+TestModGun          ThingDef  comps[0].compClass  RimWorld.CompShield  yes           test.mod
+
+Counted over indexed field paths only: the def types that carry this path (ThingDef) also hold 1 def that lost fields at export time and could belong here without showing up. 'rimsearcher snapshot truncated --type ThingDef' lists them.
+--- stderr ---

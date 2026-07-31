@@ -1,7 +1,0 @@
-Regex matches for 'ZzNeedle' (2 matching lines in scope 'all', case-insensitive):
-
-`ZzOne.cs` [vanilla]
-  L1: // ZzNeedle
-
-`ZzTwo.cs` [milira]
-  L1: // ZzNeedle

@@ -1,0 +1,5 @@
+$ rimsearcher read NoSuchFile.cs
+exit 1
+--- stdout ---
+No file named 'NoSuchFile.cs' is under the decompiled root. 'rimsearcher code-search' finds which file a symbol lives in.
+--- stderr ---

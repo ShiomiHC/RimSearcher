@@ -1,0 +1,5 @@
+$ rimsearcher read Outline.cs --lines 1-3 --member Shared
+exit 2
+--- stdout ---
+--- stderr ---
+--lines reads raw lines and --member/--type find a declaration; they are two different reads, so pass one or the other. '--outline' lists the declarations with their line ranges if you want to pick a range from them.

@@ -1,0 +1,58 @@
+$ rimsearcher get Apparel_ShieldBelt --limit 2 --json
+exit 0
+--- stdout ---
+{
+  "notes": [
+    {
+      "kind": "truncation",
+      "text": "Showing 2 of 9 fields; pass --limit all for the rest, or --path <text> to pick out the ones you want."
+    },
+    {
+      "kind": "filter",
+      "text": "Not listed: 1 field whose value is the one a fresh instance of the declaring type already carries, so this snapshot cannot tell whether anything set it. The snapshot holds 10 field paths for this def; --defaults lists the rest of those, and --path <text> sees a named one either way. A field whose value was null is in none of them: it never entered the index, so its absence here is not evidence that the field does not exist. Nothing above shows any field of these list entries, which the def has all the same: comps[0], statBases[0] — so the lists run longer than they look here."
+    },
+    {
+      "kind": "advisory",
+      "text": "'code_default' says a value differs from what a fresh instance of the class carries — not that this def chose it. These hold what most of the 9 ThingDefs hold, the count in brackets: soundDrop (9), soundImpactDefault (9)."
+    },
+    {
+      "kind": "count",
+      "text": "1 translation."
+    }
+  ],
+  "defs": [
+    {
+      "def": {
+        "def_name": "Apparel_ShieldBelt",
+        "def_type": "ThingDef",
+        "label": "shield belt",
+        "description": "",
+        "class": "Verse.ThingDef",
+        "mod": "ludeon.rimworld",
+        "source": "Apparel_Belts.xml"
+      },
+      "fields": [
+        {
+          "path": "soundImpactDefault",
+          "value": "BulletImpact_Ground",
+          "code_default": "no"
+        },
+        {
+          "path": "soundDrop",
+          "value": "Standard_Drop",
+          "code_default": "no"
+        }
+      ],
+      "translations": [
+        {
+          "path": "label",
+          "translated": "护盾腰带",
+          "original": "shield belt",
+          "language": "ChineseSimplified",
+          "origin": "in effect"
+        }
+      ]
+    }
+  ]
+}
+--- stderr ---

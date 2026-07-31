@@ -1,7 +1,0 @@
-## 'ZzWidgets.xml' — 1 XML def (0 at 100%), 1 file
-
-**XML Defs**:
-- `ZzWidgetAlpha` (34%) - ZzWidgetDef
-
-**Files**:
-- <ROOT>/Core/ZzWidgets.xml (100%)

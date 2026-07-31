@@ -1,5 +1,5 @@
 <Solution>
+  <Project Path="RimSearcher.Cli/RimSearcher.Cli.csproj" />
   <Project Path="RimSearcher.Core/RimSearcher.Core.csproj" />
-  <Project Path="RimSearcher.Server/RimSearcher.Server.csproj" />
   <Project Path="RimSearcher.Tests/RimSearcher.Tests.csproj" />
 </Solution>

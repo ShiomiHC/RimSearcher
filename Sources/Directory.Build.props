@@ -1,52 +1,11 @@
 <Project>
-    <PropertyGroup>
-        <BaseOutputPath>$(MSBuildThisFileDirectory).build\bin\$(MSBuildProjectName)\</BaseOutputPath>
-        <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory).build\obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
-        <MSBuildProjectExtensionsPath>$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
 
-        <!-- 版本号的唯一事实来源。以前是两处：UpdateChecker 里硬编码 "2.7"，而 csproj 没设 <Version>，
-             程序集元数据就停在默认的 1.0.0.0——运行时自报 2.7、exe 属性页写 1.0.0.0，
-             用户报 bug 时对不上号，更新检查也在拿一个跟发布物无关的字面量做比较。
-             放在 Directory.Build.props 而不是某个 csproj：Core / Server / Tests 属于同一个产品，
-             各自带一套版本号只会重新长出不一致。 -->
-        <Version>2.7</Version>
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <WarningsAsErrors>nullable</WarningsAsErrors>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
 
-        <!-- SourceRevisionId 一旦被置上（SourceLink、CI 打包都会），SDK 默认会把
-             "+<commit hash>" 追加到 AssemblyInformationalVersion 上。UpdateChecker.IsNewer
-             是 Split('.') 逐段 int.Parse 的，撞上后缀会抛异常并被 catch 吞掉 —— 结果不是报错，
-             而是更新提示从此永久静默。运行时那侧已经会切掉后缀，这里再从源头关掉，两道都不留。 -->
-        <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
-
-        <!-- 依赖锁。直接依赖本来就都是精确版本号，不会漂；会漂的是传递依赖——
-             Roslyn 拉进来的那串 System.* 走的是版本范围，NuGet 取「最低满足」，
-             而这个值随源上有什么包而变。反编译器和 Roslyn 的行为直接决定索引出来的
-             源码长什么样，这类漂移不该是静默的。
-             有了锁文件，restore 的 locked-mode 才真的构成约束：没有锁文件时它什么都不检查。
-             代价：动依赖时要连锁文件一起提交，忘了就构建红，那正是它的作用。 -->
-        <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
-    </PropertyGroup>
-
-    <!-- 发布产物不带符号：单文件 exe 旁边多一个 pdb 很难看，程序集里也不该留下构建机的绝对路径。
-         这个意图本身没错，但它过去是 Server.csproj 里的无条件属性，于是把普通 Release 构建和
-         测试构建的 pdb 一起去掉了——coverlet 拿不到 pdb 就无法把 IL 映射回源码，整个 Server
-         （协议层、启动流程、宿主选举、同步服务）压根进不了覆盖率报告，最该被盯住的部分反而一片空白。
-         所以收窄到发布：_IsPublishing 由 `dotnet publish` 注入，build / test 不会置上。
-
-         放在这里而不是 Server.csproj，是因为只关掉 Server 自己的符号不够——Core 仍按默认的
-         portable 编译，它的调试目录里那条 pdb 绝对路径会随 Core.dll 一起被打进单文件 exe，
-         路径照样泄露。规则只写一份，也免得以后新增项目时又漏一个。
-
-         已知局限，别误以为它比实际更强：MSBuild 的增量判定看的是文件时间戳，不看 DebugType 变没变。
-         Server 每次发布都会重编译（它的输出落在 RID 子目录 win-x64\，与普通构建天然分开），
-         但 Core 两种构建共用同一个输出目录，所以「先 dotnet build 再 dotnet publish」时
-         Core.dll 会被判定为最新而直接复用——那一份是带符号编译的，它调试目录里的 pdb 绝对路径
-         于是又被打进了单文件 exe。
-         干净目录下发布（CI、或先删 .build\）则两个程序集都会重编译，产物里一条路径都不留。
-         「发布产物不含 pdb 文件」这条硬约束不受此影响，它由 CopyOutputSymbolsToPublishDirectory
-         和 Server.csproj 里的 StripSymbolsFromPublishDir 保证，与增量与否无关。
-         要让路径清理也变成确定的，得让 publish 用一套独立的中间输出目录，代价是每次发布全量重编译。 -->
-    <PropertyGroup Condition="'$(_IsPublishing)' == 'true'">
-        <DebugType>none</DebugType>
-        <DebugSymbols>false</DebugSymbols>
-    </PropertyGroup>
 </Project>

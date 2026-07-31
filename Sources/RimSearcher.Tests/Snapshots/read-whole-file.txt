@@ -1,0 +1,18 @@
+$ rimsearcher read vanilla/Verse/Widgets.cs
+exit 0
+--- stdout ---
+vanilla/Verse/Widgets.cs, all 12 lines.
+
+     1  namespace Verse
+     2  {
+     3  	public static class Widgets
+     4  	{
+     5  		public static void Label(Rect rect, string label)
+     6  		{
+     7  			Draw(rect, "CannotUseNoPower".Translate());
+     8  			Draw(rect, "NoSuchUiKey".Translate());
+     9  			Draw(rect, ("Stat_" + label).Translate());
+    10  		}
+    11  	}
+    12  }
+--- stderr ---

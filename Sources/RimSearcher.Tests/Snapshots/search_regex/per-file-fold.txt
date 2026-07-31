@@ -1,9 +1,0 @@
-Regex matches for 'ZzNeedle' (9 matching lines in scope 'all', case-insensitive):
-
-`ZzDense.cs`
-  L1: // ZzNeedle 0
-  L2: // ZzNeedle 1
-  L3: // ZzNeedle 2
-  ... +6 more of 9 matching lines in this file
-
-... previews are capped at 3 lines per file and no parameter widens that; use read_code on a file to see the rest

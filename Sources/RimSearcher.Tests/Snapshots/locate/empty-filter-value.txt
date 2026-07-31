@@ -1,6 +1,0 @@
-## 'ZzWidget type:' — 1 C# type
-
-**C# Types**:
-- `ZzWidget` (100%)
-
-_A filter prefix was given with nothing after it and was ignored. Write the term right after the colon (type:CompShield); a space after the colon is fine too._

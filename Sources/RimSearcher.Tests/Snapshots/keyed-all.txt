@@ -1,0 +1,32 @@
+$ rimsearcher keyed
+exit 0
+--- stdout ---
+25 of 2105 keyed translations; pass --offset 25 for the next page, or --limit all for every one at once.
+
+key               translated  original       origin     placeholder  mod  source
+CannotUseNoPower  没有电力        No power       in effect  no                Misc.xml:12
+ClickToJump       转至此处        Click to jump  in effect  no                Alerts.xml:5
+FillerKey0000     填充0         filler line    in effect  no                Filler.xml:1
+FillerKey0001     填充1         filler line    in effect  no                Filler.xml:2
+FillerKey0002     填充2         filler line    in effect  no                Filler.xml:3
+FillerKey0003     填充3         filler line    in effect  no                Filler.xml:4
+FillerKey0004     填充4         filler line    in effect  no                Filler.xml:5
+FillerKey0005     填充5         filler line    in effect  no                Filler.xml:6
+FillerKey0006     填充6         filler line    in effect  no                Filler.xml:7
+FillerKey0007     填充7         filler line    in effect  no                Filler.xml:8
+FillerKey0008     填充8         filler line    in effect  no                Filler.xml:9
+FillerKey0009     填充9         filler line    in effect  no                Filler.xml:10
+FillerKey0010     填充10        filler line    in effect  no                Filler.xml:11
+FillerKey0011     填充11        filler line    in effect  no                Filler.xml:12
+FillerKey0012     填充12        filler line    in effect  no                Filler.xml:13
+FillerKey0013     填充13        filler line    in effect  no                Filler.xml:14
+FillerKey0014     填充14        filler line    in effect  no                Filler.xml:15
+FillerKey0015     填充15        filler line    in effect  no                Filler.xml:16
+FillerKey0016     填充16        filler line    in effect  no                Filler.xml:17
+FillerKey0017     填充17        filler line    in effect  no                Filler.xml:18
+FillerKey0018     填充18        filler line    in effect  no                Filler.xml:19
+FillerKey0019     填充19        filler line    in effect  no                Filler.xml:20
+FillerKey0020     填充20        filler line    in effect  no                Filler.xml:21
+FillerKey0021     填充21        filler line    in effect  no                Filler.xml:22
+FillerKey0022     填充22        filler line    in effect  no                Filler.xml:23
+--- stderr ---

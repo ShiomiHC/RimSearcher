@@ -1,0 +1,21 @@
+$ rimsearcher inherit BaseBullet
+exit 0
+--- stdout ---
+1 direct child.
+An abstract node has no fields of its own in a snapshot. Everything it declares is already merged, post-patch, into each child: 'rimsearcher get Bullet_Revolver'.
+'BaseBullet' is targeted by name by 2 patch operations in this snapshot. This layer is the XML before patches, so what the game finally used differs from it by whatever those operations did.
+
+name           BaseBullet
+def_type       ThingDef
+abstract       yes
+inherits_from  BaseProjectile
+mod            ludeon.rimworld
+source         Projectiles_Guns.xml
+patch_ops      2
+
+name            def_type  abstract  mod              source
+BaseProjectile  ThingDef  yes       ludeon.rimworld  Projectiles_Guns.xml
+
+name  def_name         def_type  abstract  mod
+      Bullet_Revolver  ThingDef  no        ludeon.rimworld
+--- stderr ---

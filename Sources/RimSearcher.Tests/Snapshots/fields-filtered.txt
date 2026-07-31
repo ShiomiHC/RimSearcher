@@ -1,0 +1,13 @@
+$ rimsearcher fields ThingDef --path comps
+exit 0
+--- stdout ---
+4 field paths within --path comps.
+
+path                                defs
+comps[0].compClass                  2
+comps[0].Class                      1
+comps[0].props.energyLossPerDamage  1
+comps[0].props.energyMax            1
+
+Counted over indexed field paths only: the def types that carry this path (ThingDef) also hold 1 def that lost fields at export time and could belong here without showing up. 'rimsearcher snapshot truncated --type ThingDef' lists them.
+--- stderr ---

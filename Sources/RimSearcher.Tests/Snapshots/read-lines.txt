@@ -1,0 +1,12 @@
+$ rimsearcher read vanilla/Verse/Outline.cs --lines 7-12
+exit 0
+--- stdout ---
+vanilla/Verse/Outline.cs, lines 7-12 of 30. Pass --lines 13+6 for the next page.
+
+     7  	public class Outer
+     8  	{
+     9  		private static readonly string Marker = Make("} not a brace {");
+    10
+    11  		private char Open = '{';
+    12
+--- stderr ---

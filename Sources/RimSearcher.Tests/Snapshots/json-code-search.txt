@@ -1,0 +1,63 @@
+$ rimsearcher code-search public --files ThingComp.cs -C 1 --json
+exit 0
+--- stdout ---
+{
+  "notes": [
+    {
+      "kind": "count",
+      "text": "4 matches in 1 file; 1 file read across 1 of 3 source trees on disk — the rest hold no file matching --files 'ThingComp.cs', and 'rimsearcher sources list' says which of those have never been decompiled."
+    }
+  ],
+  "matches": [
+    {
+      "file": "vanilla/Verse/ThingComp.cs",
+      "line": 2,
+      "is_match": false,
+      "group": 0,
+      "text": "{"
+    },
+    {
+      "file": "vanilla/Verse/ThingComp.cs",
+      "line": 3,
+      "is_match": true,
+      "group": 0,
+      "text": "\tpublic class ThingComp"
+    },
+    {
+      "file": "vanilla/Verse/ThingComp.cs",
+      "line": 4,
+      "is_match": false,
+      "group": 0,
+      "text": "\t{"
+    },
+    {
+      "file": "vanilla/Verse/ThingComp.cs",
+      "line": 5,
+      "is_match": true,
+      "group": 0,
+      "text": "\t\tpublic ThingWithComps parent;"
+    },
+    {
+      "file": "vanilla/Verse/ThingComp.cs",
+      "line": 6,
+      "is_match": true,
+      "group": 0,
+      "text": "\t\tpublic CompProperties props;"
+    },
+    {
+      "file": "vanilla/Verse/ThingComp.cs",
+      "line": 7,
+      "is_match": true,
+      "group": 0,
+      "text": "\t\tpublic virtual void PostSpawnSetup(bool respawningAfterLoad)"
+    },
+    {
+      "file": "vanilla/Verse/ThingComp.cs",
+      "line": 8,
+      "is_match": false,
+      "group": 0,
+      "text": "\t\t{"
+    }
+  ]
+}
+--- stderr ---

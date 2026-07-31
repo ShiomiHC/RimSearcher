@@ -1,0 +1,6 @@
+$ rimsearcher search 没有电力
+exit 1
+--- stdout ---
+Nothing matched '没有电力' in this snapshot. This command covers def names, labels, descriptions and the translations injected onto defs — not C# class names, and not the UI strings under Languages/*/Keyed, which sit on a layer of their own that 'rimsearcher keyed' reads.
+'没有电力' is interface text rather than a def name: this snapshot holds 1 keyed translation matching it, under the key 'CannotUseNoPower'. Keyed translations belong to no def at all, which is why a def search reaches none of them. 'rimsearcher keyed 没有电力' shows the full row, and 'rimsearcher code-search "\"CannotUseNoPower\""' finds the code that prints that key.
+--- stderr ---
