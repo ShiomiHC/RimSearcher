@@ -133,10 +133,10 @@ public sealed class Report
     /// 一句「pass --offset N」挂在最后一页上,会被读成后面还有;而末页照样得明说
     /// 「这是最后一页」,否则「4 of 8 defs, starting at 5」与半截结果同形。
     ///
-    /// <paramref name="narrow"/> 是这条命令特有的「与其翻页不如筛」的出路(fields 的
-    /// --path 之类),只在还有下一页时说。
+    /// 留下的只有算出来的那个 offset。「--limit all 能一次吃完」「与其翻页不如用 --path 筛」
+    /// 都逐字不随查询变,SKILL.md 已按命令列全,在这里逐次重念是同一份知识的第三个副本。
     /// </summary>
-    public Report PageNotice(string noun, int shown, int offset, int total, string? narrow = null)
+    public Report PageNotice(string noun, int shown, int offset, int total)
     {
         var seen = offset + shown;
         var tally = shown < total ? Tally.Of(shown, total) : Tally.Complete(shown);
@@ -144,8 +144,7 @@ public sealed class Report
             tally.Render(noun) + Within +
             (offset > 0 ? $", starting at {offset + 1}" : "") +
             (seen < total
-                ? $"; pass --offset {seen} for the next page, or --limit all for every one at once" +
-                  (narrow is null ? "." : $", or {narrow}")
+                ? $"; pass --offset {seen} for the next page."
                 : offset > 0
                     ? "; that is the last page."
                     : "."));

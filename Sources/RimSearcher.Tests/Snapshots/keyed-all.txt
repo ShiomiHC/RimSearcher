@@ -1,7 +1,7 @@
 $ rimsearcher keyed
 exit 0
 --- stdout ---
-25 of 2105 keyed translations; pass --offset 25 for the next page, or --limit all for every one at once.
+25 of 2105 keyed translations; pass --offset 25 for the next page.
 
 Same in every row, not repeated below: origin=in effect, placeholder=no.
 key               translated  original       mod  source

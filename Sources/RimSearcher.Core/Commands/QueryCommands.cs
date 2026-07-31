@@ -1238,7 +1238,7 @@ public sealed class FieldsCommand : Command
             return 1;
         }
 
-        ctx.Report.PageNotice("field path", rows.Count, offset, total, "narrow with --path <text>.");
+        ctx.Report.PageNotice("field path", rows.Count, offset, total);
 
         // 与 `get --path` 同一条纪律:子串匹配不留痕。这里的代价更大 —— 这条命令是
         // 「这个类型有没有这个字段」的正式问法,而「一条都不是整段」正是「没有」的形状。

@@ -302,11 +302,18 @@ public class StalenessTests
         return (db, config, modDir, configPath);
     }
 
-    private static string Run(string configPath, string db, params string[] argv)
+    /// <summary>
+    /// <paramref name="db"/> 传 null 就是**不寻址**:让 <c>SnapshotCatalog</c> 自己挑。
+    /// 「选了哪一份」那句话只在这条路上出得来 —— 显式 <c>--db</c> 一律静音。
+    /// </summary>
+    private static string Run(string configPath, string? db, params string[] argv)
     {
         var stdout = new StringWriter { NewLine = "\n" };
         var stderr = new StringWriter { NewLine = "\n" };
-        RimSearcher.Cli.Runner.Run([.. argv, "--db", db, "--config", configPath], stdout, stderr);
+        List<string> all = [.. argv];
+        if (db is not null) { all.Add("--db"); all.Add(db); }
+        all.Add("--config"); all.Add(configPath);
+        RimSearcher.Cli.Runner.Run(all, stdout, stderr);
         return stdout.ToString();
     }
 
@@ -460,6 +467,26 @@ public class StalenessTests
         Assert.Contains("Languages/", stdout, StringComparison.Ordinal);
         // 假阳性那一面也要说 —— 不说的话,一次 Steam 校验引发的告警会被当成工具坏了。
         Assert.Contains("identical bytes", stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 多份快照并存时说破这一次选了哪个 —— 选错快照就是答案错,而调用方没说过话。
+    ///
+    /// 但**只说这一次的选择结果**:「还注册了哪几个」与「用 snapshot list 看」逐字不随
+    /// 查询变,产地在 SKILL.md 的 Snapshots 一节,在每次查询上重念是拿上下文交税。
+    /// </summary>
+    [Fact]
+    public void 自动选中的快照报出名字而不附带指路()
+    {
+        var (db, _, _, configPath) = SnapshotOfModTree("e2e-choice");
+        // 只有一份时不存在选错,那时这句话本来就不出;第二份的内容不论,它只负责让
+        // 「不止一份」成立。名字排在后面,于是被自动检测挑中的确定是 e2e-choice。
+        File.Copy(db, Path.Combine(Path.GetDirectoryName(db)!, "zz-decoy.db"));
+
+        var stdout = Run(configPath, null, "list", "ThingDef");
+
+        Assert.Contains("Using snapshot 'e2e-choice' (auto-detected).", stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain("snapshot list", stdout, StringComparison.Ordinal);
     }
 
     /// <summary>
