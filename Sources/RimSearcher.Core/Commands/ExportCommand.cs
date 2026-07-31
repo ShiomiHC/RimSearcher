@@ -469,6 +469,7 @@ public sealed class ExportCommand : Command
         var importer = new SnapshotImporter
         {
             ModRoots = ctx.Args.Flag("no-harvest-translations") ? [] : ctx.Config.ModRoots,
+            Environment = ctx.Config,
         };
         var dbPath = Path.Combine(ctx.Config.ResolveSnapshotDir(), snapshotName + ".db");
         var stats = importer.Import(outFile, dbPath);

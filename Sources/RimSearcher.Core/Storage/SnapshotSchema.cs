@@ -34,6 +34,16 @@ public static class SnapshotSchema
     /// </summary>
     public const string MetaKeyHarvestedRoots = "harvested_roots";
 
+    /// <summary>
+    /// 导出那一刻各 mod 的 Defs/Patches 指纹(<see cref="Snapshot.ContentScan"/> 的 JSON)。
+    ///
+    /// **缺席是有意义的一态**,不是坏库:这个键是后加的,先前建的库里没有它,
+    /// 而那些库对「mod 的 XML 后来改没改」没有资格回答。缺席时这条判据整个不说话 ——
+    /// 没量过与量过了没变必须分得开(同 <see cref="MetaKeyHarvestedRoots"/> 那条缝)。
+    /// 所以它没有涨 schema_version:旧库照旧能读,只是少一条判据。
+    /// </summary>
+    public const string MetaKeyContent = "content_fingerprint";
+
     public const string Ddl = """
         PRAGMA journal_mode = OFF;
         PRAGMA synchronous  = OFF;

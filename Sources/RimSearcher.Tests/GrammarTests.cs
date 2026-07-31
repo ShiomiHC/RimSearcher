@@ -2001,21 +2001,26 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 「快照与当前安装的游戏一致」这句话要自己说清**没比的是什么**:比的只有 mod 列表、
-    /// 顺序、版本号,而改动 mod 内部的文件三样全都不变 —— 一句范围列全了的自我限定
-    /// 照样会被读成「快照 = 现在的游戏数据」的背书。正面那半在场不算数,
+    /// 「快照与当前安装的游戏一致」这句话要自己说清**没比的是什么**。一句范围列全了的
+    /// 自我限定照样会被读成「快照 = 现在的游戏数据」的背书,所以正面那半在场不算数,
     /// **没比的那半必须同时在场**。
+    ///
+    /// 这里的语料没有参考侧 XML 指纹(fixture 的库是不带环境导入的),于是走的是
+    /// 「这一层根本没量过」那一支 —— 而没量过与量过了没变必须说成两句话。
+    /// 量过那一支的闸在 <see cref="StalenessTests"/>。
     /// </summary>
     [Fact]
     public void 一致这句话要同时说清没比的是什么()
     {
         var (stdout, _, _) = Fixture.Run("snapshot", "status");
 
-        // 正面那半:三样东西点名,不能只说「一致」。
-        Assert.Contains("same mods, same order, same version", stdout, StringComparison.Ordinal);
+        // 正面那半:比过的东西点名,不能只说「一致」。
+        Assert.Contains("same mods, same order, same game build", stdout, StringComparison.Ordinal);
 
         // 反面那半 —— 承重的是这一半。
-        Assert.Contains("Nothing inside those mods is compared", stdout, StringComparison.Ordinal);
+        Assert.Contains("this snapshot has no XML fingerprint", stdout, StringComparison.Ordinal);
+        // 明细表里也要有一格,而且是这个字面:SKILL.md 拿它教人怎么认出「这条判据没量过」。
+        Assert.Contains("xml_fingerprint   not recorded", stdout, StringComparison.Ordinal);
         Assert.Contains("leaves this line reading 'matches' all the same", stdout, StringComparison.Ordinal);
 
         // 导出那一刻要报出来:「自那以后改过的文件看不见」这句话没有时刻就落不了地。

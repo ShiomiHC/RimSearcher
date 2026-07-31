@@ -88,10 +88,16 @@ public sealed class SnapshotDb : IDisposable
     /// </summary>
     public bool Harvested { get; }
 
+    /// <summary>
+    /// 导出那一刻各 mod 的 Defs/Patches 指纹。<c>null</c> = **这份快照没量过** ——
+    /// 见 <see cref="SnapshotSchema.MetaKeyContent"/>,那是一条判据的缺席,不是「没变」。
+    /// </summary>
+    public ContentScan? Content { get; }
+
     private SnapshotDb(SqliteConnection db, string path, ExportMeta meta, IReadOnlyList<ModRef> mods,
-                       bool harvested)
+                       bool harvested, ContentScan? content)
     {
-        _db = db; Path = path; Meta = meta; Mods = mods; Harvested = harvested;
+        _db = db; Path = path; Meta = meta; Mods = mods; Harvested = harvested; Content = content;
     }
 
     public static SnapshotDb Open(string path)
@@ -150,7 +156,11 @@ public sealed class SnapshotDb : IDisposable
         var harvested = meta.TryGetValue(SnapshotSchema.MetaKeyHarvestedRoots, out var hr) &&
                         int.TryParse(hr, out var roots) && roots > 0;
 
-        return new SnapshotDb(db, path, exportMeta, mods, harvested);
+        var content = meta.TryGetValue(SnapshotSchema.MetaKeyContent, out var cf)
+            ? ContentScan.FromJson(cf)
+            : null;
+
+        return new SnapshotDb(db, path, exportMeta, mods, harvested, content);
     }
 
     public void Dispose() => _db.Dispose();

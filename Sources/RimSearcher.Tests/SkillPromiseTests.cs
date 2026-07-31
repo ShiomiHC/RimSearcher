@@ -145,6 +145,20 @@ public class SkillPromiseTests
             "别的快照里有时点名说出来"),
         new("If the snapshot covers Core only and your game has mods enabled",
             "被scope挡住时说破是过滤器干的"),
+
+        // ---- 快照还等不等于磁盘 ----
+        // 「比了哪几样」是一句会过时的话:2026-07-31 之前它写着三样,而实现已经是四样。
+        // 每一样各连一道闸,少一样就红。
+        new("That comparison covers four things: same mods, same order, same game build",
+            nameof(GrammarTests.一致这句话要同时说清没比的是什么)),
+        new("It reports which mods moved, by name",
+            "漂移声明点名到mod"),
+        new("a re-download of identical bytes reads as a change, and an edit that preserves both is\nthe one case it misses",
+            "量过了也要说清比的只是尺寸与时间戳"),
+        new("`snapshot status` prints\n`xml_fingerprint: not recorded`",
+            nameof(GrammarTests.一致这句话要同时说清没比的是什么)),
+        new("which the game only rewrites when you save a change on\nits mod list page",
+            "版本来自ModsConfig时说破它会落后"),
     ];
 
     private static string SkillText()

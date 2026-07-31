@@ -243,6 +243,12 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
                     "re-export to refresh.");
                 return;
 
+            // 显式选择在这一格**不闭嘴**:`--snapshot modded` 声明的是「我要查那个环境」,
+            // 不是「我知道那些 mod 的 XML 已经不是导出时那份了」。与 VersionDrift 同类。
+            case EnvironmentMatch.ContentDrift:
+                Report.Notice(NoticeKind.Staleness, ContentDrift.Sentence(name, report.Content!));
+                return;
+
             case EnvironmentMatch.DifferentModlist:
                 // 只声明调用方**这次没有说过**的事情:带了 --snapshot/--db 就是当场声明了
                 // 「我要查的是那个环境」,复述一遍等于每次返回挂免责声明。
@@ -269,6 +275,39 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
     }
 
     public void Dispose() => _db?.Dispose();
+}
+
+/// <summary>
+/// 「参考侧 XML 变了」这句话的**唯一产地**。日常查询与 <c>snapshot status</c> 都念它,
+/// 两处各写一遍的话,详略不同会被读成两件不同的事。
+/// </summary>
+public static class ContentDrift
+{
+    /// <summary>
+    /// 两个成因分开说 —— 「文件改了」下一步是重导,「mod 从磁盘上没了」下一步是先把它
+    /// 装回来,混成一句会指错路。
+    ///
+    /// 措辞刻意说 "changed on disk",不说 "were edited":判据是长度与 mtime,
+    /// 而 Steam 重下一份逐字节相同的文件也会让它响(<see cref="Snapshot.ContentFingerprint"/>)。
+    /// 说成「被编辑过」就是拿一句证不了的话去指挥下一步。
+    /// </summary>
+    public static string Sentence(string name, ContentComparison content)
+    {
+        var parts = new List<string>();
+
+        if (content.Changed.Count > 0)
+            parts.Add($"{Tally.Complete(content.Changed.Count).Render("mod")} in snapshot '{name}' " +
+                      $"({NameList.Render(content.Changed, 3)}) " +
+                      $"{(content.Changed.Count == 1 ? "has" : "have")} Defs or Patches XML that changed on disk " +
+                      "since the export, so answers below describe the older files. Re-export to pick them up.");
+
+        if (content.Missing.Count > 0)
+            parts.Add($"{Tally.Complete(content.Missing.Count).Render("mod")} the export read " +
+                      $"({NameList.Render(content.Missing, 3)}) cannot be found on disk now, so whether " +
+                      $"{(content.Missing.Count == 1 ? "its" : "their")} files still match cannot be checked at all.");
+
+        return string.Join(" ", parts);
+    }
 }
 
 /// <summary>

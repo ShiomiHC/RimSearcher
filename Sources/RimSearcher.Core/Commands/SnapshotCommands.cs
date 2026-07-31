@@ -108,6 +108,11 @@ public sealed class SnapshotStatusCommand : Command
             new("defs", db.DefCount()),
             new("mods", db.Mods.Count),
             new("fingerprint", db.Meta.Fingerprint),
+            // 「量过没量过」要有一格看得见的位置 —— 缺席时那条判据整个不说话,
+            // 而沉默与「比过了,没变」在输出里同形。
+            new("xml_fingerprint", db.Content is { } c
+                ? $"{Tally.Complete(c.Files).Render("file")} across {Tally.Complete(c.Mods.Count).Render("mod")}"
+                : "not recorded (exported before this was measured)"),
         ]);
 
         var truncated = db.TruncatedDefCount();
@@ -120,20 +125,32 @@ public sealed class SnapshotStatusCommand : Command
         {
             case EnvironmentMatch.Same:
                 ctx.Report.Notice(NoticeKind.SnapshotChoice,
-                    "This snapshot matches the game as installed right now on the three things that are " +
-                    "compared: same mods, same order, same version.");
-                // 「matches」只覆盖 mod 列表、顺序、版本号三样,容易被读成「快照 = 当前游戏
-                // 数据」的背书,所以把没比的那半也印出来。
-                ctx.Report.Notice(NoticeKind.Boundary,
-                    "Nothing inside those mods is compared. The XML, patches, textures and audio were read " +
-                    $"once, at export time ({db.Meta.ExportedAtUtc} UTC); a file edited since then leaves this " +
-                    "line reading 'matches' all the same. So this says the right mods are loaded — not that " +
-                    "what is in them is still what is on disk. Re-export to pick up edits to a mod's own files.");
+                    "This snapshot matches the game as installed right now on everything that is compared: " +
+                    "same mods, same order, same game build" +
+                    (env.Content is { } ok
+                        ? $", and the Defs and Patches XML of {Tally.Complete(ok.Scanned).Render("mod")} is " +
+                          "unchanged in file size and timestamp since the export."
+                        : "."));
+                // 「matches」是对**比过的那几项**的背书,不是对整份数据的。没比的那半要印出来,
+                // 否则它会被读成「快照 = 当前游戏数据」。
+                ctx.Report.Notice(NoticeKind.Boundary, env.Content is null
+                    ? "The files inside those mods are not compared: this snapshot has no XML fingerprint, so a " +
+                      $"mod edited since the export ({db.Meta.ExportedAtUtc} UTC) leaves this line reading " +
+                      "'matches' all the same. Re-export to start recording that layer."
+                    : "Compared are file size and timestamp under Defs/ and Patches/, not file contents — a " +
+                      "re-download of identical bytes reads as a change, and an edit that keeps both is the one " +
+                      "case this misses. Languages/, textures and audio are outside it entirely.");
                 break;
             case EnvironmentMatch.VersionDrift:
                 ctx.Report.Notice(NoticeKind.Staleness,
                     $"Same mods and order, but the game has moved to {env.GameVersion} since the export " +
                     $"(snapshot: {db.Meta.GameVersion}). Re-export to refresh.");
+                break;
+            case EnvironmentMatch.ContentDrift:
+                ctx.Report.Notice(NoticeKind.Staleness,
+                    "Same mods, same order, same game build — but the files those mods are made of have moved. " +
+                    ContentDrift.Sentence(
+                        selection.Alias ?? Path.GetFileNameWithoutExtension(selection.Path), env.Content!));
                 break;
             case EnvironmentMatch.DifferentModlist:
                 ctx.Report.Notice(NoticeKind.Staleness,
@@ -147,6 +164,15 @@ public sealed class SnapshotStatusCommand : Command
                     "Everything above describes the snapshot alone.");
                 break;
         }
+
+        // 版本这一句是从哪来的,决定了它值多少。ModsConfig.xml 那个数是游戏上次保存 mod
+        // 列表时写下的,不是安装事实 —— 说破它,免得「same version」被当成 Steam 没动过。
+        if (env.VersionSource == GameVersionSource.ModsConfig)
+            ctx.Report.Notice(NoticeKind.Boundary,
+                "The game version above came from ModsConfig.xml, which the game only rewrites when you save a " +
+                "change on its mod list page. A Steam update within the same 1.x line does not touch it, so that " +
+                "number can lag behind what is installed. Set 'game_dir' in the config and it is read from " +
+                "Assembly-CSharp.dll instead, which is the installed fact.");
 
         return 0;
     }
@@ -353,6 +379,7 @@ public sealed class SnapshotImportCommand : Command
         var importer = new SnapshotImporter
         {
             ModRoots = harvest ? ctx.Config.ModRoots : [],
+            Environment = ctx.Config,
         };
         var stats = importer.Import(file, dbPath);
 

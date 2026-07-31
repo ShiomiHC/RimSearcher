@@ -22,6 +22,15 @@ public sealed class SnapshotImporter
     /// <summary>静态收割翻译时要扫的 mod 根目录(环境外 advisory 层)。空则跳过收割。</summary>
     public IReadOnlyList<string> ModRoots { get; init; } = [];
 
+    /// <summary>
+    /// 参考侧 XML 指纹要用的环境。<c>null</c> 就不记那一层 —— 于是建出来的库对
+    /// 「mod 的 Defs 后来改没改」不作答(<see cref="SnapshotSchema.MetaKeyContent"/>)。
+    ///
+    /// 与 <see cref="ModRoots"/> 分开一个字段,是因为 <c>--no-harvest-translations</c>
+    /// 会把那个清空,而关掉翻译收割不该顺手把过期判据也关掉。
+    /// </summary>
+    public Config.RimConfig? Environment { get; init; }
+
     public ImportStats Import(string exportPath, string dbPath)
     {
         var tempDb = dbPath + ".tmp";
@@ -305,6 +314,15 @@ public sealed class SnapshotImporter
                 Put(SnapshotSchema.MetaKeyDefCount, defs.ToString());
                 Put(SnapshotSchema.MetaKeySourcePath, Path.GetFileName(exportPath));
                 Put(SnapshotSchema.MetaKeyHarvestedRoots, ModRoots.Count.ToString());
+
+                // 扫盘发生在游戏已经退出之后,所以这一份指纹严格说是「导出结束那一刻」的磁盘,
+                // 不是「游戏读 XML 那一刻」的。中间这几十秒里有人改了文件的话,这一层会把它
+                // 记成基线 —— 少报一次,不会多报。
+                if (Environment is { } env)
+                {
+                    var scan = ContentFingerprint.Scan(env, meta.Mods.Select(m => m.PackageId), meta.GameVersion);
+                    if (scan is not null) Put(SnapshotSchema.MetaKeyContent, scan.ToJson());
+                }
             }
 
             tx.Commit();

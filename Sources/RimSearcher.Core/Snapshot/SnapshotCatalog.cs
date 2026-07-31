@@ -1,5 +1,6 @@
 using System.Xml.Linq;
 using RimSearcher.Config;
+using RimSearcher.Sources;
 using RimSearcher.Storage;
 
 namespace RimSearcher.Snapshot;
@@ -12,20 +13,41 @@ public sealed record SnapshotSelection(string Path, string? Alias, SelectionSour
 
 public enum EnvironmentMatch
 {
-    /// <summary>快照与当前 ModsConfig.xml 完全一致。</summary>
+    /// <summary>快照与当前环境在比过的每一项上都一致。</summary>
     Same,
-    /// <summary>同一套 mod、同一顺序,但版本或游戏 build 变了。</summary>
+    /// <summary>同一套 mod、同一顺序,但游戏 build 变了。</summary>
     VersionDrift,
     /// <summary>启用的 mod 清单或顺序不同。</summary>
     DifferentModlist,
+    /// <summary>mod 与游戏版本都对得上,但某些 mod 的 Defs/Patches XML 在导出之后动过。</summary>
+    ContentDrift,
     /// <summary>读不到 ModsConfig.xml,无从比对。</summary>
     Unknown,
+}
+
+/// <summary>「当前游戏是哪个版本」这句话的产地。两者强度差一档,声明时要说清是哪一个。</summary>
+public enum GameVersionSource
+{
+    /// <summary>没答案 —— 既没配 game_dir,ModsConfig.xml 也读不到。</summary>
+    None,
+    /// <summary>
+    /// <c>ModsConfig.xml</c> 的 <c>&lt;version&gt;</c>。**弱**:那是游戏上次保存 mod 列表时
+    /// 写下的历史记录,同 minor 的更新之后它不会变(成因见 <see cref="Sources.GameBuild"/>)。
+    /// </summary>
+    ModsConfig,
+    /// <summary><c>Assembly-CSharp.dll</c> 的 AssemblyVersion。安装事实,Steam 一换就变。</summary>
+    Assembly,
 }
 
 public sealed record EnvironmentReport(EnvironmentMatch Match, IReadOnlyList<string> ActiveMods, string? GameVersion)
 {
     public int Added { get; init; }
     public int Removed { get; init; }
+
+    public GameVersionSource VersionSource { get; init; } = GameVersionSource.None;
+
+    /// <summary>内容漂移的明细。<c>null</c> = 这一项没比过(快照没记指纹,或这次扫不了盘)。</summary>
+    public ContentComparison? Content { get; init; }
 }
 
 /// <summary>
@@ -115,28 +137,48 @@ public static class SnapshotCatalog
             "'rimsearcher snapshot use <name>' makes the choice stick.");
     }
 
-    /// <summary>读 ModsConfig.xml,拿有序 activeMods 与游戏版本。</summary>
+    /// <summary>
+    /// 当前环境:启用了哪些 mod,以及游戏是哪个版本。
+    ///
+    /// 两件事产地不同。mod 列表只有 <c>ModsConfig.xml</c> 答得了。版本先问
+    /// <c>Assembly-CSharp.dll</c>(装在磁盘上的事实),问不到才退回同一份 xml 里那个数 ——
+    /// 后者是游戏上次保存 mod 列表时写的历史记录,同 minor 的更新之后不会变
+    /// (成因见 <see cref="GameBuild"/>)。
+    /// </summary>
     public static EnvironmentReport ReadActiveMods(RimConfig config)
     {
+        var installed = GameBuild.Installed(config.GameDir);
+
         var path = config.ModsConfigPath();
         try
         {
             path = Path.GetFullPath(path);
-            if (!File.Exists(path)) return new EnvironmentReport(EnvironmentMatch.Unknown, [], null);
+            if (!File.Exists(path)) return Empty(installed);
             var doc = XDocument.Load(path);
             var root = doc.Root;
-            if (root is null) return new EnvironmentReport(EnvironmentMatch.Unknown, [], null);
-            var version = root.Element("version")?.Value?.Trim();
+            if (root is null) return Empty(installed);
+            var declared = root.Element("version")?.Value?.Trim();
             var mods = root.Element("activeMods")?.Elements("li")
                            .Select(e => e.Value.Trim())
                            .Where(s => s.Length > 0).ToList() ?? [];
-            return new EnvironmentReport(EnvironmentMatch.Unknown, mods, version);
+            return new EnvironmentReport(EnvironmentMatch.Unknown, mods, installed ?? declared)
+            {
+                VersionSource = installed is not null ? GameVersionSource.Assembly
+                              : declared is { Length: > 0 } ? GameVersionSource.ModsConfig
+                              : GameVersionSource.None,
+            };
         }
         catch
         {
-            return new EnvironmentReport(EnvironmentMatch.Unknown, [], null);
+            return Empty(installed);
         }
     }
+
+    private static EnvironmentReport Empty(string? installedVersion)
+        => new(EnvironmentMatch.Unknown, [], installedVersion)
+        {
+            VersionSource = installedVersion is null ? GameVersionSource.None : GameVersionSource.Assembly,
+        };
 
     private static List<string> WithoutExporter(IEnumerable<string> ids)
         => ids.Where(id => !string.Equals(id, Contract.IntermediateFormat.ExporterPackageId,
@@ -169,11 +211,43 @@ public static class SnapshotCatalog
             };
         }
 
-        if (env.GameVersion is { Length: > 0 } gv &&
-            !db.Meta.GameVersion.StartsWith(gv, StringComparison.OrdinalIgnoreCase) &&
-            !gv.StartsWith(db.Meta.GameVersion, StringComparison.OrdinalIgnoreCase))
+        if (VersionDrifted(env, db.Meta.GameVersion))
             return env with { Match = EnvironmentMatch.VersionDrift };
 
-        return env with { Match = EnvironmentMatch.Same };
+        // 内容这一层排在最后:mod 换了或游戏换了的时候,「XML 也变了」是那件事的后果,
+        // 不是第二条新闻。
+        var content = CompareContent(db, config, env);
+        if (content is { Drifted: true })
+            return env with { Match = EnvironmentMatch.ContentDrift, Content = content };
+
+        return env with { Match = EnvironmentMatch.Same, Content = content };
+    }
+
+    /// <summary>
+    /// 版本比对。两个产地严格程度不同,判法也不同:
+    ///
+    /// dll 那一路两边都是 <c>CurrentVersionStringWithRev</c>(导出器写的也是它),逐字可比,
+    /// 于是 rev 变一位就该说话。ModsConfig 那一路的值可能只有 <c>1.6</c> 那么粗,
+    /// 所以维持双向前缀 —— 拿粗的去要求细的相等,只会得到一条永远在响的假过期。
+    /// </summary>
+    private static bool VersionDrifted(EnvironmentReport env, string snapshotVersion)
+    {
+        if (env.GameVersion is not { Length: > 0 } gv) return false;
+        return env.VersionSource == GameVersionSource.Assembly
+            ? !string.Equals(gv, snapshotVersion, StringComparison.OrdinalIgnoreCase)
+            : !snapshotVersion.StartsWith(gv, StringComparison.OrdinalIgnoreCase) &&
+              !gv.StartsWith(snapshotVersion, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// 参考侧 XML 比对。两处 <c>null</c> 各有各的意思,都表示**这一项没比过**:
+    /// 快照没记(旧库),或这次扫不了盘(没配 mod 根目录)。
+    /// </summary>
+    private static ContentComparison? CompareContent(SnapshotDb db, RimConfig config, EnvironmentReport env)
+    {
+        if (db.Content is not { } recorded) return null;
+        var version = env.GameVersion is { Length: > 0 } gv ? gv : db.Meta.GameVersion;
+        var current = ContentFingerprint.Rescan(config, recorded, db.Mods.Select(m => m.PackageId), version);
+        return current is null ? null : ContentFingerprint.Compare(recorded, current);
     }
 }

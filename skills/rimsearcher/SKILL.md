@@ -352,16 +352,31 @@ A snapshot is one export: one game version, one ordered mod list, one language. 
 coexist. `rimsearcher snapshot list` shows them; `--snapshot <name>` picks one for a single
 command; `snapshot use <name>` makes it stick.
 
-The snapshot is compared with the currently installed game on every query, but it only speaks up
-when something is off *and* this command did not name a snapshot itself. Pass `--snapshot` and
-it stays quiet, because you already said which environment you meant. `snapshot status` gives
-the full comparison whenever you want it.
+The snapshot is compared with the currently installed game on every query, and it speaks up when
+something is off. Naming a snapshot yourself silences one of those lines and only that one: a
+*different mod list* is not worth reporting when you said which environment you meant, but a
+game that has moved on, or mod files that have changed underneath the snapshot, are things you
+did not say. `snapshot status` gives the full comparison whenever you want it.
 
-That comparison covers three things and no more: same mods, same order, same version. It is a
-check on the *load list*, not on the files. Nothing inside those mods is compared, so a mod's
-XML, patches, textures or audio can have been edited since the export and `snapshot status`
-will still say the snapshot matches. If the question is "did my edit take effect", the answer
-is never in that line — re-export, then ask.
+That comparison covers four things: same mods, same order, same game build, and — for snapshots
+exported once this was measured — the size and timestamp of every XML file under each mod's
+`Defs/` and `Patches/`. That last one is what catches a mod whose contents changed without its
+`About.xml` version moving, which is the ordinary shape of a Steam workshop update. It reports
+which mods moved, by name.
+
+Its edges, which the output states too: file size and timestamp are not file contents, so a
+re-download of identical bytes reads as a change, and an edit that preserves both is the one
+case it misses. `Languages/`, textures and audio are outside it entirely, as is any directory
+the installed game version does not load (a mod's `1.5/` folder while you are on 1.6). And a
+snapshot exported before this existed has no such fingerprint at all — `snapshot status` prints
+`xml_fingerprint: not recorded` and says in words that the line reading "matches" is not
+evidence about those files. Re-export, or re-run `snapshot import` on the export file, to start
+recording that layer.
+
+The game version comes from `Assembly-CSharp.dll` when `game_dir` is configured. Without it the
+number falls back to `ModsConfig.xml`, which the game only rewrites when you save a change on
+its mod list page — so a Steam update within the same 1.x line will not move it. `snapshot
+status` says which of the two it used.
 
 This matters for counts. A complete count is complete **for the snapshot**. If the snapshot
 covers Core only and your game has mods enabled, `find compClass X` returning `1 def` means one
@@ -413,6 +428,11 @@ resolved to whenever the expansion is not word for word what you typed.
   snapshot was taken. `rimsearcher mods` lists what the snapshot covers and
   `rimsearcher snapshot status` compares it with the installed game. If another registered
   snapshot has that def, the zero result says so by name.
+- **The answer disagrees with what the game shows.** A mod's files may have changed since the
+  export, in which case the snapshot is describing the older ones. Queries say so on their own
+  when they detect it, and `snapshot status` names the mods that moved — but the check is size
+  and timestamp, so an edit preserving both, or any change under `Languages/`, passes unseen.
+  Re-export before concluding the tool is wrong about the data.
 - **You are looking for an abstract parent.** It is not a def and `get` will not find it: the
   game resolves inheritance while loading and then discards it, so an abstract
   `<ThingDef Name="…">` never becomes an object. `rimsearcher inherit <name>` answers from the
