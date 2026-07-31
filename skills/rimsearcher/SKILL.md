@@ -89,9 +89,14 @@ blank.
 Rows carry an `origin` of `in effect` or `on disk`, and only `in effect` is what the game displays:
 keyed translations override each other by mod load order, the snapshot keeps the winner, and an
 `on disk` row is a translation some mod's language files contain without necessarily being the one
-that wins. A `placeholder` row is a key whose language file declares it without a translation, so
-the game falls back to English there — that is what a translation-coverage question is asking
-about, and `--placeholders` lists only those.
+that wins — most of them come from mods that are installed but not enabled, so they never entered
+the race at all. The `in effect` row is listed first. A `placeholder` row is a key whose language
+file declares it without a translation, so the game falls back to English there — that is what a
+translation-coverage question is asking about, and `--placeholders` lists only those.
+
+The `on disk` layer is scanned by default at import time, so a key that only some unenabled mod
+translates is still findable by its text. A snapshot built without that scan says so beside the
+table rather than letting the missing layer read as an empty one.
 
 One boundary is the snapshot's rather than any query's: this layer is written by the in-game
 exporter, so if the exporting game had no language data loaded there are no keyed translations at

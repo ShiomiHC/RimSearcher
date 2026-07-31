@@ -30,7 +30,7 @@
    (游戏界面 / CLI / 手写含 LLM),CLI 宽读严写(用户裁决:不得强制依赖游戏内操作)。
 8. **翻译**:label 列永远保真运行时值;translations 表两来源层——运行时 defInjections
    (环境内权威)+ import 静态收割(环境外 advisory,应对「使用者不一定主动加入
-   本地化 mod」);FTS 双语索引。
+   本地化 mod」,v7 起默认开);FTS 双语索引。
 9. **声明的上下文预算**:正常态零声明字节,异常才发声且从简,详情分流专用命令
    (00 论据 3 淘汰的「每次返回挂免责声明」不得重生)。
 
@@ -187,20 +187,27 @@ config 的 `datamod_dir` 指着它,`export` 开跑前在 `<game>/Mods/RimSearche
   `ExpandCjkBigrams`);Microsoft.Data.Sqlite 自带 FTS5,无 Interop 问题。
 - 噪声过滤 **[混合]**:清单内容沿上游、末段匹配语义,**单一产地在 import 侧**(02-2);
   `generated` 不在清单里(03 甲)。
-- `meta` 表 **[全新]**:**键值表**(`key` / `value`),不是单行 —— import 写六行:
+- `meta` 表 **[全新]**:**键值表**(`key` / `value`),不是单行 —— import 写七行:
   `schema_version` / `export_meta_json`(中间格式首行 meta 原样)/ `fingerprint` /
-  `imported_at_utc` / `def_count` / `source_file`(键名常量在 SnapshotSchema.cs:20-25)。
-  **指纹事实的唯一产地**,config.toml 只存别名指针。
+  `imported_at_utc` / `def_count` / `source_file` / `harvested_roots`
+  (键名常量在 SnapshotSchema.cs)。**指纹事实的唯一产地**,config.toml 只存别名指针。
+  `harvested_roots` 记的是这次导入扫了几个 mod 根目录:没有它,「磁盘那一层一行都没有」
+  的两个成因(没量过 / 量过确实没有)印出来一模一样,而两者的下一步差得最远。
 - 截断自证列 **[全新]**:`defs.fields_truncated`(该 def 被上限截掉的条数,0 = 完整)。
   「字段被截」与「没有该字段」必须可区分(02-3;离群 mod 687 个 def 是实证样本,03 乙)。
 - `schema_version` **[全新]**:自立计数,**不兼容上游 db** —— 无 meta 或版本不符拒读并
   指导重导(错误消息不含本机路径,发布缝)。历次:3 加 `xml_nodes`、4 加
-  `field_values.is_default`、5 加 `keyed`、6 加 `shared_values`(**当前 6**)。
+  `field_values.is_default`、5 加 `keyed`、6 加 `shared_values`、7 加 `harvested_roots`
+  (**当前 7**)。
   这份台账的产地是 SnapshotSchema.cs 的 `Version` 注释,这里只做索引。
 - `translations` 表 **[全新]**(第二轮裁决 8):两来源层——**运行时注入**(环境内权威,
   来自中间格式的 defInjections 节,译文+原文)与**静态收割**(import 时扫描**所有已装
   mod** 的 `Languages/<快照语言>/DefInjected/`,只保留 defName 命中快照内 def 的条目,
-  标来源 mod 与环境外标志)。要点:不判「翻译 mod」类型(无判据,也不需要——目标 mod
+  标来源 mod 与环境外标志)。**收割默认开**(v7 起,实测 +0.75s / 35s,换来 3815 个只在
+  磁盘上存在的 key);关得掉,但关了要记进 `harvested_roots` 并在查询侧说破。
+  收割读文件时和游戏一样把字面 `\n` 还原成换行(Keyed 在 `DirectXmlLoaderSimple`、
+  DefInjected 在 `DefInjectionPackage`),否则同一句译文在两层长得不一样,「两层不一致」
+  这个信号里就混进一批纯表示差异。要点:不判「翻译 mod」类型(无判据,也不需要——目标 mod
   自带翻译与第三方汉化包一视同仁,垃圾条目被 defName 过滤);**不替换任何字段值**,
   纯检索召回索引,故无注入 merge 语义问题,同路径多译文并存皆召回;带 language 列
   (跨语言收割官方 `Data/*/Languages` tar 留缝,第一批不做)。FTS 两层都进;

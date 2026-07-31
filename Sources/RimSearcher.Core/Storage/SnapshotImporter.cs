@@ -308,6 +308,7 @@ public sealed class SnapshotImporter
                 Put(SnapshotSchema.MetaKeyImportedAtUtc, DateTime.UtcNow.ToString("O"));
                 Put(SnapshotSchema.MetaKeyDefCount, defs.ToString());
                 Put(SnapshotSchema.MetaKeySourcePath, Path.GetFileName(exportPath));
+                Put(SnapshotSchema.MetaKeyHarvestedRoots, ModRoots.Count.ToString());
             }
 
             tx.Commit();

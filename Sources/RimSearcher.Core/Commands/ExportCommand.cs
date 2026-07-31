@@ -89,8 +89,16 @@ public sealed class ExportCommand : Command
                 Name = "harvest-translations",
                 Arity = Arity.Flag,
                 Aliases = ["harvest"],
-                Help = "Passed through to the import step: also index language files of installed mods that the " +
-                       "list does not enable.",
+                Help = "Passed through to the import step, and on by default there: also index language files of " +
+                       "installed mods that the list does not enable. Pass it explicitly only to be sure.",
+            },
+            new OptionSpec
+            {
+                Name = "no-harvest-translations",
+                Arity = Arity.Flag,
+                Aliases = ["no-harvest"],
+                Help = "Passed through to the import step: skip the language-file scan, and record in the snapshot " +
+                       "that the disk layer was never measured.",
             },
         ],
         Examples = ["rimsearcher export --modlist vanilla", "rimsearcher export --modlist vanilla --dry-run"],
@@ -483,9 +491,11 @@ public sealed class ExportCommand : Command
                 LastLines(gameLog) +
                 $" The game's own log was kept at {Path.Combine(temp, GameLogName)}.");
 
+        // 与 `snapshot import` 同一个口径:收割默认开,只有显式否定才关。两条路都能造快照,
+        // 口径分家的话「这份库量没量过磁盘」就取决于当初是哪条路造的它。
         var importer = new SnapshotImporter
         {
-            ModRoots = ctx.Args.Flag("harvest-translations") ? ctx.Config.ModRoots : [],
+            ModRoots = ctx.Args.Flag("no-harvest-translations") ? [] : ctx.Config.ModRoots,
         };
         var dbPath = Path.Combine(ctx.Config.ResolveSnapshotDir(), snapshotName + ".db");
         var stats = importer.Import(outFile, dbPath);

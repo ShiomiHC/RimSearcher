@@ -84,9 +84,17 @@ public sealed class SnapshotDb : IDisposable
     public ExportMeta Meta { get; }
     public IReadOnlyList<ModRef> Mods { get; }
 
-    private SnapshotDb(SqliteConnection db, string path, ExportMeta meta, IReadOnlyList<ModRef> mods)
+    /// <summary>
+    /// 建这份快照时扫了几个 mod 根目录去收割磁盘上的语言文件。<c>false</c> 就是一个都没扫,
+    /// 于是这份库里「磁盘上没有这一句」这句话根本说不出口 —— 见
+    /// <see cref="SnapshotSchema.MetaKeyHarvestedRoots"/>。
+    /// </summary>
+    public bool Harvested { get; }
+
+    private SnapshotDb(SqliteConnection db, string path, ExportMeta meta, IReadOnlyList<ModRef> mods,
+                       bool harvested)
     {
-        _db = db; Path = path; Meta = meta; Mods = mods;
+        _db = db; Path = path; Meta = meta; Mods = mods; Harvested = harvested;
     }
 
     public static SnapshotDb Open(string path)
@@ -141,7 +149,11 @@ public sealed class SnapshotDb : IDisposable
                                     rd.IsDBNull(2) ? null : rd.GetString(2)));
         }
 
-        return new SnapshotDb(db, path, exportMeta, mods);
+        // 版本闸在上面,所以这一格从 v7 起必然写过 —— 读不出来只可能是别的工具伪造的库。
+        var harvested = meta.TryGetValue(SnapshotSchema.MetaKeyHarvestedRoots, out var hr) &&
+                        int.TryParse(hr, out var roots) && roots > 0;
+
+        return new SnapshotDb(db, path, exportMeta, mods, harvested);
     }
 
     public void Dispose() => _db.Dispose();
@@ -1005,7 +1017,11 @@ public sealed class SnapshotDb : IDisposable
     /// 这里不替它挑,挑了就等于发一张「谁生效」的证书,而 harvest 层证不了这件事。
     /// </summary>
     public IReadOnlyList<KeyedRow> KeyedByKey(string key)
-        => ReadKeyed($"SELECT {KeyedColumns} FROM keyed WHERE key = @k COLLATE NOCASE ORDER BY origin, source_mod",
+        // 生效的那一条排头。原先是 `ORDER BY origin`,而字典序里 harvested < harvested_outside
+        // < runtime —— 唯一权威的那一行被排到最后。收割默认开之后这不是排版问题:一个 key
+        // 常有三五条来源,第一眼看到的会是一条没生效的译文,分页时它还会被挤到第二页去。
+        => ReadKeyed($"SELECT {KeyedColumns} FROM keyed WHERE key = @k COLLATE NOCASE " +
+                     $"ORDER BY (origin <> '{TranslationOrigin.Runtime}'), origin, source_mod",
                      new Dictionary<string, object?> { ["@k"] = key });
 
     /// <summary>

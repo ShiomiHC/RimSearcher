@@ -123,10 +123,21 @@ public sealed class KeyedCommand : Command
         }
         else if (placeholdersOnly)
         {
-            // 精确命中这一路不分页 —— 一个 key 的几条来源全在手上,页内筛就是全量筛。
+            // 一个 key 的几条来源一次全在手上,所以这里的筛是全量筛,不是页内筛。
             rows = exact.Where(r => r.Placeholder).ToList();
             ftsTotal = rows.Count;
         }
+
+        // --offset 在精确命中这一路原先被读进来却从不使用。一个 key 通常只有几条来源,
+        // 翻页确实没什么用 —— 但「参数给了、输出一个字没变、也没人说一句」正是本项目
+        // 点名清过的那个形状:`--offset 1` 与 `--offset 0` 印出一模一样的表,读的人
+        // 无从知道自己刚才那个参数根本没生效。
+        //
+        // 两路的 offset 在不同的地方施加(文案那路在 SQL 里,这一路在内存里),但施加
+        // **之后**两路一律走同一套分页文法报数,于是「这一页几条 / 总共几条 / 还有没有」
+        // 不再随命中方式换一套说法。
+        if (matchedOn == "key" && offset > 0)
+            rows = rows.Skip(offset).ToList();
 
         if (rows.Count == 0)
         {
@@ -207,16 +218,15 @@ public sealed class KeyedCommand : Command
         // 几条来源(in effect 一条,on disk 可以另有几条),按文案搜时数的是命中了几个 key。
         // 两者混用一个词,读的人就会把「一个 key 三条来源」读成「三个 key」(R7)。
         //
-        // 两条路的计数形态不同,因为**只有一条会翻页**:按文案搜是 LIMIT/OFFSET 出来的一页,
-        // 走分页文法(下一页的 --offset 恒在、末页明说是末页);按 key 精确命中拿到的是
-        // 这个 key 的全部来源,没有第二页可翻。原先两条共用 CountNotice + 一句写死的
-        // 「pass --limit all for the rest」,于是 `--limit all --offset N` 会拿到一句
-        // 指着调用方刚用过的参数的补救 —— 而真正让它变短的是 --offset。
-        if (matchedOn == "key")
-            ctx.Report.CountNotice(Tally.Of(shown.Count, ftsTotal), "keyed translation",
-                                   "pass --limit all for the rest.");
-        else
-            ctx.Report.PageNotice("key", shown.Count, offset, ftsTotal);
+        // 变的只有名词。计数形态两路同一套 —— 原先按 key 那一路走 CountNotice 加一句写死的
+        // 「pass --limit all for the rest」,于是 `--limit all --offset N` 会拿到一句指着
+        // 调用方刚用过的那个参数的补救,而真正让它变短的是 --offset。
+        ctx.Report.PageNotice(matchedOn == "key" ? "keyed translation" : "key",
+                              shown.Count, offset, ftsTotal);
+
+        // origin 那一列印着「in effect」,读的人自然读出「另有 on disk 的没印出来」。
+        // 这份库要是没量过磁盘,那个对照根本不存在 —— 说破它。
+        DiskLayer.NoteIfUnmeasured(ctx);
 
         // 占位译文实际显示的是英文 —— 表里它与真译文同形,所以点名说破。
         //

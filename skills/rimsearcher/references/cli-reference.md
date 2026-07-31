@@ -219,7 +219,8 @@ The game runs headless: no window appears and nothing is written to the display 
 | `--show-window` | Start the game with its window instead of headless. Only needed if a mod in the list requires a graphics device while loading; headless is otherwise identical and faster. | `--window`, `--windowed`, `--graphics` |
 | `--keep-temp` | Keep the temporary save-data folder afterwards, for looking at what the game was given. |  |
 | `--dry-run` | Do everything except start the game: resolve the list, check every mod is installed, and report what would be run. | `--check`, `--validate` |
-| `--harvest-translations` | Passed through to the import step: also index language files of installed mods that the list does not enable. | `--harvest` |
+| `--harvest-translations` | Passed through to the import step, and on by default there: also index language files of installed mods that the list does not enable. Pass it explicitly only to be sure. | `--harvest` |
+| `--no-harvest-translations` | Passed through to the import step: skip the language-file scan, and record in the snapshot that the disk layer was never measured. | `--no-harvest` |
 
 `--json` keys, besides the global `notes`:
 
@@ -659,7 +660,8 @@ The export file is refused rather than half-imported if it lacks the end marker 
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `--name` <name> | Name to register the snapshot under. Defaults to the export file's name. | `--as`, `--alias` |
-| `--harvest-translations` | Also scan the language files of every installed mod, including ones not enabled in the snapshot, so that a translated name still finds the def. Harvested rows are marked and never replace the values the game actually had. | `--harvest`, `--scan-languages` |
+| `--harvest-translations` | On by default whenever 'mod_roots' is configured: also scan the language files of every installed mod, including ones not enabled in the snapshot, so that a translated name still finds the def. Harvested rows are marked 'on disk' and never replace the values the game actually had. Pass it explicitly only to be sure; pass --no-harvest-translations to skip it. | `--harvest`, `--scan-languages` |
+| `--no-harvest-translations` | Index only the translations the game actually had, and record in the snapshot that the disk layer was never measured, so a later 'nothing on disk' is not read as an answer. | `--no-harvest`, `--skip-languages` |
 
 `--json` keys, besides the global `notes`:
 
@@ -671,7 +673,7 @@ Examples:
 
 ```
 rimsearcher snapshot import
-rimsearcher snapshot import exports/vanilla.rsx.jsonl.gz --name vanilla --harvest-translations
+rimsearcher snapshot import exports/vanilla.rsx.jsonl.gz --name vanilla --no-harvest-translations
 ```
 
 ## `snapshot list`

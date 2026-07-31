@@ -14,8 +14,9 @@ public static class SnapshotSchema
     /// 4:field_values 加了 is_default —— 一条值与 C# 声明默认值的关系(R1)。
     /// 5:加了 keyed 表 —— 界面文案那一层译文。
     /// 6:加了 shared_values —— 一条值在同类型里有多普遍(第八轮 ep34)。
+    /// 7:加了 harvested_roots —— 磁盘那一层**量没量过**,见下。
     /// </remarks>
-    public const int Version = 6;
+    public const int Version = 7;
 
     public const string MetaKeySchemaVersion = "schema_version";
     public const string MetaKeyRaw = "export_meta_json";
@@ -23,6 +24,17 @@ public static class SnapshotSchema
     public const string MetaKeyImportedAtUtc = "imported_at_utc";
     public const string MetaKeyDefCount = "def_count";
     public const string MetaKeySourcePath = "source_file";
+
+    /// <summary>
+    /// 这次导入扫了几个 mod 根目录去收割磁盘上的语言文件。<c>0</c> 就是**一个都没扫**。
+    ///
+    /// 没有这一格的时候,「磁盘那一层一行都没有」有两个成因而它们印出来一模一样:根本没量过,
+    /// 和量过了确实没有。前者的下一步是重导,后者的下一步是别再找了 —— 差得最远的两句话
+    /// 共用一个形状,正是本项目一路在清的那件事。收割从 v7 起是默认行为,但默认可以被
+    /// <c>--no-harvest-translations</c> 关掉,也可能因为没配 <c>mod_roots</c> 而没得扫,
+    /// 所以「默认开」并不能替代把它记下来。
+    /// </summary>
+    public const string MetaKeyHarvestedRoots = "harvested_roots";
 
     public const string Ddl = """
         PRAGMA journal_mode = OFF;

@@ -310,6 +310,31 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
     public void Dispose() => _db?.Dispose();
 }
 
+/// <summary>
+/// 「磁盘那一层没量过」这句话的**唯一产地**。
+///
+/// 收割从 v7 起默认开,但 <c>--no-harvest-translations</c> 和没配 <c>mod_roots</c> 都还能造出
+/// 没量过的库。这种库里,凡是把译文按「生效 / 磁盘上」分栏的输出都在暗示磁盘那一层在场 ——
+/// 而它一行也没有,读的人会把「没量过」读成「磁盘上也没有」。差得最远的两句话共用一个形状。
+///
+/// 发在表**旁边**而不是表里:少一整层与某一行缺一格是两回事,写进列里会被当成行的属性。
+///
+/// 条件里带上**这台机器现在配没配 mod_roots**:没配的机器上根本没有第二层可言,那句话
+/// 就成了每一次 get 都跟着的一句废话,而废话读多了会连带着把旁边真正的边界说明一起跳过。
+/// 配了却没量,才是「本可以知道而没去知道」—— 也只有那时,补救(重导一次)是成立的。
+/// </summary>
+internal static class DiskLayer
+{
+    public static void NoteIfUnmeasured(CommandContext ctx)
+    {
+        if (ctx.Db.Harvested || ctx.Config.ModRoots.Count == 0) return;
+        ctx.Report.Notice(NoticeKind.Boundary,
+            "This snapshot never scanned the language files on disk, so every row here is one the game actually " +
+            "had: the absence of an 'on disk' row is not evidence that no installed mod translates it. " +
+            "'rimsearcher snapshot import' scans by default — re-import to measure that layer.", footnote: true);
+    }
+}
+
 public abstract class Command
 {
     public abstract CommandSpec Spec { get; }

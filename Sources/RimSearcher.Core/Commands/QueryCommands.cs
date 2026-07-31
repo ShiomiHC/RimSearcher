@@ -602,6 +602,8 @@ public sealed class GetCommand : Command
                 ctx.Report.CountNotice(Tally.Of(translations.Count, allTranslations.Count),
                     "translation", $"pass --limit all to see the rest{whose}.");
 
+                DiskLayer.NoteIfUnmeasured(ctx);
+
                 if (translations.Any(t => t.Origin == TranslationOrigin.HarvestedOutside))
                     ctx.Report.Notice(NoticeKind.Advisory,
                         "Rows marked 'outside this snapshot' come from language files of mods that were installed " +

@@ -50,6 +50,12 @@ public static class Fixture
     /// </summary>
     public static string CoreDb { get { _ = Db; return CoreDbPath; } }
 
+    /// <summary>语料的导出文件本身 —— 要自己跑一遍 `snapshot import` 的用例用它当输入。</summary>
+    public static string ExportPath
+    {
+        get { _ = Db; return Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "fixture" + IntermediateFormat.FileExtension); }
+    }
+
     /// <summary>造好一次,整个测试进程共用。</summary>
     public static string Db
     {

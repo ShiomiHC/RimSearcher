@@ -3,6 +3,7 @@ using RimSearcher.Cli;
 using RimSearcher.Contract;
 using RimSearcher.Output;
 using RimSearcher.Search;
+using RimSearcher.Storage;
 
 namespace RimSearcher.Tests;
 
@@ -1821,6 +1822,96 @@ public class GrammarTests
         var (miss, _, missCode) = Fixture.Run("keyed", "转至此处", "--placeholders");
         Assert.Equal(1, missCode);
         Assert.Contains("2 keys matched", miss, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <c>--offset</c> 在 <c>keyed</c> 的**精确 key 命中**那一路也要生效。
+    ///
+    /// 八轮审计的后续:那一路把 offset 读进来就再没用过,于是 <c>--offset 1</c> 与
+    /// <c>--offset 0</c> 印出逐字相同的表 —— 参数没生效这件事没有任何一个字承载,
+    /// 读的人只能默认它生效了。翻过头也一样要说破,不能落回「没有这个 key」那句
+    /// (一次翻页读成一次否定,是这一轮反复清的形状)。
+    /// </summary>
+    [Fact]
+    public void keyed精确命中那一路的offset也生效()
+    {
+        var (head, _, headCode) = Fixture.Run("keyed", "CannotUseNoPower", "--json");
+        Assert.Equal(0, headCode);
+        using var doc = System.Text.Json.JsonDocument.Parse(head);
+        var sources = doc.RootElement.GetProperty("keys").GetArrayLength();
+
+        // 翻过这个 key 的来源条数,得到的必须是「翻过头了」,而不是同一张表再来一遍。
+        var (past, _, pastCode) = Fixture.Run("keyed", "CannotUseNoPower", "--offset", sources.ToString());
+        Assert.Equal(1, pastCode);
+        Assert.Contains($"--offset {sources} is past the end", past, StringComparison.Ordinal);
+        Assert.DoesNotContain("No keyed translation matches", past, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 一份没量过磁盘那一层的库,不许让「磁盘上没有」由沉默来承载。
+    ///
+    /// 收割从 v7 起默认开,但 <c>--no-harvest-translations</c> 与没配 <c>mod_roots</c> 还能造出
+    /// 没量过的库,而它印出来的 origin 那一列照样写着「in effect」—— 读的人自然读出「另有
+    /// on disk 的没印出来」,可那一层一行也没有。
+    ///
+    /// 反向也要成立:没配 mod_roots 的机器上根本没有第二层,那句话就是每次查询都跟着的
+    /// 一句废话 —— 全套基线都是在这种配置下录的,它们不许动。
+    /// </summary>
+    [Fact]
+    public void 没量过磁盘那一层的库要说破而不是沉默()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "harvestnote");
+        Directory.CreateDirectory(dir);
+        var modRoot = Path.Combine(dir, "mods");
+        Directory.CreateDirectory(modRoot);
+        var config = Path.Combine(dir, "config.toml");
+        File.WriteAllText(config, "mod_roots = ['" + modRoot.Replace("\\", "\\\\") + "']\n");
+
+        const string Says = "never scanned the language files on disk";
+
+        // 语料库是不带 mod_roots 造的,所以它就是一份没量过的库。
+        var (keyed, _, _) = Fixture.Run("keyed", "CannotUseNoPower", "--config", config);
+        Assert.Contains(Says, keyed, StringComparison.Ordinal);
+        var (get, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--config", config);
+        Assert.Contains(Says, get, StringComparison.Ordinal);
+
+        // 没配 mod_roots 时闭嘴 —— 这台机器上没有第二层可漏。
+        var (quiet, _, _) = Fixture.Run("keyed", "CannotUseNoPower");
+        Assert.DoesNotContain(Says, quiet, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 收割是**默认开**的,而两条造快照的路(<c>export</c> / <c>snapshot import</c>)口径一致。
+    /// 分家的话「这份库量没量过磁盘」就取决于当初是哪条路造的它,而输出里没有一个字说得清。
+    /// 同时给出正反两个开关要报错,不许静默挑一个 —— 挑了之后快照里那一层的含义就成了
+    /// 这段代码的偏好,而没有任何输出承载它。
+    /// </summary>
+    [Fact]
+    public void 收割默认开且两条造快照的路口径一致()
+    {
+        var specs = new CommandRegistry().Specs.ToDictionary(s => s.Name);
+        foreach (var name in new[] { "export", "snapshot import" })
+        {
+            var opts = specs[name].Options.Select(o => o.Name).ToList();
+            Assert.Contains("harvest-translations", opts);
+            Assert.Contains("no-harvest-translations", opts);
+        }
+
+        // 默认那一路真的会去扫:配了 mod_roots 而不给任何开关,导出来的库自称量过。
+        var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "harvestdefault");
+        if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        Directory.CreateDirectory(Path.Combine(dir, "mods"));
+        var config = Path.Combine(dir, "config.toml");
+        File.WriteAllText(config,
+            "mod_roots = ['" + Path.Combine(dir, "mods").Replace("\\", "\\\\") + "']\n" +
+            "snapshot_dir = '" + dir.Replace("\\", "\\\\") + "'\n");
+
+        var (json, _, code) = Fixture.Run("snapshot", "import", Fixture.ExportPath,
+                                          "--name", "harvestdefault", "--json", "--config", config);
+        Assert.Equal(0, code);
+        using var db = SnapshotDb.Open(Path.Combine(dir, "harvestdefault.db"));
+        Assert.True(db.Harvested, "不给开关的一次导入没有去扫 mod_roots —— 收割不是默认行为了。");
+        Assert.DoesNotContain("never scanned", json, StringComparison.Ordinal);
     }
 
     /// <summary>

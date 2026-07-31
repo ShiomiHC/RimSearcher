@@ -307,15 +307,24 @@ public sealed class SnapshotImportCommand : Command
                 Name = "harvest-translations",
                 Arity = Arity.Flag,
                 Aliases = ["harvest", "scan-languages"],
-                Help = "Also scan the language files of every installed mod, including ones not enabled in the " +
-                       "snapshot, so that a translated name still finds the def. Harvested rows are marked and " +
-                       "never replace the values the game actually had.",
+                Help = "On by default whenever 'mod_roots' is configured: also scan the language files of every " +
+                       "installed mod, including ones not enabled in the snapshot, so that a translated name still " +
+                       "finds the def. Harvested rows are marked 'on disk' and never replace the values the game " +
+                       "actually had. Pass it explicitly only to be sure; pass --no-harvest-translations to skip it.",
+            },
+            new OptionSpec
+            {
+                Name = "no-harvest-translations",
+                Arity = Arity.Flag,
+                Aliases = ["no-harvest", "skip-languages"],
+                Help = "Index only the translations the game actually had, and record in the snapshot that the " +
+                       "disk layer was never measured, so a later 'nothing on disk' is not read as an answer.",
             },
         ],
         Examples =
         [
             "rimsearcher snapshot import",
-            "rimsearcher snapshot import exports/vanilla.rsx.jsonl.gz --name vanilla --harvest-translations",
+            "rimsearcher snapshot import exports/vanilla.rsx.jsonl.gz --name vanilla --no-harvest-translations",
         ],
         JsonKeys = [new() { Key = "imported", What = "an object: the snapshot that was written, and what went into it." }],
     };
@@ -341,9 +350,22 @@ public sealed class SnapshotImportCommand : Command
         var name = ctx.Args.Value("name") ?? StripExtensions(Path.GetFileName(file));
         var dbPath = Path.Combine(ctx.Config.ResolveSnapshotDir(), name + ".db");
 
+        // 收割默认开。实测这一步在 16787 def 的快照上多花 0.75s(总 35s 的 2%),换来的是
+        // 3815 个只在磁盘上存在的 key —— 关着的时候这些 key 查出来是「没有」,而那是假的。
+        //
+        // 默认关的时候还有一个更深的问题:一份没收割的库对「磁盘上有没有」这个问题**根本
+        // 没有资格回答**,可它印出来的是一句普通的「没有」。默认开只是把这种库变少,
+        // 消灭不了它(--no-harvest 和没配 mod_roots 都还在),所以扫了几个根目录要记进 meta。
+        if (ctx.Args.Flag("harvest-translations") && ctx.Args.Flag("no-harvest-translations"))
+            throw new CliUsageException(
+                "--harvest-translations and --no-harvest-translations ask for opposite things. Picking one " +
+                "silently would make the resulting snapshot's disk layer mean whichever this code happened to " +
+                "prefer, and nothing in the output would say which.");
+
+        var harvest = !ctx.Args.Flag("no-harvest-translations");
         var importer = new SnapshotImporter
         {
-            ModRoots = ctx.Args.Flag("harvest-translations") ? ctx.Config.ModRoots : [],
+            ModRoots = harvest ? ctx.Config.ModRoots : [],
         };
         var stats = importer.Import(file, dbPath);
 
@@ -369,11 +391,19 @@ public sealed class SnapshotImportCommand : Command
                 $"{Tally.Complete(stats.TruncatedDefs).Render("def")} had fields dropped at export time for depth " +
                 "or size. 'get' says so per def, so that a missing path is never mistaken for an absent field.");
 
-        if (!ctx.Args.Flag("harvest-translations") && ctx.Config.ModRoots.Count > 0)
-            ctx.Report.Notice(NoticeKind.NextStep,
-                "Only the translations the game actually had are indexed. Pass --harvest-translations to also " +
-                "index language files from installed mods, which helps when the machine has no localisation mod " +
-                "enabled but you still want to search by translated name.");
+        // 没收割的时候要说破,而且两个成因分开说 —— 补救不一样(收回参数 / 去配 mod_roots)。
+        // 这句话真正防的是往后:这份库对「磁盘上有没有这一句」没有资格回答,而它印出来的
+        // 会是一句普通的「没有」。
+        if (!harvest)
+            ctx.Report.Notice(NoticeKind.Boundary,
+                "--no-harvest-translations: only the translations the game actually had are indexed, so this " +
+                "snapshot cannot answer whether a string exists in some installed mod's language files — it never " +
+                "looked. Re-import without the flag to measure that layer.");
+        else if (ctx.Config.ModRoots.Count == 0)
+            ctx.Report.Notice(NoticeKind.Boundary,
+                "No 'mod_roots' is configured, so there was nowhere to scan for language files and only the " +
+                "translations the game actually had are indexed. That is a gap in this snapshot, not an answer " +
+                "about the mods on this machine: set 'mod_roots' in the config file and import again.");
 
         return 0;
     }
