@@ -5,110 +5,115 @@ using RimSearcher.Cli;
 namespace RimSearcher.Tests;
 
 /// <summary>
-/// SKILL.md 的**承诺闸**:验的是承诺的**语义**,不是命令行的存在性。
+/// skill 文档的**承诺闸**:验的是承诺的**语义**,不是命令行的存在性。
 ///
 /// 立的是一张索引 —— 每条承诺句连着一道守它的闸,两个方向都被机器盯着:
 ///   <see cref="承诺句都还在原地"/>       原文被改写就红,逼人重新确认实现还兑不兑现;
 ///   <see cref="每条承诺都指名了守它的那道闸"/> 指的那道闸不存在就红(改名、删掉都算)。
 ///
-/// **往 SKILL.md 里加一句承诺,就要往 <see cref="Promises"/> 里加一行。** 这条规矩没法由
+/// 扫描面 = SKILL.md + references 下的手写页(cli-reference.md 是生成物,不在此列):
+/// 2026-08-01 精简后,低频承诺句下沉进了 usage-notes.md —— 下沉不是删除,承诺照钉。
+///
+/// **往 skill 文档里加一句承诺,就要往 <see cref="Promises"/> 里加一行。** 这条规矩没法由
 /// 机器强制 ——「哪句是承诺」不可判定。
 /// </summary>
 public class SkillPromiseTests
 {
-    /// <param name="Quote">SKILL.md 里的原文,空白折叠后逐字匹配(换行位置不算改动)。</param>
+    /// <param name="Quote">skill 文档里的原文,空白折叠后逐字匹配(换行位置不算改动)。</param>
     /// <param name="ProvenBy">证它的那个测试方法名。必须在本程序集里真实存在。</param>
     private sealed record Promise(string Quote, string ProvenBy);
 
     private static readonly Promise[] Promises =
     [
         // ---- 数据边界 ----
-        new("`inherit` is the only command that reads it, and it says so",
+        new("inheritance, discarded by the game before export; `inherit` alone reads it",
             nameof(继承层的来路与补丁时间差写在inherit自己的说明里)),
         // 无 Name= 的节点拿到的是导出器硬写的 0,所以承诺收窄成「声明了 Name= 的才报数」,
         // 另一半明说成 n/a;两半各由那道闸的两组断言证。
-        new("reports how many patch operations target it by name — zero means what you see is what\n   the game read",
+        new("reports how many patch operations target it by name — zero means what you see is what the game read",
             "inherit的patch计数在干净节点也在场"),
-        new("A node without a `Name=` reports `n/a`, not zero",
+        new("no `Name=` reports `n/a`, not zero",
             "inherit的patch计数在干净节点也在场"),
-        new("an abstract node has no field values of its own here",
+        new("An abstract node shows no field values",
             "抽象节点不在defs里但在继承层里"),
-        new("`get` recognises a name that lives only there and says so rather than reporting it absent",
+        new("`get` cannot reach them (it says so)",
             "get落空时不再无条件谈抽象父节点"),
 
         // ---- 三态计数与分页 ----
-        new("Results are a plain table with a count above it, and the count is **always** there",
+        new("A count is always printed above the table",
             nameof(每条查询的第一句都是计数)),
-        new("`12 defs.` — that is all of them",
+        new("`12 defs.` — all of them",
             "完整集合裸写数字不多说一个字"),
-        new("`at least 12 matches` — the scan stopped early; the true total is unknown",
+        new("`at least 12 matches` — the scan stopped early, true total unknown",
             "只知道下界时写成at_least"),
-        new("in `--json` those carry `kind: \"filter\"` while a real cut-off carries `kind: \"truncation\"`",
+        new("A `--path` match count is a filter, not a truncation (`kind: \"filter\"` vs `\"truncation\"` in `--json`)",
             nameof(过滤与截断在json里是两种kind)),
-        new("The last page says it is the last one rather than leaving you to do the arithmetic, and an `--offset` past the end is reported as an overshoot, not as \"nothing found\"",
+        new("The last page says it is the last one; an `--offset` past the end is reported as an overshoot, not as \"nothing found\"",
             "分页的三个位置各说各的话"),
 
         // ---- search / find / values 的分工 ----
         // 快照的 translations 表只有 def 侧的注入,Languages/*/Keyed 那一整套 UI 字符串
         // 一条都不在库里 —— 承诺必须限定成「注入到 def 上的译文」并明说不覆盖 Keyed。
-        new("It covers def names, labels, descriptions and the translations injected onto defs — **not C# class names**, and **not the UI strings under `Languages/*/Keyed`**",
+        new("covers def names, labels, descriptions and the translations injected onto defs",
             nameof(search只认名字标签与译文而不认C类名)),
-        new("an English term still finds its def on a\n   Chinese snapshot",
+        new("the UI strings under `Languages/*/Keyed`",
+            nameof(search只认名字标签与译文而不认C类名)),
+        new("an English term finds its def on a Chinese snapshot",
             nameof(GrammarTests.英文原文在中文快照上搜得到)),
-        new("`values <field>` gives the whole value space, and prints which full paths and def types contributed",
+        new("gives the whole value space and prints which full paths and def types contributed",
             nameof(values说清这些值来自哪些路径与def类型)),
 
         // ---- 界面文案那一层 ----
-        new("they belong to no def at all,\nwhich is why no amount of `search`, `get` or `find` reaches them",
+        new("keyed translations belonging to no def, unreachable by `search`/`get`/`find`",
             nameof(界面文案不在search的射程里而keyed认它)),
-        new("a zero result here names whichever of the two it turns out to be",
+        new("a zero result names which one you hit",
             nameof(界面文案不在search的射程里而keyed认它)),
-        new("`code-search` resolves every key written as a literal on a matching line and prints a `ui_text`\ntable beside the hits",
+        new("`code-search` resolves every key written as a literal on a matching line and prints a `ui_text` table beside the hits",
             nameof(code_search把字面量key的译文当场解出来)),
-        new("A key the code assembles at runtime (`\"Stat_\" + x`) has\nno literal to resolve, and the answer says how many lines were like that rather than leaving them\nblank",
+        new("A key the code assembles at runtime (`\"Stat_\" + x`) has no literal to resolve, and the answer says how many lines were like that rather than leaving them blank",
             nameof(code_search把字面量key的译文当场解出来)),
-        new("only `in effect` is what the game displays",
+        new("Only `in effect` rows are what the game displays",
             "收割的keyed标成非生效且同key不去重"),
-        new("if the exporting game had no language data loaded there are no keyed translations at\nall. `keyed` says that in those words instead of reporting your key absent",
+        new("there are no keyed translations in the snapshot — `keyed` says that in those words instead of reporting your key absent",
             nameof(OutputSnapshotTests.keyed层为空时说破是快照的缘故而不是查不到)),
 
         // ---- 子串匹配与同块兄弟 ----
-        new("The output says when nothing matched as a whole path segment",
+        new("the output says when nothing matched as a whole segment",
             nameof(GrammarTests.子串匹配要说破自己不是整段命中)),
-        new("the output names any hand-set field in the same `comps[N]` block as the rows it printed",
+        new("the output names hand-set fields in the block it cut away",
             nameof(GrammarTests.同一块里有人设过的兄弟字段要点名)),
-        new("takes `--type` and `--def` to narrow to the\nones a particular answer depended on. The footnote on such an answer prints that command already\nfilled in",
+        new("(narrow `--type`, `--def`), which the footnote prints already filled in",
             nameof(GrammarTests.完整性尾注指的命令要走得到它刚说的那批)),
-        new("The global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the command name",
+        new("Global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the command name",
             nameof(GrammarTests.全局参数的位置约束要写在它自己的标题上)),
-        // find --value --exact 在 SKILL 里没有专属句子,兜住它的是下面那条
+        // find --value --exact 在 skill 文档里没有专属句子,兜住它的是下面那条
         // 「Unknown options are rejected rather than ignored」。不给它单独立一行:
         // 能钉住的原文只有收窄表里孤零零一个 `--exact`,那样的 pin 无论实现怎么变都不会红。
 
         // ---- mod 列表:导出的**输入**那一侧 ----
         // 措辞取的是实现里那句窄的(SearchAll 的落空话),不是「这个 mod 在本机装了没」——
         // 两者差着这条命令根本没看过的一整个游戏目录。
-        new("That search\nanswers **which saved lists name a mod**, which is not the same question as whether the mod is\ninstalled",
+        new("It answers **which saved lists name a mod** — not whether the mod is installed",
             nameof(GrammarTests.列表点没点名与快照覆没覆盖是两个问题)),
 
         // ---- 代码默认值 ----
-        new("`yes` rows are left out of the listing by default, with a line saying how many and how to see them",
+        new("`yes` rows hide by default (a line says how many)",
             nameof(GrammarTests.默认值行被拿掉时当场说清有多少条)),
-        new("`--path <text>` always shows a named field whichever kind it is",
+        new("`--path` always shows a named field",
             nameof(GrammarTests.点了名的字段不因为是默认值而消失)),
-        new("`unknown` means the type could not be constructed for comparison, so neither claim holds",
+        new("`unknown` = type not constructible",
             nameof(GrammarTests.没法比的那一档照常显示且不与被改过的同形)),
 
         // ---- code-search 的三道闸 ----
-        new("`--limit` and `--max-per-file` decide how many matching lines are *printed*, and neither shortens the scan",
+        new("`--limit` and `--max-per-file` only shape what is printed (the count stays exact)",
             "印刷上限不缩短扫描"),
         new("A zero result from a scan that stopped short says so and does **not** point you at the snapshot",
             "没读完的零结果与真零结果分得开"),
-        new("`code-search` also reports matches and files as two different numbers",
+        new("reports matches and files as two numbers",
             nameof(code的匹配数与文件数是两个数)),
-        new("Pointing it at data questions returns nothing and tells you so",
+        new("pointed at a data question it says so",
             nameof(code的零结果指路回快照而不是硬说没有)),
-        new("a glob with a `/` in it starts with the tree's name",
+        new("A `--files` glob containing `/` starts at the tree name",
             nameof(files的glob语义在打不中时当场讲清)),
 
         // ---- read ----
@@ -116,26 +121,26 @@ public class SkillPromiseTests
             "同名文件不替调用方挑"),
         new("`--lines` together with `--member`/`--type` is a usage error rather than a silent preference",
             "两种读法同时传时当场说破"),
-        new("It finds a declaration's start and end by matching braces, not by parsing C#",
+        new("match **braces, not C#**",
             "能力边界只挂在做了推断的那几条路上"),
 
         // ---- --json / 退出码 / 参数 ----
         new("every prose sentence moves into `notes` as `{kind, text}`",
             "json模式下声明区搬进notes一条不丢"),
-        new("Do not guess: `<command> --help` lists that command's keys",
+        new("`<command> --help` lists each command's keys",
             nameof(skill列出的json键与声明一致)),
         // 越界 offset 时那个键不许整个消失 —— 消费方会拿到 KeyError 而不是空数组。
-        new("The key the command does produce is always there, empty array and all",
+        new("always present when produced, empty array and all",
             "json的数据键零行时是空数组而不是整个消失"),
-        new("`get` does print a `source` line, and it is less than it looks: the bare file name the game reported, no directory, unverified",
+        new("`get`'s `source` line is a bare, unverified file name",
             "source列印的是没有目录的裸文件名"),
-        new("Exit codes carry four distinct meanings",
+        new("`0` ran, `1` zero rows, `2` usage error, `70` tool defect",
             "退出码如实传给shell"),
         new("Unknown options are rejected rather than ignored, with the nearest accepted spelling — or, if another command takes that option, which one",
             nameof(未知选项的报错点名接受它的那条命令)),
         // 播报判据是「展开与你输入的字面不同」,不是「多于一个 mod」——
         // `--scope ludeon.rimworld` 展开成一个 mod 时也要播报。
-        new("the output spells out what a scope resolved to whenever the expansion is not word for word what you typed",
+        new("the output spells out what a scope resolved to",
             "scope在散文里展开成实际圈住的mod"),
 
         // ---- 落空的成因 ----
@@ -143,34 +148,39 @@ public class SkillPromiseTests
             "零结果按算得出来的落点分流"),
         // 同一条规矩在 find 上的样子。第二句是**不给死路**那一半:算出来是个 def 名不等于
         // 有人引用它,指一条必然空手的命令与不指路一样贵。
-        new("given a single word that is not a field path, `find`\n   works out what that word actually is",
+        new("given a single word that is not a field path, `find` works out what that word actually is",
             nameof(GrammarTests.find给一个词落空时要说破那个词其实是什么)),
-        new("Where nothing refers to that name, it says so instead of\n   handing back a query that would come back empty",
+        new("it says so instead of handing back a query that would come back empty",
             nameof(GrammarTests.find给一个词落空时要说破那个词其实是什么)),
-        new("If another registered snapshot has that def, the zero result says so by name",
+        new("another registered snapshot holding the def is named in the zero result",
             "别的快照里有时点名说出来"),
-        new("If the snapshot covers Core only and your game has mods enabled",
+        new("on a Core-only snapshot, `1 def` means one in Core",
             "被scope挡住时说破是过滤器干的"),
 
         // ---- 快照还等不等于磁盘 ----
         // 「比了哪几样」是一句会过时的话:2026-07-31 之前它写着三样,而实现已经是四样。
         // 每一样各连一道闸,少一样就红。
-        new("That comparison covers four things: same mods, same order, same game build",
+        new("Four things: same mods, same order, same game build",
             nameof(GrammarTests.一致这句话要同时说清没比的是什么)),
         new("It reports which mods moved, by name",
             "漂移声明点名到mod"),
         new("a re-download of identical bytes reads as a change, and an edit that preserves both is\nthe one case it misses",
             "量过了也要说清比的只是尺寸与时间戳"),
-        new("`snapshot status` prints\n`xml_fingerprint: not recorded`",
+        new("prints\n`xml_fingerprint: not recorded`",
             nameof(GrammarTests.一致这句话要同时说清没比的是什么)),
         new("which the game only rewrites when you save a change on\nits mod list page",
             "版本来自ModsConfig时说破它会落后"),
     ];
 
+    /// <summary>SKILL.md + references 下的手写页(生成的 cli-reference.md 除外),拼成一份扫。</summary>
     private static string SkillText()
     {
-        var path = Path.Combine(DeclarationTests.RepoRoot(), "skills", "rimsearcher", "SKILL.md");
-        return Collapse(File.ReadAllText(path));
+        var dir = Path.Combine(DeclarationTests.RepoRoot(), "skills", "rimsearcher");
+        var files = new List<string> { Path.Combine(dir, "SKILL.md") };
+        files.AddRange(Directory.EnumerateFiles(Path.Combine(dir, "references"), "*.md")
+                                .Where(f => Path.GetFileName(f) != "cli-reference.md")
+                                .OrderBy(f => f, StringComparer.Ordinal));
+        return Collapse(string.Join("\n", files.Select(File.ReadAllText)));
     }
 
     /// <summary>空白折叠 —— 重新折行不是语义改动,不该让整张表红。</summary>
@@ -184,7 +194,7 @@ public class SkillPromiseTests
                               .Select(p => p.Quote)
                               .ToList();
         Assert.True(missing.Count == 0,
-            "These promises are no longer in SKILL.md word for word. A reworded promise is a new promise: " +
+            "These promises are no longer in the skill docs word for word. A reworded promise is a new promise: " +
             "check the gate still proves it, then update the quote.\n  " + string.Join("\n  ", missing));
     }
 
@@ -452,20 +462,21 @@ public class SkillPromiseTests
     }
 
     /// <summary>
-    /// SKILL 里那份 --json 数据键清单与声明层是两处产地。两个方向都验:文档里出现的键
-    /// 必须真被声明过,而 SKILL 教的那几条命令声明的键必须都在文档里 —— 后者漏了,
-    /// 猜错键就静默拿到空数组。
+    /// skill 文档里那份 --json 数据键清单与声明层是两处产地。两个方向都验:文档里出现的键
+    /// 必须真被声明过,而 skill 教的那几条命令声明的键必须都在文档里 —— 后者漏了,
+    /// 猜错键就静默拿到空数组。清单 2026-08-01 起住在 usage-notes.md 的专节里。
     /// </summary>
     [Fact]
     public void skill列出的json键与声明一致()
     {
         var registry = new CommandRegistry();
-        var text = File.ReadAllText(Path.Combine(DeclarationTests.RepoRoot(), "skills", "rimsearcher", "SKILL.md"))
+        var text = File.ReadAllText(Path.Combine(DeclarationTests.RepoRoot(),
+                                                 "skills", "rimsearcher", "references", "usage-notes.md"))
                        .Replace("\r\n", "\n");
 
-        var paragraph = Regex.Match(text, @"`--json` gives machine-readable output:.*?(?=\n\n)",
+        var paragraph = Regex.Match(text, @"## `--json` data keys per command.*?(?=\n## )",
                                     RegexOptions.Singleline);
-        Assert.True(paragraph.Success, "The --json paragraph in SKILL.md was not found; the scanner needs updating.");
+        Assert.True(paragraph.Success, "The --json section in usage-notes.md was not found; the scanner needs updating.");
 
         var commandNames = registry.Specs
             .SelectMany(s => new[] { s.Name }.Concat(s.Aliases))

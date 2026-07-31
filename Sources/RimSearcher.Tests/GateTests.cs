@@ -50,40 +50,51 @@ public class GateTests
         Path.Combine(DeclarationTests.RepoRoot(), "skills", "rimsearcher", "SKILL.md");
 
     /// <summary>
-    /// SKILL.md 里写出来的每一条命令行都得真能跑。
+    /// skill 文档里写出来的每一条命令行都得真能跑。
     ///
-    /// SKILL.md 是手写的:模型照它拼命令行,写错一个开关,代价是调用方白跑一轮。
-    /// 这里判的不是措辞,是**命令名与开关名在注册表里存不存在**。
+    /// SKILL.md 与 references 下的手写页都是手写的:模型照它们拼命令行,写错一个开关,
+    /// 代价是调用方白跑一轮。这里判的不是措辞,是**命令名与开关名在注册表里存不存在**。
+    /// cli-reference.md 除外 —— 它是 docs 命令的生成物,由上面的字节闸守着。
     /// </summary>
     [Fact]
     public void skill文档里的命令行都能解析()
     {
         var registry = new CommandRegistry();
         var globals = GlobalOptions.All.Select(o => o.Name).ToHashSet(StringComparer.Ordinal);
-        var text = File.ReadAllText(SkillPath).Replace("\r\n", "\n");
 
-        var invocations = Regex.Matches(text, @"`" + CommandRegistry.ExeName + @"([^`]*)`");
-        Assert.True(invocations.Count > 5, "SKILL.md suddenly names almost no commands; the scanner is probably broken.");
+        var files = new List<string> { SkillPath };
+        files.AddRange(Directory.EnumerateFiles(Path.Combine(Path.GetDirectoryName(SkillPath)!, "references"), "*.md")
+                                .Where(f => Path.GetFileName(f) != "cli-reference.md"));
 
-        foreach (Match inv in invocations)
+        var total = 0;
+        foreach (var file in files)
         {
-            var argv = Tokenize(inv.Groups[1].Value);
-            if (argv.Count == 0) continue;                       // 光提 exe 名(「the rimsearcher CLI」)
-            if (argv[0].StartsWith('<') || argv[0].StartsWith("--")) continue;  // 占位命令名
+            var doc = Path.GetFileName(file);
+            var text = File.ReadAllText(file).Replace("\r\n", "\n");
 
-            var (command, rest) = registry.Resolve(argv);
-            Assert.True(command is not null, $"SKILL.md invokes '{inv.Value}', but there is no such command.");
-
-            var accepted = command!.Spec.Options
-                                  .SelectMany(o => new[] { o.Name }.Concat(o.Aliases))
-                                  .ToHashSet(StringComparer.Ordinal);
-            foreach (var token in rest.Where(t => t.StartsWith("--", StringComparison.Ordinal)))
+            foreach (Match inv in Regex.Matches(text, @"`" + CommandRegistry.ExeName + @"([^`]*)`"))
             {
-                var name = token[2..].Split('=')[0];
-                Assert.True(accepted.Contains(name) || (command.Spec.UsesGlobals && globals.Contains(name)),
-                    $"SKILL.md writes '{inv.Value}', but '{command.Spec.Name}' does not accept '--{name}'.");
+                total++;
+                var argv = Tokenize(inv.Groups[1].Value);
+                if (argv.Count == 0) continue;                       // 光提 exe 名(「the rimsearcher CLI」)
+                if (argv[0].StartsWith('<') || argv[0].StartsWith("--")) continue;  // 占位命令名
+
+                var (command, rest) = registry.Resolve(argv);
+                Assert.True(command is not null, $"{doc} invokes '{inv.Value}', but there is no such command.");
+
+                var accepted = command!.Spec.Options
+                                      .SelectMany(o => new[] { o.Name }.Concat(o.Aliases))
+                                      .ToHashSet(StringComparer.Ordinal);
+                foreach (var token in rest.Where(t => t.StartsWith("--", StringComparison.Ordinal)))
+                {
+                    var name = token[2..].Split('=')[0];
+                    Assert.True(accepted.Contains(name) || (command.Spec.UsesGlobals && globals.Contains(name)),
+                        $"{doc} writes '{inv.Value}', but '{command.Spec.Name}' does not accept '--{name}'.");
+                }
             }
         }
+
+        Assert.True(total > 5, "The skill docs suddenly name almost no commands; the scanner is probably broken.");
     }
 
     /// <summary>
