@@ -26,8 +26,14 @@ namespace RimSearcher.DataMod
         /// 0.2.0 起,列表元素的运行时类型也进索引(见 <see cref="Emit"/> 里 <c>.Class</c> 那一段)。
         /// 读取侧靠这个数分辨「这份快照里没人引用它」与「这份快照根本没量过这件事」——
         /// 两者在结果上逐字同形,而那正是本项目唯一不许留的形状。
+        ///
+        /// 0.3.0 起两处:keyed 那一层(界面文案 key → 显示文字)进导出;
+        /// 基类声明的私有字段不再整条消失(<see cref="FieldWalk.InstanceFields"/> 自己走基类链)。
+        /// 两处都没配版本能力位,理由各自不同 —— keyed 的在场判定是数据驱动的
+        /// (<c>KeyedCount()==0</c>,任何成因都接得住,比版本号强);私有字段那处的落空句
+        /// 已经把成因列全,而重导之后本机不再存在 0.3.0 以下的快照。
         /// </summary>
-        public const string ExporterVersion = "0.2.0";
+        public const string ExporterVersion = "0.3.0";
 
         public static ExportLimits Limits = new ExportLimits();
 
