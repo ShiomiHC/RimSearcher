@@ -28,8 +28,11 @@ namespace RimSearcher.DataMod
         /// 0.3.0 起 keyed 那一层(界面文案 key → 显示文字)进导出,且基类声明的私有字段不再
         /// 整条消失(<see cref="FieldWalk.InstanceFields"/> 自己走基类链)。keyed 的在场判定
         /// 是数据驱动的(<c>KeyedCount()==0</c>),不配版本能力位。
+        /// 0.4.0 起 <c>.Class</c> 的判据换成 <see cref="NestedClass.ShouldEmit"/>(运行时类型
+        /// ≠ 声明类型),于是**单字段**上的 <c>Class=</c> 也进索引 —— 0.2 那一档只发列表元素,
+        /// 而 <c>find Class X</c> 对 <c>GenStepDef.genStep</c> 回的零与「量过了、没人用」同形。
         /// </summary>
-        public const string ExporterVersion = "0.3.0";
+        public const string ExporterVersion = "0.4.0";
 
         public static ExportLimits Limits = new ExportLimits();
 
@@ -253,7 +256,8 @@ namespace RimSearcher.DataMod
                     try { baseline = field.GetValue(pristine); }
                     catch { known = false; }
                 }
-                Emit(value, path, depth, output, state, known, baseline);
+                // 声明类型一路穿下去 —— 「作者写没写 Class=」的判据就是它与运行时类型的差。
+                Emit(value, path, depth, output, state, known, baseline, field.FieldType);
             }
         }
 
@@ -286,7 +290,7 @@ namespace RimSearcher.DataMod
         /// </summary>
         private static void Emit(object value, string path, int depth,
                                  List<ExportedField> output, WalkState state,
-                                 bool baselineKnown, object baseline)
+                                 bool baselineKnown, object baseline, Type declared)
         {
             if (value == null) return;
 
@@ -320,25 +324,30 @@ namespace RimSearcher.DataMod
                 // 于是 baseline 为 null 而 known 仍为 true —— 那是一句判得出来的话,
                 // 不该退化成「没法比」。
                 var baselineItems = baselineKnown ? AsList(baseline) : null;
+                // 元素位置声明的是什么类型:List<CompProperties> 的每一项声明成 CompProperties,
+                // 于是没写 Class= 的那些 li 与它相等,一条都不发。
+                var elementType = NestedClass.ElementType(value.GetType()) ?? NestedClass.ElementType(declared);
                 var i = 0;
                 foreach (var item in enumerable)
                 {
                     if (i >= Limits.MaxCollectionItems) { state.Truncated++; break; }
                     var itemBaseline = baselineItems != null && i < baselineItems.Count ? baselineItems[i] : null;
                     Emit(item, path + "[" + i.ToString(CultureInfo.InvariantCulture) + "]", depth + 1,
-                         output, state, baselineKnown, itemBaseline);
+                         output, state, baselineKnown, itemBaseline, elementType);
                     i++;
                 }
                 return;
             }
 
-            // 列表元素的**运行时类型**单发一条 `<path>.Class`,否则 `<li Class="JobGiver_
+            // 嵌套对象的**运行时类型**单发一条 `<path>.Class`,否则 `<li Class="JobGiver_
             // AnimalFlee">` 这类多态子对象的类型一条也不进索引(类型不是字段),而「哪些
             // ThinkTreeDef 挂了这个节点」是 def 侧最常见的反查之一。
             //
-            // 只发给列表元素(路径以 ] 收尾):`<li Class=>` 只出现在列表里,而给每个嵌套
-            // 对象都加一行会把 MaxFieldValuesPerDef 提前撞穿,换来更多 def 被截。
-            if (path.Length > 0 && path[path.Length - 1] == ']')
+            // 判据是「运行时类型 ≠ 那个位置声明的类型」,也就是 XML 里写了 Class=。
+            // 0.2.0 用的是「路径以 ] 收尾」,那条前提(「<li Class=> 只出现在列表里」)是错的:
+            // <genStep Class="…"> 是单字段上的 Class,整整 167 个 GenStepDef 因此一条都没有。
+            // 换判据同时删掉了大批「运行时正好等于声明」的行 —— 它们报告的是作者没做的事。
+            if (NestedClass.ShouldEmit(value.GetType(), declared))
             {
                 if (state.Emitted >= Limits.MaxFieldValuesPerDef) { state.Truncated++; return; }
                 var typeName = value.GetType().FullName;

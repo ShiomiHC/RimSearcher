@@ -26,11 +26,20 @@ public sealed record ExportMeta(
     public string Fingerprint => ComputeFingerprint(GameVersion, Language, Mods);
 
     /// <summary>
-    /// 这份快照量过嵌套 <c>&lt;li Class="…"&gt;</c> 的运行时类型吗(导出器 0.2.0 起)。
+    /// 这份快照量过**列表元素**(<c>&lt;li Class="…"&gt;</c>)的运行时类型吗(导出器 0.2.0 起)。
     ///
     /// 老快照对 <c>find Class X</c> 回零,而那与「量过了、确实没人用它」同形。
     /// </summary>
     public bool IndexesNestedClass => AtLeast(ExporterVersion, 0, 2);
+
+    /// <summary>
+    /// 单字段上的 <c>Class="…"</c> 也量过了吗(导出器 0.4.0 起)。
+    ///
+    /// 0.2 那一档的判据是「路径以 ] 收尾」,于是 <c>&lt;genStep Class="GenStep_RocksFromGrid"&gt;</c>
+    /// 这种**不在列表里**的多态一条都没进索引 —— 而 <c>find Class X</c> 对它回的零,
+    /// 与「列表里量过了、确实没人用」逐字同形。三种世界各说各的话,判据在这里分档。
+    /// </summary>
+    public bool IndexesAllNestedClass => AtLeast(ExporterVersion, 0, 4);
 
     private static bool AtLeast(string version, int major, int minor)
     {

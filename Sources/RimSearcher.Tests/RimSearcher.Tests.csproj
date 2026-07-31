@@ -31,6 +31,7 @@
   -->
   <ItemGroup>
     <Compile Include="..\RimSearcher.DataMod\FieldWalk.cs" Link="Exporter\FieldWalk.cs" />
+    <Compile Include="..\RimSearcher.DataMod\NestedClass.cs" Link="Exporter\NestedClass.cs" />
   </ItemGroup>
 
 </Project>
