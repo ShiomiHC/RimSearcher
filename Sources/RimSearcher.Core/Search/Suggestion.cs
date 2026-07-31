@@ -27,7 +27,7 @@ public static class Suggestion
 
     /// <summary>
     /// 标准那句话,前面自带一个空格,一个候选都没有时给 <paramref name="whenNone"/>。
-    /// 「一条都没有」的场合通常要说点别的(「'rimsearcher types' lists them all」),
+    /// 「一条都没有」的场合通常要说点别的(「'rimsearcher list' with no def type lists them all」),
     /// 所以那句也从这里过 —— 否则调用点还得自己写一遍三元判断,产地就又劈成两份。
     /// </summary>
     public static string Say(IReadOnlyCollection<string> closest, string whenNone = "")

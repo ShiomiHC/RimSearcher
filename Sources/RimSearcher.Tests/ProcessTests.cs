@@ -110,7 +110,7 @@ public class ProcessTests
     public void 输出以单个LF结尾且不含CR()
     {
         var psi = new ProcessStartInfo(Exe) { RedirectStandardOutput = true };
-        foreach (var a in new[] { "types", "--db", Fixture.Db, "--config", Fixture.NoConfigPath })
+        foreach (var a in new[] { "list", "--db", Fixture.Db, "--config", Fixture.NoConfigPath })
             psi.ArgumentList.Add(a);
         using var proc = Process.Start(psi)!;
         var raw = proc.StandardOutput.ReadToEnd();

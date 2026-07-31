@@ -26,6 +26,8 @@ is the only command that reads it, and it says so.
 | What can this field be set to? | `rimsearcher values <field>` |
 | What fields does this def type have? | `rimsearcher fields <DefType>` |
 | Everything of one kind | `rimsearcher list <DefType>` |
+| What kinds of def does this snapshot hold at all? | `rimsearcher list` with no type |
+| Which saved mod lists name this mod? | `rimsearcher modlist show --find <text>` |
 | What does this inherit from / what inherits from it? | `rimsearcher inherit <name>` |
 | Which layer of the chain writes this field? | `rimsearcher inherit <def> --path <field>` |
 | What does this interface text say, or which key is behind it? | `rimsearcher keyed <key or phrase>` |
@@ -270,10 +272,11 @@ and it is the only way to see a specific file when that MCP is not available.
 `notes` as `{kind, text}`, and the data sits beside it under a key that depends on the command —
 `defs` for `search`/`list`/`get`, `matches` for `code-search` and for `find` with a field path,
 `paths` for `find --value`, `nodes` for `inherit`, `keys` for `keyed`, `source` and `declarations`
-for `read`, and a key named after the command itself for `values`, `fields`, `types` and `mods`.
-Two commands carry a second key: `values` has `field`, saying which full paths and def types its
-value space was drawn from, and `code-search` has `ui_text`, holding the keyed translation of every
-key written as a literal on a matching line.
+for `read`, and a key named after the command itself for `values`, `fields` and `mods`.
+Three commands carry a second key: `values` has `field`, saying which full paths and def types its
+value space was drawn from, `code-search` has `ui_text`, holding the keyed translation of every
+key written as a literal on a matching line, and `list` swaps between `defs` and `types` according
+to whether you named a def type — the two never appear together.
 Do not guess: `<command> --help` lists that command's keys, as does
 [references/cli-reference.md](references/cli-reference.md). Reading a key the command does not
 produce gives you nothing, which is indistinguishable from an empty result. The key the command
@@ -305,7 +308,7 @@ the tool instead, where the counts stay honest:
 | `fields` | `--path`, `--offset`, `--limit` |
 | `values` | `--type`, `--scope`, `--offset`, `--limit` |
 | `search` | `--type`, `--scope`, `--offset`, `--limit` |
-| `list` | `--class`, `--scope`, `--offset`, `--limit` |
+| `list` | `--class`, `--scope`, `--offset`, `--limit` (`--class` and `--offset` need a def type) |
 | `inherit` | `--path`, `--limit` |
 | `keyed` | `--placeholders`, `--offset`, `--limit` |
 | `find` | `--scope`, `--exact`, `--offset`, `--limit` |
@@ -362,6 +365,14 @@ loading stage sits still it says so on stderr and **keeps waiting** — that lin
 verdict, and the only thing that stops the game is `--timeout`. Raise `--timeout` rather than
 treating a stall report as failure.
 
+That `<name>` is required, and `rimsearcher modlist list` is where it comes from: those saved lists
+are the only thing an export can be run against. One saved from the game's mod screen, one written
+by `modlist save`, and one typed by hand are equally valid. `modlist show <name>` prints a single
+list in load order, and `modlist show --find <text>` searches every list on this machine at once.
+That search answers **which saved lists name a mod**, which is not the same question as whether the
+mod is installed — nothing here reads the game's mod folder, and a zero result says so in those
+words rather than leaving you to read it as "not installed".
+
 ## Parameters
 
 `rimsearcher <command> --help` is authoritative, and
@@ -371,7 +382,7 @@ another command takes that option, which one — so a wrong guess costs one line
 answer.
 
 The global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the command name:
-`rimsearcher types --json`, not `rimsearcher --json types`. "Global" describes which commands
+`rimsearcher mods --json`, not `rimsearcher --json mods`. "Global" describes which commands
 take them, not where they sit.
 
 For the decompiler MCP, see [references/decompiler-mcp.md](references/decompiler-mcp.md).

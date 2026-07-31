@@ -1,4 +1,4 @@
-$ rimsearcher types
+$ rimsearcher list
 exit 0
 --- stdout ---
 4 def types.

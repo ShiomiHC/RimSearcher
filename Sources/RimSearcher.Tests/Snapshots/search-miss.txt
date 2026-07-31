@@ -2,5 +2,5 @@ $ rimsearcher search zzzznothing
 exit 1
 --- stdout ---
 Nothing matched 'zzzznothing' in this snapshot. This command covers def names, labels, descriptions and the translations injected onto defs — not C# class names, and not the UI strings under Languages/*/Keyed, which sit on a layer of their own that 'rimsearcher keyed' reads.
-'rimsearcher types' lists what kinds of def this snapshot holds, and 'rimsearcher mods' lists which mods it covers.
+'rimsearcher list' with no def type lists what kinds of def this snapshot holds, and 'rimsearcher mods' lists which mods it covers.
 --- stderr ---

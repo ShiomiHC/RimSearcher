@@ -163,11 +163,14 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
     }
 
     /// <summary>
-    /// 「不给 <c>--limit</c> 就是全量」的那几条命令(<c>types</c> / <c>mods</c>)用的取法。
+    /// 「不给 <c>--limit</c> 就是全量」的那几条命令(<c>mods</c>、以及 <c>list</c> 不带
+    /// def 类型的那一半)用的取法。
     ///
     /// 与 <see cref="Limit"/> 的区别只在**缺省值**:那边缺省是 25 条,这边缺省是全给 ——
-    /// 一份快照的 def 类型与 mod 就那么几十条,截一刀省不下什么,却让「一共有哪些」
-    /// 这个问题答不完整。写成 <c>Args.Value("limit") is null ? LimitValue.All : ctx.Limit()</c>
+    /// 截一刀会让「一共有哪些」这个问题答不完整,而这两处问的正是这个。
+    /// (原本的理由写的是「就那么几十条,截一刀省不下什么」,不成立:实测一份装了 mod 的
+    /// 快照有 232 个 def 类型。缺省全给是拿 context 换完整,不是白捡的便宜。)
+    /// 写成 <c>Args.Value("limit") is null ? LimitValue.All : ctx.Limit()</c>
     /// 曾在两处各写一份;那是一条**语义**(这条命令默认给全),不该以一个三元表达式的形态
     /// 散落在调用点。
     /// </summary>

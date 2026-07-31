@@ -733,11 +733,15 @@ public class GrammarTests
             // 存储桶的名字,不是一个 def
             ("ThingDef",          "is a def type in this snapshot", "find compClass"),
             // def 自己的运行时 class
-            ("TestVariantDef",    "--class TestVariantDef",         "rimsearcher types"),
+            //
+            // MustNot 这一串原先写的是 "rimsearcher types" —— 那条命令并进 list 之后
+            // 整份输出里再没有这几个字,断言于是恒真、闸再也红不了。锚点改成那句
+            // **兜底话自己**的措辞:它才是这一条要挡的东西(算得出落点就不许退回猜)。
+            ("TestVariantDef",    "--class TestVariantDef",         "lists what kinds of def this snapshot holds"),
             // 字段取值(comps[N].compClass 那一类)—— 这一支是修这条时自己弄丢又补回来的
             ("CompShield",        "rimsearcher find compClass CompShield", "no class"),
             // 快照覆盖的 mod
-            ("ludeon.rimworld",   "is a mod this snapshot covers",  "rimsearcher types"),
+            ("ludeon.rimworld",   "is a mod this snapshot covers",  "lists what kinds of def this snapshot holds"),
         ];
 
         foreach (var (query, must, mustNot) in cases)
@@ -1491,9 +1495,9 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 零行就是 exit 1,`types` 也不例外。R12 的退出码约定被四条命令守着、被这一条破着:
-    /// `types --scope brrainz.harmony` 印「0 def types.」然后 exit 0 —— 脚本按退出码分流
-    /// 会把它当成「查到了」,而唯一能纠正的信息在那一行散文里。
+    /// 零行就是 exit 1,列 def 类型的那一支也不例外。R12 的退出码约定被四条命令守着、
+    /// 被这一支破着:`list --scope brrainz.harmony` 印「0 def types.」然后 exit 0 ——
+    /// 脚本按退出码分流会把它当成「查到了」,而唯一能纠正的信息在那一行散文里。
     ///
     /// 顺带:那句话也不许把 scope 造成的空说成快照的空。`values` 原先回
     /// 「No def in this snapshot has a field path ending in 'defName'」——
@@ -1504,7 +1508,7 @@ public class GrammarTests
     {
         var empty = new[] { "--scope", "all,-ludeon.rimworld,-test.mod" };
 
-        var (types, _, tcode) = Fixture.Run(["types", .. empty]);
+        var (types, _, tcode) = Fixture.Run(["list", .. empty]);
         Assert.Equal(1, tcode);
         Assert.Contains("--scope all,-ludeon.rimworld,-test.mod", types, StringComparison.Ordinal);
         Assert.Matches(@"Snapshot-wide the figure is \d+ def types?\.", types);
@@ -1690,7 +1694,7 @@ public class GrammarTests
             ("paths",     ["find", "--value", "zzznothing"]),
             ("fields",    ["fields", "ThingDef", "--path", "zzznothing"]),
             ("values",    ["values", "zzznotafield"]),
-            ("types",     ["types", "--scope", "all,-ludeon.rimworld,-test.mod"]),
+            ("types",     ["list", "--scope", "all,-ludeon.rimworld,-test.mod"]),
             ("truncated", ["snapshot", "truncated", "--def", "zzznothing"]),
             ("matches",   ["code-search", "zzzznothing"]),
             // 八轮审计:上面这张表原先到此为止,而**表里没有的命令恰恰是没兑现的那几条**。
@@ -2370,5 +2374,103 @@ public class GrammarTests
         Assert.DoesNotContain("not that this def chose it", own, StringComparison.Ordinal);
     }
 
+    // ---- mod 列表这一层(收束时才发现它一道闸都没有)----
 
+    /// <summary>
+    /// 「某份保存的列表点了它的名」与「这份快照覆盖了它」是两个问题,而且答案会不一样 ——
+    /// 列表是**导出的输入**,快照是导出的产物,中间隔着一次没跑过的导出。
+    ///
+    /// 落空那一句是这条的要害。`modlist show --find` 找不到时,唯一诚实的话是
+    /// 「没有哪份列表点它的名」,**不是**「本机没装」—— 后者这条命令根本没看过。
+    /// 实现里那句话写对了,而这道闸是它的产地凭据:说宽一格,读的人就会拿一次
+    /// exit 1 当成「这个 mod 不存在」,而那正是这套输出一直在清的那种同形。
+    /// </summary>
+    [Fact]
+    public void 列表点没点名与快照覆没覆盖是两个问题()
+    {
+        // fixture-extra 点了 test.notinsnapshot 的名,而快照里没有它。
+        var (found, _, fcode) = Fixture.Run("modlist", "show", "--find", "test.notinsnapshot");
+        Assert.Equal(0, fcode);
+        Assert.Contains("fixture-extra", found, StringComparison.Ordinal);
+
+        var (covered, _, _) = Fixture.Run("mods");
+        Assert.DoesNotContain("test.notinsnapshot", covered, StringComparison.Ordinal);
+
+        // 一份列表都没点名时,不许把话说成「没装」。
+        var (miss, _, mcode) = Fixture.Run("modlist", "show", "--find", "zzznotamodanywhere");
+        Assert.Equal(1, mcode);
+        Assert.Contains("says nothing about whether it is installed", miss, StringComparison.Ordinal);
+    }
+
+    // ---- types 并入 list(功能收束)----
+
+    /// <summary>
+    /// <c>types</c> 与 <c>list</c> 问的是同一张表的两个层级:「有哪些桶」与「桶里有哪些 def」。
+    /// 并成一条之后,**不给 def 类型**就是问上面那一层 —— 而这一层原先只有 exit 2。
+    ///
+    /// 判的是这条路走得通且答的是 def 类型:退出码、计数句的名词、表头。
+    /// 不判逐字措辞 —— 那一份在字节基线里。
+    /// </summary>
+    [Fact]
+    public void 不给def类型时list答的是有哪些def类型()
+    {
+        var (bare, _, code) = Fixture.Run("list");
+        Assert.Equal(0, code);
+        // 三态文法的第一句:数的名词必须是 def type,不是 def。
+        Assert.Matches(@"^\d+( of \d+)? def types?\.", bare);
+        Assert.Contains("def_type", bare, StringComparison.Ordinal);
+
+        // 老名字还认(别名),且与裸 list 逐字同形 —— 两个拼法一个产地。
+        var (aliased, _, acode) = Fixture.Run("types");
+        Assert.Equal(0, acode);
+        Assert.Equal(bare, aliased);
+    }
+
+    /// <summary>
+    /// 一条命令按有没有 def 类型换数据键(<c>defs</c> / <c>types</c>),而两边都得在
+    /// **开查之前**声明 —— 否则零行时那个键整个消失,消费方拿到的不是空数组而是 KeyError,
+    /// 与「工具崩了」同形(<see cref="Report.Promises"/> 的产地注释)。
+    ///
+    /// 反向也判:认领的那张有、另一张不许平白出现。空数组在机器侧读作「查过了,没有」,
+    /// 凭空多一个就是凭空多一句假话。
+    /// </summary>
+    [Fact]
+    public void list按有没有给def类型换数据键且两边互斥()
+    {
+        var (types, _, _) = Fixture.Run("list", "--json");
+        using var t = System.Text.Json.JsonDocument.Parse(types);
+        Assert.True(t.RootElement.TryGetProperty("types", out _));
+        Assert.False(t.RootElement.TryGetProperty("defs", out _));
+
+        var (defs, _, _) = Fixture.Run("list", "ThingDef", "--json");
+        using var d = System.Text.Json.JsonDocument.Parse(defs);
+        Assert.True(d.RootElement.TryGetProperty("defs", out _));
+        Assert.False(d.RootElement.TryGetProperty("types", out _));
+    }
+
+    /// <summary>
+    /// <c>--class</c> 与 <c>--offset</c> 只在给了 def 类型时才有意义。并条之后它们仍然
+    /// 声明在这条命令上,于是「不给类型还传了它们」有了一个新的沉默口子:照单收下、
+    /// 悄悄不生效,输出里没有任何迹象 —— 与 <see cref="CommandContext.Limit"/> 那条注释
+    /// 记的 <c>--limit 5000</c> 被静默夹紧是同一种事故。
+    ///
+    /// 所以当场退 2,并且**说清该往哪走**:桶归属这个问题下面那条零行分流早就会答。
+    /// </summary>
+    [Fact]
+    public void 不给def类型时不许悄悄吃掉class与offset()
+    {
+        foreach (var argv in new[] { new[] { "list", "--class", "TestVariantDef" },
+                                     ["list", "--offset", "2"] })
+        {
+            var (stdout, stderr, code) = Fixture.Run(argv);
+            Assert.Equal(2, code);
+            Assert.Equal("", stdout);
+            Assert.Contains($"--{argv[1].TrimStart('-')} needs a def type", stderr, StringComparison.Ordinal);
+        }
+
+        // 指的那条路真的走得通 —— 不许指了个空。
+        var (holder, _, hcode) = Fixture.Run("list", "TestVariantDef");
+        Assert.Equal(1, hcode);
+        Assert.Contains("--class TestVariantDef", holder, StringComparison.Ordinal);
+    }
 }
