@@ -141,6 +141,12 @@ public class SkillPromiseTests
         // ---- 落空的成因 ----
         new("A zero result names its own cause",
             "零结果按算得出来的落点分流"),
+        // 同一条规矩在 find 上的样子。第二句是**不给死路**那一半:算出来是个 def 名不等于
+        // 有人引用它,指一条必然空手的命令与不指路一样贵。
+        new("given a single word that is not a field path, `find`\n   works out what that word actually is",
+            nameof(GrammarTests.find给一个词落空时要说破那个词其实是什么)),
+        new("Where nothing refers to that name, it says so instead of\n   handing back a query that would come back empty",
+            nameof(GrammarTests.find给一个词落空时要说破那个词其实是什么)),
         new("If another registered snapshot has that def, the zero result says so by name",
             "别的快照里有时点名说出来"),
         new("If the snapshot covers Core only and your game has mods enabled",

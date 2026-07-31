@@ -211,6 +211,10 @@ stays local.
    `find --value World/WorldObjects/Expanding` searches every field and reports which paths
    hold it. Guessing a plausible field name and getting a clean, complete-looking table for
    the wrong field is the expensive failure here.
+   A guess that misses is not a dead end: given a single word that is not a field path, `find`
+   works out what that word actually is — a field value, a def name, a def type, a mod — and
+   names the query that reaches it. Where nothing refers to that name, it says so instead of
+   handing back a query that would come back empty.
 4. **A def type in `list` is a storage bucket, not a runtime class.** The game groups subclasses
    under their base's database, so `CreepJoinerAggressiveDef` instances live under
    `CreepJoinerBaseDef`. When a bucket holds more than one class, `list` adds a `class` column,
