@@ -66,6 +66,17 @@ public class OutputSnapshotTests
         { "find-hit",              ["find", "compClass", "RimWorld.CompShield"] },
         { "find-miss-compprops",   ["find", "compClass", "CompProperties_Shield"] },
         { "find-miss-field",       ["find", "noSuchField", "x"] },
+        // 单位置参数落空的三档。敲一个词进来的人多半给的是**值**而不是字段路径
+        // (这条命令的正脸就是「从一个类名或一个值反查 def」),所以名字的落点要当场算:
+        //   CompShield      它是某些 def 的字段取值 —— 指得动填好参数的 find
+        //   Bullet_Revolver 它是 def 名 —— NameLookup 那句「is not a def name」在这里是假话
+        //   noSuchField     哪儿都不是 —— 只剩那句带 <text> 占位的通用指路
+        { "find-miss-name-is-value", ["find", "CompShield"] },
+        { "find-miss-name-is-def", ["find", "Bullet_Revolver"] },
+        // def 名那一档的另一半:没有任何字段指向它 —— 那时不许指向一条空手而归的 --value,
+        // 「没有谁按名字引用它」本身就是答案。顺带钉住同名跨类型不让这句话变形。
+        { "find-miss-name-unreferenced", ["find", "Firefoam"] },
+        { "find-miss-bare",        ["find", "noSuchField"] },
         // 另一半问法。行的形状不同,--json 的顶层键也就不同(matches / paths)。
         { "find-by-value",         ["find", "--value", "CompShield"] },
         // 继承层的四条路各钉一份:抽象节点(有子、被 patch 点名)、具体 def(往上走)、

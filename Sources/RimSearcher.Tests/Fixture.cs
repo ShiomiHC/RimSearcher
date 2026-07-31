@@ -248,6 +248,9 @@ public static class Fixture
             ("soundPickup", "Standard_Pickup", DefaultState.Differs),
             ("soundInteract", "Standard_Pickup", DefaultState.Differs),
             ("thingClass", "RimWorld.Apparel", DefaultState.Differs),
+            // 唯一一条 def 指向 def 的字段。没有它,「这个 def 名被谁引用着」整份语料里无处可验,
+            // 而那正是 find 的 Examples 写着的问法(`find defaultProjectile Bullet_Revolver`)。
+            ("verbs[0].defaultProjectile", "Bullet_Revolver", DefaultState.Differs),
             // 列表元素的运行时类型(导出器 0.2.0 起才发这一维)。这是主快照里唯一一条
             // `.Class`,而 other 那份标着 0.1.0 —— 「量过了、没人用」与「这份快照根本
             // 没量」各有一个落点。

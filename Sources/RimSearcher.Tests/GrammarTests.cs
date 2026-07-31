@@ -2101,6 +2101,44 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// `find` 只给一个词时,那个词多半是**值**而不是字段路径 —— 这条命令的正脸就是
+    /// 「从一个类名或一个值反查 def」,而 `find CompShield` 曾经落在「没有这个字段路径」上死掉,
+    /// 同一份快照里 `find --value CompShield` 却当场有答案。
+    ///
+    /// 落点分流借 search 那一份产地,但 **def 名那一档要自己说**:借来的措辞是
+    /// 「'X' is not a def name」,而这里它就是 def 名,照借等于把一句假话摆在输出位置。
+    /// </summary>
+    [Fact]
+    public void find给一个词落空时要说破那个词其实是什么()
+    {
+        // 它是字段取值 —— 指路要把参数填好,而不是给一个 <text> 占位。
+        var (asValue, _, _) = Fixture.Run("find", "CompShield");
+        Assert.Contains("it appears as a field value", asValue, StringComparison.Ordinal);
+        Assert.Contains("'rimsearcher find --value CompShield'", asValue, StringComparison.Ordinal);
+        Assert.DoesNotContain("--value <text>", asValue, StringComparison.Ordinal);
+
+        // 它是 def 名 —— 借来的那句在这里是假话,一个字都不许出现。
+        var (asDef, _, _) = Fixture.Run("find", "Bullet_Revolver");
+        Assert.DoesNotContain("is not a def name", asDef, StringComparison.Ordinal);
+        Assert.Contains("is a def name in this snapshot, not a field path", asDef, StringComparison.Ordinal);
+
+        // 指出去的那条路要走得通,否则这句话只是把死路换了个说法。
+        var (points, _, code) = Fixture.Run("find", "--value", "Bullet_Revolver");
+        Assert.Equal(0, code);
+        Assert.Contains("verbs[0].defaultProjectile", points, StringComparison.Ordinal);
+
+        // 反面:没人引用的 def 名不许指向那条空手而归的命令,而要把「没人引用」说出来。
+        var (unreferenced, _, _) = Fixture.Run("find", "Firefoam");
+        Assert.Contains("no indexed field value points at it", unreferenced, StringComparison.Ordinal);
+        Assert.DoesNotContain("'rimsearcher find --value Firefoam'", unreferenced, StringComparison.Ordinal);
+
+        // 哪儿都不是的那一档:算不出来就退回带占位的通用指路,不许硬编一句猜测。
+        var (nowhere, _, _) = Fixture.Run("find", "noSuchField");
+        Assert.Contains("'rimsearcher find --value <text>'", nowhere, StringComparison.Ordinal);
+        Assert.DoesNotContain("is not a def name", nowhere, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 默认值折叠按「谁设的值」筛,而提问常常是「这个列表有几项」—— 两个维度正交,
     /// 却归同一个开关管。一整个列表项被折光时,「这个列表只有一项」就成了看得见的形状。
     ///

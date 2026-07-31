@@ -710,13 +710,28 @@ public sealed class FindCommand : Command
                     ["parentname"] = "abstract XML parents are not in a runtime snapshot at all; see 'rimsearcher get --help'",
                 };
 
+                // 只给了一个词的人给的多半不是字段路径而是一个**值** —— 这条命令的正脸就是
+                // 「从一个类名或一个值反查 def」。落点当场算得出来,就说算出来的那一条。
+                // 值也给了的那一支不进来:下面那句已经拿着那个值点名了 --value。
+                var placed = value is null && !identity.ContainsKey(path) ? Placed(ctx, path, scope) : null;
+
                 ctx.Report.Notice(NoticeKind.NextStep,
                     $"No def in this snapshot has a field path ending in '{path}'" +
                     (scope.IsAll ? "" : $" within --scope {scope.Expression}") + ". " +
                     (identity.TryGetValue(path, out var hint)
                         ? $"'{path}' is part of a def's identity rather than one of its fields: {hint}."
                         : "'rimsearcher fields <DefType> --path <text>' lists the paths that a def type actually has" +
-                          (value is null ? "." : $", and 'rimsearcher find --value {value}' finds which field holds that value.")));
+                          (value is not null
+                              ? $", and 'rimsearcher find --value {value}' finds which field holds that value."
+                              // 落点算出来了就不给这半句:下一句里同一条命令的参数是**填好的**。
+                              : placed is not null
+                                  ? "."
+                                  : ", and 'rimsearcher find --value <text>' finds which path holds a value " +
+                                    "you already know.")));
+
+                // 算得出来的结论排在索引边界那句之前;边界那句照旧挂 —— 「它是个值」并不
+                // 证明「它不同时是一个没进索引的字段」,两件事正交,叠加不替换。
+                if (placed is not null) ctx.Report.Notice(NoticeKind.NextStep, placed);
                 // identity 那一档不说:那时候答案已经给全了,再挂一句索引边界是纯噪音。
                 // `class` 是**唯一**的例外:导出器 0.2.0 起 `<path>.Class` 是一条真路径,
                 // 敲 `find Class X` 的人问的多半是嵌套子对象的类型,而 identity 那句只答了
@@ -798,6 +813,27 @@ public sealed class FindCommand : Command
         {
             var i = v.LastIndexOf('.');
             return i < 0 ? v : v[(i + 1)..];
+        }
+
+        // 落点分流借 search 那一份产地(NameLookup),**除了 def 名这一档**:那九档的措辞
+        // 是给「这个名字不是 def」写的,而 `find Bullet_Revolver` 里它就是 def 名 ——
+        // 照借会把一句假话摆在输出位置。def 名自己说,剩下八档原样复用。
+        static string? Placed(CommandContext ctx, string name, Snapshot.ScopeFilter scope)
+        {
+            if (ctx.Db.GetDefsNamed(name).Count == 0) return NameLookup.Locate(ctx, name, scope)?.Sentence;
+
+            // 指向 --value 之前先探一次,判据与那条命令自己的默认完全一致(子串)——
+            // 一个字段都没指向它时那句话是死路,而「没有谁按名字引用它」本身就是个答案。
+            // defName 那条路径不算数:它装的是这个 def 自己的名字,不是谁指向它。
+            var referenced = ctx.Db.PathsWithValue(name, scope, Limits.MaxSuggestions).Rows
+                                .Any(r => !string.Equals(r.Path, "defName", StringComparison.Ordinal));
+
+            return $"'{name}' is a def name in this snapshot, not a field path. 'rimsearcher get {name}' shows " +
+                   "what is in it" +
+                   (referenced
+                       ? $", and 'rimsearcher find --value {name}' names the fields that point at it."
+                       : ", and no indexed field value points at it — nothing in this snapshot refers to it " +
+                         "by name.");
         }
 
         // 一次命中横跨几种路径形状 —— 拿 find 的结果做集合差的人,少的正是这一句。
