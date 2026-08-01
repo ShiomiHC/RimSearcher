@@ -154,6 +154,14 @@ in the identity block is the def's **own** type (usually the same for every def 
 type), while `*.Class` and `*Class` rows — `genStep.Class`, `comps[0].compClass`,
 `thingClass` — are what actually runs.
 
+**A `genSteps[N]` position is not the run order.** `MapGenerator` sorts the steps by
+`GenStepDef.order` ascending, then by list index, so the numbering `get <MapGeneratorDef>
+--path genSteps` prints is the XML's and lines up with execution only by luck — `Space` looks
+like proof that it does (orders 100/875/1500 in list order), while `Asteroid` puts order 1500
+directly before order 200. Read each step's own `order` before concluding anything about
+sequence. Nothing in a snapshot pairs the two: the list position and the order value live on
+different defs.
+
 **How the `find Class` dimension arrived.** The runtime type of a nested `Class="…"` object
 is queryable under the field name `Class`. It arrived in two exporter steps — list elements
 (`<li Class="…">`) at 0.2.0, single class-picking fields (`GenStepDef.genStep`,
@@ -247,3 +255,17 @@ saved lists are the only thing an export can run against. One saved from the gam
 screen, one written by `modlist save`, and one typed by hand all appear in `modlist list` and
 read back the same way — a hand-written file carries no display names, which `modlist show`
 states rather than reporting anything missing.
+
+### Confirming a specific path survived truncation
+
+Every truncation report is a count, never a list of what was dropped: the exporter stops at
+the per-def cap and does not go on counting, so `snapshot truncated`'s number is a lower
+bound and no command can name the missing paths. Asking "was `statBases` itself cut on this
+def?" has no direct answer.
+
+The way through is a second snapshot. Export the same def with fewer mods enabled — fewer
+mods means fewer patched-in fields, so the def often lands under the cap — and diff the path
+sets from `get <def> --limit all --json` on each, normalising `[0]`, `[1]`, … to `[]` first.
+A path present in the smaller snapshot and absent in the larger one was cut; an empty
+difference is the confirmation. Reverse the reading if the def is truncated in *both*: then
+the diff bounds nothing and only a re-export with a smaller list settles it.

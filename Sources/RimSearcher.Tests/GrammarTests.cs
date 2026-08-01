@@ -1195,6 +1195,38 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// SKILL.md 里那几条**可实测**的默认与口径,逐条对回实现。它们各自都是一句
+    /// 「不这么以为就会拿错答案」的话,而文档与实现是两处产地。
+    /// </summary>
+    [Fact]
+    public void skill那几条可实测的默认与口径逐条对得上()
+    {
+        // code-search 默认区分大小写:错的那次拿到的零,与「真没有」形状相同。
+        var (wrongCase, _, missCode) = Fixture.Run("code-search", "thingcomp");
+        Assert.Equal(1, missCode);
+        var (folded, _, hitCode) = Fixture.Run("code-search", "thingcomp", "-i");
+        Assert.Equal(0, hitCode);
+        Assert.Contains("ThingComp", folded, StringComparison.Ordinal);
+        Assert.DoesNotContain("ThingComp", wrongCase, StringComparison.Ordinal);
+
+        // read 的 --limit 数的是印出来的行,方向与别处相反:all 是放开,不是收窄。
+        var (capped, _, _) = Fixture.Run("read", "vanilla/Verse/Widgets.cs", "--limit", "3");
+        var (whole, _, _) = Fixture.Run("read", "vanilla/Verse/Widgets.cs", "--limit", "all");
+        Assert.True(whole.Split('\n').Length > capped.Split('\n').Length);
+
+        // 「哪些 def 类型有这个字段」values 自己就答得出,不必按类型一个个扫。
+        var (types, _, _) = Fixture.Run("values", "compClass");
+        Assert.Contains("def_types", types, StringComparison.Ordinal);
+        Assert.Contains("ThingDef", types, StringComparison.Ordinal);
+        Assert.Contains("HediffDef", types, StringComparison.Ordinal);
+
+        // mod 列与 --scope 管的都是 def 的归属,不是谁写下了那个值。
+        var (scoped, _, _) = Fixture.Run("find", "thingClass", "--scope", "test.mod");
+        Assert.Contains("TestModGun", scoped, StringComparison.Ordinal);
+        Assert.DoesNotContain("Bullet_Revolver", scoped, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 抽象节点自己没有值,而 <c>same_value</c> 此前就整个不出 —— 于是 <c>165 of 165</c>
     /// 看着像铁证,实际上「这一层声明了它」与「后代各写各的」在数上分不开,分得开的
     /// 那一列不在场,而说破这件事的那句话埋在第四条脚注里。

@@ -83,6 +83,8 @@ so. A `--files` glob containing `/` starts at the tree name (`vanilla/**/Widgets
 
 - **PowerShell: single-quote regexes.** Double quotes eat backslashes — `\w+` becomes
   `w+`, an honest-looking zero.
+- **`code-search` is case-sensitive unless you pass `-i`** — `orbitalDebris` and
+  `OrbitalDebris` are two searches, and the wrong one's zero looks like absence.
 - **Never pipe through `grep` or `head`.** The filter runs *after* `--limit`, so it
   searches only the first page — and the truncation sentence shares the stream, so
   "truncated" silently becomes "absent". Narrow inside the command instead:
@@ -103,7 +105,11 @@ so. A `--files` glob containing `/` starts at the tree name (`vanilla/**/Widgets
 
   `head`'s replacement: paging commands take `--offset`; `read` `--member`/`--type`/
   `--outline`/`--lines`; `get` `--path` (field order carries no meaning); `code-search`
-  an anchored pattern plus `--source`/`--files`.
+  an anchored pattern plus `--source`/`--files`. `read`'s `--limit` is the odd one out —
+  it caps printed lines rather than narrowing a result set, so `--limit all` *widens*.
+  The rule guards against a hidden truncation, so it lifts where there is none to hide:
+  after `--limit all`, or on output that does not page. `read --member` has no in-command
+  window at all — read the count line, then pipe.
 - **Reverse-look-up field names, never guess.** `find --value <value>` reports which paths
   hold the value. A guessed field name that happens to exist returns a clean,
   complete-looking table for the wrong field — the most expensive failure here.
@@ -113,6 +119,14 @@ so. A `--files` glob containing `/` starts at the tree name (`vanilla/**/Widgets
   at a `.` — `find graphicData.shaderType` also collects `swimmingGraphicData.shaderType`.
   `--exact-path` pins the whole path, with `[]` standing for any index. This changes the
   answer, not the row count.
+- **The `mod` column says where the def was declared, not who wrote the value you asked
+  about**, and `--scope` filters that same thing. A comp a third-party mod bolts onto a
+  vanilla def stays filed under the vanilla mod: `--scope vanilla` keeps it,
+  `--scope all,-vanilla` drops it — backwards from the instinct. Nothing records which mod
+  authored a value.
+- **`values <field>` already answers "which def types have this field"** — its `def_types`
+  row names them with `n of m` coverage. `fields <DefType>` goes the other way and needs
+  the type up front.
 - **Never guess a class from a defName** — across what Ludeon ships, 98 of 167 `GenStepDef`s
   run a class not named after the def. Class names come only from `get`'s `*Class` rows. A zero from
   `code-search "class GenStep_<defName>"` is evidence about the name you invented.
@@ -243,6 +257,9 @@ game**; raise it, don't read a stall as failure.
 - **Answer disagrees with the game**: mod files changed since export — queries say so when
   detected, but the check is size and timestamp, so an edit preserving both, or anything
   under `Languages/`, passes unseen. Re-export before concluding the tool is wrong.
+- **`find Class <ClassName>` came back zero**: a C# class can be used with no def at all —
+  code `new`s it directly. Before believing a near-miss the zero result suggests, scan
+  unanchored: `code-search '<ClassName>' --limit all`; the construction site is the answer.
 - **Use text search last**: `find`/`values` are exact over resolved data; `code-search`
   matches identically-named things from unrelated types.
 

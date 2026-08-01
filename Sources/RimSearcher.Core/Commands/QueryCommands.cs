@@ -697,7 +697,10 @@ public sealed class FindCommand : Command
             new()
             {
                 Key = "matches",
-                What = "with a field path: one row per def that has it — def_name, def_type, value, mod.",
+                What = "with a field path: one row per def that has it — def_name, def_type, value, mod. " +
+                       "'mod' is where the def was declared, not who wrote the value: a comp another mod " +
+                       "bolts onto a vanilla def still reads as the vanilla mod, and --scope filters that " +
+                       "same column.",
             },
             new()
             {
@@ -1162,7 +1165,9 @@ public sealed class ListCommand : Command
             {
                 Key = "defs",
                 What = "with a def type: one row per def — def_name, label, mod, plus 'class' when the " +
-                       "bucket holds more than one def class.",
+                       "bucket holds more than one def class. 'mod' is where the def was declared, not who " +
+                       "last changed it: a def another mod patched still reads as its original mod, and " +
+                       "--scope filters that same column.",
             },
             new()
             {
