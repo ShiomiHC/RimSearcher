@@ -131,6 +131,28 @@ public sealed class KeyedCommand : Command
             ftsTotal = hitTotal;
             matchedTotal = hitMatched;
             matchedOn = "text";
+
+            // 查询词过了两道剥离而两道都不留痕(见 FtsText.EffectiveTerms)。不说破的话:
+            // `*` 看着像通配符 —— 换个位置放它,回来的是同一批、零警告;而剥掉一个下划线
+            // 会让前缀悄悄变宽,计数是一个更大集合的数,却与一个正常计数逐字同形。
+            //
+            // 只在这条路上说:精确 key 那一路走的是 SQL 等值比较,规范化碰不到它,
+            // 在那儿说就是错话。
+            var terms = FtsText.EffectiveTerms(query);
+            if (!string.Equals(string.Join(" ", terms), query.Trim(), StringComparison.Ordinal))
+                ctx.Report.Notice(NoticeKind.Boundary,
+                    $"'{query}' was not matched as typed: only letters and digits take part, so what ran was " +
+                    (terms.Count == 0
+                        ? "an empty query."
+                        : $"{NameList.Render(terms, Limits.MaxSuggestions)}.") +
+                    // 只在查询词里真有 `*` 时讲它 —— 否则这句话是答非所问,而下划线那种
+                    // 剥离与通配符无关。
+                    (query.Contains('*', StringComparison.Ordinal)
+                        ? " '*' is not a wildcard here: it is dropped like any other punctuation, which is why " +
+                          "moving it elsewhere in the query brings back the same rows."
+                        : "") +
+                    // 零结果时下面没有计数可指 —— 方位词只在真有东西可指时才用。
+                    (hits.Count > 0 ? " The count below is for what ran, not for what you typed." : ""));
         }
         else if (placeholdersOnly)
         {

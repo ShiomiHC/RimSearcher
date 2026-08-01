@@ -1,7 +1,7 @@
 $ rimsearcher fields ThingDef --limit 3 --offset 3
 exit 0
 --- stdout ---
-3 of 18 field paths, starting at 4; pass --offset 6 for the next page.
+3 of 20 field paths, starting at 4; pass --offset 6 for the next page.
 
 path                defs
 soundPickup         9

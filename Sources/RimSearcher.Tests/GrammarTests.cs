@@ -1127,6 +1127,53 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// <c>--path</c> 命中了几条、却没一条是整段时,那两句只穷举了两种读法,而漏掉的第三种
+    /// 正是名值对结构:<c>statBases[N].stat = MarketValue</c> 把**字段自己的名字搬进了值那
+    /// 一列**,<c>--path</c> 结构上够不着它。于是表干净、完整,答的却是另一个问题。
+    ///
+    /// 闸盯两头:够得着时报出来,而整段命中过的那些不许多这一句(那时没有歧义)。
+    /// </summary>
+    [Fact]
+    public void path部分命中时说破那个词也可能是个值()
+    {
+        // 'energy' 命中 comps[0].props.energy* 两条(都不是整段),而它同时是
+        // statBases[1].stat 的值 EnergyShieldRechargeRate 的一部分。
+        var (both, _, code) = Fixture.Run("get", "Apparel_ShieldBelt", "--path", "energy");
+        Assert.Equal(0, code);
+        Assert.Contains("A third reading is in play here", both, StringComparison.Ordinal);
+        Assert.Contains("find --value energy", both, StringComparison.Ordinal);
+
+        // 整段命中过:没有这种歧义,不许多话。
+        var (whole, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--path", "stat");
+        Assert.DoesNotContain("A third reading", whole, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <c>keyed</c> 的查询词要过两道剥离,而两道都不留痕:先是 FTS 的语法字符(<c>*</c> 就在
+    /// 其中),再是分词器把其余非字母数字当分隔符。于是 <c>Command*Settle</c> 与
+    /// <c>CommandSettle*</c> 回同一批、零警告 —— 只有再敲一个 <c>Settle*Command</c> 拿到零
+    /// 才知道 <c>*</c> 只是被删了;而 <c>CE_</c> 实际按 <c>CE</c> 匹配,计数是一个更宽集合的数。
+    ///
+    /// 闸盯两头:改过就说破,一字没改时不许多话。
+    /// </summary>
+    [Fact]
+    public void keyed说破查询词被规范化成了什么()
+    {
+        var (starred, _, _) = Fixture.Run("keyed", "Command*Settle");
+        Assert.Contains("was not matched as typed", starred, StringComparison.Ordinal);
+        Assert.Contains("CommandSettle", starred, StringComparison.Ordinal);
+        Assert.Contains("'*' is not a wildcard", starred, StringComparison.Ordinal);
+
+        // 下划线不是我们剥的,是分词器切的 —— 两道都要说破,否则计数无从解释。
+        var (underscore, _, _) = Fixture.Run("keyed", "CommandSettle_");
+        Assert.Contains("was not matched as typed", underscore, StringComparison.Ordinal);
+
+        // 一字没改:这句话不许出场,否则它退化成每次都挂的免责声明。
+        var (plain, _, _) = Fixture.Run("keyed", "CommandSettle");
+        Assert.DoesNotContain("was not matched as typed", plain, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 表头把命中拆成「精确」与「包含」两组,分的是**路径**;而右边那列数的是 def,一直按
     /// 包含计。两个口径叠在一张表里而不说破,「56 精确」会把整张表连同 defs 列一起读成精确数。
     /// </summary>

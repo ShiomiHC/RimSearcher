@@ -292,6 +292,11 @@ public static class Fixture
             // ContainerPrefix 对任何带下标的层都成立,兄弟提示不许把块名写死成 comps[N]。
             ("statBases[0].stat", "MarketValue", DefaultState.Differs),
             ("statBases[0].value", "120", DefaultState.Differs),
+            // 名值对把**字段名搬进值那一列**:按 'energy' 筛路径会命中 comps 那两条
+            // (含它、但不是整段),而玩家真正要的那个数坐在这里的值上,--path 够不着。
+            // 与游戏里的形状一致 —— EnergyShieldRechargeRate 是个 stat 名,energyMax 是 comp 字段。
+            ("statBases[1].stat", "EnergyShieldRechargeRate", DefaultState.Differs),
+            ("statBases[1].value", "0.13", DefaultState.Differs),
             // 噪声:末段匹配应把这两条挡掉
             ("shortHash", "12345", DefaultState.Differs),
             ("comps[0].index", "0", DefaultState.Same),

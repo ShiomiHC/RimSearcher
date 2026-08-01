@@ -87,6 +87,32 @@ public static class FtsText
         return parts.Count == 0 ? "\"\"" : string.Join(" ", parts);
     }
 
+    /// <summary>
+    /// 这个查询词**真正参与匹配**的是哪几段。说破用的 —— 匹配本身仍走
+    /// <see cref="BuildMatchQuery"/>,这里是它那两道剥离的可读形态。
+    ///
+    /// 两道叠在一起,而两道都不留痕:先是 <see cref="FtsSpecials"/>(FTS5 的语法字符,
+    /// 留着会让 MATCH 解析失败),它把 <c>Command*Settle</c> **拼**成 <c>CommandSettle</c>;
+    /// 再是分词器把其余非字母数字当分隔符,于是 <c>CE_</c> 实际按 <c>CE</c> 匹配。
+    /// 第一道让 <c>*</c> 看着像通配符,第二道让前缀计数悄悄变宽。
+    /// </summary>
+    public static IReadOnlyList<string> EffectiveTerms(string userQuery)
+    {
+        var result = new List<string>();
+        foreach (var raw in Tokenize(userQuery))
+        {
+            var clean = new string(raw.Where(c => !FtsSpecials.Contains(c)).ToArray());
+            var sb = new StringBuilder();
+            foreach (var c in clean)
+            {
+                if (char.IsLetterOrDigit(c)) sb.Append(c);
+                else if (sb.Length > 0) { result.Add(sb.ToString()); sb.Clear(); }
+            }
+            if (sb.Length > 0) result.Add(sb.ToString());
+        }
+        return result;
+    }
+
     private static List<string> Tokenize(string q)
     {
         var result = new List<string>();

@@ -7,7 +7,7 @@ label        shield belt
 class        Verse.ThingDef
 mod          ludeon.rimworld
 source       Apparel_Belts.xml
-Matching 'comps': 3 fields, out of 10 fields on the def.
+Matching 'comps': 3 fields, out of 12 fields on the def.
 
 path                                value                code_default
 comps[0].compClass                  RimWorld.CompShield  yes

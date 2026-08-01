@@ -429,6 +429,15 @@ public sealed class GetCommand : Command
                     // 相反的字段,所以要说破「整段一次都没命中」。整段命中的数在**截断之前**
                     // 数(matchedPaths 不受 --limit 影响),否则换个 --limit 就换一句结论。
                     var whole = matchedPaths.Count(x => PathSegments.IsWholeSegment(x, paths));
+
+                    // 第三种可能,而那两句只穷举了两种:名值对结构(statBases[N].stat = MarketValue)
+                    // 把**字段的名字搬进了值那一列**,--path 结构上够不着它。于是「命中了几条、
+                    // 但没一条是整段」这张表干净、完整,答的却是另一个问题。这一档查得出来,
+                    // 就查出来 —— 与完全没命中那支同一个探针。
+                    var alsoValue = whole == 0
+                        ? paths.Where(t => ctx.Db.ValueHits(def.Id, t) > 0).ToList()
+                        : [];
+
                     ctx.Report.Notice(NoticeKind.Filter,
                         $"Matching {PathFilterText.Say(paths)}{whose}: " +
                         $"{Tally.Complete(matched).Render("field")}, out of " +
@@ -440,7 +449,14 @@ public sealed class GetCommand : Command
                             ? $" None of those has {PathFilterText.Say(paths)} as a whole path segment: each match contains " +
                               "it inside a longer name. Either those longer names are the fields you meant, or " +
                               "nothing here is called exactly that — this line removes none of the matched " +
-                              "fields, so read them before deciding which."
+                              "fields, so read them before deciding which." +
+                              (alsoValue.Count > 0
+                                  ? " A third reading is in play here: this def also carries " +
+                                    $"{PathFilterText.Say(alsoValue)} as a field's *value*, not in any path. " +
+                                    "A name/value pair puts the field's own name in the value column " +
+                                    "(statBases[N].stat = MarketValue), where --path cannot reach it — " +
+                                    $"'rimsearcher find --value {alsoValue[0]}' goes at it from that side."
+                                  : "")
                             : whole < matched
                                 ? $" Whole path segment: {Tally.Complete(whole).Render("field")}; " +
                                   $"inside a longer name: {Tally.Complete(matched - whole).Render("field")}."
