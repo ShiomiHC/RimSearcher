@@ -2028,7 +2028,8 @@ public class GrammarTests
         // 反面那半 —— 承重的是这一半。
         Assert.Contains("this snapshot has no XML fingerprint", stdout, StringComparison.Ordinal);
         // 明细表里也要有一格,而且是这个字面:SKILL.md 拿它教人怎么认出「这条判据没量过」。
-        Assert.Contains("xml_fingerprint   not recorded", stdout, StringComparison.Ordinal);
+        Assert.Contains("xml_fingerprint   not recorded (exported before this was measured)",
+                        stdout, StringComparison.Ordinal);
         Assert.Contains("leaves this line reading 'matches' all the same", stdout, StringComparison.Ordinal);
 
         // 导出那一刻要报出来:「自那以后改过的文件看不见」这句话没有时刻就落不了地。

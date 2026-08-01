@@ -72,7 +72,9 @@ public class SkillPromiseTests
             nameof(界面文案不在search的射程里而keyed认它)),
         new("a zero result names which one you hit",
             nameof(界面文案不在search的射程里而keyed认它)),
-        new("`code-search` resolves every key written as a literal on a matching line and prints a `ui_text` table beside the hits",
+        // 「every key written as a literal on a matching line」两处都太宽:触发条件是
+        // `.Translate()` 收下的字面量,而覆盖面是**印出来的**行而非全部命中行。
+        new("resolves the literal keys passed to `.Translate()` on the lines it prints and appends a `ui_text` table beside the hits",
             nameof(code_search把字面量key的译文当场解出来)),
         new("A key the code assembles at runtime (`\"Stat_\" + x`) has no literal to resolve, and the answer says how many lines were like that rather than leaving them blank",
             nameof(code_search把字面量key的译文当场解出来)),
@@ -170,8 +172,12 @@ public class SkillPromiseTests
             "漂移声明点名到mod"),
         new("a re-download of identical bytes reads as a change, and an edit that preserves both is\nthe one case it misses",
             "量过了也要说清比的只是尺寸与时间戳"),
-        new("prints\n`xml_fingerprint: not recorded`",
+        // 2026-08-01 实测校对:原文钉的是 `xml_fingerprint: not recorded` —— 冒号那个形状
+        // 输出里不存在(是对齐的列),而字面也被截短了。钉住的必须是渲染器真吐的那一串。
+        new("`xml_fingerprint` as `not recorded (exported before this was measured)`",
             nameof(GrammarTests.一致这句话要同时说清没比的是什么)),
+        new("names the source only in the fallback case",
+            "版本来自ModsConfig时说破它会落后"),
         new("which the game only rewrites when you save a change on\nits mod list page",
             "版本来自ModsConfig时说破它会落后"),
     ];
