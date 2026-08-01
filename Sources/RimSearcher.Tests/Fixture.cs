@@ -365,7 +365,13 @@ public static class Fixture
             ("soundPickup", "Standard_Pickup", DefaultState.Differs),
             ("soundInteract", "Standard_Pickup", DefaultState.Differs),
             ("thingClass", "RimWorld.Building", DefaultState.Differs),
-            ("statBases[0].stat", "MarketValue", DefaultState.Differs));
+            ("statBases[0].stat", "MarketValue", DefaultState.Differs),
+            // 点路径的后缀不在 `.` 上对齐:问 graphicData.texPath 会把下面这条
+            // blueprintGraphicData.texPath 一起收走。形状照抄游戏里真有的那一对 ——
+            // --exact-path 唯一的落点,少了它这件事只在真快照上看得见。
+            ("graphicData.texPath", "Things/Building/Nozzle", DefaultState.Differs),
+            ("building.blueprintGraphicData.texPath", "Things/Building/Blueprint_Nozzle",
+             DefaultState.Differs));
 
         Def("StatDef", "Firefoam", null, "ludeon.rimworld", "Stats_Basics.xml", false, 0);
 
@@ -382,7 +388,9 @@ public static class Fixture
             ("soundPickup", "Standard_Pickup", DefaultState.Differs),
             ("soundInteract", "Standard_Pickup", DefaultState.Differs),
             ("thingClass", "RimWorld.Building", DefaultState.Differs),
-            ("statFactors[0].stat", "MarketValue", DefaultState.Differs));
+            ("statFactors[0].stat", "MarketValue", DefaultState.Differs),
+            // 第二个整段命中,于是「精确」那一路数得出 2 而不是 1。
+            ("graphicData.texPath", "Things/Building/Cannon", DefaultState.Differs));
 
         // 三级匹配的语料:查 "VoidNode" 时 FTS 命中前两个(词首对齐),第三个只有子串扫描找得到。
         // 混合命中是「N of M 的 M 不许随 --limit 变」那道闸唯一的落点。

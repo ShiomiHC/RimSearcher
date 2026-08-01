@@ -91,12 +91,12 @@ so. A `--files` glob containing `/` starts at the tree name (`vanilla/**/Widgets
 |---|---|
 | `get` | `--path`, `--type`, `--defaults`, `--limit` |
 | `fields` | `--path`, `--offset`, `--limit` |
-| `values` | `--type`, `--scope`, `--offset`, `--limit` |
+| `values` | `--type`, `--scope`, `--exact-path`, `--offset`, `--limit` |
 | `search` | `--type`, `--scope`, `--offset`, `--limit` |
 | `list` | `--find`, `--class`, `--scope`, `--offset`, `--limit` |
 | `inherit` | `--path`, `--limit` |
 | `keyed` | `--placeholders`, `--offset`, `--limit` |
-| `find` | `--scope`, `--exact`, `--offset`, `--limit` |
+| `find` | `--scope`, `--exact`, `--exact-path`, `--offset`, `--limit` |
 | `code-search` | `--source`, `--files`, `--max-files`, `--max-per-file`, `--limit` |
 | `read` | `--member`, `--type`, `--lines`, `--outline`, `--source`, `--limit` |
 | `sources sync` | `--only`, `--modlist`, `--force`, `--dry-run` |
@@ -107,9 +107,12 @@ so. A `--files` glob containing `/` starts at the tree name (`vanilla/**/Widgets
 - **Reverse-look-up field names, never guess.** `find --value <value>` reports which paths
   hold the value. A guessed field name that happens to exist returns a clean,
   complete-looking table for the wrong field — the most expensive failure here.
-- **`find`'s path is a whole-segment suffix; every `--path` filter is a substring.** Opposite
-  reach for the same word: `find genSteps` never sees `extraGenSteps[N]`, while
-  `fields BiomeDef --path enStep` finds both. This changes the answer, not the row count.
+- **`find`'s path is matched from the end; every `--path` filter is a substring.** A bare name
+  matches the last segment whole (`find genSteps` never sees `extraGenSteps[N]`, while
+  `fields BiomeDef --path enStep` finds both), but a dotted one is raw text that does not stop
+  at a `.` — `find graphicData.shaderType` also collects `swimmingGraphicData.shaderType`.
+  `--exact-path` pins the whole path, with `[]` standing for any index. This changes the
+  answer, not the row count.
 - **Never guess a class from a defName** — across what Ludeon ships, 98 of 167 `GenStepDef`s
   run a class not named after the def. Class names come only from `get`'s `*Class` rows. A zero from
   `code-search "class GenStep_<defName>"` is evidence about the name you invented.

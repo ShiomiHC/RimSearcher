@@ -93,6 +93,21 @@ public static class CommonOptions
         Narrows = true,
     };
 
+    /// <summary>
+    /// 后缀匹配的对侧开关。默认那条后缀是纯文本、不在 <c>.</c> 上对齐,于是
+    /// <c>graphicData.shaderType</c> 连 <c>swimmingGraphicData.shaderType</c> 一起收走 ——
+    /// 结果里那句「横跨几种路径形状」说得出这件事,而在此之前没有一条命令能把它筛掉。
+    /// </summary>
+    public static readonly OptionSpec ExactPath = new()
+    {
+        Name = "exact-path",
+        Aliases = ["whole-path", "path-exact"],
+        Arity = Arity.Flag,
+        Help = "Match the field path as a whole instead of as a suffix. Write '[]' for any index, so a path " +
+               "shape such as 'lifeStages[].bodyGraphicData.shaderType' can be pasted straight back in.",
+        Narrows = true,
+    };
+
     public static readonly OptionSpec Type = new()
     {
         Name = "type",

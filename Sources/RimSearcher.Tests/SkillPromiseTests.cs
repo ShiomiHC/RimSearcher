@@ -168,6 +168,11 @@ public class SkillPromiseTests
         // 而「覆写了基类的什么」正是读轮廓的人最常从这里得出的结论。
         new("they point at opposite next steps",
             nameof(GrammarTests.轮廓分得出覆写与新引入并报出读的是哪个文件)),
+        // 第九轮盲测证伪了这里原来那句「whole-segment suffix」:点路径是纯文本后缀,
+        // 不在 `.` 上对齐。承诺改成实况的同时钉住新开关 —— 没有它这条说明只是个警告。
+        new("a dotted one is raw text that does not stop", nameof(GrammarTests.点路径的后缀不在点上对齐而exactpath钉得住)),
+        new("`--exact-path` pins the whole path, with `[]` standing for any index",
+            nameof(GrammarTests.点路径的后缀不在点上对齐而exactpath钉得住)),
         new("on a Core-only snapshot, `1 def` means one in Core",
             "被scope挡住时说破是过滤器干的"),
 

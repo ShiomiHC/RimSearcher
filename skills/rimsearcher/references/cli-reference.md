@@ -279,7 +279,7 @@ Find defs by the value of a field. This is the reverse lookup: from a C# class o
 rimsearcher find [fieldPath] [value] [options]
 ```
 
-The field path is matched from the end, so 'compClass' finds 'comps[3].compClass' without you knowing the index. This replaces grepping the XML: the values here are the merged, post-patch ones, and a class reference is an exact match rather than a text hit.
+The field path is matched from the end, so 'compClass' finds 'comps[3].compClass' without you knowing the index. That suffix is plain text and does not stop at a '.', so 'graphicData.shaderType' also matches 'swimmingGraphicData.shaderType'; --exact-path pins the whole path. This replaces grepping the XML: the values here are the merged, post-patch ones, and a class reference is an exact match rather than a text hit.
 
 | Argument | Meaning |
 |---|---|
@@ -292,6 +292,7 @@ The field path is matched from the end, so 'compClass' finds 'comps[3].compClass
 | `--offset` <n> | Skip this many defs before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
 | `--exact` | Require the whole value to match, with either a field path or --value. Without it, the value is matched as a substring. | `--exact-match`, `--whole` |
+| `--exact-path` | Match the field path as a whole instead of as a suffix. Write '[]' for any index, so a path shape such as 'lifeStages[].bodyGraphicData.shaderType' can be pasted straight back in. | `--whole-path`, `--path-exact` |
 | `--value` <text> | The value to look for, same as giving it as an argument. Without a field path, every field is searched and the report names which paths hold it. | `--any-field`, `--search-values`, `--holding` |
 
 `--json` keys, besides the global `notes`:
@@ -858,6 +859,7 @@ Answers 'what am I allowed to put here' and 'which classes are actually in use' 
 | `--offset` <n> | Skip this many values before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind`, `--category` |
+| `--exact-path` | Match the field path as a whole instead of as a suffix. Write '[]' for any index, so a path shape such as 'lifeStages[].bodyGraphicData.shaderType' can be pasted straight back in. | `--whole-path`, `--path-exact` |
 
 `--json` keys, besides the global `notes`:
 

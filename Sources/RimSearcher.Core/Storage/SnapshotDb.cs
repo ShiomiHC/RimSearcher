@@ -42,6 +42,21 @@ public enum ValueMatch
 }
 
 /// <summary>
+/// 一个字段路径怎么比。
+///
+/// 默认是**后缀**,而且不在 <c>.</c> 上对齐(上游 <c>find</c> 的语义):
+/// <c>graphicData.shaderType</c> 会把 <c>swimmingGraphicData.shaderType</c> 一起收走。
+/// <paramref name="Exact"/> 把它钉成整条路径。
+///
+/// 精确态里 <c>[]</c> 是任意下标的通配 —— 「这批命中横跨几种路径形状」那句印出来的
+/// 就是带 <c>[]</c> 的形状,而它是读的人手上唯一一条现成的收窄依据,得能原样粘回来。
+/// </summary>
+public readonly record struct PathQuery(string Text, bool Exact = false)
+{
+    public static implicit operator PathQuery(string text) => new(text);
+}
+
+/// <summary>
 /// 一条译文。<paramref name="DefType"/> 为 null 表示这条是从语言文件收割的,注入 key
 /// 只有 <c>DefName.field</c> —— 同名跨 def 类型时它归谁在数据源里就是不确定的。
 /// </summary>
@@ -465,22 +480,12 @@ public sealed class SnapshotDb : IDisposable
     /// 因为调用方通常只知道末段(<c>compClass</c>),不知道完整路径(<c>comps[3].compClass</c>)。
     /// </summary>
     public (IReadOnlyList<(DefRow Def, string Path, string? Value, int Default)> Rows, int Total)
-        FindByField(string pathSuffix, string? value, bool exact, ScopeFilter scope, int limit, int offset = 0)
+        FindByField(PathQuery path, string? value, bool exact, ScopeFilter scope, int limit, int offset = 0)
     {
         var p = new Dictionary<string, object?>();
         var conds = new List<string>();
 
-        var leaf = NoiseFilter.Leaf(pathSuffix);
-        if (pathSuffix.Contains('.') || pathSuffix.Contains('['))
-        {
-            p["@path"] = "%" + pathSuffix;
-            conds.Add("fv.path LIKE @path");
-        }
-        else
-        {
-            p["@leaf"] = leaf;
-            conds.Add("fv.leaf = @leaf COLLATE NOCASE");
-        }
+        PathCondition(path, p, conds);
 
         if (value is { Length: > 0 })
         {
@@ -513,22 +518,12 @@ public sealed class SnapshotDb : IDisposable
     /// 而「两种形状」才是做集合运算的人要判的那件事。
     /// </summary>
     public IReadOnlyList<(string Shape, int Count)> FindPathShapes(
-        string pathSuffix, string? value, bool exact, ScopeFilter scope)
+        PathQuery path, string? value, bool exact, ScopeFilter scope)
     {
         var p = new Dictionary<string, object?>();
         var conds = new List<string>();
 
-        var leaf = NoiseFilter.Leaf(pathSuffix);
-        if (pathSuffix.Contains('.') || pathSuffix.Contains('['))
-        {
-            p["@path"] = "%" + pathSuffix;
-            conds.Add("fv.path LIKE @path");
-        }
-        else
-        {
-            p["@leaf"] = leaf;
-            conds.Add("fv.leaf = @leaf COLLATE NOCASE");
-        }
+        PathCondition(path, p, conds);
 
         if (value is { Length: > 0 })
         {
@@ -655,21 +650,44 @@ public sealed class SnapshotDb : IDisposable
         return "WHERE " + string.Join(" AND ", conds);
     }
 
-    private static string SuffixWhere(string pathSuffix, ScopeFilter scope, Dictionary<string, object?> p)
+    private static string SuffixWhere(PathQuery path, ScopeFilter scope, Dictionary<string, object?> p)
     {
         var conds = new List<string>();
-        if (pathSuffix.Contains('.') || pathSuffix.Contains('['))
+        PathCondition(path, p, conds);
+        if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
+        return "WHERE " + string.Join(" AND ", conds);
+    }
+
+    /// <summary>
+    /// 路径条件的唯一产地。行表与计数表分开建条件的话,同一个 <c>--exact-path</c> 会让
+    /// 「这一页几条」与「一共几条」数的是两个集合。
+    /// </summary>
+    private static void PathCondition(PathQuery path, Dictionary<string, object?> p, List<string> conds)
+    {
+        if (path.Exact)
         {
-            p["@path"] = "%" + pathSuffix;
+            // `[]` 是下标通配。先转义再放通配 —— 反过来的话路径里真有的 % 会被当成通配。
+            if (path.Text.Contains("[]", StringComparison.Ordinal))
+            {
+                p["@path"] = Escape(path.Text).Replace("[]", "[%]", StringComparison.Ordinal);
+                conds.Add("fv.path LIKE @path ESCAPE '\\' COLLATE NOCASE");
+            }
+            else
+            {
+                p["@path"] = path.Text;
+                conds.Add("fv.path = @path COLLATE NOCASE");
+            }
+        }
+        else if (path.Text.Contains('.') || path.Text.Contains('['))
+        {
+            p["@path"] = "%" + path.Text;
             conds.Add("fv.path LIKE @path");
         }
         else
         {
-            p["@leaf"] = NoiseFilter.Leaf(pathSuffix);
+            p["@leaf"] = NoiseFilter.Leaf(path.Text);
             conds.Add("fv.leaf = @leaf COLLATE NOCASE");
         }
-        if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
-        return "WHERE " + string.Join(" AND ", conds);
     }
 
     /// <summary>
@@ -682,10 +700,10 @@ public sealed class SnapshotDb : IDisposable
     /// </summary>
     public (IReadOnlyList<(string Path, int Count)> Paths, int PathTotal,
             IReadOnlyList<(string DefType, int Count)> DefTypes, int DefsCovered)
-        ValueCoverage(string pathSuffix, ScopeFilter scope, int limit, string? defType = null)
+        ValueCoverage(PathQuery path, ScopeFilter scope, int limit, string? defType = null)
     {
         var p = new Dictionary<string, object?>();
-        var where = SuffixWhere(pathSuffix, scope, p);
+        var where = SuffixWhere(path, scope, p);
         // 产地块必须描述**值表实际统计的那批行**。--type 只筛值表而不筛产地块,就会出现
         // 「表里只有 ThingDef,产地却说还有 HediffDef 和 AbilityDef」。
         if (defType is { Length: > 0 }) { p["@cdt"] = defType; where += " AND d.def_type = @cdt COLLATE NOCASE"; }
@@ -751,10 +769,10 @@ public sealed class SnapshotDb : IDisposable
     /// 调用方自己已经把结果收到这一个类型上时,尾注也得跟着收 —— 否则会在一张与它无关的表
     /// 下面挂一个完整性告警,而**一旦有一句披露被发现是过期的,其余每一句都要被重新审视**。
     /// </param>
-    public TruncationScope TruncatedDefsSharingPath(string pathSuffix, ScopeFilter scope, string? defType = null)
+    public TruncationScope TruncatedDefsSharingPath(PathQuery path, ScopeFilter scope, string? defType = null)
     {
         var p = new Dictionary<string, object?>();
-        return TruncatedAmong(SuffixWhere(pathSuffix, scope, p), scope, p, defType);
+        return TruncatedAmong(SuffixWhere(path, scope, p), scope, p, defType);
     }
 
     /// <summary>
@@ -812,10 +830,10 @@ public sealed class SnapshotDb : IDisposable
     }
 
     /// <summary>某个字段后缀在快照里到底存不存在 —— find 的零结果要靠它分流成因。</summary>
-    public bool FieldPathExists(string pathSuffix, ScopeFilter scope)
+    public bool FieldPathExists(PathQuery path, ScopeFilter scope)
     {
         var p = new Dictionary<string, object?>();
-        var where = SuffixWhere(pathSuffix, scope, p);
+        var where = SuffixWhere(path, scope, p);
         return Scalar($"SELECT EXISTS(SELECT 1 FROM field_values fv JOIN defs d ON d.id = fv.def_id {where})", p) != 0;
     }
 
@@ -925,10 +943,10 @@ public sealed class SnapshotDb : IDisposable
     }
 
     public (IReadOnlyList<(string Value, int Count)> Rows, int Total) DistinctValues(
-        string pathSuffix, ScopeFilter scope, int limit, string? defType = null, int offset = 0)
+        PathQuery path, ScopeFilter scope, int limit, string? defType = null, int offset = 0)
     {
         var p = new Dictionary<string, object?>();
-        var where = SuffixWhere(pathSuffix, scope, p);
+        var where = SuffixWhere(path, scope, p);
         if (defType is { Length: > 0 })
         {
             p["@dt"] = defType;

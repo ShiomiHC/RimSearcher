@@ -644,8 +644,10 @@ public sealed class FindCommand : Command
         Summary = "Find defs by the value of a field. This is the reverse lookup: from a C# class or a value back to the defs that use it.",
         Remarks =
             "The field path is matched from the end, so 'compClass' finds 'comps[3].compClass' without you knowing " +
-            "the index. This replaces grepping the XML: the values here are the merged, post-patch ones, and a " +
-            "class reference is an exact match rather than a text hit.",
+            "the index. That suffix is plain text and does not stop at a '.', so 'graphicData.shaderType' also " +
+            "matches 'swimmingGraphicData.shaderType'; --exact-path pins the whole path. This replaces grepping " +
+            "the XML: the values here are the merged, post-patch ones, and a class reference is an exact match " +
+            "rather than a text hit.",
         Positionals =
         [
             new PositionalSpec { Name = "fieldPath", Help = "A field path or just its last segment, such as compClass or defaultProjectile. Omit it to search every field instead.", Required = false },
@@ -665,6 +667,7 @@ public sealed class FindCommand : Command
                        "Without it, the value is matched as a substring.",
                 Narrows = true,
             },
+            CommonOptions.ExactPath,
             new OptionSpec
             {
                 // 「别 grep XML」拿走了一种能力,就得给回等价的一种:不知道字段叫什么时
@@ -761,8 +764,9 @@ public sealed class FindCommand : Command
 
         var value = ctx.Args.Positional(1) ?? named;
         var exact = ctx.Args.Flag("exact");
+        var pq = new PathQuery(path, ctx.Args.Flag("exact-path"));
 
-        var (rows, total) = ctx.Db.FindByField(path, value, exact, scope, limit.Effective, offset);
+        var (rows, total) = ctx.Db.FindByField(pq, value, exact, scope, limit.Effective, offset);
 
         if (rows.Count > 0)
             ctx.Report.PageNotice("def", rows.Count, offset, total);
@@ -779,10 +783,28 @@ public sealed class FindCommand : Command
             void NoteElsewhere()
             {
                 if (NameLookup.Elsewhere(ctx, db => db.FindByField(
-                        path, value, exact,
+                        pq, value, exact,
                         Snapshot.ScopeFilter.Parse("all", db.PackageIds(), ctx.Config), 0, 0).Total, "def")
                     is { } line)
                     ctx.Report.Notice(NoticeKind.NextStep, line);
+            }
+
+            // --exact-path 自己把结果筛空,与「这个字段不存在」是两件事,而下面那套分流
+            // 会把它说成后者 —— 它问的是「路径存在吗」,而此时那条路径确实不以整段存在。
+            // 排在最前面:这条成因一旦成立,后面三条都不适用。
+            if (pq.Exact && ctx.Db.FieldPathExists(path, scope))
+            {
+                // 列出形状而不是报个数:那批形状本身就是下一条查询,而它们带的 `[]`
+                // 原样粘回 --exact-path 就走得通。
+                var shapes = ctx.Db.FindPathShapes(path, value, exact, scope);
+                var shown = shapes.Take(Limits.MaxSuggestions).ToList();
+                ctx.Report.Notice(NoticeKind.NextStep,
+                    $"No field path is exactly '{path}'. Matched as a suffix instead: " +
+                    string.Join(", ", shown.Select(x => $"{x.Shape} ({x.Count})")) +
+                    (shapes.Count > shown.Count ? $", and {shapes.Count - shown.Count} more shapes" : "") +
+                    ". Any one of those goes straight back into --exact-path, where '[]' stands for any index.");
+                NoteElsewhere();
+                return 1;
             }
 
             // 零结果有三种互斥成因,它们要的下一步完全不同:
@@ -791,7 +813,7 @@ public sealed class FindCommand : Command
             //   (3) 名字是 def 的身份而不是字段(class / def_type / mod / source)→ 该换命令
             // (1) 要先于近似项算:跳过它,`find zzznotafield somevalue` 会报
             // 「No def has 'zzznotafield' set to ...」,一句预设了字段存在的话。
-            var fieldExists = ctx.Db.FieldPathExists(path, scope);
+            var fieldExists = ctx.Db.FieldPathExists(pq, scope);
 
             if (!fieldExists)
             {
@@ -850,7 +872,7 @@ public sealed class FindCommand : Command
 
             // 直接把真实值域里的近似项端出来:一条字段的取值动辄上百(compClass 有 175 个),
             // 指一条「去跑 values」的路照样看不见答案。
-            var space = ctx.Db.DistinctValues(path, scope, Limits.MaxLimit).Rows.Select(v => v.Value).ToList();
+            var space = ctx.Db.DistinctValues(pq, scope, Limits.MaxLimit).Rows.Select(v => v.Value).ToList();
 
             // RimWorld 的约定:XML 里写的是 `Class="CompProperties_X"`,而落到 def 上的
             // comps[N].compClass 存的是被解析出来的 `CompX` —— 照 XML 抄的名字必然查不到。
@@ -871,7 +893,7 @@ public sealed class FindCommand : Command
 
             // 值域计数没有产地就是负资产:「out of 207 values」会被读成「值的形态有讲究」。
             // 数字得连着「这些值来自哪些路径 / 哪些 def 类型」一起说。
-            var cov = space.Count > 0 ? ctx.Db.ValueCoverage(path, scope, 3) : default;
+            var cov = space.Count > 0 ? ctx.Db.ValueCoverage(pq, scope, 3) : default;
             var provenance = space.Count == 0 ? "" :
                 $", out of the {Tally.Complete(space.Count).Render("value")} found under " +
                 (cov.Paths.Count > 0
@@ -896,7 +918,7 @@ public sealed class FindCommand : Command
             // 「零是这个圈造成的」差着一次重查,而这次重查是白拿的:同一条 SQL,scope 换成 all。
             var hiddenByScope = scope.IsAll
                 ? 0
-                : ctx.Db.FindByField(path, value, exact,
+                : ctx.Db.FindByField(pq, value, exact,
                                      Snapshot.ScopeFilter.Parse("all", ctx.Db.PackageIds(), ctx.Config),
                                      0, 0).Total;
             if (hiddenByScope > 0)
@@ -973,7 +995,7 @@ public sealed class FindCommand : Command
         }
 
         // 一次命中横跨几种路径形状 —— 拿 find 的结果做集合差的人,少的正是这一句。
-        Advisory.NoteMixedPathShapes(ctx, ctx.Db.FindPathShapes(path, value, exact, scope));
+        Advisory.NoteMixedPathShapes(ctx, ctx.Db.FindPathShapes(pq, value, exact, scope));
 
         // 这里不像 get 那样把默认值行滤掉:调用方点名了一个字段与一个值,「哪些 def 取到过它」
         // 的答案里就该有它们。但**为什么取到**要分得开 —— comps[N].compClass 一整批
@@ -991,7 +1013,7 @@ public sealed class FindCommand : Command
 
         Advisory.NoteAuthoredSiblings(ctx, rows.Where(r => r.Default != Contract.DefaultState.Same)
                                                 .Select(r => (r.Def.DefName, r.Def.Id, r.Path)));
-        Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(path, scope),
+        Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(pq, scope),
             "every def type that uses this path at all, not just the ones in the rows above");
         return 0;
     }
@@ -1514,7 +1536,11 @@ public sealed class ValuesCommand : Command
             "A bare name such as compClass matches every path ending in it, so the table above the values tells you " +
             "which full paths and which def types actually contributed, and how many defs are covered.",
         Positionals = [new PositionalSpec { Name = "fieldPath", Help = "A field path or its last segment, such as compClass." }],
-        Options = [CommonOptions.Limit("values"), CommonOptions.Offset("values"), CommonOptions.Scope, CommonOptions.Type],
+        Options =
+        [
+            CommonOptions.Limit("values"), CommonOptions.Offset("values"), CommonOptions.Scope,
+            CommonOptions.Type, CommonOptions.ExactPath,
+        ],
         Examples =
         [
             "rimsearcher values compClass",
@@ -1541,7 +1567,8 @@ public sealed class ValuesCommand : Command
         var scope = ctx.Scope();
         var type = ctx.Args.Value("type");
         var offset = ctx.Args.Offset();
-        var (rows, total) = ctx.Db.DistinctValues(path, scope, limit.Effective, type, offset);
+        var pq = new PathQuery(path, ctx.Args.Flag("exact-path"));
+        var (rows, total) = ctx.Db.DistinctValues(pq, scope, limit.Effective, type, offset);
 
         if (rows.Count == 0)
         {
@@ -1553,27 +1580,35 @@ public sealed class ValuesCommand : Command
 
             // 三种成因,要的下一步不同 —— 与 `find` 的分流同形:字段不存在 / 不在这个
             // --type 上 / 不在这个 --scope 里。空是 scope 造的就不能记在快照头上。
-            var withoutType = type is not null && ctx.Db.FieldPathExists(path, scope);
+            var withoutType = type is not null && ctx.Db.FieldPathExists(pq, scope);
             var wideScope = ScopeFilter.Parse("all", ctx.Db.PackageIds(), ctx.Config);
-            var outsideScope = !withoutType && !scope.IsAll && ctx.Db.FieldPathExists(path, wideScope);
+            var outsideScope = !withoutType && !scope.IsAll && ctx.Db.FieldPathExists(pq, wideScope);
+
+            // --exact-path 自己筛空,与「这个字段不存在」是两件事。它排在三条成因之前:
+            // 一旦成立,那三句都在描述另一个集合。
+            var loosely = pq.Exact && !withoutType && !outsideScope && ctx.Db.FieldPathExists(path, scope);
 
             ctx.Report.Notice(NoticeKind.NextStep,
-                withoutType
-                    ? $"'{path}' exists in this snapshot but not on any {type}. Drop --type to see which def types have it."
-                    : outsideScope
-                        ? $"'{path}' exists in this snapshot but no def has it within --scope {scope.Expression}. " +
-                          "Widen the scope, or run 'rimsearcher mods' to see what this scope could have matched."
-                        : $"No def in this snapshot has a field path ending in '{path}'" +
-                          (scope.IsAll ? "" : $" (nor anywhere outside --scope {scope.Expression})") + ". " +
-                          $"'rimsearcher fields <DefType>' lists the paths a type actually has, and " +
-                          $"'rimsearcher find --value <text>' finds which path holds a value you already know.");
-            if (!withoutType && !outsideScope) Completeness.NoteIndexHoldsValuesOnly(ctx);
+                loosely
+                    ? $"No field path is exactly '{path}', though some path ends in it. Drop --exact-path " +
+                      $"to pool them, and read matched_paths for the real shapes — one of those pasted back " +
+                      "with --exact-path is the narrow query."
+                    : withoutType
+                        ? $"'{path}' exists in this snapshot but not on any {type}. Drop --type to see which def types have it."
+                        : outsideScope
+                            ? $"'{path}' exists in this snapshot but no def has it within --scope {scope.Expression}. " +
+                              "Widen the scope, or run 'rimsearcher mods' to see what this scope could have matched."
+                            : $"No def in this snapshot has a field path ending in '{path}'" +
+                              (scope.IsAll ? "" : $" (nor anywhere outside --scope {scope.Expression})") + ". " +
+                              $"'rimsearcher fields <DefType>' lists the paths a type actually has, and " +
+                              $"'rimsearcher find --value <text>' finds which path holds a value you already know.");
+            if (!withoutType && !outsideScope && !loosely) Completeness.NoteIndexHoldsValuesOnly(ctx);
             return 1;
         }
 
         // 值的产地:后缀匹配天然会把语义不同的路径并进一张表,不说清就会被读成
         // 「这个字段到处都是这个值」。
-        var cov = ctx.Db.ValueCoverage(path, scope, Limits.MaxSuggestions, type);
+        var cov = ctx.Db.ValueCoverage(pq, scope, Limits.MaxSuggestions, type);
 
         // 这里的省略不是 NameList 那种「我取了前几条」—— cov.Paths 已经在 SQL 侧截过,
         // 手上根本没有第 4 条起的名字。分母只有 cov.PathTotal 知道,所以照实拼。
@@ -1591,6 +1626,15 @@ public sealed class ValuesCommand : Command
             new("defs_with_field", (object)cov.DefsCovered),
         ]);
 
+        // 这张表把几条路径的值**并成了一池**,而 matched_paths 只列得下前几条。不指出
+        // 收窄的办法,读的人手上就只有一个没法拆开的池子。
+        if (cov.PathTotal > 1 && !pq.Exact)
+            ctx.Report.Notice(NoticeKind.Boundary,
+                $"These values come from {Tally.Complete(cov.PathTotal).Render("field path")} pooled together, " +
+                "not from one field. Any path named above goes back in with --exact-path to pool that one " +
+                "alone; '[]' there stands for any index.",
+                footnote: true);
+
         ctx.Report.PageNotice("value", rows.Count, offset, total);
         ctx.Report.Table("values", ["value", "defs"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
@@ -1599,7 +1643,7 @@ public sealed class ValuesCommand : Command
                 ["defs"] = r.Count,
             }).ToList());
         // 尾注跟着 --type 一起收:表已经滤成一个类型了,脚注不能还在说别的类型。
-        Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(path, scope, type),
+        Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(pq, scope, type),
             type is { Length: > 0 }
                 ? $"all of {type}, the type this table is already filtered to"
                 : "every def type that uses this path at all, not just the ones in the rows above");
@@ -1883,7 +1927,8 @@ internal static class Advisory
             string.Join(", ", shown.Select(x => $"{x.Shape} ({x.Count})")) +
             (shapes.Count > shown.Count ? $", and {shapes.Count - shown.Count} more shapes" : "") +
             ". The suffix matched them all; a set operation over this result treats them as one field " +
-            "unless the path column is read row by row.",
+            "unless the path column is read row by row. Pasting one of those shapes back with " +
+            "--exact-path keeps that one alone.",
             footnote: true);
     }
 

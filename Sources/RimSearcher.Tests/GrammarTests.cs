@@ -1195,6 +1195,52 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 点路径的后缀是**纯文本**,不在 <c>.</c> 上对齐:问 <c>graphicData.texPath</c> 会把
+    /// <c>building.blueprintGraphicData.texPath</c> 一起收走,而两者是不同的字段。表干净、
+    /// 计数完整,答的是另一个问题 —— 第九轮盲测在真快照上量到 185 行里只有 130 行对得上。
+    ///
+    /// 闸盯三件事:开关真能钉住整段;<c>[]</c> 是下标通配(那句「横跨几种形状」印的就是
+    /// 带 <c>[]</c> 的形状,得能原样粘回来);以及它把结果筛空时说的是「不是整段」而不是
+    /// 「没有这个字段」。
+    /// </summary>
+    [Fact]
+    public void 点路径的后缀不在点上对齐而exactpath钉得住()
+    {
+        // 默认:两种形状一起收走。
+        var (loose, _, _) = Fixture.Run("find", "graphicData.texPath");
+        Assert.Contains("3 defs.", loose, StringComparison.Ordinal);
+        Assert.Contains("building.blueprintGraphicData.texPath", loose, StringComparison.Ordinal);
+
+        // 钉住整段:那条跨边界的不在了。
+        var (pinned, _, _) = Fixture.Run("find", "graphicData.texPath", "--exact-path");
+        Assert.Contains("2 defs", pinned, StringComparison.Ordinal);
+        Assert.DoesNotContain("blueprintGraphicData", pinned, StringComparison.Ordinal);
+
+        // `[]` 是下标通配:两条 statBases 都在,而写死 [0] 只留一条。
+        var (anyIndex, _, _) = Fixture.Run("find", "statBases[].stat", "--exact-path");
+        Assert.Contains("EnergyShieldRechargeRate", anyIndex, StringComparison.Ordinal);
+        var (zeroOnly, _, _) = Fixture.Run("find", "statBases[0].stat", "--exact-path");
+        Assert.DoesNotContain("EnergyShieldRechargeRate", zeroOnly, StringComparison.Ordinal);
+
+        // 被开关筛空:成因是「不是整段」,不是「没有这个字段」,而下一步就摆在句子里。
+        var (empty, _, code) = Fixture.Run("find", "blueprintGraphicData.texPath", "--exact-path");
+        Assert.Equal(1, code);
+        Assert.Contains("No field path is exactly 'blueprintGraphicData.texPath'", empty, StringComparison.Ordinal);
+        Assert.Contains("building.blueprintGraphicData.texPath (1)", empty, StringComparison.Ordinal);
+        Assert.DoesNotContain("No def in this snapshot has a field path", empty, StringComparison.Ordinal);
+
+        // values 同一条开关、同一条成因分流。并了池就说破自己并了几条,钉住了就不说 ——
+        // 否则那句话退化成每次都挂的免责声明。
+        var (pool, _, _) = Fixture.Run("values", "graphicData.texPath");
+        Assert.Contains("come from 2 field paths pooled together", pool, StringComparison.Ordinal);
+        var (pooled, _, _) = Fixture.Run("values", "graphicData.texPath", "--exact-path");
+        Assert.DoesNotContain("blueprintGraphicData", pooled, StringComparison.Ordinal);
+        Assert.DoesNotContain("pooled together", pooled, StringComparison.Ordinal);
+        var (none, _, _) = Fixture.Run("values", "blueprintGraphicData.texPath", "--exact-path");
+        Assert.Contains("Drop --exact-path", none, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 轮廓不印修饰符时,「覆写了基类的成员」与「自己新引入的可覆写成员」逐字同形 ——
     /// 两行都是 <c>property … n-n</c>,而它们对「接下来该去基类找什么」给出相反的答案。
     ///
