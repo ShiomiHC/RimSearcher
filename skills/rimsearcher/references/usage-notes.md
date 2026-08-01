@@ -64,7 +64,9 @@ data sits under a key that depends on the command. `<command> --help` lists each
 Code output is rows too, so nothing is parsed back out of `path:line:text`:
 `code-search` rows are `{file, line, is_match, group, text}`, `read` rows are
 `{file, line, text}` — `{file, line, kind, declaration, text}` when the lines came from
-`--member` or `--type`. `--json` never folds columns: every row carries every column.
+`--member` or `--type`. Under `--outline` the rows are `{kind, name, in, lines, at}` instead,
+and the last of those is a string like `"817-951"` to hand straight back to `--lines`, not a
+pair of integers. `--json` never folds columns: every row carries every column.
 Truncation notes carry `kind: "truncation"`. On the def-side commands that take `--path`
 (`get`, `inherit`, `fields`), the count of rows the filter matched carries `kind: "filter"` —
 a filter you asked for, not a cut-off; the code commands narrow files with `--files` instead.

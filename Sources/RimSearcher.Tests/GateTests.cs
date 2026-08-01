@@ -31,6 +31,97 @@ public class GateTests
         Assert.Equal(committed, rendered.Replace("\r\n", "\n"));
     }
 
+    // ---- 声明的行键 vs 实际吐出来的行键 ----
+
+    /// <summary>
+    /// 每条命令的 <c>--help</c> 里那句「one row per X: a, b, c」点的名,必须真是那张表的列。
+    ///
+    /// 第九轮盲测抓到的形状:<c>snapshot truncated --help</c> 写着
+    /// <c>def_name, def_type, dropped, mod</c>,而实际行是 <c>{def_name, def_type, fields_dropped}</c>
+    /// 且根本没有 mod 列 —— 照 help 写的解析代码会静默拿到 null,而 null 与「这个 def 没丢字段」
+    /// 同形。这类漂移人工比不出来,因为两边都长得像对的。
+    ///
+    /// 只认「冒号后、句号前的逗号清单」这一种写法:提取不出名字的散文一律跳过,于是这道闸
+    /// **只会漏报、不会误报**。想被它守住,行键就照那个写法列。
+    /// </summary>
+    [Fact]
+    public void 声明里点名的行键都是真列()
+    {
+        // 每个行式键配一次真调用。新增一个 Rows=true 的键就要在这里加一行 ——
+        // 下面第一条断言保证漏加会红,第二条保证「探针没造出行」不被沉默放过。
+        var probes = new Dictionary<string, string[]>(StringComparer.Ordinal)
+        {
+            ["search.defs"] = ["search", "shield"],
+            ["get.defs"] = ["get", "Apparel_ShieldBelt"],
+            ["list.defs"] = ["list", "ThingDef"],
+            ["list.types"] = ["list"],
+            ["find.matches"] = ["find", "thingClass", "RimWorld.Bullet"],
+            ["find.paths"] = ["find", "--value", "RimWorld.Bullet"],
+            ["fields.fields"] = ["fields", "ThingDef"],
+            ["values.values"] = ["values", "thingClass"],
+            ["mods.mods"] = ["mods"],
+            ["inherit.nodes"] = ["inherit", "BaseBullet"],
+            ["keyed.keys"] = ["keyed", "CannotUseNoPower"],
+            ["code-search.matches"] = ["code-search", "Translate"],
+            ["code-search.ui_text"] = ["code-search", "Translate"],
+            ["read.source"] = ["read", "CompShield.cs", "--lines", "1-5"],
+            ["read.declarations"] = ["read", "CompShield.cs", "--outline"],
+            ["snapshot list.snapshots"] = ["snapshot", "list"],
+            ["snapshot truncated.truncated"] = ["snapshot", "truncated"],
+            ["modlist list.modlists"] = ["modlist", "list"],
+            ["modlist show.mods"] = ["modlist", "show", "fixture-current"],
+            ["sources list.trees"] = ["sources", "list"],
+        };
+
+        var declared = new CommandRegistry().Specs
+            .SelectMany(s => s.JsonKeys.Where(k => k.Rows).Select(k => (Command: s.Name, k.Key, k.What)))
+            .ToList();
+
+        var uncovered = declared.Where(d => !probes.ContainsKey($"{d.Command}.{d.Key}")).ToList();
+        Assert.True(uncovered.Count == 0,
+            "These row-shaped keys have no probe here, so nothing checks their column names: " +
+            string.Join(", ", uncovered.Select(d => $"{d.Command}.{d.Key}")));
+
+        var complaints = new List<string>();
+        foreach (var (command, key, what) in declared)
+        {
+            var named = ColumnsNamedIn(what);
+            if (named.Count == 0) continue;
+
+            var (json, _, _) = Fixture.Run([.. probes[$"{command}.{key}"], "--json"]);
+            var root = System.Text.Json.JsonDocument.Parse(json).RootElement;
+            if (!root.TryGetProperty(key, out var rows) ||
+                rows.ValueKind != System.Text.Json.JsonValueKind.Array || rows.GetArrayLength() == 0)
+            {
+                complaints.Add($"{command}.{key}: the probe produced no rows, so its column names went unchecked.");
+                continue;
+            }
+
+            var actual = rows[0].EnumerateObject().Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
+            foreach (var n in named.Where(n => !actual.Contains(n)))
+                complaints.Add($"{command}.{key}: --help names '{n}', but the rows carry [{string.Join(", ", actual)}].");
+        }
+
+        Assert.True(complaints.Count == 0, string.Join("\n  ", complaints.Prepend("")));
+    }
+
+    /// <summary>
+    /// 「冒号后、句号前」那一段里的逗号分隔标识符。括号里的解释先剥掉
+    /// (<c>defs (how many defs use it)</c> 点的列名是 <c>defs</c>)。
+    /// </summary>
+    private static List<string> ColumnsNamedIn(string what)
+    {
+        var colon = what.IndexOf(':');
+        if (colon < 0) return [];
+        var tail = what[(colon + 1)..];
+        var stop = tail.IndexOf('.');
+        if (stop >= 0) tail = tail[..stop];
+
+        return [.. tail.Split(',')
+            .Select(part => Regex.Replace(part, @"\(.*", "").Trim())
+            .Where(part => Regex.IsMatch(part, "^[a-z][a-z0-9_]*$"))];
+    }
+
     /// <summary>
     /// 参考页里不许出现本机路径。它是要进库、要给别人读的 —— 一条 <c>C:\Users\CCH</c>
     /// 既是噪声,也是把作者的机器当成了世界。

@@ -731,6 +731,28 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// <c>--value ""</c> 是用法错误,不是「没给 --value」。此前空串被读成后者,于是
+    /// <c>find &lt;path&gt; --value ""</c> 静默退化成「列出所有带这个字段的 def」——
+    /// 一张长得和合法答案一模一样的表,而问的人想要的是「哪些 def 把它设成了空」。
+    /// usage-notes 那句「猜错一个开关只值一行,不值一个错答案」在这条上此前是不成立的。
+    /// </summary>
+    [Fact]
+    public void find的空value是用法错误而不是静默退化()
+    {
+        var (stdout, stderr, code) = Fixture.Run("find", "thingClass", "--value", "");
+        Assert.Equal(2, code);
+        Assert.Equal("", stdout);
+        // 两种写法各自的含义都要说,只说「不接受」会让人再猜一次。
+        Assert.Contains("rimsearcher find thingClass", stderr, StringComparison.Ordinal);
+        Assert.Contains("not in the index at all", stderr, StringComparison.Ordinal);
+
+        // 没有字段路径那一支同样拒,而给的是那一支该给的写法。
+        var (_, bare, bareCode) = Fixture.Run("find", "--value", "");
+        Assert.Equal(2, bareCode);
+        Assert.Contains("rimsearcher find --value", bare, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 类名形状的落空句不许把「抽象基类」当唯一解释:一个类可以完全不经过 def 被使用
     /// (C# 里直接 new),那时候两条查询都是零,而只说抽象基类会把人推去查一批不存在的子类。
     /// 盲测 S1 正是这么走完全程的。

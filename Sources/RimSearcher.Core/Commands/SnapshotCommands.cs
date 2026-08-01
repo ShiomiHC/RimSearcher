@@ -15,7 +15,7 @@ public sealed class SnapshotListCommand : Command
         Options = [],
         UsesGlobals = true,
         Examples = ["rimsearcher snapshot list"],
-        JsonKeys = [new() { Key = "snapshots", Rows = true, What = "one row per registered snapshot: name, defs, mods, game, language, exported, pinned, path." }],
+        JsonKeys = [new() { Key = "snapshots", Rows = true, What = "one row per registered snapshot: name, active, defs, mods, game, exported." }],
     };
 
     public override int Run(CommandContext ctx)
@@ -187,7 +187,9 @@ public sealed class SnapshotUseCommand : Command
         Remarks = "A pinned choice still loses to an explicit --snapshot or --db on a single command.",
         Positionals = [new PositionalSpec { Name = "name", Help = "A name from 'snapshot list'." }],
         Options = [],
-        Examples = ["rimsearcher snapshot use vanilla"],
+        // 例子刻意不叫 vanilla:find / list 的 --help 逐字警告过「--scope vanilla 与一个
+        // 恰好叫 vanilla 的快照不是一回事」,而这里拿它当命名示范就是在教人制造那次撞名。
+        Examples = ["rimsearcher snapshot use modded"],
         JsonKeys = [new() { Key = "pinned", What = "an object: which snapshot is now pinned, and where the choice was written." }],
     };
 
@@ -245,7 +247,7 @@ public sealed class SnapshotTruncatedCommand : Command
             "rimsearcher snapshot truncated --type ThingDef",
             "rimsearcher snapshot truncated --def Bullet_Revolver",
         ],
-        JsonKeys = [new() { Key = "truncated", Rows = true, What = "one row per def that lost fields at export time: def_name, def_type, dropped, mod." }],
+        JsonKeys = [new() { Key = "truncated", Rows = true, What = "one row per def that lost fields at export time: def_name, def_type, fields_dropped. The count is a lower bound — the exporter stopped, it did not finish counting." }],
     };
 
     public override int Run(CommandContext ctx)

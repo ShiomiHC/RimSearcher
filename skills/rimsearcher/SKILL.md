@@ -98,7 +98,7 @@ so. A `--files` glob containing `/` starts at the tree name (`vanilla/**/Widgets
 | `keyed` | `--placeholders`, `--offset`, `--limit` |
 | `find` | `--scope`, `--exact`, `--offset`, `--limit` |
 | `code-search` | `--source`, `--files`, `--max-files`, `--max-per-file`, `--limit` |
-| `read` | `--member`, `--type`, `--lines`, `--outline`, `--limit` |
+| `read` | `--member`, `--type`, `--lines`, `--outline`, `--source`, `--limit` |
 | `sources sync` | `--only`, `--modlist`, `--force`, `--dry-run` |
 
   `head`'s replacement: paging commands take `--offset`; `read` `--member`/`--type`/
@@ -107,8 +107,11 @@ so. A `--files` glob containing `/` starts at the tree name (`vanilla/**/Widgets
 - **Reverse-look-up field names, never guess.** `find --value <value>` reports which paths
   hold the value. A guessed field name that happens to exist returns a clean,
   complete-looking table for the wrong field — the most expensive failure here.
-- **Never guess a class from a defName** — in Core, 98 of 167 `GenStepDef`s run a class
-  not named after the def. Class names come only from `get`'s `*Class` rows. A zero from
+- **`find`'s path is a whole-segment suffix; every `--path` filter is a substring.** Opposite
+  reach for the same word: `find genSteps` never sees `extraGenSteps[N]`, while
+  `fields BiomeDef --path enStep` finds both. This changes the answer, not the row count.
+- **Never guess a class from a defName** — across what Ludeon ships, 98 of 167 `GenStepDef`s
+  run a class not named after the def. Class names come only from `get`'s `*Class` rows. A zero from
   `code-search "class GenStep_<defName>"` is evidence about the name you invented.
 - **Give `read` the bare file name; never build a path from the namespace** — folders are
   not namespaces. `--member`/`--type`/`--outline` match **braces, not C#**: a name they

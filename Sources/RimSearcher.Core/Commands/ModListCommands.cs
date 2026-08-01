@@ -200,7 +200,9 @@ public sealed class ModListShowCommand : Command
             "rimsearcher modlist show vanilla",
             "rimsearcher modlist show --find milira",
         ],
-        JsonKeys = [new() { Key = "mods", Rows = true, What = "one row per mod in the list, in load order: order, package_id, name, installed." }],
+        // 「装没装」不是一列,是表旁边的一句话 —— 声明里写成列名的话,按列去读的人
+        // 会拿到 null 并把它读成「没装」。
+        JsonKeys = [new() { Key = "mods", Rows = true, What = "one row per mod in the list, in load order: order, package_id, name. Whether they are installed here is a note beside the table, not a column." }],
     };
 
     public override int Run(CommandContext ctx)

@@ -666,6 +666,20 @@ public sealed class FindCommand : Command
         var offset = ctx.Args.Offset();
 
         var path = ctx.Args.Positional(0);
+
+        // 空串**不是**一个值。此前它被当成「没给 --value」,于是 `find <path> --value ""`
+        // 静默退化成「列出所有带这个字段的 def」—— 一张长得和合法答案一模一样的表,
+        // 而读的人问的是「哪些 def 把它设成了空」。两种写法各自的含义当场说清:
+        // 「没设过」在这套索引里不是一个可查的值(null 根本不进索引)。
+        if (ctx.Args.Value("value") is { Length: 0 })
+            throw new CliUsageException(
+                "--value was given as an empty string, which is not a value to look for. " +
+                (path is null
+                    ? "Pass the text to look for ('rimsearcher find --value CompShield')."
+                    : $"To list every def that has the field, drop it ('rimsearcher find {path}'); " +
+                      $"to look for a value, pass one ('rimsearcher find {path} <value>'). ") +
+                "A field nobody set is not in the index at all, so no query here returns it.");
+
         var named = ctx.Args.Value("value") is { Length: > 0 } v ? v : null;
 
         // 分支判据是**给没给字段**,不是给没给 --value。--value 一律读作「要找的值」:

@@ -534,7 +534,7 @@ rimsearcher modlist show [name] [options]
 
 | Key | Holds |
 |---|---|
-| `mods` | one row per mod in the list, in load order: order, package_id, name, installed. |
+| `mods` | one row per mod in the list, in load order: order, package_id, name. Whether they are installed here is a note beside the table, not a column. |
 
 Examples:
 
@@ -693,7 +693,7 @@ rimsearcher snapshot list
 
 | Key | Holds |
 |---|---|
-| `snapshots` | one row per registered snapshot: name, defs, mods, game, language, exported, pinned, path. |
+| `snapshots` | one row per registered snapshot: name, active, defs, mods, game, exported. |
 
 Examples:
 
@@ -744,7 +744,7 @@ Every count this tool reports over field paths — 'find', 'values', 'fields' �
 
 | Key | Holds |
 |---|---|
-| `truncated` | one row per def that lost fields at export time: def_name, def_type, dropped, mod. |
+| `truncated` | one row per def that lost fields at export time: def_name, def_type, fields_dropped. The count is a lower bound — the exporter stopped, it did not finish counting. |
 
 Examples:
 
@@ -777,7 +777,7 @@ A pinned choice still loses to an explicit --snapshot or --db on a single comman
 Examples:
 
 ```
-rimsearcher snapshot use vanilla
+rimsearcher snapshot use modded
 ```
 
 ## `sources list`
