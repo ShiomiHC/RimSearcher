@@ -1195,6 +1195,36 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 抽象节点自己没有值,而 <c>same_value</c> 此前就整个不出 —— 于是 <c>165 of 165</c>
+    /// 看着像铁证,实际上「这一层声明了它」与「后代各写各的」在数上分不开,分得开的
+    /// 那一列不在场,而说破这件事的那句话埋在第四条脚注里。
+    ///
+    /// 参照值改从子树众数取,并把「一个整个类型都带的字段,追平是恒真的」那个分母摆出来。
+    /// </summary>
+    [Fact]
+    public void 抽象节点也给得出same_value并摆出恒真那一档的分母()
+    {
+        var (byMode, _, code) = Fixture.Run("inherit", "BaseProjectile", "--path", "soundDrop");
+        Assert.Equal(0, code);
+        Assert.Contains("same_value", byMode, StringComparison.Ordinal);
+        Assert.Contains("is a node, not a def, so it carries no value of its own", byMode, StringComparison.Ordinal);
+        Assert.Contains("'Standard_Drop'", byMode, StringComparison.Ordinal);
+        // 这条降级出路已经不存在,它指的那个动作也不再有意义。
+        Assert.DoesNotContain("Give a def rather than an abstract node", byMode, StringComparison.Ordinal);
+        // 口径不同就得说破:这一列比的是众数,不是节点声明的值。
+        Assert.Contains("not one the node declares", byMode, StringComparison.Ordinal);
+
+        // 追平的那一行要带着全类型分母,否则它读起来就是铁证。
+        var (full, _, _) = Fixture.Run("inherit", "BaseBullet", "--path", "soundDrop");
+        Assert.Contains("The denominator for a full row", full, StringComparison.Ordinal);
+        Assert.Contains("ThingDefs carry a path containing 'soundDrop'", full, StringComparison.Ordinal);
+
+        // 没追平的表不许多这一句 —— 它本来就没在暗示什么。
+        var (partial, _, _) = Fixture.Run("inherit", "Bullet_Revolver", "--path", "projectile.burstCount");
+        Assert.DoesNotContain("The denominator for a full row", partial, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 点路径的后缀是**纯文本**,不在 <c>.</c> 上对齐:问 <c>graphicData.texPath</c> 会把
     /// <c>building.blueprintGraphicData.texPath</c> 一起收走,而两者是不同的字段。表干净、
     /// 计数完整,答的是另一个问题 —— 第九轮盲测在真快照上量到 185 行里只有 130 行对得上。
@@ -2294,27 +2324,34 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 参照值不在场时,<c>same_value</c> 这一列整个不出。
-    ///
-    /// 抽象节点自己没有字段表,于是没有「这个 def 上的那个值」可比。照印一列恒为 0 的数,
+    /// 参照值**一个都定不下来**时,<c>same_value</c> 这一列整个不出:照印一列恒为 0 的数,
     /// 读起来是「一个兄弟都不同意」—— 而 0 既可以是量过为零,也可以是没量。
+    ///
+    /// 抽象节点不在此列(2026-08-01 起):它自己没有值,但子树的众数定得下来。
+    /// 定不下来的只剩一种 —— 问的那个 def 在这条路径上装着好几个不同的值。
     /// </summary>
     [Fact]
-    public void 没有参照值时证人表不许印一列恒零的同值数()
+    public void 参照值定不下来时证人表不许印一列恒零的同值数()
     {
         static System.Text.Json.JsonElement Witnesses(string json)
             => System.Text.Json.JsonDocument.Parse(json).RootElement
                   .GetProperty("nodes")[0].GetProperty("witnesses");
 
-        var (abstractNode, _, _) = Fixture.Run("inherit", "BaseBullet", "--path", "thingClass", "--json");
-        foreach (var r in Witnesses(abstractNode).EnumerateArray())
+        // projectile 下三个字段三个值,没有一个能当参照。
+        var (spread, _, _) = Fixture.Run("inherit", "Bullet_Revolver", "--path", "projectile", "--json");
+        foreach (var r in Witnesses(spread).EnumerateArray())
             Assert.False(r.TryGetProperty("same_value", out _),
-                "抽象节点没有自己的值可比,same_value 不该在场");
+                "参照值定不下来时 same_value 不该在场");
 
-        // 反向:有参照值的那一侧必须有这一列,否则上面那条断言换成「永远不印」也照样绿。
+        // 反向:定得下来的那一侧必须有这一列,否则上面那条断言换成「永远不印」也照样绿。
         var (concrete, _, _) = Fixture.Run("inherit", "Bullet_Revolver", "--path", "thingClass", "--json");
         foreach (var r in Witnesses(concrete).EnumerateArray())
             Assert.True(r.TryGetProperty("same_value", out _), "有参照值时 same_value 必须在场");
+
+        // 抽象节点这一侧也必须有 —— 它此前正是「静默丢掉一列」的那个形状。
+        var (node, _, _) = Fixture.Run("inherit", "BaseBullet", "--path", "thingClass", "--json");
+        foreach (var r in Witnesses(node).EnumerateArray())
+            Assert.True(r.TryGetProperty("same_value", out _), "抽象节点按众数比,same_value 必须在场");
     }
 
     /// <summary>

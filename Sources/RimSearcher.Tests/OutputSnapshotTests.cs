@@ -89,6 +89,9 @@ public class OutputSnapshotTests
         // 继承层的四条路各钉一份:抽象节点(有子、被 patch 点名)、具体 def(往上走)、
         // 断链(父不在快照里)、名字不在这一层 —— 四条的措辞各说一件不同的事。
         { "inherit-abstract",      ["inherit", "BaseBullet"] },
+        // 抽象节点侧的 same_value:参照值从子树众数来,而那一列在场与否是这条命令
+        // 唯一分得开「这层声明了它」与「后代各写各的」的地方。
+        { "inherit-abstract-path", ["inherit", "BaseProjectile", "--path", "soundDrop"] },
         { "inherit-def",           ["inherit", "Bullet_Revolver"] },
         { "inherit-broken-chain",  ["inherit", "TestModGun"] },
         { "inherit-not-in-layer",  ["inherit", "Apparel_ShieldBelt"] },

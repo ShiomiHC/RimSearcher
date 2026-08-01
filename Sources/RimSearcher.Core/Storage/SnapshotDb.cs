@@ -1220,11 +1220,61 @@ public sealed class SnapshotDb : IDisposable
     public (int Descendants, int WithPath, int SameValue, int Truncated) Witnesses(
         string ancestorName, string pathFilter, string? value, (string DefName, string DefType)? exclude)
     {
-        var p = new Dictionary<string, object?>
-        {
-            ["@root"] = ancestorName,
-            ["@f"] = "%" + Escape(pathFilter) + "%",
-        };
+        var p = new Dictionary<string, object?>();
+        var cte = KinCte(ancestorName, pathFilter, exclude, p);
+
+        // 三个数一趟取回:分开跑三趟的话递归 CTE 也跑三趟,而 BuildingBase 这种量级的
+        // 后代集是这条命令里最贵的一件事。
+        var same = value is null
+            ? "0"
+            : "(SELECT COUNT(DISTINCT fv.def_id) FROM field_values fv JOIN kin k ON k.id = fv.def_id " +
+              "  WHERE fv.path LIKE @f ESCAPE '\\' AND fv.value = @v COLLATE NOCASE)";
+        if (value is not null) p["@v"] = value;
+
+        using var rd = Query(
+            cte + "SELECT (SELECT COUNT(*) FROM kin), " +
+            "(SELECT COUNT(DISTINCT fv.def_id) FROM field_values fv JOIN kin k ON k.id = fv.def_id " +
+            $" WHERE fv.path LIKE @f ESCAPE '\\'), {same}, " +
+            "(SELECT COUNT(*) FROM kin k JOIN defs d ON d.id = k.id WHERE d.fields_truncated > 0)", p);
+        return rd.Read()
+            ? (rd.GetInt32(0), rd.GetInt32(1), rd.GetInt32(2), rd.GetInt32(3))
+            : (0, 0, 0, 0);
+    }
+
+    /// <summary>
+    /// 一层之下**最常见**的那个值,带着它的 def 数,以及一共出现了几种值。
+    ///
+    /// 抽象节点自己没有值可比,而这张表要分的恰恰是「一个共享值」与「各写各的一份」——
+    /// 众数把这件事变回可数的:众数占满带路径的那批就是共享,散开就是各写各的。
+    /// 与「问的那个 def 自己装着什么」不是同一个口径,所以调用方必须在表头说破它是哪一种。
+    /// </summary>
+    public (string? Value, int Defs, int Distinct) DominantValue(string ancestorName, string pathFilter)
+    {
+        var p = new Dictionary<string, object?>();
+        var cte = KinCte(ancestorName, pathFilter, null, p);
+
+        // 并列时按值排序定序:名次靠随机决定的话,同一份快照两次运行会给出两个参照值。
+        using var rd = Query(
+            cte +
+            "SELECT fv.value, COUNT(DISTINCT fv.def_id) AS c, " +
+            "  (SELECT COUNT(*) FROM (SELECT DISTINCT fv2.value COLLATE NOCASE FROM field_values fv2 " +
+            "     JOIN kin k2 ON k2.id = fv2.def_id WHERE fv2.path LIKE @f ESCAPE '\\')) " +
+            "FROM field_values fv JOIN kin k ON k.id = fv.def_id " +
+            "WHERE fv.path LIKE @f ESCAPE '\\' " +
+            "GROUP BY fv.value COLLATE NOCASE ORDER BY c DESC, fv.value LIMIT 1", p);
+        return rd.Read()
+            ? (rd.IsDBNull(0) ? null : rd.GetString(0), rd.GetInt32(1), rd.GetInt32(2))
+            : (null, 0, 0);
+    }
+
+    /// <summary>
+    /// 一个具名层之下的 def 集(<c>kin</c>)。两条查询共用,免得同一个后代集算出两种。
+    /// </summary>
+    private static string KinCte(string ancestorName, string pathFilter,
+                                 (string DefName, string DefType)? exclude, Dictionary<string, object?> p)
+    {
+        p["@root"] = ancestorName;
+        p["@f"] = "%" + Escape(pathFilter) + "%";
 
         // 自环与 XML 里写得出的环由 UNION(而非 UNION ALL)吃掉:去重之后递归自然收敛。
         var cte =
@@ -1249,24 +1299,7 @@ public sealed class SnapshotDb : IDisposable
             p["@xn"] = ex.DefName; p["@xt"] = ex.DefType;
             cte += "     AND NOT (d.def_name = @xn COLLATE NOCASE AND d.def_type = @xt) ";
         }
-        cte += ") ";
-
-        // 三个数一趟取回:分开跑三趟的话递归 CTE 也跑三趟,而 BuildingBase 这种量级的
-        // 后代集是这条命令里最贵的一件事。
-        var same = value is null
-            ? "0"
-            : "(SELECT COUNT(DISTINCT fv.def_id) FROM field_values fv JOIN kin k ON k.id = fv.def_id " +
-              "  WHERE fv.path LIKE @f ESCAPE '\\' AND fv.value = @v COLLATE NOCASE)";
-        if (value is not null) p["@v"] = value;
-
-        using var rd = Query(
-            cte + "SELECT (SELECT COUNT(*) FROM kin), " +
-            "(SELECT COUNT(DISTINCT fv.def_id) FROM field_values fv JOIN kin k ON k.id = fv.def_id " +
-            $" WHERE fv.path LIKE @f ESCAPE '\\'), {same}, " +
-            "(SELECT COUNT(*) FROM kin k JOIN defs d ON d.id = k.id WHERE d.fields_truncated > 0)", p);
-        return rd.Read()
-            ? (rd.GetInt32(0), rd.GetInt32(1), rd.GetInt32(2), rd.GetInt32(3))
-            : (0, 0, 0, 0);
+        return cte + ") ";
     }
 
     /// <summary>

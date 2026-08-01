@@ -189,7 +189,12 @@ so. A `--files` glob containing `/` starts at the tree name (`vanilla/**/Widgets
 - **Which layer declares a field**: `inherit <def> --path <field>` computes evidence — a
   layer whose `with_path` falls short of `other_defs` is not the declaring one. The reverse
   does not follow; `same_value` tells every-descendant-writes-it apart. A patch that added
-  the field to many defs looks exactly like a layer declaring it.
+  the field to many defs looks exactly like a layer declaring it. **`with_path` reaching
+  `other_defs` is no evidence at all for a field the whole def type carries** — for a scalar
+  like `tickerType` it is true of every layer anyone could ask about, and the output prints
+  the type-wide denominator so that row can be read against it. On an abstract node
+  `same_value` counts against the most common value under it, not against a value the node
+  declares — the node declares nothing.
 - **A `list` def type is a storage bucket, not a runtime class.** Multi-class buckets get a
   `class` column and `--class`; `list <SomeClass>` says where to look instead of "no such
   type". Most buckets hold one class — there `--class` narrows nothing and the behaviour

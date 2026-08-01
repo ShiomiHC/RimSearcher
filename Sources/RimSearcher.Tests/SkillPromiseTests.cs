@@ -171,6 +171,11 @@ public class SkillPromiseTests
         // 第九轮盲测证伪了这里原来那句「whole-segment suffix」:点路径是纯文本后缀,
         // 不在 `.` 上对齐。承诺改成实况的同时钉住新开关 —— 没有它这条说明只是个警告。
         new("a dotted one is raw text that does not stop", nameof(GrammarTests.点路径的后缀不在点上对齐而exactpath钉得住)),
+        // 恒真的东西长得与铁证一模一样,而这一句是唯一说破它的地方。
+        new("is no evidence at all for a field the whole def type carries",
+            nameof(GrammarTests.抽象节点也给得出same_value并摆出恒真那一档的分母)),
+        new("counts against the most common value under it, not against a value the node",
+            nameof(GrammarTests.抽象节点也给得出same_value并摆出恒真那一档的分母)),
         new("`--exact-path` pins the whole path, with `[]` standing for any index",
             nameof(GrammarTests.点路径的后缀不在点上对齐而exactpath钉得住)),
         new("on a Core-only snapshot, `1 def` means one in Core",

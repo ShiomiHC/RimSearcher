@@ -326,6 +326,30 @@ public sealed class InheritCommand : Command
             }
         }
 
+        // 抽象节点自己没有值,而那一列此前就整个不出 —— 于是 `165 of 165` 看着像铁证,
+        // 实际上「这一层声明了它」与「三千个 def 各写各的」在数上无法分辨,唯一分得开的
+        // 那一列不在场。参照值改从子树的众数取:占满就是共享,散开就是各写各的。
+        //
+        // 口径与「问的那个 def 自己装着什么」不同,所以表头必须说破参照值是哪儿来的 ——
+        // 两种口径下这一列都读作「有几个后代读到参照值」,变的是参照值的产地。
+        var byMode = false;
+        if (reference is null && exclude is null && node.Name is { Length: > 0 })
+        {
+            var dom = ctx.Db.DominantValue(node.Name, pathFilter);
+            if (dom.Value is not null)
+            {
+                reference = dom.Value;
+                byMode = true;
+                ctx.Report.Notice(NoticeKind.Filter,
+                    $"'{node.Name}' is a node, not a def, so it carries no value of its own. The counts below " +
+                    $"are compared against the most common value under it instead: {Quote(dom.Value)}, on " +
+                    $"{Tally.Complete(dom.Defs).Render("def")}" +
+                    (dom.Distinct > 1
+                        ? $", out of {Tally.Complete(dom.Distinct).Render("value")} that appear there."
+                        : " — the only value that appears there."));
+            }
+        }
+
         var columns = reference is null
             ? new List<string> { "layer", "other_defs", "with_path" }
             : ["layer", "other_defs", "with_path", "same_value"];
@@ -363,16 +387,37 @@ public sealed class InheritCommand : Command
             "The converse does not hold: with_path reaching other_defs is equally consistent with every " +
             "descendant writing the field separately" +
             (reference is null
-                ? ", which no count here tells apart. Give a def rather than an abstract node to get the " +
-                  "same_value column, which does."
+                ? ", which no count here tells apart. No single value could be fixed to compare against, so " +
+                  "the same_value column — the one that does tell them apart — is not in this table."
                 : ". The same_value column is what tells the two apart — one shared value points at the layer, " +
-                  "a spread of values points at each def writing its own."));
+                  "a spread of values points at each def writing its own." +
+                  (byMode
+                      ? " It is the most common value under this node, not one the node declares: the node " +
+                        "declares nothing, and a majority is what stands in for it."
+                      : "")));
 
         ctx.Report.Notice(NoticeKind.Boundary,
             "A descendant that overrides the field still counts in with_path" +
             (reference is null ? "" : " but not in same_value") + ", so the columns differing means overriding, " +
             "not absence. And field values here are the merged, post-patch ones, so a PatchOperation that added " +
             "this field to many defs is indistinguishable from a layer declaring it.");
+
+        // with_path 追平 other_defs,对一个**整个类型都带**的字段是恒真的 —— 而恒真的东西
+        // 长得与铁证一模一样。第九轮盲测的落点:`inherit BasePawn --path tickerType` 回
+        // 165 of 165,而全快照三千多个 ThingDef 每一个都带这条路径。分母摆出来,那 165
+        // 才有得比。只在真追平了的时候说 —— 没追平的表本来就没在暗示什么。
+        if (node.DefType is { Length: > 0 } &&
+            rows.Any(r => r["with_path"] is int w && w > 0 && Equals(r["other_defs"], r["with_path"])))
+        {
+            var wide = ctx.Db.TypeDefsWithPath(node.DefType, [pathFilter]);
+            var all = ctx.Db.CountDefsOfType(node.DefType,
+                Snapshot.ScopeFilter.Parse("all", ctx.Db.PackageIds(), ctx.Config));
+            if (wide.Defs > 0 && all > 0)
+                ctx.Report.Notice(NoticeKind.Boundary,
+                    $"The denominator for a full row: across the whole snapshot, {wide.Defs} of the {all} " +
+                    $"{node.DefType}s carry a path containing '{pathFilter}', layer or no layer. A row where " +
+                    "with_path equals other_defs is evidence only to the extent that fraction is smaller.");
+        }
 
         // 导出时被截字段表的 def 会「没有这条路径」而其实有 —— 那正好是让一层被误判成
         // 「没声明」的方向。数的是分母里的那些,不是整库:整库的数恒为非零,恒真的

@@ -1,0 +1,25 @@
+$ rimsearcher inherit BaseProjectile --path soundDrop
+exit 0
+--- stdout ---
+name           BaseProjectile
+def_type       ThingDef
+abstract       yes
+mod            ludeon.rimworld
+source         Projectiles_Guns.xml
+patch_ops      0
+'BaseProjectile' is a node, not a def, so it carries no value of its own. The counts below are compared against the most common value under it instead: 'Standard_Drop', on 2 defs — the only value that appears there.
+
+layer           other_defs  with_path  same_value
+BaseProjectile  3           2          2
+Each row counts the other defs descending from that layer: how many carry a field path containing 'soundDrop', and how many of those read the same value. A layer that declares a field passes it to every descendant, so a layer whose with_path falls short of other_defs is not the one declaring this field. The snapshot stores no 'declared here' fact — the game resolves inheritance while loading and then discards it — so these counts are what the answer has to be read off.
+The converse does not hold: with_path reaching other_defs is equally consistent with every descendant writing the field separately. The same_value column is what tells the two apart — one shared value points at the layer, a spread of values points at each def writing its own. It is the most common value under this node, not one the node declares: the node declares nothing, and a majority is what stands in for it.
+A descendant that overrides the field still counts in with_path but not in same_value, so the columns differing means overriding, not absence. And field values here are the merged, post-patch ones, so a PatchOperation that added this field to many defs is indistinguishable from a layer declaring it.
+1 def counted in other_defs had the field list cut short at export, so any of those can miss with_path for that reason alone — the direction that makes a layer look innocent.
+3 direct children.
+
+name        def_name    def_type        abstract  mod
+BaseBullet              ThingDef        yes       ludeon.rimworld
+            Firefoam    ThingDef        no        ludeon.rimworld
+            VariantOne  TestVariantDef  no        test.mod
+An abstract node has no fields of its own in a snapshot. Everything it declares is already merged, post-patch, into each child: 'rimsearcher get Firefoam'.
+--- stderr ---
