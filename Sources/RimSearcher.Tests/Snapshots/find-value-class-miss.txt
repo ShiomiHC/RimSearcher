@@ -1,0 +1,5 @@
+$ rimsearcher find compClass RimWorld.CompNoSuchThing
+exit 1
+--- stdout ---
+No def has 'compClass' set to 'RimWorld.CompNoSuchThing', out of the 2 values found under comps[0].compClass. 'rimsearcher values compClass --limit all' lists them. Two things look like this zero when 'RimWorld.CompNoSuchThing' is a class: it is an abstract base and defs name its subclasses instead ('rimsearcher code-search "class \w+ : CompNoSuchThing\b"' names them), or no def drives it at all and C# constructs it directly ('rimsearcher code-search "CompNoSuchThing"' shows who does). Neither is evidence that the class itself does not exist.
+--- stderr ---

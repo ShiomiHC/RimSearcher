@@ -22,6 +22,9 @@ public class OutputSnapshotTests
         { "search-hit",            ["search", "shield"] },
         { "search-miss",           ["search", "zzzznothing"] },
         { "search-miss-classlike", ["search", "CompShield"] },
+        // 像类名、而且**哪儿都算不出落点**的那一档 —— 唯一走到「按形状猜」的分支,
+        // 也是第九轮盲测里 CLI 唯一一处确定假话的原产地。
+        { "search-miss-classlike-nowhere", ["search", "CompProperties_NoSuchThing"] },
         // 落空的四种成因,一种一份基线 —— 各自要的下一步不同,而其中三种的答案就在同一个库里。
         { "search-miss-xmlnode",   ["search", "BaseBullet"] },
         { "search-miss-deftype",   ["search", "ThingDef"] },
@@ -35,6 +38,10 @@ public class OutputSnapshotTests
         // 同一句话由几个 key 各自承载时不许挑一个说成「就是这个」—— 真数据里
         // 「转至事件发生地点」同时是 JumpToLocation 与 ClickToJumpToProblem。
         { "search-miss-keyed-multi", ["search", "转至此处"] },
+        // 落空的成因里,自己施加的过滤排在猜测之前 —— 两份摆一起:被 scope 滤空的那次
+        // 不许再猜抽象基类,真零那次两种成因并列。
+        { "find-value-scoped-empty", ["find", "thingClass", "RimWorld.Bullet", "--scope", "test.mod"] },
+        { "find-value-class-miss",   ["find", "compClass", "RimWorld.CompNoSuchThing"] },
         // scope 展开在**有结果时**也要说:组名那份必须带展开句,写死 packageId 那份不多说一个字。
         { "find-scope-group",      ["find", "thingClass", "RimWorld.Bullet", "--scope", "vanilla"] },
         { "find-scope-literal",    ["find", "thingClass", "RimWorld.Bullet", "--scope", "ludeon.rimworld"] },
@@ -158,6 +165,10 @@ public class OutputSnapshotTests
         { "code-search-no-ui-text", ["code-search", "Translate", "--no-ui-text"] },
         // keyed 的两个方向。key → 显示什么;文案 → 是哪个 key(带上「拿它去搜代码」那一步)。
         { "keyed-hit",             ["keyed", "CannotUseNoPower"] },
+        // 查询词恰好是一个真 key,而同前缀还有别的 —— 精确命中把前缀匹配关掉的那一刻。
+        // 两份基线摆在一起:收窄了的那次要说破,前缀那次照旧两行都在。
+        { "keyed-exact-collapses", ["keyed", "CommandSettle"] },
+        { "keyed-prefix-both",     ["keyed", "CommandSettl"] },
         { "keyed-text",            ["keyed", "没有电力"] },
         // keyed 自己那条下一步提示:一个 key 时命令填好,几个 key 时说破要按行挑 ——
         // 填第一个等于替读的人挑了一个。
@@ -351,7 +362,7 @@ public class OutputSnapshotTests
         Assert.Equal(1, code);
         Assert.Contains("carry a real translation", text);
         // 分母是整层的行数,不是「筛剩下的零」。
-        Assert.Contains("2105 keyed translations", text);
+        Assert.Contains("2107 keyed translations", text);
         Assert.Contains("the exit code is still non-zero", text);
         // 「没找到」的措辞一个字都不许出现:那会把「译全了」说成「查不到」。
         Assert.DoesNotContain("No keyed translation matches", text);

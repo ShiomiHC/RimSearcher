@@ -1004,6 +1004,38 @@ public sealed class SnapshotDb : IDisposable
                      new Dictionary<string, object?> { ["@k"] = key });
 
     /// <summary>
+    /// 以 <paramref name="key"/> 为前缀、但不是它自己的那些 key(去重)。
+    ///
+    /// 精确命中会把前缀匹配整个关掉 —— <c>keyed CommandSettle</c> 只回一行,而
+    /// <c>CommandSettleDesc</c> 就躺在旁边。**少掉的那些与「不存在」逐字同形**,
+    /// 于是命令层要拿这个数说破自己收窄过。
+    ///
+    /// 判据是字面前缀,不走 FTS:FTS 那条同时认译文与英文原文,数出来的是另一个集合,
+    /// 而这句话要说的恰恰是「以此为前缀的 key」。
+    /// </summary>
+    /// <returns><c>Keys</c> 最多 <paramref name="limit"/> 个(字典序),<c>Total</c> 是全部。</returns>
+    public (IReadOnlyList<string> Keys, int Total) KeyedPrefixSiblings(string key, int limit)
+    {
+        // key 里可以合法地出现 _ 与 %(LIKE 的两个通配符),不转义的话
+        // `Stat_Foo` 会把 `StatXFoo` 也算成兄弟 —— 一个只会多报、不会少报的错,
+        // 但它报出来的数字没有产地。
+        var p = new Dictionary<string, object?>
+        {
+            ["@p"] = key.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%",
+            ["@k"] = key,
+        };
+        const string where = "FROM keyed WHERE key LIKE @p ESCAPE '\\' AND key <> @k COLLATE NOCASE";
+        var total = Scalar($"SELECT COUNT(DISTINCT key) {where}", p);
+        var keys = new List<string>();
+        if (total > 0)
+        {
+            using var rd = Query($"SELECT DISTINCT key {where} ORDER BY LENGTH(key), key LIMIT {limit}", p);
+            while (rd.Read()) keys.Add(rd.GetString(0));
+        }
+        return (keys, total);
+    }
+
+    /// <summary>
     /// 全文检索 keyed 三列(key / 译文 / 英文原文)。中文查得到 key,英文也查得到 ——
     /// 这一层的 original 进了 FTS(与 translations 那张表不同,那边只索引 translated),
     /// 因为「从屏幕上的字往回走」是这一层存在的理由,而屏幕上的字两种语言都可能。

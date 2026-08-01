@@ -476,6 +476,14 @@ public static class Fixture
         Keyed("JumpToLocation", "转至此处", "Jump to location", false, "Letters.xml", 6);
         Keyed("ClickToJump", "转至此处", "Click to jump", false, "Alerts.xml", 5);
 
+        //   CommandSettle / CommandSettleDesc  一个 key 恰好是另一个的前缀 —— 而
+        //     RimWorld 的 `X` / `XDesc` 是这一层最常见的形状。精确命中会把前缀匹配整个
+        //     关掉,于是 `keyed CommandSettle` 的一行与「这个前缀下只有一个 key」同形。
+        //     名字取自第九轮盲测 S11 的原始证据。
+        Keyed("CommandSettle", "定居", "Settle", false, "GameplayCommands.xml", 386);
+        Keyed("CommandSettleDesc", "在此处建立新殖民地。", "Settle in this location.", false,
+              "GameplayCommands.xml", 387);
+
         // 过线的填充批。两道闸共用,而两道都**必须**有一批过 Limits.MaxLimit(2000)的语料:
         //   `--limit all` 解除行上限 —— 语料不过线,「夹到 2000」与「全给」印出来一模一样;
         //   `--placeholders` 在 SQL 里筛 —— 占位排在这批的最末一条,于是「取完这一页再筛」

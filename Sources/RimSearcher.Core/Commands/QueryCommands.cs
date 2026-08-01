@@ -141,10 +141,16 @@ public sealed class SearchCommand : Command
             ctx.Report.Notice(NoticeKind.NextStep,
                 sighting?.Sentence
                 ?? (looksLikeClass
+                    // 嵌套 `Class=` **是**被索引的(导出器 0.2.0 起),所以不许说「索引不到」——
+                    // 那句话会把 `find Class` 的零判成「工具看不见」,而不是「确实没有」。
+                    // 覆盖到哪一层随快照的导出器版本变,所以念 NestedClassLine 那个唯一产地,
+                    // 不在这里另写一句会过时的。
                     ? $"Nothing in this snapshot is called that under any other guise either — no def type, " +
-                      $"no class, no mod. If '{query}' is a class that only appears inside nested " +
-                      "<li Class=\"...\"> objects, the snapshot does not index those: 'rimsearcher code-search' " +
-                      "finds the class itself."
+                      $"no class, no mod. " + Completeness.NestedClassLine(ctx) +
+                      // 反方向那半:类可以完全不经过 def 被使用,那时候两条查询都该是零。
+                      $" A zero from that one too means no def names '{query}' — the class can still exist and " +
+                      $"be constructed in C#: 'rimsearcher code-search \"class {ClassNameShape.Tail(query)}\\b\"' " +
+                      "settles whether it exists, and a bare 'rimsearcher code-search' on the name shows who uses it."
                     : "'rimsearcher list' with no def type lists what kinds of def this snapshot holds, " +
                       "and 'rimsearcher mods' lists which mods it covers."));
         }
@@ -821,8 +827,29 @@ public sealed class FindCommand : Command
             // 两句并排摆着,读的人会挑后者(它更具体),然后去查一批根本不存在的子类。
             var indexGap = isClassPath && !ctx.Db.Meta.IndexesAllNestedClass;
 
+            // 本次查询**自己施加的过滤**是算得出来的成因,而抽象基类只是个猜测。算得出来的
+            // 排在最前,并让猜测退场 —— 与 indexGap 同一条纪律:两句并排摆着,读的人会挑
+            // 更具体的那句,然后去查一批根本不存在的子类。
+            //
+            // scope 只在第一行被回显过,而回显不是成因 —— 「我圈了这几个 mod」与
+            // 「零是这个圈造成的」差着一次重查,而这次重查是白拿的:同一条 SQL,scope 换成 all。
+            var hiddenByScope = scope.IsAll
+                ? 0
+                : ctx.Db.FindByField(path, value, exact,
+                                     Snapshot.ScopeFilter.Parse("all", ctx.Db.PackageIds(), ctx.Config),
+                                     0, 0).Total;
+            if (hiddenByScope > 0)
+                ctx.Report.Notice(NoticeKind.Filter,
+                    $"--scope {scope.Expression} is what emptied this: " +
+                    $"{Tally.Complete(hiddenByScope).Render("def")} in this snapshot " +
+                    $"{(hiddenByScope == 1 ? "has" : "have")} '{path}' set to " +
+                    $"{(exact ? "exactly " : "")}'{value}'. Drop --scope to see {(hiddenByScope == 1 ? "it" : "them")}.");
+
             ctx.Report.Notice(NoticeKind.NextStep,
-                $"No def has '{path}' set to {(exact ? "exactly " : "")}'{value}'{provenance}." +
+                // 落空句自己要带上收窄条件,否则它与上面那句「--scope 把 N 行滤掉了」
+                // 并排摆着就是一对矛盾话。措辞与 search 的落空句同源。
+                $"No def{(scope.IsAll ? "" : $" within --scope {scope.Expression}")} has '{path}' set to " +
+                $"{(exact ? "exactly " : "")}'{value}'{provenance}." +
                 (close.Count > 0
                     ? $" Closest: {string.Join(", ", close)}." +
                       (alt is not null && close.FirstOrDefault(c => Tail(c).Equals(alt, StringComparison.OrdinalIgnoreCase)) is { } resolved
@@ -833,13 +860,19 @@ public sealed class FindCommand : Command
                           : $" 'rimsearcher values {path} --limit all' lists the whole value domain.")
                     // 「如果 X 是抽象基类」是一句**未经验证的猜测摆在输出位置**,读的人会当
                     // 结论用。判据从严(ClassNameShape 把 `True`、`.ogg`、`1.5` 挡在外面),
-                    // 并指向一条能当场证实或证伪它的 code-search。
+                    // 并指向能当场证实或证伪它的 code-search。
+                    //
+                    // 两种成因并列,不许只说抽象基类那一种:`GenStep_ScatterLumpsMineable` 是个
+                    // 被 C# 直接 new 出来的**具体类**,而单说抽象基类会把人推去查一批不存在的
+                    // 子类 —— 第九轮盲测 S1 正是这么走完全程的。
                     : $" 'rimsearcher values {path} --limit all' lists them." +
-                      (ClassNameShape.Looks(value) && !indexGap
-                          ? $" If '{value}' is an abstract base class, no def names it directly, and its " +
-                            "subclasses are what to look up instead: " +
-                            $"'rimsearcher code-search \"class \\w+ : {ClassNameShape.Tail(value)}\\b\"' " +
-                            "names them, and settles whether such a class exists at all."
+                      (ClassNameShape.Looks(value) && !indexGap && hiddenByScope == 0
+                          ? $" Two things look like this zero when '{value}' is a class: it is an abstract base " +
+                            "and defs name its subclasses instead " +
+                            $"('rimsearcher code-search \"class \\w+ : {ClassNameShape.Tail(value)}\\b\"' names " +
+                            "them), or no def drives it at all and C# constructs it directly " +
+                            $"('rimsearcher code-search \"{ClassNameShape.Tail(value)}\"' shows who does). " +
+                            "Neither is evidence that the class itself does not exist."
                           : "")));
 
             // 边界排在建议**之后**:它限定的是上面那整段,而不是其中某一条。

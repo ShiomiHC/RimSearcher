@@ -205,6 +205,21 @@ public sealed class KeyedCommand : Command
         // 计数形态两路同一套。
         Emit(ctx, shown, matchedOn == "key" ? "keyed translation" : "key", offset, ftsTotal, placeholdersOnly);
 
+        // 精确命中把前缀匹配**静默**关掉了:`keyed CommandSettle` 回一行、绝口不提
+        // `CommandSettleDesc`,而计数仍是「完整计数」形态 —— 于是一次收窄长得和
+        // 「这个前缀下就这一个 key」一模一样。翻译覆盖率一类的问题会因此系统性少数。
+        // 只在真有兄弟时发声:没有兄弟时这句话是纯噪音。
+        if (matchedOn == "key")
+        {
+            var (siblings, siblingTotal) = ctx.Db.KeyedPrefixSiblings(query, Limits.MaxSuggestions);
+            if (siblingTotal > 0)
+                ctx.Report.Notice(NoticeKind.Boundary,
+                    $"'{query}' is itself a key, so the answer above is that one key — matching stopped being " +
+                    $"a prefix search. Beyond it, {Tally.Complete(siblingTotal).Render("key")} in this layer " +
+                    $"{(siblingTotal == 1 ? "starts" : "start")} with it " +
+                    $"({NameList.Render(siblings, Limits.MaxSuggestions)}); shorten the query to see them together.");
+        }
+
         // 靠文案搜到时下一步几乎总是「哪段代码印的」,而绝大多数调用点把 key 写成紧邻的字面量。
         // 只在**表里只有一个 key** 时把命令填好:同一句界面文案由几个 key 各自承载是常态
         // (「转至事件发生地点」同时是 JumpToLocation 与 ClickToJumpToProblem),那时填第一个

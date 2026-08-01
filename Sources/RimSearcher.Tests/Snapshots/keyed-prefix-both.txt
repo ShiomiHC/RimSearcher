@@ -1,0 +1,11 @@
+$ rimsearcher keyed CommandSettl
+exit 0
+--- stdout ---
+2 keys.
+
+Same in every row, not repeated below: origin=in effect, placeholder=no.
+key                translated            original                  mod  source
+CommandSettle      定居                  Settle                         GameplayCommands.xml:386
+CommandSettleDesc  在此处建立新殖民地。  Settle in this location.       GameplayCommands.xml:387
+These rows do not all carry the same key, so the code search goes after whichever row is the one you meant: 'rimsearcher code-search "\"<key>\""' with the key from that row. Most call sites write the key inline, but not all of them do — a key assembled from parts will not appear that way.
+--- stderr ---

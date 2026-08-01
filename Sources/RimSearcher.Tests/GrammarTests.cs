@@ -681,6 +681,74 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 算不出落点、只剩「像个类名」那一档的兜底话,不许声称快照不索引嵌套
+    /// <c>&lt;li Class="..."&gt;</c> —— 那是**确定的假话**(`find Class` 整条路建立在这条索引上,
+    /// 而覆盖到哪一层随导出器版本变),它的后果精确地是最贵的那种:把 `find Class` 的零
+    /// 读成「工具看不见」而不是「确实没有」。
+    ///
+    /// 反方向那半同时钉:`find Class` 的零也可能是「没有 def 驱动这个类」,而类照样存在 ——
+    /// 所以这句话必须把 code-search 指出来,否则读的人会在 def 那一侧原地打转。
+    /// </summary>
+    [Fact]
+    public void 类名形状的兜底话指向findClass而不是声称索引不到()
+    {
+        var (stdout, _, code) = Fixture.Run("search", "CompProperties_NoSuchThing");
+        Assert.Equal(1, code);
+
+        // 措辞可以改,这个断言钉的是**不许说的那件事**。
+        Assert.DoesNotContain("does not index those", stdout, StringComparison.Ordinal);
+        Assert.Contains("rimsearcher find Class", stdout, StringComparison.Ordinal);
+        Assert.Contains("code-search", stdout, StringComparison.Ordinal);
+
+        // 那句索引边界必须来自唯一产地(措辞随快照的导出器版本分三支),不是在这条路上另写
+        // 一份会过时的。主语料是 0.2.0,于是取的必须是「只量了列表元素」那一支。
+        Assert.Contains("for list elements only", stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <c>find</c> 落空时,**本次查询自己施加的过滤**是算得出来的成因,而「像个抽象基类」
+    /// 只是个猜测 —— 算得出来的排在前面,猜测退场。
+    ///
+    /// 盲测 S7 走过的路:`--scope all,-vanilla` 把唯一那一行剔掉,输出却只回显了 scope、
+    /// 再给一句抽象基类,于是「被我自己滤掉了」被读成「这个类没人用」。scope 的回显
+    /// 不是成因 —— 两者差着一次重查。
+    /// </summary>
+    [Fact]
+    public void find被scope滤空时说破并让猜测退场()
+    {
+        // 语料要的是**路径两边都在、值只在一边**:thingClass 在两个 mod 里都有,
+        // 而 RimWorld.Bullet 只是 ludeon 的 Bullet_Revolver 的值。路径也落空的那种走的是
+        // 另一条分支(它自己的句子里已经带着 --scope),这里钉的是值这一层。
+        var (all, _, allCode) = Fixture.Run("find", "thingClass", "RimWorld.Bullet");
+        Assert.Equal(0, allCode);
+
+        var (scoped, _, code) = Fixture.Run(
+            "find", "thingClass", "RimWorld.Bullet", "--scope", "test.mod");
+        Assert.Equal(1, code);
+        Assert.Contains("--scope test.mod is what emptied this", scoped, StringComparison.Ordinal);
+        // 算出来的成因在场时,那句未经验证的猜测不许并排摆着。
+        Assert.DoesNotContain("abstract base", scoped, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 类名形状的落空句不许把「抽象基类」当唯一解释:一个类可以完全不经过 def 被使用
+    /// (C# 里直接 new),那时候两条查询都是零,而只说抽象基类会把人推去查一批不存在的子类。
+    /// 盲测 S1 正是这么走完全程的。
+    /// </summary>
+    [Fact]
+    public void find的类名落空句并列两种成因()
+    {
+        // 路径取 compClass 而不是 Class:主语料是 0.2.0,`Class` 那条路上索引缺口在场,
+        // 于是猜测本来就该退场(那是另一条纪律,由 indexGap 守)。
+        var (stdout, _, code) = Fixture.Run("find", "compClass", "RimWorld.CompNoSuchThing");
+        Assert.Equal(1, code);
+        Assert.Contains("abstract base", stdout, StringComparison.Ordinal);
+        // 反方向那一半:没有 def 驱动它,而类照样存在。
+        Assert.Contains("no def drives it at all", stdout, StringComparison.Ordinal);
+        Assert.Contains("does not exist", stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 被自己的 <c>--scope</c> 挡住,不是「没有」。这一条排在分流的第一位。
     /// </summary>
     [Fact]
@@ -1702,6 +1770,36 @@ public class GrammarTests
         Assert.Equal(1, pastCode);
         Assert.Contains($"--offset {sources} is past the end", past, StringComparison.Ordinal);
         Assert.DoesNotContain("No keyed translation matches", past, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 查询词恰好是一个真 key 时,前缀匹配被关掉 —— 这**本身没错**(问一个 key 就该答那个
+    /// key),错的是它静默发生:`keyed CommandSettle` 的一行与「这个前缀下只有一个 key」
+    /// 逐字同形,而 `CommandSettleDesc` 就躺在旁边。翻译覆盖率一类的问题会因此系统性少数。
+    ///
+    /// 三个方向一起钉:收窄了要说破并点名兄弟;**没有兄弟时不许发声**(那句话会变成
+    /// 每次精确命中都跟着的噪音);前缀查询那一路照旧两条都在。
+    /// </summary>
+    [Fact]
+    public void keyed精确命中把前缀匹配关掉时要说破()
+    {
+        var (collapsed, _, code) = Fixture.Run("keyed", "CommandSettle");
+        Assert.Equal(0, code);
+        Assert.Contains("CommandSettleDesc", collapsed, StringComparison.Ordinal);
+        // 说破的是「匹配方式变了」,不只是「还有别的」—— 后者读起来像一条可选的建议。
+        Assert.Contains("prefix", collapsed, StringComparison.Ordinal);
+
+        // 没有兄弟的精确命中:一个字都不许多说。
+        var (lone, _, loneCode) = Fixture.Run("keyed", "CannotUseNoPower");
+        Assert.Equal(0, loneCode);
+        Assert.DoesNotContain("prefix", lone, StringComparison.Ordinal);
+
+        // 前缀那一路本来就两条都在,这句话在那里同样是噪音。
+        var (prefix, _, prefixCode) = Fixture.Run("keyed", "CommandSettl");
+        Assert.Equal(0, prefixCode);
+        Assert.Contains("CommandSettle", prefix, StringComparison.Ordinal);
+        Assert.Contains("CommandSettleDesc", prefix, StringComparison.Ordinal);
+        Assert.DoesNotContain("matching stopped being", prefix, StringComparison.Ordinal);
     }
 
     /// <summary>

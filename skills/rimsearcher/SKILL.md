@@ -196,8 +196,8 @@ so. A `--files` glob containing `/` starts at the tree name (`vanilla/**/Widgets
   translations belonging to no def, unreachable by `search`/`get`/`find`. Both directions:
   key → displayed text, phrase in either language → keys. Only `in effect` rows are what
   the game displays; `on disk` rows mostly come from installed-but-disabled mods.
-  **A query that is itself an exact key silently stops matching prefixes** — `CommandSettle`
-  returns one row and never mentions `CommandSettleDesc`; shorten the query to see siblings.
+  **A query that is itself an exact key stops matching prefixes** — `CommandSettle` returns
+  that one key, and says so below the table while naming the siblings it stopped short of.
   `--placeholders` with no query lists every untranslated key — **do not invent a stand-in
   query**: `""`, `*`, `.` are not wildcards, and a real word silently answers a different
   question.

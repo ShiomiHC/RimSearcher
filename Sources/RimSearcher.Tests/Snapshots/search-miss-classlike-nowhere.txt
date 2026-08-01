@@ -1,0 +1,6 @@
+$ rimsearcher search CompProperties_NoSuchThing
+exit 1
+--- stdout ---
+Nothing matched 'CompProperties_NoSuchThing' in this snapshot. This command covers def names, labels, descriptions and the translations injected onto defs — not C# class names, and not the UI strings under Languages/*/Keyed, which sit on a layer of their own that 'rimsearcher keyed' reads.
+Nothing in this snapshot is called that under any other guise either — no def type, no class, no mod. The runtime type of a nested Class="..." object is indexed as '<path>.Class' for list elements only (<li Class="...">), so 'rimsearcher find Class <ClassName>' reaches those. A single field that picks a class — GenStepDef.genStep, ThinkTreeDef.thinkRoot — is not in this snapshot at all: it was written by exporter 0.2.0, before that case entered the index, and a zero from that query is not evidence about it. Re-export to reach it. A zero from that one too means no def names 'CompProperties_NoSuchThing' — the class can still exist and be constructed in C#: 'rimsearcher code-search "class CompProperties_NoSuchThing\b"' settles whether it exists, and a bare 'rimsearcher code-search' on the name shows who uses it.
+--- stderr ---

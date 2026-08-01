@@ -371,8 +371,8 @@ public class ImportTests
     public void 运行时keyed五条都进库且双语两侧都在()
     {
         using var db = Build("keyed");
-        // 五条形态语料 + 2100 条过 MaxLimit 的填充批(上限与占位两道闸要的,见 Fixture)。
-        Assert.Equal(5 + 2100, db.KeyedCount());
+        // 七条形态语料 + 2100 条过 MaxLimit 的填充批(上限与占位两道闸要的,见 Fixture)。
+        Assert.Equal(7 + 2100, db.KeyedCount());
 
         var row = db.KeyedByKey("CannotUseNoPower").Single();
         Assert.Equal("没有电力", row.Translated);

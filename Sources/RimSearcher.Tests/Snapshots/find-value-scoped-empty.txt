@@ -1,0 +1,6 @@
+$ rimsearcher find thingClass RimWorld.Bullet --scope test.mod
+exit 1
+--- stdout ---
+--scope test.mod is what emptied this: 1 def in this snapshot has 'thingClass' set to 'RimWorld.Bullet'. Drop --scope to see it.
+No def within --scope test.mod has 'thingClass' set to 'RimWorld.Bullet', out of the 1 value found under thingClass. 'rimsearcher values thingClass --limit all' lists them.
+--- stderr ---
