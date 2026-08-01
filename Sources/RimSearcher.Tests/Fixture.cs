@@ -317,7 +317,11 @@ public static class Fixture
             ("soundPickup", "Standard_Pickup", DefaultState.Differs),
             ("soundInteract", "Standard_Pickup", DefaultState.Differs),
             ("thingClass", "Verse.ThingWithComps", DefaultState.Differs),
-            ("ingestible.foodType", "Meat", DefaultState.Differs));
+            ("ingestible.foodType", "Meat", DefaultState.Differs),
+            // 值是 Standard_Pickup 的**超串**,而它坐在一条别的 def 都没有的路径上 ——
+            // 于是 `find --value Standard_Pickup` 分得出「精确的两条路径」与「只含它的
+            // 那一条」,而那正是 defs 列口径说明唯一的落点。
+            ("ingestible.ingestSound", "Standard_PickupFood", DefaultState.Differs));
 
         // comps[0].compClass 与上面那个 ThingDef 同路径,而**只有 ThingDef 那边有被截过的 def**
         // (Bullet_Revolver)。于是 `values compClass --type HediffDef` 是「表已经滤干净、

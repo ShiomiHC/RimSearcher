@@ -552,6 +552,32 @@ public sealed class SnapshotDb : IDisposable
     }
 
     /// <summary>
+    /// 同类型的 def 里,有几个在含这段文本的路径上有值 —— 以及那摊路径有几条。
+    ///
+    /// def 数按 <c>DISTINCT def_id</c> 数,不是把每条路径的行数相加:同一个 def 往往在多条
+    /// 路径上都有值(<c>ingestible.*</c> 在语料里就有七十几条),相加得到的数会大过这个类型
+    /// 的 def 总数。
+    /// </summary>
+    public (int Defs, int Paths) TypeDefsWithPath(string defType, IReadOnlyList<string> pathFilters)
+    {
+        var filters = pathFilters.Where(f => !string.IsNullOrEmpty(f)).ToList();
+        if (filters.Count == 0) return (0, 0);
+
+        var p = new Dictionary<string, object?> { ["@t"] = defType };
+        var any = new List<string>();
+        for (var i = 0; i < filters.Count; i++)
+        {
+            p[$"@f{i}"] = "%" + Escape(filters[i]) + "%";
+            any.Add($"fv.path LIKE @f{i} ESCAPE '\\'");
+        }
+        var where = "FROM field_values fv JOIN defs d ON d.id = fv.def_id " +
+                    $"WHERE d.def_type = @t COLLATE NOCASE AND ({string.Join(" OR ", any)})";
+
+        return (Scalar($"SELECT COUNT(DISTINCT fv.def_id) {where}", p),
+                Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT fv.path {where})", p));
+    }
+
+    /// <summary>
     /// <c>WholeSegment</c> 是 <c>Total</c> 里有几条把 <paramref name="pathFilter"/> 用作**完整的一段**。
     /// 子串匹配不留痕:不拆开这两档,「你要的那个字段根本不在」与「它在,旁边还有一堆别的」
     /// 逐字同形。数在分页**之前**数。

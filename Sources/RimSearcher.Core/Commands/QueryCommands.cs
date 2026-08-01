@@ -392,6 +392,14 @@ public sealed class GetCommand : Command
                     // 第二种成因:给进来的文本不是路径而是**值**(`--path TrapSpringChance`
                     // 是 statBases[6].stat 装着的那个值)。这一档算得出来,就算出来再说。
                     var asValue = paths.Where(t => ctx.Db.ValueHits(def.Id, t) > 0).ToList();
+
+                    // 第三种成因,也是最容易被读反的那种:字段在同类型别的 def 上有,只是
+                    // 这个 def 上是 null 而 null 不进索引。「这个 def 没有」与「这个类型
+                    // 没有」在输出上同形,而这个数当场查得出来 —— 不报,前者就会被当后者用。
+                    var (kin, kinPaths) = asValue.Count > 0
+                        ? (0, 0)
+                        : ctx.Db.TypeDefsWithPath(def.DefType, paths);
+
                     ctx.Report.Notice(NoticeKind.Boundary,
                         $"No field path{whose} contains {PathFilterText.Say(paths)}; the def does have " +
                         $"{Tally.Complete(total).Render("field")}. Drop --path to see them." +
@@ -399,7 +407,18 @@ public sealed class GetCommand : Command
                         (asValue.Count > 0
                             ? " Found on this def as a field's value rather than anywhere in a path: " +
                               $"{PathFilterText.Say(asValue)}. 'rimsearcher find --value {asValue[0]}' names every path holding it."
+                            : "") +
+                        (kin > 0
+                            ? $" Other defs of this type do have it: {Tally.Complete(kin).Render("def")} across " +
+                              $"{Tally.Complete(kinPaths).Render("field path")}. So it is missing from this def, " +
+                              $"not from {def.DefType} — a field that is null on a def never entered the index. " +
+                              $"'rimsearcher fields {def.DefType} --path {paths[0]}' names those paths."
                             : ""));
+
+                    // 一个同类都没有,而那段文本也不是个值:此时「索引里没有」与「字段不存在」
+                    // 真的分不开,得由那段话去分。上面两支各自已经解释过了,不再挂一遍。
+                    if (kin == 0 && asValue.Count == 0)
+                        Completeness.NoteIndexHoldsValuesOnly(ctx);
                 }
                 else
                 {
@@ -944,7 +963,8 @@ public sealed class FindCommand : Command
 
         Advisory.NoteAuthoredSiblings(ctx, rows.Where(r => r.Default != Contract.DefaultState.Same)
                                                 .Select(r => (r.Def.DefName, r.Def.Id, r.Path)));
-        Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(path, scope));
+        Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(path, scope),
+            "every def type that uses this path at all, not just the ones in the rows above");
         return 0;
     }
 
@@ -1000,9 +1020,12 @@ public sealed class FindCommand : Command
                 exactTotal == 0
                     ? $"No value here is exactly '{value}'; each match has it inside a longer value — see " +
                       "example_value. --exact would return nothing."
+                    // 拆的是**路径**,而右边那列数的是 def,两个口径叠在一张表里。不说破的话
+                    // 「56 精确」会把整张表连同 defs 列一起读成精确数。
                     : $"Value exactly '{value}': {Tally.Complete(exactTotal).Render("field path")}; " +
                       $"containing it: {Tally.Complete(total - exactTotal).Render("field path")}. " +
-                      "--exact keeps the first group only.");
+                      "--exact keeps the first group only — and also narrows the defs column, which here " +
+                      $"counts every def whose value contains '{value}', both groups together.");
 
         ctx.Report.Table("paths", ["path", "def_type", "defs", "example_value"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
@@ -1018,7 +1041,8 @@ public sealed class FindCommand : Command
         // 「同类型」等于全体 def 类型,单这一项就等于全库 —— 于是子集计数会大于全集。
         // 表里那批 def 是「取到过这个值」选出来的,尾注担保的也必须是同一批。
         Completeness.NoteIndexedPathsOnly(ctx,
-            ctx.Db.TruncatedDefsSharingValue(value, exact ? ValueMatch.Exact : ValueMatch.Substring, scope));
+            ctx.Db.TruncatedDefsSharingValue(value, exact ? ValueMatch.Exact : ValueMatch.Substring, scope),
+            "every def type that holds this value anywhere, not just the ones in the rows above");
         return 0;
     }
 }
@@ -1442,7 +1466,10 @@ public sealed class FieldsCommand : Command
                 ["path"] = r.Path,
                 ["defs"] = r.Count,
             }).ToList());
-        Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsOfType(type));
+        // 这一处圈的是整个 def 类型,与 --path 无关 —— 表已经按 --path 滤过,而被砍掉的
+        // 字段本来就不在表里,按 --path 收窄这个数就是拿看得见的东西去限定看不见的东西。
+        Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsOfType(type),
+            $"all of {type}, whatever --path says");
         return 0;
     }
 }
@@ -1544,7 +1571,10 @@ public sealed class ValuesCommand : Command
                 ["defs"] = r.Count,
             }).ToList());
         // 尾注跟着 --type 一起收:表已经滤成一个类型了,脚注不能还在说别的类型。
-        Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(path, scope, type));
+        Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(path, scope, type),
+            type is { Length: > 0 }
+                ? $"all of {type}, the type this table is already filtered to"
+                : "every def type that uses this path at all, not just the ones in the rows above");
         return 0;
     }
 }
@@ -1677,12 +1707,18 @@ internal static class Completeness
         // 指列名而不是指那一列的取值:整列同值时渲染器会把它折进表上方那行
         // (`Same in every row: code_default=no`),于是「上面的一个 no」在表里根本不存在,
         // 这句话就指了个空。列名在折叠行里照样出现,指它才两种排布都成立。
+        //
+        // 范围也得写进句子:shared_values 建表时就把「与声明默认值相同」的行整批排除了
+        // (见那张表的建表注释),于是一行 yes 从来没进过候选。不说破的话,「上面没有一个」
+        // 印在一张只有 yes 行的表下面会被读成结论 —— 而那是没比过,不是比过了没有。
         ctx.Report.Notice(NoticeKind.Advisory, listed.Count > 0
             ? $"Values that most of the {total} {def.DefType}s in this snapshot also carry, so their " +
               $"'{FieldDefault.Column}' is not this def having made a choice — the count in brackets: " +
-              $"{NameList.Render(listed, listed.Count)}."
-            : $"No value above is one that most of the {total} {def.DefType}s in this snapshot also carry, " +
-              $"so none of them is a class-wide default showing through '{FieldDefault.Column}'.");
+              $"{NameList.Render(listed, listed.Count)}. " +
+              $"Only rows whose '{FieldDefault.Column}' is no were compared: a yes is a declared default already."
+            : $"No value above with '{FieldDefault.Column}'=no is one that most of the {total} " +
+              $"{def.DefType}s in this snapshot also carry, so none of them is a class-wide default showing " +
+              $"through that column. Rows marked yes were not compared: a yes is a declared default already.");
     }
 
     /// <summary>
@@ -1714,7 +1750,16 @@ internal static class Completeness
                "query here reaches it — re-export to get 'rimsearcher find Class <ClassName>'.";
     }
 
-    public static void NoteIndexedPathsOnly(CommandContext ctx, TruncationScope affected)
+    /// <param name="basis">
+    /// 这批类型是**怎么圈出来的**,整句写全。三条调用路各不相同(用得到这条路径 /
+    /// 取到过这个值 / 就是这一个类型),而句子此前一律写死成 "carrying this path" ——
+    /// 按值那条与按类型那条上,那句话说的不是它做的事。
+    ///
+    /// 范围本身也得由调用方说破「比上面那张表宽」:一个被砍过的 def 丢掉的可能正是本次
+    /// 问的那个字段,所以担保必须按类型给,给不了「只看表里这几行」那么窄 —— 而读的人
+    /// 默认按表读,于是名单里冒出表里没有的类型时,整条脚注会被当成虚警。
+    /// </param>
+    public static void NoteIndexedPathsOnly(CommandContext ctx, TruncationScope affected, string basis)
     {
         if (affected.Count == 0) return;
 
@@ -1722,16 +1767,22 @@ internal static class Completeness
         var shown = types.Take(Limits.MaxSuggestions).ToList();
         var cmd = "rimsearcher snapshot truncated" +
                   string.Concat(shown.Select(t => $" --type {t}"));
-        // 类型当场点名,不写「the same def types」—— 这里数的是「哪些 def 类型带得动这条
-        // 路径」,跟表里那几行的类型可以毫无关系。主语固定成「那些 def 类型」,计数进从句:
-        // 名词有登记处,动词没有。
+        // 类型当场点名,不写「the same def types」。主语固定,计数进从句:名词有登记处,
+        // 动词没有。
         // 「计数只覆盖索引到的路径」这条规则搬进了 SKILL.md。这里留的是它在**这一次**
-        // 的具体后果:哪几个 def 类型带得动这条路径、其中多少个 def 在导出时掉过字段、
+        // 的具体后果:范围圈住了哪几个 def 类型、其中多少个 def 在导出时掉过字段、
         // 以及那条已经填好参数的交叉验证命令 —— 三样都是查一次才知道的。
+        // basis 自己已经点了那个类型的名时,名单就是同一个词再说一遍。
+        var alreadyNamed = types.Count == 1 && basis.Contains(types[0], StringComparison.Ordinal);
+        var tally = Tally.Complete(affected.Count).Render("def");
+
         ctx.Report.Notice(NoticeKind.Boundary,
-            $"The def types carrying this path ({NameList.Render(types, Limits.MaxSuggestions)}) also hold " +
-            $"{Tally.Complete(affected.Count).Render("def")} that lost fields at export time and could belong " +
-            "here without showing up. " +
+            "Defs whose export was cut short can be missing from this answer: the field asked about may be " +
+            "one of the ones they lost. " +
+            (alreadyNamed
+                ? $"That risk spans {basis}, holding {tally} cut short. "
+                : $"That risk spans {basis} — {NameList.Render(types, Limits.MaxSuggestions)}, " +
+                  $"holding {tally} cut short between them. ") +
             $"'{cmd}' lists " +
             (shown.Count == types.Count
                 ? "them."

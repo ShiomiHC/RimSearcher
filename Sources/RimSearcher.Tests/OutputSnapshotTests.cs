@@ -155,6 +155,8 @@ public class OutputSnapshotTests
         // --path 筛空的两种成因:真没有这条路径 vs 给进来的文本其实是个**值**
         // (stat 名装在 statBases[N].stat 里)。
         { "get-path-is-value",     ["get", "Apparel_ShieldBelt", "--path", "MarketValue"] },
+        // 第三种:字段在同类型别的 def 上有(Meat_Muffalo 的 ingestible.*),这个 def 上是 null。
+        { "get-path-on-kin",       ["get", "Apparel_ShieldBelt", "--path", "ingestible"] },
         // --source 已经给出时,补救措施里不许再列 --source。
         { "code-search-source-cap", ["code-search", "public", "--source", "vanilla", "--max-files", "1"] },
         { "code-search-no-tree",   ["code-search", "public", "--source", "HAR"] },

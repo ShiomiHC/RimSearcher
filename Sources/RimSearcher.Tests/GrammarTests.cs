@@ -493,11 +493,11 @@ public class GrammarTests
         // RimWorld.CompShield 在 test.mod 的 TestModGun 上也有 —— 收窄之后仍有结果,
         // 变的只是这句背书该不该说话。
         var (wide, _, _) = Fixture.Run("find", "--value", "CompShield");
-        Assert.Contains("def types carrying this path", wide);
+        Assert.Contains("Defs whose export was cut short", wide);
 
         // 收到 test.mod 之后被砍的那个不在 scope 里,这句背书就不该再提它。
         var (narrow, _, _) = Fixture.Run("find", "--value", "CompShield", "--scope", "test.mod");
-        Assert.DoesNotContain("def types carrying this path", narrow);
+        Assert.DoesNotContain("Defs whose export was cut short", narrow);
     }
 
     /// <summary>
@@ -1080,6 +1080,97 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 第三种成因,而且是最容易被读反的那种:字段在同类型别的 def 上有,只是这个 def 上是
+    /// null(null 不进索引)。「这个 def 没有」与「这个类型没有」在输出上同形,而工具手边
+    /// 就有那个数 —— 不说出来,读的人会拿前者当后者用。
+    ///
+    /// 闸盯两头:有同类时报数并说破范围,没同类时不许凭空造出一个 0 来暗示什么。
+    /// </summary>
+    [Fact]
+    public void 字段在同类型别的def上有时当场报数()
+    {
+        // Meat_Muffalo 有 ingestible.foodType,Apparel_ShieldBelt 没有 —— 同为 ThingDef。
+        var (kin, _, code) = Fixture.Run("get", "Apparel_ShieldBelt", "--path", "ingestible");
+        Assert.Equal(0, code);
+        Assert.Contains("Other defs of this type do have it: 1 def", kin, StringComparison.Ordinal);
+        Assert.Contains("missing from this def, not from ThingDef", kin, StringComparison.Ordinal);
+        Assert.Contains("fields ThingDef --path ingestible", kin, StringComparison.Ordinal);
+
+        // 真的哪儿都没有时:换成「索引里没有值不等于字段不存在」那段,而不是报一个 0。
+        var (nowhere, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--path", "zzzznothing");
+        Assert.DoesNotContain("Other defs of this type", nowhere, StringComparison.Ordinal);
+        Assert.Contains("no indexed value sits at that path", nowhere, StringComparison.Ordinal);
+
+        // 文本其实是个值的那一支已经解释过了,不许再挂一遍长段落。
+        var (asValue2, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--path", "MarketValue");
+        Assert.DoesNotContain("no indexed value sits at that path", asValue2, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 共享值那句结语号称扫过「上面」全部行,而 shared_values 建表时就把「与声明默认值
+    /// 相同」的行整批排除了 —— 一行 <c>code_default=yes</c> 从来没进过候选。于是
+    /// 「上面没有一个」印在一张**只有 yes 行**的表下面时读起来像结论,其实是没比过。
+    ///
+    /// 闸盯两句:正反两句共用同一个范围声明,不许只改一句。
+    /// </summary>
+    [Fact]
+    public void 共享值结语说破自己只比过非默认行()
+    {
+        // 表里唯一一行是 yes(projectile.burstCount=1,声明默认值本身)。
+        var (onlyYes, _, _) = Fixture.Run("get", "Bullet_Revolver", "--path", "burstCount");
+        Assert.Contains("Rows marked yes were not compared", onlyYes, StringComparison.Ordinal);
+        Assert.Contains("No value above with 'code_default'=no", onlyYes, StringComparison.Ordinal);
+
+        // 有命中的那一句用同一个取景。
+        var (hit, _, _) = Fixture.Run("get", "Apparel_ShieldBelt");
+        Assert.Contains("Only rows whose 'code_default' is no were compared", hit, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 表头把命中拆成「精确」与「包含」两组,分的是**路径**;而右边那列数的是 def,一直按
+    /// 包含计。两个口径叠在一张表里而不说破,「56 精确」会把整张表连同 defs 列一起读成精确数。
+    /// </summary>
+    [Fact]
+    public void 按值反查说破defs列与拆分不同口径()
+    {
+        // soundPickup / soundInteract 精确,ingestible.ingestSound 只含它。
+        var (split, _, _) = Fixture.Run("find", "--value", "Standard_Pickup");
+        Assert.Contains("Value exactly 'Standard_Pickup': 2 field paths; containing it: 1 field path.",
+            split, StringComparison.Ordinal);
+        Assert.Contains("also narrows the defs column", split, StringComparison.Ordinal);
+
+        // 一条都不精确时没有两个口径可混,那句话就不该在场 —— 否则它退化成每次都挂的免责声明。
+        var (none, _, _) = Fixture.Run("find", "--value", "CompShield");
+        Assert.DoesNotContain("also narrows the defs column", none, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 截断脚注圈的那批 def 类型,**按查询方式各不相同**:用得到这条路径的 / 取到过这个值的 /
+    /// 就是这一个类型。此前三条路共用一句写死的「carrying this path」,于是按值那条与按类型
+    /// 那条上,句子说的不是它做的事。
+    ///
+    /// 还要说破范围比上面那张表宽 —— 一个被砍过的 def 丢掉的可能正是本次问的字段,担保只能
+    /// 按类型给。不说的话,名单里冒出表里没有的类型,整条脚注会被当成虚警扔掉。
+    /// </summary>
+    [Fact]
+    public void 截断脚注说破自己圈的是哪批def类型()
+    {
+        var (byPath, _, _) = Fixture.Run("find", "compClass", "RimWorld.CompShield");
+        Assert.Contains("every def type that uses this path at all, not just the ones in the rows above",
+            byPath, StringComparison.Ordinal);
+
+        var (byValue, _, _) = Fixture.Run("find", "--value", "RimWorld.CompShield");
+        Assert.Contains("every def type that holds this value anywhere", byValue, StringComparison.Ordinal);
+        Assert.DoesNotContain("uses this path", byValue, StringComparison.Ordinal);
+
+        // 按类型那条:数的是整个类型,与 --path 无关 —— 被砍掉的字段本来就不在表里,
+        // 拿 --path 去限定它等于拿看得见的东西限定看不见的东西。
+        var (byType, _, _) = Fixture.Run("fields", "ThingDef", "--path", "comps");
+        Assert.Contains("all of ThingDef, whatever --path says", byType, StringComparison.Ordinal);
+        Assert.DoesNotContain("uses this path", byType, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 不点名时默认值行不列,但**不许静默**:少了多少条、为什么、怎么看回来,都要在场。
     /// 机器侧靠 kind 分类(这是过滤不是截断,混用会让扫 notes 的下一位读成「结果不完整」)。
     /// </summary>
@@ -1331,7 +1422,7 @@ public class GrammarTests
         var (stdout, _, _) = Fixture.Run("find", "--value", "CompShield");
 
         var m = Regex.Match(stdout,
-            @"def types carrying this path [^']*?also hold (\d+) defs? that lost fields[^']*" +
+            @"Defs whose export was cut short [^']*?holding (\d+) defs? cut short between them\. " +
             @"'rimsearcher snapshot truncated([^']*)' lists them\.");
         Assert.True(m.Success, stdout);
 
@@ -2164,7 +2255,7 @@ public class GrammarTests
     [Fact]
     public void 完整性脚注要跟着自己划的类型一起收()
     {
-        const string Note = "def types carrying this path";
+        const string Note = "cut short between them";
 
         // 语料:comps[0].compClass 同时落在 ThingDef 与 HediffDef 上,而只有 ThingDef
         // 那边有被截过的 def(Bullet_Revolver)。不划类型时这句话成立,要出。
@@ -2345,7 +2436,8 @@ public class GrammarTests
 
         // 另一个类型上没有这种值 —— 这时候要明说没有,不能靠沉默。
         var (own, _, _) = Fixture.Run("get", "VariantOne");
-        Assert.Contains("No value above is one that most of the", own, StringComparison.Ordinal);
+        Assert.Contains($"No value above with '{FieldDefault.Column}'=no is one that most of the", own,
+            StringComparison.Ordinal);
         Assert.DoesNotContain("is not this def having made a choice", own, StringComparison.Ordinal);
     }
 

@@ -9,5 +9,5 @@ comps[0].Class                      1
 comps[0].props.energyLossPerDamage  1
 comps[0].props.energyMax            1
 
-The def types carrying this path (ThingDef) also hold 1 def that lost fields at export time and could belong here without showing up. 'rimsearcher snapshot truncated --type ThingDef' lists them.
+Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans all of ThingDef, whatever --path says, holding 1 def cut short. 'rimsearcher snapshot truncated --type ThingDef' lists them.
 --- stderr ---

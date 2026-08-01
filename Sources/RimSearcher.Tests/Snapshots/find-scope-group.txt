@@ -7,5 +7,5 @@ exit 0
 def_name         def_type  path        value            code_default  mod
 Bullet_Revolver  ThingDef  thingClass  RimWorld.Bullet  no            ludeon.rimworld
 
-The def types carrying this path (ThingDef) also hold 1 def that lost fields at export time and could belong here without showing up. 'rimsearcher snapshot truncated --type ThingDef' lists them.
+Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans every def type that uses this path at all, not just the ones in the rows above — ThingDef, holding 1 def cut short between them. 'rimsearcher snapshot truncated --type ThingDef' lists them.
 --- stderr ---
