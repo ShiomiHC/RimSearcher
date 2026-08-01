@@ -266,7 +266,11 @@ public class StalenessTests
     /// <summary>
     /// 走真的 import 路径建库,于是「记进 meta」与「读出来比对」两侧同时被闸住。
     /// </summary>
-    private static (string Db, RimConfig Config, string ModDir, string ConfigPath) SnapshotOfModTree(string name)
+    /// <summary>快照自己那两个 mod。<see cref="SnapshotOfModTree"/> 的 activeMods 默认值。</summary>
+    private static readonly string[] SnapshotMods = ["ludeon.rimworld", "test.mod"];
+
+    private static (string Db, RimConfig Config, string ModDir, string ConfigPath) SnapshotOfModTree(
+        string name, string[]? activeMods = null, string? gameVersion = null)
     {
         var root = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "content", name);
         if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
@@ -280,8 +284,8 @@ public class StalenessTests
         // 于是这几条闸的成败取决于跑测试的人现在开着哪些 mod。
         var modsConfig = Path.Combine(root, "ModsConfig.xml");
         File.WriteAllText(modsConfig,
-            $"<ModsConfigData><version>{Fixture.GameVersion}</version><activeMods>" +
-            $"<li>ludeon.rimworld</li><li>{PackageId}</li>" +
+            $"<ModsConfigData><version>{gameVersion ?? Fixture.GameVersion}</version><activeMods>" +
+            string.Concat((activeMods ?? SnapshotMods).Select(id => $"<li>{id}</li>")) +
             "</activeMods></ModsConfigData>\n", new UTF8Encoding(false));
 
         var config = new RimConfig { ModRoots = [Path.Combine(root, "mods")], ModsConfig = modsConfig };
@@ -358,6 +362,98 @@ public class StalenessTests
 
         Assert.Equal(EnvironmentMatch.Same, report.Match);
         Assert.False(report.Content!.Drifted);
+    }
+
+    // ---- mod 列表:集合差不算过期,次序差算 ----
+
+    /// <summary>
+    /// 游戏多开了几个 mod,不是漂移。快照覆盖到哪儿为止是**它存在的理由**(一份刻意精简的
+    /// 基线快照,pin 上之后这句话每次查询都成立、且永远不会「修好」),而恒真的警告不携带
+    /// 信息,却与真过期同形同位。
+    /// </summary>
+    [Fact]
+    public void 游戏多开了mod不算漂移()
+    {
+        var (dbPath, config, _, _) = SnapshotOfModTree(
+            "superset", ["ludeon.rimworld", "test.mod", "extra.mod"]);
+        using var db = SnapshotDb.Open(dbPath);
+        var report = SnapshotCatalog.Compare(db, config);
+
+        Assert.Equal(EnvironmentMatch.Same, report.Match);
+        Assert.False(report.Reordered);
+        // 数字照旧算出来 —— `snapshot status` 要逐条讲,只是不进每次查询。
+        Assert.Equal(1, report.Added);
+        Assert.Equal(0, report.Removed);
+    }
+
+    /// <summary>禁用一个 mod 是同一件事的另一半:也是环境选择,也不发声。</summary>
+    [Fact]
+    public void 游戏禁用了mod也不算漂移()
+    {
+        var (dbPath, config, _, _) = SnapshotOfModTree("subset", ["ludeon.rimworld"]);
+        using var db = SnapshotDb.Open(dbPath);
+        var report = SnapshotCatalog.Compare(db, config);
+
+        Assert.Equal(EnvironmentMatch.Same, report.Match);
+        Assert.False(report.Reordered);
+        Assert.Equal(1, report.Removed);
+    }
+
+    /// <summary>
+    /// 次序变了是漂移。没人挑得出一个「次序变体」环境 —— 而加载顺序决定同名 patch 谁赢,
+    /// 于是快照里的值不是「不全」,是错的。
+    /// </summary>
+    [Fact]
+    public void 同一批mod换了次序算漂移()
+    {
+        var (dbPath, config, _, _) = SnapshotOfModTree("reordered", ["test.mod", "ludeon.rimworld"]);
+        using var db = SnapshotDb.Open(dbPath);
+
+        Assert.True(SnapshotCatalog.Compare(db, config).Reordered);
+    }
+
+    /// <summary>
+    /// 次序只在**两边都在**的那些 mod 之间判。拿全表去判的话,多开一个就会让它响 ——
+    /// 而那一格按上面的口径不发声,于是集合差会从这条判据的后门漏回来。
+    /// </summary>
+    [Fact]
+    public void 多开的mod插在中间不算换次序()
+    {
+        var (dbPath, config, _, _) = SnapshotOfModTree(
+            "interleaved", ["ludeon.rimworld", "extra.mod", "test.mod"]);
+        using var db = SnapshotDb.Open(dbPath);
+
+        Assert.False(SnapshotCatalog.Compare(db, config).Reordered);
+    }
+
+    /// <summary>
+    /// **这条是整件事的理由**:此前 mod 列表不一致会让 <c>Compare</c> 当场 return,
+    /// 于是版本与 XML 那两层根本跑不到 —— 一份 pin 着的精简快照碰上 build 升级,一个字都不报。
+    /// 那条恒真的列表警告不只是稀释信号,它在顶替信号。
+    /// </summary>
+    [Fact]
+    public void 多开了mod也照样报版本漂移()
+    {
+        var (dbPath, config, _, _) = SnapshotOfModTree(
+            "superset-version", ["ludeon.rimworld", "test.mod", "extra.mod"], gameVersion: "1.7.0000");
+        using var db = SnapshotDb.Open(dbPath);
+
+        Assert.Equal(EnvironmentMatch.VersionDrift, SnapshotCatalog.Compare(db, config).Match);
+    }
+
+    /// <summary>同上,XML 那一层 —— 两层各有各的 return,漏一个就漏一整类。</summary>
+    [Fact]
+    public void 多开了mod也照样报XML漂移()
+    {
+        var (dbPath, config, modDir, _) = SnapshotOfModTree(
+            "superset-content", ["ludeon.rimworld", "test.mod", "extra.mod"]);
+        File.AppendAllText(Path.Combine(modDir, "Defs", "Things.xml"), "<!-- edited -->");
+
+        using var db = SnapshotDb.Open(dbPath);
+        var report = SnapshotCatalog.Compare(db, config);
+
+        Assert.Equal(EnvironmentMatch.ContentDrift, report.Match);
+        Assert.Equal(["test.mod"], report.Content!.Changed);
     }
 
     /// <summary>
@@ -467,6 +563,50 @@ public class StalenessTests
         Assert.Contains("Languages/", stdout, StringComparison.Ordinal);
         // 假阳性那一面也要说 —— 不说的话,一次 Steam 校验引发的告警会被当成工具坏了。
         Assert.Contains("identical bytes", stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// pin 着一份覆盖面与游戏不同的快照时,每次查询**一个字都不提 mod 列表**。
+    /// 这是这轮改动的正面:头两行恒定横幅是在不需要时的泛泛提醒,而需要时的精确提醒
+    /// (零结果点名哪份快照有那个 def)另有产地。
+    /// </summary>
+    [Fact]
+    public void 多开了mod时查询不提mod列表()
+    {
+        var (db, _, _, configPath) = SnapshotOfModTree(
+            "e2e-superset", ["ludeon.rimworld", "test.mod", "extra.mod"]);
+        var stdout = Run(configPath, db, "get", "Apparel_ShieldBelt");
+
+        Assert.DoesNotContain("mod list", stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain("no longer enabled", stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain("load order", stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>次序变了照旧当场说 —— 这一条是上一条的反面,少了它「省略」就成了「全静默」。</summary>
+    [Fact]
+    public void 次序变了查询当场说破()
+    {
+        var (db, _, _, configPath) = SnapshotOfModTree("e2e-reorder", ["test.mod", "ludeon.rimworld"]);
+        var stdout = Run(configPath, db, "get", "Apparel_ShieldBelt");
+
+        Assert.Contains("different load order", stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 集合差在 <c>snapshot status</c> 里照旧逐条讲 —— 它是被显式问的那一处。
+    /// 还要说破「查询不会提这件事」,否则那份沉默会被当成没差异。
+    /// </summary>
+    [Fact]
+    public void 集合差在status里照旧逐条讲()
+    {
+        var (db, _, _, configPath) = SnapshotOfModTree(
+            "e2e-superset-status", ["ludeon.rimworld", "test.mod", "extra.mod"]);
+        var stdout = Run(configPath, db, "snapshot", "status");
+
+        Assert.Contains("1 enabled that this snapshot lacks", stdout, StringComparison.Ordinal);
+        Assert.Contains("Ordinary queries stay silent", stdout, StringComparison.Ordinal);
+        // 版本与文件那两层的背书不许把 mod 列表也一起背下去。
+        Assert.DoesNotContain("same mods", stdout, StringComparison.Ordinal);
     }
 
     /// <summary>

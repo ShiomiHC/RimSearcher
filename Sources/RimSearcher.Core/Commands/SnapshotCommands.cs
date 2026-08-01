@@ -121,12 +121,36 @@ public sealed class SnapshotStatusCommand : Command
                 $"{Tally.Complete(truncated).Render("def")} in this snapshot had fields dropped at export time for " +
                 "depth or size. For those, a field path missing from 'get' is not proof that the def lacks it.");
 
+        // 集合差在**这里**逐条讲,而每次查询一个字都不说(成因见 EnvironmentReport.Added)——
+        // 于是「为什么查询不提这件事」的答案得在这一句里,否则沉默会被当成没差异。
+        // 归 Boundary 不归 Staleness:它讲的是这份数据覆盖到哪儿为止,不是它过没过期。
+        if (env.Added > 0 || env.Removed > 0)
+            ctx.Report.Notice(NoticeKind.Boundary,
+                $"The game currently has a different mod list: {env.Added} enabled that this snapshot lacks, " +
+                $"{env.Removed} in this snapshot that are no longer enabled. This is not automatically wrong — " +
+                "you may be querying another environment on purpose — but nothing here reflects those mods. " +
+                "Ordinary queries stay silent about this; they report only the differences below.");
+
+        // 次序是另一回事:它不是「另一个环境」,而是同一批 mod 的另一种解析结果。
+        if (env.Reordered)
+            ctx.Report.Notice(NoticeKind.Staleness,
+                "The mods this snapshot describes are in a different load order in the game now. Load order " +
+                "decides which patch wins, so a value here can differ from what the game resolves. Re-export " +
+                "to settle it.");
+
+        // 下面三支只讲版本与文件那两层,mod 列表已由上面两句收口 —— 于是「same mods」这类
+        // 断言只在列表真的一字不差时才出得来。
+        var sameList = env is { Added: 0, Removed: 0, Reordered: false };
+
         switch (env.Match)
         {
             case EnvironmentMatch.Same:
                 ctx.Report.Notice(NoticeKind.SnapshotChoice,
-                    "This snapshot matches the game as installed right now on everything that is compared: " +
-                    "same mods, same order, same game build" +
+                    (sameList
+                        ? "This snapshot matches the game as installed right now on everything that is compared: " +
+                          "same mods, same order, same game build"
+                        : "Apart from the mod list, this snapshot matches the game as installed right now: " +
+                          "same game build") +
                     (env.Content is { } ok
                         ? $", and the Defs and Patches XML of {Tally.Complete(ok.Scanned).Render("mod")} is " +
                           "unchanged in file size and timestamp since the export."
@@ -143,20 +167,16 @@ public sealed class SnapshotStatusCommand : Command
                 break;
             case EnvironmentMatch.VersionDrift:
                 ctx.Report.Notice(NoticeKind.Staleness,
-                    $"Same mods and order, but the game has moved to {env.GameVersion} since the export " +
+                    (sameList ? "Same mods and order, but t" : "T") +
+                    $"he game has moved to {env.GameVersion} since the export " +
                     $"(snapshot: {db.Meta.GameVersion}). Re-export to refresh.");
                 break;
             case EnvironmentMatch.ContentDrift:
                 ctx.Report.Notice(NoticeKind.Staleness,
-                    "Same mods, same order, same game build — but the files those mods are made of have moved. " +
+                    (sameList ? "Same mods, same order, same game build" : "Same game build") +
+                    " — but the files those mods are made of have moved. " +
                     ContentDrift.Sentence(
                         selection.Alias ?? Path.GetFileNameWithoutExtension(selection.Path), env.Content!));
-                break;
-            case EnvironmentMatch.DifferentModlist:
-                ctx.Report.Notice(NoticeKind.Staleness,
-                    $"The game currently has a different mod list: {env.Added} enabled that this snapshot lacks, " +
-                    $"{env.Removed} in this snapshot that are no longer enabled. This is not automatically wrong — " +
-                    "you may be querying another environment on purpose — but nothing here reflects those mods.");
                 break;
             case EnvironmentMatch.Unknown:
                 ctx.Report.Notice(NoticeKind.Boundary,

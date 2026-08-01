@@ -229,6 +229,16 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
                 $"did not have enabled — is absent from every answer below, not reported as missing.");
         }
 
+        // 「游戏现在多开/少开了哪些 mod」这一层**每次查询都不说**(成因见
+        // EnvironmentReport.Added)。次序不是那一层:没人挑得出一个「次序变体」环境,
+        // 而加载顺序决定同名 patch 谁赢 —— 于是快照里的值不是不全,是错的。
+        // 这条与 VersionDrift / ContentDrift 同类,显式选择也不闭嘴。
+        if (report.Reordered)
+            Report.Notice(NoticeKind.Staleness,
+                $"The mods snapshot '{name}' describes are in a different load order in the game now. " +
+                "Load order decides which patch wins, so a value below can differ from what the game resolves. " +
+                "'rimsearcher snapshot status' explains the difference.");
+
         switch (report.Match)
         {
             case EnvironmentMatch.Same:
@@ -245,25 +255,6 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
             // 不是「我知道那些 mod 的 XML 已经不是导出时那份了」。与 VersionDrift 同类。
             case EnvironmentMatch.ContentDrift:
                 Report.Notice(NoticeKind.Staleness, ContentDrift.Sentence(name, report.Content!));
-                return;
-
-            case EnvironmentMatch.DifferentModlist:
-                // 只声明调用方**这次没有说过**的事情:带了 --snapshot/--db 就是当场声明了
-                // 「我要查的是那个环境」,复述一遍等于每次返回挂免责声明。
-                if (selection.Source is SelectionSource.ExplicitAlias or SelectionSource.ExplicitDb)
-                    return;
-
-                // Pinned 不算说过:`snapshot use` 是**过去某一刻**的选择,而 mod 列表会变 ——
-                // 两者不一致恰恰说明那次选择已过时,与 VersionDrift 同类。
-                Report.Notice(NoticeKind.Staleness,
-                    selection.Source == SelectionSource.Pinned
-                        ? $"Snapshot '{name}' is the pinned one, but the game's mod list has changed since " +
-                          $"({report.Added} enabled now that it lacks, {report.Removed} in it that are no longer " +
-                          "enabled), so counts below are complete for the snapshot, not for your game. " +
-                          "'rimsearcher snapshot status' explains the difference."
-                        : $"Snapshot '{name}' was picked for you, and it does not describe the mods currently enabled in " +
-                          $"the game ({report.Added} enabled now that it lacks, {report.Removed} in it that are no longer " +
-                          "enabled). 'rimsearcher snapshot status' explains the difference; --snapshot picks another.");
                 return;
 
             case EnvironmentMatch.Unknown:

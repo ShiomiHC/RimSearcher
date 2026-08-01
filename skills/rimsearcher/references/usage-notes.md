@@ -30,10 +30,17 @@ save a change on its mod list page — so a Steam update within the same 1.x lin
 move it. `snapshot status` names the source only in the fallback case: a note says the number
 came from `ModsConfig.xml`, and silence means the DLL was read.
 
-**Naming a snapshot silences one warning and only that one.** Queries compare the snapshot
-with the installed game every time and speak up when something is off. `--snapshot <name>`
-mutes the *different mod list* line — you said which environment you meant — but a game that
-has moved on, or mod files changed underneath the snapshot, are still reported.
+**What a query will and will not warn about.** Every query compares the snapshot with the
+installed game, and reports only what makes the snapshot's own data wrong: the game build
+moved, the `Defs/`–`Patches/` XML of the mods it describes changed on disk or went missing,
+or those mods sit in a different load order now (load order decides which patch wins, so a
+value can be wrong rather than merely partial). Which mods the game happens to have enabled
+is **never** reported — enabling five more mods, or disabling one, leaves every query
+silent. That is an environment choice, not staleness: a snapshot deliberately narrowed to
+Core plus the official DLCs would otherwise carry a warning that is true forever and fixable
+never. Ask `snapshot status` for those numbers, and note that a zero result already names
+another snapshot that holds the def you asked for. No selector mutes any of this —
+`--snapshot <name>` says which environment you meant, not that you knew it had moved.
 
 **`modlist show --find <text>`** searches every saved list it can open, naming any it could
 not. It answers **which saved lists name a mod** — not whether the mod is installed. This

@@ -11,15 +11,19 @@ public enum SelectionSource { ExplicitDb, ExplicitAlias, Pinned, AutoDetected, O
 
 public sealed record SnapshotSelection(string Path, string? Alias, SelectionSource Source);
 
+/// <summary>
+/// 「这份快照还等于它自己的来源吗」的判定。**只管过期,不管环境选择** ——
+/// 「游戏现在启用着哪些 mod」不在这个枚举里,它走
+/// <see cref="EnvironmentReport.Added"/> / <see cref="EnvironmentReport.Removed"/>
+/// (成因见那里)。
+/// </summary>
 public enum EnvironmentMatch
 {
     /// <summary>快照与当前环境在比过的每一项上都一致。</summary>
     Same,
-    /// <summary>同一套 mod、同一顺序,但游戏 build 变了。</summary>
+    /// <summary>游戏 build 变了。</summary>
     VersionDrift,
-    /// <summary>启用的 mod 清单或顺序不同。</summary>
-    DifferentModlist,
-    /// <summary>mod 与游戏版本都对得上,但某些 mod 的 Defs/Patches XML 在导出之后动过。</summary>
+    /// <summary>游戏版本对得上,但某些 mod 的 Defs/Patches XML 在导出之后动过。</summary>
     ContentDrift,
     /// <summary>读不到 ModsConfig.xml,无从比对。</summary>
     Unknown,
@@ -41,8 +45,33 @@ public enum GameVersionSource
 
 public sealed record EnvironmentReport(EnvironmentMatch Match, IReadOnlyList<string> ActiveMods, string? GameVersion)
 {
+    /// <summary>
+    /// 集合差:游戏这边多开了几个 / 快照这边有几个已不再启用。
+    ///
+    /// **不进 <see cref="Match"/>,于是每次查询不为它发声** —— 它是环境选择,不是过期。
+    /// 拿一份刻意精简的基线快照(本体 + 官方 DLC)当 pin,「你的环境和它不一样」每次查询
+    /// 都成立、而且永远不会「修好」:那正是那份快照存在的理由。恒真的警告不携带信息,
+    /// 却与真过期同形同位,久了会把真的那几条一起训练成噪声。
+    ///
+    /// 需要它的两处各自更准:<c>snapshot status</c> 逐条讲(它是被显式问的),
+    /// 而零结果会点名「这个 def 不在你查的这份里,在 'modded' 那份里」。
+    /// </summary>
     public int Added { get; init; }
+
+    /// <inheritdoc cref="Added"/>
     public int Removed { get; init; }
+
+    /// <summary>
+    /// 快照描述的那批 mod,在当前列表里的**相对次序**变了。
+    ///
+    /// 这一条与集合差分开,因为它不是「另一个环境」—— 没人 pin 得出一个「次序变体」。
+    /// 加载顺序决定同名 patch 谁赢,于是次序一动,快照里的值不是「不全」而是**直接错了**,
+    /// 与 <see cref="EnvironmentMatch.VersionDrift"/> 同类。
+    ///
+    /// 判据只看两边都在的那些 mod:多开几个不算,禁用几个也不算(那是集合差),
+    /// 只有剩下的那些互换了位置才算。
+    /// </summary>
+    public bool Reordered { get; init; }
 
     public GameVersionSource VersionSource { get; init; } = GameVersionSource.None;
 
@@ -196,31 +225,50 @@ public static class SnapshotCatalog
         var snapshotIds = WithoutExporter(db.Mods.Select(m => m.PackageId));
         var activeIds = WithoutExporter(env.ActiveMods);
 
-        var sameList = ExportMeta.ComputeModlistFingerprint(snapshotIds) ==
-                       ExportMeta.ComputeModlistFingerprint(activeIds);
-
-        if (!sameList)
+        // mod 列表的三个产出都算出来,但**一个都不改 Match**:它们各自有各自的去处,
+        // 而版本与内容那两层必须照旧跑到。此前这里在列表不一致时直接 return,于是
+        // pin 着一份精简快照的人碰上 build 升级或 XML 改动,一个字都收不到 —— 那条恒真的
+        // 列表警告不只是稀释信号,它在顶替信号。
+        if (ExportMeta.ComputeModlistFingerprint(snapshotIds) !=
+            ExportMeta.ComputeModlistFingerprint(activeIds))
         {
             var snapSet = snapshotIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
             var envSet = activeIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
-            return env with
+            env = env with
             {
-                Match = EnvironmentMatch.DifferentModlist,
                 Added = envSet.Except(snapSet, StringComparer.OrdinalIgnoreCase).Count(),
                 Removed = snapSet.Except(envSet, StringComparer.OrdinalIgnoreCase).Count(),
+                // 次序只在**两边都在**的那些 mod 之间判 —— 拿全表去判的话,多开一个
+                // 或禁用一个都会让它响,而那两件事按上面的口径不发声。
+                Reordered = !IsSubsequence([.. snapshotIds.Where(envSet.Contains)], activeIds),
             };
         }
 
         if (VersionDrifted(env, db.Meta.GameVersion))
             return env with { Match = EnvironmentMatch.VersionDrift };
 
-        // 内容这一层排在最后:mod 换了或游戏换了的时候,「XML 也变了」是那件事的后果,
+        // 内容这一层排在最后:游戏换了版本的时候,「XML 也变了」是那件事的后果,
         // 不是第二条新闻。
         var content = CompareContent(db, config, env);
         if (content is { Drifted: true })
             return env with { Match = EnvironmentMatch.ContentDrift, Content = content };
 
         return env with { Match = EnvironmentMatch.Same, Content = content };
+    }
+
+    /// <summary>
+    /// <paramref name="inner"/> 是否为 <paramref name="outer"/> 的子序列 —— 一个都不能少,
+    /// 而且**相对顺序**要保持。
+    /// </summary>
+    private static bool IsSubsequence(IReadOnlyList<string> inner, IReadOnlyList<string> outer)
+    {
+        var i = 0;
+        foreach (var id in outer)
+        {
+            if (i == inner.Count) break;
+            if (string.Equals(inner[i], id, StringComparison.OrdinalIgnoreCase)) i++;
+        }
+        return i == inner.Count;
     }
 
     /// <summary>

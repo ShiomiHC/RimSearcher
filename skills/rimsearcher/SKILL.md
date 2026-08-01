@@ -216,11 +216,13 @@ so. A `--files` glob containing `/` starts at the tree name (`vanilla/**/Widgets
 
 One export = one game version, one ordered mod list, one language; several coexist.
 `rimsearcher snapshot list` shows them, `--snapshot <name>` picks per command,
-`snapshot use <name>` sticks. Queries compare it with the installed game and speak up on
-their own; `snapshot status` is the full comparison (details: usage-notes).
+`snapshot use <name>` sticks. Queries speak up on their own when the snapshot no longer
+matches its own sources — game build moved, mod files changed, load order reshuffled — but
+never about *which* mods the game has enabled; `snapshot status` is the full comparison
+(details: usage-notes).
 
 **A complete count is complete for the snapshot, not the installed game**: on a Core-only
-snapshot, `1 def` means one in Core — the tool says so when that gap exists. Data is as of
+snapshot, `1 def` means one in Core, and no line says so. Data is as of
 the export; stale → `rimsearcher export --modlist <name>`, where `<name>` is required and
 comes from `rimsearcher modlist list`. Export runs the game headless and silent for
 minutes; a stall line on stderr is a report, not a verdict — **only `--timeout` stops the
