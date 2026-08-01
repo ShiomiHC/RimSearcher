@@ -2580,7 +2580,7 @@ public class GrammarTests
 
         // 不截时每个下标都露过面 —— 这时候要给正面那句话,不能沉默。
         var (whole, _, _) = Fixture.Run("get", "Apparel_ShieldBelt");
-        Assert.Contains("Every list index this def has does appear below", whole, StringComparison.Ordinal);
+        Assert.Contains("Every list index the def has appears below", whole, StringComparison.Ordinal);
         Assert.DoesNotContain("Nothing below shows any field", whole, StringComparison.Ordinal);
     }
 

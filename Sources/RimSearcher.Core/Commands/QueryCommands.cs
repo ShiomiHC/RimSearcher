@@ -522,23 +522,28 @@ public sealed class GetCommand : Command
                                                 .Distinct(StringComparer.Ordinal)
                                                 .Where(x => !shownIdx.Contains(x))
                                                 .ToList();
-                    // 「code_default 这一列是什么意思」搬进了 SKILL.md —— 它逐字不随查询变。
-                    // 第四态那半句**不能走**:上一句刚说「这个 def 有 N 条字段路径,--defaults
-                    // 列出其余的」,不接着说破 null 字段从没进过索引,那个 N 就会被读成
-                    // 「这个 def 的全部字段」,而「字段不存在」与「值是 null」在这里同形。
+                    // 「code_default 这一列是什么意思」与「--path 指名字段两边都看得见」
+                    // 都搬进了 SKILL.md —— 逐字不随查询变。**`--defaults` 不能跟着走**:
+                    // 它是这条声明唯一的出路,少了它这句就只说「有 N 条你看不到」而不说
+                    // 怎么看到。出路紧贴它召回的那个数,不隔一句挂在总数后面。
+                    // 第四态那半句同样不能走:上一句刚给出「这个 def 有 M 条字段路径」,
+                    // 不接着说破 null 字段从没进过索引,那个 M 就会被读成「这个 def 的全部
+                    // 字段」,而「字段不存在」与「值是 null」在这里同形。它数的是那两个数
+                    // (没列出的、索引里的),不是那两张表 —— neither 得自己带上主语。
                     ctx.Report.Notice(NoticeKind.Filter,
                         $"Not listed: {Tally.Complete(defaulted).Render("field")} carrying the declaring type's " +
-                        $"own default. The snapshot holds {Tally.Complete(total).Render("field path")} for this " +
-                        "def; --defaults lists the rest, --path <text> sees a named one either way. " +
-                        "A null-valued field never entered the index and is in neither." +
+                        "own default; --defaults lists them. The snapshot holds " +
+                        $"{Tally.Complete(total).Render("field path")} for this " +
+                        "def; a null-valued field never entered the index and is in neither count." +
                         // 方位词指的是这句话下面那张表。此前渲染器无条件把声明全提到最前,
                         // 于是这两句写着 above 却印在表前,指的是一片不存在的上文。
                         (hiddenIdx.Count > 0
                             ? " Nothing below shows any field of these list entries, which the def has all the " +
                               $"same: {NameList.Render(hiddenIdx, Limits.MaxSuggestions)} — so the lists run " +
                               "longer than they look here."
-                            : " Every list index this def has does appear below, so the lists are as long as " +
-                              "they look here."));
+                            // 正面态只报事实,不把事实翻译成读法 —— 「每个下标都在下面」到
+                            // 「列表长度如实」只隔一步,而藏了的那一态才是坑,解释留在那边。
+                            : " Every list index the def has appears below."));
                 }
             }
 
