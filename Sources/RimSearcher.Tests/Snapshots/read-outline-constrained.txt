@@ -1,8 +1,9 @@
 $ rimsearcher read vanilla/Verse/Constrained.cs --outline
 exit 0
 --- stdout ---
-2 declarations.
+vanilla/Verse/Constrained.cs, 2 declarations.
 
+Same in every row, not repeated below: modifiers=internal.
 kind    name         in           lines  at
 method  Both         Constrained  7      7-13
 class   Constrained               10     5-14

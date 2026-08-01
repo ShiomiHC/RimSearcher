@@ -1,6 +1,9 @@
 $ rimsearcher get Firefoam
 exit 0
 --- stdout ---
+2 defs share the name 'Firefoam' across different def types; all of them are shown. Pass --type <DefType> for just one.
+What follows is 2 defs in a row, one block each. Every count, footnote and truncation warning below belongs to the block it sits in — read the def_type line at the top of a block to know which def the lines under it are about.
+
 def_name       Firefoam
 def_type       ThingDef
 label          firefoam
@@ -32,5 +35,4 @@ class        Verse.StatDef
 mod          ludeon.rimworld
 source       Stats_Basics.xml
 0 fields.
-2 defs share the name 'Firefoam' across different def types; all of them are shown. Pass --type <DefType> for just one.
 --- stderr ---

@@ -1,5 +1,5 @@
 $ rimsearcher read vanilla/Verse/Outline.cs --member Shard
 exit 1
 --- stdout ---
-No member named 'Shard' was found in vanilla/Verse/Outline.cs (30 lines, 7 declarations). Closest by spelling: Shared. 'rimsearcher read vanilla/Verse/Outline.cs --outline' lists every declaration, and brace matching is not a parse — 'rimsearcher code-search' searches the text itself.
+No member named 'Shard' was found in vanilla/Verse/Outline.cs (34 lines, 9 declarations). Closest by spelling: Shared. 'rimsearcher read vanilla/Verse/Outline.cs --outline' lists every declaration, and brace matching is not a parse — 'rimsearcher code-search' searches the text itself.
 --- stderr ---

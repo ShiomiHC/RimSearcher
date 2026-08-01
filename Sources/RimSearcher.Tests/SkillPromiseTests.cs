@@ -164,6 +164,10 @@ public class SkillPromiseTests
         // 说破那个新的沉默形状 —— 于是它比大多数承诺更需要一道闸看着。
         new("It is repositioned, never suppressed",
             nameof(StalenessTests.漂移横幅点到那个mod时才占表头)),
+        // 承诺的是一条**区分**能力,不是一列的存在:不印修饰符时那两行逐字同形,
+        // 而「覆写了基类的什么」正是读轮廓的人最常从这里得出的结论。
+        new("they point at opposite next steps",
+            nameof(GrammarTests.轮廓分得出覆写与新引入并报出读的是哪个文件)),
         new("on a Core-only snapshot, `1 def` means one in Core",
             "被scope挡住时说破是过滤器干的"),
 

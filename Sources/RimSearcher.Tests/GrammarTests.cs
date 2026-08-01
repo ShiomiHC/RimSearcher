@@ -852,7 +852,7 @@ public class GrammarTests
         Assert.Equal(0, code);
 
         // 类体的两端就是文件里那一对真括号:少认一个,Outer 会在 Marker 那一行提前收尾。
-        Assert.Contains("5-29", stdout, StringComparison.Ordinal);
+        Assert.Contains("5-33", stdout, StringComparison.Ordinal);
         // 初值里的 Make( 不是一个方法声明,字段名才是 Marker。
         Assert.Contains("Marker", stdout, StringComparison.Ordinal);
         Assert.DoesNotContain("Make", stdout, StringComparison.Ordinal);
@@ -910,7 +910,7 @@ public class GrammarTests
     public void 裸行读随时说得出总数与下一页()
     {
         var (page, _, _) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--lines", "7-12");
-        Assert.Contains("of 30", page, StringComparison.Ordinal);
+        Assert.Contains("of 34", page, StringComparison.Ordinal);
         Assert.Contains("--lines 13", page, StringComparison.Ordinal);
 
         // 一次读完时不许再劝人翻页 —— 那一句会被读成「后面还有」。
@@ -921,7 +921,7 @@ public class GrammarTests
 
         // 印刷上限咬下去时,接着读的那一段是算得出来的,就得给出来。
         var (capped, _, _) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--type", "Outer", "--limit", "4");
-        Assert.Contains("--lines 9-29", capped, StringComparison.Ordinal);
+        Assert.Contains("--lines 9-33", capped, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1127,6 +1127,27 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// <c>inherit</c> 数节点、<c>get</c> 数 def,两个数**必然**对不上,而两条命令都用绝对语气
+    /// 报自己那个。差额不解释的话,读的人只能自己编一个理由 —— 盲测里编的是「那几个是
+    /// code-generated」,而它们明明来自具名 XML 文件,那个解释当场被自己推翻。
+    ///
+    /// 闸盯两头:有差额就点名是哪几个类型,没差额时不许多话。
+    /// </summary>
+    [Fact]
+    public void inherit说破有几个同名def不在继承层里()
+    {
+        // Firefoam 的 ThingDef 在继承层里(声明了 ParentName=),同名的 StatDef 不在。
+        var (gap, _, _) = Fixture.Run("inherit", "Firefoam");
+        Assert.Contains("Outside this layer: 1 def also named 'Firefoam'", gap, StringComparison.Ordinal);
+        Assert.Contains("StatDef", gap, StringComparison.Ordinal);
+        Assert.Contains("counts 2 where this command counts 1", gap, StringComparison.Ordinal);
+
+        // 没有同名的另一半时,这句话不该在场。
+        var (clean, _, _) = Fixture.Run("inherit", "Bullet_Revolver");
+        Assert.DoesNotContain("Outside this layer", clean, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// <c>--path</c> 命中了几条、却没一条是整段时,那两句只穷举了两种读法,而漏掉的第三种
     /// 正是名值对结构:<c>statBases[N].stat = MarketValue</c> 把**字段自己的名字搬进了值那
     /// 一列**,<c>--path</c> 结构上够不着它。于是表干净、完整,答的却是另一个问题。
@@ -1171,6 +1192,28 @@ public class GrammarTests
         // 一字没改:这句话不许出场,否则它退化成每次都挂的免责声明。
         var (plain, _, _) = Fixture.Run("keyed", "CommandSettle");
         Assert.DoesNotContain("was not matched as typed", plain, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 轮廓不印修饰符时,「覆写了基类的成员」与「自己新引入的可覆写成员」逐字同形 ——
+    /// 两行都是 <c>property … n-n</c>,而它们对「接下来该去基类找什么」给出相反的答案。
+    ///
+    /// 路径同理。轮廓是「先看看有什么」那一步,而它此前只报个数:名字按裸文件名解析出来时,
+    /// 读的人手上没有一条粘得回去的路径,下一条 <c>--member</c> 只好再赌一次同样的名字。
+    /// </summary>
+    [Fact]
+    public void 轮廓分得出覆写与新引入并报出读的是哪个文件()
+    {
+        var (outline, _, code) = Fixture.Run("read", "Outline.cs", "--source", "vanilla", "--outline");
+        Assert.Equal(0, code);
+
+        static string RowOf(string text, string name)
+            => text.Split('\n').Single(l => l.Contains($" {name} ", StringComparison.Ordinal));
+
+        Assert.Contains("protected override", RowOf(outline, "SeedPart"), StringComparison.Ordinal);
+        Assert.Contains("protected virtual", RowOf(outline, "Radius"), StringComparison.Ordinal);
+
+        Assert.Contains("vanilla/Verse/Outline.cs, 9 declarations.", outline, StringComparison.Ordinal);
     }
 
     /// <summary>

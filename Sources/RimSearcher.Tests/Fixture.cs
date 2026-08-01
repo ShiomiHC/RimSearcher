@@ -715,6 +715,12 @@ public static class Fixture
             "\t\t\t{",
             "\t\t\t}",
             "\t\t}",
+            "",
+            // 覆写与新引入的可覆写成员各一个,形状刻意做成一模一样(都是单行 `=> …;` 属性),
+            // 于是不印修饰符时两行轮廓逐字同形。追加在末尾是为了不动上面那批行号。
+            "\t\tprotected override int SeedPart => 2;",
+            "",
+            "\t\tprotected virtual float Radius => 1f;",
             "\t}",
             "}");
 

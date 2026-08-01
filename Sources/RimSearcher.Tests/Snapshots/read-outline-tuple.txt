@@ -1,15 +1,15 @@
 $ rimsearcher read vanilla/Verse/Tuples.cs --outline
 exit 0
 --- stdout ---
-6 declarations.
+vanilla/Verse/Tuples.cs, 6 declarations.
 
-kind         name    in      lines  at
-field        bounds  Tuples  1      5-5
-field        spans   Tuples  1      7-7
-constructor  Tuples  Tuples  3      9-11
-method       Split   Tuples  3      13-15
-method       Maybe   Tuples  3      17-19
-class        Tuples          18     3-20
+kind         modifiers  name    in      lines  at
+field        private    bounds  Tuples  1      5-5
+field        private    spans   Tuples  1      7-7
+constructor  internal   Tuples  Tuples  3      9-11
+method       internal   Split   Tuples  3      13-15
+method       internal   Maybe   Tuples  3      17-19
+class        internal   Tuples          18     3-20
 
 Found by matching braces, not by parsing C#: a name not listed here may still be in the file.
 --- stderr ---

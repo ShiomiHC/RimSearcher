@@ -332,6 +332,32 @@ public sealed class GetCommand : Command
         var limit = ctx.Limit(fallback: Limits.DefaultFieldsPerDef);
         var paths = ctx.Args.Values("path");
 
+        // 撞名这件事排在**全部段落之前**。此前它在最后:六个同名 def 各带一张完整字段表,
+        // 两百行之后才说「这里其实有六个」,而第一段开口可以是一句否定
+        // (「No field path of Chimera (PawnKindDef) contains ...」),读的人已经拿它当答案走了。
+        // 按全量说话,不按过滤后的集合 —— --type 在场时最需要这句:调用方主动收窄了,
+        // 恰恰说明它知道有歧义、并打算只读一个。
+        if (allMatches.Count > 1)
+        {
+            var others = allMatches.Where(d => !matches.Contains(d))
+                                   .Select(d => d.DefType)
+                                   .Distinct(StringComparer.Ordinal)
+                                   .ToList();
+            ctx.Report.Notice(NoticeKind.Boundary, NameCollision.Say(
+                name, allMatches.Count,
+                matches.Select(d => d.DefType).Distinct(StringComparer.Ordinal).ToList(),
+                others));
+
+            // 每段各带自己的脚注与截断警告,而那些话只差一个数字 —— 段与段的分界得看得见,
+            // 否则「at least 23 fields were dropped」与「at least 174」并排出现时,没人知道
+            // 哪条管哪个 def。分界由每段自己的 def_type 行给出,这里只说破要按它读。
+            if (matches.Count > 1)
+                ctx.Report.Notice(NoticeKind.Boundary,
+                    $"What follows is {Tally.Complete(matches.Count).Render("def")} in a row, one block each. " +
+                    "Every count, footnote and truncation warning below belongs to the block it sits in — " +
+                    "read the def_type line at the top of a block to know which def the lines under it are about.");
+        }
+
         foreach (var def in matches)
         {
             // 恒定形状:即使只有一个 def,JSON 里也是 defs[0] —— 形状随数据变会让照着一次
@@ -596,20 +622,6 @@ public sealed class GetCommand : Command
         }
 
         ctx.Report.EndItems();
-
-        // 按全量说话,不按过滤后的集合 —— --type 在场时最需要这句提示:调用方主动收窄了,
-        // 恰恰说明它知道有歧义、并打算只读一个。
-        if (allMatches.Count > 1)
-        {
-            var others = allMatches.Where(d => !matches.Contains(d))
-                                   .Select(d => d.DefType)
-                                   .Distinct(StringComparer.Ordinal)
-                                   .ToList();
-            ctx.Report.Notice(NoticeKind.Boundary, NameCollision.Say(
-                name, allMatches.Count,
-                matches.Select(d => d.DefType).Distinct(StringComparer.Ordinal).ToList(),
-                others));
-        }
 
         return 0;
     }

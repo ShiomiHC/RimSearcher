@@ -1,9 +1,9 @@
 $ rimsearcher read vanilla/Verse/Pair.cs --outline
 exit 0
 --- stdout ---
-2 declarations.
+vanilla/Verse/Pair.cs, 2 declarations.
 
-Same in every row, not repeated below: lines=3.
+Same in every row, not repeated below: modifiers=internal, lines=3.
 kind   name     in  at
 class  Pair         3-5
 class  Pair<T>      7-9

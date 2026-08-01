@@ -86,8 +86,8 @@ public sealed class ReadCommand : Command
                 Name = "outline",
                 Arity = Arity.Flag,
                 Aliases = ["members", "toc"],
-                Help = "List the file's types and members with their line ranges instead of reading any " +
-                       "of them. This is the cheap way to find out what to ask for.",
+                Help = "List the file's types and members with their modifiers and line ranges instead " +
+                       "of reading any of them. This is the cheap way to find out what to ask for.",
             },
             new OptionSpec
             {
@@ -119,7 +119,8 @@ public sealed class ReadCommand : Command
             new()
             {
                 Key = "declarations",
-                What = "with --outline: one row per declaration — kind, name, in (the owner), lines, at " +
+                What = "with --outline: one row per declaration — kind, modifiers (the leading run of " +
+                       "them, verbatim; null when there are none), name, in (the owner), lines, at " +
                        "(the 'start-end' range to hand back to --lines).",
             },
         ],
@@ -207,12 +208,20 @@ public sealed class ReadCommand : Command
         }
 
         var shown = decls.Take(cap).ToList();
-        ctx.Report.CountNotice(Tally.Of(shown.Count, decls.Count), "declaration",
-                               "raise --limit to see the rest.");
-        ctx.Report.Table("declarations", ["kind", "name", "in", "lines", "at"],
+        // 路径进计数句,与 --lines 那一路同形。轮廓是「先看看有什么」那一步,而它此前
+        // 只报个数 —— 名字是按裸文件名解析出来的时候,读的人手上没有一条能粘回去的路径,
+        // 下一条 --member 只好再赌一次同样的名字。
+        var tally = Tally.Of(shown.Count, decls.Count);
+        ctx.Report.Notice(tally.IsTruncated ? NoticeKind.Truncation : NoticeKind.Count,
+            $"{rel}, {tally.Render("declaration")}" +
+            (tally.IsTruncated ? "; raise --limit to see the rest." : "."));
+        ctx.Report.Table("declarations", ["kind", "modifiers", "name", "in", "lines", "at"],
             shown.Select(d => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
                 ["kind"] = d.Kind,
+                // override 与 virtual 分不开的时候,一份轮廓能让人得出「这个类覆写了
+                // 基类的 A、B、C」,而其中某个其实是它自己新引入的。
+                ["modifiers"] = d.Modifiers is { Length: > 0 } ? d.Modifiers : null,
                 // 带元数的显示名。裸名留给匹配 —— 反编译树的文件名不带元数,调用方
                 // 无从知道该写几个类型参数,--type ThingOwner 要能同时命中 ThingOwner<T>。
                 ["name"] = d.Display,

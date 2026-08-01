@@ -239,6 +239,28 @@ public sealed class InheritCommand : Command
             ctx.Report.Notice(NoticeKind.Boundary,
                 $"{Tally.Complete(nodes.Count).Render("XML node")} answer to '{name}'; all of them are shown.");
 
+        // 这个数与 `get` 那边的**必然**对不上,而两条命令都用绝对语气报自己那个 —— 差额
+        // 不解释的话,读的人只能自己编一个理由(盲测里编的是「那几个是 code-generated」,
+        // 而它们明明来自具名 XML 文件,于是那个解释当场被自己推翻)。
+        // 差额的真实成因只有一个:这一层只装声明了 Name= / ParentName= / Abstract= 的节点。
+        var sameName = ctx.Db.GetDefsNamed(name);
+        var inLayer = nodes.Count(n => string.Equals(n.DefName, name, StringComparison.OrdinalIgnoreCase));
+        var outside = sameName.Count - inLayer;
+        if (outside > 0)
+        {
+            var types = sameName
+                .Where(d => !nodes.Any(n => string.Equals(n.DefName, name, StringComparison.OrdinalIgnoreCase)
+                                            && string.Equals(n.DefType, d.DefType, StringComparison.OrdinalIgnoreCase)))
+                .Select(d => d.DefType)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            ctx.Report.Notice(NoticeKind.Boundary,
+                $"Outside this layer: {Tally.Complete(outside).Render("def")} also named '{name}', declaring no " +
+                $"Name=, ParentName= or Abstract= ({NameList.Render(types, Limits.MaxSuggestions)}). An ordinary " +
+                $"def takes part in no inheritance, which is why 'rimsearcher get {name}' counts " +
+                $"{sameName.Count} where this command counts {nodes.Count}.");
+        }
+
         return 0;
     }
 

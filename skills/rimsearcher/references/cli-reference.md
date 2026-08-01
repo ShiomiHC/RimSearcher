@@ -595,7 +595,7 @@ Page with --lines, never with a pipe. The first line of the answer says which li
 | `--type` <name> | Read this whole type. With --member it instead says which type the member must belong to. | `--class`, `--class-name`, `--type-name`, `--extract-class` |
 | `--lines` <a-b|a+n|a|all> | Read raw lines instead: '400-460' is inclusive, '400+60' is sixty lines from 400, '400' starts there and takes the default window, 'all' is the whole file. Without it the read starts at line 1 and takes 150. | `--line`, `--range`, `--line-range` |
 | `--source` <name> | Only resolve the file name inside this source tree. 'rimsearcher sources list' names them. | `--root`, `--tree` |
-| `--outline` | List the file's types and members with their line ranges instead of reading any of them. This is the cheap way to find out what to ask for. | `--members`, `--toc` |
+| `--outline` | List the file's types and members with their modifiers and line ranges instead of reading any of them. This is the cheap way to find out what to ask for. | `--members`, `--toc` |
 | `-n`, `--limit` <n|all> | How many lines to print at most. Values above 2000 are clamped to it, because one type can be thousands of lines and this output is read whole. Default: `2000`. | `--max-lines`, `--max-results`, `--count`, `--rows`, `--head` |
 
 `--json` keys, besides the global `notes`:
@@ -603,7 +603,7 @@ Page with --lines, never with a pipe. The first line of the answer says which li
 | Key | Holds |
 |---|---|
 | `source` | without --outline: one row per source line — file, line, text, plus kind and declaration when the line came from --member/--type. The text form's line-number gutter is not repeated here. This is the key the three reading modes produce; 'declarations' is absent then. |
-| `declarations` | with --outline: one row per declaration — kind, name, in (the owner), lines, at (the 'start-end' range to hand back to --lines). |
+| `declarations` | with --outline: one row per declaration — kind, modifiers (the leading run of them, verbatim; null when there are none), name, in (the owner), lines, at (the 'start-end' range to hand back to --lines). |
 
 Examples:
 

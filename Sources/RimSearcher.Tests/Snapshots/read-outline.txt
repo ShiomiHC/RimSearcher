@@ -1,16 +1,18 @@
 $ rimsearcher read Outline.cs --source vanilla --outline
 exit 0
 --- stdout ---
-7 declarations.
+vanilla/Verse/Outline.cs, 9 declarations.
 
-kind      name      in     lines  at
-field     Marker    Outer  1      9-9
-field     Open      Outer  1      11-11
-property  Verbatim  Outer  1      13-13
-method    Shared    Outer  7      15-21
-method    Shared    Inner  3      25-27
-class     Inner     Outer  6      23-28
-class     Outer            25     5-29
+kind      modifiers                name      in     lines  at
+field     private static readonly  Marker    Outer  1      9-9
+field     private                  Open      Outer  1      11-11
+property  public                   Verbatim  Outer  1      13-13
+method    public                   Shared    Outer  7      15-21
+method    public                   Shared    Inner  3      25-27
+class     public                   Inner     Outer  6      23-28
+property  protected override       SeedPart  Outer  1      30-30
+property  protected virtual        Radius    Outer  1      32-32
+class     public                   Outer            29     5-33
 
 Found by matching braces, not by parsing C#: a name not listed here may still be in the file.
 --- stderr ---

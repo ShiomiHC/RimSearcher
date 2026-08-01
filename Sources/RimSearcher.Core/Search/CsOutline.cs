@@ -24,6 +24,15 @@ public sealed record CsDecl(string Kind, string Name, string? Owner, int StartLi
     /// </summary>
     public string OwnerTypeParams { get; init; } = "";
 
+    /// <summary>
+    /// 声明头最前面那串修饰符原文,空格分隔;一个都没有就是空串。
+    ///
+    /// 存在的理由是 <c>override</c> 与 <c>virtual</c> 的区别 —— 少了它,
+    /// 「这个类型覆写了基类的某个成员」与「这个类型自己新引入了一个可覆写成员」
+    /// 在轮廓里逐字同形,而两者对「该去基类找什么」给出相反的下一步。
+    /// </summary>
+    public string Modifiers { get; init; } = "";
+
     /// <summary>带元数的自己。<see cref="Name"/> 保持裸名 —— 那是**匹配**用的。</summary>
     public string Display => Name + TypeParams;
 
@@ -232,6 +241,12 @@ public static class CsOutline
     /// </summary>
     private static CsDecl? Classify(string header, CsDecl? owner, bool bodyless = false)
     {
+        var decl = ClassifyCore(header, owner, bodyless);
+        return decl is null ? null : decl with { Modifiers = LeadingModifiers(header) };
+    }
+
+    private static CsDecl? ClassifyCore(string header, CsDecl? owner, bool bodyless = false)
+    {
         if (header.Length == 0) return null;
 
         // 成员一律带着 owner 的泛型参数走。少了它,`ThingOwner<T>.Count` 与
@@ -304,6 +319,35 @@ public static class CsOutline
         return new CsDecl(bodyless ? "field" : "property", last, ownerName, 0, 0)
             { OwnerTypeParams = ownerParams };
     }
+
+    /// <summary>
+    /// 声明头开头那一串修饰符,取到第一个不是修饰符的词为止。
+    ///
+    /// 只认前缀,不满文件搜:C# 的修饰符一律写在类型/返回类型左边,而同样这些词在右边
+    /// 是别的东西(<c>Func&lt;int&gt; New</c> 里的 new、参数表里的 ref)。取前缀就不必分辨。
+    /// </summary>
+    private static string LeadingModifiers(string header)
+    {
+        // 特性自成一段、又常与声明挤在同一个 pending 里,先跳过。
+        while (header.StartsWith('[') && header.IndexOf(']') > 0)
+            header = header[(header.IndexOf(']') + 1)..].TrimStart();
+
+        var taken = new List<string>();
+        foreach (var word in header.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (!ModifierWords.Contains(word)) break;
+            taken.Add(word);
+        }
+        return string.Join(' ', taken);
+    }
+
+    private static readonly HashSet<string> ModifierWords = new(StringComparer.Ordinal)
+    {
+        "public", "private", "protected", "internal", "file",
+        "static", "readonly", "const", "volatile", "required", "ref",
+        "abstract", "virtual", "override", "sealed", "new",
+        "extern", "partial", "async", "unsafe",
+    };
 
     private static readonly string[] TypeKeywords = ["class", "struct", "interface", "record", "enum"];
 
