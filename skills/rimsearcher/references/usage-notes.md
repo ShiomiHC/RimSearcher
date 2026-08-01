@@ -42,6 +42,14 @@ never. Ask `snapshot status` for those numbers, and note that a zero result alre
 another snapshot that holds the def you asked for. No selector mutes any of this —
 `--snapshot <name>` says which environment you meant, not that you knew it had moved.
 
+**The changed-XML line moves, so do not read only the header.** It sits at the top when the
+answer names one of the changed mods, when there is no answer at all, or when the output has
+no `mod` column to rule it out (`fields`, `values`, `code-search`). It drops *below* the
+table when every row provably comes from other mods. It is repositioned, never suppressed:
+a row missing because a changed mod deleted it looks exactly like a zero result, which is
+why zero results keep it at the top. The other three lines — build moved, load order
+reshuffled, mod list unreadable — always stay at the top.
+
 **`modlist show --find <text>`** searches every saved list it can open, naming any it could
 not. It answers **which saved lists name a mod** — not whether the mod is installed. This
 command reads only the saved `.rml` files, never the game's mod folder, and a zero result

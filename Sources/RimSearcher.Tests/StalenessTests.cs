@@ -535,6 +535,50 @@ public class StalenessTests
     }
 
     /// <summary>
+    /// 漂移横幅的**位置**跟着结果走:点到了那个 mod 就在最上面,没点到就沉到表下。
+    ///
+    /// 一次都不抑制 —— 「结果里没有那个 mod」不等于「答案没受它影响」,那个 mod 可能正是
+    /// 把某一行改没了的那个。调的只是位置:表头留给随查询变化的东西(scope 展开、
+    /// 精确/包含拆分、截断脚注),而一条每次都在同一行说同样话的横幅,读到第五遍之后
+    /// 会把整个表头区一起训练成盲区。
+    /// </summary>
+    [Fact]
+    public void 漂移横幅点到那个mod时才占表头()
+    {
+        var (db, _, modDir, configPath) = SnapshotOfModTree("e2e-drift-place");
+        File.AppendAllText(Path.Combine(modDir, "Defs", "Things.xml"), "<!-- edited -->");
+        const string Banner = "changed on disk";
+
+        // 答案就出自那个 mod:第一行。
+        var hit = Run(configPath, db, "get", "TestModGun");
+        Assert.StartsWith("1 mod in snapshot", hit, StringComparison.Ordinal);
+
+        // 答案与它无关:话照说,位置在表下面。
+        var other = Run(configPath, db, "get", "Apparel_ShieldBelt");
+        Assert.Contains(Banner, other, StringComparison.Ordinal);
+        Assert.False(other.StartsWith("1 mod in snapshot", StringComparison.Ordinal));
+        Assert.True(other.IndexOf(Banner, StringComparison.Ordinal) >
+                    other.IndexOf("ludeon.rimworld", StringComparison.Ordinal));
+
+        // 零结果最需要它:被漂移改没的那一行,长得就是这个样子。
+        var miss = Run(configPath, db, "get", "zzznosuchdef");
+        Assert.StartsWith("1 mod in snapshot", miss, StringComparison.Ordinal);
+
+        // 输出里根本没有 mod 这一维时,证不出无关 —— 一律当有关。
+        var agg = Run(configPath, db, "fields", "ThingDef");
+        Assert.StartsWith("1 mod in snapshot", agg, StringComparison.Ordinal);
+
+        // 位置会变,于是句子里一个方位词都不许有 —— 沉到表下时 "answers below" 指的是
+        // 一片不存在的下文。
+        foreach (var stdout in new[] { hit, other, miss, agg })
+        {
+            var line = stdout[stdout.IndexOf("1 mod in snapshot", StringComparison.Ordinal)..].Split('\n')[0];
+            Assert.DoesNotContain("below", line, StringComparison.Ordinal);
+            Assert.DoesNotContain("above", line, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
     /// 没漂移时一个字都不说。这条与上一条是同一件事的两半 —— 一条天天响的过期警告
     /// 会被训练成噪声,那时真漂移的那次也就白说了。
     /// </summary>

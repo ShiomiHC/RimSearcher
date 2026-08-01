@@ -253,8 +253,14 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
 
             // 显式选择在这一格**不闭嘴**:`--snapshot modded` 声明的是「我要查那个环境」,
             // 不是「我知道那些 mod 的 XML 已经不是导出时那份了」。与 VersionDrift 同类。
+            //
+            // 但位置让结果去定(见 Report.DeferredNotice):这一条与版本漂移不同,它点着
+            // 具体几个 mod,而绝大多数查询与那几个无关 —— 每次都占着表头第一行,读到第五遍
+            // 就把表头整块训练成盲区,而表头恰恰是 scope 展开、精确/包含拆分这些真会改变
+            // 答案的东西所在。无关时沉到表下,点到了(或证不出无关)照旧在最上面。
             case EnvironmentMatch.ContentDrift:
-                Report.Notice(NoticeKind.Staleness, ContentDrift.Sentence(name, report.Content!));
+                Report.DeferredNotice(NoticeKind.Staleness, ContentDrift.Sentence(name, report.Content!),
+                    [.. report.Content!.Changed, .. report.Content.Missing]);
                 return;
 
             case EnvironmentMatch.Unknown:
@@ -279,6 +285,10 @@ public static class ContentDrift
     /// 措辞刻意说 "changed on disk",不说 "were edited":判据是长度与 mtime,
     /// 而 Steam 重下一份逐字节相同的文件也会让它响(<see cref="Snapshot.ContentFingerprint"/>)。
     /// 说成「被编辑过」就是拿一句证不了的话去指挥下一步。
+    ///
+    /// **一个方位词都不许有。** 这句话的位置由结果决定(见 <see cref="Output.Report.Settle"/>):
+    /// 与答案无关时沉到表下,那时一句 "answers below" 指的是一片不存在的下文。
+    /// 而且旧的那部分只是那几个 mod,不是整份答案 —— 指名道姓比指方位既准又不会指错。
     /// </summary>
     public static string Sentence(string name, ContentComparison content)
     {
@@ -288,7 +298,9 @@ public static class ContentDrift
             parts.Add($"{Tally.Complete(content.Changed.Count).Render("mod")} in snapshot '{name}' " +
                       $"({NameList.Render(content.Changed, 3)}) " +
                       $"{(content.Changed.Count == 1 ? "has" : "have")} Defs or Patches XML that changed on disk " +
-                      "since the export, so answers below describe the older files. Re-export to pick them up.");
+                      "since the export, so anything read from " +
+                      $"{(content.Changed.Count == 1 ? "it" : "them")} describes the older files. " +
+                      "Re-export to pick them up.");
 
         if (content.Missing.Count > 0)
             parts.Add($"{Tally.Complete(content.Missing.Count).Render("mod")} the export read " +

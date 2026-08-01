@@ -232,6 +232,8 @@ public static class Runner
                 ctx.Report.Promises(key.Key);
 
             var code = command.Run(ctx);
+            // 位置等结果才定得下的那几条,在这里落位 —— 命令自己不必逐个记得收尾。
+            ctx.Report.Settle();
             stdout.Write(ctx.Json ? JsonRenderer.Render(ctx.Report) : TextRenderer.Render(ctx.Report));
             return code;
         }

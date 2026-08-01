@@ -123,6 +123,76 @@ public sealed class Report
         return this;
     }
 
+    /// <summary>那些 mod 一动、这次的答案就可能不对的那条话,以及它点名的 mod。</summary>
+    private (Notice Notice, IReadOnlyList<string> Mods)? _deferred;
+
+    /// <summary>
+    /// 位置等结果出来再定的一条声明:先按脚注挂上,<see cref="Settle"/> 再决定要不要提回
+    /// 表头。发的时候查询还没跑,而判据在结果里。
+    ///
+    /// **只调位置,一次都不抑制。**「结果里没点到那个 mod」不等于「答案没受它影响」——
+    /// 那个 mod 可能正是把某一行改没了的那个,而这种失效恰好落在零结果上,也就是最需要
+    /// 这句话的场合。表头留给随查询变化的东西(scope 展开成哪几个 mod、精确/包含的拆分、
+    /// 截断脚注),恒定的环境声明沉到表下 —— 一条每次都在同一位置说同样话的横幅,读到第五遍
+    /// 之后会把整个表头区一起训练成盲区。
+    /// </summary>
+    public Report DeferredNotice(NoticeKind kind, string text, IReadOnlyList<string> aboutMods)
+    {
+        var notice = new Notice(kind, text, Footnote: true);
+        _deferred = (notice, aboutMods);
+        _entries.Add(notice);
+        return this;
+    }
+
+    /// <summary>结果已经在手,把延后的那条摆到它该去的位置。渲染之前调一次。</summary>
+    public void Settle()
+    {
+        if (_deferred is not { } d) return;
+        _deferred = null;
+
+        var at = _entries.IndexOf(d.Notice);
+        if (at >= 0 && !ProvablyUnrelated(d.Mods))
+            _entries[at] = d.Notice with { Footnote = false };
+    }
+
+    /// <summary>结果里的 mod 这一维,叫这个名字。</summary>
+    private const string ModKey = "mod";
+
+    /// <summary>
+    /// 「这次的答案与那几个 mod 无关」证得出来吗 —— 证不出就提回表头。
+    ///
+    /// 只有一种证得出:输出里有块带着 mod 这一维,而它点的名一个都不在那几个里。
+    /// 反过来的两种都算证不出 —— 一行都没有(零结果:被改没的那一行长的就是这个样子),
+    /// 以及整个输出没有 mod 这一维(<c>fields</c> / <c>values</c> 这类跨 mod 的聚合)。
+    ///
+    /// 带 mod 维的块**只要有一个就作数**,不要求每个块都有:<c>get</c> 的字段表是那个
+    /// def 的附属,归属已经由它上面的明细块说过了,拿字段表的「没有 mod 列」去否掉
+    /// 明细块给出的答案,等于永远证不出。
+    /// </summary>
+    private bool ProvablyUnrelated(IReadOnlyList<string> mods)
+    {
+        var withMod = 0;
+
+        foreach (var block in _entries.OfType<Block>())
+        {
+            if (ModCells(block) is not { } cells) continue;
+            withMod++;
+            if (cells.Any(c => mods.Contains(c, StringComparer.OrdinalIgnoreCase))) return false;
+        }
+
+        return withMod > 0;
+    }
+
+    /// <summary>这个块的 mod 列/键有哪些取值。<c>null</c> = 它根本没有这一维。</summary>
+    private static IReadOnlyList<string>? ModCells(Block block) => block switch
+    {
+        TableBlock t when t.Rows.Count > 0 && t.Columns.Contains(ModKey, StringComparer.Ordinal) =>
+            [.. t.Rows.Select(r => r.GetValueOrDefault(ModKey)?.ToString() ?? "")],
+        DetailBlock d when d.Pairs.Any(p => p.Key == ModKey) =>
+            [.. d.Pairs.Where(p => p.Key == ModKey).Select(p => p.Value?.ToString() ?? "")],
+        _ => null,
+    };
+
     /// <summary>
     /// 计数恒在。完整集渲染成裸 N 并按 <see cref="NoticeKind.Count"/> 归类,被截时追加
     /// 怎么看到剩下的、按 <see cref="NoticeKind.Truncation"/> 归类 —— 两态同一个产地、

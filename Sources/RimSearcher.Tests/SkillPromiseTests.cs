@@ -160,6 +160,10 @@ public class SkillPromiseTests
             nameof(GrammarTests.find给一个词落空时要说破那个词其实是什么)),
         new("another registered snapshot holding the def is named in the zero result",
             "别的快照里有时点名说出来"),
+        // 位置本身成了承诺:只扫表头的读法会漏掉沉到表下的那一条,而这句话就是在
+        // 说破那个新的沉默形状 —— 于是它比大多数承诺更需要一道闸看着。
+        new("It is repositioned, never suppressed",
+            nameof(StalenessTests.漂移横幅点到那个mod时才占表头)),
         new("on a Core-only snapshot, `1 def` means one in Core",
             "被scope挡住时说破是过滤器干的"),
 
