@@ -162,8 +162,10 @@ so. A `--files` glob containing `/` starts at the tree name (`vanilla/**/Widgets
   `yes` row as "this def sets X" is the top confident-wrong answer here. `unknown` = type
   not constructible. Exemptions cut both ways: rules that *read* the value (thresholds,
   comparisons) answer fine from a `yes` row — the value is real either way;
-  `compClass`/`thingClass`/`workerClass` are
-  constructor-assigned, so `yes` is their normal state. `yes` rows hide by default (a line
+  `compClass`/`thingClass`/`workerClass` are usually
+  constructor-assigned, so a `yes` there carries no authorship — and a `no` beside it is
+  just as ordinary, reached by more than one route. Neither value says who mounted the
+  comp; the `mod` column and the block's `Class` row do. `yes` rows hide by default (a line
   says how many); `--defaults` shows them; `--path` always shows a named field.
 - **The shared-value line after `get`'s table** (`soundDrop (3347)`) names values most
   defs of the type also carry — inherited or engine-filled far more often than authored,

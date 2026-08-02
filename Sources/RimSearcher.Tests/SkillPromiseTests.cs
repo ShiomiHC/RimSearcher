@@ -54,6 +54,11 @@ public class SkillPromiseTests
             nameof(过滤与截断在json里是两种kind)),
         new("Fields the exporter dropped are `kind: \"boundary\"` instead",
             nameof(导出期丢字段与本次分页截断在json里是两种kind)),
+        // 消费侧提的原案是「第三方以 `Class=` 挂上去的会是 `no`」—— 用他们自己那张表就能
+        // 证伪(第三方 comp 经 `Class=` 挂上去恰恰是 `yes`),而 vanilla 自己有一千多条 `no`。
+        // 收下的是他们的观察(「normal state」把 `no` 推成异常),不是他们的规则。
+        new("a `no` beside it is just as ordinary, reached by more than one route",
+            nameof(class字段上的yes与no同时是常态)),
         new("The last page says it is the last one; an `--offset` past the end is reported as an overshoot, not as \"nothing found\"",
             "分页的三个位置各说各的话"),
 
@@ -358,6 +363,30 @@ public class SkillPromiseTests
 
         var (cut, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--limit", "1", "--json");
         Assert.Contains("\"kind\": \"truncation\"", cut, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// class 字段上 `yes` 与 `no` **同时**是常态。守的是「`no` 是异常」这个读法 ——
+    /// 现文原来只说 `yes` is their normal state,而正常两个字反着念就是「`no` 不正常」,
+    /// 于是每一条 `no` 都像个发现。真快照上 vanilla 自己就有一千多条 `no`,零第三方参与。
+    ///
+    /// 闸只证得了「两种取值在同一条路径上共存」,证不了成因 —— 成因确实不止一条
+    /// (裸 `&lt;compClass&gt;` 挂在基类 `CompProperties` 上是一条;`Class=` 点了名而那个
+    /// 子类的构造函数不供 compClass 是另一条),所以句子里写的是「不止一条路」而不是
+    /// 枚举。**别把这道闸升级成对成因的断言** —— 那正是这句话上一次写错的方式。
+    /// </summary>
+    [Fact]
+    public void class字段上的yes与no同时是常态()
+    {
+        var (json, _, _) = Fixture.Run("find", "compClass", "--limit", "all", "--json");
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var defaults = doc.RootElement.GetProperty("matches").EnumerateArray()
+            .Select(r => r.GetProperty("code_default").GetString())
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        Assert.Contains("yes", defaults);
+        Assert.Contains("no", defaults);
     }
 
     /// <summary>
