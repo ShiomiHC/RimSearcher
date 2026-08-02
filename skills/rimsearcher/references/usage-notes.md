@@ -133,7 +133,7 @@ came from assemblies that have since changed; `rimsearcher sources sync` rebuild
 ones from whatever the snapshot's mods actually load. A tree reported as stale still answers
 questions — about the older build. Say which when it matters.
 
-When a narrowed `code-search` reports reading `23 of 33 source trees on disk`, the line names
+When a narrowed `code-search` reports reading only some of the source trees on disk, the line names
 its own cause: under `--files` the other trees hold no file that matches — never-decompiled
 ones among them — and under `--source` they are the trees you excluded. An unfiltered run
 prints no such fraction at all. `sources list` says which are which; a tree it lists as
