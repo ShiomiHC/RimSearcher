@@ -110,6 +110,10 @@ public class SkillPromiseTests
             nameof(GrammarTests.列表点没点名与快照覆没覆盖是两个问题)),
 
         // ---- 代码默认值 ----
+        // 折叠行在消费侧统计里出现 120 次,而契约此前只在 SKILL.md 里躺着 —— 守它的断言
+        // 是别的测试顺带带上的一句,改掉那个测试就一起没了。
+        new("the folded column\n  still applies to every row; the first column (the row's identity) and `--json` never fold",
+            nameof(GrammarTests.折叠掉的列对每一行仍然成立而json一列都不折)),
         new("`yes` rows hide by default (a line says how many)",
             nameof(GrammarTests.默认值行被拿掉时当场说清有多少条)),
         new("`--path` always shows a named field",

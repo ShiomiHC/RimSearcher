@@ -2637,6 +2637,33 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 折叠行是**表的一部分**,不是表上方的一句评论:被折走的那一列对每一行都仍然成立。
+    ///
+    /// 这一形状在消费侧统计里出现 120 次,而它一旦被读成「表里没有这一列」,整张表就少了
+    /// 一维 —— 尤其是折的正好是 <c>code_default</c> 时,「这些行没有默认值信息」与
+    /// 「这些行全都是 no」是相反的结论。机器侧那半同样要守:<c>--json</c> 一列都不折,
+    /// 照文本形状写的解析器会在这里拿到一个不存在的键。
+    /// </summary>
+    [Fact]
+    public void 折叠掉的列对每一行仍然成立而json一列都不折()
+    {
+        var (text, _, _) = Fixture.Run("get", "Apparel_ShieldBelt");
+        Assert.Contains($"Same in every row, not repeated below: {FieldDefault.Column}=no", text,
+            StringComparison.Ordinal);
+        // 折了就不该再作为列出现 —— 两处都印的话这道闸证不出折叠真的发生过。
+        var header = text.Split('\n').First(l => l.TrimStart().StartsWith("path", StringComparison.Ordinal));
+        Assert.DoesNotContain(FieldDefault.Column, header, StringComparison.Ordinal);
+
+        var (json, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--json");
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        // 撞名时每个 def 各占一块,所以字段表挂在 defs[] 里面而不是根上。
+        var rows = doc.RootElement.GetProperty("defs")[0].GetProperty("fields").EnumerateArray().ToList();
+        Assert.NotEmpty(rows);
+        // 每一行都带,且带的就是被折走的那个值 —— 少一行都算折叠改写了数据。
+        Assert.All(rows, r => Assert.Equal("no", r.GetProperty(FieldDefault.Column).GetString()));
+    }
+
+    /// <summary>
     /// <c>ThingDef.ResolveReferences</c> 之类的引擎代码会给**每一个** def 塞上同一个值
     /// (如 <c>soundImpactDefault</c>),而 <c>code_default</c> 那一列能证的只有「与刚 new
     /// 出来的实例不同」,读的人一律读成「有人挑了它」。
