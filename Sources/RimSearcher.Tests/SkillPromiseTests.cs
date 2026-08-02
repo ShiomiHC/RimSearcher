@@ -52,6 +52,8 @@ public class SkillPromiseTests
             "只知道下界时写成at_least"),
         new("A `--path` match count is a filter, not a truncation (`kind: \"filter\"` vs `\"truncation\"` in `--json`)",
             nameof(过滤与截断在json里是两种kind)),
+        new("Fields the exporter dropped are `kind: \"boundary\"` instead",
+            nameof(导出期丢字段与本次分页截断在json里是两种kind)),
         new("The last page says it is the last one; an `--offset` past the end is reported as an overshoot, not as \"nothing found\"",
             "分页的三个位置各说各的话"),
 
@@ -127,6 +129,11 @@ public class SkillPromiseTests
             "同名文件不替调用方挑"),
         new("`--lines` together with `--member`/`--type` is a usage error rather than a silent preference",
             "两种读法同时传时当场说破"),
+        // 这条替掉的原文是「`read --member` has no in-command window at all — read the count
+        // line, then pipe」:一句 CLI 当场证伪得了的假话,而它是禁管道那段里**唯一授权
+        // 去管道**的场合。第九轮盲测把它当论据、文档照搬,两边都没跑过一次。
+        new("`--limit` caps the lines and the count line hands back the exact `--lines a-b` to resume from",
+            nameof(GrammarTests.成员读的窗口是limit加印回来的续读区间)),
         new("match **braces, not C#**",
             "能力边界只挂在做了推断的那几条路上"),
 
@@ -351,6 +358,28 @@ public class SkillPromiseTests
 
         var (cut, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--limit", "1", "--json");
         Assert.Contains("\"kind\": \"truncation\"", cut, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// **导出期丢掉的字段不是 `truncation`**,是 `boundary` —— `truncation` 专给这一次查询
+    /// 自己截的那一刀。区分是刻意的(一个是数据的边界,另一个是本次分页),但它把一条
+    /// 现成的体检做法变成了陷阱:照「Truncation notes carry kind truncation」写
+    /// `notes | where kind=="truncation"` 去筛截断,恰好漏掉唯一那种**答案会因此错**的截断
+    /// —— 分页截断你自己下的命令就知道,导出截断只有这条 note 会说。
+    /// </summary>
+    [Fact]
+    public void 导出期丢字段与本次分页截断在json里是两种kind()
+    {
+        // Bullet_Revolver 在语料里带着 fields_truncated=3。
+        var (json, _, _) = Fixture.Run("get", "Bullet_Revolver", "--json");
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var dropped = doc.RootElement.GetProperty("notes").EnumerateArray()
+            .Where(n => n.GetProperty("text").GetString()!
+                         .Contains("exporter stopped short", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.True(dropped.Count == 1, $"Expected exactly one export-truncation note, got {dropped.Count}.");
+        Assert.Equal("boundary", dropped[0].GetProperty("kind").GetString());
     }
 
     /// <summary>

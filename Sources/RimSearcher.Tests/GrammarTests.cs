@@ -938,6 +938,32 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// `--member` 也有命令内窗口:`--limit` 封顶,续读区间**当场算出来印回去**。
+    ///
+    /// 这条不是锦上添花的便利,它是禁管道那条规矩在 `read` 上能不能立住的地基 ——
+    /// 「这一形状没有出路」是 SKILL.md 里唯一授权去管道的理由,而管道会把上面那句
+    /// 「少了 N 行」一起吃掉。第九轮盲测据一句未经实测的断言把这条路记成不存在,
+    /// 文档照搬了一轮。于是这里钉的是那句话的反面:窗口在,而且续读参数是给好的。
+    /// </summary>
+    [Fact]
+    public void 成员读的窗口是limit加印回来的续读区间()
+    {
+        var (stdout, _, code) = Fixture.Run(
+            "read", "vanilla/Verse/Outline.cs", "--member", "Shared", "--limit", "3");
+        Assert.Equal(0, code);
+        Assert.Contains("--limit stopped the printing at 3 lines", stdout, StringComparison.Ordinal);
+
+        // 区间不是摆设:粘回去要真的读得到下一段,否则这条出路与「自己数行号」等价。
+        var m = Regex.Match(stdout, @"read on with --lines (\d+)-(\d+)");
+        Assert.True(m.Success, $"No resume range in '{stdout}'.");
+        var range = $"{m.Groups[1].Value}-{m.Groups[2].Value}";
+        var (resumed, _, resumedCode) = Fixture.Run(
+            "read", "vanilla/Verse/Outline.cs", "--lines", range);
+        Assert.Equal(0, resumedCode);
+        Assert.Contains($"lines {range} of", resumed, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 配平括号不是解析,这句边界只跟着**用了轮廓的**那几条路走。裸行读没有任何推断,
     /// 那里不该多这一句。
     /// </summary>

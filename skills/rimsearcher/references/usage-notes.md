@@ -84,7 +84,10 @@ instead, and the last of those is a string like `"817-951"` to hand straight bac
 not a pair of integers. Read the modifiers before concluding that a type overrides something:
 an override member and a virtual one the type introduces itself are otherwise identical rows,
 and they point at opposite next steps. `--json` never folds columns: every row carries every column.
-Truncation notes carry `kind: "truncation"`. On the def-side commands that take `--path`
+Truncation notes carry `kind: "truncation"`, but only for the cut this query made. Fields the
+exporter dropped are `kind: "boundary"` instead, so a sweep written as
+`notes | where kind == "truncation"` catches the paging cut you already asked for and misses
+the export-time one you did not. On the def-side commands that take `--path`
 (`get`, `inherit`, `fields`), the count of rows the filter matched carries `kind: "filter"` —
 a filter you asked for, not a cut-off; the code commands narrow files with `--files` instead.
 

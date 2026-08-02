@@ -108,8 +108,9 @@ so. A `--files` glob containing `/` starts at the tree name (`vanilla/**/Widgets
   an anchored pattern plus `--source`/`--files`. `read`'s `--limit` is the odd one out —
   it caps printed lines rather than narrowing a result set, so `--limit all` *widens*.
   The rule guards against a hidden truncation, so it lifts where there is none to hide:
-  after `--limit all`, or on output that does not page. `read --member` has no in-command
-  window at all — read the count line, then pipe.
+  after `--limit all`, or on output that does not page. `read --member` pages too, just not
+  through `--offset`: `--limit` caps the lines and the count line hands back the exact
+  `--lines a-b` to resume from, so a long member is read window by window.
 - **Reverse-look-up field names, never guess.** `find --value <value>` reports which paths
   hold the value. A guessed field name that happens to exist returns a clean,
   complete-looking table for the wrong field — the most expensive failure here.
