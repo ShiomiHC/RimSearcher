@@ -248,11 +248,13 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
         // EnvironmentReport.Added)。次序不是那一层:没人挑得出一个「次序变体」环境,
         // 而加载顺序决定同名 patch 谁赢 —— 于是快照里的值不是不全,是错的。
         // 这条与 VersionDrift / ContentDrift 同类,显式选择也不闭嘴。
+        // 尾句不指 `snapshot status`:SKILL.md 的 Snapshots 一节把「它是那次完整比对」写死了,
+        // 而这条每次查询都发,那个指路就是同一句话的第 N 份副本。留下的是后果 —— 它决定
+        // 下面那个值怎么读,推不出来。
         if (report.Reordered)
             Report.Notice(NoticeKind.Staleness,
                 $"The mods snapshot '{name}' describes are in a different load order in the game now. " +
-                "Load order decides which patch wins, so a value below can differ from what the game resolves. " +
-                "'rimsearcher snapshot status' explains the difference.");
+                "Load order decides which patch wins, so a value below can differ from what the game resolves.");
 
         switch (report.Match)
         {
@@ -260,10 +262,10 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
                 return;   // 一致:除了上面那行「用的是哪个」,不再多说
 
             case EnvironmentMatch.VersionDrift:
+                // 「下面的值出自旧那一版」是前半句的同义反复 —— 两个版本号已经把它说完了。
                 Report.Notice(NoticeKind.Staleness,
                     $"Snapshot '{name}' was exported from game version {db.Meta.GameVersion}, " +
-                    $"but the game is now on {report.GameVersion}. Values below are from the older build; " +
-                    "re-export to refresh.");
+                    $"but the game is now on {report.GameVersion}. Re-export to refresh.");
                 return;
 
             // 显式选择在这一格**不闭嘴**:`--snapshot modded` 声明的是「我要查那个环境」,
@@ -343,9 +345,12 @@ internal static class DiskLayer
     {
         if (ctx.Db.Harvested || ctx.Config.ModRoots.Count == 0) return;
         ctx.Report.Notice(NoticeKind.Boundary,
+            // 「import 默认就扫」是那条命令自己的 help 文本(cli-reference 的
+            // --no-harvest-translations 行就是它渲染的),不在每次查询上重念;
+            // 补救留一句,不留就把这条边界写成了死路。
             "This snapshot never scanned the language files on disk, so every row here is one the game actually " +
             "had: the absence of an 'on disk' row is not evidence that no installed mod translates it. " +
-            "'rimsearcher snapshot import' scans by default — re-import to measure that layer.", footnote: true);
+            "Re-import to measure that layer.", footnote: true);
     }
 }
 
