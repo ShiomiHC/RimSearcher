@@ -125,19 +125,20 @@ public sealed class SearchCommand : Command
         }
         else if (rows.Count == 0)
         {
-            // 值域必须说清:search 覆盖 defName / label / description / def 侧译文,
-            // **不含** C# 类名,也不含 Languages/*/Keyed 那一整套 UI 字符串 —— 后者在库里,
-            // 只是在另一张表上,所以句子要指向 keyed,而不是停在「不覆盖」。
+            // 值域(覆盖 defName / label / description / def 侧译文,**不含** C# 类名与
+            // Languages/*/Keyed)是恒定知识,归 SKILL.md;这里只说本次的事实。
             //
-            // 这一整段在下面那句算得出落点时是重复的(占位符版本在前、实参版本在后),量过 227
-            // 字节。但它不能单方面砍:SKILL.md 的 search 一节逐字承诺了 CLI 会说这句,
-            // SkillPromiseTests 把那句承诺与本条输出对钉在一起。要砍得连承诺一起改。
+            // 此前这里整段复读那份清单,而下面那句在算得出落点时正要说同一件事、还带真参数:
+            // 「not the UI strings under Languages/*/Keyed … that 'rimsearcher keyed' reads」
+            // 后面紧跟着「'没有电力' is interface text … 'rimsearcher keyed 没有电力' shows
+            // the full row」。占位符版本在前、实参版本在后,量过 227 字节。
+            //
+            // 算不出落点时也不该复读:NameLookup.Locate 查的正是那几层(def 类型、类、mod、
+            // keyed、字段值、XML 节点、别的快照),它返回 null 就意味着**那几层都查过且都空** ——
+            // 那时再指过去是条假线索。
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"Nothing matched '{query}' in this snapshot" +
-                (scope.IsAll ? "" : $" within --scope {scope.Expression}") +
-                ". This command covers def names, labels, descriptions and the translations injected onto " +
-                "defs — not C# class names, and not the UI strings under Languages/*/Keyed, which sit on a " +
-                "layer of their own that 'rimsearcher keyed' reads.");
+                (scope.IsAll ? "" : $" within --scope {scope.Expression}") + ".");
 
             // 名字的真实落点当场算得出来:算得出就说算出来的那一条,算不出才退回按形状猜。
             var sighting = NameLookup.Locate(ctx, query, scope);
@@ -556,9 +557,8 @@ public sealed class GetCommand : Command
             // 它说的是 the list below。
             if (def.FieldsTruncated > 0)
                 ctx.Report.Notice(NoticeKind.Boundary,
-                    $"The exporter stopped short on this def: {Tally.AtLeast(def.FieldsTruncated).Render("field")} " +
-                    "were dropped at export time for depth or size, so a path missing from the list below is not " +
-                    "proof that the def lacks it.");
+                    $"The exporter stopped short on this def: {ExportCap.OnDef(def.FieldsTruncated)}, " +
+                    "so a path missing from the list below is not proof that the def lacks it.");
 
             ctx.Report.Table("fields", ["path", "value", FieldDefault.Column],
                 fields.Select(f => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>

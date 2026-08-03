@@ -1,6 +1,6 @@
 $ rimsearcher search CompShield
 exit 1
 --- stdout ---
-Nothing matched 'CompShield' in this snapshot. This command covers def names, labels, descriptions and the translations injected onto defs — not C# class names, and not the UI strings under Languages/*/Keyed, which sit on a layer of their own that 'rimsearcher keyed' reads.
+Nothing matched 'CompShield' in this snapshot.
 'CompShield' is not a def name, but it appears as a field value: 'comps[0].compClass' holds 'RimWorld.CompShield'. 'rimsearcher find compClass CompShield' lists the defs that use it, and 'rimsearcher find --value CompShield' covers every path at once.
 --- stderr ---

@@ -1,6 +1,6 @@
 $ rimsearcher search TestModGun --scope ludeon.rimworld
 exit 1
 --- stdout ---
-Nothing matched 'TestModGun' in this snapshot within --scope ludeon.rimworld. This command covers def names, labels, descriptions and the translations injected onto defs — not C# class names, and not the UI strings under Languages/*/Keyed, which sit on a layer of their own that 'rimsearcher keyed' reads.
+Nothing matched 'TestModGun' in this snapshot within --scope ludeon.rimworld.
 'TestModGun' is in this snapshot after all — it comes from test.mod, which --scope ludeon.rimworld excludes. Drop --scope, or name that mod in it.
 --- stderr ---

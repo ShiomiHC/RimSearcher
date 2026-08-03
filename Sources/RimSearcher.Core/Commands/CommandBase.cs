@@ -329,6 +329,28 @@ public static class ContentDrift
 }
 
 /// <summary>
+/// 「导出器半路停了,字段没发全」这半句的**唯一产地**。<c>get</c> / <c>snapshot status</c> /
+/// <c>snapshot import</c> 三处都念它,此前各写各的,后两句已经逐字相同却仍是两份。
+///
+/// **只统一事实,不统一后果。** 三处的读者站的位置不一样:一个正看着这个 def 的字段表
+/// (「下面这张表」),一个还没查任何 def(「以后 get 的时候」),一个刚导完(「工具将来会提醒你」)。
+/// 把后果也压成一句,三处就都得说得含糊,而后果恰恰是这条声明存在的理由。
+/// </summary>
+internal static class ExportCap
+{
+    /// <summary>
+    /// 某一个 def 上丢了几个字段。数是**下界** —— 导出器是停下来了,不是数完了
+    /// (见 <c>snapshot truncated</c> 那一侧的同一条注解)。
+    /// </summary>
+    public static string OnDef(int fields)
+        => $"{Tally.AtLeast(fields).Render("field")} were dropped at export time for depth or size";
+
+    /// <summary>一批 def 里有几个被截过。<paramref name="among"/> 是插在计数与谓语之间的定语。</summary>
+    public static string OverDefs(int defs, string among = "")
+        => $"{Tally.Complete(defs).Render("def")}{among} had fields dropped at export time for depth or size";
+}
+
+/// <summary>
 /// 「磁盘那一层没量过」这句话的**唯一产地**。
 ///
 /// 收割默认开,但 <c>--no-harvest-translations</c> 与没配 <c>mod_roots</c> 都能造出没量过的库。

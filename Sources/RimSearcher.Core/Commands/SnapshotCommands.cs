@@ -118,8 +118,8 @@ public sealed class SnapshotStatusCommand : Command
         var truncated = db.TruncatedDefCount();
         if (truncated > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
-                $"{Tally.Complete(truncated).Render("def")} in this snapshot had fields dropped at export time for " +
-                "depth or size. For those, a field path missing from 'get' is not proof that the def lacks it.");
+                $"{ExportCap.OverDefs(truncated, " in this snapshot")}. " +
+                "For those, a field path missing from 'get' is not proof that the def lacks it.");
 
         // 集合差在**这里**逐条讲,而每次查询一个字都不说(成因见 EnvironmentReport.Added)——
         // 于是「为什么查询不提这件事」的答案得在这一句里,否则沉默会被当成没差异。
@@ -424,8 +424,8 @@ public sealed class SnapshotImportCommand : Command
 
         if (stats.TruncatedDefs > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
-                $"{Tally.Complete(stats.TruncatedDefs).Render("def")} had fields dropped at export time for depth " +
-                "or size. 'get' says so per def, so that a missing path is never mistaken for an absent field.");
+                $"{ExportCap.OverDefs(stats.TruncatedDefs)}. " +
+                "'get' says so per def, so that a missing path is never mistaken for an absent field.");
 
         // 没收割要说破,两个成因分开说 —— 补救不一样(收回参数 / 去配 mod_roots)。
         if (!harvest)

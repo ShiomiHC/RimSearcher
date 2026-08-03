@@ -69,6 +69,11 @@ public class SkillPromiseTests
             nameof(search只认名字标签与译文而不认C类名)),
         new("the UI strings under `Languages/*/Keyed`",
             nameof(search只认名字标签与译文而不认C类名)),
+        // 2026-08-03:值域清单此前**同时**写在文档与每一次零结果的输出里,而输出的下一行
+        // 在算得出落点时正要用真参数说同一件事。清单是恒定知识,归文档;CLI 说本次的事实。
+        // 这条承诺钉的是「不复读」——「说了什么」由上面两条钉着,方向相反,一起才夹得住。
+        new("instead of reciting that list back at you",
+            nameof(search只认名字标签与译文而不认C类名)),
         new("an English term finds its def on a Chinese snapshot",
             nameof(GrammarTests.英文原文在中文快照上搜得到)),
         new("gives the whole value space and prints which full paths and def types contributed",
@@ -418,6 +423,14 @@ public class SkillPromiseTests
     /// <summary>
     /// search 认名字/标签/译文,不认 C# 类名。这句话若不成立,读者会拿 `search CompShield`
     /// 的零结果当成「游戏里没有这个类」—— 而它其实是问错了地方。
+    ///
+    /// 兑现它的是**点名**那一行,不是值域清单。2026-08-03 之前这道闸拿
+    /// <c>Contains("Languages/*/Keyed")</c> 守它 —— 而 CompShield 与 keyed 毫无关系,
+    /// 那个断言是把这串字符当「承诺句在不在」的探针使,守的是措辞不是语义。清单同时写在
+    /// 文档与每一次零结果里,于是有落点时占位符版本在前、实参版本在后,连说两遍。
+    ///
+    /// 现在两个方向一起夹:**点名那一行必须在**(下面的正断言),**清单必须不在**
+    /// (反断言,钉住「不复读」那条承诺)。
     /// </summary>
     [Fact]
     public void search只认名字标签与译文而不认C类名()
@@ -430,14 +443,23 @@ public class SkillPromiseTests
         var (byClass, _, classCode) = Fixture.Run("search", "CompShield");
         Assert.Equal(1, classCode);
         Assert.DoesNotContain("Apparel_ShieldBelt", byClass, StringComparison.Ordinal);
-        // 只说「没有」不够:得把该去哪儿问说出来,否则这条承诺帮不到任何人。
-        Assert.Contains("find", byClass, StringComparison.Ordinal);
+        // 只说「没有」不够:得把该去哪儿问说出来,而且要带本次的查询词 ——
+        // 一句 'find compClass <Class>' 的占位符版本帮不到拿着零结果的人。
+        Assert.Contains("find compClass CompShield", byClass, StringComparison.Ordinal);
+        // 点的是它真正待着的那一层:作为字段值,不是作为 def。
+        Assert.Contains("field value", byClass, StringComparison.Ordinal);
 
-        // 快照的 translations 表只有 def 侧的注入(def_type + def_name + field 三列),
-        // Languages/*/Keyed 那一整套 UI 字符串一条都进不来 —— schema 级的硬边界,
-        // 不是覆盖率问题。
-        Assert.Contains("Languages/*/Keyed", byClass, StringComparison.Ordinal);
-        Assert.Contains("injected onto defs", byClass, StringComparison.Ordinal);
+        // UI 文案那一层同样点名,而不是笼统说「search 不覆盖它」。
+        var (byKeyed, _, keyedCode) = Fixture.Run("search", "没有电力");
+        Assert.Equal(1, keyedCode);
+        Assert.Contains("rimsearcher keyed 没有电力", byKeyed, StringComparison.Ordinal);
+
+        // 三处都不许把值域清单复读一遍 —— 那是 SKILL.md 的份内事。
+        foreach (var out_ in new[] { byClass, byKeyed })
+        {
+            Assert.DoesNotContain("Languages/*/Keyed", out_, StringComparison.Ordinal);
+            Assert.DoesNotContain("This command covers def names", out_, StringComparison.Ordinal);
+        }
     }
 
     /// <summary>

@@ -188,6 +188,8 @@ public class DeclarationTests
             ("changed on disk", "ContentDrift.Sentence", 1),
             ("share the name", "NameCollision.Say", 1),
             ("is past the end", "Report.PastEnd", 1),
+            // 两个:按 def 数的与按字段数的,都在 ExportCap 里。
+            ("dropped at export time for depth or size", "ExportCap", 2),
             // 三档快照三句话,都在 NestedClassLine 这一个方法里。
             ("The runtime type of a nested Class", "Completeness.NestedClassLine", 3),
         ];

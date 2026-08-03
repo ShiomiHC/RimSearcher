@@ -187,7 +187,9 @@ so. A `--files` glob containing `/` starts at the tree name (`vanilla/**/Widgets
 - **`search`** covers def names, labels, descriptions and the translations injected onto
   defs — both languages, so an English term finds its def on a Chinese snapshot. It does
   **not** cover C# class names (→ `find compClass <Class>`) or the UI strings under
-  `Languages/*/Keyed` (→ `keyed <phrase>`); a zero result names which one you hit.
+  `Languages/*/Keyed` (→ `keyed <phrase>`); a zero result names which one you hit — the
+  layer the name actually sits on, query already filled in, instead of reciting that list
+  back at you.
 - **`get --path`/`--value` match substrings** — `--path soundImpact` also returns
   `soundImpactDefault`, opposite meaning; the output says when nothing matched as a whole
   segment. `--type <DefType>` picks between same-named defs (common).
