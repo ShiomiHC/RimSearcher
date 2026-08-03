@@ -13,5 +13,5 @@ The exporter stopped short on this def: at least 3 fields were dropped at export
 
 path                   value  code_default
 projectile.burstCount  1      yes
-No value above with 'code_default'=no is one that most of the 9 ThingDefs in this snapshot also carry, so none of them is a class-wide default showing through that column. Rows marked yes were not compared: a yes is a declared default already.
+No value above with 'code_default'=no is one that most of the 9 ThingDefs in this snapshot also carry. Rows marked yes were not compared: a yes is a declared default already.
 --- stderr ---

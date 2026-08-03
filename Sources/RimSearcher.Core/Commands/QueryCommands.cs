@@ -128,6 +128,10 @@ public sealed class SearchCommand : Command
             // 值域必须说清:search 覆盖 defName / label / description / def 侧译文,
             // **不含** C# 类名,也不含 Languages/*/Keyed 那一整套 UI 字符串 —— 后者在库里,
             // 只是在另一张表上,所以句子要指向 keyed,而不是停在「不覆盖」。
+            //
+            // 这一整段在下面那句算得出落点时是重复的(占位符版本在前、实参版本在后),量过 227
+            // 字节。但它不能单方面砍:SKILL.md 的 search 一节逐字承诺了 CLI 会说这句,
+            // SkillPromiseTests 把那句承诺与本条输出对钉在一起。要砍得连承诺一起改。
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"Nothing matched '{query}' in this snapshot" +
                 (scope.IsAll ? "" : $" within --scope {scope.Expression}") +
@@ -1755,10 +1759,16 @@ internal static class Completeness
     /// 一件事一个产地:find / values / fields 三处调同一份措辞,不各写各的。
     /// </summary>
     public static void NoteIndexHoldsValuesOnly(CommandContext ctx)
+        // 第三种成因只在**这份快照真有被砍的 def** 时存在。没有的时候那 105 字节讲的是一件
+        // 这里不可能发生的事,而它还带着一条会回空表的指路 —— 与 NoteIndexedPathsOnly
+        // 同一条纪律(圈住的类型里没有被砍的就一个字不发)。
         => ctx.Report.Notice(NoticeKind.Boundary,
             "Two things keep a field out of this index without any sign here: a value that was null " +
-            "on every def, and a field the game marks as an unsaved runtime cache. A third, hitting " +
-            "the per-def field cap, does leave a sign — 'rimsearcher snapshot truncated' lists those defs. " +
+            "on every def, and a field the game marks as an unsaved runtime cache. " +
+            (ctx.Db.TruncatedDefCount() > 0
+                ? "A third, hitting the per-def field cap, does leave a sign — " +
+                  "'rimsearcher snapshot truncated' lists those defs. "
+                : "") +
             NestedClassLine(ctx) +
             " So this says no indexed value sits at that path — not that no such field exists. " +
             "'rimsearcher code-search' reads the class declaration, which does say.");
@@ -1809,9 +1819,12 @@ internal static class Completeness
               $"'{FieldDefault.Column}' is not this def having made a choice — the count in brackets: " +
               $"{NameList.Render(listed, listed.Count)}. " +
               $"Only rows whose '{FieldDefault.Column}' is no were compared: a yes is a declared default already."
+            // 否定支砍掉「所以没有一个是透过那一列显出来的全类默认值」:那是前半句的改写,
+            // 而 SKILL.md 讲过这条线是干什么的。「yes 没参与比较」那半句一个字不动 ——
+            // 它守的是「没比过」被读成「比过了没有」,而那正是这一支印在一张全 yes 表下面时的样子。
             : $"No value above with '{FieldDefault.Column}'=no is one that most of the {total} " +
-              $"{def.DefType}s in this snapshot also carry, so none of them is a class-wide default showing " +
-              $"through that column. Rows marked yes were not compared: a yes is a declared default already.");
+              $"{def.DefType}s in this snapshot also carry. " +
+              $"Rows marked yes were not compared: a yes is a declared default already.");
     }
 
     /// <summary>
@@ -1987,9 +2000,11 @@ internal static class Advisory
         var n = ctx.Db.CountTranslationsOutside(defNames);
         if (n == 0) return;
         ctx.Report.Notice(NoticeKind.Advisory,
+            // 尾句砍掉:`get <defName>` 那个占位符贴不回去 —— 要敲它得先知道是上面哪几个 def,
+            // 而这句话正是那个不知道。它是指路的形状,不是指路。
             $"{Tally.Complete(n).Render("def")} above also matched language files from mods that are installed " +
-            "but were not enabled in this snapshot; those translations are searchable but were not in effect. " +
-            "'rimsearcher get <defName>' shows which.", footnote: true);
+            "but were not enabled in this snapshot; those translations are searchable but were not in effect.",
+            footnote: true);
     }
 
     /// <summary>
