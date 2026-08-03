@@ -1,0 +1,6 @@
+$ rimsearcher values comps
+exit 1
+--- stdout ---
+No def in this snapshot has a field path ending in 'comps'.
+'comps' holds objects rather than a value, so nothing is indexed under that name by itself — the values sit one level down, on 4 field paths. The widest is 'comps[0].compClass' (3 defs): 'rimsearcher values comps[0].compClass' reads it, and 'rimsearcher fields ThingDef --path-contains comps' lists the rest.
+--- stderr ---

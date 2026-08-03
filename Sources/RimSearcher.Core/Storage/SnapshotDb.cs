@@ -838,6 +838,50 @@ public sealed class SnapshotDb : IDisposable
     }
 
     /// <summary>
+    /// 这个名字是不是别的路径的**上一层**。
+    ///
+    /// 索引只存叶子。<c>List&lt;ThingDefCountRangeClass&gt; statBases</c> 这样的字段自己不落一行,
+    /// 值住在 <c>statBases[0].stat</c> 上,于是按后缀问 <c>statBases</c> 恒空 —— 而这是最容易敲的
+    /// 那个名字(C# 字段名就长这样)。空结果与「快照里真没有这个字段」逐字同形,分不出来就会
+    /// 把 1967 个 def 有值的字段报成空的。
+    /// </summary>
+    /// <returns>按 def 数排的样本路径、这样的路径一共几条,以及占最多的那个 def 类型
+    /// (指路的 <c>fields</c> 要一个 &lt;DefType&gt; 才敲得动,不填就只是个名词)。</returns>
+    public (IReadOnlyList<(string Path, int Defs)> Samples, int Total, string? TopType) PathsBelow(
+        string name, ScopeFilter scope, int limit)
+    {
+        // 段边界要认准:`stat` 不能命中 `statBases[0].value`。名字后面只接 `[` 或 `.`,
+        // 前面只接开头或 `.` —— 四种组合各一条 LIKE。
+        var e = Escape(name);
+        var p = new Dictionary<string, object?>
+        {
+            ["@b0"] = e + "[%", ["@b1"] = e + ".%", ["@b2"] = "%." + e + "[%", ["@b3"] = "%." + e + ".%",
+        };
+        var conds = new List<string>
+        {
+            "(fv.path LIKE @b0 ESCAPE '\\' COLLATE NOCASE OR fv.path LIKE @b1 ESCAPE '\\' COLLATE NOCASE " +
+            "OR fv.path LIKE @b2 ESCAPE '\\' COLLATE NOCASE OR fv.path LIKE @b3 ESCAPE '\\' COLLATE NOCASE)",
+        };
+        if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
+        var where = "WHERE " + string.Join(" AND ", conds);
+        const string join = "FROM field_values fv JOIN defs d ON d.id = fv.def_id";
+
+        var total = Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT fv.path {join} {where})", p);
+        var rows = new List<(string, int)>();
+        string? topType = null;
+        if (total > 0)
+        {
+            using (var rd = Query($"SELECT fv.path, COUNT(DISTINCT d.id) c {join} {where} " +
+                                  $"GROUP BY fv.path ORDER BY c DESC, fv.path LIMIT {limit}", p))
+                while (rd.Read()) rows.Add((rd.GetString(0), rd.GetInt32(1)));
+            using (var rd = Query($"SELECT d.def_type {join} {where} " +
+                                  "GROUP BY d.def_type ORDER BY COUNT(DISTINCT d.id) DESC, d.def_type LIMIT 1", p))
+                if (rd.Read()) topType = rd.GetString(0);
+        }
+        return (rows, total, topType);
+    }
+
+    /// <summary>
     /// 按值反查字段路径:给一段文本,回答「哪些字段取到过含它的值」。
     ///
     /// 没有它,唯一的出路是猜字段名 —— 猜偏了,<c>--path-contains</c> 会返回一个语法上完全正常、

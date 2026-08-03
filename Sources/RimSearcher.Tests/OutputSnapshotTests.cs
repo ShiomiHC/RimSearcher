@@ -105,6 +105,12 @@ public class OutputSnapshotTests
         { "fields-filtered",       ["fields", "ThingDef", "--path-contains", "comps"] },
         { "values-coverage",       ["values", "compClass"] },
         { "values-miss",           ["values", "noSuchField"] },
+        // 零结果的第四种成因:敲的名字是**上一层**。索引只存叶子,`comps` 自己不落行,
+        // 值在 `comps[0].compClass` 上 —— 而 C# 字段名就长这样,是最容易敲的那个词。
+        // 与 values-miss / where-miss-field 是配对的:那两条是真不存在,这两条是存在但更深,
+        // 输出必须**不同形**。此前两者逐字一样,把 statBases(2394 个 def)报成了「没有」。
+        { "values-miss-deeper",    ["values", "comps"] },
+        { "where-miss-deeper",     ["where", "comps", "x"] },
         // list 的另一半:不给 def 类型时列类型总表。
         { "list-types",            ["list"] },
         { "mods",                  ["mods"] },

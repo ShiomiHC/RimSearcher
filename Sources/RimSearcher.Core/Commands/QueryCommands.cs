@@ -847,29 +847,37 @@ public sealed class FindCommand : Command
                 // 「从一个类名或一个值反查 def」。落点当场算得出来,就说算出来的那一条。
                 // 值也给了的那一支不进来:下面那句已经拿着那个值点名了 --value。
                 var placed = value is null && !identity.ContainsKey(path) ? Placed(ctx, path, scope) : null;
+                // 与 values 那一支同一条:算出来「值在更深一层」就不再发带占位符的通用指路。
+                var deeper = identity.ContainsKey(path) ? null : Completeness.ValuesLiveDeeper(ctx, path, scope);
 
                 ctx.Report.Notice(NoticeKind.NextStep,
                     $"No def in this snapshot has a field path ending in '{path}'" +
-                    (scope.IsAll ? "" : $" within --scope {scope.Expression}") + ". " +
+                    (scope.IsAll ? "" : $" within --scope {scope.Expression}") + "." +
+                    // 尾巴撤掉时那个句点后面不许留空格 —— 基线闸按行尾空白判红。
                     (identity.TryGetValue(path, out var hint)
-                        ? $"'{path}' is part of a def's identity rather than one of its fields: {hint}."
-                        : "'rimsearcher fields <DefType> --path-contains <text>' lists the paths that a def type actually has" +
-                          (value is not null
-                              ? $", and 'rimsearcher where --value {value}' finds which field holds that value."
-                              // 落点算出来了就不给这半句:下一句里同一条命令的参数是**填好的**。
-                              : placed is not null
-                                  ? "."
-                                  : ", and 'rimsearcher where --value <text>' finds which path holds a value " +
-                                    "you already know.")));
+                        ? $" '{path}' is part of a def's identity rather than one of its fields: {hint}."
+                        : deeper is not null
+                            ? ""
+                            : " 'rimsearcher fields <DefType> --path-contains <text>' lists the paths that a def type actually has" +
+                              (value is not null
+                                  ? $", and 'rimsearcher where --value {value}' finds which field holds that value."
+                                  // 落点算出来了就不给这半句:下一句里同一条命令的参数是**填好的**。
+                                  : placed is not null
+                                      ? "."
+                                      : ", and 'rimsearcher where --value <text>' finds which path holds a value " +
+                                        "you already know.")));
 
                 // 算得出来的结论排在索引边界那句之前;边界那句照旧挂 —— 「它是个值」并不
                 // 证明「它不同时是一个没进索引的字段」,两件事正交,叠加不替换。
                 if (placed is not null) ctx.Report.Notice(NoticeKind.NextStep, placed);
+                // 「值住在更深一层」把边界那句**顶掉**,不是叠加:后者列的两条成因
+                // (每个 def 都是 null / 不存盘的运行时缓存)在这种局面下一条都不成立。
+                if (deeper is not null) ctx.Report.Notice(NoticeKind.NextStep, deeper);
                 // identity 那一档不说:那时候答案已经给全了,再挂一句索引边界是纯噪音。
                 // `class` 是**唯一**的例外:导出器 0.2.0 起 `<path>.Class` 是一条真路径,
                 // 敲 `where Class X` 的人问的多半是嵌套子对象的类型,而 identity 那句只答了
                 // 「def 自己的 class」。
-                if (!identity.ContainsKey(path) || string.Equals(path, "class", StringComparison.OrdinalIgnoreCase))
+                else if (!identity.ContainsKey(path) || string.Equals(path, "class", StringComparison.OrdinalIgnoreCase))
                     Completeness.NoteIndexHoldsValuesOnly(ctx, path);
                 NoteElsewhere();
                 return 1;
@@ -1618,6 +1626,11 @@ public sealed class ValuesCommand : Command
             // 一旦成立,那三句都在描述另一个集合。
             var loosely = pq.Exact && !withoutType && !outsideScope && ctx.Db.FieldPathExists(path, scope);
 
+            // 第四种成因:敲的是上一层。它要先算出来 —— 它一旦成立,下面那句通用指路里
+            // 带占位符的两条命令就不发了,填好参数的路在它自己那句里。
+            var deeper = !withoutType && !outsideScope && !loosely
+                ? Completeness.ValuesLiveDeeper(ctx, path, scope) : null;
+
             ctx.Report.Notice(NoticeKind.NextStep,
                 loosely
                     ? $"No field path is exactly '{path}', though some path ends in it. Drop --exact-path " +
@@ -1629,10 +1642,14 @@ public sealed class ValuesCommand : Command
                             ? $"'{path}' exists in this snapshot but no def has it within --scope {scope.Expression}. " +
                               "Widen the scope, or run 'rimsearcher mods' to see what this scope could have matched."
                             : $"No def in this snapshot has a field path ending in '{path}'" +
-                              (scope.IsAll ? "" : $" (nor anywhere outside --scope {scope.Expression})") + ". " +
-                              $"'rimsearcher fields <DefType>' lists the paths a type actually has, and " +
-                              $"'rimsearcher where --value <text>' finds which path holds a value you already know.");
-            if (!withoutType && !outsideScope && !loosely) Completeness.NoteIndexHoldsValuesOnly(ctx, path);
+                              (scope.IsAll ? "" : $" (nor anywhere outside --scope {scope.Expression})") + "." +
+                              // 尾巴撤掉时那个句点后面不许留空格 —— 基线闸按行尾空白判红。
+                              (deeper is not null
+                                  ? ""
+                                  : " 'rimsearcher fields <DefType>' lists the paths a type actually has, and " +
+                                    "'rimsearcher where --value <text>' finds which path holds a value you already know."));
+            if (deeper is not null) ctx.Report.Notice(NoticeKind.NextStep, deeper);
+            else if (!withoutType && !outsideScope && !loosely) Completeness.NoteIndexHoldsValuesOnly(ctx, path);
             return 1;
         }
 
@@ -1804,6 +1821,43 @@ internal static class Completeness
                   "'rimsearcher snapshot truncated' lists those defs. "
                 : "") +
             NestedClassLine(ctx));
+    }
+
+    /// <summary>
+    /// 敲的那个名字是**上一层**,值住在更深的叶子上 —— 这是零结果里最常见的一种成因,
+    /// 而在补上这句之前它一次都没被说出来过。
+    ///
+    /// 索引只存叶子:<c>List&lt;StatModifier&gt; statBases</c> 自己不落行,值在
+    /// <c>statBases[0].stat</c> 上。于是按后缀问 <c>statBases</c> 恒空 —— 而 C# 字段名就长这样,
+    /// 是最容易敲进去的那个词。实测 ThingDef 上 <c>statBases</c>(44 条路径 / 1967 个 def)、
+    /// <c>comps</c>、<c>costList</c>、<c>verbs</c> 全部落进这个洞,输出与「快照里真没有这个字段」
+    /// 逐字同形,而 <see cref="NoteIndexHoldsValuesOnly"/> 随后列的两条成因一条都不适用,
+    /// 把读者按在「这字段是空的」上。
+    ///
+    /// 一旦这句出声,那条免责就**不许再跟**:它讲的是另一种局面。
+    /// </summary>
+    /// <returns>该说的那句话,不适用就是 null。调用方拿它做两件事:掐掉那条免责,
+    /// 以及把前一句里带 &lt;DefType&gt; / &lt;text&gt; 占位的通用指路一并撤掉 —— 参数填好的路
+    /// 就在下一句,占位的那两条排在它前面只会先被照做。</returns>
+    public static string? ValuesLiveDeeper(CommandContext ctx, string path, ScopeFilter scope)
+    {
+        // 自己带下标或点号的路径不进来:那时敲的已经是一条具体路径,空就是真的空。
+        if (path.Contains('.') || path.Contains('[')) return null;
+        var (samples, total, topType) = ctx.Db.PathsBelow(path, scope, 1);
+        if (total == 0) return null;
+
+        // 试过把打头那条从 `values` 换成 `where`(理由:`where` 带 def 名一列,`values` 只出汇总),
+        // 5 个盲测 + 回访之后**改回来了**:细节错不是「路指错表」造成的。四个受测者一致自判
+        // 「错在自己」,机制是不对称查询(查了 [0] 不查 [1])、抽样撞上恰好只有一条的 def、
+        // 以及把 `values` 的分布表当逐 def 对照表用。联表本来就有(`get <def> --path-contains`),
+        // 是没人敲,不是没有。别再为这个改措辞。
+        var top = samples[0];
+        return $"'{path}' holds objects rather than a value, so nothing is indexed under that name by itself — " +
+               $"the values sit one level down, on {Tally.Complete(total).Render("field path")}. The widest is " +
+               $"'{top.Path}' ({Tally.Complete(top.Defs).Render("def")}): 'rimsearcher values {top.Path}' reads it" +
+               (topType is null
+                   ? "."
+                   : $", and 'rimsearcher fields {topType} --path-contains {path}' lists the rest.");
     }
 
     /// <summary>
