@@ -165,6 +165,53 @@ public class DeclarationTests
             $"Rendered but not registered in NounRegistry: {string.Join(", ", missing)}.");
     }
 
+    /// <summary>
+    /// 声明了「唯一产地」的那几句话,真的只有一个产地。
+    ///
+    /// 此前这条纪律只写在产地自己的注释里(「两条命令回答同一个问题时口径不许不一致」),
+    /// 而注释拦不住手抄 —— <c>list --class</c> 那一支就手抄了 <c>DefTypeMiss.Say</c>,
+    /// 于是它比兄弟分支少了近似候选:同一个问题,一条给拼写建议,一条不给。抄的时候两句一模一样,
+    /// 是产地后来长出来的那半句没有跟过去,而这种漂移不会以任何形式变红。
+    ///
+    /// 数的是**代码里**的出现次数:整行注释先剔掉,不然产地自己的注释会算进去。
+    /// 期望数写死是有意的 —— 给产地加一个分支就该回来把这里的数一起改,那次修改正是
+    /// 「这句话还有几个出口」值得重新确认的时刻。
+    /// </summary>
+    [Fact]
+    public void 声明了唯一产地的句子只有一个产地()
+    {
+        // (可辨认的片段, 产地, 该片段在代码里应有的出现次数)
+        (string Fragment, string Origin, int Expected)[] soleOrigins =
+        [
+            ("No def type named", "DefTypeMiss.Say", 1),
+            ("never scanned the language files", "DiskLayer.NoteIfUnmeasured", 1),
+            ("changed on disk", "ContentDrift.Sentence", 1),
+            ("share the name", "NameCollision.Say", 1),
+            ("is past the end", "Report.PastEnd", 1),
+            // 三档快照三句话,都在 NestedClassLine 这一个方法里。
+            ("The runtime type of a nested Class", "Completeness.NestedClassLine", 3),
+        ];
+
+        var code = new System.Text.StringBuilder();
+        foreach (var file in Directory.EnumerateFiles(
+                     Path.Combine(RepoRoot(), "Sources", "RimSearcher.Core"), "*.cs", SearchOption.AllDirectories))
+            foreach (var line in File.ReadAllLines(file))
+                if (!line.TrimStart().StartsWith("//", StringComparison.Ordinal))
+                    code.Append(line).Append('\n');
+        var text = code.ToString();
+
+        var strayed = new List<string>();
+        foreach (var (fragment, origin, expected) in soleOrigins)
+        {
+            var n = System.Text.RegularExpressions.Regex.Matches(
+                text, System.Text.RegularExpressions.Regex.Escape(fragment)).Count;
+            if (n != expected)
+                strayed.Add($"'{fragment}' appears {n}x in code, expected {expected}x — its sole origin is {origin}");
+        }
+
+        Assert.True(strayed.Count == 0, string.Join("\n", strayed));
+    }
+
     /// <summary>登记了却没人用的名词也是债:表越长,越没人敢动它。</summary>
     [Fact]
     public void 登记表里没有无人使用的名词()

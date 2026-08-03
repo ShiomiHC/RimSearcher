@@ -99,6 +99,9 @@ public class OutputSnapshotTests
         { "get-xml-node-only",     ["get", "BaseBullet"] },
         { "list-limited",          ["list", "ThingDef", "--limit", "2"] },
         { "list-scope-empty",      ["list", "HediffDef", "--scope", "test.mod"] },
+        // 打错类型名再带 --class:此前这一支手抄了 DefTypeMiss.Say,抄的是产地后来长出
+        // 近似候选之前的那一版,于是拼错 + --class 是唯一拿不到拼写建议的路。两支同一个问题。
+        { "list-typo-classed",     ["list", "ThingDf", "--class", "TestVariantDef"] },
         { "fields-filtered",       ["fields", "ThingDef", "--path", "comps"] },
         { "values-coverage",       ["values", "compClass"] },
         { "values-miss",           ["values", "noSuchField"] },

@@ -1368,7 +1368,7 @@ public sealed class ListCommand : Command
                 if (present.Count == 0)
                 {
                     ctx.Report.Notice(NoticeKind.NextStep,
-                        $"No def type named '{type}' in this snapshot. 'rimsearcher list' with no def type lists them all.");
+                        DefTypeMiss.Say(type, ctx.Db.Types(scope).Select(t => t.Type), "list"));
                     return 1;
                 }
 
@@ -1400,7 +1400,7 @@ public sealed class ListCommand : Command
                 return 1;
             }
 
-            ctx.Report.Notice(NoticeKind.NextStep, DefTypeMiss.Say(type, ctx.Db.Types(scope).Select(t => t.Type)));
+            ctx.Report.Notice(NoticeKind.NextStep, DefTypeMiss.Say(type, ctx.Db.Types(scope).Select(t => t.Type), "list"));
             return 1;
         }
 
@@ -1518,7 +1518,7 @@ public sealed class FieldsCommand : Command
                 Completeness.NoteIndexHoldsValuesOnly(ctx);
                 return 1;
             }
-            ctx.Report.Notice(NoticeKind.NextStep, DefTypeMiss.Say(type, ctx.Db.Types(ctx.Scope()).Select(t => t.Type)));
+            ctx.Report.Notice(NoticeKind.NextStep, DefTypeMiss.Say(type, ctx.Db.Types(ctx.Scope()).Select(t => t.Type), "fields"));
             return 1;
         }
 
@@ -1725,10 +1725,22 @@ internal static class DefTypeMiss
     /// <summary>
     /// 「这个快照里没有这个 def 类型」的唯一产地:<c>list</c> 与 <c>fields</c> 共用一份措辞,
     /// 两条命令回答同一个问题时口径不许不一致,否则读的人会以为差别有意义。
+    ///
+    /// 近似候选**不能**把出路顶掉:<see cref="Suggestion.Say"/> 是二选一的,于是「打错了」
+    /// 这条路上以前只剩一串名字,一条能敲的命令都没有 —— 而拿到名字之后要敲什么,恰好是
+    /// 打错的人不知道的。所以头一个候选带着命令一起给。
+    ///
+    /// <paramref name="verb"/> 跟着调用方走:同一句话在 <c>fields</c> 上指 <c>list</c>
+    /// 就把人从他要问的问题上带走了。
     /// </summary>
-    public static string Say(string typed, IEnumerable<string> known)
-        => $"No def type named '{typed}' in this snapshot." +
-           Suggestion.Say(Suggestion.Closest(known, typed), " 'rimsearcher list' with no def type lists them all.");
+    public static string Say(string typed, IEnumerable<string> known, string verb)
+    {
+        var close = Suggestion.Closest(known, typed);
+        return $"No def type named '{typed}' in this snapshot." +
+               (close.Count == 0
+                   ? " 'rimsearcher list' with no def type lists them all."
+                   : Suggestion.Say(close) + $" 'rimsearcher {verb} {close[0]}' if that is the one.");
+    }
 }
 
 internal static class Completeness
