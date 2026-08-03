@@ -189,9 +189,11 @@ public class DeclarationTests
             foreach (System.Text.RegularExpressions.Match m in
                      System.Text.RegularExpressions.Regex.Matches(text, @"\.Render\(\s*""([^""]+)""\s*\)"))
                 used.Add(m.Groups[1].Value);
+            // 名词后面收尾的可能是逗号(还带着 howToSeeMore)也可能是右括号 —— CountNotice
+            // 的第三个参数可省,只认逗号会把省掉的那些判成「没人用」。
             foreach (System.Text.RegularExpressions.Match m in
                      System.Text.RegularExpressions.Regex.Matches(
-                         text, @"(?:Count|Truncation)Notice\([^;]*?,\s*""([^""]+)""\s*,"))
+                         text, @"(?:Count|Truncation)Notice\([^;]*?,\s*""([^""]+)""\s*[,)]"))
                 used.Add(m.Groups[1].Value);
         }
         return used;

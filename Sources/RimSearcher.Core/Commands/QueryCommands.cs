@@ -501,9 +501,10 @@ public sealed class GetCommand : Command
                 // 分母是**列出来的那一群**的总数,不是 def 的字段总数 —— 否则被 limit 截的
                 // 与被默认值过滤掉的混在同一个差额里,拆不开。两者各自一句,再由 total 对账。
                 var listable = withDefaults ? total : total - defaulted;
+                // 撞名连印时才点名这一块是谁 —— 别处那个 def_name 行就在几行之上,
+                // 而多块连印时读者手里有好几个。出路本身不说(见 CountNotice)。
                 ctx.Report.CountNotice(Tally.Of(fields.Count, listable), "field",
-                    $"pass --limit all{(matches.Count == 1 ? "" : $" (this is {def.DefName})")} " +
-                    "for the rest, or --path <text> to pick out the ones you want.");
+                    matches.Count == 1 ? "" : $"this is {def.DefName} ({def.DefType}).");
 
                 // 措辞不许滑成「没人设过它」:XML 里照着默认值写一遍是常事,快照里那两种
                 // 情形完全同形。这一列能证的只有「与声明默认值无从区分」,句子就只说这个,
@@ -591,7 +592,8 @@ public sealed class GetCommand : Command
             {
                 // 数量在表之前,同字段表那条分界。
                 ctx.Report.CountNotice(Tally.Of(translations.Count, allTranslations.Count),
-                    "translation", $"pass --limit all to see the rest{whose}.");
+                    "translation",
+                    matches.Count == 1 ? "" : $"this is {def.DefName} ({def.DefType}).");
 
                 // original 是被替换掉的原文:导出时刻 def 上留的是译文,原文只在注入记录里 ——
                 // 两者同时在场是运行时导出独有的便宜。
@@ -1263,7 +1265,7 @@ public sealed class ListCommand : Command
                 $"Filtered by --find '{typeFind}'; this snapshot holds " +
                 $"{Tally.Complete(everything.Count).Render("def type")} in all.");
 
-        ctx.Report.CountNotice(Tally.Of(rows.Count, all.Count), "def type", "pass --limit all for the rest.");
+        ctx.Report.CountNotice(Tally.Of(rows.Count, all.Count), "def type");
         ctx.Report.Table("types", ["def_type", "defs"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
@@ -1682,8 +1684,7 @@ public sealed class ModsCommand : Command
         var limit = ctx.LimitOrAll();
         var mods = limit.IsAll ? all : all.Take(limit.Effective).ToList();
 
-        ctx.Report.CountNotice(Tally.Of(mods.Count, all.Count), "mod",
-            "pass --limit all to see the whole load order.");
+        ctx.Report.CountNotice(Tally.Of(mods.Count, all.Count), "mod");
         ctx.Report.Table("mods", ["order", "package_id", "name", "version"],
             mods.Select((m, i) => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {

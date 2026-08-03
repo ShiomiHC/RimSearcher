@@ -206,8 +206,7 @@ public sealed class InheritCommand : Command
                 var shown = limit.IsAll ? children : children.Take(limit.Effective).ToList();
 
                 // 计数在它数的那张表**上方** —— 数得清几条、全不全,读到行的时候得已经知道。
-                ctx.Report.CountNotice(Tally.Of(shown.Count, children.Count), "direct child",
-                    "pass --limit all for the rest.");
+                ctx.Report.CountNotice(Tally.Of(shown.Count, children.Count), "direct child");
 
                 if (shown.Count > 0)
                     ctx.Report.Table("children", ["name", "def_name", "def_type", "abstract", "mod"],

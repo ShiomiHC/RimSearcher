@@ -194,13 +194,20 @@ public sealed class Report
     };
 
     /// <summary>
-    /// 计数恒在。完整集渲染成裸 N 并按 <see cref="NoticeKind.Count"/> 归类,被截时追加
-    /// 怎么看到剩下的、按 <see cref="NoticeKind.Truncation"/> 归类 —— 两态同一个产地、
-    /// 同一个位置,因为靠沉默传达「完整」一定会被读错。
+    /// 计数恒在。完整集渲染成裸 N 并按 <see cref="NoticeKind.Count"/> 归类,被截时按
+    /// <see cref="NoticeKind.Truncation"/> 归类 —— 两态同一个产地、同一个位置,因为靠
+    /// 沉默传达「完整」一定会被读错。
+    ///
+    /// <paramref name="howToSeeMore"/> 留空是常态,与 <see cref="PageNotice"/> 同一条纪律:
+    /// 「--limit all 能一次吃完」这类出路逐字不随查询变,SKILL.md 已按命令列全,在每次计数上
+    /// 重念是同一份知识的第三个副本。截断信号由 <c>n of N</c> 这个形状自己带着,不靠尾句。
+    /// 只有当出路带着**算出来的**参数时才传它。
     /// </summary>
-    public Report CountNotice(Tally tally, string noun, string howToSeeMore)
+    public Report CountNotice(Tally tally, string noun, string howToSeeMore = "")
         => tally.IsTruncated
-            ? Notice(NoticeKind.Truncation, $"Showing {tally.Render(noun)}{Within}; {howToSeeMore}")
+            ? Notice(NoticeKind.Truncation,
+                     $"Showing {tally.Render(noun)}{Within}" +
+                     (howToSeeMore.Length == 0 ? "." : $"; {howToSeeMore}"))
             : Notice(NoticeKind.Count, $"{tally.Render(noun)}{Within}.");
 
     /// <summary>

@@ -299,7 +299,7 @@ public sealed class SnapshotTruncatedCommand : Command
             return 0;
         }
 
-        ctx.Report.CountNotice(Tally.Of(rows.Count, total), "def", "raise --limit to see the rest.");
+        ctx.Report.CountNotice(Tally.Of(rows.Count, total), "def");
         ctx.Report.Table("truncated", ["def_name", "def_type", "fields_dropped"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
