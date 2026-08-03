@@ -19,6 +19,10 @@ public static class TextRenderer
     {
         var sb = new StringBuilder();
 
+        // 快照标签贴在第一条声明行前,贴过就清空。一条声明都没有时它自己成行 ——
+        // 那是它唯一独占一行的场合。
+        var tag = report.SnapshotTag is { Length: > 0 } t ? $"[{t}] " : "";
+
         // 按 Add 的先后走,声明与数据块交错 —— 每句话就落在它所讲的那个块旁边,而调用方
         // pipe 一个 head 先拿到的是数据。位置由写命令的人决定,不由这里统一提到最前。
         foreach (var entry in report.Entries)
@@ -27,12 +31,17 @@ public static class TextRenderer
             {
                 case Notice n:
                     // 脚注另有归处,在最后统一收。
-                    if (!n.Footnote) sb.Append(n.Text).Append(OutputText.Newline);
+                    if (!n.Footnote)
+                    {
+                        sb.Append(tag).Append(n.Text).Append(OutputText.Newline);
+                        tag = "";
+                    }
                     break;
 
                 case Block block:
                     // 空块直接跳过,连分隔空行都不留:连着的两个空行会被读成「后面还有,被截断了」。
                     if (IsEmpty(block)) continue;
+                    if (tag.Length > 0) { sb.Append(tag.TrimEnd()).Append(OutputText.Newline); tag = ""; }
                     // 块与它上面的东西之间空一行;声明之间不空 —— 连着的几句话是一段。
                     if (sb.Length > 0) sb.Append(OutputText.Newline);
                     RenderBlock(sb, block);
@@ -44,7 +53,11 @@ public static class TextRenderer
         if (footnotes.Count > 0)
         {
             if (sb.Length > 0) sb.Append(OutputText.Newline);
-            foreach (var n in footnotes) sb.Append(n.Text).Append(OutputText.Newline);
+            foreach (var n in footnotes)
+            {
+                sb.Append(tag).Append(n.Text).Append(OutputText.Newline);
+                tag = "";
+            }
         }
 
         return OutputText.Finish(sb.ToString());
@@ -186,6 +199,10 @@ public static class JsonRenderer
     public static string Render(Report report)
     {
         var root = new Dictionary<string, object?>();
+
+        // 文本侧那个标签在这里有自己的键,不塞进 notes:机器侧要判「哪份快照」时,
+        // 从一句话里抠字符串是两份数据。取值与文本侧同源,逐字相同。
+        if (report.SnapshotTag is { Length: > 0 } tag) root["snapshot"] = tag;
 
         if (report.Notices.Count > 0)
             root["notes"] = report.Notices

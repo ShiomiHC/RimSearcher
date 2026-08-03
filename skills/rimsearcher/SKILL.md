@@ -239,7 +239,9 @@ any depth.
 One export = one game version, one ordered mod list, one language; several coexist.
 `rimsearcher snapshot list` shows them, `--snapshot <name>` picks per command,
 `snapshot use <name>` sticks; `snapshot status` is the full comparison with the installed
-game. Queries raise staleness themselves when they detect it.
+game. Queries raise staleness themselves when they detect it. When several are registered
+and you did not name one, the first line carries `[<name>]` — or `[<name> auto-detected]`
+when nothing was pinned and the pick came from matching the game's mod list.
 
 **A complete count is complete for the snapshot, not the installed game**: on a Core-only
 snapshot, `1 def` means one in Core, and **no line says so** — the one boundary here that

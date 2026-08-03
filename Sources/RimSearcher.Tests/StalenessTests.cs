@@ -669,7 +669,8 @@ public class StalenessTests
 
         var stdout = Run(configPath, null, "list", "ThingDef");
 
-        Assert.Contains("Using snapshot 'e2e-choice' (auto-detected).", stdout, StringComparison.Ordinal);
+        // 贴在第一条声明行前,不独占一行 —— line 1 是管道下唯一的幸存者,留给计数。
+        Assert.StartsWith("[e2e-choice auto-detected] ", stdout, StringComparison.Ordinal);
         Assert.DoesNotContain("snapshot list", stdout, StringComparison.Ordinal);
     }
 

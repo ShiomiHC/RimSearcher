@@ -542,14 +542,45 @@ public static class Fixture
         var stdout = new StringWriter { NewLine = "\n" };
         var stderr = new StringWriter { NewLine = "\n" };
         var all = new List<string>(argv);
-        if (!argv.Contains("--db")) { all.Add("--db"); all.Add(Db); }
-        if (!argv.Contains("--config")) { all.Add("--config"); all.Add(SourcesConfigPath); }
+        // 哨兵:这条用例要的正是「没人指定库、而配置里钉了一份」那条路 —— 快照标签只在
+        // 那时才出现。写成一个词而不是直接传 --config <路径>:基线第一行回显 argv,
+        // 而那个路径是绝对的、含机器名。
+        if (all.Remove(Pinned))
+        {
+            all.Add("--config");
+            all.Add(PinnedConfigPath);
+        }
+        else if (!argv.Contains("--db")) { all.Add("--db"); all.Add(Db); }
+        if (!all.Contains("--config")) { all.Add("--config"); all.Add(SourcesConfigPath); }
         var code = RimSearcher.Cli.Runner.Run(all, stdout, stderr);
         return (stdout.ToString(), stderr.ToString(), code);
     }
 
+    /// <summary>写进 argv 表示「这次走 pinned 那条路」。见 <see cref="Run"/>。</summary>
+    public const string Pinned = "--fixture-pinned";
+
     /// <summary>指向一个不存在的配置文件 —— 测试不许读本机 config。</summary>
     public static string NoConfigPath => Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "no-such-config.toml");
+
+    private static string? _pinnedConfig;
+
+    /// <summary>
+    /// 与 <see cref="SourcesConfigPath"/> 同内容,外加 <c>active_snapshot</c> —— 「钉住了一份,
+    /// 而目录里不止一份」这个组合是快照标签唯一的落点。
+    /// </summary>
+    public static string PinnedConfigPath
+    {
+        get
+        {
+            if (_pinnedConfig is not null) return _pinnedConfig;
+            var path = Path.Combine(Path.GetDirectoryName(SourcesConfigPath)!, "pinned-config.toml");
+            File.WriteAllText(path,
+                File.ReadAllText(SourcesConfigPath) +
+                "active_snapshot = '" + Path.GetFileNameWithoutExtension(Db) + "'\n",
+                new UTF8Encoding(false));
+            return _pinnedConfig = path;
+        }
+    }
 
     private static string? _sourcesConfig;
 

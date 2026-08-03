@@ -1,0 +1,22 @@
+$ rimsearcher search shield --json --fixture-pinned
+exit 0
+--- stdout ---
+{
+  "snapshot": "fixture",
+  "notes": [
+    {
+      "kind": "count",
+      "text": "1 def."
+    }
+  ],
+  "defs": [
+    {
+      "def_name": "Apparel_ShieldBelt",
+      "def_type": "ThingDef",
+      "label": "shield belt",
+      "matched_on": "def_name+label",
+      "mod": "ludeon.rimworld"
+    }
+  ]
+}
+--- stderr ---

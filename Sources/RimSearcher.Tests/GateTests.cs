@@ -366,7 +366,8 @@ public class GateTests
             var declared = command.Spec.JsonKeys.Select(k => k.Key).ToHashSet(StringComparer.Ordinal);
             foreach (var prop in doc.RootElement.EnumerateObject())
             {
-                if (prop.Name == "notes") continue;
+                // 这两个是每条命令都可能有的输出元数据,不是谁的数据键,不进各自的声明。
+                if (prop.Name is "notes" or "snapshot") continue;
                 if (!declared.Contains(prop.Name))
                     undeclared.Add($"{command.Spec.Name} emits '{prop.Name}' (seen in case '{name}')");
             }

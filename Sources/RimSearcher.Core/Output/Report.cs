@@ -102,6 +102,18 @@ public sealed class Report
     private string Within => Narrowing.Length == 0 ? "" : $" within {Narrowing}";
 
     /// <summary>
+    /// 这次答案出自哪份快照,贴在第一条声明行前(<c>[baseline] 31 defs.</c>)。空 = 不说
+    /// (只有一份快照,或调用方自己指定了)。
+    ///
+    /// 不独占一行:8 个盲测被试(4 有 / 4 无)量下来,独占 line 1 的整句
+    /// 「Using snapshot 'x' (pinned).」既不必要也不充分 —— 有它在,仍有人把纯官方快照的
+    /// 完整计数读成「游戏里全部」;删掉它,另一些人照样从 <c>mods</c> 认出口径。
+    /// 而 line 1 是管道下唯一的幸存者(实证:一次 <c>| head -n 1</c> 拿到的就是这句横幅,
+    /// 答案一行不剩),那个位置该留给计数。
+    /// </summary>
+    public string SnapshotTag { get; set; } = "";
+
+    /// <summary>
     /// 数据键恒在 —— 与「计数恒在」同一条道理的机器侧版本。
     ///
     /// 零行时命令一律提前 return,不认领的话 <c>--json</c> 里那个键就**整个消失**,
