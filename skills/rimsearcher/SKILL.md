@@ -91,9 +91,7 @@ any depth.
   the damage is silent and confined to `$`: the pattern that ran is not the one you wrote.
 - **`code-search` is case-sensitive unless you pass `-i`** — `orbitalDebris` and
   `OrbitalDebris` are two searches, and the wrong one's zero looks like absence.
-- **Never pipe through `grep` or `head`.** The filter runs *after* `--limit`, so it
-  searches only the first page — and the truncation sentence shares the stream, so
-  "truncated" silently becomes "absent". Narrow inside the command instead:
+- **Narrow inside the command.** Each one has its own filters:
 
 | Command | Narrow with |
 |---|---|
@@ -109,14 +107,13 @@ any depth.
 | `read` | `--member`, `--type`, `--lines`, `--outline`, `--source`, `--limit` |
 | `sources sync` | `--only`, `--modlist`, `--force`, `--dry-run` |
 
-  `head`'s replacement: paging commands take `--offset`; `read` `--member`/`--type`/
+  Reading a long result in pieces: paging commands take `--offset`; `read` `--member`/`--type`/
   `--outline`/`--lines`; `get` `--path-contains` (field order carries no meaning); `code-search`
   an anchored pattern plus `--source`/`--file-glob`. `read`'s `--limit` is the odd one out —
   it caps printed lines rather than narrowing a result set, so `--limit all` *widens*.
-  The rule guards against a hidden truncation, so it lifts where there is none to hide:
-  after `--limit all`, or on output that does not page. `read --member` pages too, just not
-  through `--offset`: `--limit` caps the lines and the count line hands back the exact
-  `--lines a-b` to resume from, so a long member is read window by window.
+  `read --member` pages too, just not through `--offset`: `--limit` caps the lines and the
+  count line hands back the exact `--lines a-b` to resume from, so a long member is read
+  window by window.
 - **Reverse-look-up field names, never guess.** `where --value <value>` reports which paths
   hold the value. A guessed field name that happens to exist returns a clean,
   complete-looking table for the wrong field — the most expensive failure here.

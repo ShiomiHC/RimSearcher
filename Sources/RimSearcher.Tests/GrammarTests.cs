@@ -925,6 +925,34 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 还剩三页以上时要指出 `--outline` 这条路。
+    ///
+    /// **这句是「别拿 grep/head 砍输出」这条契约现在唯一的承重点。** SKILL.md 里那条禁令
+    /// 已按盲测删掉(8 个被试 4 v 4,两臂都零管道、答案全对,而且都自发用上了
+    /// `--outline`/`--member`/`--lines`)—— 删得掉的前提是工具自己在人想砍输出的那一刻
+    /// 给出了出路。08 量到 87% 的那个世系里,`get`/`code-search`/`read` 恰恰都不支持
+    /// `--offset`,那时的结论是「规矩对最需要它的场合没给出路,不是调用方不守规矩」。
+    /// 这句一旦消失而禁令又已不在,就直接退回那个世系。
+    /// </summary>
+    [Fact]
+    public void 页数多到该换路子时要指出outline()
+    {
+        var (paged, _, _) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--lines", "1+8");
+        Assert.Contains("--lines 9+8", paged, StringComparison.Ordinal);
+        // 逐字咬,免得别处凑巧出现 `--outline` 就算过。剩几页要算得出来,而不是含混的「很多」。
+        Assert.Contains(
+            "Reaching the end that way takes 4 pages at this size; --outline instead lists "
+                + "the file's declarations with each one's line range, to pass back to --lines.",
+            paged,
+            StringComparison.Ordinal);
+
+        // 翻一两页是正常分页,不值得换路子 —— 那时这句不出现,否则每次分页都在劝人改道。
+        var (few, _, _) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--lines", "1+20");
+        Assert.DoesNotContain("--outline", few, StringComparison.Ordinal);
+        Assert.Contains("--lines 21+20", few, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 两种读法同时传时不排优先级 —— 静默择一拿回的是**完全另一块代码**。
     /// </summary>
     [Fact]
