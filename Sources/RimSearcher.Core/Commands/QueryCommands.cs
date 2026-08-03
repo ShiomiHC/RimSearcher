@@ -969,7 +969,12 @@ public sealed class FindCommand : Command
                           : "")));
 
             // 边界排在建议**之后**:它限定的是上面那整段,而不是其中某一条。
-            if (isClassPath) ctx.Report.Notice(NoticeKind.Boundary, Completeness.NestedClassLine(ctx));
+            //
+            // 量全了的那一档在这里**不发声**:它说的是「'find Class <ClassName>' 才是查得到
+            // 它的那条查询」,而 isClassPath 的意思正是调用方刚跑完那条 —— 把人指回他站着的
+            // 地方。留下的两档说的是另一回事:这份快照没量到那里,所以你手上这个零是假的。
+            if (isClassPath && !ctx.Db.Meta.IndexesAllNestedClass)
+                ctx.Report.Notice(NoticeKind.Boundary, Completeness.NestedClassLine(ctx));
             // 值侧是单语的 —— `find label "shield belt"` 在中文快照上必然空手,
             // 而那个 def 就在文本索引里躺着。与上面的近似候选叠加,不替换。
             if (value is { Length: > 0 }) Advisory.NoteTextIndexHasIt(ctx, value);
@@ -1370,13 +1375,18 @@ public sealed class ListCommand : Command
                 // 那条路上去,并按快照量到哪一步说话。
                 if (present.Count == 1)
                 {
+                    // 「类恒定的桶把多态放在嵌套字段上」这条通则是 --class 自己的 help 文本
+                    // (OptionSpec 里那段,cli-reference 的 --class 行就是它渲染出来的),
+                    // 不在这里再讲一遍;这句只留本次的事实与填好参数的转向。
                     ctx.Report.Notice(NoticeKind.NextStep,
                         $"Every one of the {Tally.Complete(present[0].Count).Render("def")} of type {type} has the " +
                         $"same class, {present[0].Class}, so --class cannot tell them apart and this is not " +
-                        $"evidence about '{wantClass}'. A def type whose own class never varies picks its " +
-                        "behaviour in a nested field instead, and that field's runtime type is a different query: " +
+                        $"evidence about '{wantClass}'. The behaviour lives on a nested field instead: " +
                         $"'rimsearcher find Class {wantClass}'.");
-                    ctx.Report.Notice(NoticeKind.Boundary, Completeness.NestedClassLine(ctx));
+                    // 量全了的快照上这一条只会把上面那句用占位符再说一遍。留着的是它另外两档
+                    // 携带的免责:那条转向在这份快照上会回一个**假零**,不说破就是个闭环。
+                    if (!ctx.Db.Meta.IndexesAllNestedClass)
+                        ctx.Report.Notice(NoticeKind.Boundary, Completeness.NestedClassLine(ctx));
                     return 1;
                 }
 

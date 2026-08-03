@@ -2795,18 +2795,24 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 三档快照对「嵌套类型查得到吗」说的话必须互不相同。
+    /// 三档快照对「嵌套类型查得到吗」说的话必须互不相同,而**量全了的那档在这里一个字都不说**。
     ///
     /// 中间那档(0.2~0.3,只量列表元素)最险:<c>find Class &lt;单字段上的类&gt;</c> 照样回零,
     /// 而一句 "is the query that reaches it" 会把人送去查一条对 <c>genStep</c> 根本不存在
     /// 的路径 —— 走空了,落空句再把同一条规则念一遍,闭环。
+    ///
+    /// 0.4 那档在这个调用点上是**同一个闭环的另一半**:句子说「'find Class &lt;ClassName&gt;'
+    /// 才是查得到它的那条查询」,而走到这里的前提(<c>isClassPath</c>)正是调用方刚跑完那条。
+    /// 于是它把人指回他站着的地方。沉默在这里是有内容的 —— 与本工具别处一致,只有出问题才发声,
+    /// 那两档一发声就是「你手上这个零是假的」。
     /// </summary>
     [Fact]
     public void 嵌套类型这一维按快照量到哪一步说话()
     {
-        // 0.4:量全了,那条查询是真路。
+        // 0.4:量全了 —— 不许再指一遍刚跑过的那条查询。
         var (modern, _, _) = Fixture.Run("find", "Class", "RimWorld.NotAnyClassHere", "--db", Fixture.ModernDb);
-        Assert.Contains("in a list or on a single field", modern, StringComparison.Ordinal);
+        Assert.DoesNotContain("in a list or on a single field", modern, StringComparison.Ordinal);
+        Assert.DoesNotContain("is the query that reaches it", modern, StringComparison.Ordinal);
 
         // 0.2:只量了列表元素 —— 必须点名它够不着的是哪一类,且不许说成「查得到」。
         var (mid, _, _) = Fixture.Run("find", "Class", "RimWorld.NotAnyClassHere");
