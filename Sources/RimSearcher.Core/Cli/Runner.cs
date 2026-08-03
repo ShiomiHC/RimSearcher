@@ -69,7 +69,11 @@ public sealed class CommandRegistry
     {
         if (argv.Count == 0) return (null, []);
 
-        if (argv.Count >= 2)
+        // 第二个词得自己带字母数字才配当子命令名。<see cref="Matches"/> 的归一化那一条
+        // 只留字母数字,于是 `keyed *` 归一化成 `keyed` 恰好等于命令名本身,那个词被当作
+        // 命令名的一部分吃掉 —— argv 短了一截,而没有一个字说过。位置参数可选的命令
+        // (list / keyed)在那里与真·无参调用逐字同形。
+        if (argv.Count >= 2 && ArgParser.Normalize(argv[1]).Length > 0)
         {
             var two = argv[0] + " " + argv[1];
             var hit2 = Commands.FirstOrDefault(c => Matches(c.Spec, two));

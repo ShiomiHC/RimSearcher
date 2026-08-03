@@ -1,0 +1,5 @@
+$ rimsearcher list %
+exit 1
+--- stdout ---
+No def type named '%' in this snapshot. 'rimsearcher list' with no def type lists them all.
+--- stderr ---

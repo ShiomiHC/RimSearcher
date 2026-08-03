@@ -2245,7 +2245,7 @@ public class GrammarTests
     public void 扫过的树数要跟磁盘上的树数对得上账()
     {
         // fixture 三棵树,zz.emptytree 一个文件都没有 —— 差额恒为 1。
-        var (miss, _, mcode) = Fixture.Run("code-search", "--", "zzzznothing");
+        var (miss, _, mcode) = Fixture.Run("code-search", "zzzznothing");
         Assert.Equal(1, mcode);
         Assert.Contains("2 of 3 source trees on disk", miss, StringComparison.Ordinal);
         Assert.Contains("the rest hold no file matching --file-glob '*.cs'", miss, StringComparison.Ordinal);
@@ -2278,15 +2278,15 @@ public class GrammarTests
     [Fact]
     public void 代码零命中要说破反编译抹掉了什么()
     {
-        var (comment, _, _) = Fixture.Run("code-search", "--", @"//\s*TODO");
+        var (comment, _, _) = Fixture.Run("code-search", @"//\s*TODO");
         Assert.Contains("comment", comment, StringComparison.Ordinal);
         Assert.Contains("ILSpy", comment, StringComparison.Ordinal);
 
-        var (local, _, _) = Fixture.Run("code-search", "--", "myFuelCounter");
+        var (local, _, _) = Fixture.Run("code-search", "myFuelCounter");
         Assert.Contains("Local variable names", local, StringComparison.Ordinal);
 
         // 带元字符的模式不是「照名字找一个局部变量」,不许挂那句话。
-        var (regex, _, _) = Fixture.Run("code-search", "--", @"zzz\w+\(");
+        var (regex, _, _) = Fixture.Run("code-search", @"zzz\w+\(");
         Assert.DoesNotContain("Local variable names", regex, StringComparison.Ordinal);
         Assert.DoesNotContain("ILSpy", regex, StringComparison.Ordinal);
 

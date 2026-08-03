@@ -45,6 +45,11 @@ public class OutputSnapshotTests
         // scope 展开在**有结果时**也要说:组名那份必须带展开句,写死 packageId 那份不多说一个字。
         { "where-scope-group",      ["where", "thingClass", "RimWorld.Bullet", "--scope", "vanilla"] },
         { "where-scope-literal",    ["where", "thingClass", "RimWorld.Bullet", "--scope", "ludeon.rimworld"] },
+        // 位置参数只含标点。两段式子命令匹配把 `<命令> <词>` 归一化后与命令名比,而
+        // 归一化只留字母数字 —— 于是这个词整个消失,argv 短了一截而没有一个字说过。
+        // 位置参数可选的命令(list / keyed)落点最贵:输出与**真·无参调用**逐字同形。
+        { "punct-only-arg-list",   ["list", "%"] },
+        { "punct-only-arg-keyed",  ["keyed", "*"] },
         // 快照标签。别的用例一律显式传 --db(= 调用方自己选的,不报),于是这条输出
         // 在闸上一个字都不响了很久 —— 落点只有「没人指定库 + 目录里不止一份 + 配置钉了一份」
         // 这一个组合。两份摆一起:有声明行时标签贴在第一条上,没有时它自己成行。

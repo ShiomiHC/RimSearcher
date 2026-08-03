@@ -223,12 +223,14 @@ public sealed class SnapshotDb : IDisposable
 
         var total = Scalar($"SELECT COUNT(*) {from}", p);
 
+        p["@qe"] = Escape(query);
+
         // 排序:名字整体命中 > 有 label > 名字前缀命中 > bm25 相关度 > 名字短的在前。
         // 列权重让 def_name 压过 description。「有 label」压在前缀之上:带 label 的是玩家
         // 看得见的东西,不带的是 EffecterDef/SoundDef 一类基础设施,而前缀只说明「名字长得像」。
         var order = "ORDER BY (d.def_name = @q COLLATE NOCASE) DESC, " +
                     "(d.label IS NOT NULL AND d.label != '') DESC, " +
-                    "(d.def_name LIKE @q || '%' COLLATE NOCASE) DESC, " +
+                    "(d.def_name LIKE @qe || '%' ESCAPE '\\' COLLATE NOCASE) DESC, " +
                     "bm25(defs_fts, 10.0, 4.0, 1.0, 3.0), LENGTH(d.def_name), d.def_name";
         var rows = ReadDefs($"SELECT {DefColumns} {from} {order} LIMIT {limit} OFFSET {offset}", p);
         return (rows, total);
@@ -399,7 +401,8 @@ public sealed class SnapshotDb : IDisposable
         if (className is { Length: > 0 })
         {
             p["@c"] = className;
-            conds.Add("(d.class = @c COLLATE NOCASE OR d.class LIKE '%.' || @c COLLATE NOCASE)");
+            p["@e"] = Escape(className);
+            conds.Add("(d.class = @c COLLATE NOCASE OR d.class LIKE '%.' || @e ESCAPE '\\' COLLATE NOCASE)");
         }
         // 筛在 LIMIT **之前**发生 —— 这正是它存在的理由。管道接 grep 是筛在之后,
         // 而那会连同「25 of 167 defs」那句计数一起吃掉,于是「这一页里没有」与
@@ -439,8 +442,8 @@ public sealed class SnapshotDb : IDisposable
     /// <summary>名字不是 def_type 时的反查:有没有 def 的运行时 class 恰是它,在哪个桶下。</summary>
     public IReadOnlyList<(string DefType, int Count)> TypesHoldingClass(string className, ScopeFilter scope)
     {
-        var p = new Dictionary<string, object?> { ["@c"] = className };
-        var conds = new List<string> { "(d.class = @c COLLATE NOCASE OR d.class LIKE '%.' || @c COLLATE NOCASE)" };
+        var p = new Dictionary<string, object?> { ["@c"] = className, ["@e"] = Escape(className) };
+        var conds = new List<string> { "(d.class = @c COLLATE NOCASE OR d.class LIKE '%.' || @e ESCAPE '\\' COLLATE NOCASE)" };
         if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
         var rows = new List<(string, int)>();
         using var rd = Query(
@@ -490,7 +493,7 @@ public sealed class SnapshotDb : IDisposable
         if (value is { Length: > 0 })
         {
             if (exact) { p["@v"] = value; conds.Add("fv.value = @v COLLATE NOCASE"); }
-            else { p["@v"] = "%" + value + "%"; conds.Add("fv.value LIKE @v"); }
+            else { p["@v"] = "%" + Escape(value) + "%"; conds.Add("fv.value LIKE @v ESCAPE '\\'"); }
         }
         if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
 
@@ -528,7 +531,7 @@ public sealed class SnapshotDb : IDisposable
         if (value is { Length: > 0 })
         {
             if (exact) { p["@v"] = value; conds.Add("fv.value = @v COLLATE NOCASE"); }
-            else { p["@v"] = "%" + value + "%"; conds.Add("fv.value LIKE @v"); }
+            else { p["@v"] = "%" + Escape(value) + "%"; conds.Add("fv.value LIKE @v ESCAPE '\\'"); }
         }
         if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
 
@@ -680,8 +683,8 @@ public sealed class SnapshotDb : IDisposable
         }
         else if (path.Text.Contains('.') || path.Text.Contains('['))
         {
-            p["@path"] = "%" + path.Text;
-            conds.Add("fv.path LIKE @path");
+            p["@path"] = "%" + Escape(path.Text);
+            conds.Add("fv.path LIKE @path ESCAPE '\\'");
         }
         else
         {
