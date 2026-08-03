@@ -30,7 +30,7 @@ public sealed class CodeSearchCommand : Command
             "MCP answers it from metadata and is both faster and exact.\n\n" +
             "It does not search Defs: the game's XML is not on disk in the form the game ended up with. " +
             "Data questions ('which defs use this class', 'what values does this field take') belong to " +
-            "'find', 'values', and 'search', which answer them from the snapshot exactly.\n\n" +
+            "'where', 'values', and 'search', which answer them from the snapshot exactly.\n\n" +
             "Three caps apply, and they divide in two. --limit and --max-per-file decide how many matching " +
             "lines are printed; neither shortens the scan, so the match count stays exact whichever of them " +
             "bites. --max-files decides how much is read, so when that one bites the count drops to a lower " +
@@ -40,10 +40,12 @@ public sealed class CodeSearchCommand : Command
         [
             new OptionSpec
             {
-                Name = "files",
+                Name = "file-glob",
                 // 同一个文件过滤意图被真实调用方拼出 9 种键名。归一化只吃大小写与分隔符的
                 // 差异,剩下的换词写法列在这里有意接受。
-                Aliases = ["file-filter", "file-glob", "glob", "file-pattern", "file-extension", "file-type", "path-filter", "include"],
+                // 主名由 R13 定:自由命名 12/12 落在 file-glob,识别复测 10/10。旧主名
+                // files 产出式一票没拿到,降为别名;path-glob 是实测的第二名(6/12)。
+                Aliases = ["path-glob", "files", "file-filter", "glob", "file-pattern", "file-extension", "file-type", "path-filter", "include"],
                 Placeholder = "<glob>",
                 Help = "Only search files whose path matches this glob. A glob with no '/' matches the file name " +
                        "alone (*.cs is every .cs file at any depth); with a '/' it matches the path relative to " +
@@ -59,7 +61,7 @@ public sealed class CodeSearchCommand : Command
                 Name = "max-files",
                 Aliases = ["file-limit", "scan-limit", "max-scan"],
                 Placeholder = "<n|all>",
-                Help = "How many files the scan may read before it stops, counted after --files has filtered. " +
+                Help = "How many files the scan may read before it stops, counted after --file-glob has filtered. " +
                        "Pass 'all' to lift the cap. This is the only cap that can make the answer partial.",
                 Default = Limits.CodeSearchMaxFiles.ToString(),
             },
@@ -106,12 +108,20 @@ public sealed class CodeSearchCommand : Command
             {
                 // 默认开:默认关等于把能力藏起来,而「这行打印的是什么字」正是拿着一行
                 // .Translate() 的人下一句要问的。
-                Name = "no-ui-text",
+                Name = "no-resolve-keys",
                 Arity = Arity.Flag,
-                Aliases = ["no-translations", "without-ui-text"],
+                // 主名与别名各由一头的实测定。识别测:no-resolve-keys 7/10,而危险的那种误读
+                // (读成「按内容过滤命中、结果行数变少」)零例;旧主名 no-ui-text 只有 2/10,
+                // 6/10 正落在那种误读上 —— 而加不加这个开关,命中计数逐字不变,输出不会纠正他。
+                // 产出式:12/12 伸手去写的是 no-translations,于是它留作别名接住;可它的识别测
+                // 只有 2/12,8/12 把它读成「搜索时排除翻译数据」,当不了主名。
+                // ui-text 那一族两头都不占,不留 —— 真实调用记录里 832 次 code-search
+                // 对这个开关的三种写法是 0 次,删掉不会有人撞上。
+                Aliases = ["no-translations", "no-lookup-keys", "no-translate", "no-translation-lookup", "code-only"],
                 Help = "Do not resolve translation keys found in the printed lines. By default, a printed line " +
                        "containing \"SomeKey\".Translate() gets its displayed text looked up in the snapshot and " +
-                       "listed separately.",
+                       "listed separately. This only removes that extra table — the matches themselves, and the " +
+                       "match count, are the same either way.",
             },
         ],
         Examples =
@@ -135,7 +145,7 @@ public sealed class CodeSearchCommand : Command
                 What = "present only when a printed matching line calls .Translate() on a literal key that the " +
                        "snapshot can resolve — key, translated, original, one row per distinct key. Keys that " +
                        "resolve to nothing, and lines whose key is assembled at runtime, are reported in the " +
-                       "notes rather than as empty rows. Suppressed entirely by --no-ui-text.",
+                       "notes rather than as empty rows. Suppressed entirely by --no-resolve-keys.",
             },
         ],
     };
@@ -156,7 +166,7 @@ public sealed class CodeSearchCommand : Command
                 SourcesShared.NotConfiguredToRead("search"));
 
         var sourceName = ctx.Args.Value("source");
-        var glob = ctx.Args.Value("files") ?? "*.cs";
+        var glob = ctx.Args.Value("file-glob") ?? "*.cs";
         var contextLines = ctx.Args.Int("context", 0);
         var limit = ctx.Limit();
         var maxPerFile = PositiveOrAll(ctx, "max-per-file", Limits.CodeSearchMatchesPerFile);
@@ -182,7 +192,7 @@ public sealed class CodeSearchCommand : Command
         var lines = new List<string>();
         var rows = new List<IReadOnlyDictionary<string, object?>>();
         var filesRead = 0;
-        var filesCandidate = 0;     // 过了 --files 的文件,不管读没读 —— 「N of M」的那个 M
+        var filesCandidate = 0;     // 过了 --file-glob 的文件,不管读没读 —— 「N of M」的那个 M
         var filesWithMatches = 0;
         var totalMatches = 0;       // 找到多少
         var printed = 0;            // 印出来多少 —— 与上一个不是一件事
@@ -265,7 +275,7 @@ public sealed class CodeSearchCommand : Command
             //   树在但一个文件都没有(程序集从没反编译)—— 该 sync,不是该改 glob;
             //   glob 一个文件都没打中 —— 该改 glob,不是该换数据源;
             //   没读完 —— 结论无效,该抬闸,且**不指路去别的数据源**;
-            //   真读完了也没有 —— 这时才提示去 search / find 问 def。
+            //   真读完了也没有 —— 这时才提示去 search / where 问 def。
             if (filesCandidate == 0 && sourceName is { Length: > 0 } && EmptyTree(root, sourceName))
                 ctx.Report.Notice(NoticeKind.NextStep,
                     $"The source tree '{sourceName}' exists but holds no decompiled files at all, so the glob " +
@@ -274,7 +284,7 @@ public sealed class CodeSearchCommand : Command
                     "'rimsearcher sources list' shows which trees are in that state.");
             else if (filesCandidate == 0)
                 ctx.Report.Notice(NoticeKind.NextStep,
-                    $"No file matched --files '{glob}', so nothing was read at all." +
+                    $"No file matched --file-glob '{glob}', so nothing was read at all." +
                     (glob.Contains('/')
                         ? " A glob containing '/' is matched against the whole path relative to the decompiled " +
                           "root, which begins with the source tree's name: 'vanilla/**/Widgets.cs', not " +
@@ -297,7 +307,7 @@ public sealed class CodeSearchCommand : Command
                     Framing(root, sourceName, treesTotal, glob) + ". " +
                     // 「反编译时就抹掉了」排在 def 那句之前:它是唯一一种再怎么扫都不会有的成因。
                     (Erased(ctx.Args.Positional(0)!) is { } erased ? erased + " " : "") +
-                    "If you were looking for a def rather than code, 'rimsearcher search' and 'rimsearcher find' " +
+                    "If you were looking for a def rather than code, 'rimsearcher search' and 'rimsearcher where' " +
                     "answer that from the snapshot — the XML is not searched here.");
         }
         else
@@ -316,6 +326,19 @@ public sealed class CodeSearchCommand : Command
                     ? $" across {treeTally.Render("source tree")}"
                     : Framing(root, sourceName, treesTotal, glob)) + ".");
         }
+
+        // 不带 '/' 也不带 '.' 的 glob 是**按命名空间取景**的写法落到了文件名上。
+        // 盲测里六份里六份把「只搜 Verse 命名空间」写成 --file-glob '*Verse*',而它挑出的
+        // 45 个文件没有一个在 Verse 下 —— Overseer、HediffGiverSet 这些名字里恰好含 verse。
+        // 印出来是一份计数完整、语气笃定的正常答案,与「Verse 下就这么多」逐字同形。
+        // 带扩展名的写法(*.cs / *Comp*.cs)不报:那种写法本身就在说文件名,没有这层歧义。
+        if (filesCandidate > 0 && !glob.Contains('/') && !glob.Contains('.'))
+            ctx.Report.Notice(NoticeKind.NextStep,
+                $"'{glob}' carries no '/', so it selected by file name alone and ignored case: the files read " +
+                $"are the ones whose name matches, not the ones inside a directory called " +
+                // 建议必须给 '**':'*' 不跨 '/',而路径是 <tree>/<assembly>/<namespace>/<file>.cs
+                // 四段起,'*/Verse/*' 一个文件都挑不出来。给一条敲了没用的命令比不给更坏。
+                $"'{glob.Trim('*')}'. For a directory write '**/{glob.Trim('*')}/**'.");
 
         // 三个旋钮各自申报,因为被截的原因不同,该拧的也不同。
         // 两句都以旋钮自己作主语、计数放进从句:动词没有登记处,主谓一致只能靠句子结构避开。
@@ -340,7 +363,7 @@ public sealed class CodeSearchCommand : Command
         if (lines.Count == 0) return 1;
 
         ctx.Report.Text("matches", lines, rows);
-        if (!ctx.Args.Flag("no-ui-text")) ResolveUiText(ctx, rows);
+        if (!ctx.Args.Flag("no-resolve-keys")) ResolveUiText(ctx, rows);
         return 0;
     }
 
@@ -385,7 +408,7 @@ public sealed class CodeSearchCommand : Command
                 $"{Tally.Complete(literal.Distinct(StringComparer.Ordinal).Count()).Render("translation key")} " +
                 "appear in the printed lines, but no snapshot could be opened to say what they display, so " +
                 "this answer says nothing either way about them. 'rimsearcher snapshot list' shows what is " +
-                "registered; pass --no-ui-text to stop asking.");
+                "registered; pass --no-resolve-keys to stop asking.");
             return;
         }
 
@@ -455,7 +478,7 @@ public sealed class CodeSearchCommand : Command
 
         var narrow = new List<string>();
         if (string.IsNullOrEmpty(sourceName)) narrow.Add("--source <tree>");
-        if (!ctx.Args.Has("files")) narrow.Add("--files <glob>");
+        if (!ctx.Args.Has("file-glob")) narrow.Add("--file-glob <glob>");
         parts.Add("Raise the cap with --max-files all" +
                   (narrow.Count > 0 ? $", or narrow with {string.Join(" or ", narrow)}." : "."));
 
@@ -610,7 +633,7 @@ public sealed class CodeSearchCommand : Command
         if (string.IsNullOrEmpty(sourceName))
         {
             // 这里的树数与 `sources list` 的棵数谁也不解释谁,差额会被当成「几棵没扫的代码」。
-            // 说清它数的是什么(按这个 --files 挑得出文件的树),差额就不再是未知量;
+            // 说清它数的是什么(按这个 --file-glob 挑得出文件的树),差额就不再是未知量;
             // 「the rest」不带数,避免主谓跟着数走(NounRegistry 只管名词)。
             //
             // 差额在就一定说,哪怕只剩一棵树被扫到:否则「2 files read.」与「全库就这么多」
@@ -622,7 +645,7 @@ public sealed class CodeSearchCommand : Command
             // 写成「其中有些从没反编译过」在差额全是 glob 不匹配时就是一句假话。
             if (treesTotal < onDisk)
                 return $" across {Tally.Of(treesTotal, onDisk).Render("source tree")} on disk — the rest hold " +
-                       $"no file matching --files '{glob}', and 'sources list' says which have never been decompiled";
+                       $"no file matching --file-glob '{glob}', and 'sources list' says which have never been decompiled";
             return onDisk > 1 ? $" across {Tally.Complete(treesTotal).Render("source tree")}" : "";
         }
 

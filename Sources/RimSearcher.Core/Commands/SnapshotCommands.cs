@@ -236,7 +236,7 @@ public sealed class SnapshotTruncatedCommand : Command
         Name = "snapshot truncated",
         Summary = "List the defs whose fields the exporter stopped short on.",
         Remarks =
-            "Every count this tool reports over field paths — 'find', 'values', 'fields' — is complete only " +
+            "Every count this tool reports over field paths — 'where', 'values', 'fields' — is complete only " +
             "for what got indexed. These defs are where that gap can hide, so this is how a claim of " +
             "'that is all of them' gets cross-checked rather than trusted.",
         Options =

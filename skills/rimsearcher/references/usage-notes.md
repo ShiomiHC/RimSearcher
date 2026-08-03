@@ -66,8 +66,8 @@ data sits under a key that depends on the command. `<command> --help` lists each
 |---|---|
 | `search`, `get` | `defs` |
 | `list` | `defs` (with a def type) or `types` (without) — never both |
-| `find` with a field path | `matches` |
-| `find --value` | `paths` |
+| `where` with a field path | `matches` |
+| `where --value` | `paths` |
 | `values` | `values`, plus `field` (which full paths and def types the value space was drawn from) whenever the path matched something — absent when nothing did |
 | `fields` | `fields` |
 | `mods` | `mods` |
@@ -87,9 +87,9 @@ and they point at opposite next steps. `--json` never folds columns: every row c
 Truncation notes carry `kind: "truncation"`, but only for the cut this query made. Fields the
 exporter dropped are `kind: "boundary"` instead, so a sweep written as
 `notes | where kind == "truncation"` catches the paging cut you already asked for and misses
-the export-time one you did not. On the def-side commands that take `--path`
+the export-time one you did not. On the def-side commands that take `--path-contains`
 (`get`, `inherit`, `fields`), the count of rows the filter matched carries `kind: "filter"` —
-a filter you asked for, not a cut-off; the code commands narrow files with `--files` instead.
+a filter you asked for, not a cut-off; the code commands narrow files with `--file-glob` instead.
 
 ## keyed: the layers in depth
 
@@ -99,7 +99,7 @@ language files contain without necessarily being the one that wins — most come
 that are installed but not enabled, so they never entered the race. `placeholder` is a
 separate yes/no column rather than a third origin: a row marked `placeholder=yes` declares
 the key in its language file without a translation, so the game falls back to English there —
-that is what a translation-coverage question is asking about, and `--placeholders` lists only
+that is what a translation-coverage question is asking about, and `--empty-translation` lists only
 those. Such a row still carries an origin of `in effect` or `on disk`.
 
 The `on disk` layer is scanned at import time whenever `mod_roots` is configured, so a key
@@ -109,8 +109,8 @@ empty one. And if the
 exporting game had no language data loaded at all, there are no keyed translations in the
 snapshot — `keyed` says that in those words instead of reporting your key absent.
 
-`--placeholders` needs no query — on its own it filters the whole layer, so
-`rimsearcher keyed --placeholders --limit all` is "list every untranslated string"; given a
+`--empty-translation` needs no query — on its own it filters the whole layer, so
+`rimsearcher keyed --empty-translation --limit all` is "list every untranslated string"; given a
 query it narrows that result set instead. Leaving the query out *without* the switch
 enumerates the layer itself, paged like any other listing. When nothing is a placeholder the
 answer is a coverage statement over the whole layer; the exit code is still `1` because no
@@ -118,7 +118,7 @@ rows were printed, which is not a failed lookup.
 
 Going from code to screen text needs no second step: `code-search` resolves the literal keys
 passed to `.Translate()` on the lines it prints and appends a `ui_text` table beside the hits
-(`--no-ui-text` turns it off) — a `--limit` that truncates the hits truncates that table with
+(`--no-resolve-keys` turns it off) — a `--limit` that truncates the hits truncates that table with
 it, and a literal not passed to `.Translate()` gets no row. A key the code assembles at
 runtime (`"Stat_" + x`) has no literal to resolve, and the answer says how many lines were
 like that rather than leaving them blank. Going from a key to the code that prints it:
@@ -134,7 +134,7 @@ ones from whatever the snapshot's mods actually load. A tree reported as stale s
 questions — about the older build. Say which when it matters.
 
 When a narrowed `code-search` reports reading only some of the source trees on disk, the line names
-its own cause: under `--files` the other trees hold no file that matches — never-decompiled
+its own cause: under `--file-glob` the other trees hold no file that matches — never-decompiled
 ones among them — and under `--source` they are the trees you excluded. An unfiltered run
 prints no such fraction at all. `sources list` says which are which; a tree it lists as
 `empty` and outside the snapshot is one `sources sync` plans no work for. A zero result from
@@ -159,19 +159,19 @@ type), while `*.Class` and `*Class` rows — `genStep.Class`, `comps[0].compClas
 
 **A `genSteps[N]` position is not the run order.** `MapGenerator` sorts the steps by
 `GenStepDef.order` ascending, then by list index, so the numbering `get <MapGeneratorDef>
---path genSteps` prints is the XML's and lines up with execution only by luck — `Space` looks
+--path-contains genSteps` prints is the XML's and lines up with execution only by luck — `Space` looks
 like proof that it does (orders 100/875/1500 in list order), while `Asteroid` puts order 1500
 directly before order 200. Read each step's own `order` before concluding anything about
 sequence. Nothing in a snapshot pairs the two: the list position and the order value live on
 different defs.
 
-**How the `find Class` dimension arrived.** The runtime type of a nested `Class="…"` object
+**How the `where Class` dimension arrived.** The runtime type of a nested `Class="…"` object
 is queryable under the field name `Class`. It arrived in two exporter steps — list elements
 (`<li Class="…">`) at 0.2.0, single class-picking fields (`GenStepDef.genStep`,
 `ThinkTreeDef.thinkRoot`) at 0.4.0. A zero result ends with a line stating how far the
 snapshot's exporter got: on a current snapshot, that both list elements and single fields are
 indexed under `<path>.Class`; on an older one, which of the two steps is missing. On a
-pre-0.4 snapshot, `find Class` and `list --class` are both structurally blind to single
+pre-0.4 snapshot, `where Class` and `list --own-class` are both structurally blind to single
 class-picking fields and only `code-search` can answer; re-export to close the gap.
 
 **Anchoring, walked through.** `code-search MapPortal` finds every mention — 81 matches in 39
@@ -201,7 +201,7 @@ tell" there throws away a correct result.
 `TraitDef`; `--type <DefType>` picks one, and `--json` keeps each in its own slot regardless.
 
 **Sibling fields in one indexed block.** `minFuelCost` and `fuelPerTile` sit in one
-`comps[N]` block and answer different halves of "how far does this go". A `--path` filter
+`comps[N]` block and answer different halves of "how far does this go". A `--path-contains` filter
 cuts the siblings away, which is why the output names any hand-set field in the same block
 as the rows it printed.
 
@@ -217,7 +217,7 @@ several unrelated paths, and that header is how you tell which you are looking a
 **Storage buckets.** The game groups subclasses under their base's database, so
 `CreepJoinerAggressiveDef` instances live under `CreepJoinerBaseDef`. `list <SomeClass>`
 tells you where to look rather than claiming the type does not exist. Most buckets hold
-exactly one class; there `--class` narrows nothing, and such a def type keeps its whole
+exactly one class; there `--own-class` narrows nothing, and such a def type keeps its whole
 behaviour on a nested `Class="…"` field instead — every `GenStepDef` in a snapshot is a
 `Verse.GenStepDef` (the count moves with the mod list: 167 in vanilla, 169 in a modded
 snapshot), and which `GenStep` each runs is on `genStep`, indexed as `genStep.Class`.
@@ -240,7 +240,7 @@ Two things `read` refuses to guess at, because a wrong guess reads exactly like 
 when a bare file name matches several files it lists them instead of picking, and `--lines`
 together with `--member`/`--type` is a usage error rather than a silent preference.
 
-Where a `find` guess misses: given a single word that is not a field path, `find` works out
+Where a `where` guess misses: given a single word that is not a field path, `where` works out
 what that word actually is — a field value, a def name, a def type, a mod — and names the
 query that reaches it. Where nothing refers to that name, it says so instead of handing back
 a query that would come back empty.

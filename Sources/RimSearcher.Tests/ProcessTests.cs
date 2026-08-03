@@ -60,7 +60,7 @@ public class ProcessTests
     [Fact]
     public void 真进程能查出结果且退出码为零()
     {
-        var (stdout, stderr, code) = Run("find", "compClass", "RimWorld.CompShield");
+        var (stdout, stderr, code) = Run("where", "compClass", "RimWorld.CompShield");
         Assert.Equal(0, code);
         Assert.Equal("", stderr);
         Assert.Contains("Apparel_ShieldBelt", stdout);
@@ -80,7 +80,7 @@ public class ProcessTests
 
     /// <summary>三个退出码要真的传给 shell,脚本才分得清「用错了」「没结果」「成功」。</summary>
     [Theory]
-    [InlineData(new[] { "find", "compClass", "RimWorld.CompShield" }, 0)]
+    [InlineData(new[] { "where", "compClass", "RimWorld.CompShield" }, 0)]
     [InlineData(new[] { "get", "NoSuchDefAtAll" }, Runner.ExitNoResults)]
     [InlineData(new[] { "search", "shield", "--nonsense" }, Runner.ExitUsage)]
     [InlineData(new[] { "no-such-command" }, Runner.ExitUsage)]

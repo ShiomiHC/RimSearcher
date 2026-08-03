@@ -26,9 +26,9 @@ public sealed record TruncationScope(int Count, IReadOnlyList<string> Types);
 /// </summary>
 public enum ValueMatch
 {
-    /// <summary>值里含这段文本(<c>find</c> 的默认)。</summary>
+    /// <summary>值里含这段文本(<c>where</c> 的默认)。</summary>
     Substring,
-    /// <summary>整个值与它相等(<c>find --exact</c>)。</summary>
+    /// <summary>整个值与它相等(<c>where --exact</c>)。</summary>
     Exact,
     /// <summary>
     /// 值**就是**这个标识符,或者是它的限定形态(<c>RimWorld.CompShield</c> 之于
@@ -362,7 +362,7 @@ public sealed class SnapshotDb : IDisposable
             $"SELECT COUNT(*) FROM field_values {where} AND is_default = {Contract.DefaultState.Same}", p);
 
         // 命中的**全部**路径,不受 limit 与 includeDefaults 影响 —— 「其中几条是整段命中」
-        // 必须在截断之前数完,否则同一个 --path 换个 --limit 就换一句结论。
+        // 必须在截断之前数完,否则同一个 --path-contains 换个 --limit 就换一句结论。
         var allPaths = new List<string>();
         using (var pr = Query($"SELECT path FROM field_values {where} ORDER BY rowid", p))
             while (pr.Read()) allPaths.Add(pr.GetString(0));
@@ -378,7 +378,7 @@ public sealed class SnapshotDb : IDisposable
     }
 
     /// <summary>
-    /// 这个 def 上有几个字段**把这段文本当值**装着。只服务一句话:<c>--path</c> 筛空时,
+    /// 这个 def 上有几个字段**把这段文本当值**装着。只服务一句话:<c>--path-contains</c> 筛空时,
     /// 「路径里没有它」与「它其实是个值」是两种成因,而后者可以当场算出来。
     /// </summary>
     public int ValueHits(long defId, string text)
@@ -510,7 +510,7 @@ public sealed class SnapshotDb : IDisposable
     /// 同一次 <see cref="FindByField"/> 的命中横跨几种**路径形状**(下标归一后的路径),
     /// 每种几条。数在分页之前数,所以它说的是整个结果集,不是这一页。
     ///
-    /// 后缀匹配会把语义不同的路径混进同一个结果集(`find stat Mass` 的上千行里混着一行
+    /// 后缀匹配会把语义不同的路径混进同一个结果集(`where stat Mass` 的上千行里混着一行
     /// <c>statFactors[N].stat</c>,其余是 <c>statBases[N].stat</c>),拿它做集合差时
     /// 那一行是**静默假阴性**。
     ///
@@ -778,7 +778,7 @@ public sealed class SnapshotDb : IDisposable
     /// <summary>
     /// 同上,但这批 def 是「取到过某个值」而不是「有某条路径」选出来的。
     ///
-    /// <c>find --value</c> 非有它不可:那条路上的结果行是**路径**,而按路径逐条求和
+    /// <c>where --value</c> 非有它不可:那条路上的结果行是**路径**,而按路径逐条求和
     /// 会把 <c>defName</c> 这种每个 def 类型都有的路径整个放大成全库 —— 报出来的是
     /// **子集计数大于全集**,而它印出来与一个正常计数逐字同形。
     /// </summary>
@@ -840,8 +840,8 @@ public sealed class SnapshotDb : IDisposable
     /// <summary>
     /// 按值反查字段路径:给一段文本,回答「哪些字段取到过含它的值」。
     ///
-    /// 没有它,唯一的出路是猜字段名 —— 猜偏了,<c>--path</c> 会返回一个语法上完全正常、
-    /// 语义上完全错误的结果集(<c>fields FactionDef --path texture</c> 只命中
+    /// 没有它,唯一的出路是猜字段名 —— 猜偏了,<c>--path-contains</c> 会返回一个语法上完全正常、
+    /// 语义上完全错误的结果集(<c>fields FactionDef --path-contains texture</c> 只命中
     /// <c>settlementTexturePath</c>,真正管事的 <c>factionIconPath</c> 被整个滤掉)。
     /// </summary>
     /// <remarks>
@@ -1112,7 +1112,7 @@ public sealed class SnapshotDb : IDisposable
     }
 
     /// <summary>
-    /// 整层枚举,不带查询词。<c>keyed</c> 的位置参数是必填的,而 <c>--placeholders</c> 是
+    /// 整层枚举,不带查询词。<c>keyed</c> 的位置参数是必填的,而 <c>--empty-translation</c> 是
     /// **整层的过滤器**、不是搜索结果上的过滤器 —— 没有这条,「把还没译的全列出来」
     /// 这条意图没有可表达的形式。
     /// </summary>
@@ -1208,7 +1208,7 @@ public sealed class SnapshotDb : IDisposable
     /// 解完丢了),但它**推得出来**:某一层若真声明了这个字段,它的后代应当**都**带着;
     /// 后代里有一条不带,那一层就没声明。这里只出数,推论留给读的人。
     ///
-    /// <paramref name="pathFilter"/> 用子串语义,与 <c>get --path</c> 同一套:同一个词
+    /// <paramref name="pathFilter"/> 用子串语义,与 <c>get --path-contains</c> 同一套:同一个词
     /// 在两条命令里选中同一批字段,否则两边的数对不上账而没人看得出为什么。
     /// </summary>
     /// <param name="exclude">排除掉的那个 def(问的就是它,算进分母会把每一层都撑成非零)。</param>

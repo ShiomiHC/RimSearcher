@@ -158,7 +158,7 @@ public static class ArgParser
 
         // 同一个词在这条命令上是**位置参数**。这一档排在「别的命令有」之前:那句只说得出
         // 「这里不行」,而这里说得出「这里该怎么写」,还能把值填进去 —— 而且落空的多半正是
-        // 跨命令搬过来的写法(--field 是 get / inherit / read 认的,find 把它放在位置上)。
+        // 跨命令搬过来的写法(--field 是 get / inherit / read 认的,where 把它放在位置上)。
         //
         // 与选项比分,严格更近才赢,两边同分让给选项:`--values` 在位置参数 <value> 与
         // 选项 --value 上都是前缀命中,而它想要的显然是拼错了的那个选项。反过来 `--field`
@@ -175,22 +175,30 @@ public static class ArgParser
                    $"'{CommandRegistry.ExeName} {spec.Name} {shape}'.";
         }
 
-        // 「别的命令有、这条没有」比任何编辑距离候选都准,优先报这一种。
         var n = Normalize(body);
         var elsewhere = (siblings ?? [])
             .Where(s => !string.Equals(s.Name, spec.Name, StringComparison.Ordinal))
             .Where(s => s.Options.Any(o => Normalize(o.Name) == n || o.Aliases.Any(a => Normalize(a) == n)))
             .Select(s => $"'{s.Name}'")
             .ToList();
-        if (elsewhere.Count > 0)
-            // 截断走 NameList 而非自己 Take:它会带出被省掉的数量,
-            // 否则「只列前三条」与「一共就这三条认」逐字同形。
-            return $"Unknown option '{raw}'. It is accepted by " +
-                   NameList.Render(elsewhere, Limits.MaxSuggestions) + $", but not by '{spec.Name}'.";
 
+        // 本命令自己的近似候选排在跨命令那句之前。反过来放会把改名后的旧名指向错方向:
+        // `get --path-contains` 改名之后 `--path` 在 docs 上仍是 --out 的别名,于是
+        // 「It is accepted by 'docs'」抢先返回,而 get 自己叫它什么一个字都没说。
+        // 两句都留:跨命令那条信息没有因为让位而丢掉。
         var msg = $"Unknown option '{raw}'.";
         if (candidates.Count > 0)
+        {
             msg += $" Did you mean {string.Join(" or ", candidates.Select(c => "--" + c))}?";
+            if (elsewhere.Count > 0)
+                msg += " The name as typed is accepted by " +
+                       NameList.Render(elsewhere, Limits.MaxSuggestions) + $", but not by '{spec.Name}'.";
+        }
+        else if (elsewhere.Count > 0)
+            // 截断走 NameList 而非自己 Take:它会带出被省掉的数量,
+            // 否则「只列前三条」与「一共就这三条认」逐字同形。
+            msg += " It is accepted by " +
+                   NameList.Render(elsewhere, Limits.MaxSuggestions) + $", but not by '{spec.Name}'.";
         else
             // 没有近似候选时直接列出接受的名字,省掉一次 --help 往返。
             msg += $" This command accepts: {string.Join(", ", options.Select(o => "--" + o.Name).OrderBy(s => s, StringComparer.Ordinal))}.";
@@ -228,9 +236,19 @@ public static class ArgParser
     public static List<string> Suggest(string typed, IReadOnlyList<OptionSpec> options)
         => Ranked(Scored(typed, options));
 
+    /// <summary>
+    /// 只留最好的那一档。跨档并列会把一条准的稀释掉:`--path` 在 `--path-contains` 上是
+    /// 前缀(0 分),在 `--db` 上只是别名 snapshot-path 的子串(1 分),而
+    /// 「Did you mean --path-contains or --db?」读起来两个一样可信。
+    /// 同档并列照旧全列 —— 那时确实分不出谁更近。
+    /// </summary>
     private static List<string> Ranked(List<(int Score, string Name)> scored)
-        => scored.OrderBy(t => t.Score).ThenBy(t => t.Name, StringComparer.Ordinal)
-                 .Take(Limits.MaxSuggestions).Select(t => t.Name).ToList();
+    {
+        if (scored.Count == 0) return [];
+        var best = scored.Min(t => t.Score);
+        return scored.Where(t => t.Score == best).OrderBy(t => t.Name, StringComparer.Ordinal)
+                     .Take(Limits.MaxSuggestions).Select(t => t.Name).ToList();
+    }
 
     /// <summary>
     /// 候选与它们的分数。分数要出得来,是因为「这个词其实是位置参数」那一档得跟选项比远近,

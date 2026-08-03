@@ -1,7 +1,7 @@
 $ rimsearcher code-search public --limit 2
 exit 0
 --- stdout ---
-13 matches in 5 files (2 printed); 9 files read across 2 of 3 source trees on disk — the rest hold no file matching --files '*.cs', and 'sources list' says which have never been decompiled.
+13 matches in 5 files (2 printed); 9 files read across 2 of 3 source trees on disk — the rest hold no file matching --file-glob '*.cs', and 'sources list' says which have never been decompiled.
 --limit stopped the printing at 2 matches; raise it to see more.
 
 vanilla/RimWorld/CompShield.cs  1 match

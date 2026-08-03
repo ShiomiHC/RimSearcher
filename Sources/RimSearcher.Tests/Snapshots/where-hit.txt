@@ -1,4 +1,4 @@
-$ rimsearcher find compClass RimWorld.CompShield
+$ rimsearcher where compClass RimWorld.CompShield
 exit 0
 --- stdout ---
 2 defs.

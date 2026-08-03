@@ -1,0 +1,12 @@
+$ rimsearcher code-search public --file-glob *Thing*
+exit 0
+--- stdout ---
+4 matches in 1 file; 1 file read across 1 of 3 source trees on disk — the rest hold no file matching --file-glob '*Thing*', and 'sources list' says which have never been decompiled.
+'*Thing*' carries no '/', so it selected by file name alone and ignored case: the files read are the ones whose name matches, not the ones inside a directory called 'Thing'. For a directory write '**/Thing/**'.
+
+vanilla/Verse/ThingComp.cs  4 matches
+3: 	public class ThingComp
+5: 		public ThingWithComps parent;
+6: 		public CompProperties props;
+7: 		public virtual void PostSpawnSetup(bool respawningAfterLoad)
+--- stderr ---

@@ -15,6 +15,23 @@ public sealed class CommandRegistry
     public const string Tagline =
         "Answers questions about RimWorld's defs and C# from a snapshot of what the game actually loaded.";
 
+    /// <summary>
+    /// 移除掉的旧命令名 → 现在叫什么。
+    ///
+    /// 为什么不留成别名:这些名字正是**因为被读错**才换掉的,留作别名等于把那道选择题
+    /// 永远留在原地(<c>find</c> 与 <c>search</c> 在英语里几乎同义,而两条命令做的是相反
+    /// 方向的事)。这张表只负责接住敲旧名的那一次,不让旧名继续可用。
+    ///
+    /// 非有它不可:近似候选救不了这一档 —— <c>find</c> 与 <c>where</c> 一个字母都不像,
+    /// 编辑距离恒空,于是「Unknown command 'find'. 去看 --help」是唯一会印出来的话,
+    /// 而它与「这个词从来就不是一条命令」逐字同形。
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> Retired =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["find"] = "where",
+        };
+
     public IReadOnlyList<Command> Commands { get; } =
     [
         new SearchCommand(),
@@ -192,6 +209,17 @@ public static class Runner
                     // 开关型全局参数没有占位符,无条件拼接会给这条照抄用的命令留个尾空格。
                     $"'{CommandRegistry.ExeName} <command> ... --{asGlobal.Name}" +
                     (asGlobal.Placeholder is { Length: > 0 } ph ? " " + ph : "") + "'."));
+                return ExitUsage;
+            }
+
+            // 退役名排在近似候选之前:这一档是**确知**的,而近似候选是猜的。
+            // 参数不回显 —— 夹具会追加 --db <绝对路径>,照抄进基线就不可移植了;
+            // 说清「参数原样不动」足够让人自己换掉那一个词。
+            if (CommandRegistry.Retired.TryGetValue(argv[0], out var renamed))
+            {
+                stderr.Write(OutputText.Finish(
+                    $"'{argv[0]}' was renamed to '{renamed}' and is no longer accepted. " +
+                    $"Its arguments are unchanged, so the same call works with '{renamed}' in its place."));
                 return ExitUsage;
             }
 

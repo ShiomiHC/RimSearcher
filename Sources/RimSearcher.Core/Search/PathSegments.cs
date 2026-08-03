@@ -3,8 +3,8 @@ namespace RimSearcher.Search;
 /// <summary>
 /// 字段路径的分段。
 ///
-/// `--path` 与 `--value` 都是**子串**匹配,而子串匹配不留痕:
-/// `--path soundImpact` 会命中语义相反的 `soundImpactDefault`。所以输出里必须有一处说
+/// `--path-contains` 与 `--value` 都是**子串**匹配,而子串匹配不留痕:
+/// `--path-contains soundImpact` 会命中语义相反的 `soundImpactDefault`。所以输出里必须有一处说
 /// 「你打的这个词,作为一个完整的段,一次都没命中」。
 ///
 /// 判据:把路径按 `.` 切开,每段去掉 `[N]` 下标,与查询词整体比一次。

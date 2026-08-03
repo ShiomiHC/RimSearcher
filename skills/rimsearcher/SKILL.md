@@ -22,15 +22,15 @@ Contracts live here; mechanics, edges and worked examples in
 | What does this def actually contain? | `rimsearcher get <defName>` |
 | Which C# class does this def actually run? | `rimsearcher get <defName>` — the `*Class` rows |
 | What is this called? I only know part. | `rimsearcher search <words>` |
-| Which defs use this class / value? | `rimsearcher find <field> <value>` |
-| Which defs pick this class with `Class="…"`? | `rimsearcher find Class <ClassName>` |
+| Which defs use this class / value? | `rimsearcher where <field> <value>` |
+| Which defs pick this class with `Class="…"`? | `rimsearcher where Class <ClassName>` |
 | What can this field be set to? | `rimsearcher values <field>` |
 | What fields does this def type have? | `rimsearcher fields <DefType>` |
 | Everything of one kind | `rimsearcher list <DefType>` + `--find <text>`; no type = the def types |
 | Which saved mod lists name this mod? | `rimsearcher modlist show --find <text>` |
 | What inherits from this / vice versa? | `rimsearcher inherit <name>` |
 | UI text ↔ translation key | `rimsearcher keyed <key or phrase>` |
-| Which UI text is untranslated? | `rimsearcher keyed --placeholders` with no query |
+| Which UI text is untranslated? | `rimsearcher keyed --empty-translation` with no query |
 | The game's C#: bodies, callers, overrides, hierarchy | `mcp__decompiler__get_decompiled_source`, `find_callers`, `get_overrides`, `find_derived_types`, `search_types` |
 | A code *shape* across all files | `rimsearcher code-search <regex>` |
 | The text of one file, member, or line range | `rimsearcher read <file> --member <name>` |
@@ -66,9 +66,9 @@ PatchOperations rewrite the XML on disk, inheritance merges it, and thousands of
 | Old habit | Now |
 |---|---|
 | grep `<defName>Bullet_` | `rimsearcher search Bullet_` |
-| grep `<li Class="CompProperties_AmbientSound">` | `rimsearcher find compClass CompAmbientSound` |
-| grep a `Class="…"` to see which defs pick it | `rimsearcher find Class <ClassName>` |
-| grep a `<thingClass>` to see who uses it | `rimsearcher find thingClass <ClassName>` |
+| grep `<li Class="CompProperties_AmbientSound">` | `rimsearcher where compClass CompAmbientSound` |
+| grep a `Class="…"` to see which defs pick it | `rimsearcher where Class <ClassName>` |
+| grep a `<thingClass>` to see who uses it | `rimsearcher where thingClass <ClassName>` |
 | grep to find what values a tag takes | `rimsearcher values <tag>` |
 | grep `Name="BaseBullet"` for the abstract parent | `rimsearcher inherit BaseBullet` |
 
@@ -76,13 +76,19 @@ Second row: the XML names the **properties** class, the def field holds the reso
 **comp** class — asking with the properties name costs a redirect round trip.
 
 `code-search` searches **decompiled C#, never Defs** — pointed at a data question it says
-so. A `--files` glob containing `/` starts at the tree name (`vanilla/**/Widgets.cs`, not
-`Verse/Widgets.cs`), also under `--source`; no `/` matches file names at any depth.
+so. A `--file-glob` glob containing `/` is matched against the whole path, which is
+`<packageId>/<assembly>/<namespace dirs>/<file>.cs` — **two levels before the namespace**,
+so `vanilla/Assembly-CSharp/RimWorld/*.cs`, and `vanilla/RimWorld/**` matches nothing.
+`**` crosses `/` and is the safe way to skip the assembly you did not look up
+(`vanilla/**/Widgets.cs`); this holds under `--source` too. No `/` matches file names at
+any depth.
 
 ## Query habits
 
-- **PowerShell: single-quote regexes.** Double quotes eat backslashes — `\w+` becomes
-  `w+`, an honest-looking zero.
+- **PowerShell: single-quote regexes.** Double quotes interpolate `$` — `"…: $name\b"`
+  reaches the tool with `$name` already replaced, and `"(\w+)$"` is fine only because the
+  quote follows. Backslashes survive either way (PowerShell escapes with a backtick), so
+  the damage is silent and confined to `$`: the pattern that ran is not the one you wrote.
 - **`code-search` is case-sensitive unless you pass `-i`** — `orbitalDebris` and
   `OrbitalDebris` are two searches, and the wrong one's zero looks like absence.
 - **Never pipe through `grep` or `head`.** The filter runs *after* `--limit`, so it
@@ -91,33 +97,33 @@ so. A `--files` glob containing `/` starts at the tree name (`vanilla/**/Widgets
 
 | Command | Narrow with |
 |---|---|
-| `get` | `--path`, `--type`, `--defaults`, `--limit` |
-| `fields` | `--path`, `--offset`, `--limit` |
+| `get` | `--path-contains`, `--type`, `--defaults`, `--limit` |
+| `fields` | `--path-contains`, `--offset`, `--limit` |
 | `values` | `--type`, `--scope`, `--exact-path`, `--offset`, `--limit` |
 | `search` | `--type`, `--scope`, `--offset`, `--limit` |
-| `list` | `--find`, `--class`, `--scope`, `--offset`, `--limit` |
-| `inherit` | `--path`, `--limit` |
-| `keyed` | `--placeholders`, `--offset`, `--limit` |
-| `find` | `--scope`, `--exact`, `--exact-path`, `--offset`, `--limit` |
-| `code-search` | `--source`, `--files`, `--max-files`, `--max-per-file`, `--limit` |
+| `list` | `--find`, `--own-class`, `--scope`, `--offset`, `--limit` |
+| `inherit` | `--path-contains`, `--limit` |
+| `keyed` | `--empty-translation`, `--offset`, `--limit` |
+| `where` | `--scope`, `--exact`, `--exact-path`, `--offset`, `--limit` |
+| `code-search` | `--source`, `--file-glob`, `--max-files`, `--max-per-file`, `--limit` |
 | `read` | `--member`, `--type`, `--lines`, `--outline`, `--source`, `--limit` |
 | `sources sync` | `--only`, `--modlist`, `--force`, `--dry-run` |
 
   `head`'s replacement: paging commands take `--offset`; `read` `--member`/`--type`/
-  `--outline`/`--lines`; `get` `--path` (field order carries no meaning); `code-search`
-  an anchored pattern plus `--source`/`--files`. `read`'s `--limit` is the odd one out —
+  `--outline`/`--lines`; `get` `--path-contains` (field order carries no meaning); `code-search`
+  an anchored pattern plus `--source`/`--file-glob`. `read`'s `--limit` is the odd one out —
   it caps printed lines rather than narrowing a result set, so `--limit all` *widens*.
   The rule guards against a hidden truncation, so it lifts where there is none to hide:
   after `--limit all`, or on output that does not page. `read --member` pages too, just not
   through `--offset`: `--limit` caps the lines and the count line hands back the exact
   `--lines a-b` to resume from, so a long member is read window by window.
-- **Reverse-look-up field names, never guess.** `find --value <value>` reports which paths
+- **Reverse-look-up field names, never guess.** `where --value <value>` reports which paths
   hold the value. A guessed field name that happens to exist returns a clean,
   complete-looking table for the wrong field — the most expensive failure here.
-- **`find`'s path is matched from the end; every `--path` filter is a substring.** A bare name
-  matches the last segment whole (`find genSteps` never sees `extraGenSteps[N]`, while
-  `fields BiomeDef --path enStep` finds both), but a dotted one is raw text that does not stop
-  at a `.` — `find graphicData.shaderType` also collects `swimmingGraphicData.shaderType`.
+- **`where`'s path is matched from the end; every `--path-contains` filter is a substring.** A bare name
+  matches the last segment whole (`where genSteps` never sees `extraGenSteps[N]`, while
+  `fields BiomeDef --path-contains enStep` finds both), but a dotted one is raw text that does not stop
+  at a `.` — `where graphicData.shaderType` also collects `swimmingGraphicData.shaderType`.
   `--exact-path` pins the whole path, with `[]` standing for any index. This changes the
   answer, not the row count.
 - **The `mod` column says where the def was declared, not who wrote the value you asked
@@ -140,7 +146,7 @@ so. A `--files` glob containing `/` starts at the tree name (`vanilla/**/Widgets
 
 - **A count is always printed above the table**, in three forms: `12 defs.` — all of them;
   `12 of 347 defs` — cut off, 347 exist, the sentence names the next `--offset`;
-  `at least 12 matches` — the scan stopped early, true total unknown. A `--path` match count is a filter, not a truncation
+  `at least 12 matches` — the scan stopped early, true total unknown. A `--path-contains` match count is a filter, not a truncation
   (`kind: "filter"` vs `"truncation"` in `--json`).
 - **`Same in every row, not repeated below:` is part of the table** — the folded column
   still applies to every row; the first column (the row's identity) and `--json` never fold.
@@ -154,23 +160,28 @@ so. A `--files` glob containing `/` starts at the tree name (`vanilla/**/Widgets
   class, mod, UI text, or present in another named snapshot. Read that sentence before
   concluding: "not here" ≠ "not anywhere".
 - **Truncation at export**: `get` warns on the affected def, and then a missing field path
-  is *not* evidence of absence. Same boundary on `find`/`values`/`fields` (counts are over
+  is *not* evidence of absence. Same boundary on `where`/`values`/`fields` (counts are over
   indexed paths); cross-check with `rimsearcher snapshot truncated` (narrow `--type`,
   `--def`), which the footnote prints already filled in.
 - **`code_default` decides what a value is worth.** `no` = something set it (differs from
   a fresh instance). `yes` = the snapshot **cannot tell** whether anyone set it — quoting a
-  `yes` row as "this def sets X" is the top confident-wrong answer here. `unknown` = type
+  `yes` row as "this def sets X" is the top confident-wrong answer here — and **"so the def
+  did not set it, it comes from the class default" is the same error facing the other way**.
+  An XML line whose value happens to equal the default is indistinguishable from no line at
+  all, so neither direction is available: the honest answer off a `yes` row is that this
+  cannot be told from here. Reading the C# constructor shows where the default *could* come
+  from, never whether the XML says it too. `unknown` = type
   not constructible. Exemptions cut both ways: rules that *read* the value (thresholds,
   comparisons) answer fine from a `yes` row — the value is real either way;
   `compClass`/`thingClass`/`workerClass` are usually
-  constructor-assigned, so a `yes` there carries no authorship — and a `no` beside it is
-  just as ordinary, reached by more than one route. Neither value says who mounted the
+  constructor-assigned, so a `yes` there is **no signal in either direction** — and a `no`
+  beside it is just as ordinary, reached by more than one route. Neither value says who mounted the
   comp; the `mod` column and the block's `Class` row do. `yes` rows hide by default (a line
-  says how many); `--defaults` shows them; `--path` always shows a named field.
+  says how many); `--defaults` shows them; `--path-contains` always shows a named field.
 - **The shared-value line after `get`'s table** (`soundDrop (3347)`) names values most
   defs of the type also carry — inherited or engine-filled far more often than authored,
   so a `no` row on that list is still not the def author's decision.
-- **The sibling line under `--path` is not decoration**: fields in one `comps[N]` block
+- **The sibling line under `--path-contains` is not decoration**: fields in one `comps[N]` block
   constrain each other, and the output names hand-set fields in the block it cut away.
 - **Null-valued fields never enter the index** — absent even from `--defaults`. Absence is
   not evidence the type lacks the field; read the declaring class.
@@ -186,49 +197,32 @@ so. A `--files` glob containing `/` starts at the tree name (`vanilla/**/Widgets
   (`--snapshot`, `--db`, `--json`, `--config`) go **after** the command name.
 - **`search`** covers def names, labels, descriptions and the translations injected onto
   defs — both languages, so an English term finds its def on a Chinese snapshot. It does
-  **not** cover C# class names (→ `find compClass <Class>`) or the UI strings under
+  **not** cover C# class names (→ `where compClass <Class>`) or the UI strings under
   `Languages/*/Keyed` (→ `keyed <phrase>`); a zero result names which one you hit — the
   layer the name actually sits on, query already filled in, instead of reciting that list
   back at you.
-- **`get --path`/`--value` match substrings** — `--path soundImpact` also returns
+- **`get --path-contains`/`--value` match substrings** — `--path-contains soundImpact` also returns
   `soundImpactDefault`, opposite meaning; the output says when nothing matched as a whole
   segment. `--type <DefType>` picks between same-named defs (common).
-- **Abstract parents are not defs**: `get` cannot reach them (it says so) — use `inherit`.
-  What it reads from the XML is the **structure**: who inherits from whom, which nodes are
-  abstract. Field **values** are the snapshot's, already post-patch — so it is no way to
-  see a def before a PatchOperation, and nothing here is. The layer holds only nodes
-  declaring `Name=`, `ParentName=` or `Abstract=`; an ordinary def takes part in no
-  inheritance and `inherit` says that instead of reporting it absent. An abstract node
-  shows no field values of its own, so `get` a concrete child.
-- **`patch_ops` counts one narrow thing**: patches that target a node **by `Name=`**. A `0`
-  is not evidence the def is unpatched — defName-targeted patches are counted nowhere and
-  can go as deep as swapping the runtime class (`Human` reports `patch_ops 0` while running
-  `AlienRace.ThingDef_AlienRace`). No `Name=` reports `n/a` rather than `0` — the same
-  blind spot, said out loud.
-- **Which layer declares a field**: `inherit <def> --path <field>` computes evidence — a
-  layer whose `with_path` falls short of `other_defs` is not the declaring one. The reverse
-  does not follow; `same_value` tells every-descendant-writes-it apart. A patch that added
-  the field to many defs looks exactly like a layer declaring it. **`with_path` reaching
-  `other_defs` is no evidence at all for a field the whole def type carries** — for a scalar
-  like `tickerType` it is true of every layer anyone could ask about, and the output prints
-  the type-wide denominator so that row can be read against it. On an abstract node
-  `same_value` counts against the most common value under it, not against a value the node
-  declares — the node declares nothing.
+- **Abstract parents are not defs**: `get` cannot reach them — it names `inherit` instead.
+  `inherit` answers four things off the XML layer: who inherits from whom, which nodes are
+  abstract, which layer declares a field (`--path-contains`), and how many patches target a node by
+  `Name=`. Its field **values** are still the snapshot's, already post-patch — nothing here
+  sees a def before a PatchOperation. Every rule for reading those columns and counts,
+  including what each of them is *not* evidence for, prints beside the table that carries it.
 - **A `list` def type is a storage bucket, not a runtime class.** Multi-class buckets get a
-  `class` column and `--class`; `list <SomeClass>` says where to look instead of "no such
-  type". Most buckets hold one class — there `--class` narrows nothing and the behaviour
-  lives on a nested `Class="…"` field instead: **`find Class` territory, not `--class`**.
-- **`find Class`** reaches that nested runtime type, but only where it **differs from the
+  `class` column and `--own-class`; `list <SomeClass>` says where to look instead of "no such
+  type". Most buckets hold one class — there `--own-class` narrows nothing and the behaviour
+  lives on a nested `Class="…"` field instead: **`where Class` territory, not `--own-class`**.
+- **`where Class`** reaches that nested runtime type, but only where it **differs from the
   declared type** — a field running exactly what its C# declares is not indexed under
   `Class` at all, and older snapshots predate parts of this dimension. So a zero is about
   the index, never "no def runs it": confirm with `code-search "class <Name>\b"`.
 - **`keyed` is the only road to screen text** — captions, alerts, tooltips are keyed
-  translations belonging to no def, unreachable by `search`/`get`/`find`. Both directions:
+  translations belonging to no def, unreachable by `search`/`get`/`where`. Both directions:
   key → displayed text, phrase in either language → keys. Only `in effect` rows are what
   the game displays; `on disk` rows mostly come from installed-but-disabled mods.
-  **A query that is itself an exact key stops matching prefixes** — `CommandSettle` returns
-  that one key, and says so below the table while naming the siblings it stopped short of.
-  `--placeholders` with no query lists every untranslated key — **do not invent a stand-in
+  `--empty-translation` with no query lists every untranslated key — **do not invent a stand-in
   query**: `""`, `*`, `.` are not wildcards, and a real word silently answers a different
   question.
 - **`code-search` reports matches and files as two numbers** — "how many methods" wants
@@ -237,23 +231,20 @@ so. A `--files` glob containing `/` starts at the tree name (`vanilla/**/Widgets
   `at least N` — raise it rather than looking elsewhere. Tree counts: `sources list`.
 - **Decompiled text has lost comments and local variable names** (parameters and members
   survive). A member you cannot find is usually inherited — follow the `: Base`. Trees are
-  named by packageId (`vanilla` = the game); version diffs are a `git diff` question.
+  named by packageId (`vanilla` = the game); `sources list` is the roster and says which
+  trees are current, empty or absent.
 
 ## Snapshots
 
 One export = one game version, one ordered mod list, one language; several coexist.
 `rimsearcher snapshot list` shows them, `--snapshot <name>` picks per command,
-`snapshot use <name>` sticks. Queries speak up on their own when the snapshot no longer
-matches its own sources — game build moved, mod files changed, load order reshuffled — but
-never about *which* mods the game has enabled; `snapshot status` is the full comparison
-(details: usage-notes).
+`snapshot use <name>` sticks; `snapshot status` is the full comparison with the installed
+game. Queries raise staleness themselves when they detect it.
 
 **A complete count is complete for the snapshot, not the installed game**: on a Core-only
-snapshot, `1 def` means one in Core, and no line says so. Data is as of
-the export; stale → `rimsearcher export --modlist <name>`, where `<name>` is required and
-comes from `rimsearcher modlist list`. Export runs the game headless and silent for
-minutes; a stall line on stderr is a report, not a verdict — **only `--timeout` stops the
-game**; raise it, don't read a stall as failure.
+snapshot, `1 def` means one in Core, and **no line says so** — the one boundary here that
+never announces itself. Stale → `rimsearcher export --modlist <name>`, where `<name>` is
+required and comes from `rimsearcher modlist list`.
 
 ## Recovering
 
@@ -262,10 +253,10 @@ game**; raise it, don't read a stall as failure.
 - **Answer disagrees with the game**: mod files changed since export — queries say so when
   detected, but the check is size and timestamp, so an edit preserving both, or anything
   under `Languages/`, passes unseen. Re-export before concluding the tool is wrong.
-- **`find Class <ClassName>` came back zero**: a C# class can be used with no def at all —
+- **`where Class <ClassName>` came back zero**: a C# class can be used with no def at all —
   code `new`s it directly. Before believing a near-miss the zero result suggests, scan
   unanchored: `code-search '<ClassName>' --limit all`; the construction site is the answer.
-- **Use text search last**: `find`/`values` are exact over resolved data; `code-search`
+- **Use text search last**: `where`/`values` are exact over resolved data; `code-search`
   matches identically-named things from unrelated types.
 
 For the decompiler MCP itself: [references/decompiler-mcp.md](references/decompiler-mcp.md).

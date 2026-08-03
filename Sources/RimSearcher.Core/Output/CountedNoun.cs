@@ -84,6 +84,9 @@ public static class NounRegistry
         ["directory"] = "directories",
         ["line"] = "lines",
         ["declaration"] = "declarations",
+        // 数的是「按当前页大小还要翻几次」,与 "line"(总量)不是一回事 —— 同一个文件换个
+        // --limit 就换一个页数,而行数不变。
+        ["page"] = "pages",
     };
 
     public static IReadOnlyCollection<string> Known => Plurals.Keys;

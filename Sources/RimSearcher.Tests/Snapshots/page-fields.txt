@@ -8,5 +8,5 @@ soundPickup         9
 thingClass          6
 comps[0].compClass  2
 
-Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans all of ThingDef, whatever --path says, holding 1 def cut short. 'rimsearcher snapshot truncated --type ThingDef' lists them.
+Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans all of ThingDef, whatever --path-contains says, holding 1 def cut short. 'rimsearcher snapshot truncated --type ThingDef' lists them.
 --- stderr ---

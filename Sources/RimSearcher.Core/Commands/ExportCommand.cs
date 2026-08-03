@@ -38,7 +38,8 @@ public sealed class ExportCommand : Command
             new OptionSpec
             {
                 Name = "modlist",
-                Aliases = ["list", "mods", "profile"],
+                // 不收 "mods"(那是 --scope 的别名,指一组 mod)也不收 "list"(那是子命令名)。
+                Aliases = ["profile"],
                 Placeholder = "<name>",
                 Help = "Which mod list to run. 'rimsearcher modlist list' shows the names.",
                 Required = true,

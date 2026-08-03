@@ -1,0 +1,6 @@
+$ rimsearcher get Apparel_ShieldBelt --path comps
+exit 2
+--- stdout ---
+--- stderr ---
+Unknown option '--path'. Did you mean --path-contains? The name as typed is accepted by 'docs', but not by 'get'.
+Run 'rimsearcher get --help' to see what this command accepts.

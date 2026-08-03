@@ -82,7 +82,7 @@ public sealed record JsonKeySpec
     /// 自己在 Run 里调 <see cref="Output.Report.Promises"/>:漏掉一条的表现是那个键不在,
     /// 与「查过了确实没有」同形。
     ///
-    /// **只在某个开关下才产出的键不标**(<c>find --value</c> 的 paths、<c>read --outline</c>
+    /// **只在某个开关下才产出的键不标**(<c>where --value</c> 的 paths、<c>read --outline</c>
     /// 的 declarations、<c>sources sync --dry-run</c> 的 plan):它们互斥,凭空多一个空数组
     /// 在机器侧读作「这一路也查过了,没有」。那几条由命令在自己那条分支上认领。
     /// 「an object: …」那类键同理不标:空数组不是它们的空形状。

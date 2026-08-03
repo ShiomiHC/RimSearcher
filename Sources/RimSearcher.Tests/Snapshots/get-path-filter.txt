@@ -1,4 +1,4 @@
-$ rimsearcher get Apparel_ShieldBelt --path comps
+$ rimsearcher get Apparel_ShieldBelt --path-contains comps
 exit 0
 --- stdout ---
 def_name     Apparel_ShieldBelt

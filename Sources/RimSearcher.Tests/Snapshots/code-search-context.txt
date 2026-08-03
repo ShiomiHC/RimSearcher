@@ -1,7 +1,7 @@
-$ rimsearcher code-search public --files ThingComp.cs -C 1
+$ rimsearcher code-search public --file-glob ThingComp.cs -C 1
 exit 0
 --- stdout ---
-4 matches in 1 file; 1 file read across 1 of 3 source trees on disk — the rest hold no file matching --files 'ThingComp.cs', and 'sources list' says which have never been decompiled.
+4 matches in 1 file; 1 file read across 1 of 3 source trees on disk — the rest hold no file matching --file-glob 'ThingComp.cs', and 'sources list' says which have never been decompiled.
 
 vanilla/Verse/ThingComp.cs  4 matches
 2- {

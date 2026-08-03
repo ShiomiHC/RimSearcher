@@ -1,4 +1,4 @@
-$ rimsearcher list ThingDf --class TestVariantDef
+$ rimsearcher list ThingDf --own-class TestVariantDef
 exit 1
 --- stdout ---
 No def type named 'ThingDf' in this snapshot. Closest by spelling: ThingDef. 'rimsearcher list ThingDef' if that is the one.

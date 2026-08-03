@@ -13,7 +13,6 @@ Commands:
   docs                Render the command reference from the declarations in the code.
   export              Run the game unattended with a chosen mod list and import what it exports.
   fields              List the field paths that a def type actually uses, with how often each occurs.
-  find                Find defs by the value of a field. This is the reverse lookup: from a C# class or a value back to the defs that use it.
   get                 Show one def in full: its identity, its fields, and any translations of it.
   inherit             Show what an XML node inherits from and what inherits from it, including abstract parents.
   keyed               Look up the UI text behind a translation key, or find the key behind a piece of UI text.
@@ -32,6 +31,7 @@ Commands:
   sources list        List the decompiled source trees and say which ones no longer match the installed assemblies.
   sources sync        Decompile the assemblies the game actually loads into the configured source tree.
   values              List the distinct values a field takes, most common first.
+  where               Find defs by the value of a field. This is the reverse lookup: from a C# class or a value back to the defs that use it.
 
 Global options (every command takes these, written after the command):
       --snapshot <name>  Query this named snapshot instead of the one that would be picked automatically. An explicit choice always wins over auto-detection.

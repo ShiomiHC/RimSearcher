@@ -1,7 +1,7 @@
 $ rimsearcher code-search Translate
 exit 0
 --- stdout ---
-3 matches in 1 file; 9 files read across 2 of 3 source trees on disk — the rest hold no file matching --files '*.cs', and 'sources list' says which have never been decompiled.
+3 matches in 1 file; 9 files read across 2 of 3 source trees on disk — the rest hold no file matching --file-glob '*.cs', and 'sources list' says which have never been decompiled.
 
 vanilla/Verse/Widgets.cs  3 matches
 7: 			Draw(rect, "CannotUseNoPower".Translate());

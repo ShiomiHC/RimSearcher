@@ -51,7 +51,8 @@ public sealed class ReadCommand : Command
             new OptionSpec
             {
                 Name = "member",
-                Aliases = ["method", "method-name", "member-name", "field", "property"],
+                // 不收 "field":那个词在 get/inherit 上指 def 的字段路径,是另一个概念。
+                Aliases = ["method", "method-name", "member-name", "property"],
                 Placeholder = "<name>",
                 Help = "Read the declaration of this member. Every member of that name in the file is " +
                        "returned; --type narrows it to one declaring type.",
@@ -59,7 +60,8 @@ public sealed class ReadCommand : Command
             new OptionSpec
             {
                 Name = "type",
-                Aliases = ["class", "class-name", "type-name", "extract-class"],
+                // 不收 "class":那个词是 list 的主名,在那里指 def 自身的实现类。
+                Aliases = ["class-name", "type-name", "extract-class"],
                 Placeholder = "<name>",
                 Help = "Read this whole type. With --member it instead says which type the member must " +
                        "belong to.",
@@ -345,6 +347,16 @@ public sealed class ReadCommand : Command
         }
 
         var complete = from == 1 && to == text.Length;
+
+        // 「还剩一页」与「还剩几十页」在这条截断行里逐字同形,而两者的正确出路完全不同:
+        // 前者翻一下就完了,后者盲翻是荒谬路径。而这条行给的唯一出路一直是 --lines ——
+        // R10 的实证:657 次 read 只对 33 次 --outline,53 个会话里只有 2 个在第一次
+        // read 时用它。页数摆出来,再点名另一条路,这条行才不再是唯一的出路。
+        //
+        // 只在还剩三页以上时说:翻一两页是正常分页,不值得换路子。
+        var pageSize = to - from + 1;
+        var morePages = pageSize > 0 ? (text.Length - to + pageSize - 1) / pageSize : 0;
+
         ctx.Report.Notice(complete ? NoticeKind.Count : NoticeKind.Truncation,
             complete
                 ? $"{rel}, all {Tally.Complete(text.Length).Render("line")}."
@@ -352,7 +364,13 @@ public sealed class ReadCommand : Command
                   (clipped > 0
                       ? $" --limit stopped it {Tally.Complete(clipped).Render("line")} short of what --lines asked for."
                       : "") +
-                  (to < text.Length ? $" Pass --lines {to + 1}+{to - from + 1} for the next page." : ""));
+                  (to < text.Length ? $" Pass --lines {to + 1}+{pageSize} for the next page." : "") +
+                  // 不写「一屏看完」:Verse/Pawn.cs 的 outline 是 329 条声明、334 行,
+                  // 压的是 14 倍不是压成一屏。说得出口的是它的 at 列能直接回传 --lines。
+                  (morePages >= 3
+                      ? $" Reaching the end that way takes {Tally.Complete(morePages).Render("page")} at this size; " +
+                        "--outline instead lists the file's declarations with each one's line range, to pass back to --lines."
+                      : ""));
 
         // 裸行读没有任何推断,不挂那条能力边界 —— 挂上去就成了每次返回的常驻免责声明。
         ctx.Report.Text("source", lines, rows);

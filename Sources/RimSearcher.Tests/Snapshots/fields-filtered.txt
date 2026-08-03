@@ -1,7 +1,7 @@
-$ rimsearcher fields ThingDef --path comps
+$ rimsearcher fields ThingDef --path-contains comps
 exit 0
 --- stdout ---
-4 field paths within --path comps.
+4 field paths within --path-contains comps.
 
 path                                defs
 comps[0].compClass                  2
@@ -9,5 +9,5 @@ comps[0].Class                      1
 comps[0].props.energyLossPerDamage  1
 comps[0].props.energyMax            1
 
-Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans all of ThingDef, whatever --path says, holding 1 def cut short. 'rimsearcher snapshot truncated --type ThingDef' lists them.
+Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans all of ThingDef, whatever --path-contains says, holding 1 def cut short. 'rimsearcher snapshot truncated --type ThingDef' lists them.
 --- stderr ---

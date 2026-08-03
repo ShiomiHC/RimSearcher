@@ -43,7 +43,7 @@ public sealed class KeyedCommand : Command
                 Required = false,
                 Help = "A translation key, or a phrase from the interface in any language the snapshot has. " +
                        "Leave it out to list the layer itself — every keyed translation, or with " +
-                       "--placeholders only the untranslated ones.",
+                       "--empty-translation only the untranslated ones.",
             },
         ],
         Options =
@@ -52,11 +52,16 @@ public sealed class KeyedCommand : Command
             CommonOptions.Offset("keys"),
             new OptionSpec
             {
-                Name = "placeholders",
+                Name = "empty-translation",
                 Arity = Arity.Flag,
-                Aliases = ["untranslated", "todo"],
-                Help = "List only keys whose translation is still a placeholder — the language file has the " +
-                       "key but not a translation, so the game falls back to English. This is what a " +
+                // 旧主名 placeholders 的识别测 0/12:十二份全把它读成「译文里含 {0} 这类
+                // 格式化占位符」,与真义(键在、译文空)方向相反。untranslated 是实测第二名
+                // (8/12),但它会被读成「语言文件里压根没有这个键」,只配当别名。
+                // placeholders 不留作别名:它读成「译文里含 {0}」的那一份人是**另一个集合**,
+                // 拿它当别名等于把一个静默给错答案的入口留着。
+                Aliases = ["empty-translations", "untranslated", "todo"],
+                Help = "List only keys the language file leaves untranslated — the key is there but carries " +
+                       "no translation, so the game falls back to English. This is what a " +
                        "translation-coverage question wants, and it needs no query: on its own it filters " +
                        "the whole layer.",
                 // 计数只在这个开关划的线之内完整,不念回去就会被读成整层的总数。
@@ -68,7 +73,7 @@ public sealed class KeyedCommand : Command
             "rimsearcher keyed CannotUseNoPower",
             "rimsearcher keyed 没有电力",
             "rimsearcher keyed Command --limit all",
-            "rimsearcher keyed --placeholders --limit all",
+            "rimsearcher keyed --empty-translation --limit all",
         ],
         JsonKeys =
         [
@@ -88,7 +93,7 @@ public sealed class KeyedCommand : Command
         var query = ctx.Args.Positional(0);
         var limit = ctx.Limit();
         var offset = ctx.Args.Int("offset", 0);
-        var placeholdersOnly = ctx.Args.Flag("placeholders");
+        var placeholdersOnly = ctx.Args.Flag("empty-translation");
 
         // 这一层整个是空的,与「这个 key 不在里面」是两件事,而它们的输出会长成一样。
         // 先问一次,好让下面每一条落空的话都能带上正确的成因。
@@ -106,7 +111,7 @@ public sealed class KeyedCommand : Command
             return 1;
         }
 
-        // 不给查询词就是整层枚举:`--placeholders` 是**整层的过滤器**,不是搜索结果上的
+        // 不给查询词就是整层枚举:`--empty-translation` 是**整层的过滤器**,不是搜索结果上的
         // 过滤器,它单独出现是这个开关最自然的用法。判据与 `list` 同源 —— 分模式看
         // **给没给位置参数**,不看开关。
         if (query is null)
@@ -116,7 +121,7 @@ public sealed class KeyedCommand : Command
         var exact = ctx.Db.KeyedByKey(query);
         var rows = exact;
         var matchedOn = "key";
-        // 分页三件事按它算。--placeholders 下推之后它是过滤后的数。
+        // 分页三件事按它算。--empty-translation 下推之后它是过滤后的数。
         var ftsTotal = exact.Count;
         // 「N 条命中里一条占位都没有」要的是过滤**之前**的数。两个数混用一个,
         // 那句最强否定句就会拿着自己筛剩的零去否定全体。
@@ -179,11 +184,11 @@ public sealed class KeyedCommand : Command
 
             if (placeholdersOnly && matchedTotal > 0)
             {
-                // 主语是 --placeholders(固定单数),计数进从句 —— 见下面那条注释。
+                // 主语是 --empty-translation(固定单数),计数进从句 —— 见下面那条注释。
                 ctx.Report.Notice(NoticeKind.Filter,
-                    $"--placeholders filtered out every match: {Tally.Complete(matchedTotal).Render("key")} " +
+                    $"--empty-translation filtered out every match: {Tally.Complete(matchedTotal).Render("key")} " +
                     $"matched '{query}', and none of them is a placeholder — each has a real translation. " +
-                    "Drop --placeholders to see them.");
+                    "Drop --empty-translation to see them.");
                 return 1;
             }
 
@@ -264,7 +269,7 @@ public sealed class KeyedCommand : Command
     }
 
     /// <summary>
-    /// 不给查询词的那一半:整层枚举,<c>--placeholders</c> 在这里是它本来的形状 —— 作用在
+    /// 不给查询词的那一半:整层枚举,<c>--empty-translation</c> 在这里是它本来的形状 —— 作用在
     /// 整层上的过滤器,而不是「先搜到什么再从里面筛」。
     ///
     /// 分页走文案搜索那一路的文法(LIMIT/OFFSET + <see cref="Output.Report.PageNotice"/>):
@@ -341,11 +346,11 @@ public sealed class KeyedCommand : Command
         var placeholders = shown.Count(r => r.Placeholder);
         if (placeholders > 0)
             ctx.Report.Notice(NoticeKind.Boundary, placeholdersOnly
-                // --placeholders 在场时表里每一行都是占位,计数上面已报过 ——
+                // --empty-translation 在场时表里每一行都是占位,计数上面已报过 ——
                 // 这句要说的只剩「占位是什么意思」。
                 ? "Placeholder means the language file declares the key without a translation, so the game " +
                   "displays the English text instead of what the translated column shows. Every row above is " +
-                  "one of those, which is what --placeholders selects."
+                  "one of those, which is what --empty-translation selects."
                 : "Placeholder means the language file declares the key without a translation, so the game " +
                   "displays the English text instead of what the translated column shows: that is the case for " +
                   // 这里数的是**表里的行**,所以名词固定是 keyed translation,不跟着上面那句

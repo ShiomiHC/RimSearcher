@@ -55,8 +55,8 @@ public class GateTests
             ["get.defs"] = ["get", "Apparel_ShieldBelt"],
             ["list.defs"] = ["list", "ThingDef"],
             ["list.types"] = ["list"],
-            ["find.matches"] = ["find", "thingClass", "RimWorld.Bullet"],
-            ["find.paths"] = ["find", "--value", "RimWorld.Bullet"],
+            ["find.matches"] = ["where", "thingClass", "RimWorld.Bullet"],
+            ["find.paths"] = ["where", "--value", "RimWorld.Bullet"],
             ["fields.fields"] = ["fields", "ThingDef"],
             ["values.values"] = ["values", "thingClass"],
             ["mods.mods"] = ["mods"],
@@ -473,7 +473,7 @@ public class GateTests
     /// 两处豁免,各有实质理由:
     /// - <c>CodeSearchCommand.NoSuchTree</c> 在名单后面还要说「树名是 packageId,外号匹配
     ///   不上任何东西」—— 那是这条命令独有的成因;
-    /// - <c>find</c> 的值域近似先做**末段精确匹配**(CompAmbientSound 对
+    /// - <c>where</c> 的值域近似先做**末段精确匹配**(CompAmbientSound 对
     ///   RimWorld.CompAmbientSound 是同一个名字,不是「长得像」),说 by spelling 是假话。
     /// </summary>
     [Fact]

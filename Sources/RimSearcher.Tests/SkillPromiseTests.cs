@@ -28,20 +28,14 @@ public class SkillPromiseTests
         // ---- 数据边界 ----
         new("inheritance, discarded by the game before export; `inherit` alone reads it",
             nameof(继承层的来路与补丁时间差写在inherit自己的说明里)),
-        // 2026-08-01 第九轮盲测证伪了原来钉在这里的那句「zero means what you see is what
-        // the game read」:`Human` 声明了 Name= 因而报 patch_ops 0,而它的运行时类型是
-        // `AlienRace.ThingDef_AlienRace` —— 被一条 defName 定向 patch 换掉了。
-        // **0 只说明没有按 Name 命中的 patch**,而这道闸此前一直在守那句假话。
-        new("patches that target a node **by `Name=`**",
-            "inherit的patch计数在干净节点也在场"),
-        new("A `0` is not evidence the def is unpatched",
-            "inherit的patch计数在干净节点也在场"),
-        new("reports `n/a` rather than `0`",
-            "inherit的patch计数在干净节点也在场"),
-        new("An abstract node shows no field values",
-            "抽象节点不在defs里但在继承层里"),
-        new("`get` cannot reach them (it says so)",
-            "get落空时不再无条件谈抽象父节点"),
+        // 2026-08-03:`inherit` 的五条 pin 退役(patch_ops 三条、抽象节点两条)。**契约没退役,
+        // 它的住处变了** —— 10 量到 `inherit` 占 0.9% 的调用却占 4.8% 的 SKILL.md 篇幅,而这五句
+        // CLI 在出结果那一刻逐条印着,且各自另有行为闸:`inherit的patch计数在干净节点也在场`
+        // 断言 `patch_ops is not measured` 与 `is targeted by name by` 各自只在该出现时出现,
+        // `get落空时不再无条件谈抽象父节点` 断言 `get BaseBullet` 印出 `never becomes a def`
+        // 加指路命令。**doc 侧不再复述,behaviour 侧的闸原样留着** —— 退的是「文档说过」这道
+        // 保险,不是这件事本身。原文里那句被 09 证伪过的「zero means what the game read」
+        // 早已改掉,不是这次退的东西。
 
         // ---- 三态计数与分页 ----
         new("A count is always printed above the table",
@@ -50,7 +44,7 @@ public class SkillPromiseTests
             "完整集合裸写数字不多说一个字"),
         new("`at least 12 matches` — the scan stopped early, true total unknown",
             "只知道下界时写成at_least"),
-        new("A `--path` match count is a filter, not a truncation (`kind: \"filter\"` vs `\"truncation\"` in `--json`)",
+        new("A `--path-contains` match count is a filter, not a truncation (`kind: \"filter\"` vs `\"truncation\"` in `--json`)",
             nameof(过滤与截断在json里是两种kind)),
         new("Fields the exporter dropped are `kind: \"boundary\"` instead",
             nameof(导出期丢字段与本次分页截断在json里是两种kind)),
@@ -80,7 +74,7 @@ public class SkillPromiseTests
             nameof(values说清这些值来自哪些路径与def类型)),
 
         // ---- 界面文案那一层 ----
-        new("keyed translations belonging to no def, unreachable by `search`/`get`/`find`",
+        new("keyed translations belonging to no def, unreachable by `search`/`get`/`where`",
             nameof(界面文案不在search的射程里而keyed认它)),
         new("a zero result names which one you hit",
             nameof(界面文案不在search的射程里而keyed认它)),
@@ -121,7 +115,7 @@ public class SkillPromiseTests
             nameof(GrammarTests.折叠掉的列对每一行仍然成立而json一列都不折)),
         new("`yes` rows hide by default (a line says how many)",
             nameof(GrammarTests.默认值行被拿掉时当场说清有多少条)),
-        new("`--path` always shows a named field",
+        new("`--path-contains` always shows a named field",
             nameof(GrammarTests.点了名的字段不因为是默认值而消失)),
         new("`unknown` = type not constructible",
             nameof(GrammarTests.没法比的那一档照常显示且不与被改过的同形)),
@@ -135,7 +129,15 @@ public class SkillPromiseTests
             nameof(code的匹配数与文件数是两个数)),
         new("pointed at a data question it says so",
             nameof(code的零结果指路回快照而不是硬说没有)),
-        new("A `--files` glob containing `/` starts at the tree name",
+        // 2026-08-03 R10-N1:改写过一次。原文「starts at the tree name」在**夹具上**是完整的
+        // (夹具树是 vanilla/Verse/…),在**真实盘上**不是 —— 真实布局是
+        // <packageId>/<assembly>/<命名空间目录>/<file>.cs,树名之后还有一层 assembly。
+        // 盲代理读了原文后写出 'vanilla/RimWorld/**/*.cs' 落空,多绕两轮;而它比没读手册的
+        // 那一组还慢。**文档照夹具写、闸照夹具立,两边一致地错** —— 这是本条的真成因,
+        // 不是措辞问题。CLI 的落空消息用的也是同一个手写例子,同样缺那一层。
+        // pin 只钉闸证得动的那半句(落空时讲清 glob 是整条相对路径);assembly 那一层是
+        // **实测断言、本夹具证不了**(加一层会动一批字节级基线),复核方式记在 Docs/11。
+        new("is matched against the whole path",
             nameof(files的glob语义在打不中时当场讲清)),
 
         // ---- read ----
@@ -175,7 +177,7 @@ public class SkillPromiseTests
             "零结果按算得出来的落点分流"),
         // 同一条规矩在 find 上的样子。第二句是**不给死路**那一半:算出来是个 def 名不等于
         // 有人引用它,指一条必然空手的命令与不指路一样贵。
-        new("given a single word that is not a field path, `find` works out what that word actually is",
+        new("given a single word that is not a field path, `where` works out what that word actually is",
             nameof(GrammarTests.find给一个词落空时要说破那个词其实是什么)),
         new("it says so instead of handing back a query that would come back empty",
             nameof(GrammarTests.find给一个词落空时要说破那个词其实是什么)),
@@ -201,10 +203,10 @@ public class SkillPromiseTests
         new("says where the def was declared, not who wrote the value you asked",
             nameof(GrammarTests.skill那几条可实测的默认与口径逐条对得上)),
         // 恒真的东西长得与铁证一模一样,而这一句是唯一说破它的地方。
-        new("is no evidence at all for a field the whole def type carries",
-            nameof(GrammarTests.抽象节点也给得出same_value并摆出恒真那一档的分母)),
-        new("counts against the most common value under it, not against a value the node",
-            nameof(GrammarTests.抽象节点也给得出same_value并摆出恒真那一档的分母)),
+        // 同上一批退役(2026-08-03):`inherit --path-contains` 的证据读法整段从 SKILL.md 下架。
+        // `抽象节点也给得出same_value并摆出恒真那一档的分母` 断言的正是 CLI 印出
+        // `not one the node declares` 与 `The denominator for a full row` —— 读法与它解释的
+        // 那张表同时到场,比在文档里等着被读到更靠谱。
         new("`--exact-path` pins the whole path, with `[]` standing for any index",
             nameof(GrammarTests.点路径的后缀不在点上对齐而exactpath钉得住)),
         new("on a Core-only snapshot, `1 def` means one in Core",
@@ -282,7 +284,7 @@ public class SkillPromiseTests
         string[][] queries =
         [
             ["search", "shield"], ["list", "ThingDef"], ["get", "Apparel_ShieldBelt"],
-            ["find", "compClass", "RimWorld.CompShield"], ["values", "thingClass"],
+            ["where", "compClass", "RimWorld.CompShield"], ["values", "thingClass"],
             ["fields", "ThingDef"], ["list"], ["mods"], ["inherit", "BaseBullet"],
             // 界面文案那一层此前不在这份名单里,而它恰是全仓唯一一处把分页句 Add 在表
             // 之后的命令 —— 名单漏了谁,谁就可以一直反着来。
@@ -366,7 +368,7 @@ public class SkillPromiseTests
     [Fact]
     public void 过滤与截断在json里是两种kind()
     {
-        var (filtered, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--path", "comps", "--json");
+        var (filtered, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--path-contains", "comps", "--json");
         Assert.Contains("\"kind\": \"filter\"", filtered, StringComparison.Ordinal);
         Assert.DoesNotContain("\"kind\": \"truncation\"", filtered, StringComparison.Ordinal);
 
@@ -387,7 +389,7 @@ public class SkillPromiseTests
     [Fact]
     public void class字段上的yes与no同时是常态()
     {
-        var (json, _, _) = Fixture.Run("find", "compClass", "--limit", "all", "--json");
+        var (json, _, _) = Fixture.Run("where", "compClass", "--limit", "all", "--json");
         using var doc = System.Text.Json.JsonDocument.Parse(json);
         var defaults = doc.RootElement.GetProperty("matches").EnumerateArray()
             .Select(r => r.GetProperty("code_default").GetString())
@@ -445,7 +447,7 @@ public class SkillPromiseTests
         Assert.DoesNotContain("Apparel_ShieldBelt", byClass, StringComparison.Ordinal);
         // 只说「没有」不够:得把该去哪儿问说出来,而且要带本次的查询词 ——
         // 一句 'find compClass <Class>' 的占位符版本帮不到拿着零结果的人。
-        Assert.Contains("find compClass CompShield", byClass, StringComparison.Ordinal);
+        Assert.Contains("where compClass CompShield", byClass, StringComparison.Ordinal);
         // 点的是它真正待着的那一层:作为字段值,不是作为 def。
         Assert.Contains("field value", byClass, StringComparison.Ordinal);
 
@@ -510,7 +512,7 @@ public class SkillPromiseTests
         Assert.Contains("not a literal", stdout, StringComparison.Ordinal);
 
         // 关得掉,而且关掉之后一个字都不多说。
-        var (off, _, _) = Fixture.Run("code-search", "Translate", "--no-ui-text");
+        var (off, _, _) = Fixture.Run("code-search", "Translate", "--no-resolve-keys");
         Assert.DoesNotContain("ui_text", off, StringComparison.Ordinal);
         Assert.DoesNotContain("没有电力", off, StringComparison.Ordinal);
     }
@@ -551,18 +553,18 @@ public class SkillPromiseTests
         var (stdout, _, code) = Fixture.Run("code-search", "zzznosuchsymbolanywhere");
         Assert.Equal(1, code);
         Assert.Contains("rimsearcher search", stdout, StringComparison.Ordinal);
-        Assert.Contains("rimsearcher find", stdout, StringComparison.Ordinal);
+        Assert.Contains("rimsearcher where", stdout, StringComparison.Ordinal);
         Assert.Contains("XML", stdout, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// --files 的 glob 是相对反编译根匹配的,于是带 `/` 的写法必须以树名打头。这条规则
+    /// --file-glob 的 glob 是相对反编译根匹配的,于是带 `/` 的写法必须以树名打头。这条规则
     /// 只写在文档里没用 —— 打不中的那一刻它必须在输出里,那才是有人需要它的时候。
     /// </summary>
     [Fact]
     public void files的glob语义在打不中时当场讲清()
     {
-        var (stdout, _, code) = Fixture.Run("code-search", "class", "--files", "zzznotree/**");
+        var (stdout, _, code) = Fixture.Run("code-search", "class", "--file-glob", "zzznotree/**");
         Assert.Equal(1, code);
         Assert.Contains("relative to the decompiled root", stdout, StringComparison.Ordinal);
         Assert.Contains("sources list", stdout, StringComparison.Ordinal);
@@ -617,7 +619,7 @@ public class SkillPromiseTests
             "The --json paragraph names keys that no command declares: " + string.Join(", ", invented));
 
         // 反向:SKILL 教的那几条命令,声明的每个键都得在这段话里。
-        string[] taught = ["search", "list", "get", "find", "values", "fields", "mods", "inherit",
+        string[] taught = ["search", "list", "get", "where", "values", "fields", "mods", "inherit",
                            "keyed", "read", "code-search"];
         var undocumented = registry.Specs
             .Where(s => taught.Contains(s.Name))

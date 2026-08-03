@@ -1,0 +1,10 @@
+$ rimsearcher read vanilla/Verse/Outline.cs --limit 4
+exit 0
+--- stdout ---
+vanilla/Verse/Outline.cs, lines 1-4 of 34. --limit stopped it 30 lines short of what --lines asked for. Pass --lines 5+4 for the next page. Reaching the end that way takes 8 pages at this size; --outline instead lists the file's declarations with each one's line range, to pass back to --lines.
+
+     1  using System;
+     2
+     3  namespace Verse
+     4  {
+--- stderr ---

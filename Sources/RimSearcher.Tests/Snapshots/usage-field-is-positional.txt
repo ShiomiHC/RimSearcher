@@ -1,6 +1,6 @@
-$ rimsearcher find --field compClass
+$ rimsearcher where --field compClass
 exit 2
 --- stdout ---
 --- stderr ---
-Unknown option '--field'. On 'find' it is an argument rather than an option: 'rimsearcher find compClass <value>'.
-Run 'rimsearcher find --help' to see what this command accepts.
+Unknown option '--field'. On 'where' it is an argument rather than an option: 'rimsearcher where compClass <value>'.
+Run 'rimsearcher where --help' to see what this command accepts.

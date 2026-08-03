@@ -1,0 +1,5 @@
+$ rimsearcher find compClass RimWorld.CompShield
+exit 2
+--- stdout ---
+--- stderr ---
+'find' was renamed to 'where' and is no longer accepted. Its arguments are unchanged, so the same call works with 'where' in its place.

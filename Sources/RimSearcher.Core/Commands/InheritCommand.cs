@@ -45,12 +45,16 @@ public sealed class InheritCommand : Command
             CommonOptions.Limit("children"),
             new OptionSpec
             {
-                Name = "path",
-                Aliases = ["field", "fieldPath"],
+                // 与 get/fields 同名同义:这个开关的「限定到含该文本的字段路径」这一半,
+                // R11 的 12 份识别测全对。错的是另一半 —— 它拿这个筛选去做什么(横向数
+                // 兄弟 def,不是纵向追溯本 def 的来源)。那一半是操作本身要重新设计,
+                // 不在本批,所以这里只跟着改名。
+                Name = "path-contains",
+                Aliases = ["filter", "grep", "field-contains", "path-filter", "field", "fieldPath"],
                 Placeholder = "<text>",
                 Help = "Ask which layer a field comes from. For every layer in the chain, count the other defs " +
                        "descending from it that carry a field path containing this text, and how many of those " +
-                       "carry the same value. Matching is the substring match 'get --path' uses, so the same " +
+                       "carry the same value. Matching is the substring match 'get --path-contains' uses, so the same " +
                        "word selects the same fields in both commands.",
             },
         ],
@@ -59,7 +63,7 @@ public sealed class InheritCommand : Command
             "rimsearcher inherit BaseBullet",
             "rimsearcher inherit Bullet_Revolver",
             "rimsearcher inherit BaseHumanlike --limit all",
-            "rimsearcher inherit Bullet_Revolver --path damageAmountBase",
+            "rimsearcher inherit Bullet_Revolver --path-contains damageAmountBase",
         ],
         JsonKeys =
         [
@@ -68,7 +72,7 @@ public sealed class InheritCommand : Command
                 Key = "nodes",
                 Rows = true,
                 What = "one object per XML node answering to the name — each with 'node' (identity and patch " +
-                       "count), 'ancestors', 'children' when it has any, and 'witnesses' when --path is given.",
+                       "count), 'ancestors', 'children' when it has any, and 'witnesses' when --path-contains is given.",
             },
         ],
     };
@@ -116,7 +120,7 @@ public sealed class InheritCommand : Command
         }
 
         var limit = ctx.Limit();
-        var pathFilter = ctx.Args.Value("path");
+        var pathFilter = ctx.Args.Value("path-contains");
 
         foreach (var node in nodes)
         {
@@ -320,7 +324,7 @@ public sealed class InheritCommand : Command
                     ctx.Report.Notice(NoticeKind.Boundary,
                         $"'{self.DefName}' carries {Tally.Complete(values.Count).Render("value")} matching " +
                         $"'{pathFilter}' ({NameList.Render(values.Select(Quote).ToList(), 4)}), so there is no " +
-                        "single value to compare against. Narrow --path until one is left.");
+                        "single value to compare against. Narrow --path-contains until one is left.");
                 }
             }
         }
@@ -402,7 +406,7 @@ public sealed class InheritCommand : Command
             "this field to many defs is indistinguishable from a layer declaring it.");
 
         // with_path 追平 other_defs,对一个**整个类型都带**的字段是恒真的 —— 而恒真的东西
-        // 长得与铁证一模一样。第九轮盲测的落点:`inherit BasePawn --path tickerType` 回
+        // 长得与铁证一模一样。第九轮盲测的落点:`inherit BasePawn --path-contains tickerType` 回
         // 165 of 165,而全快照三千多个 ThingDef 每一个都带这条路径。分母摆出来,那 165
         // 才有得比。只在真追平了的时候说 —— 没追平的表本来就没在暗示什么。
         if (node.DefType is { Length: > 0 } &&

@@ -1,4 +1,4 @@
-$ rimsearcher inherit BaseProjectile --path soundDrop
+$ rimsearcher inherit BaseProjectile --path-contains soundDrop
 exit 0
 --- stdout ---
 name           BaseProjectile

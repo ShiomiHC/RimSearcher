@@ -1,5 +1,5 @@
-$ rimsearcher code-search public --files Verse/ThingComp.cs
+$ rimsearcher code-search public --file-glob Verse/ThingComp.cs
 exit 1
 --- stdout ---
-No file matched --files 'Verse/ThingComp.cs', so nothing was read at all. A glob containing '/' is matched against the whole path relative to the decompiled root, which begins with the source tree's name: 'vanilla/**/Widgets.cs', not 'Verse/Widgets.cs'. Without a '/' it matches the file name alone at any depth. 'rimsearcher sources list' names the trees.
+No file matched --file-glob 'Verse/ThingComp.cs', so nothing was read at all. A glob containing '/' is matched against the whole path relative to the decompiled root, which begins with the source tree's name: 'vanilla/**/Widgets.cs', not 'Verse/Widgets.cs'. Without a '/' it matches the file name alone at any depth. 'rimsearcher sources list' names the trees.
 --- stderr ---

@@ -1,4 +1,4 @@
-$ rimsearcher keyed --placeholders --offset 9
+$ rimsearcher keyed --empty-translation --offset 9
 exit 1
 --- stdout ---
 --offset 9 is past the end: 2 keyed translations in this snapshot are placeholders.

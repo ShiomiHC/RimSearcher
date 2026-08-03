@@ -67,7 +67,7 @@ internal static class NameLookup
             }
         }
 
-        // (2) 继承层。抽象父节点从头到尾没有 Def 实例,search / get / find 三条路都够不着,
+        // (2) 继承层。抽象父节点从头到尾没有 Def 实例,search / get / where 三条路都够不着,
         //     只有 inherit 走的那张表里有。
         var node = ctx.Db.NodesNamed(name).FirstOrDefault();
         if (node is not null)
@@ -102,7 +102,7 @@ internal static class NameLookup
                 (holders.Count > 3
                     ? $" and {Output.Tally.Complete(holders.Count - 3).Render("def type")} more"
                     : "") +
-                $"; the query is 'rimsearcher list {holders[0].DefType} --class {name}'.");
+                $"; the query is 'rimsearcher list {holders[0].DefType} --own-class {name}'.");
         }
 
         // (5) 界面文案。上面每一档判的是「这个**名字**是什么」,这一档判的是「这句**话**
@@ -138,7 +138,7 @@ internal static class NameLookup
                           $"'rimsearcher code-search \"\\\"{distinct[0]}\\\"\"' finds the code that prints " +
                           "that key."
                         // 不说「同一句话来自多个 key」:FTS 是**分词**匹配,命中的几行未必
-                        // 整句相等(`keyed Milira --placeholders` 命中的两行是 menu 与 button
+                        // 整句相等(`keyed Milira --empty-translation` 命中的两行是 menu 与 button
                         // 两句不同的话)。说得住的只有「这些词出现在几个 key 的文案里」。
                         : $"Those words appear in the text of more than one key, so which key is the one you " +
                           $"are after is not decided here: 'rimsearcher keyed {name}' lists them with the key " +
@@ -167,15 +167,15 @@ internal static class NameLookup
             var tail = best.Path.Contains('.') ? best.Path[(best.Path.LastIndexOf('.') + 1)..] : best.Path;
             return new Sighting(Where.FieldValue,
                 // 不在这里报 def 数:PathsWithValue 按 (path, def_type) 分组,而 comps[2] 与
-                // comps[5] 是两组,报出来的「1 def」会被读成「全快照只有一个」。计数交给 find,
+                // comps[5] 是两组,报出来的「1 def」会被读成「全快照只有一个」。计数交给 where,
                 // 它数的是对的那个东西。
                 $"'{name}' is not a def name, but it appears as a field value: '{best.Path}' holds " +
                 $"'{best.Sample}'" +
                 (holdingTotal > 1
                     ? $", and it turns up under {holdingTotal} path and def-type combinations in all"
                     : "") +
-                $". 'rimsearcher find {tail} {name}' lists the defs that use it, and " +
-                $"'rimsearcher find --value {name}' covers every path at once.");
+                $". 'rimsearcher where {tail} {name}' lists the defs that use it, and " +
+                $"'rimsearcher where --value {name}' covers every path at once.");
         }
 
         // (8) mod,报的是外号(输入 `Milira`,packageId 是 Ancot.MiliraRace)。

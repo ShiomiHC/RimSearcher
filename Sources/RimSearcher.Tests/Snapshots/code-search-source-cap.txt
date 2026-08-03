@@ -2,7 +2,7 @@ $ rimsearcher code-search public --source vanilla --max-files 1
 exit 0
 --- stdout ---
 at least 1 match in 1 file; 1 of 7 files read in the 'vanilla' tree alone (1 of 3 source trees on disk); drop --source to search them all.
-The scan stopped after reading 1 file, so this answer is partial rather than complete. 'vanilla' was read only in part: 1 of 7 files. Raise the cap with --max-files all, or narrow with --files <glob>.
+The scan stopped after reading 1 file, so this answer is partial rather than complete. 'vanilla' was read only in part: 1 of 7 files. Raise the cap with --max-files all, or narrow with --file-glob <glob>.
 
 vanilla/RimWorld/CompShield.cs  1 match
 3: 	public class CompShield : ThingComp

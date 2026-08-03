@@ -92,7 +92,7 @@ public static class Fixture
                 // 第四份:导出器 0.4.0,**单字段上的 Class= 也量过了**那一档。
                 // 主 fixture 停在 0.2.0(只量列表元素)、other 停在 0.1.0(一点没量),
                 // 三档各有一个落点 —— 而这三档说的话必须不一样:中间那档对
-                // `find Class <单字段上的类>` 回的零,与「量过了、没人用」逐字同形。
+                // `where Class <单字段上的类>` 回的零,与「量过了、没人用」逐字同形。
                 var modernExport = Path.Combine(dir, "modern" + IntermediateFormat.FileExtension);
                 WriteModernExport(modernExport);
                 new SnapshotImporter().Import(modernExport, Path.Combine(SnapshotDir, "modern.db"));
@@ -160,9 +160,9 @@ public static class Fixture
     /// 导出器 0.4.0 那一档的语料 —— **单字段上的 <c>Class=</c>**。
     ///
     /// 形状照抄游戏里的 GenStepDef:def 自己的 class 全是 <c>Verse.GenStepDef</c>(恒定量,
-    /// 于是 <c>--class</c> 在这个类型上区分不了任何东西),真正跑哪段代码写在 <c>genStep</c>
+    /// 于是 <c>--own-class</c> 在这个类型上区分不了任何东西),真正跑哪段代码写在 <c>genStep</c>
     /// 那**一个字段**的 Class= 里。旧判据(路径以 <c>]</c> 收尾)对它一条都发不出,
-    /// 而 <c>list GenStepDef --class X</c> 回的那句「No def of type GenStepDef has class 'X'」
+    /// 而 <c>list GenStepDef --own-class X</c> 回的那句「No def of type GenStepDef has class 'X'」
     /// 读起来正是「没有 def 用这个类」。
     ///
     /// 两个 def:一个写了 Class=(多态),一个没写(只有普通字段) —— 「这个类没人用」
@@ -252,7 +252,7 @@ public static class Fixture
             => DefAs(type, "Verse." + type, name, label, mod, file, generated, truncated, fields);
 
         // 运行时 class 与 def_type 不是一回事:游戏只给「祖先链上没有非抽象 Def」的类型建库,
-        // 所以子类型的 def 全落在基类桶里。语料里必须有这么一桶,否则 list --class 那条路没人守。
+        // 所以子类型的 def 全落在基类桶里。语料里必须有这么一桶,否则 list --own-class 那条路没人守。
         void DefAs(string type, string cls, string name, string? label, string mod, string file, bool generated,
                    int truncated, params (string Path, string Value, int Default)[] fields)
         {
@@ -293,7 +293,7 @@ public static class Fixture
             ("statBases[0].stat", "MarketValue", DefaultState.Differs),
             ("statBases[0].value", "120", DefaultState.Differs),
             // 名值对把**字段名搬进值那一列**:按 'energy' 筛路径会命中 comps 那两条
-            // (含它、但不是整段),而玩家真正要的那个数坐在这里的值上,--path 够不着。
+            // (含它、但不是整段),而玩家真正要的那个数坐在这里的值上,--path-contains 够不着。
             // 与游戏里的形状一致 —— EnergyShieldRechargeRate 是个 stat 名,energyMax 是 comp 字段。
             ("statBases[1].stat", "EnergyShieldRechargeRate", DefaultState.Differs),
             ("statBases[1].value", "0.13", DefaultState.Differs),
@@ -303,7 +303,7 @@ public static class Fixture
             ("modContentPack.name", "Core", DefaultState.Differs));
 
         // burstCount 的形状:**字段名与提问一字不差,值却是代码默认值** ——
-        // 「--path 点了名的东西不许被过滤掉」那道闸的落点。
+        // 「--path-contains 点了名的东西不许被过滤掉」那道闸的落点。
         // speed 取 Unknown —— 三态里最容易被顺手并进某一边的那个。
         Def("ThingDef", "Bullet_Revolver", "revolver bullet", "ludeon.rimworld", "Projectiles_Guns.xml", false, 3,
             ("soundImpactDefault", "BulletImpact_Ground", DefaultState.Differs),
@@ -324,7 +324,7 @@ public static class Fixture
             ("thingClass", "Verse.ThingWithComps", DefaultState.Differs),
             ("ingestible.foodType", "Meat", DefaultState.Differs),
             // 值是 Standard_Pickup 的**超串**,而它坐在一条别的 def 都没有的路径上 ——
-            // 于是 `find --value Standard_Pickup` 分得出「精确的两条路径」与「只含它的
+            // 于是 `where --value Standard_Pickup` 分得出「精确的两条路径」与「只含它的
             // 那一条」,而那正是 defs 列口径说明唯一的落点。
             ("ingestible.ingestSound", "Standard_PickupFood", DefaultState.Differs));
 
@@ -342,7 +342,7 @@ public static class Fixture
             ("soundInteract", "Standard_Pickup", DefaultState.Differs),
             ("thingClass", "RimWorld.Apparel", DefaultState.Differs),
             // 唯一一条 def 指向 def 的字段。没有它,「这个 def 名被谁引用着」整份语料里无处可验,
-            // 而那正是 find 的 Examples 写着的问法(`find defaultProjectile Bullet_Revolver`)。
+            // 而那正是 find 的 Examples 写着的问法(`where defaultProjectile Bullet_Revolver`)。
             ("verbs[0].defaultProjectile", "Bullet_Revolver", DefaultState.Differs),
             // 列表元素的运行时类型(导出器 0.2.0 起才发这一维)。这是主快照里唯一一条
             // `.Class`,而 other 那份标着 0.1.0 —— 「量过了、没人用」与「这份快照根本
@@ -380,7 +380,7 @@ public static class Fixture
         // ① label 与上面那个 ThingDef Firefoam **逐字相同、def 类型也相同**(真数据里
         //    TrapSpringChance 与 PawnTrapSpringChance 的简中 label 都是「陷阱触发率」)。
         //    同名跨类型的那一对(Firefoam 自己)在表里当场分得开,不是同一件事,所以要各一份。
-        // ② statFactors 这一条让 `find stat MarketValue` 横跨两种路径形状 —— 大批 statBases
+        // ② statFactors 这一条让 `where stat MarketValue` 横跨两种路径形状 —— 大批 statBases
         //    行里混着一行 statFactors,拿它做集合差的人不会逐行核对 path。
         Def("ThingDef", "FoamPopper", "firefoam", "ludeon.rimworld", "Buildings_Special.xml", false, 0,
             ("soundImpactDefault", "BulletImpact_Ground", DefaultState.Differs),
@@ -503,7 +503,7 @@ public static class Fixture
 
         // 过线的填充批。两道闸共用,而两道都**必须**有一批过 Limits.MaxLimit(2000)的语料:
         //   `--limit all` 解除行上限 —— 语料不过线,「夹到 2000」与「全给」印出来一模一样;
-        //   `--placeholders` 在 SQL 里筛 —— 占位排在这批的最末一条,于是「取完这一页再筛」
+        //   `--empty-translation` 在 SQL 里筛 —— 占位排在这批的最末一条,于是「取完这一页再筛」
         //     会拿着第一页的零去否定全部 2100 条。
         // 全部共用 original 里的 filler 一词,与上面五条的查询词不相交(基线不受牵连)。
         for (var i = 0; i < 2100; i++)

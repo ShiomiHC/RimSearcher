@@ -1,7 +1,7 @@
 $ rimsearcher read vanilla/Verse/Outline.cs --lines 7-12
 exit 0
 --- stdout ---
-vanilla/Verse/Outline.cs, lines 7-12 of 34. Pass --lines 13+6 for the next page.
+vanilla/Verse/Outline.cs, lines 7-12 of 34. Pass --lines 13+6 for the next page. Reaching the end that way takes 4 pages at this size; --outline instead lists the file's declarations with each one's line range, to pass back to --lines.
 
      7  	public class Outer
      8  	{

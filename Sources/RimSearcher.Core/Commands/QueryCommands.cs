@@ -147,7 +147,7 @@ public sealed class SearchCommand : Command
                 sighting?.Sentence
                 ?? (looksLikeClass
                     // 嵌套 `Class=` **是**被索引的(导出器 0.2.0 起),所以不许说「索引不到」——
-                    // 那句话会把 `find Class` 的零判成「工具看不见」,而不是「确实没有」。
+                    // 那句话会把 `where Class` 的零判成「工具看不见」,而不是「确实没有」。
                     // 覆盖到哪一层随快照的导出器版本变,所以念 NestedClassLine 那个唯一产地,
                     // 不在这里另写一句会过时的。
                     ? $"Nothing in this snapshot is called that under any other guise either — no def type, " +
@@ -238,9 +238,13 @@ public sealed class GetCommand : Command
             new OptionSpec
             {
                 // 没有它,在几百字段的 def 里找一条路径只能 --limit all 再 grep 输出。
-                Name = "path",
+                Name = "path-contains",
                 Arity = Arity.Multi,
-                Aliases = ["paths", "field", "field-path", "only", "filter", "grep"],
+                // 主名与别名各由一头的实测定:识别测 path-contains 10/10(危险的两种误读
+                // ——读成文件系统路径、读成按值匹配——各零例),而产出式里没人写得出它,
+                // 24/24 伸手去抓的是 filter。所以 filter 留作别名接住伸手。
+                // 光叫 path 两头都不占:产出式 0/24,而它与文件路径撞词。
+                Aliases = ["filter", "grep", "field-contains", "path-filter", "field", "field-path", "only"],
                 Placeholder = "<text>",
                 Help = "Only show field paths containing this text. Repeat it to widen the selection.",
                 Narrows = true,
@@ -257,20 +261,13 @@ public sealed class GetCommand : Command
                 Help = "Also list fields whose value is the one a fresh instance of the declaring type already "
                      + "carries. Those rows are left out by default because they are the ones most often read as "
                      + "something an author chose, when the snapshot cannot tell whether anything set them at all. "
-                     + "How many were left out is always printed, and --path shows a named field either way.",
-            },
-            new OptionSpec
-            {
-                Name = "fields",
-                Arity = Arity.Flag,
-                Aliases = ["with-fields", "show-fields"],
-                Help = "Deprecated no-op: fields are always shown. Kept so that scripts that pass it keep working.",
+                     + "How many were left out is always printed, and --path-contains shows a named field either way.",
             },
         ],
         Examples =
         [
             "rimsearcher get Apparel_ShieldBelt",
-            "rimsearcher get Apparel_ShieldBelt --path statBases",
+            "rimsearcher get Apparel_ShieldBelt --path-contains statBases",
             "rimsearcher get Bullet_Revolver --limit all",
             "rimsearcher get Bullet_Revolver --defaults",
         ],
@@ -335,7 +332,7 @@ public sealed class GetCommand : Command
         }
 
         var limit = ctx.Limit(fallback: Limits.DefaultFieldsPerDef);
-        var paths = ctx.Args.Values("path");
+        var paths = ctx.Args.Values("path-contains");
 
         // 撞名这件事排在**全部段落之前**。此前它在最后:六个同名 def 各带一张完整字段表,
         // 两百行之后才说「这里其实有六个」,而第一段开口可以是一句否定
@@ -369,7 +366,7 @@ public sealed class GetCommand : Command
             // 输出写的解析器在下一次撞名时静默拿到别的东西。
             ctx.Report.Item("defs");
 
-            // --path 说的是「这次我只要这些」,而 description 动辄几百字,会把它淹掉。
+            // --path-contains 说的是「这次我只要这些」,而 description 动辄几百字,会把它淹掉。
             var pairs = new List<KeyValuePair<string, object?>>
             {
                 new("def_name", def.DefName),
@@ -401,7 +398,7 @@ public sealed class GetCommand : Command
             ctx.Report.Detail("def", pairs);
 
             // 默认不列「与 C# 声明默认值无从区分」的那些行。两个例外都指向同一条:
-            // **调用方点了名的东西不许消失** —— --path 已经点名了要哪些路径,--defaults
+            // **调用方点了名的东西不许消失** —— --path-contains 已经点名了要哪些路径,--defaults
             // 是明说要全量。于是过滤只发生在什么都没点名的那一次。
             var withDefaults = ctx.Args.Flag("defaults") || paths.Count > 0;
             var (fields, matched, total, defaulted, matchedPaths) =
@@ -420,7 +417,7 @@ public sealed class GetCommand : Command
                 // 这两件事在输出上长得一样,所以必须由声明区把它们分开。
                 if (matched == 0)
                 {
-                    // 第二种成因:给进来的文本不是路径而是**值**(`--path TrapSpringChance`
+                    // 第二种成因:给进来的文本不是路径而是**值**(`--path-contains TrapSpringChance`
                     // 是 statBases[6].stat 装着的那个值)。这一档算得出来,就算出来再说。
                     var asValue = paths.Where(t => ctx.Db.ValueHits(def.Id, t) > 0).ToList();
 
@@ -433,36 +430,36 @@ public sealed class GetCommand : Command
 
                     ctx.Report.Notice(NoticeKind.Boundary,
                         $"No field path{whose} contains {PathFilterText.Say(paths)}; the def does have " +
-                        $"{Tally.Complete(total).Render("field")}. Drop --path to see them." +
+                        $"{Tally.Complete(total).Render("field")}. Drop --path-contains to see them." +
                         // 动词不进登记处:冒号在前、名单在后,主句就没有随数量变形的成分。
                         (asValue.Count > 0
                             ? " Found on this def as a field's value rather than anywhere in a path: " +
-                              $"{PathFilterText.Say(asValue)}. 'rimsearcher find --value {asValue[0]}' names every path holding it."
+                              $"{PathFilterText.Say(asValue)}. 'rimsearcher where --value {asValue[0]}' names every path holding it."
                             : "") +
                         (kin > 0
                             ? $" Other defs of this type do have it: {Tally.Complete(kin).Render("def")} across " +
                               $"{Tally.Complete(kinPaths).Render("field path")}. So it is missing from this def, " +
                               $"not from {def.DefType} — a field that is null on a def never entered the index. " +
-                              $"'rimsearcher fields {def.DefType} --path {paths[0]}' names those paths."
+                              $"'rimsearcher fields {def.DefType} --path-contains {paths[0]}' names those paths."
                             : ""));
 
                     // 一个同类都没有,而那段文本也不是个值:此时「索引里没有」与「字段不存在」
                     // 真的分不开,得由那段话去分。上面两支各自已经解释过了,不再挂一遍。
                     if (kin == 0 && asValue.Count == 0)
-                        Completeness.NoteIndexHoldsValuesOnly(ctx);
+                        Completeness.NoteIndexHoldsValuesOnly(ctx, paths[0]);
                 }
                 else
                 {
                     // 这是调用方自己要的过滤,不是截断:机器侧靠 kind 分类,混用会让
                     // 「我主动只要 driverClass」被扫 notes 的下一位读成「结果不完整」。
                     // 动词不进登记处,计数一律挪到冒号后。
-                    // 子串匹配不留痕:`--path soundImpact` 只回 `soundImpactDefault` 这个语义
+                    // 子串匹配不留痕:`--path-contains soundImpact` 只回 `soundImpactDefault` 这个语义
                     // 相反的字段,所以要说破「整段一次都没命中」。整段命中的数在**截断之前**
                     // 数(matchedPaths 不受 --limit 影响),否则换个 --limit 就换一句结论。
                     var whole = matchedPaths.Count(x => PathSegments.IsWholeSegment(x, paths));
 
                     // 第三种可能,而那两句只穷举了两种:名值对结构(statBases[N].stat = MarketValue)
-                    // 把**字段的名字搬进了值那一列**,--path 结构上够不着它。于是「命中了几条、
+                    // 把**字段的名字搬进了值那一列**,--path-contains 结构上够不着它。于是「命中了几条、
                     // 但没一条是整段」这张表干净、完整,答的却是另一个问题。这一档查得出来,
                     // 就查出来 —— 与完全没命中那支同一个探针。
                     var alsoValue = whole == 0
@@ -485,8 +482,8 @@ public sealed class GetCommand : Command
                                   ? " A third reading is in play here: this def also carries " +
                                     $"{PathFilterText.Say(alsoValue)} as a field's *value*, not in any path. " +
                                     "A name/value pair puts the field's own name in the value column " +
-                                    "(statBases[N].stat = MarketValue), where --path cannot reach it — " +
-                                    $"'rimsearcher find --value {alsoValue[0]}' goes at it from that side."
+                                    "(statBases[N].stat = MarketValue), where --path-contains cannot reach it — " +
+                                    $"'rimsearcher where --value {alsoValue[0]}' goes at it from that side."
                                   : "")
                             : whole < matched
                                 ? $" Whole path segment: {Tally.Complete(whole).Render("field")}; " +
@@ -496,7 +493,7 @@ public sealed class GetCommand : Command
                         ctx.Report.Notice(NoticeKind.Truncation,
                             $"Showing {Tally.Of(fields.Count, matched).Render("field")}; raise --limit for the rest.");
 
-                    // --path 是调用方自己收窄的,而收窄之后同一块里的其它字段就看不见了。
+                    // --path-contains 是调用方自己收窄的,而收窄之后同一块里的其它字段就看不见了。
                     Advisory.NoteAuthoredSiblings(ctx, fields.Where(f => f.Default != Contract.DefaultState.Same)
                                                              .Select(f => (def.DefName, def.Id, f.Path)));
                 }
@@ -528,7 +525,7 @@ public sealed class GetCommand : Command
                                                 .Distinct(StringComparer.Ordinal)
                                                 .Where(x => !shownIdx.Contains(x))
                                                 .ToList();
-                    // 「code_default 这一列是什么意思」与「--path 指名字段两边都看得见」
+                    // 「code_default 这一列是什么意思」与「--path-contains 指名字段两边都看得见」
                     // 都搬进了 SKILL.md —— 逐字不随查询变。**`--defaults` 不能跟着走**:
                     // 它是这条声明唯一的出路,少了它这句就只说「有 N 条你看不到」而不说
                     // 怎么看到。出路紧贴它召回的那个数,不隔一句挂在总数后面。
@@ -572,10 +569,10 @@ public sealed class GetCommand : Command
                 }).ToList());
 
             // 表之后:这句讲的是刚读过的那些行(措辞里就是 above)。
-            // --path 那条分支同样要说 —— 按 path 收窄恰恰是最容易只盯着一行读的用法。
+            // --path-contains 那条分支同样要说 —— 按 path 收窄恰恰是最容易只盯着一行读的用法。
             Completeness.NoteWidelySharedValues(ctx, def, fields);
 
-            // --limit 与 --path 同样管译文表:不管的话,`get Muffalo --limit 5` 会吐出八十行,
+            // --limit 与 --path-contains 同样管译文表:不管的话,`get Muffalo --limit 5` 会吐出八十行,
             // 而字段表刚报的「一个都没匹配上」会被一批译文块淹掉。
             // 归属策略与 inherits_from 同源:def_type 对得上的归自己;对不上的一律不要;
             // def_type 为空的(语言文件收割,注入 key 不带类型)留着,但要自证它是按名字匹配的。
@@ -638,7 +635,7 @@ public sealed class GetCommand : Command
     }
 
 
-    /// <summary>--path 在场时把 description 压成一行:它不是被要的东西,却最占地方。</summary>
+    /// <summary>--path-contains 在场时把 description 压成一行:它不是被要的东西,却最占地方。</summary>
     private static string? Clip(string? text)
     {
         if (text is null || text.Length <= 80) return text;
@@ -650,8 +647,11 @@ public sealed class FindCommand : Command
 {
     public override CommandSpec Spec => new()
     {
-        Name = "find",
-        Aliases = ["by-field", "where"],
+        // 旧主名 find 不留作别名。它与 search 在英语里几乎同义,而两条命令做的是相反方向的
+        // 事(search 从名字找 def,这条从字段值反查 def),盲测里 33–42% 的动词误选就落在这
+        // 一对上。留着别名等于把那道选择题留着 —— 而 where 与 search 谁也不像谁。
+        Name = "where",
+        Aliases = ["by-field"],
         Summary = "Find defs by the value of a field. This is the reverse lookup: from a C# class or a value back to the defs that use it.",
         Remarks =
             "The field path is matched from the end, so 'compClass' finds 'comps[3].compClass' without you knowing " +
@@ -696,10 +696,10 @@ public sealed class FindCommand : Command
         ],
         Examples =
         [
-            "rimsearcher find compClass RimWorld.CompShield",
-            "rimsearcher find compClass --value RimWorld.CompShield",
-            "rimsearcher find defaultProjectile Bullet_Revolver",
-            "rimsearcher find --value World/WorldObjects/Expanding",
+            "rimsearcher where compClass RimWorld.CompShield",
+            "rimsearcher where compClass --value RimWorld.CompShield",
+            "rimsearcher where defaultProjectile Bullet_Revolver",
+            "rimsearcher where --value World/WorldObjects/Expanding",
         ],
         // 这条命令的两种问法产出两种行,所以键名也是两个 —— 同一个键装两种形状,
         // 消费方读到的字段会随它没传过的参数变,比多一个键危险得多。
@@ -731,7 +731,7 @@ public sealed class FindCommand : Command
 
         var path = ctx.Args.Positional(0);
 
-        // 空串**不是**一个值。此前它被当成「没给 --value」,于是 `find <path> --value ""`
+        // 空串**不是**一个值。此前它被当成「没给 --value」,于是 `where <path> --value ""`
         // 静默退化成「列出所有带这个字段的 def」—— 一张长得和合法答案一模一样的表,
         // 而读的人问的是「哪些 def 把它设成了空」。两种写法各自的含义当场说清:
         // 「没设过」在这套索引里不是一个可查的值(null 根本不进索引)。
@@ -739,19 +739,19 @@ public sealed class FindCommand : Command
             throw new CliUsageException(
                 "--value was given as an empty string, which is not a value to look for. " +
                 (path is null
-                    ? "Pass the text to look for ('rimsearcher find --value CompShield')."
-                    : $"To list every def that has the field, drop it ('rimsearcher find {path}'); " +
-                      $"to look for a value, pass one ('rimsearcher find {path} <value>'). ") +
+                    ? "Pass the text to look for ('rimsearcher where --value CompShield')."
+                    : $"To list every def that has the field, drop it ('rimsearcher where {path}'); " +
+                      $"to look for a value, pass one ('rimsearcher where {path} <value>'). ") +
                 "A field nobody set is not in the index at all, so no query here returns it.");
 
         var named = ctx.Args.Value("value") is { Length: > 0 } v ? v : null;
 
         // 分支判据是**给没给字段**,不是给没给 --value。--value 一律读作「要找的值」:
         // 有字段就是那个字段的值,没字段才退回搜遍所有字段。此前判据挂在 --value 上,于是
-        // `find --field X --value Y` 被拒掉 --field 之后,剩下的半条命令照样跑得通、
+        // `where --field X --value Y` 被拒掉 --field 之后,剩下的半条命令照样跑得通、
         // 答的却是另一个问题 —— 一个语法正常、语义全错、还长得像正常结果的东西。
         //
-        // 两张表互斥,按分支认领 —— 声明在命令头上的话,`find compClass X` 会白发一个
+        // 两张表互斥,按分支认领 —— 声明在命令头上的话,`where compClass X` 会白发一个
         // 空的 paths,而空数组在机器侧读作「查过了,没有」。
         if (path is null)
         {
@@ -759,8 +759,8 @@ public sealed class FindCommand : Command
             {
                 ctx.Report.Promises("matches");
                 ctx.Report.Notice(NoticeKind.NextStep,
-                    "'find' needs either a field path ('rimsearcher find compClass CompShield') or " +
-                    "--value to search every field ('rimsearcher find --value CompShield').");
+                    "'where' needs either a field path ('rimsearcher where compClass CompShield') or " +
+                    "--value to search every field ('rimsearcher where --value CompShield').");
                 return 2;
             }
             ctx.Report.Promises("paths");
@@ -773,8 +773,8 @@ public sealed class FindCommand : Command
         if (ctx.Args.Positional(1) is { } inline && named is not null && !string.Equals(inline, named, StringComparison.Ordinal))
             throw new CliUsageException(
                 $"The value is given twice and the two differ: '{inline}' as an argument and '{named}' as --value. " +
-                $"With a field path they mean the same thing — 'rimsearcher find {path} {inline}' is " +
-                $"'rimsearcher find {path} --value {inline}'. Drop one.");
+                $"With a field path they mean the same thing — 'rimsearcher where {path} {inline}' is " +
+                $"'rimsearcher where {path} --value {inline}'. Drop one.");
 
         var value = ctx.Args.Positional(1) ?? named;
         var exact = ctx.Args.Flag("exact");
@@ -825,7 +825,7 @@ public sealed class FindCommand : Command
             //   (1) 这个字段路径根本不存在 → 该去找字段叫什么
             //   (2) 字段存在,但这个值不在它的值域里 → 该去看值域
             //   (3) 名字是 def 的身份而不是字段(class / def_type / mod / source)→ 该换命令
-            // (1) 要先于近似项算:跳过它,`find zzznotafield somevalue` 会报
+            // (1) 要先于近似项算:跳过它,`where zzznotafield somevalue` 会报
             // 「No def has 'zzznotafield' set to ...」,一句预设了字段存在的话。
             var fieldExists = ctx.Db.FieldPathExists(pq, scope);
 
@@ -834,7 +834,7 @@ public sealed class FindCommand : Command
                 // identity 级的名字不是字段,却是最自然的猜法 —— 它们在 get 的输出里就摆着。
                 var identity = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["class"] = "'rimsearcher list <DefType> --class <ClassName>' filters by the def's own class",
+                    ["class"] = "'rimsearcher list <DefType> --own-class <ClassName>' filters by the def's own class",
                     ["def_type"] = "'rimsearcher list <DefType>' lists a whole type",
                     ["deftype"] = "'rimsearcher list <DefType>' lists a whole type",
                     ["mod"] = "'--scope <packageId>' restricts any query to one mod",
@@ -853,13 +853,13 @@ public sealed class FindCommand : Command
                     (scope.IsAll ? "" : $" within --scope {scope.Expression}") + ". " +
                     (identity.TryGetValue(path, out var hint)
                         ? $"'{path}' is part of a def's identity rather than one of its fields: {hint}."
-                        : "'rimsearcher fields <DefType> --path <text>' lists the paths that a def type actually has" +
+                        : "'rimsearcher fields <DefType> --path-contains <text>' lists the paths that a def type actually has" +
                           (value is not null
-                              ? $", and 'rimsearcher find --value {value}' finds which field holds that value."
+                              ? $", and 'rimsearcher where --value {value}' finds which field holds that value."
                               // 落点算出来了就不给这半句:下一句里同一条命令的参数是**填好的**。
                               : placed is not null
                                   ? "."
-                                  : ", and 'rimsearcher find --value <text>' finds which path holds a value " +
+                                  : ", and 'rimsearcher where --value <text>' finds which path holds a value " +
                                     "you already know.")));
 
                 // 算得出来的结论排在索引边界那句之前;边界那句照旧挂 —— 「它是个值」并不
@@ -867,10 +867,10 @@ public sealed class FindCommand : Command
                 if (placed is not null) ctx.Report.Notice(NoticeKind.NextStep, placed);
                 // identity 那一档不说:那时候答案已经给全了,再挂一句索引边界是纯噪音。
                 // `class` 是**唯一**的例外:导出器 0.2.0 起 `<path>.Class` 是一条真路径,
-                // 敲 `find Class X` 的人问的多半是嵌套子对象的类型,而 identity 那句只答了
+                // 敲 `where Class X` 的人问的多半是嵌套子对象的类型,而 identity 那句只答了
                 // 「def 自己的 class」。
                 if (!identity.ContainsKey(path) || string.Equals(path, "class", StringComparison.OrdinalIgnoreCase))
-                    Completeness.NoteIndexHoldsValuesOnly(ctx);
+                    Completeness.NoteIndexHoldsValuesOnly(ctx, path);
                 NoteElsewhere();
                 return 1;
             }
@@ -952,7 +952,7 @@ public sealed class FindCommand : Command
                       (alt is not null && close.FirstOrDefault(c => Tail(c).Equals(alt, StringComparison.OrdinalIgnoreCase)) is { } resolved
                           // 说破规律,并把**那条命令**一起给出来,不只是给一个名字。
                           ? " The XML writes Class=\"CompProperties_X\"; this field holds the resolved CompX — " +
-                            $"'rimsearcher find {path} {resolved}' is the query you meant."
+                            $"'rimsearcher where {path} {resolved}' is the query you meant."
                           // 「给了个名字」不等于「说了下一步」:那几条只是最近的,真值域没看过。
                           : $" 'rimsearcher values {path} --limit all' lists the whole value domain.")
                     // 「如果 X 是抽象基类」是一句**未经验证的猜测摆在输出位置**,读的人会当
@@ -979,7 +979,7 @@ public sealed class FindCommand : Command
             // 地方。留下的两档说的是另一回事:这份快照没量到那里,所以你手上这个零是假的。
             if (isClassPath && !ctx.Db.Meta.IndexesAllNestedClass)
                 ctx.Report.Notice(NoticeKind.Boundary, Completeness.NestedClassLine(ctx));
-            // 值侧是单语的 —— `find label "shield belt"` 在中文快照上必然空手,
+            // 值侧是单语的 —— `where label "shield belt"` 在中文快照上必然空手,
             // 而那个 def 就在文本索引里躺着。与上面的近似候选叠加,不替换。
             if (value is { Length: > 0 }) Advisory.NoteTextIndexHasIt(ctx, value);
             NoteElsewhere();
@@ -993,7 +993,7 @@ public sealed class FindCommand : Command
         }
 
         // 落点分流借 search 那一份产地(NameLookup),**除了 def 名这一档**:那九档的措辞
-        // 是给「这个名字不是 def」写的,而 `find Bullet_Revolver` 里它就是 def 名 ——
+        // 是给「这个名字不是 def」写的,而 `where Bullet_Revolver` 里它就是 def 名 ——
         // 照借会把一句假话摆在输出位置。def 名自己说,剩下八档原样复用。
         static string? Placed(CommandContext ctx, string name, Snapshot.ScopeFilter scope)
         {
@@ -1008,12 +1008,12 @@ public sealed class FindCommand : Command
             return $"'{name}' is a def name in this snapshot, not a field path. 'rimsearcher get {name}' shows " +
                    "what is in it" +
                    (referenced
-                       ? $", and 'rimsearcher find --value {name}' names the fields that point at it."
+                       ? $", and 'rimsearcher where --value {name}' names the fields that point at it."
                        : ", and no indexed field value points at it — nothing in this snapshot refers to it " +
                          "by name.");
         }
 
-        // 一次命中横跨几种路径形状 —— 拿 find 的结果做集合差的人,少的正是这一句。
+        // 一次命中横跨几种路径形状 —— 拿 where 的结果做集合差的人,少的正是这一句。
         Advisory.NoteMixedPathShapes(ctx, ctx.Db.FindPathShapes(pq, value, exact, scope));
 
         // 这里不像 get 那样把默认值行滤掉:调用方点名了一个字段与一个值,「哪些 def 取到过它」
@@ -1082,7 +1082,7 @@ public sealed class FindCommand : Command
 
         ctx.Report.PageNotice("field path", rows.Count, offset, total);
 
-        // 子串命中不留痕,与 `--path` 是同一条纪律的值侧:`find --value Bullet` 命中每一个
+        // 子串命中不留痕,与 `--path-contains` 是同一条纪律的值侧:`where --value Bullet` 命中每一个
         // `Bullet_*`,而问的人多半只想要「值就是 Bullet 的那些」。
         if (!exact && exactTotal < total)
             ctx.Report.Notice(NoticeKind.Filter,
@@ -1106,7 +1106,7 @@ public sealed class FindCommand : Command
             }).ToList());
 
         // 按值一次问清,不按结果里的每条路径各查一次再求和:求和会把同一个被砍的 def 按它
-        // 出现在几条路径上重复计数,而路径 defName(`find --value` 命中 def 名时必然有)的
+        // 出现在几条路径上重复计数,而路径 defName(`where --value` 命中 def 名时必然有)的
         // 「同类型」等于全体 def 类型,单这一项就等于全库 —— 于是子集计数会大于全集。
         // 表里那批 def 是「取到过这个值」选出来的,尾注担保的也必须是同一批。
         Completeness.NoteIndexedPathsOnly(ctx,
@@ -1131,7 +1131,7 @@ public sealed class ListCommand : Command
                 Required = false,
                 Help = "A def type such as ThingDef. Leave it out and this lists the def types themselves, " +
                        "with how many defs each holds — all of them, unless you pass --limit. " +
-                       "--class and --offset need a def type and are refused without one.",
+                       "--own-class and --offset need a def type and are refused without one.",
             },
         ],
         Options =
@@ -1141,8 +1141,12 @@ public sealed class ListCommand : Command
             CommonOptions.Offset("defs"),
             new OptionSpec
             {
-                Name = "class",
-                Aliases = ["def-class", "runtime-class"],
+                Name = "own-class",
+                // n=10 的识别测把三个候选分开了:own-class 10/10 且零靶心误读;
+                // def-class 9/10 但那一份正是「子字段里的 compClass 也算」;
+                // root-class 只有 1/10 —— 9 份把等值读成「及其派生类」的 is-a 匹配,丢掉。
+                // 旧主名 class 留作别名:它是产出式赢家,但单说 class 不带「谁的」。
+                Aliases = ["def-class", "class", "runtime-class"],
                 Placeholder = "<ClassName>",
                 // 「own」在做功,但光靠它不够:很多 def 类型的 class 是恒定量,多态全在嵌套
                 // 字段上,而这个选项够不着那里。不说破的话,它在那些类型上回的零读起来
@@ -1150,7 +1154,7 @@ public sealed class ListCommand : Command
                 Help = "Only defs whose own class is this. Def types that hold several classes list them below " +
                        "the count. Many def types hold just one class and pick their behaviour in a nested " +
                        "field instead — GenStepDef is all Verse.GenStepDef, with the GenStep subclass on " +
-                       "'genStep' — and this option cannot see that. 'rimsearcher find Class <ClassName>' can.",
+                       "'genStep' — and this option cannot see that. 'rimsearcher where Class <ClassName>' can.",
                 Narrows = true,
             },
             new OptionSpec
@@ -1172,7 +1176,7 @@ public sealed class ListCommand : Command
             "rimsearcher list",
             "rimsearcher list HediffDef",
             "rimsearcher list GenStepDef --find scatter",
-            "rimsearcher list CreepJoinerBaseDef --class CreepJoinerAggressiveDef",
+            "rimsearcher list CreepJoinerBaseDef --own-class CreepJoinerAggressiveDef",
             "rimsearcher list ThingDef --scope all,-vanilla --limit all",
         ],
         JsonKeys =
@@ -1205,7 +1209,7 @@ public sealed class ListCommand : Command
     /// <summary>
     /// 不给 def 类型的那一半:列出这份快照有哪些 def 类型。
     ///
-    /// <c>--class</c> 与 <c>--offset</c> 只对另一半有意义,却仍然声明在这条命令上 ——
+    /// <c>--own-class</c> 与 <c>--offset</c> 只对另一半有意义,却仍然声明在这条命令上 ——
     /// 照单收下、悄悄不生效是个沉默口子(与 <see cref="CommandContext.Limit"/> 记的
     /// <c>--limit</c> 被静默夹紧同形),所以当场退 2 并把该走的那条路说出来。
     /// </summary>
@@ -1213,12 +1217,12 @@ public sealed class ListCommand : Command
     {
         // 指的那条路只在名字**真是** def class 时才落到桶上(`list CompShield` 回的是
         // 「No def type named 'CompShield'」),所以两种落点都说出来。
-        if (ctx.Args.Value("class") is { } cls)
+        if (ctx.Args.Value("own-class") is { } cls)
             throw new CliUsageException(
-                $"--class needs a def type to narrow inside. If you do not know which def type holds " +
+                $"--own-class needs a def type to narrow inside. If you do not know which def type holds " +
                 $"the class '{cls}', run 'rimsearcher list {cls}': it names the def type when '{cls}' " +
                 $"is a def class, and reports no such def type when it is not — a class that defs only " +
-                $"reference in a field is found by 'rimsearcher find <field> {cls}' instead.");
+                $"reference in a field is found by 'rimsearcher where <field> {cls}' instead.");
 
         // 数量不许猜:一份快照能有两百多个 def 类型。
         if (ctx.Args.Offset() > 0)
@@ -1230,7 +1234,7 @@ public sealed class ListCommand : Command
         ctx.Report.Promises("types");
         var everything = ctx.Db.Types(scope);
 
-        // --find 在这一半筛的是**类型名**。这条路不像 --class 那样退 2:它在这里
+        // --find 在这一半筛的是**类型名**。这条路不像 --own-class 那样退 2:它在这里
         // 真的生效,而「哪些 def 类型名字里带 Gen」是个答得出来的问题。
         var typeFind = ctx.Args.Value("find");
         var all = typeFind is null
@@ -1288,7 +1292,7 @@ public sealed class ListCommand : Command
     {
         var limit = ctx.Limit();
         var offset = ctx.Args.Offset();
-        var wantClass = ctx.Args.Value("class");
+        var wantClass = ctx.Args.Value("own-class");
         var find = ctx.Args.Value("find");
         var scope = ctx.Scope();
 
@@ -1341,7 +1345,7 @@ public sealed class ListCommand : Command
                         $"No def of type {type}{(wantClass is null ? "" : $" with class '{wantClass}'")} has " +
                         $"'{find}' in its name or label, out of {Tally.Complete(unfiltered).Render("def")}. " +
                         "The filter reads def names and labels only — a def that merely holds this as a field " +
-                        "value is 'rimsearcher find --value', and label text in another language is " +
+                        "value is 'rimsearcher where --value', and label text in another language is " +
                         "'rimsearcher search'.");
                     Advisory.NoteTextIndexHasIt(ctx, find, "--find");
                     return 1;
@@ -1358,7 +1362,7 @@ public sealed class ListCommand : Command
                     $"{Tally.Complete(holders.Sum(h => h.Count)).Render("def")}: " +
                     string.Join(", ", holders.Select(h => $"{h.Count} under {h.DefType}")) + ". " +
                     $"The game only gives a def database to types with no concrete Def ancestor, so subclasses " +
-                    $"share their base's bucket. 'rimsearcher list {holders[0].DefType} --class {type}' lists them.");
+                    $"share their base's bucket. 'rimsearcher list {holders[0].DefType} --own-class {type}' lists them.");
                 return 1;
             }
 
@@ -1373,20 +1377,20 @@ public sealed class ListCommand : Command
                 }
 
                 // 只有一个 class 时,这个选项在这个类型上区分不了任何东西 —— 而不说破的话,
-                // 「确实没有 def 用这个类」与「--class 问的根本不是这件事」逐字同形。
+                // 「确实没有 def 用这个类」与「--own-class 问的根本不是这件事」逐字同形。
                 // 那类型真正的多态在嵌套字段上(GenStepDef 的 167 个 def 全是 Verse.GenStepDef,
                 // 各自跑的 GenStep 子类写在 genStep 那一个字段的 Class= 里),所以转向要指到
                 // 那条路上去,并按快照量到哪一步说话。
                 if (present.Count == 1)
                 {
-                    // 「类恒定的桶把多态放在嵌套字段上」这条通则是 --class 自己的 help 文本
-                    // (OptionSpec 里那段,cli-reference 的 --class 行就是它渲染出来的),
+                    // 「类恒定的桶把多态放在嵌套字段上」这条通则是 --own-class 自己的 help 文本
+                    // (OptionSpec 里那段,cli-reference 的 --own-class 行就是它渲染出来的),
                     // 不在这里再讲一遍;这句只留本次的事实与填好参数的转向。
                     ctx.Report.Notice(NoticeKind.NextStep,
                         $"Every one of the {Tally.Complete(present[0].Count).Render("def")} of type {type} has the " +
-                        $"same class, {present[0].Class}, so --class cannot tell them apart and this is not " +
+                        $"same class, {present[0].Class}, so --own-class cannot tell them apart and this is not " +
                         $"evidence about '{wantClass}'. The behaviour lives on a nested field instead: " +
-                        $"'rimsearcher find Class {wantClass}'.");
+                        $"'rimsearcher where Class {wantClass}'.");
                     // 量全了的快照上这一条只会把上面那句用占位符再说一遍。留着的是它另外两档
                     // 携带的免责:那条转向在这份快照上会回一个**假零**,不说破就是个闭环。
                     if (!ctx.Db.Meta.IndexesAllNestedClass)
@@ -1427,7 +1431,7 @@ public sealed class ListCommand : Command
                 // 「def 类型不等于运行时 class」那条区分上。
                 $"Type {type} holds {Tally.Complete(classes.Count).Render("def class")}: " +
                 NameList.Render([.. classes.Select(c => $"{Tail(c.Class)} ({c.Count})")], Limits.MaxSuggestions) +
-                ". Pass --class to pick one.");
+                ". Pass --own-class to pick one.");
 
         var columns = heterogeneous
             ? new[] { "def_name", "class", "label", "mod" }
@@ -1460,7 +1464,7 @@ public sealed class FieldsCommand : Command
         Aliases = ["paths", "schema"],
         Summary = "List the field paths that a def type actually uses, with how often each occurs.",
         Remarks =
-            "Use this before 'find' when you are not sure what a field is called. The counts tell you whether a " +
+            "Use this before 'where' when you are not sure what a field is called. The counts tell you whether a " +
             "path is universal for the type or only present on a handful of defs.\n\n" +
             "What is listed is every path the exporter recorded a value for. A field whose value was null on " +
             "every def of the type is in none of them, so a path missing here is not proof that the field does " +
@@ -1474,9 +1478,9 @@ public sealed class FieldsCommand : Command
                 // ThingDef 有近三千条路径,默认只出 25 条。没有这个开关只能
                 // `fields ThingDef | grep comps`,而管道会把截断声明一起滤掉,
                 // 于是「被截了」变成「没有」—— 筛选必须在工具里做。
-                Name = "path",
+                Name = "path-contains",
                 Arity = Arity.Multi,
-                Aliases = ["paths", "contains", "match", "filter", "grep", "only"],
+                Aliases = ["filter", "grep", "field-contains", "path-filter", "contains", "match", "only"],
                 Placeholder = "<text>",
                 Help = "Only list paths containing this text. Repeat it to widen the selection.",
                 Narrows = true,
@@ -1486,7 +1490,7 @@ public sealed class FieldsCommand : Command
         Examples =
         [
             "rimsearcher fields ThingDef",
-            "rimsearcher fields ThingDef --path comps",
+            "rimsearcher fields ThingDef --path-contains comps",
             "rimsearcher fields HediffDef --limit all",
         ],
         JsonKeys =
@@ -1499,7 +1503,7 @@ public sealed class FieldsCommand : Command
     {
         var type = ctx.Args.Positional(0)!;
         var limit = ctx.Limit();
-        var filters = ctx.Args.Values("path");
+        var filters = ctx.Args.Values("path-contains");
         var offset = ctx.Args.Offset();
         var (rows, total, whole) = ctx.Db.FieldPathsForType(type, limit.Effective, filters, offset);
 
@@ -1514,8 +1518,8 @@ public sealed class FieldsCommand : Command
             if (filters.Count > 0 && ctx.Db.FieldPathsForType(type, 1).Rows.Count > 0)
             {
                 ctx.Report.Notice(NoticeKind.Boundary,
-                    $"'{type}' has field paths, but none contains {PathFilterText.Say(filters)}. Drop --path to see them all.");
-                Completeness.NoteIndexHoldsValuesOnly(ctx);
+                    $"'{type}' has field paths, but none contains {PathFilterText.Say(filters)}. Drop --path-contains to see them all.");
+                Completeness.NoteIndexHoldsValuesOnly(ctx, filters[0]);
                 return 1;
             }
             ctx.Report.Notice(NoticeKind.NextStep, DefTypeMiss.Say(type, ctx.Db.Types(ctx.Scope()).Select(t => t.Type), "fields"));
@@ -1524,7 +1528,7 @@ public sealed class FieldsCommand : Command
 
         ctx.Report.PageNotice("field path", rows.Count, offset, total);
 
-        // 与 `get --path` 同一条纪律:子串匹配不留痕。这里的代价更大 —— 这条命令是
+        // 与 `get --path-contains` 同一条纪律:子串匹配不留痕。这里的代价更大 —— 这条命令是
         // 「这个类型有没有这个字段」的正式问法,而「一条都不是整段」正是「没有」的形状。
         if (filters.Count > 0 && whole < total)
             ctx.Report.Notice(NoticeKind.Filter,
@@ -1542,10 +1546,10 @@ public sealed class FieldsCommand : Command
                 ["path"] = r.Path,
                 ["defs"] = r.Count,
             }).ToList());
-        // 这一处圈的是整个 def 类型,与 --path 无关 —— 表已经按 --path 滤过,而被砍掉的
-        // 字段本来就不在表里,按 --path 收窄这个数就是拿看得见的东西去限定看不见的东西。
+        // 这一处圈的是整个 def 类型,与 --path-contains 无关 —— 表已经按 --path-contains 滤过,而被砍掉的
+        // 字段本来就不在表里,按 --path-contains 收窄这个数就是拿看得见的东西去限定看不见的东西。
         Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsOfType(type),
-            $"all of {type}, whatever --path says");
+            $"all of {type}, whatever --path-contains says");
         return 0;
     }
 }
@@ -1604,7 +1608,7 @@ public sealed class ValuesCommand : Command
                 return 1;
             }
 
-            // 三种成因,要的下一步不同 —— 与 `find` 的分流同形:字段不存在 / 不在这个
+            // 三种成因,要的下一步不同 —— 与 `where` 的分流同形:字段不存在 / 不在这个
             // --type 上 / 不在这个 --scope 里。空是 scope 造的就不能记在快照头上。
             var withoutType = type is not null && ctx.Db.FieldPathExists(pq, scope);
             var wideScope = ScopeFilter.Parse("all", ctx.Db.PackageIds(), ctx.Config);
@@ -1627,8 +1631,8 @@ public sealed class ValuesCommand : Command
                             : $"No def in this snapshot has a field path ending in '{path}'" +
                               (scope.IsAll ? "" : $" (nor anywhere outside --scope {scope.Expression})") + ". " +
                               $"'rimsearcher fields <DefType>' lists the paths a type actually has, and " +
-                              $"'rimsearcher find --value <text>' finds which path holds a value you already know.");
-            if (!withoutType && !outsideScope && !loosely) Completeness.NoteIndexHoldsValuesOnly(ctx);
+                              $"'rimsearcher where --value <text>' finds which path holds a value you already know.");
+            if (!withoutType && !outsideScope && !loosely) Completeness.NoteIndexHoldsValuesOnly(ctx, path);
             return 1;
         }
 
@@ -1712,7 +1716,7 @@ public sealed class ModsCommand : Command
 }
 
 /// <summary>
-/// 一串 <c>--path</c> 念回给读的人时的写法。产地唯一 —— `get` 与 `fields` 说的是同一件事。
+/// 一串 <c>--path-contains</c> 念回给读的人时的写法。产地唯一 —— `get` 与 `fields` 说的是同一件事。
 /// </summary>
 internal static class PathFilterText
 {
@@ -1749,7 +1753,7 @@ internal static class Completeness
     /// 反查类命令的完整性尾注。
     ///
     /// 快照里有两套「完整」在互相打架:get 会为**单个 def** 声明「导出时砍掉了 N 个字段」,
-    /// 而 find / values / fields 的计数以**已索引路径**为界 —— 某个 def 的 comps 在导出时被砍,
+    /// 而 where / values / fields 的计数以**已索引路径**为界 —— 某个 def 的 comps 在导出时被砍,
     /// 它就从 find 的结果里静默消失,而这恰恰是「一共有哪些」这类问题的致命伤。
     ///
     /// 但尾注本身也不能变成新的免责声明,所以收窄到「与本次结果**同类型**的 def 里真有被
@@ -1768,22 +1772,53 @@ internal static class Completeness
     /// 是子类时反射默认拿不到(见 <c>FieldWalk</c>)。于是「这个字段不存在」与「它在,
     /// 只是每个 def 上都是 null」在输出上完全同形。
     ///
-    /// 一件事一个产地:find / values / fields 三处调同一份措辞,不各写各的。
+    /// 一件事一个产地:where / values / fields 三处调同一份措辞,不各写各的。
     /// </summary>
-    public static void NoteIndexHoldsValuesOnly(CommandContext ctx)
-        // 第三种成因只在**这份快照真有被砍的 def** 时存在。没有的时候那 105 字节讲的是一件
-        // 这里不可能发生的事,而它还带着一条会回空表的指路 —— 与 NoteIndexedPathsOnly
-        // 同一条纪律(圈住的类型里没有被砍的就一个字不发)。
-        => ctx.Report.Notice(NoticeKind.Boundary,
+    /// <summary>
+    /// 结论与那条能敲的命令排在成因分类**之前**。依据是采纳率实测:这句话到达读者 19 次,
+    /// 只被照做 1 次,而它点名的 <c>code-search</c> 自然跟随率是 57% —— 读者不是没采纳,
+    /// 是反着走的(19 次没有一次是会话末条,不是「聊完了」造成的)。
+    ///
+    /// 两个成因都在句子自己身上:唯一的出路埋在 300 多字符的分类之后;而它印的
+    /// <c>'rimsearcher code-search'</c> 不带参数 —— 那不是一条命令,是一个名词,抄不走。
+    /// 本仓别处的纪律是**命令填好了再印**(<c>snapshot truncated</c> 的脚注就是填好的)。
+    /// </summary>
+    public static void NoteIndexHoldsValuesOnly(CommandContext ctx, string? path = null)
+    {
+        // 字段声明的行长这样:`public List<ThingDefCountRangeClass> killedLeavingsRanges;`。
+        // 类型里带 <> 和 [],所以字符类不能只有 \w —— `\w+ <name>;` 实测零命中。
+        var leaf = Leaf(path);
+        var how = leaf is null
+            ? "'rimsearcher code-search' reads the class declaration, which does say."
+            : $"'rimsearcher code-search \"[\\w<>,\\[\\] ]+ {leaf};\"' finds the declaration, which does say.";
+
+        ctx.Report.Notice(NoticeKind.Boundary,
+            $"This says no indexed value sits at that path — not that no such field exists. {how} " +
             "Two things keep a field out of this index without any sign here: a value that was null " +
             "on every def, and a field the game marks as an unsaved runtime cache. " +
+            // 第三种成因只在**这份快照真有被砍的 def** 时存在。没有的时候那 105 字节讲的是一件
+            // 这里不可能发生的事,而它还带着一条会回空表的指路 —— 与 NoteIndexedPathsOnly
+            // 同一条纪律(圈住的类型里没有被砍的就一个字不发)。
             (ctx.Db.TruncatedDefCount() > 0
                 ? "A third, hitting the per-def field cap, does leave a sign — " +
                   "'rimsearcher snapshot truncated' lists those defs. "
                 : "") +
-            NestedClassLine(ctx) +
-            " So this says no indexed value sits at that path — not that no such field exists. " +
-            "'rimsearcher code-search' reads the class declaration, which does say.");
+            NestedClassLine(ctx));
+    }
+
+    /// <summary>
+    /// 路径的末段,即 C# 里那个字段自己的名字(<c>graphicData.shaderType</c> → <c>shaderType</c>,
+    /// <c>statBases[3].stat</c> → <c>stat</c>)。拿不出一个纯标识符就返回 null ——
+    /// 那时宁可不给命令,也不给一条敲了会报错的。
+    /// </summary>
+    private static string? Leaf(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        var last = path.Split('.')[^1];
+        var bracket = last.IndexOf('[');
+        if (bracket >= 0) last = last[..bracket];
+        return last.Length > 0 && last.All(c => char.IsLetterOrDigit(c) || c == '_') ? last : null;
+    }
 
     /// <summary>
     /// 上面这些行里,哪些的值是**同类型大多数 def 都有的那个**。
@@ -1843,7 +1878,7 @@ internal static class Completeness
     /// 嵌套 <c>Class="…"</c> 的运行时类型这一维,手上这份快照量到哪一步。
     ///
     /// **三档,不是两档。** 0.2.0 只发列表元素(判据是「路径以 ] 收尾」),0.4.0 起单字段
-    /// 上的 <c>Class=</c> 才一并发。中间那一档最险:<c>find Class X</c> 照样回零,而那个零
+    /// 上的 <c>Class=</c> 才一并发。中间那一档最险:<c>where Class X</c> 照样回零,而那个零
     /// 与「量过了、确实没人用它」逐字同形 —— 一句 "is the query that reaches it" 会把人
     /// 送去查一条对 <c>&lt;genStep Class="…"&gt;</c> 根本不存在的路径,走空了再照这句
     /// 试一遍,闭环。所以中间档必须点名它够不着的是哪一类。
@@ -1852,11 +1887,11 @@ internal static class Completeness
     {
         if (ctx.Db.Meta.IndexesAllNestedClass)
             return "The runtime type of a nested Class=\"...\" object — in a list or on a single field — is " +
-                   "indexed as '<path>.Class', so 'rimsearcher find Class <ClassName>' is the query that reaches it.";
+                   "indexed as '<path>.Class', so 'rimsearcher where Class <ClassName>' is the query that reaches it.";
 
         if (ctx.Db.Meta.IndexesNestedClass)
             return "The runtime type of a nested Class=\"...\" object is indexed as '<path>.Class' for list " +
-                   "elements only (<li Class=\"...\">), so 'rimsearcher find Class <ClassName>' reaches those. " +
+                   "elements only (<li Class=\"...\">), so 'rimsearcher where Class <ClassName>' reaches those. " +
                    // 句尾不重复指 code-search:三个调用点各自都已经指过了,
                    // 而 NoteIndexHoldsValuesOnly 的结尾正好就是那一句。
                    "A single field that picks a class — GenStepDef.genStep, ThinkTreeDef.thinkRoot — is not in " +
@@ -1865,7 +1900,7 @@ internal static class Completeness
 
         return "The runtime type of a nested Class=\"...\" object is not in this snapshot at all: it was " +
                $"written by exporter {ctx.Db.Meta.ExporterVersion}, before that type entered the index, so no " +
-               "query here reaches it — re-export to get 'rimsearcher find Class <ClassName>'.";
+               "query here reaches it — re-export to get 'rimsearcher where Class <ClassName>'.";
     }
 
     /// <param name="basis">
@@ -1916,14 +1951,14 @@ internal static class Advisory
     /// 值侧是**单语**的:field_values 存的是游戏加载时的那一份文本(这份快照的语言),
     /// 而另一侧只活在 translations 表里,只有 `search` 看得见。
     ///
-    /// 于是中文快照上 `find --value "shield belt"` 回「本快照没有任何字段装着这段文本」,
+    /// 于是中文快照上 `where --value "shield belt"` 回「本快照没有任何字段装着这段文本」,
     /// 而 `search "shield belt"` 当场命中 —— 两句话都对,而前者与「这东西真不存在」逐字同形。
     ///
     /// 只在文本索引**真的命中**时出声,并且点名命中了谁 —— 一句无条件的「值侧是单语的」
     /// 就是免责声明,而这一句自带可验证的下一步。
     /// </summary>
     /// <param name="reachedBy">
-    /// 够不着它的是哪个旋钮。<c>find --value</c> 与 <c>list --find</c> 撞的是同一堵墙
+    /// 够不着它的是哪个旋钮。<c>where --value</c> 与 <c>list --find</c> 撞的是同一堵墙
     /// (库里存的是加载后的那一份文本),但句尾若写死 <c>--value</c>,另一条路上的读者
     /// 会去查一个自己没用过的参数。
     /// </param>
@@ -1958,9 +1993,9 @@ internal static class Advisory
     /// <summary>
     /// 这一次命中横跨了不止一种路径形状。
     ///
-    /// `find stat Mass` 的上千行里会混进几行 <c>statFactors[].stat</c>,拿它做集合差时
+    /// `where stat Mass` 的上千行里会混进几行 <c>statFactors[].stat</c>,拿它做集合差时
     /// 那几行是**静默假阴性** —— 表里确实印了 path 列,但默认 25 行的视图下没人会逐行核对
-    /// 路径形状,而 `find` 恰恰是这套命令里用来做集合运算的那一个。
+    /// 路径形状,而 `where` 恰恰是这套命令里用来做集合运算的那一个。
     ///
     /// 只有一种形状时一个字不说 —— 那时「结果集是齐的」是无条件的。
     /// </summary>
@@ -2000,7 +2035,7 @@ internal static class Advisory
             "Rows above carry the same label and the same def type: " + string.Join("; ", shown) +
             (clashes.Count > shown.Count ? $", and {clashes.Count - shown.Count} more such labels" : "") +
             ". The defName is the only column that tells them apart; the description, which is not in this " +
-            "table, says which is which — 'rimsearcher get <defName> --path description'.",
+            "table, says which is which — 'rimsearcher get <defName> --path-contains description'.",
             footnote: true);
     }
 
@@ -2028,7 +2063,7 @@ internal static class Advisory
     ///
     /// 收窄在调用侧(<paramref name="shown"/> 已经筛过):只有当**你看的这一行自己**是有人
     /// 设过的值时才提示。判别字段(compClass / thingClass / workerClass)按定义就是声明
-    /// 默认值,而 `find compClass CompShield` 恰恰是推荐的那条主查询 —— 在它上面挂一句
+    /// 默认值,而 `where compClass CompShield` 恰恰是推荐的那条主查询 —— 在它上面挂一句
     /// 「同块还有 energyMax」是纯噪音,而噪音要在所有调用上收税。
     /// </summary>
     public static void NoteAuthoredSiblings(CommandContext ctx,
@@ -2049,7 +2084,7 @@ internal static class Advisory
             (block is null
                 ? "Fields in one indexed block bind and override each other, and this table shows only the one asked for."
                 : $"Fields in one {block} entry bind and override each other, and this table shows only the one " +
-                  $"asked for. 'rimsearcher get {first.DefName} --path {block}' lists the whole block."),
+                  $"asked for. 'rimsearcher get {first.DefName} --path-contains {block}' lists the whole block."),
             footnote: true);
     }
 }

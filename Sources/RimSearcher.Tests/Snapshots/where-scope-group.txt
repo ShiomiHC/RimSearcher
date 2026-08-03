@@ -1,7 +1,8 @@
-$ rimsearcher find thingClass RimWorld.Bullet --scope ludeon.rimworld
+$ rimsearcher where thingClass RimWorld.Bullet --scope vanilla
 exit 0
 --- stdout ---
-1 def within --scope ludeon.rimworld.
+--scope vanilla (= ludeon.rimworld).
+1 def within --scope vanilla.
 
 def_name         def_type  path        value            code_default  mod
 Bullet_Revolver  ThingDef  thingClass  RimWorld.Bullet  no            ludeon.rimworld

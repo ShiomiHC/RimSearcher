@@ -10,7 +10,7 @@ namespace RimSearcher.Search;
 /// 「凭什么近」:七处里有几处的池子是 def 名、有几处是文件名、有几处是树名,读的人
 /// 需要知道这三个字是拼写打分打出来的,而不是语义上相关。
 ///
-/// **一处故意不用这里**:<c>find</c> 的值域近似先做末段精确匹配(<c>CompAmbientSound</c>
+/// **一处故意不用这里**:<c>where</c> 的值域近似先做末段精确匹配(<c>CompAmbientSound</c>
 /// 对 <c>RimWorld.CompAmbientSound</c> 是**同一个名字**,不是「长得像」),模糊打分只是
 /// 兜底。那里说 by spelling 就是假话,所以它留着自己的 <c>Closest:</c>。
 ///

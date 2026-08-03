@@ -40,11 +40,11 @@ public class OutputSnapshotTests
         { "search-miss-keyed-multi", ["search", "转至此处"] },
         // 落空的成因里,自己施加的过滤排在猜测之前 —— 两份摆一起:被 scope 滤空的那次
         // 不许再猜抽象基类,真零那次两种成因并列。
-        { "find-value-scoped-empty", ["find", "thingClass", "RimWorld.Bullet", "--scope", "test.mod"] },
-        { "find-value-class-miss",   ["find", "compClass", "RimWorld.CompNoSuchThing"] },
+        { "where-value-scoped-empty", ["where", "thingClass", "RimWorld.Bullet", "--scope", "test.mod"] },
+        { "where-value-class-miss",   ["where", "compClass", "RimWorld.CompNoSuchThing"] },
         // scope 展开在**有结果时**也要说:组名那份必须带展开句,写死 packageId 那份不多说一个字。
-        { "find-scope-group",      ["find", "thingClass", "RimWorld.Bullet", "--scope", "vanilla"] },
-        { "find-scope-literal",    ["find", "thingClass", "RimWorld.Bullet", "--scope", "ludeon.rimworld"] },
+        { "where-scope-group",      ["where", "thingClass", "RimWorld.Bullet", "--scope", "vanilla"] },
+        { "where-scope-literal",    ["where", "thingClass", "RimWorld.Bullet", "--scope", "ludeon.rimworld"] },
         // 换一份已注册的快照就拿得到 —— 这句话是算得出来的,不该报成「没有」。
         { "get-other-snapshot",    ["get", "OnlyInOtherSnapshot"] },
         { "inherit-other-snapshot", ["inherit", "OnlyInOtherSnapshot"] },
@@ -54,12 +54,12 @@ public class OutputSnapshotTests
         { "search-substring",      ["search", "VoidNode"] },
         { "search-substring-cap",  ["search", "VoidNode", "--limit", "2"] },
         { "get-full",              ["get", "Apparel_ShieldBelt"] },
-        { "get-path-filter",       ["get", "Apparel_ShieldBelt", "--path", "comps"] },
-        { "get-path-no-match",     ["get", "Apparel_ShieldBelt", "--path", "zzzz"] },
+        { "get-path-filter",       ["get", "Apparel_ShieldBelt", "--path-contains", "comps"] },
+        { "get-path-no-match",     ["get", "Apparel_ShieldBelt", "--path-contains", "zzzz"] },
         { "get-truncated-export",  ["get", "Bullet_Revolver"] },
         // 代码默认值的三个落点:字段名与提问一字不差、值却是声明默认值 ——
         // 点了名就必须印出来,并且当场说清它是哪一种。
-        { "get-code-default-path", ["get", "Bullet_Revolver", "--path", "burstCount"] },
+        { "get-code-default-path", ["get", "Bullet_Revolver", "--path-contains", "burstCount"] },
         { "get-code-default-all",  ["get", "Bullet_Revolver", "--defaults"] },
         { "get-code-default-json", ["get", "Bullet_Revolver", "--defaults", "--json"] },
         { "get-generated",         ["get", "Meat_Muffalo"] },
@@ -70,28 +70,28 @@ public class OutputSnapshotTests
         { "get-name-collision-typed", ["get", "Firefoam", "--type", "StatDef"] },
         // 桶名不一致(XML 根元素 TestVariantDef,def 落在 TestBaseDef 桶)时 inherits_from 仍要在场。
         { "get-bucket-mismatch",   ["get", "VariantOne"] },
-        { "find-hit",              ["find", "compClass", "RimWorld.CompShield"] },
-        { "find-miss-compprops",   ["find", "compClass", "CompProperties_Shield"] },
-        { "find-miss-field",       ["find", "noSuchField", "x"] },
+        { "where-hit",              ["where", "compClass", "RimWorld.CompShield"] },
+        { "where-miss-compprops",   ["where", "compClass", "CompProperties_Shield"] },
+        { "where-miss-field",       ["where", "noSuchField", "x"] },
         // 单位置参数落空的三档。敲一个词进来的人多半给的是**值**而不是字段路径
         // (这条命令的正脸就是「从一个类名或一个值反查 def」),所以名字的落点要当场算:
         //   CompShield      它是某些 def 的字段取值 —— 指得动填好参数的 find
         //   Bullet_Revolver 它是 def 名 —— NameLookup 那句「is not a def name」在这里是假话
         //   noSuchField     哪儿都不是 —— 只剩那句带 <text> 占位的通用指路
-        { "find-miss-name-is-value", ["find", "CompShield"] },
-        { "find-miss-name-is-def", ["find", "Bullet_Revolver"] },
+        { "where-miss-name-is-value", ["where", "CompShield"] },
+        { "where-miss-name-is-def", ["where", "Bullet_Revolver"] },
         // def 名那一档的另一半:没有任何字段指向它 —— 那时不许指向一条空手而归的 --value,
         // 「没有谁按名字引用它」本身就是答案。顺带钉住同名跨类型不让这句话变形。
-        { "find-miss-name-unreferenced", ["find", "Firefoam"] },
-        { "find-miss-bare",        ["find", "noSuchField"] },
+        { "where-miss-name-unreferenced", ["where", "Firefoam"] },
+        { "where-miss-bare",        ["where", "noSuchField"] },
         // 另一半问法。行的形状不同,--json 的顶层键也就不同(matches / paths)。
-        { "find-by-value",         ["find", "--value", "CompShield"] },
+        { "where-by-value",         ["where", "--value", "CompShield"] },
         // 继承层的四条路各钉一份:抽象节点(有子、被 patch 点名)、具体 def(往上走)、
         // 断链(父不在快照里)、名字不在这一层 —— 四条的措辞各说一件不同的事。
         { "inherit-abstract",      ["inherit", "BaseBullet"] },
         // 抽象节点侧的 same_value:参照值从子树众数来,而那一列在场与否是这条命令
         // 唯一分得开「这层声明了它」与「后代各写各的」的地方。
-        { "inherit-abstract-path", ["inherit", "BaseProjectile", "--path", "soundDrop"] },
+        { "inherit-abstract-path", ["inherit", "BaseProjectile", "--path-contains", "soundDrop"] },
         { "inherit-def",           ["inherit", "Bullet_Revolver"] },
         { "inherit-broken-chain",  ["inherit", "TestModGun"] },
         { "inherit-not-in-layer",  ["inherit", "Apparel_ShieldBelt"] },
@@ -99,10 +99,10 @@ public class OutputSnapshotTests
         { "get-xml-node-only",     ["get", "BaseBullet"] },
         { "list-limited",          ["list", "ThingDef", "--limit", "2"] },
         { "list-scope-empty",      ["list", "HediffDef", "--scope", "test.mod"] },
-        // 打错类型名再带 --class:此前这一支手抄了 DefTypeMiss.Say,抄的是产地后来长出
-        // 近似候选之前的那一版,于是拼错 + --class 是唯一拿不到拼写建议的路。两支同一个问题。
-        { "list-typo-classed",     ["list", "ThingDf", "--class", "TestVariantDef"] },
-        { "fields-filtered",       ["fields", "ThingDef", "--path", "comps"] },
+        // 打错类型名再带 --own-class:此前这一支手抄了 DefTypeMiss.Say,抄的是产地后来长出
+        // 近似候选之前的那一版,于是拼错 + --own-class 是唯一拿不到拼写建议的路。两支同一个问题。
+        { "list-typo-classed",     ["list", "ThingDf", "--own-class", "TestVariantDef"] },
+        { "fields-filtered",       ["fields", "ThingDef", "--path-contains", "comps"] },
         { "values-coverage",       ["values", "compClass"] },
         { "values-miss",           ["values", "noSuchField"] },
         // list 的另一半:不给 def 类型时列类型总表。
@@ -116,16 +116,19 @@ public class OutputSnapshotTests
         { "json-mode",             ["get", "Apparel_ShieldBelt", "--limit", "2", "--json"] },
         // 代码块在 --json 里得是行,不是一串 "path:line:text" 字符串 ——
         // 路径里本来就可能有冒号,拼起来解析不回去。
-        { "json-code-search",      ["code-search", "public", "--files", "ThingComp.cs", "-C", "1", "--json"] },
+        { "json-code-search",      ["code-search", "public", "--file-glob", "ThingComp.cs", "-C", "1", "--json"] },
         { "json-read-member",      ["read", "vanilla/Verse/Outline.cs", "--member", "Shared", "--json"] },
         { "usage-unknown-flag",    ["search", "shield", "--lmit", "5"] },
         { "usage-unknown-command", ["serach", "shield"] },
+        // 退役的旧命令名。近似候选救不了它(find 与 where 一个字母都不像),
+        // 不专门接住的话,印出来的与「这个词从来就不是一条命令」逐字同形。
+        { "usage-retired-command", ["find", "compClass", "RimWorld.CompShield"] },
         // 同一个词在别的命令上是选项、在这条上是位置参数。--field 是 get / inherit / read
         // 认的写法,搬到 find 上就落空,而「这里怎么写」是算得出来的 —— 连值一起填好。
-        { "usage-field-is-positional", ["find", "--field", "compClass"] },
+        { "usage-field-is-positional", ["where", "--field", "compClass"] },
         // 值给了两遍且不一样。位置参数与 --value 说的是同一件事,挑一个跑下去的话
         // 另一个被丢了在输出里看不出来。
-        { "usage-value-twice",     ["find", "compClass", "RimWorld.CompShield", "--value", "Other"] },
+        { "usage-value-twice",     ["where", "compClass", "RimWorld.CompShield", "--value", "Other"] },
         // 夹具恒追加 --db/--config,而总览那条分支要求 argv 恰好一个词。
         { "help-overview",         ["--help"] },
         // `--help <command>` 不接,但那个词不许被默默扔掉 —— 说清这一屏是什么,
@@ -141,7 +144,7 @@ public class OutputSnapshotTests
         // 以下每条盯 code-search 的一件事:
         { "code-search-hit",       ["code-search", ": ThingComp"] },
         // 上下文窗口重叠:-C 1 打在连着命中的五行上,窗口要合并。
-        { "code-search-context",   ["code-search", "public", "--files", "ThingComp.cs", "-C", "1"] },
+        { "code-search-context",   ["code-search", "public", "--file-glob", "ThingComp.cs", "-C", "1"] },
         // --limit 只管印几行,不许缩短扫描:总数必须仍是准数(「N of M」而非「at least N」)。
         { "code-search-limit",     ["code-search", "public", "--limit", "2"] },
         // 单文件上限:同上,过了上限的命中仍要进总数。
@@ -155,17 +158,24 @@ public class OutputSnapshotTests
         { "code-search-miss",      ["code-search", "zzzznothing"] },
         // 第三种零结果:glob 一个文件都没打中 —— 带 '/' 的 glob 匹配的是相对**根目录**
         // 的整条路径,少写树名就全空。
-        { "code-search-glob-empty", ["code-search", "public", "--files", "Verse/ThingComp.cs"] },
+        { "code-search-glob-empty", ["code-search", "public", "--file-glob", "Verse/ThingComp.cs"] },
         // 第四种零结果:树在名单里、目录也在,里面一个文件都没有 —— 真因是这棵树该 sync 一遍,
         // 不许与上一条同形(否则答案会变成「改 glob」)。
         { "code-search-empty-tree", ["code-search", "public", "--source", "zz.emptytree"] },
         // 别名 --file-extension 收下 'cs',值却按 glob 解 —— 两种文法的零结果要分得开。
         { "code-search-bare-ext",  ["code-search", "public", "--file-extension", "cs"] },
-        // --path 筛空的两种成因:真没有这条路径 vs 给进来的文本其实是个**值**
+        // 不带 '/' 也不带 '.' 的 glob:调用方想取的是目录/命名空间,挑中的却是文件名。
+        // 这一支有命中,于是没有任何落空消息会响 —— 一份完整的答案答的是另一个问题。
+        { "code-search-nameonly-glob", ["code-search", "public", "--file-glob", "*Thing*"] },
+        // --path-contains 筛空的两种成因:真没有这条路径 vs 给进来的文本其实是个**值**
         // (stat 名装在 statBases[N].stat 里)。
-        { "get-path-is-value",     ["get", "Apparel_ShieldBelt", "--path", "MarketValue"] },
+        { "get-path-is-value",     ["get", "Apparel_ShieldBelt", "--path-contains", "MarketValue"] },
         // 第三种:字段在同类型别的 def 上有(Meat_Muffalo 的 ingestible.*),这个 def 上是 null。
-        { "get-path-on-kin",       ["get", "Apparel_ShieldBelt", "--path", "ingestible"] },
+        { "get-path-on-kin",       ["get", "Apparel_ShieldBelt", "--path-contains", "ingestible"] },
+        // 退役的旧名 --path:它在 docs 上仍是 --out 的别名,于是拒绝消息有两句话可说。
+        // 先说的必须是**这条命令**叫它什么 —— 只说「docs 认它」的话,一次改名就把
+        // 用得最多的那个词指向了最不相干的命令,而两种消息都以 exit 2 收场,同形。
+        { "get-retired-path",      ["get", "Apparel_ShieldBelt", "--path", "comps"] },
         // --source 已经给出时,补救措施里不许再列 --source。
         { "code-search-source-cap", ["code-search", "public", "--source", "vanilla", "--max-files", "1"] },
         { "code-search-no-tree",   ["code-search", "public", "--source", "HAR"] },
@@ -173,7 +183,7 @@ public class OutputSnapshotTests
         // 查得到的 key 进表、查不到的字面量点名、运行时拼出来的 key 单独说。
         { "code-search-ui-text",   ["code-search", "Translate"] },
         // 同一次调用关掉它:那三条声明必须一起消失,不许留一句孤零零的边界话。
-        { "code-search-no-ui-text", ["code-search", "Translate", "--no-ui-text"] },
+        { "code-search-no-resolve-keys", ["code-search", "Translate", "--no-resolve-keys"] },
         // keyed 的两个方向。key → 显示什么;文案 → 是哪个 key(带上「拿它去搜代码」那一步)。
         { "keyed-hit",             ["keyed", "CannotUseNoPower"] },
         // 查询词恰好是一个真 key,而同前缀还有别的 —— 精确命中把前缀匹配关掉的那一刻。
@@ -187,16 +197,16 @@ public class OutputSnapshotTests
         // 占位:表里它与真译文同形,而游戏显示的是英文。这一份守的是那句说破在场。
         { "keyed-placeholder",     ["keyed", "TodoKey"] },
         // 过滤器筛空 ≠ 没有这个 key。
-        { "keyed-placeholder-none", ["keyed", "CannotUseNoPower", "--placeholders"] },
+        { "keyed-placeholder-none", ["keyed", "CannotUseNoPower", "--empty-translation"] },
         // 第三条路:不给查询词的整层枚举 —— 「把还没译的全列出来」这条意图要有一种
         // 可表达的形式。两份基线:整层第一页,以及这条意图本身。
         { "keyed-all",             ["keyed"] },
-        { "keyed-all-placeholders", ["keyed", "--placeholders", "--limit", "all"] },
+        { "keyed-all-placeholders", ["keyed", "--empty-translation", "--limit", "all"] },
         // 枚举走的是分页文法而不是精确 key 那一路,所以翻过头这条分支也得有。
-        { "keyed-all-past-end",    ["keyed", "--placeholders", "--offset", "9"] },
-        // --placeholders 是收窄参数,计数要念回它划的那道线 —— 不念的话「1 key.」会被
+        { "keyed-all-past-end",    ["keyed", "--empty-translation", "--offset", "9"] },
+        // --empty-translation 是收窄参数,计数要念回它划的那道线 —— 不念的话「1 key.」会被
         // 读成「filler 一共命中一条」,而真值是 2100 条里有一条占位。
-        { "keyed-text-placeholders", ["keyed", "filler", "--placeholders"] },
+        { "keyed-text-placeholders", ["keyed", "filler", "--empty-translation"] },
         // 零结果的两种成因:代码里有这个字面量而语言文件里没有(死 key),
         // 以及问的其实是个 def 名 —— 后者该被指回 get/search,而不是报「没有」。
         { "keyed-miss",            ["keyed", "NoSuchUiKey"] },
@@ -215,6 +225,9 @@ public class OutputSnapshotTests
         // 裸行三态:一段、整份、越过末尾。翻页参数与总行数恒在,这条命令的分页就靠它。
         { "read-lines",            ["read", "vanilla/Verse/Outline.cs", "--lines", "7-12"] },
         { "read-whole-file",       ["read", "vanilla/Verse/Widgets.cs"] },
+        // 截断行的两种处境逐字同形:还剩一页,与还剩几十页。前者翻一下就完了,后者盲翻是
+        // 荒谬路径,而这条行给的唯一出路一直是 --lines。页数摆出来才分得开。
+        { "read-many-pages",       ["read", "vanilla/Verse/Outline.cs", "--limit", "4"] },
         { "read-past-end",         ["read", "vanilla/Verse/Outline.cs", "--lines", "900"] },
         { "read-line-cap",         ["read", "vanilla/Verse/Outline.cs", "--type", "Outer", "--limit", "4"] },
         // 基名撞车时不选,只列 —— 选错的输出与选对的逐字同形。
@@ -369,7 +382,7 @@ public class OutputSnapshotTests
         }
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
 
-        var (text, _, code) = Fixture.Run("keyed", "--placeholders", "--db", db);
+        var (text, _, code) = Fixture.Run("keyed", "--empty-translation", "--db", db);
         Assert.Equal(1, code);
         Assert.Contains("carry a real translation", text);
         // 分母是整层的行数,不是「筛剩下的零」。

@@ -1,4 +1,4 @@
-$ rimsearcher get Bullet_Revolver --path burstCount
+$ rimsearcher get Bullet_Revolver --path-contains burstCount
 exit 0
 --- stdout ---
 def_name       Bullet_Revolver

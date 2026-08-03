@@ -221,7 +221,7 @@ public sealed class Report
     /// 一句「pass --offset N」挂在最后一页上,会被读成后面还有;而末页照样得明说
     /// 「这是最后一页」,否则「4 of 8 defs, starting at 5」与半截结果同形。
     ///
-    /// 留下的只有算出来的那个 offset。「--limit all 能一次吃完」「与其翻页不如用 --path 筛」
+    /// 留下的只有算出来的那个 offset。「--limit all 能一次吃完」「与其翻页不如用 --path-contains 筛」
     /// 都逐字不随查询变,SKILL.md 已按命令列全,在这里逐次重念是同一份知识的第三个副本。
     /// </summary>
     public Report PageNotice(string noun, int shown, int offset, int total)

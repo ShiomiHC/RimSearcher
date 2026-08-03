@@ -15,7 +15,6 @@ Answers questions about RimWorld's defs and C# from a snapshot of what the game 
 | `docs` | Render the command reference from the declarations in the code. |
 | `export` | Run the game unattended with a chosen mod list and import what it exports. |
 | `fields` | List the field paths that a def type actually uses, with how often each occurs. |
-| `find` | Find defs by the value of a field. This is the reverse lookup: from a C# class or a value back to the defs that use it. |
 | `get` | Show one def in full: its identity, its fields, and any translations of it. |
 | `inherit` | Show what an XML node inherits from and what inherits from it, including abstract parents. |
 | `keyed` | Look up the UI text behind a translation key, or find the key behind a piece of UI text. |
@@ -34,6 +33,7 @@ Answers questions about RimWorld's defs and C# from a snapshot of what the game 
 | `sources list` | List the decompiled source trees and say which ones no longer match the installed assemblies. |
 | `sources sync` | Decompile the assemblies the game actually loads into the configured source tree. |
 | `values` | List the distinct values a field takes, most common first. |
+| `where` | Find defs by the value of a field. This is the reverse lookup: from a C# class or a value back to the defs that use it. |
 
 ## Exit codes
 
@@ -73,7 +73,7 @@ rimsearcher code-search <pattern> [options]
 
 This is for shapes that only text can express, such as a method signature pattern across every class. For anything symbol-level — one member's body, callers, overrides, derived types — the DecompilerServer MCP answers it from metadata and is both faster and exact.
 
-It does not search Defs: the game's XML is not on disk in the form the game ended up with. Data questions ('which defs use this class', 'what values does this field take') belong to 'find', 'values', and 'search', which answer them from the snapshot exactly.
+It does not search Defs: the game's XML is not on disk in the form the game ended up with. Data questions ('which defs use this class', 'what values does this field take') belong to 'where', 'values', and 'search', which answer them from the snapshot exactly.
 
 Three caps apply, and they divide in two. --limit and --max-per-file decide how many matching lines are printed; neither shortens the scan, so the match count stays exact whichever of them bites. --max-files decides how much is read, so when that one bites the count drops to a lower bound ('at least N') and the answer says which trees it never reached.
 
@@ -83,21 +83,21 @@ Three caps apply, and they divide in two. --limit and --max-per-file decide how 
 
 | Option | Meaning | Also accepted |
 |---|---|---|
-| `--files` <glob> | Only search files whose path matches this glob. A glob with no '/' matches the file name alone (*.cs is every .cs file at any depth); with a '/' it matches the path relative to the decompiled root, which begins with the source tree's name even under --source, and there '*' stops at a '/' while '**' crosses it. So */Verse/* is one level down, **/Verse/** is any. Default: `*.cs`. | `--file-filter`, `--file-glob`, `--glob`, `--file-pattern`, `--file-extension`, `--file-type`, `--path-filter`, `--include` |
-| `--max-files` <n|all> | How many files the scan may read before it stops, counted after --files has filtered. Pass 'all' to lift the cap. This is the only cap that can make the answer partial. Default: `50000`. | `--file-limit`, `--scan-limit`, `--max-scan` |
+| `--file-glob` <glob> | Only search files whose path matches this glob. A glob with no '/' matches the file name alone (*.cs is every .cs file at any depth); with a '/' it matches the path relative to the decompiled root, which begins with the source tree's name even under --source, and there '*' stops at a '/' while '**' crosses it. So */Verse/* is one level down, **/Verse/** is any. Default: `*.cs`. | `--path-glob`, `--files`, `--file-filter`, `--glob`, `--file-pattern`, `--file-extension`, `--file-type`, `--path-filter`, `--include` |
+| `--max-files` <n|all> | How many files the scan may read before it stops, counted after --file-glob has filtered. Pass 'all' to lift the cap. This is the only cap that can make the answer partial. Default: `50000`. | `--file-limit`, `--scan-limit`, `--max-scan` |
 | `--max-per-file` <n|all> | How many matching lines to print from any one file. Matches past it are still counted, so the total stays exact. Pass 'all' to print every one. Default: `20`. | `--per-file`, `--matches-per-file`, `--max-matches-per-file`, `--file-preview` |
 | `--source` <name> | Which decompiled source tree to search. Omit to search them all. | `--root`, `--tree`, `--scope` |
 | `-C`, `--context` <n> | Show this many lines above and below each match. Windows that overlap or touch are merged, so no line is printed twice. Default: `0`. | `--context-lines`, `--around` |
 | `-n`, `--limit` <n|all> | How many matching lines to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `-i`, `--ignore-case` | Match without regard to letter case. | `--case-insensitive` |
-| `--no-ui-text` | Do not resolve translation keys found in the printed lines. By default, a printed line containing "SomeKey".Translate() gets its displayed text looked up in the snapshot and listed separately. | `--no-translations`, `--without-ui-text` |
+| `--no-resolve-keys` | Do not resolve translation keys found in the printed lines. By default, a printed line containing "SomeKey".Translate() gets its displayed text looked up in the snapshot and listed separately. This only removes that extra table — the matches themselves, and the match count, are the same either way. | `--no-translations`, `--no-lookup-keys`, `--no-translate`, `--no-translation-lookup`, `--code-only` |
 
 `--json` keys, besides the global `notes`:
 
 | Key | Holds |
 |---|---|
 | `matches` | one row per printed line — file, line, is_match, group, text. Context lines come through with is_match false, and 'group' is the merged window they belong to, so the text form's '--' separator needs no counterpart here. |
-| `ui_text` | present only when a printed matching line calls .Translate() on a literal key that the snapshot can resolve — key, translated, original, one row per distinct key. Keys that resolve to nothing, and lines whose key is assembled at runtime, are reported in the notes rather than as empty rows. Suppressed entirely by --no-ui-text. |
+| `ui_text` | present only when a printed matching line calls .Translate() on a literal key that the snapshot can resolve — key, translated, original, one row per distinct key. Keys that resolve to nothing, and lines whose key is assembled at runtime, are reported in the notes rather than as empty rows. Suppressed entirely by --no-resolve-keys. |
 
 Examples:
 
@@ -212,7 +212,7 @@ The game runs headless: no window appears and nothing is written to the display 
 
 | Option | Meaning | Also accepted |
 |---|---|---|
-| `--modlist` <name> | Which mod list to run. 'rimsearcher modlist list' shows the names. **required** | `--list`, `--mods`, `--profile` |
+| `--modlist` <name> | Which mod list to run. 'rimsearcher modlist list' shows the names. **required** | `--profile` |
 | `--name` <name> | Name to register the resulting snapshot under. Defaults to the mod list's name. | `--as`, `--alias` |
 | `--timeout` <seconds> | How long to wait for the game to finish, and the only thing that will stop it. A large mod list can take minutes to load; if a stage sits still for a while this command says so and keeps waiting, so raise this rather than trusting a stall report. Default: `900`. | `--timeout-seconds`, `--wait` |
 | `--show-window` | Start the game with its window instead of headless. Only needed if a mod in the list requires a graphics device while loading; headless is otherwise identical and faster. | `--window`, `--windowed`, `--graphics` |
@@ -243,7 +243,7 @@ List the field paths that a def type actually uses, with how often each occurs.
 rimsearcher fields <defType> [options]
 ```
 
-Use this before 'find' when you are not sure what a field is called. The counts tell you whether a path is universal for the type or only present on a handful of defs.
+Use this before 'where' when you are not sure what a field is called. The counts tell you whether a path is universal for the type or only present on a handful of defs.
 
 What is listed is every path the exporter recorded a value for. A field whose value was null on every def of the type is in none of them, so a path missing here is not proof that the field does not exist — for the shape of a nested object, read its class with 'code-search' and 'read'.
 
@@ -254,7 +254,7 @@ What is listed is every path the exporter recorded a value for. A field whose va
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n|all> | How many field paths to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
-| `--path` <text> | Only list paths containing this text. Repeat it to widen the selection. | `--paths`, `--contains`, `--match`, `--filter`, `--grep`, `--only` |
+| `--path-contains` <text> | Only list paths containing this text. Repeat it to widen the selection. | `--filter`, `--grep`, `--field-contains`, `--path-filter`, `--contains`, `--match`, `--only` |
 | `--offset` <n> | Skip this many field paths before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
 
 `--json` keys, besides the global `notes`:
@@ -267,48 +267,8 @@ Examples:
 
 ```
 rimsearcher fields ThingDef
-rimsearcher fields ThingDef --path comps
+rimsearcher fields ThingDef --path-contains comps
 rimsearcher fields HediffDef --limit all
-```
-
-## `find`
-
-Find defs by the value of a field. This is the reverse lookup: from a C# class or a value back to the defs that use it.
-
-```
-rimsearcher find [fieldPath] [value] [options]
-```
-
-The field path is matched from the end, so 'compClass' finds 'comps[3].compClass' without you knowing the index. That suffix is plain text and does not stop at a '.', so 'graphicData.shaderType' also matches 'swimmingGraphicData.shaderType'; --exact-path pins the whole path. This replaces grepping the XML: the values here are the merged, post-patch ones, and a class reference is an exact match rather than a text hit.
-
-| Argument | Meaning |
-|---|---|
-| `<fieldPath>` | A field path or just its last segment, such as compClass or defaultProjectile. Omit it to search every field instead. *(optional)* |
-| `<value>` | The value to look for. '--value' spells out this same argument, so give it one way or the other. Omit it to list every def that has the field at all. *(optional)* |
-
-| Option | Meaning | Also accepted |
-|---|---|---|
-| `-n`, `--limit` <n|all> | How many defs to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
-| `--offset` <n> | Skip this many defs before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
-| `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
-| `--exact` | Require the whole value to match, with either a field path or --value. Without it, the value is matched as a substring. | `--exact-match`, `--whole` |
-| `--exact-path` | Match the field path as a whole instead of as a suffix. Write '[]' for any index, so a path shape such as 'lifeStages[].bodyGraphicData.shaderType' can be pasted straight back in. | `--whole-path`, `--path-exact` |
-| `--value` <text> | The value to look for, same as giving it as an argument. Without a field path, every field is searched and the report names which paths hold it. | `--any-field`, `--search-values`, `--holding` |
-
-`--json` keys, besides the global `notes`:
-
-| Key | Holds |
-|---|---|
-| `matches` | with a field path: one row per def that has it — def_name, def_type, value, mod. 'mod' is where the def was declared, not who wrote the value: a comp another mod bolts onto a vanilla def still reads as the vanilla mod, and --scope filters that same column. |
-| `paths` | without a field path: one row per field path that holds the value — path, def_type, defs, example_value. This is the key that question produces; 'matches' is absent then. |
-
-Examples:
-
-```
-rimsearcher find compClass RimWorld.CompShield
-rimsearcher find compClass --value RimWorld.CompShield
-rimsearcher find defaultProjectile Bullet_Revolver
-rimsearcher find --value World/WorldObjects/Expanding
 ```
 
 ## `get`
@@ -330,10 +290,9 @@ The 'source' line is the bare file name the game reported for that def — no di
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n|all> | How many fields to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `60`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
-| `--path` <text> | Only show field paths containing this text. Repeat it to widen the selection. | `--paths`, `--field`, `--field-path`, `--only`, `--filter`, `--grep` |
+| `--path-contains` <text> | Only show field paths containing this text. Repeat it to widen the selection. | `--filter`, `--grep`, `--field-contains`, `--path-filter`, `--field`, `--field-path`, `--only` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind`, `--category` |
-| `--defaults` | Also list fields whose value is the one a fresh instance of the declaring type already carries. Those rows are left out by default because they are the ones most often read as something an author chose, when the snapshot cannot tell whether anything set them at all. How many were left out is always printed, and --path shows a named field either way. | `--with-defaults`, `--all-fields` |
-| `--fields` | Deprecated no-op: fields are always shown. Kept so that scripts that pass it keep working. | `--with-fields`, `--show-fields` |
+| `--defaults` | Also list fields whose value is the one a fresh instance of the declaring type already carries. Those rows are left out by default because they are the ones most often read as something an author chose, when the snapshot cannot tell whether anything set them at all. How many were left out is always printed, and --path-contains shows a named field either way. | `--with-defaults`, `--all-fields` |
 
 `--json` keys, besides the global `notes`:
 
@@ -345,7 +304,7 @@ Examples:
 
 ```
 rimsearcher get Apparel_ShieldBelt
-rimsearcher get Apparel_ShieldBelt --path statBases
+rimsearcher get Apparel_ShieldBelt --path-contains statBases
 rimsearcher get Bullet_Revolver --limit all
 rimsearcher get Bullet_Revolver --defaults
 ```
@@ -369,13 +328,13 @@ What is shown is the XML before PatchOperations are applied. Each node that decl
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n|all> | How many children to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
-| `--path` <text> | Ask which layer a field comes from. For every layer in the chain, count the other defs descending from it that carry a field path containing this text, and how many of those carry the same value. Matching is the substring match 'get --path' uses, so the same word selects the same fields in both commands. | `--field`, `--fieldPath` |
+| `--path-contains` <text> | Ask which layer a field comes from. For every layer in the chain, count the other defs descending from it that carry a field path containing this text, and how many of those carry the same value. Matching is the substring match 'get --path-contains' uses, so the same word selects the same fields in both commands. | `--filter`, `--grep`, `--field-contains`, `--path-filter`, `--field`, `--fieldPath` |
 
 `--json` keys, besides the global `notes`:
 
 | Key | Holds |
 |---|---|
-| `nodes` | one object per XML node answering to the name — each with 'node' (identity and patch count), 'ancestors', 'children' when it has any, and 'witnesses' when --path is given. |
+| `nodes` | one object per XML node answering to the name — each with 'node' (identity and patch count), 'ancestors', 'children' when it has any, and 'witnesses' when --path-contains is given. |
 
 Examples:
 
@@ -383,7 +342,7 @@ Examples:
 rimsearcher inherit BaseBullet
 rimsearcher inherit Bullet_Revolver
 rimsearcher inherit BaseHumanlike --limit all
-rimsearcher inherit Bullet_Revolver --path damageAmountBase
+rimsearcher inherit Bullet_Revolver --path-contains damageAmountBase
 ```
 
 ## `keyed`
@@ -402,13 +361,13 @@ Rows are marked 'in effect' or 'on disk'. Only 'in effect' is what the game disp
 
 | Argument | Meaning |
 |---|---|
-| `<query>` | A translation key, or a phrase from the interface in any language the snapshot has. Leave it out to list the layer itself — every keyed translation, or with --placeholders only the untranslated ones. *(optional)* |
+| `<query>` | A translation key, or a phrase from the interface in any language the snapshot has. Leave it out to list the layer itself — every keyed translation, or with --empty-translation only the untranslated ones. *(optional)* |
 
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n|all> | How many keys to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--offset` <n> | Skip this many keys before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
-| `--placeholders` | List only keys whose translation is still a placeholder — the language file has the key but not a translation, so the game falls back to English. This is what a translation-coverage question wants, and it needs no query: on its own it filters the whole layer. | `--untranslated`, `--todo` |
+| `--empty-translation` | List only keys the language file leaves untranslated — the key is there but carries no translation, so the game falls back to English. This is what a translation-coverage question wants, and it needs no query: on its own it filters the whole layer. | `--empty-translations`, `--untranslated`, `--todo` |
 
 `--json` keys, besides the global `notes`:
 
@@ -422,7 +381,7 @@ Examples:
 rimsearcher keyed CannotUseNoPower
 rimsearcher keyed 没有电力
 rimsearcher keyed Command --limit all
-rimsearcher keyed --placeholders --limit all
+rimsearcher keyed --empty-translation --limit all
 ```
 
 ## `list`
@@ -435,14 +394,14 @@ rimsearcher list [defType] [options]
 
 | Argument | Meaning |
 |---|---|
-| `<defType>` | A def type such as ThingDef. Leave it out and this lists the def types themselves, with how many defs each holds — all of them, unless you pass --limit. --class and --offset need a def type and are refused without one. *(optional)* |
+| `<defType>` | A def type such as ThingDef. Leave it out and this lists the def types themselves, with how many defs each holds — all of them, unless you pass --limit. --own-class and --offset need a def type and are refused without one. *(optional)* |
 
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n|all> | How many defs to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
 | `--offset` <n> | Skip this many defs before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
-| `--class` <ClassName> | Only defs whose own class is this. Def types that hold several classes list them below the count. Many def types hold just one class and pick their behaviour in a nested field instead — GenStepDef is all Verse.GenStepDef, with the GenStep subclass on 'genStep' — and this option cannot see that. 'rimsearcher find Class <ClassName>' can. | `--def-class`, `--runtime-class` |
+| `--own-class` <ClassName> | Only defs whose own class is this. Def types that hold several classes list them below the count. Many def types hold just one class and pick their behaviour in a nested field instead — GenStepDef is all Verse.GenStepDef, with the GenStep subclass on 'genStep' — and this option cannot see that. 'rimsearcher where Class <ClassName>' can. | `--def-class`, `--class`, `--runtime-class` |
 | `--find` <text> | Only defs whose name or label contains this. The filter runs before --limit, so a count of what matched is always reported — unlike piping to grep, which only ever sees the current page. | `--filter`, `--grep`, `--search`, `--match` |
 
 `--json` keys, besides the global `notes`:
@@ -458,7 +417,7 @@ Examples:
 rimsearcher list
 rimsearcher list HediffDef
 rimsearcher list GenStepDef --find scatter
-rimsearcher list CreepJoinerBaseDef --class CreepJoinerAggressiveDef
+rimsearcher list CreepJoinerBaseDef --own-class CreepJoinerAggressiveDef
 rimsearcher list ThingDef --scope all,-vanilla --limit all
 ```
 
@@ -592,8 +551,8 @@ Page with --lines, never with a pipe. The first line of the answer says which li
 
 | Option | Meaning | Also accepted |
 |---|---|---|
-| `--member` <name> | Read the declaration of this member. Every member of that name in the file is returned; --type narrows it to one declaring type. | `--method`, `--method-name`, `--member-name`, `--field`, `--property` |
-| `--type` <name> | Read this whole type. With --member it instead says which type the member must belong to. | `--class`, `--class-name`, `--type-name`, `--extract-class` |
+| `--member` <name> | Read the declaration of this member. Every member of that name in the file is returned; --type narrows it to one declaring type. | `--method`, `--method-name`, `--member-name`, `--property` |
+| `--type` <name> | Read this whole type. With --member it instead says which type the member must belong to. | `--class-name`, `--type-name`, `--extract-class` |
 | `--lines` <a-b|a+n|a|all> | Read raw lines instead: '400-460' is inclusive, '400+60' is sixty lines from 400, '400' starts there and takes the default window, 'all' is the whole file. Without it the read starts at line 1 and takes 150. | `--line`, `--range`, `--line-range` |
 | `--source` <name> | Only resolve the file name inside this source tree. 'rimsearcher sources list' names them. | `--root`, `--tree` |
 | `--outline` | List the file's types and members with their modifiers and line ranges instead of reading any of them. This is the cheap way to find out what to ask for. | `--members`, `--toc` |
@@ -732,7 +691,7 @@ List the defs whose fields the exporter stopped short on.
 rimsearcher snapshot truncated [options]
 ```
 
-Every count this tool reports over field paths — 'find', 'values', 'fields' — is complete only for what got indexed. These defs are where that gap can hide, so this is how a claim of 'that is all of them' gets cross-checked rather than trusted.
+Every count this tool reports over field paths — 'where', 'values', 'fields' — is complete only for what got indexed. These defs are where that gap can hide, so this is how a claim of 'that is all of them' gets cross-checked rather than trusted.
 
 | Option | Meaning | Also accepted |
 |---|---|---|
@@ -874,4 +833,44 @@ Examples:
 rimsearcher values compClass
 rimsearcher values expandingIconTexture --type WorldObjectDef
 rimsearcher values thingClass --scope vanilla
+```
+
+## `where`
+
+Find defs by the value of a field. This is the reverse lookup: from a C# class or a value back to the defs that use it.
+
+```
+rimsearcher where [fieldPath] [value] [options]
+```
+
+The field path is matched from the end, so 'compClass' finds 'comps[3].compClass' without you knowing the index. That suffix is plain text and does not stop at a '.', so 'graphicData.shaderType' also matches 'swimmingGraphicData.shaderType'; --exact-path pins the whole path. This replaces grepping the XML: the values here are the merged, post-patch ones, and a class reference is an exact match rather than a text hit.
+
+| Argument | Meaning |
+|---|---|
+| `<fieldPath>` | A field path or just its last segment, such as compClass or defaultProjectile. Omit it to search every field instead. *(optional)* |
+| `<value>` | The value to look for. '--value' spells out this same argument, so give it one way or the other. Omit it to list every def that has the field at all. *(optional)* |
+
+| Option | Meaning | Also accepted |
+|---|---|---|
+| `-n`, `--limit` <n|all> | How many defs to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+| `--offset` <n> | Skip this many defs before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
+| `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
+| `--exact` | Require the whole value to match, with either a field path or --value. Without it, the value is matched as a substring. | `--exact-match`, `--whole` |
+| `--exact-path` | Match the field path as a whole instead of as a suffix. Write '[]' for any index, so a path shape such as 'lifeStages[].bodyGraphicData.shaderType' can be pasted straight back in. | `--whole-path`, `--path-exact` |
+| `--value` <text> | The value to look for, same as giving it as an argument. Without a field path, every field is searched and the report names which paths hold it. | `--any-field`, `--search-values`, `--holding` |
+
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `matches` | with a field path: one row per def that has it — def_name, def_type, value, mod. 'mod' is where the def was declared, not who wrote the value: a comp another mod bolts onto a vanilla def still reads as the vanilla mod, and --scope filters that same column. |
+| `paths` | without a field path: one row per field path that holds the value — path, def_type, defs, example_value. This is the key that question produces; 'matches' is absent then. |
+
+Examples:
+
+```
+rimsearcher where compClass RimWorld.CompShield
+rimsearcher where compClass --value RimWorld.CompShield
+rimsearcher where defaultProjectile Bullet_Revolver
+rimsearcher where --value World/WorldObjects/Expanding
 ```
