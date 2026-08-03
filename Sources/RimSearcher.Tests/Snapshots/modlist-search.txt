@@ -1,0 +1,9 @@
+$ rimsearcher modlist show --find test.notinsnapshot
+exit 0
+--- stdout ---
+1 mod across 11 mod lists.
+1 mod list could not be read and so was not searched (fixture-damaged). A match could be sitting in there.
+
+modlist        order  package_id          name
+fixture-extra  1      test.notinsnapshot  Not In Snapshot
+--- stderr ---

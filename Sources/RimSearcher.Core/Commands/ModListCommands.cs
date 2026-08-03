@@ -292,10 +292,14 @@ public sealed class ModListShowCommand : Command
             return 1;
         }
 
-        // hint 不说 "all":打不开的那几份也在这台机器上,而这里数的是打得开的。
-        // (它只在截断态才印,而这个 Tally 恒完整 —— 但一句不印的话说错了,照样是错的。)
-        ctx.Report.CountNotice(Tally.Complete(rows.Count), "mod",
-            $"searched {Tally.Complete(searched).Render("mod list")}.");
+        // 分母与计数同句。此前它是 CountNotice 的 howToSeeMore,而那个参数只在截断态才印、
+        // 这个 Tally 恒完整 —— 于是「搜了几份」一次都没印出来过,偏偏零结果那一支说了。
+        // 「3 mods.」不说搜的是 12 份还是 1 份,而这正是这条命令在答的问题。
+        //
+        // 数的是**打得开的**那几份:打不开的也在这台机器上,由 NoteSkipped 单独点名。
+        ctx.Report.Notice(NoticeKind.Count,
+            $"{Tally.Complete(rows.Count).Render("mod")} across " +
+            $"{Tally.Complete(searched).Render("mod list")}.");
         NoteSkipped();
         ctx.Report.Table("mods", ["modlist", "order", "package_id", "name"], rows);
         return 0;

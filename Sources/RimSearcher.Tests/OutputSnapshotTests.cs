@@ -108,6 +108,9 @@ public class OutputSnapshotTests
         // list 的另一半:不给 def 类型时列类型总表。
         { "list-types",            ["list"] },
         { "mods",                  ["mods"] },
+        // modlist 此前一份基线都没有,而这条命令答的正是「搜遍了几份」——
+        // 那个分母本来挂在 CountNotice 的截断参数上,而这个 Tally 恒完整,于是一次都没印出来过。
+        { "modlist-search",        ["modlist", "show", "--find", "test.notinsnapshot"] },
         // limit 取 2 而不是 3:默认值行不进表,ShieldBelt 只剩 3 条可列,--limit 3 截不到东西,
         // 而这份基线要的正是「JSON 里的截断声明」。
         { "json-mode",             ["get", "Apparel_ShieldBelt", "--limit", "2", "--json"] },
