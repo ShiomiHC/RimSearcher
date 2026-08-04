@@ -46,10 +46,6 @@ The MCP is often not connected — a normal state, not an error. CLI substitutes
 | `find_callers` | nothing exact — `code-search` matches *text*; same-named members collide. Read the hits; never report the count as a caller count. |
 | `get_il` | **nothing.** Opcode-level questions (`Call` vs `Callvirt`, transpiler targets) are invisible in decompiled C#. Say the question cannot be answered. |
 
-**Anchor the pattern, never search a bare symbol name** — `"class MapPortal\b"` returns
-one hit, the bare name hundreds. A three-digit match count is the fingerprint of an
-unanchored pattern.
-
 ## Out of range
 
 - **"How should this XML be written?"** No path from runtime objects back to authorable
