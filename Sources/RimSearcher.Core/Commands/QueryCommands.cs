@@ -590,9 +590,19 @@ public sealed class GetCommand : Command
                     // 不接着说破 null 字段从没进过索引,那个 M 就会被读成「这个 def 的全部
                     // 字段」,而「字段不存在」与「值是 null」在这里同形。它数的是那两个数
                     // (没列出的、索引里的),不是那两张表 —— neither 得自己带上主语。
+                    // 否定那个推论的话必须落在**产生那个推论的**那条路径上。此前
+                    // 「值相等 ≠ 没人写」只在 --defaults 渲染出 yes 行时才说,而这一句是
+                    // **不加 --defaults 时唯一提到那些字段的地方** —— 最短、最常走的那条路。
+                    // 实测有人从这句的 carrying 推出「它们带的是类默认 ⇒ 没人写过」,
+                    // 而三处口径(产地注释 / SKILL.md / --defaults Help)当时全是准确的:
+                    // 副本都对,只是没有一份落在他走的那条路上。
+                    // 不新增查询,只是把另一支已经说清的话搬到这一支。
                     ctx.Report.Notice(NoticeKind.Filter,
-                        $"Not listed: {Tally.Complete(defaulted).Render("field")} carrying the declaring type's " +
-                        "own default; --defaults lists them. The snapshot holds " +
+                        $"Not listed: {Tally.Complete(defaulted).Render("field")} whose value matches the " +
+                        // 出路紧贴它召回的那个数(见下),否定另起一句 —— 挂在分号后面会被
+                        // 连读成同一句的尾巴,而它要挡的正是「只读前半句」。
+                        "declaring type's own default; --defaults lists them. That match is not evidence " +
+                        "that nothing wrote them. The snapshot holds " +
                         $"{Tally.Complete(total).Render("field path")} for this " +
                         "def; a null-valued field never entered the index and is in neither count." +
                         // 方位词指的是这句话下面那张表。此前渲染器无条件把声明全提到最前,
@@ -2116,8 +2126,14 @@ internal static class Completeness
         // XML 里照着默认值再写一遍是常事,能证的只有『无从区分』」)。
         // 那句话把「值相等」说成了「它就是那个默认值」,读者顺着推就得出「所以作者没写」——
         // 正是 r13 题 2 那个错答的方向。输出与它自己的产地注释矛盾,是假话,不是天花板。
-        var yesMeans = $"a yes only says the value matches what a fresh instance of the declaring " +
-                       "type carries — whether anything wrote it is not recorded";
+        // **否定放主句,匹配事实放从句。** 此前是反过来的(前半句陈述、破折号后免责),
+        // 而实测有人复述了前半句、接着自己接上「所以是没写」—— 前半句可独立成立时,
+        // 只读前半句反而显得更完整。inherit 那句同型的话就是这么排的
+        // (`A 0 is therefore not evidence that…` 是主句)。
+        // 外层已经有一个冒号,这里用破折号。破折号本身不是问题 —— 问题是此前**否定在
+        // 破折号后**,于是只读前半句的人读到的是一句可独立成立的陈述。
+        var yesMeans = "a yes is not evidence that nothing wrote the value — it only says the value " +
+                       "matches what a fresh instance of the declaring type carries";
         ctx.Report.Notice(NoticeKind.Advisory, listed.Count > 0
             ? $"Values that most of the {total} {def.DefType}s in this snapshot also carry, so their " +
               $"'{FieldDefault.Column}' is not this def having made a choice — the count in brackets: " +

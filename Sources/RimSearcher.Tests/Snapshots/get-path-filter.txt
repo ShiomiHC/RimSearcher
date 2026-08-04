@@ -14,5 +14,5 @@ path                                value                code_default
 comps[0].compClass                  RimWorld.CompShield  yes
 comps[0].props.energyMax            0.5                  no
 comps[0].props.energyLossPerDamage  0.033                no
-No value above with 'code_default'=no is one that most of the 9 ThingDefs in this snapshot also carry. Rows marked yes were not compared: a yes only says the value matches what a fresh instance of the declaring type carries — whether anything wrote it is not recorded.
+No value above with 'code_default'=no is one that most of the 9 ThingDefs in this snapshot also carry. Rows marked yes were not compared: a yes is not evidence that nothing wrote the value — it only says the value matches what a fresh instance of the declaring type carries.
 --- stderr ---

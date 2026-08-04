@@ -1311,10 +1311,46 @@ public class GrammarTests
             Assert.Contains("fresh instance of the declaring type", text, StringComparison.Ordinal);
         }
 
-        // 「写没写不在记录里」在输出侧两支都要在;help 侧由 --defaults 那条 Help 自己说
-        // (措辞是 The snapshot cannot tell whether anything set those at all)。
+        // **否定排在主句、在「值相等」那个事实之前。** r17 抓到一个受测者复述了限定的
+        // 前半句、接着自己接上「所以是没写、用类默认」—— 前半句可独立成立时,只读前半句
+        // 反而显得更完整,后半句的免责就成了可以不读的尾巴。
         foreach (var text in new[] { onlyYes, hit })
-            Assert.Contains("whether anything wrote it is not recorded", text, StringComparison.Ordinal);
+        {
+            var neg = text.IndexOf("is not evidence that nothing wrote", StringComparison.Ordinal);
+            var fact = text.IndexOf("only says the value matches", StringComparison.Ordinal);
+            Assert.True(neg >= 0 && fact > neg,
+                        "「值相等不构成没人写的证据」要在主句,排在「值相等」那个事实之前");
+        }
+    }
+
+    /// <summary>
+    /// 否定那个推论的话必须落在**产生那个推论的**那条路径上。
+    ///
+    /// r17 抓到:不加 <c>--defaults</c> 时,提到那些字段的**只有** <c>Not listed:</c> 那一句,
+    /// 而受测者正是从它推出「没人写过」;否定它的那句当时只在加了 <c>--defaults</c>、
+    /// 渲染出 yes 行时才印。**三处副本(产地注释 / SKILL.md / Help)当时全是准确的** ——
+    /// 副本都对,只是没有一份落在他走的那条路上,而那是最短、最常走的一条。
+    ///
+    /// 这给「改一处先查全部副本」补了一个维度:除了「有几处文案、哪些说反了」,
+    /// 还有**「读者可能走的每条路径上,那句话在不在」**。与「输出侧的一句话只有落在
+    /// 必经路径上才测得到」是同一件事的另一面。
+    /// </summary>
+    [Fact]
+    public void 值相等不等于没人写这句落在默认路径上()
+    {
+        const string Denial = "is not evidence that nothing wrote";
+
+        // 不加 --defaults:那些行根本不在表里,只有 Not listed 那句在说它们。
+        var (plain, _, _) = Fixture.Run("get", "Bullet_Revolver");
+        Assert.Contains("Not listed:", plain, StringComparison.Ordinal);
+        Assert.Contains(Denial, plain, StringComparison.Ordinal);
+
+        // JSON 侧同样 —— 那条失效样本走的就是 --json。
+        Assert.Contains(Denial, Fixture.Run("get", "Bullet_Revolver", "--json").Stdout,
+                        StringComparison.Ordinal);
+
+        // 「carrying」那个读法不许回来:它把「值相等」说成「它们带的就是类默认」。
+        Assert.DoesNotContain("carrying the declaring type's own default", plain, StringComparison.Ordinal);
     }
 
     /// <summary>

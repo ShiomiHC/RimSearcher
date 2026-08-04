@@ -9,11 +9,11 @@ exit 0
     },
     {
       "kind": "filter",
-      "text": "Not listed: 1 field carrying the declaring type's own default; --defaults lists them. The snapshot holds 12 field paths for this def; a null-valued field never entered the index and is in neither count. Nothing below shows any field of these list entries, which the def has all the same: comps[0], statBases[0], statBases[1] — so the lists run longer than they look here."
+      "text": "Not listed: 1 field whose value matches the declaring type's own default; --defaults lists them. That match is not evidence that nothing wrote them. The snapshot holds 12 field paths for this def; a null-valued field never entered the index and is in neither count. Nothing below shows any field of these list entries, which the def has all the same: comps[0], statBases[0], statBases[1] — so the lists run longer than they look here."
     },
     {
       "kind": "advisory",
-      "text": "Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_default' is not this def having made a choice — the count in brackets: soundDrop (9), soundImpactDefault (9). Only rows whose 'code_default' is no were compared: a yes only says the value matches what a fresh instance of the declaring type carries — whether anything wrote it is not recorded."
+      "text": "Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_default' is not this def having made a choice — the count in brackets: soundDrop (9), soundImpactDefault (9). Only rows whose 'code_default' is no were compared: a yes is not evidence that nothing wrote the value — it only says the value matches what a fresh instance of the declaring type carries."
     },
     {
       "kind": "count",
