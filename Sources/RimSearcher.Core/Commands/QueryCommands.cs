@@ -926,7 +926,9 @@ public sealed class FindCommand : Command
                 ctx.Report.Notice(NoticeKind.NextStep,
                     $"No field path is exactly '{path}'. Matched as a suffix instead: " +
                     string.Join(", ", shown.Select(x => $"{x.Shape} ({x.Count})")) +
-                    (shapes.Count > shown.Count ? $", and {shapes.Count - shown.Count} more shapes" : "") +
+                    (shapes.Count > shown.Count
+                        ? $", plus {Tally.Complete(shapes.Count - shown.Count).Render("path shape")} not shown"
+                        : "") +
                     ". Any one of those goes straight back into --exact-path, where '[]' stands for any index.");
                 NoteElsewhere();
                 return 1;
@@ -1134,9 +1136,6 @@ public sealed class FindCommand : Command
                          "by name.");
         }
 
-        // 一次命中横跨几种路径形状 —— 拿 where 的结果做集合差的人,少的正是这一句。
-        Advisory.NoteMixedPathShapes(ctx, ctx.Db.FindPathShapes(pq, value, exact, scope));
-
         // 这里不像 get 那样把默认值行滤掉:调用方点名了一个字段与一个值,「哪些 def 取到过它」
         // 的答案里就该有它们。但**为什么取到**要分得开 —— comps[N].compClass 一整批
         // 等于 CompShield,多半是 CompProperties_Shield 的声明里写死的,不是谁在 XML 里挑的。
@@ -1159,6 +1158,12 @@ public sealed class FindCommand : Command
         // 同样在表上方,且排在 scope 补集那句之后:两句都在说「你手上这张表不是全集」,
         // 而 scope 那条是调用方自己划的界,这条是他没意识到自己划了的界。
         Advisory.NoteValueElsewhere(ctx, pq, value, exact, scope, defs);
+
+        // 跨形状那句紧贴着它:两条是同一件事的两个维度 —— 路径维度的外延(你这一堆行
+        // 其实不是同一个字段)与值维度的外延(同一个值还坐在别的字段上),本来就该挨着读。
+        // 它此前是 footnote,于是**同类的两条外延警告分居数据两侧**,而按位置纪律
+        // 下方那条正是会被 head/sed 截掉的那条。
+        Advisory.NoteMixedPathShapes(ctx, ctx.Db.FindPathShapes(pq, value, exact, scope));
 
         ctx.Report.Table("matches",
             generated.Total > 0
@@ -2342,11 +2347,14 @@ internal static class Advisory
         ctx.Report.Notice(NoticeKind.Boundary,
             "These rows span more than one path shape: " +
             string.Join(", ", shown.Select(x => $"{x.Shape} ({x.Count})")) +
-            (shapes.Count > shown.Count ? $", and {shapes.Count - shown.Count} more shapes" : "") +
+            // 「and 1 more shapes」——名词随数量变形只能走登记处。挪到表上方之后
+            // 这句是人人都会读到的了,那个复数错也跟着从脚注区走到了台前。
+            (shapes.Count > shown.Count
+                ? $", plus {Tally.Complete(shapes.Count - shown.Count).Render("path shape")} not shown"
+                : "") +
             ". The suffix matched them all; a set operation over this result treats them as one field " +
             "unless the path column is read row by row. Pasting one of those shapes back with " +
-            "--exact-path keeps that one alone.",
-            footnote: true);
+            "--exact-path keeps that one alone.");
     }
 
     /// <summary>

@@ -422,8 +422,17 @@ public sealed class ReadCommand : Command
             $"({Tally.Complete(text.Length).Render("line")}, " +
             $"{Tally.Complete(decls.Count).Render("declaration")})." +
             Suggestion.Say(close) +
-            " 'rimsearcher read " + rel + " --outline' lists every declaration, and brace matching is not a " +
-            "parse — 'rimsearcher code-search' searches the text itself.");
+            // 出路不许比它自己的自述更自信。此前这里写 "lists every declaration",而
+            // --outline 自己的末尾写的是「a name not listed here may still be in the file」——
+            // 同一个能力,在自述处诚实、在被推荐处被夸大,而读者是**先**读到推荐的那句、
+            // 带着一个更强的预期去看那份清单的。实证:CostListCalculator.cs 里
+            // `operator ==` 两边都列不出来,而 "every" 让那份清单成了「文件里没有」的证据。
+            //
+            // 顺序也调了:--outline 与 --member 共用花括号匹配,对这次落空**没有诊断力**——
+            // 拿同一把尺子去校验它自己量出来的结果。真出路是 code-search,排它在前。
+            " 'rimsearcher code-search' searches the text itself and does not go through brace matching, " +
+            "which is what just came up empty — 'rimsearcher read " + rel + " --outline' lists what that " +
+            "same matching does find, so a name missing there is missing for the same reason.");
 
         // 「这个文件里没有」会被读成「这个类型没有这个成员」。反编译产物**不重复父类的成员**:
         // `read MapPortal.cs --member Destroy` 落空,而 Destroy 在再上一层的 Thing 里。

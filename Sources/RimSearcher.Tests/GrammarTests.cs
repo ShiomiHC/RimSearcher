@@ -2511,6 +2511,61 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 两条外延警告要在数据的**同一侧**,而且是上方那一侧。
+    ///
+    /// 跨形状那条(路径维度:你这一堆行其实不是同一个字段)此前是 footnote,而值维度那条
+    /// 在表上方 —— 同一件事的两个维度分居数据两侧,且按位置纪律,下方那条正是
+    /// `head`/`sed` 截掉的那条。两条本来就该挨着读。
+    /// </summary>
+    [Fact]
+    public void 跨形状与同值别处两条外延警告都在表上方且相邻()
+    {
+        var (text, _, _) = Fixture.Run("where", "stat", "--value", "MarketValue");
+        var shapes = text.IndexOf("span more than one path shape", StringComparison.Ordinal);
+        var head = text.IndexOf("def_name", StringComparison.Ordinal);
+        Assert.True(shapes >= 0, "跨形状那句该出场");
+        Assert.True(head > shapes, "跨形状那句要排在表上方,不许留在末尾脚注区");
+
+        // 同一次查询两条都出场时必须相邻 —— 中间隔着别的段落就又成了两处分开的警告。
+        var elsewhere = text.IndexOf("Naming a field narrows", StringComparison.Ordinal);
+        if (elsewhere >= 0)
+        {
+            var between = text[Math.Min(elsewhere, shapes)..Math.Max(elsewhere, shapes)];
+            Assert.DoesNotContain("\n\n\n", between, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// **一个能力被推荐时的描述,不许强于它自述时的描述。**
+    ///
+    /// `--outline` 自己的末尾说「a name not listed here may still be in the file」,而
+    /// `--member` 落空时曾推荐它说「lists **every** declaration」—— 同一个能力,自述处诚实、
+    /// 被推荐处夸大,而读者是**先**读推荐那句、带着更强的预期去看清单的。
+    /// 实证:`CostListCalculator.cs` 的 `operator ==` 两边都列不出来,而 "every" 把那份
+    /// 清单变成了「文件里没有」的证据。
+    ///
+    /// 这条闸比对**两个独立产地**,不复述任何一边的理由 —— 与磁盘层那条同型。
+    /// </summary>
+    [Fact]
+    public void 推荐outline时的说法不许强于它自述的说法()
+    {
+        var (miss, _, _) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--member", "Shard");
+        var (outline, _, _) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--outline");
+
+        // 自述侧:盲区说破,这是被比对的那个基准。
+        Assert.Contains("may still be in the file", outline, StringComparison.Ordinal);
+
+        // 推荐侧:不许出现全称量词。逐字钉 every 太窄 —— 钉的是「这个能力被说成完整的」。
+        foreach (var absolute in new[] { "every declaration", "all declarations", "the complete list" })
+            Assert.DoesNotContain(absolute, miss, StringComparison.Ordinal);
+
+        // 而且真出路排在前面:--outline 与 --member 共用花括号匹配,对这次落空没有诊断力。
+        var cs = miss.IndexOf("code-search", StringComparison.Ordinal);
+        var ol = miss.IndexOf("--outline", StringComparison.Ordinal);
+        Assert.True(cs >= 0 && ol > cs, "不走同一套匹配的那条出路要排在前面");
+    }
+
+    /// <summary>
     /// 点名字段的那次查询,**外延不足**的那一半。`where` 对「结果比预期多」处理得很齐
     /// (跨形状、子串、scope 补集三句),反向一直是零提示 —— 而那种局面下表是干净完整的,
     /// 没有一处看得出问题。闭卷实测四个样本零反查,带着「字段名一律反查」那条文档的
