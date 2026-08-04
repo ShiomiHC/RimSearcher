@@ -154,8 +154,10 @@ public class SkillPromiseTests
         // 这条替掉的原文是「`read --member` has no in-command window at all — read the count
         // line, then pipe」:一句 CLI 当场证伪得了的假话,而它是禁管道那段里**唯一授权
         // 去管道**的场合。第九轮盲测把它当论据、文档照搬,两边都没跑过一次。
-        new("`--limit` caps the lines and the count line hands back the exact `--lines a-b` to resume from",
-            nameof(GrammarTests.成员读的窗口是limit加印回来的续读区间)),
+        // 2026-08-04(14 批 B):doc 侧退役,`成员读的窗口是limit加印回来的续读区间` 留着 ——
+        // 现敲的原文是「--limit stopped the printing at 5 lines, 427 short of the whole.
+        // Raise it, or read on with --lines 2021-2447.」,续读区间是算好的实参,文档给的
+        // 是占位符 `a-b`。上面那句假话正是「照搬没跑过」的产物,而 CLI 这一侧跑过。
         new("match **braces, not C#**",
             "能力边界只挂在做了推断的那几条路上"),
 
@@ -205,8 +207,9 @@ public class SkillPromiseTests
         // 文档批补的四条可实测口径。每条都是「不这么以为就会拿错答案」的那种句子,
         // 而文档与实现是两处产地。
         new("is case-sensitive unless you pass `-i`", nameof(GrammarTests.skill那几条可实测的默认与口径逐条对得上)),
-        new("it caps printed lines rather than narrowing a result set, so `--limit all` *widens*",
-            nameof(GrammarTests.skill那几条可实测的默认与口径逐条对得上)),
+        // 2026-08-04(14 批 B):`read` 的 --limit 那条同批退役。它防的是「--limit 会挑出
+        // 最相关的那几行」这个误解,而 CLI 的首行 `…, lines 1-20 of 2449.` 把它当场拆了 ——
+        // 行号区间摆在那里,没有「挑」的余地。这条闸的其余三条钉子照旧指着它。
         new("its `def_types`\n  row names them", nameof(GrammarTests.skill那几条可实测的默认与口径逐条对得上)),
         new("says where the def was declared, not who wrote the value you asked",
             nameof(GrammarTests.skill那几条可实测的默认与口径逐条对得上)),

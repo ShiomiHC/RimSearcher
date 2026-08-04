@@ -188,34 +188,11 @@ public class GateTests
         Assert.True(total > 5, "The skill docs suddenly name almost no commands; the scanner is probably broken.");
     }
 
-    /// <summary>
-    /// 收窄开关那张表:每一行的命令必须真的接受同一行里列出的每个开关。
-    /// 上一条只看得见成句的命令行,而这张表把命令与开关拆在两个单元格里 ——
-    /// 恰恰是最容易漂的形态。
-    /// </summary>
-    [Fact]
-    public void skill文档的收窄开关表与声明一致()
-    {
-        var registry = new CommandRegistry();
-        var text = File.ReadAllText(SkillPath).Replace("\r\n", "\n");
-
-        var rows = Regex.Matches(text, @"^\| `([a-z-]+(?: [a-z-]+)?)` \| ((?:`--[a-z-]+`(?:, )?)+) \|$",
-                                 RegexOptions.Multiline);
-        Assert.True(rows.Count >= 5, "The narrowing table in SKILL.md was not found; the scanner needs updating.");
-
-        foreach (Match row in rows)
-        {
-            var (command, _) = registry.Resolve(row.Groups[1].Value.Split(' '));
-            Assert.True(command is not null, $"The narrowing table names '{row.Groups[1].Value}', which is not a command.");
-
-            var accepted = command!.Spec.Options
-                                  .SelectMany(o => new[] { o.Name }.Concat(o.Aliases))
-                                  .ToHashSet(StringComparer.Ordinal);
-            foreach (Match opt in Regex.Matches(row.Groups[2].Value, @"--([a-z-]+)"))
-                Assert.True(accepted.Contains(opt.Groups[1].Value),
-                    $"The narrowing table gives '{command.Spec.Name}' the option '--{opt.Groups[1].Value}', which it does not accept.");
-        }
-    }
+    // 2026-08-04(14 批 B):`skill文档的收窄开关表与声明一致` 随那张表一起退役。它守的是
+    // 一张十一行的手写表 ——「命令与开关拆在两个单元格里,恰恰是最容易漂的形态」—— 而表
+    // 退成了 `<command> --help`,那一份直接由 CommandSpec 生成,漂移这件事本身没有了。
+    // **不是把闸放松了**:上面那条(文档里成句的命令行逐个 token 对 Spec)覆盖面没变,
+    // 而这条现在没有输入可扫。表若哪天回来,连这道闸一起回来。
 
     /// <summary>引号与转义之外的最小分词 —— 这里只需要把一条命令行拆成 token。</summary>
     private static List<string> Tokenize(string s)

@@ -87,29 +87,9 @@ any depth.
   the damage is silent and confined to `$`: the pattern that ran is not the one you wrote.
 - **`code-search` is case-sensitive unless you pass `-i`** — `orbitalDebris` and
   `OrbitalDebris` are two searches, and the wrong one's zero looks like absence.
-- **Narrow inside the command.** Each one has its own filters:
-
-| Command | Narrow with |
-|---|---|
-| `get` | `--path-contains`, `--type`, `--defaults`, `--limit` |
-| `fields` | `--path-contains`, `--offset`, `--limit` |
-| `values` | `--type`, `--scope`, `--exact-path`, `--offset`, `--limit` |
-| `search` | `--type`, `--scope`, `--offset`, `--limit` |
-| `list` | `--find`, `--own-class`, `--scope`, `--offset`, `--limit` |
-| `inherit` | `--path-contains`, `--limit` |
-| `keyed` | `--empty-translation`, `--offset`, `--limit` |
-| `where` | `--scope`, `--exact`, `--exact-path`, `--offset`, `--limit` |
-| `code-search` | `--source`, `--file-glob`, `--max-files`, `--max-per-file`, `--limit` |
-| `read` | `--member`, `--type`, `--lines`, `--outline`, `--source`, `--limit` |
-| `sources sync` | `--only`, `--modlist`, `--force`, `--dry-run` |
-
-  Reading a long result in pieces: paging commands take `--offset`; `read` `--member`/`--type`/
-  `--outline`/`--lines`; `get` `--path-contains` (field order carries no meaning); `code-search`
-  an anchored pattern plus `--source`/`--file-glob`. `read`'s `--limit` is the odd one out —
-  it caps printed lines rather than narrowing a result set, so `--limit all` *widens*.
-  `read --member` pages too, just not through `--offset`: `--limit` caps the lines and the
-  count line hands back the exact `--lines a-b` to resume from, so a long member is read
-  window by window.
+- **Narrow inside the command** — every one has its own filters, and `<command> --help`
+  lists them. Paging a `get` is where that reflex misfires: its field order carries no
+  meaning, so a long def is read with `--path-contains`, not with `--limit`.
 - **Reverse-look-up field names, never guess.** `where --value <value>` reports which paths
   hold the value. A guessed field name that happens to exist returns a clean,
   complete-looking table for the wrong field — the most expensive failure here.
