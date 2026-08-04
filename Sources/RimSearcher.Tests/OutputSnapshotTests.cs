@@ -90,6 +90,11 @@ public class OutputSnapshotTests
         // 桶名不一致(XML 根元素 TestVariantDef,def 落在 TestBaseDef 桶)时 inherits_from 仍要在场。
         { "get-bucket-mismatch",   ["get", "VariantOne"] },
         { "where-hit",              ["where", "compClass", "RimWorld.CompShield"] },
+        // 一行是一个(def, 路径)对,而同一个 def 可以在多条路径上命中 —— 于是 line 1 那个
+        // 数不是 def 数。此前它印的是「N defs」,真快照上 `where capacity Consciousness`
+        // 是 155 行 / 80 个 def(AlcoholHigh 一个占四行)。两份摆一起:两数不等时补一句
+        // 说破,相等时(where-hit)一个字都不许多。
+        { "where-rows-not-defs",    ["where", "stat"] },
         { "where-miss-compprops",   ["where", "compClass", "CompProperties_Shield"] },
         { "where-miss-field",       ["where", "noSuchField", "x"] },
         // 单位置参数落空的三档。敲一个词进来的人多半给的是**值**而不是字段路径

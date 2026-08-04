@@ -283,6 +283,8 @@ public class GrammarTests
 
         var (stdout, _, _) = Fixture.Run("where", "compClass", "RimWorld.CompShield");
         var lines = stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        // 两个数在这条查询上相等,于是名词是 def(那时它同时数着两样),
+        // 而且不许多印一句 —— 下面 kinds 只有 count 与 boundary 两条把着这件事。
         Assert.Equal("2 defs.", lines[0]);
         // 那条 boundary 摆在表**上面**,这是它的位置而不只是它的存在:沉到表下时,
         // `| head` 砍掉尾巴之后剩下的输出与完整输出逐字相同 —— line 1 的计数只担保表,
@@ -1322,6 +1324,36 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// <c>where</c> 的 line 1 数的是**行**,不是 def。
+    ///
+    /// 一行是一个(def, 路径)对,而后缀匹配一放开,同一个 def 就常在多条路径上命中 ——
+    /// 真快照上 <c>where capacity Consciousness</c> 是 **155 行 / 80 个 def**
+    /// (首页二十五行里 <c>AlcoholHigh</c> 一个占四行)。此前这句印的是「155 defs」,
+    /// 而拿 <c>where</c> 做集合运算的人要的正是后一个数,差了将近一倍。
+    ///
+    /// 两半都要:名词跟着它真正数的东西走,而两数不等时补一句说破 ——
+    /// 只改名词的话,「一共有几个 def」就整个不出了。相等时那一句不许出现,
+    /// 否则它只是把上一句用另一个词再念一遍。
+    /// </summary>
+    [Fact]
+    public void where的计数句数的是行并在它不等于def数时说破()
+    {
+        // Apparel_ShieldBelt 在 statBases[0] 与 statBases[1] 上各命中一次。
+        var (many, _, code) = Fixture.Run("where", "stat");
+        Assert.Equal(0, code);
+        Assert.StartsWith("4 matches.", many, StringComparison.Ordinal);
+        Assert.Contains("come from 3 defs", many, StringComparison.Ordinal);
+
+        // 没给值的问法也走这里 —— 句子里不许出现指不到东西的「这个值」。
+        Assert.DoesNotContain("this value", many, StringComparison.Ordinal);
+
+        // 两数相等:一个字都不许多。
+        var (one, _, _) = Fixture.Run("where", "compClass", "RimWorld.CompShield");
+        Assert.StartsWith("2 defs.", one, StringComparison.Ordinal);
+        Assert.DoesNotContain("come from", one, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 抽象节点自己没有值,而 <c>same_value</c> 此前就整个不出 —— 于是 <c>165 of 165</c>
     /// 看着像铁证,实际上「这一层声明了它」与「后代各写各的」在数上分不开,分得开的
     /// 那一列不在场,而说破这件事的那句话埋在第四条脚注里。
@@ -1363,9 +1395,12 @@ public class GrammarTests
     [Fact]
     public void 点路径的后缀不在点上对齐而exactpath钉得住()
     {
-        // 默认:两种形状一起收走。
+        // 默认:两种形状一起收走 —— 而其中一个 def 两条路径都占,于是 3 行只有 2 个 def,
+        // 计数句自己就换了名词。这不是巧合:多收一个字段进来正是本条要说的那件事,
+        // 而「行数 ≠ def 数」是它在 line 1 上留下的第一个痕迹。
         var (loose, _, _) = Fixture.Run("where", "graphicData.texPath");
-        Assert.Contains("3 defs.", loose, StringComparison.Ordinal);
+        Assert.Contains("3 matches.", loose, StringComparison.Ordinal);
+        Assert.Contains("come from 2 defs", loose, StringComparison.Ordinal);
         Assert.Contains("building.blueprintGraphicData.texPath", loose, StringComparison.Ordinal);
 
         // 钉住整段:那条跨边界的不在了。

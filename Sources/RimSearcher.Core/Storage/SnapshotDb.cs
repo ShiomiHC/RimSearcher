@@ -481,8 +481,14 @@ public sealed class SnapshotDb : IDisposable
     /// <summary>
     /// 反查:哪些 def 的某字段等于某值。路径按**后缀**匹配(上游 <c>find</c> 的语义),
     /// 因为调用方通常只知道末段(<c>compClass</c>),不知道完整路径(<c>comps[3].compClass</c>)。
+    ///
+    /// <c>Total</c> 与 <c>Defs</c> 是**两个数**,不是一个数的两种说法:一行是一个
+    /// (def, 路径)对,而同一个 def 可以在多条路径上取到同一个值 ——
+    /// <c>where capacity Consciousness</c> 是 155 行、80 个 def(<c>AlcoholHigh</c> 一个
+    /// 就占四行)。分页数的是行,而「这个值一共被几个 def 用着」问的是后者;
+    /// 拿其中一个去回答另一个,差得下来一倍。
     /// </summary>
-    public (IReadOnlyList<(DefRow Def, string Path, string? Value, int Default)> Rows, int Total)
+    public (IReadOnlyList<(DefRow Def, string Path, string? Value, int Default)> Rows, int Total, int Defs)
         FindByField(PathQuery path, string? value, bool exact, ScopeFilter scope, int limit, int offset = 0)
     {
         var p = new Dictionary<string, object?>();
@@ -498,15 +504,17 @@ public sealed class SnapshotDb : IDisposable
         if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
 
         var where = "WHERE " + string.Join(" AND ", conds);
-        var total = Scalar($"SELECT COUNT(*) FROM field_values fv JOIN defs d ON d.id = fv.def_id {where}", p);
+        var from = $"FROM field_values fv JOIN defs d ON d.id = fv.def_id {where}";
+        var total = Scalar($"SELECT COUNT(*) {from}", p);
+        var defs = Scalar($"SELECT COUNT(DISTINCT d.id) {from}", p);
 
         var rows = new List<(DefRow, string, string?, int)>();
         using var rd = Query(
-            $"SELECT {DefColumns}, fv.path, fv.value, fv.is_default FROM field_values fv JOIN defs d ON d.id = fv.def_id {where} " +
+            $"SELECT {DefColumns}, fv.path, fv.value, fv.is_default {from} " +
             $"ORDER BY d.def_name LIMIT {limit} OFFSET {offset}", p);
         while (rd.Read())
             rows.Add((ReadDefRow(rd), rd.GetString(10), rd.IsDBNull(11) ? null : rd.GetString(11), rd.GetInt32(12)));
-        return (rows, total);
+        return (rows, total, defs);
     }
 
     /// <summary>

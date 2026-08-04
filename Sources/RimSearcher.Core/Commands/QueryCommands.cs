@@ -810,13 +810,38 @@ public sealed class FindCommand : Command
         var exact = ctx.Args.Flag("exact");
         var pq = new PathQuery(path, ctx.Args.Flag("exact-path"));
 
-        var (rows, total) = ctx.Db.FindByField(pq, value, exact, scope, limit.Effective, offset);
+        var (rows, total, defs) = ctx.Db.FindByField(pq, value, exact, scope, limit.Effective, offset);
+
+        // 数的是**行**,不是 def:一行是一个(def, 路径)对,同一个 def 在多条路径上取到
+        // 同一个值就有几行(`where capacity Consciousness` 是 155 行 / 80 个 def,首页
+        // 二十五行里 `AlcoholHigh` 一个就占四行)。此前这里印的是「155 defs」,而翻页、
+        // --limit、offset 管的自始至终都是行 —— 那个数没错,错的是它叫什么。
+        // 名词跟着这个数**真正数的东西**走,而那是算得出来的:两数相等时它同时是行数与
+        // def 数,叫 def 是真话;不等时只有 match 说得住。
+        //
+        // 不一律叫 match:盲测三臂里有两臂在 `where graphicData.shaderType Cutout
+        // --exact-path`(1492 行 = 1492 个 def)上取了「25 of 1492」的第一个数,
+        // 而问的是「多少个 def」—— 恒定叫 match 时,读者还得自己把 match 折算成 def,
+        // 那一步是白加的。
+        var noun = defs == total ? "def" : "match";
 
         if (rows.Count > 0)
-            ctx.Report.PageNotice("def", rows.Count, offset, total);
+        {
+            ctx.Report.PageNotice(noun, rows.Count, offset, total);
+            // 两个数不等时才说:相等时它只是把上一句用另一个词再念一遍。
+            // 而不等时非说不可 —— `where` 是这套命令里用来做集合运算的那一个,
+            // 「有多少个 def 用着这个值」正是拿它做集合差的人要的那个数。
+            if (defs < total)
+                ctx.Report.Notice(NoticeKind.Count,
+                    // 不说「holds this value」:`where stat` 这种只给路径不给值的问法
+                    // 一样会走到这里,那时句子里的「这个值」指不到任何东西。
+                    $"Those {Tally.Complete(total).Render("match")} come from " +
+                    $"{Tally.Complete(defs).Render("def")}: a def that matches on more than one path has " +
+                    "a row for each, so the def_name column repeats.");
+        }
         else if (offset > 0 && total > 0)
         {
-            ctx.Report.PastEnd(offset, $"{Tally.Complete(total).Render("def")} match in all.");
+            ctx.Report.PastEnd(offset, $"{Tally.Complete(total).Render(noun)} in all.");
             return 1;
         }
 
@@ -826,9 +851,11 @@ public sealed class FindCommand : Command
             // 声明在分流之前 —— 它对四条分支一视同仁,而每条分支各自 return。
             void NoteElsewhere()
             {
+                // 问「那边有几个 def」而不是「几行」:这句话是拿去跟本快照的零比的,
+                // 而零那一侧说的是 def。
                 if (NameLookup.Elsewhere(ctx, db => db.FindByField(
                         pq, value, exact,
-                        Snapshot.ScopeFilter.Parse("all", db.PackageIds(), ctx.Config), 0, 0).Total, "def")
+                        Snapshot.ScopeFilter.Parse("all", db.PackageIds(), ctx.Config), 0, 0).Defs, "def")
                     is { } line)
                     ctx.Report.Notice(NoticeKind.NextStep, line);
             }
@@ -968,11 +995,13 @@ public sealed class FindCommand : Command
             //
             // scope 只在第一行被回显过,而回显不是成因 —— 「我圈了这几个 mod」与
             // 「零是这个圈造成的」差着一次重查,而这次重查是白拿的:同一条 SQL,scope 换成 all。
+            // 取 Defs 不取 Total:这句话的谓语是「有 N 个 def 把这个字段设成了它」,
+            // 而 Total 数的是(def, 路径)行。
             var hiddenByScope = scope.IsAll
                 ? 0
                 : ctx.Db.FindByField(pq, value, exact,
                                      Snapshot.ScopeFilter.Parse("all", ctx.Db.PackageIds(), ctx.Config),
-                                     0, 0).Total;
+                                     0, 0).Defs;
             if (hiddenByScope > 0)
                 ctx.Report.Notice(NoticeKind.Filter,
                     $"--scope {scope.Expression} is what emptied this: " +
