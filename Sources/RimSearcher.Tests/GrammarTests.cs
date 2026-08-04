@@ -1040,9 +1040,14 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 分页的三个位置各说各的话:中间页说得出自己从第几条起,末页**不给**下一页的参数,
+    /// 分页的三个位置各说各的话:中间页说得出自己从第几条起,末页说得出自己是末页,
     /// 翻过了头是一句「翻过头了」而不是一句「没有这个东西」—— 分页给「缺席」添了一种
     /// 新成因,分不清就会报最强的那种。
+    ///
+    /// **哪一页都不给下一页的参数。** 「pass --offset N for the next page」印了 34 次而
+    /// `--offset` 全史使用 0 次(08),而同形判据不认它:`2 of 9 defs` 自己就带着截断
+    /// 信号,去掉那半句没有任何错误结论变得同形。它省的是一次查表,不是防一次误判 ——
+    /// 而它占的是 line 1,管道下唯一的幸存者。
     /// </summary>
     [Fact]
     public void 分页的三个位置各说各的话()
@@ -1050,7 +1055,10 @@ public class GrammarTests
         var (mid, _, midCode) = Fixture.Run("list", "ThingDef", "--limit", "2", "--offset", "2");
         Assert.Equal(0, midCode);
         Assert.Contains("2 of 9 defs, starting at 3", mid, StringComparison.Ordinal);
-        Assert.Contains("--offset 4", mid, StringComparison.Ordinal);
+        Assert.DoesNotContain("next page", mid, StringComparison.Ordinal);
+
+        var (first, _, _) = Fixture.Run("list", "ThingDef", "--limit", "2");
+        Assert.StartsWith("2 of 9 defs.", first, StringComparison.Ordinal);
 
         var (last, _, lastCode) = Fixture.Run("list", "ThingDef", "--limit", "4", "--offset", "5");
         Assert.Equal(0, lastCode);

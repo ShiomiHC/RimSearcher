@@ -1,7 +1,7 @@
 $ rimsearcher search VoidNode --limit 1 --offset 1
 exit 0
 --- stdout ---
-1 of 3 defs, starting at 2; pass --offset 2 for the next page.
+1 of 3 defs, starting at 2.
 
 def_name       def_type  label            matched_on  mod
 VoidNodeShard  ThingDef  void node shard  def_name    test.mod

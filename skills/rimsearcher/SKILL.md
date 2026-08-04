@@ -138,7 +138,7 @@ any depth.
 ## Reading the output
 
 - **A count is always printed above the table**, in three forms: `12 defs.` — all of them;
-  `12 of 347 defs` — cut off, 347 exist, the sentence names the next `--offset`;
+  `12 of 347 defs` — cut off, 347 exist, and the next page is `--offset 12`;
   `at least 12 matches` — the scan stopped early, true total unknown. A `--path-contains` match count is a filter, not a truncation
   (`kind: "filter"` vs `"truncation"` in `--json`).
 - **`Same in every row, not repeated below:` is part of the table** — the folded column

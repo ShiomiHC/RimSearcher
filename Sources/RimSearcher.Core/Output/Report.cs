@@ -225,16 +225,19 @@ public sealed class Report
     /// <summary>
     /// 分页态的计数,产地唯一。
     ///
-    /// 没有 <c>--offset</c> 的表只有两条出路:把 <c>--limit</c> 抬到全量(一次吃掉整个
-    /// 上下文预算),或者管道接 head(把声明区连同计数一起截掉,而那是这套输出唯一
-    /// 说得清「你没看到什么」的地方)。
     ///
-    /// 三件事恒在:这一页几条、总共几条、下一页怎么要。到头时**不给**下一页的参数 ——
-    /// 一句「pass --offset N」挂在最后一页上,会被读成后面还有;而末页照样得明说
-    /// 「这是最后一页」,否则「4 of 8 defs, starting at 5」与半截结果同形。
+    /// 两件事恒在:这一页几条、总共几条。**下一页怎么要不说** —— 原先这里挂着
+    /// 「pass --offset N for the next page」,08 记着它印了 34 次而 `--offset` 全史
+    /// 使用 0 次。留用理由曾是「N 是算出来的,省一次 off-by-one」,但同形判据不认它:
+    /// 去掉之后 `25 of 495 values.` 与任何错误结论都不同形,截断信号由 `n of N` 自己带着。
+    /// 它省的是一次查表,不是防一次误判。
     ///
-    /// 留下的只有算出来的那个 offset。「--limit all 能一次吃完」「与其翻页不如用 --path-contains 筛」
-    /// 都逐字不随查询变,SKILL.md 已按命令列全,在这里逐次重念是同一份知识的第三个副本。
+    /// 对照是 <c>read</c> 那句递回 <c>--lines</c> / 点名 <c>--outline</c> 的指路:同样
+    /// 全史零使用的参数,那一句让八个盲测被试全部用上了。差别在于那句给的是**另一条路**
+    /// (别翻页,看 outline),这句给的是同一条路的下一步 —— 而 `--limit all` 与
+    /// `--path-contains` 在几乎每个真实场景里都比翻页更优,于是这一步没人要走。
+    ///
+    /// 末页那句留着:没有它,「4 of 8 defs, starting at 5」与半截结果同形。
     /// </summary>
     public Report PageNotice(string noun, int shown, int offset, int total)
     {
@@ -243,11 +246,7 @@ public sealed class Report
         return Notice(tally.IsTruncated ? NoticeKind.Truncation : NoticeKind.Count,
             tally.Render(noun) + Within +
             (offset > 0 ? $", starting at {offset + 1}" : "") +
-            (seen < total
-                ? $"; pass --offset {seen} for the next page."
-                : offset > 0
-                    ? "; that is the last page."
-                    : "."));
+            (seen >= total && offset > 0 ? "; that is the last page." : "."));
     }
 
     /// <summary>

@@ -1,7 +1,7 @@
 $ rimsearcher list ThingDef --limit 2
 exit 0
 --- stdout ---
-2 of 9 defs; pass --offset 2 for the next page.
+2 of 9 defs.
 
 Same in every row, not repeated below: mod=ludeon.rimworld.
 def_name            label
