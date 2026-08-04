@@ -8,8 +8,8 @@ matched_paths    soundDrop (5)
 def_types        ThingDef (5 of 5)
 defs_with_field  5
 Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans every def type that uses this path at all, not just the ones in the rows above — ThingDef, holding 1 def cut short between them. 'rimsearcher snapshot truncated --type ThingDef' lists them.
+What --scope all,-test.mod left out is not empty for this query: with --scope test.mod instead, it finds 1 value.
 
 value          defs
 Standard_Drop  5
-What --scope all,-test.mod left out is not empty for this query: with --scope test.mod instead, it finds 1 value.
 --- stderr ---

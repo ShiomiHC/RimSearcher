@@ -1269,6 +1269,13 @@ public class GrammarTests
         // 带数字,并给出一条能直接敲的下一步 —— 只说「还有别的」等于把活推回去。
         Assert.Contains("--scope test.mod instead, it finds 4 defs", excl, StringComparison.Ordinal);
 
+        // **排在表上方**,与「计数在它数的那张表上方」同一条纪律。位置对这一条格外要紧:
+        // 它的受众定义上就是拿到一张长表的人,而那种人最可能 head/sed 截一段就走 ——
+        // 落在末尾脚注区的话,最该读到它的人正好读不到。首次落地时它就在倒数第三行。
+        var said = excl.IndexOf(Says, StringComparison.Ordinal);
+        var firstRow = excl.IndexOf("Apparel_ShieldBelt", StringComparison.Ordinal);
+        Assert.True(firstRow > said, "补集句要排在表上方,不许落进末尾脚注区");
+
         // 补集用**组名**时展开也要在:读者据此知道那个词实际圈住了谁。
         var (group, _, _) = Fixture.Run("list", "ThingDef", "--scope", "all,-vanilla");
         Assert.Contains("--scope vanilla (= ludeon.rimworld) instead", group, StringComparison.Ordinal);

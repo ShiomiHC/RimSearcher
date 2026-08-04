@@ -303,6 +303,10 @@ public sealed class SnapshotTruncatedCommand : Command
         }
 
         ctx.Report.CountNotice(Tally.Of(rows.Count, total), "def");
+
+        // 表上方,与「计数在它数的那张表上方」同一条纪律:这句说的是「这张表全不全」。
+        ctx.AnnounceExcluded(scope, rest => ctx.Db.TruncatedDefs(rest, 0, types, defName).Total, "def");
+
         ctx.Report.Table("truncated", ["def_name", "def_type", "fields_dropped"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
@@ -312,7 +316,6 @@ public sealed class SnapshotTruncatedCommand : Command
             }).ToList());
         ctx.Report.Notice(NoticeKind.Boundary,
             "The count is a lower bound per def: the exporter stopped, it did not finish counting.");
-        ctx.AnnounceExcluded(scope, rest => ctx.Db.TruncatedDefs(rest, 0, types, defName).Total, "def");
         return 0;
     }
 }

@@ -181,6 +181,11 @@ public sealed class SearchCommand : Command
                       "and 'rimsearcher mods' lists which mods it covers."));
         }
 
+        // 表上方 —— 理由同 list 那处。主结果退到模糊候选时这句更要紧:表里印的是
+        // 「拼写最接近的」,而被排除的那半边可能有真命中 —— 两者在表上长得一样,
+        // 只有这个数分得开。
+        ctx.AnnounceExcluded(scope, rest => CountIn(ctx, query, rest, type), "def");
+
         // 「靠什么命中的」必须在表里:命中可以来自子结构(如 TraitDef 某一档 degreeData 的
         // label),而那一行自己的 label 是空的 —— 不说清就会被归到邻行上。
         ctx.Report.Table("defs", ["def_name", "def_type", "label", "matched_on", "mod"],
@@ -197,10 +202,6 @@ public sealed class SearchCommand : Command
 
         Advisory.NoteOutsideTranslations(ctx, rows.Select(r => r.DefName));
         Advisory.NoteSameLabel(ctx, rows);
-
-        // 主结果退到模糊候选时这句更要紧:表里印的是「拼写最接近的」,而被排除的那半边
-        // 可能有真命中 —— 两者在表上长得一样,只有这个数分得开。
-        ctx.AnnounceExcluded(scope, rest => CountIn(ctx, query, rest, type), "def");
         return rows.Count == 0 ? 1 : 0;
     }
 
@@ -1151,6 +1152,10 @@ public sealed class FindCommand : Command
         Advisory.NoteGeneratedDefs(ctx, generated.Names, generated.Total, defs,
             rows.Count(r => r.Def.Generated));
 
+        // 表上方 —— 理由同 list 那处。数 def 而不是 matches:这条命令一行是一个
+        // (def, 路径)对,而「被排除的那半边还有多少」问的是有多少个 def 落在外面。
+        ctx.AnnounceExcluded(scope, rest => ctx.Db.FindByField(pq, value, exact, rest, 0, 0).Defs, "def");
+
         ctx.Report.Table("matches",
             generated.Total > 0
                 ? ["def_name", "def_type", "path", "value", FieldDefault.Column, DeclaredIn.Column, "mod"]
@@ -1168,10 +1173,6 @@ public sealed class FindCommand : Command
 
         Advisory.NoteAuthoredSiblings(ctx, rows.Where(r => r.Default != Contract.DefaultState.Same)
                                                 .Select(r => (r.Def.DefName, r.Def.Id, r.Path)));
-
-        // 数 def 而不是数 matches:这条命令一行是一个(def, 路径)对,而「被排除的那半边
-        // 还有多少」问的是有多少个 def 落在外面。
-        ctx.AnnounceExcluded(scope, rest => ctx.Db.FindByField(pq, value, exact, rest, 0, 0).Defs, "def");
         return 0;
     }
 
@@ -1242,6 +1243,11 @@ public sealed class FindCommand : Command
             ctx.Db.TruncatedDefsSharingValue(value, exact ? ValueMatch.Exact : ValueMatch.Substring, scope),
             "every def type that holds this value anywhere, not just the ones in the rows above");
 
+        // 表上方 —— 理由同 list 那处。名词用 field path 而不是 path:NounRegistry 只认
+        // 前者,而这张表一行就是一条字段路径。
+        ctx.AnnounceExcluded(scope, rest => ctx.Db.PathsWithValue(
+            value, rest, 0, exact ? ValueMatch.Exact : ValueMatch.Substring).Total, "field path");
+
         ctx.Report.Table("paths", ["path", "def_type", "defs", "example_value"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
@@ -1250,10 +1256,6 @@ public sealed class FindCommand : Command
                 ["defs"] = r.Defs,
                 ["example_value"] = r.Sample,
             }).ToList());
-
-        // 名词用 field path 而不是 path:NounRegistry 只认前者,而这张表一行就是一条字段路径。
-        ctx.AnnounceExcluded(scope, rest => ctx.Db.PathsWithValue(
-            value, rest, 0, exact ? ValueMatch.Exact : ValueMatch.Substring).Total, "field path");
         return 0;
     }
 }
@@ -1421,14 +1423,9 @@ public sealed class ListCommand : Command
                 $"{Tally.Complete(everything.Count).Render("def type")} in all.");
 
         ctx.Report.CountNotice(Tally.Of(rows.Count, all.Count), "def type");
-        ctx.Report.Table("types", ["def_type", "defs"],
-            rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
-            {
-                ["def_type"] = r.Type,
-                ["defs"] = r.Count,
-            }).ToList());
 
-        // --find 也要跟着过去,否则补集那一半按更宽的口径数,两个数不可比。
+        // 表上方 —— 理由同 RunDefs 那处。--find 也要跟着过去,否则补集那一半按更宽的
+        // 口径数,两个数不可比。
         ctx.AnnounceExcluded(scope, rest =>
         {
             var there = ctx.Db.Types(rest);
@@ -1436,6 +1433,13 @@ public sealed class ListCommand : Command
                 ? there.Count
                 : there.Count(t => t.Type.Contains(typeFind, StringComparison.OrdinalIgnoreCase));
         }, "def type");
+
+        ctx.Report.Table("types", ["def_type", "defs"],
+            rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+            {
+                ["def_type"] = r.Type,
+                ["defs"] = r.Count,
+            }).ToList());
         return 0;
     }
 
@@ -1572,6 +1576,13 @@ public sealed class ListCommand : Command
         // 分页必须给总数,否则不知道翻到哪算到头。
         ctx.Report.PageNotice("def", rows.Count, offset, total);
 
+        // 排在表**上方**,与「计数在它数的那张表上方」同一条纪律:这句说的是
+        // 「这张表全不全」,读到行的时候得已经知道。位置对这一条格外要紧 ——
+        // 它的受众定义上就是拿到一张长表的人,而那种人最可能 head/sed 截一段就走,
+        // 末尾的脚注正好被切掉(本项目实测踩过:`sed -n '9,20p'` 两头一起切,
+        // 把确实存在的 comp 读成了空)。
+        ctx.AnnounceExcluded(scope, rest => ctx.Db.ListByType(type, rest, 0, 0, wantClass, find).Total, "def");
+
         // 桶里只有一种 class 时不平白多一列(ThingDef 一万多个 def 都是 Verse.ThingDef);
         // 异构时这一列是唯一能把子类型区分开的东西。
         var classes = ctx.Db.ClassesInType(type, scope);
@@ -1597,9 +1608,6 @@ public sealed class ListCommand : Command
                 ["mod"] = r.SourceMod,
             }).ToList());
 
-        // 同样的筛条件,只把 scope 换成被排除的那一半 —— 那边非空的话,上面这张表就是
-        // 一份沉默的部分答案。
-        ctx.AnnounceExcluded(scope, rest => ctx.Db.ListByType(type, rest, 0, 0, wantClass, find).Total, "def");
         return 0;
     }
 
@@ -1844,14 +1852,15 @@ public sealed class ValuesCommand : Command
                 ? $"all of {type}, the type this table is already filtered to"
                 : "every def type that uses this path at all, not just the ones in the rows above");
 
+        // 表上方 —— 理由同 list 那处。
+        ctx.AnnounceExcluded(scope, rest => ctx.Db.DistinctValues(pq, rest, 0, type, 0).Total, "value");
+
         ctx.Report.Table("values", ["value", "defs"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
                 ["value"] = r.Value,
                 ["defs"] = r.Count,
             }).ToList());
-
-        ctx.AnnounceExcluded(scope, rest => ctx.Db.DistinctValues(pq, rest, 0, type, 0).Total, "value");
         return 0;
     }
 }
