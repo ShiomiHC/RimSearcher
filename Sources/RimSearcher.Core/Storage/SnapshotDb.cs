@@ -972,6 +972,87 @@ public sealed class SnapshotDb : IDisposable
     }
 
     /// <summary>
+    /// 同一个值还落在**哪些别的路径形状**上 —— 只看给定的那几个 def_type,并排掉调用方
+    /// 自己命中的那些形状。
+    ///
+    /// <see cref="PathsWithValue"/> 答的是「这个值分布在哪」,这里答的是
+    /// 「你点名的那条路径之外还有谁」——**同一份数据的补集视角**,与
+    /// <c>ScopeFilter.Complement</c> 那条同源:一次合法查询返回一张干净完整的表,
+    /// 而它是不是全集,读的人从表里看不出来。
+    ///
+    /// 按 def_type 收窄不是省地方,是「最大的那个」这个词的正确性前提:值 3.9 的真·最大项
+    /// 是 <c>PsychicRitualDef.invocationCircleRadius</c>(16),而问 ThingDef 爆炸半径的人
+    /// 被指到那儿只会更糊涂。
+    ///
+    /// 形状内的 def 数**单独精确数一次**,不靠把 <c>comps[0]</c> 与 <c>comps[4]</c> 的
+    /// 计数相加 —— 同一个 def 在两个下标上都带这个值时,相加会多报。排序用相加的近似值
+    /// (只影响挑谁,不影响印出来的数),印出来的那个数走第二趟精确查询。
+    /// </summary>
+    public (string Shape, int Defs, int OtherShapes, IReadOnlyCollection<string> Types)? ValueElsewhere(
+        PathQuery own, string value, ValueMatch match, ScopeFilter scope)
+    {
+        // 「调用方这次命中了哪些形状、哪些 def_type」要按**整个结果集**算,不是按这一页 ——
+        // 与 FindPathShapes 同一条纪律。只取 DISTINCT 的 (path, def_type),不取行。
+        var op = new Dictionary<string, object?>();
+        var oc = new List<string>();
+        PathCondition(own, op, oc);
+        if (match == ValueMatch.Exact) { op["@v"] = value; oc.Add("fv.value = @v COLLATE NOCASE"); }
+        else { op["@v"] = "%" + Escape(value) + "%"; oc.Add("fv.value LIKE @v ESCAPE '\\'"); }
+        if (scope.SqlPredicate("d.source_mod", op) is { } osc) oc.Add(osc);
+
+        var ownShapes = new HashSet<string>(StringComparer.Ordinal);
+        var defTypes = new HashSet<string>(StringComparer.Ordinal);
+        using (var rd = Query(
+            "SELECT DISTINCT fv.path, d.def_type FROM field_values fv JOIN defs d ON d.id = fv.def_id " +
+            $"WHERE {string.Join(" AND ", oc)}", op))
+            while (rd.Read())
+            {
+                ownShapes.Add(Search.PathSegments.Shape(rd.GetString(0)));
+                defTypes.Add(rd.GetString(1));
+            }
+        if (defTypes.Count == 0) return null;
+
+        var p = new Dictionary<string, object?>();
+        var where = ValueWhere(value, match, scope, p);
+        var keys = new List<string>();
+        foreach (var t in defTypes) { var k = $"@dt{keys.Count}"; p[k] = t; keys.Add(k); }
+
+        // 形状 → 该形状下的具体路径,以及一个用来排序的近似 def 数。
+        var paths = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        var rough = new Dictionary<string, int>(StringComparer.Ordinal);
+        using (var rd = Query(
+            "SELECT fv.path, COUNT(DISTINCT d.id) FROM field_values fv JOIN defs d ON d.id = fv.def_id " +
+            $"{where} AND d.def_type IN ({string.Join(",", keys)}) GROUP BY fv.path", p))
+            while (rd.Read())
+            {
+                var shape = Search.PathSegments.Shape(rd.GetString(0));
+                if (ownShapes.Contains(shape)) continue;
+                (paths.TryGetValue(shape, out var list) ? list : paths[shape] = []).Add(rd.GetString(0));
+                rough[shape] = rough.GetValueOrDefault(shape) + rd.GetInt32(1);
+            }
+        if (paths.Count == 0) return null;
+
+        var top = rough.OrderByDescending(x => x.Value).ThenBy(x => x.Key, StringComparer.Ordinal).First().Key;
+
+        // 印出来的是**那个形状自己的 def 数**,不是并集。并集试过,是个更坏的东西:
+        // 靶题(值 3.9)的并集是 17,而真值是 11 —— 差额是 statBases[].value 与
+        // verbs[].minRange 这些语义无关的形状。**哪些形状跟提问的是同一件事,判据不在值里**,
+        // CLI 判不出来,所以这个和不能由它来加。一个看着像答案的错数比不给数更坏
+        // (见 Docs/17「天花板标签会盖住假话」那条的反面:这里是真天花板,那就说破)。
+        //
+        // 这个数走第二趟精确查询,不靠把 comps[0] 与 comps[4] 的计数相加 ——
+        // 同一个 def 在两个下标上都带这个值时,相加会多报。排序才用相加的近似值。
+        var pp = new Dictionary<string, object?>();
+        var pw = ValueWhere(value, match, scope, pp);
+        var pk = new List<string>();
+        foreach (var path in paths[top]) { var k = $"@p{pk.Count}"; pp[k] = path; pk.Add(k); }
+        var defs = Scalar(
+            "SELECT COUNT(DISTINCT d.id) FROM field_values fv JOIN defs d ON d.id = fv.def_id " +
+            $"{pw} AND fv.path IN ({string.Join(",", pk)})", pp);
+        return (top, defs, paths.Count, defTypes);
+    }
+
+    /// <summary>
     /// 与这些行同处一个带下标容器、而且**有人设过**(<c>is_default &lt;&gt; Same</c>)的兄弟字段。
     ///
     /// 一块 <c>comps[1]</c> 里的字段互相约束:<c>minFuelCost=50</c> 盖掉同块的

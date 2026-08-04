@@ -1156,6 +1156,10 @@ public sealed class FindCommand : Command
         // (def, 路径)对,而「被排除的那半边还有多少」问的是有多少个 def 落在外面。
         ctx.AnnounceExcluded(scope, rest => ctx.Db.FindByField(pq, value, exact, rest, 0, 0).Defs, "def");
 
+        // 同样在表上方,且排在 scope 补集那句之后:两句都在说「你手上这张表不是全集」,
+        // 而 scope 那条是调用方自己划的界,这条是他没意识到自己划了的界。
+        Advisory.NoteValueElsewhere(ctx, pq, value, exact, scope, defs);
+
         ctx.Report.Table("matches",
             generated.Total > 0
                 ? ["def_name", "def_type", "path", "value", FieldDefault.Column, DeclaredIn.Column, "mod"]
@@ -2289,6 +2293,48 @@ internal static class Advisory
     ///
     /// 只有一种形状时一个字不说 —— 那时「结果集是齐的」是无条件的。
     /// </summary>
+    /// <summary>
+    /// 点名了字段的那次查询,**外延不足**的那一半。
+    ///
+    /// `where` 对「结果比预期多」已经处理得很齐(跨形状那句、子串那句、scope 补集那句);
+    /// 这一句管的是反向:`where explosionRadius --value 3.9 --exact` 返回的两行每一行都对,
+    /// 只是**不是全部** —— 同一个值另有 <c>comps[].explosiveRadius</c> 九个 ThingDef,
+    /// 而这张表计数准确、路径明确、code_default=no、mod 归属清楚,**没有一处看得出问题**。
+    /// 闭卷实测四个样本零反查,其中一个带着「字段名一律反查、不许猜」的文档照样踩,
+    /// 还主动加了 --exact 与 --limit all(两个已知陷阱都躲了,栽在没被提示的这个上)。
+    ///
+    /// **不设阈值**:常见值上它每次都出声(值 1 落在 1800 条路径上),吵是吵,但沉默一旦
+    /// 挂上条件就承重了 —— 没提示会被读成「我的外延是全的」,而那正是本仓修过五次的形态。
+    /// 噪声改由数值本身承担:按命中行的 def_type 收窄之后,3.9 那句给出「9 对 2」,
+    /// 而值 1 那句给出的大数当场说明「筛选全靠字段名在做」,那是校准不是噪声。
+    ///
+    /// 口径跟随查询:带 --exact 就精确反查,否则子串 —— 两处不同口径会让这个数与表打架。
+    /// </summary>
+    public static void NoteValueElsewhere(CommandContext ctx, PathQuery own, string? value, bool exact,
+                                          Snapshot.ScopeFilter scope, int here)
+    {
+        // 没给值时这条命令答的是「谁有这个字段」,不存在「同一个值还在别处」这回事。
+        if (value is not { Length: > 0 }) return;
+        if (ctx.Db.ValueElsewhere(own, value, exact ? ValueMatch.Exact : ValueMatch.Substring,
+                                  scope) is not { } el) return;
+        // **加法在这里不做**,而且要说破为什么不做 —— 这是别处那批「CLI 把两个加数加完」
+        // 的句子的例外:哪些形状跟提问的是同一件事,判据不在值里(靶题里
+        // comps[].explosiveRadius 算,statBases[].value 不算),CLI 判不出来。
+        // 试过给并集,那是个看着像答案的错数(17,真值 11)。所以给形状自己的数,
+        // 并把「相关不相关得你判」写在句子里,而不是让读者自己想到这一层。
+        //
+        // 也不写成「N 对 M」那种比较:自己就是最大项时那场比较赢了,于是这句话在
+        // 最该警醒的场合读成了「你没事」。
+        ctx.Report.Notice(NoticeKind.Boundary,
+            $"Naming a field narrows to that field: '{Quote(value)}' also sits on " +
+            $"{Tally.Complete(el.OtherShapes).Render("path shape")} of " +
+            $"{string.Join("/", el.Types.OrderBy(t => t, StringComparer.Ordinal))} not matched here" +
+            $"{(el.OtherShapes > 1 ? ", the largest" : "")} being {el.Shape} on " +
+            $"{Tally.Complete(el.Defs).Render("def")}. Whether any of those is the same thing " +
+            $"the question is about does not follow from the value — 'rimsearcher where --value " +
+            $"{Quote(value)}{(exact ? " --exact" : "")}' lists every path holding it, to be read as paths.");
+    }
+
     public static void NoteMixedPathShapes(CommandContext ctx, IReadOnlyList<(string Shape, int Count)> shapes)
     {
         if (shapes.Count < 2) return;

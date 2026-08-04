@@ -59,6 +59,9 @@ public static class NounRegistry
         ["def class"] = "def classes",
         ["field"] = "fields",
         ["field path"] = "field paths",
+        // 下标归一后的路径。与 "field path" 分开登记:comps[0..4].explosiveRadius 是
+        // 五条 field path、一个 path shape,而做集合运算的人问的是后者。
+        ["path shape"] = "path shapes",
         ["value"] = "values",
         ["match"] = "matches",
         ["file"] = "files",

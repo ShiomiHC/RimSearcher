@@ -2511,6 +2511,43 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 点名字段的那次查询,**外延不足**的那一半。`where` 对「结果比预期多」处理得很齐
+    /// (跨形状、子串、scope 补集三句),反向一直是零提示 —— 而那种局面下表是干净完整的,
+    /// 没有一处看得出问题。闭卷实测四个样本零反查,带着「字段名一律反查」那条文档的
+    /// 那个照样踩。
+    ///
+    /// 三条一起钉,少一条这句话就退化:
+    /// ① 别处那个形状要**点名**并带 def 数 —— 只说「还有别处」等于把活推回去;
+    /// ② 「哪些形状跟提问是同一件事,从值里推不出来」这半句不许掉 —— 试过给并集
+    ///    (靶题 17,真值 11),那是个看着像答案的错数;
+    /// ③ 位置在表上方。
+    /// </summary>
+    [Fact]
+    public void 点名字段时同值落在别的路径上要说破()
+    {
+        // Standard_Pickup 同时坐在 soundPickup 与 soundInteract 上,同为 ThingDef。
+        var (hit, _, _) = Fixture.Run("where", "soundPickup", "--value", "Standard_Pickup", "--exact");
+        Assert.Contains("soundInteract", hit, StringComparison.Ordinal);
+        Assert.Contains("path shape", hit, StringComparison.Ordinal);
+        // 相关性判不出来这件事要写在句子里,不留给读者自己想到。
+        Assert.Contains("does not follow from the value", hit, StringComparison.Ordinal);
+
+        // 表上方 —— 与补集句同一条纪律:受众定义上就是拿到一张表的人。
+        var said = hit.IndexOf("Naming a field narrows", StringComparison.Ordinal);
+        var head = hit.IndexOf("def_name", StringComparison.Ordinal);
+        Assert.True(said >= 0 && head > said, "这句要排在表上方,不许落进末尾脚注区");
+
+        foreach (var quiet in new[]
+                 {
+                     // 不给值:这条命令答的是「谁有这个字段」,没有「同值还在别处」这回事。
+                     Fixture.Run("where", "soundPickup").Stdout,
+                     // 值只在这一条路径上 —— 沉默此时是真的没有别处,不是没算。
+                     Fixture.Run("where", "shortHash", "--value", "12345", "--exact").Stdout,
+                 })
+            Assert.DoesNotContain("Naming a field narrows", quiet, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 「磁盘那一层没量过」这件事有**两个独立产地**:造库那一刻(<c>snapshot import</c>)
     /// 与每次查询(<c>DiskLayer</c>)。这条闸比对的是两者,不复述任何一边的理由 ——
     /// 前一版的闸把实现的理由(「没配 mod_roots 的机器上没有第二层可漏」)抄进了注释,
