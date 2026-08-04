@@ -1057,6 +1057,9 @@ public sealed class FindCommand : Command
         // 这里不像 get 那样把默认值行滤掉:调用方点名了一个字段与一个值,「哪些 def 取到过它」
         // 的答案里就该有它们。但**为什么取到**要分得开 —— comps[N].compClass 一整批
         // 等于 CompShield,多半是 CompProperties_Shield 的声明里写死的,不是谁在 XML 里挑的。
+        Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(pq, scope),
+            "every def type that uses this path at all, not just the ones in the rows above");
+
         ctx.Report.Table("matches", ["def_name", "def_type", "path", "value", FieldDefault.Column, "mod"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
@@ -1070,8 +1073,6 @@ public sealed class FindCommand : Command
 
         Advisory.NoteAuthoredSiblings(ctx, rows.Where(r => r.Default != Contract.DefaultState.Same)
                                                 .Select(r => (r.Def.DefName, r.Def.Id, r.Path)));
-        Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(pq, scope),
-            "every def type that uses this path at all, not just the ones in the rows above");
         return 0;
     }
 
@@ -1134,6 +1135,14 @@ public sealed class FindCommand : Command
                       "--exact keeps the first group only — and also narrows the defs column, which here " +
                       $"counts every def whose value contains '{value}', both groups together.");
 
+        // 按值一次问清,不按结果里的每条路径各查一次再求和:求和会把同一个被砍的 def 按它
+        // 出现在几条路径上重复计数,而路径 defName(`where --value` 命中 def 名时必然有)的
+        // 「同类型」等于全体 def 类型,单这一项就等于全库 —— 于是子集计数会大于全集。
+        // 表里那批 def 是「取到过这个值」选出来的,这句担保的也必须是同一批。
+        Completeness.NoteIndexedPathsOnly(ctx,
+            ctx.Db.TruncatedDefsSharingValue(value, exact ? ValueMatch.Exact : ValueMatch.Substring, scope),
+            "every def type that holds this value anywhere, not just the ones in the rows above");
+
         ctx.Report.Table("paths", ["path", "def_type", "defs", "example_value"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
@@ -1142,14 +1151,6 @@ public sealed class FindCommand : Command
                 ["defs"] = r.Defs,
                 ["example_value"] = r.Sample,
             }).ToList());
-
-        // 按值一次问清,不按结果里的每条路径各查一次再求和:求和会把同一个被砍的 def 按它
-        // 出现在几条路径上重复计数,而路径 defName(`where --value` 命中 def 名时必然有)的
-        // 「同类型」等于全体 def 类型,单这一项就等于全库 —— 于是子集计数会大于全集。
-        // 表里那批 def 是「取到过这个值」选出来的,尾注担保的也必须是同一批。
-        Completeness.NoteIndexedPathsOnly(ctx,
-            ctx.Db.TruncatedDefsSharingValue(value, exact ? ValueMatch.Exact : ValueMatch.Substring, scope),
-            "every def type that holds this value anywhere, not just the ones in the rows above");
         return 0;
     }
 }
@@ -1578,16 +1579,17 @@ public sealed class FieldsCommand : Command
                     : $"Whole path segment: {Tally.Complete(whole).Render("field path")}; " +
                       $"inside a longer name: {Tally.Complete(total - whole).Render("field path")}.");
 
+        // 这一处圈的是整个 def 类型,与 --path-contains 无关 —— 表已经按 --path-contains 滤过,而被砍掉的
+        // 字段本来就不在表里,按 --path-contains 收窄这个数就是拿看得见的东西去限定看不见的东西。
+        Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsOfType(type),
+            $"all of {type}, whatever --path-contains says");
+
         ctx.Report.Table("fields", ["path", "defs"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
                 ["path"] = r.Path,
                 ["defs"] = r.Count,
             }).ToList());
-        // 这一处圈的是整个 def 类型,与 --path-contains 无关 —— 表已经按 --path-contains 滤过,而被砍掉的
-        // 字段本来就不在表里,按 --path-contains 收窄这个数就是拿看得见的东西去限定看不见的东西。
-        Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsOfType(type),
-            $"all of {type}, whatever --path-contains says");
         return 0;
     }
 }
@@ -1717,17 +1719,18 @@ public sealed class ValuesCommand : Command
                 "alone; '[]' there stands for any index.",
                 footnote: true);
 
+        // 跟着 --type 一起收:表已经滤成一个类型了,这句不能还在说别的类型。
+        Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(pq, scope, type),
+            type is { Length: > 0 }
+                ? $"all of {type}, the type this table is already filtered to"
+                : "every def type that uses this path at all, not just the ones in the rows above");
+
         ctx.Report.Table("values", ["value", "defs"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
                 ["value"] = r.Value,
                 ["defs"] = r.Count,
             }).ToList());
-        // 尾注跟着 --type 一起收:表已经滤成一个类型了,脚注不能还在说别的类型。
-        Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(pq, scope, type),
-            type is { Length: > 0 }
-                ? $"all of {type}, the type this table is already filtered to"
-                : "every def type that uses this path at all, not just the ones in the rows above");
         return 0;
     }
 }
@@ -1991,6 +1994,15 @@ internal static class Completeness
                "query here reaches it — re-export to get 'rimsearcher where Class <ClassName>'.";
     }
 
+    /// <summary>
+    /// 摆在表**上面**,不进脚注区 —— 与 <see cref="Report.DeferredNotice"/> 那条「表头留给随查询
+    /// 变化的东西」一致:它只在真有 def 被砍过时才出声(<c>affected.Count == 0</c> 直接返回),
+    /// 不是每次都在同一位置说同一句的横幅。
+    ///
+    /// 沉在脚注区时它是可以被无声切掉的:`| head` 或 `Select-Object -First N` 砍掉尾巴之后,
+    /// 剩下的输出与完整输出**逐字相同** —— line 1 的计数只担保表,对脚注一个字都没说,
+    /// 于是没有任何信号提示「这里少了一句『这答案可能缺东西』」。
+    /// </summary>
     /// <param name="basis">
     /// 这批类型是**怎么圈出来的**,整句写全。三条调用路各不相同(用得到这条路径 /
     /// 取到过这个值 / 就是这一个类型),而句子此前一律写死成 "carrying this path" ——
@@ -2028,8 +2040,7 @@ internal static class Completeness
             (shown.Count == types.Count
                 ? "them."
                 : $"the ones of the {shown.Count} biggest of those types; for the rest, the bare " +
-                  "'rimsearcher snapshot truncated' covers every type at once."),
-            footnote: true);
+                  "'rimsearcher snapshot truncated' covers every type at once."));
     }
 }
 

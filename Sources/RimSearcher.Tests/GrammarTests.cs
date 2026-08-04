@@ -284,10 +284,14 @@ public class GrammarTests
         var (stdout, _, _) = Fixture.Run("where", "compClass", "RimWorld.CompShield");
         var lines = stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal("2 defs.", lines[0]);
+        // 那条 boundary 摆在表**上面**,这是它的位置而不只是它的存在:沉到表下时,
+        // `| head` 砍掉尾巴之后剩下的输出与完整输出逐字相同 —— line 1 的计数只担保表,
+        // 对表下的东西一个字都没说,于是那一刀不留任何痕迹。
+        Assert.Contains("snapshot truncated", lines[1]);
         // 折叠行是**表的一部分** —— 整列同值的列提到表上方说一次,搬的是数据不是散文。
         // 「不许有免责声明」那一侧由上面的 kinds 断言把着:notices 里仍然只有 count 与
         // boundary 两条,渲染器折出来的这行根本不进 notes。
-        var header = lines[1].StartsWith("Same in every row", StringComparison.Ordinal) ? lines[2] : lines[1];
+        var header = lines[2].StartsWith("Same in every row", StringComparison.Ordinal) ? lines[3] : lines[2];
         Assert.StartsWith("def_name", header);
     }
 

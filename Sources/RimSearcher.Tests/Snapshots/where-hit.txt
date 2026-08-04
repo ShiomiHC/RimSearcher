@@ -2,11 +2,10 @@ $ rimsearcher where compClass RimWorld.CompShield
 exit 0
 --- stdout ---
 2 defs.
+Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans every def type that uses this path at all, not just the ones in the rows above — ThingDef, holding 1 def cut short between them. 'rimsearcher snapshot truncated --type ThingDef' lists them.
 
 Same in every row, not repeated below: def_type=ThingDef, path=comps[0].compClass, value=RimWorld.CompShield, code_default=yes.
 def_name            mod
 Apparel_ShieldBelt  ludeon.rimworld
 TestModGun          test.mod
-
-Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans every def type that uses this path at all, not just the ones in the rows above — ThingDef, holding 1 def cut short between them. 'rimsearcher snapshot truncated --type ThingDef' lists them.
 --- stderr ---

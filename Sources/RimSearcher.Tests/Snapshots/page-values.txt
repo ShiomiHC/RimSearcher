@@ -6,9 +6,8 @@ exit 0
 matched_paths    thingClass (6)
 def_types        ThingDef (6 of 9)
 defs_with_field  6
+Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans every def type that uses this path at all, not just the ones in the rows above — ThingDef, holding 1 def cut short between them. 'rimsearcher snapshot truncated --type ThingDef' lists them.
 
 value              defs
 RimWorld.Building  2
-
-Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans every def type that uses this path at all, not just the ones in the rows above — ThingDef, holding 1 def cut short between them. 'rimsearcher snapshot truncated --type ThingDef' lists them.
 --- stderr ---
