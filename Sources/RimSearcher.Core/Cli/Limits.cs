@@ -54,6 +54,15 @@ public static class Limits
     /// <summary>未知 flag 报错时最多给出的近似候选数。</summary>
     public const int MaxSuggestions = 3;
 
+    /// <summary>
+    /// 取样式提示为了不把分界线切在并列上,最多能展开到几条。
+    ///
+    /// 常规取样的两倍 —— 不是从数据里挑出来的阈值。真快照上确实有全部同大的退化情形
+    /// (<c>ManeuverDef</c> 上值为 <c>0</c>:23 个路径形状一样大),没有天花板时一行提示会被
+    /// 撑成 23 项;而 601 个采样值 × def_type 共 4240 组里,想要超过这个数的只有 16 组。
+    /// </summary>
+    public const int MaxShownShapes = MaxSuggestions * 2;
+
     /// <summary>模糊匹配回退触发前,精确/前缀匹配需要达到的最少命中数。</summary>
     public const int FuzzyFallbackThreshold = 1;
 }

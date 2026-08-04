@@ -55,6 +55,26 @@ public static class Fixture
     /// <summary>0.1.0 那一档,给「这份快照根本没量过」的措辞当落点。</summary>
     public static string OtherDb { get { _ = Db; return Path.Combine(SnapshotDir, "other.db"); } }
 
+    /// <summary>
+    /// 「同值还坐在别的路径形状上」那句提示的**展示位边界**语料 —— 单独一份,不进
+    /// <see cref="SnapshotDir"/>。
+    ///
+    /// 分出来是因为主 fixture 里凑不出这个数据形态:那句话取前若干条,而边界落在**并列**上
+    /// 时谁进展示位由字典序决定,主语料一共没几个形状,一次都触发不了。往主语料里加又会
+    /// 把每一份 `get` / `list` 基线一起搅动 —— 数据形态的闸不该以搅动别的闸为代价。
+    /// </summary>
+    public static string TieExportPath
+    {
+        get
+        {
+            var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests");
+            Directory.CreateDirectory(dir);
+            var path = Path.Combine(dir, "tie" + IntermediateFormat.FileExtension);
+            WriteTieExport(path);
+            return path;
+        }
+    }
+
     /// <summary>语料的导出文件本身 —— 要自己跑一遍 `snapshot import` 的用例用它当输入。</summary>
     public static string ExportPath
     {
@@ -216,6 +236,95 @@ public static class Fixture
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindEnd)
             .Int(IntermediateFormat.KeyRecords, 4)
             .Int(IntermediateFormat.KeyDefs, 2)
+            .Int(IntermediateFormat.KeyInjections, 0)
+            .Int(IntermediateFormat.KeyXmlNodes, 0)
+            .ToString());
+
+        w.Flush();
+    }
+
+    /// <summary>
+    /// 两个 def 类型,各造一种**边界并列**:
+    ///
+    /// <list type="bullet">
+    /// <item><c>TieDef</c> / 值 <c>7.77</c>:七个别处形状,第 3、4、5 名都是 3 个 def。
+    /// 取三条会在这三个里按字典序挑一个 —— 挑中谁与提问、与数据都无关。</item>
+    /// <item><c>CapDef</c> / 值 <c>8.88</c>:九个别处形状**全部并列**。这一种代表真快照上
+    /// 的退化情形(<c>ManeuverDef</c> 上值为 <c>0</c> 时 23 个形状同大),并列全展开会把
+    /// 一行提示撑爆,天花板必须存在 —— 这份语料就是那条天花板唯一的落点。</item>
+    /// </list>
+    ///
+    /// 每个类型都留一条**自己的**字段(<c>aim</c> / <c>probe</c>)当提问入口:那句话只在
+    /// 点名字段时才发,而被点名的形状要从「别处」里排掉。
+    /// </summary>
+    private static void WriteTieExport(string path)
+    {
+        using var fs = File.Create(path);
+        using var gz = new GZipStream(fs, CompressionLevel.Optimal);
+        using var w = new StreamWriter(gz, new UTF8Encoding(false)) { NewLine = "\n" };
+
+        long records = 0;
+
+        w.WriteLine(new JsonLine()
+            .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindMeta)
+            .Int(IntermediateFormat.KeyFormatVersion, IntermediateFormat.FormatVersion)
+            .Str(IntermediateFormat.KeyExporterVersion, "0.2.0")
+            .Str(IntermediateFormat.KeyExportedAtUtc, "2026-01-04T00:00:00.0000000Z")
+            .Str(IntermediateFormat.KeyGameVersion, GameVersion)
+            .Str(IntermediateFormat.KeyLanguage, Language)
+            .Raw(IntermediateFormat.KeyMods,
+                "[" + new JsonLine().Str("package_id", "ludeon.rimworld").Str("name", "Core").Str("version", "1.6") + "]")
+            .Raw(IntermediateFormat.KeyLimits, new JsonLine().Int("max_field_depth", 6).ToString())
+            .Str(IntermediateFormat.KeyModSettingsHash, "")
+            .ToString());
+        records++;
+
+        void Def(string type, string name, params (string Path, string Value)[] fields)
+        {
+            w.WriteLine(new JsonLine()
+                .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindDef)
+                .Str(IntermediateFormat.KeyDefType, type)
+                .Str(IntermediateFormat.KeyDefName, name)
+                .Str(IntermediateFormat.KeyLabel, "")
+                .Str(IntermediateFormat.KeyDescription, "")
+                .Str(IntermediateFormat.KeySourceMod, "ludeon.rimworld")
+                .Str(IntermediateFormat.KeySourceFile, "Ties.xml")
+                .Bool(IntermediateFormat.KeyGenerated, false)
+                .Str(IntermediateFormat.KeyClass, "Verse." + type)
+                .Fields(IntermediateFormat.KeyFields,
+                    [.. fields.Select(f => new ExportedField(f.Path, f.Value, DefaultState.Differs))])
+                .Int(IntermediateFormat.KeyFieldsTruncated, 0)
+                .ToString());
+            records++;
+        }
+
+        // TieDef:alpha 5、beta 4、{delta,epsilon,gamma[]} 各 3、{eta,zeta} 各 1。
+        // 三条并列的那一组正好跨在第 3 名这条线上。
+        const string V = "7.77";
+        for (var i = 1; i <= 5; i++)
+        {
+            var f = new List<(string, string)> { ("alpha", V) };
+            if (i <= 4) f.Add(("beta", V));
+            if (i <= 3) { f.Add(("gamma[0].size", V)); f.Add(("delta", V)); f.Add(("epsilon", V)); }
+            if (i <= 2) f.Add(("aim", V));            // 提问入口,要被排掉
+            if (i == 1) { f.Add(("zeta", V)); f.Add(("eta", V)); }
+            Def("TieDef", "Tie" + i, [.. f]);
+        }
+
+        // CapDef:九个形状全部 2 个 def —— 一个也分不出高下。
+        const string W = "8.88";
+        for (var i = 1; i <= 2; i++)
+        {
+            var f = new List<(string, string)>();
+            for (var s = 1; s <= 9; s++) f.Add(("s" + s, W));
+            if (i == 1) f.Add(("probe", W));
+            Def("CapDef", "Cap" + i, [.. f]);
+        }
+
+        w.WriteLine(new JsonLine()
+            .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindEnd)
+            .Int(IntermediateFormat.KeyRecords, records + 1)
+            .Int(IntermediateFormat.KeyDefs, 7)
             .Int(IntermediateFormat.KeyInjections, 0)
             .Int(IntermediateFormat.KeyXmlNodes, 0)
             .ToString());

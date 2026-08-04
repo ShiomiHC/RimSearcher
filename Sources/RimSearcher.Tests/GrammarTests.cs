@@ -2603,6 +2603,52 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 上一条那句话的**展示位边界**:取前若干条时,分界线不许落在并列上。
+    ///
+    /// 消费侧量过(真快照,601 个采样值 × def_type):触发省略的 143 组里 54 组(38%)
+    /// 的被省略首位与展示末位 def 数**完全相同** —— 值 =1 的 ThingDef 那组两边都是 3414。
+    /// 数一样时谁进展示位只取决于同分时的字典序,而那句话正文说的恰恰是「相关性从值里
+    /// 推不出来」:用一个从值算出的量做选样已经勉强,让它在无区分力处继续裁,就是把
+    /// **实现细节**印成了看起来有依据的排名。
+    ///
+    /// 修法是把并列的一并展示,不是加一句「这里是并列」:那句话要报个数,而
+    /// **排序用的是各下标相加的近似值、印出来的是精确 def 数**,两个数在同一句里对不上。
+    /// 能算的就算出来 —— 这里「并列」是确定性事实,那就让它自己显出来。
+    ///
+    /// 天花板同时钉住:真快照上存在九个、二十三个形状全部同大的退化情形,全展开会把
+    /// 一行提示撑爆。天花板咬住时分界线又落回并列上 —— 这一小撮不再多说,理由同上
+    /// (报不出一个与印出来的数同源的数),而读者手上一直有那条列全的命令。
+    /// </summary>
+    [Fact]
+    public void 展示位的分界线不许落在并列上()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "tiesnap");
+        if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        Directory.CreateDirectory(dir);
+        var config = Path.Combine(dir, "config.toml");
+        File.WriteAllText(config, "snapshot_dir = '" + dir.Replace("\\", "\\\\") + "'\n");
+        Fixture.Run("snapshot", "import", Fixture.TieExportPath, "--name", "tie", "--config", config);
+        var db = Path.Combine(dir, "tie.db");
+        // 走 --db 而不是 --snapshot:Fixture.Run 在 argv 里没有 --db 时会**追加**主 fixture 的库,
+        // 于是 --snapshot 静默失效 —— 闸会绿在一份根本没打算测的语料上。
+        Assert.True(File.Exists(db), "导入没落到预期路径,后面的读数就全是主 fixture 的");
+
+        string Ask(string field, string value) =>
+            Fixture.Run("where", field, "--value", value, "--exact", "--db", db, "--config", config).Stdout;
+
+        // ① 三条并列的横跨第 3 名 —— 要么都在,要么都不在,不许留下一个。
+        var tie = Ask("aim", "7.77");
+        foreach (var both in new[] { "delta (3)", "epsilon (3)", "gamma[].size (3)" })
+            Assert.Contains(both, tie, StringComparison.Ordinal);
+        // 而它确实还在省略,不是碰巧全列了 —— 否则这条闸测的是「一共没几条」。
+        Assert.Contains("plus 2 path shapes not shown", tie, StringComparison.Ordinal);
+
+        // ② 全部并列时天花板咬住:不是九条全出来,也不是退回三条。
+        var cap = Ask("probe", "8.88");
+        Assert.Contains("plus 3 path shapes not shown", cap, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 「磁盘那一层没量过」这件事有**两个独立产地**:造库那一刻(<c>snapshot import</c>)
     /// 与每次查询(<c>DiskLayer</c>)。这条闸比对的是两者,不复述任何一边的理由 ——
     /// 前一版的闸把实现的理由(「没配 mod_roots 的机器上没有第二层可漏」)抄进了注释,
@@ -2637,8 +2683,14 @@ public class GrammarTests
                                "--name", "a", "--config", cfgA).Stdout;
         var impB = Fixture.Run("snapshot", "import", Fixture.ExportPath,
                                "--name", "b", "--config", cfgB).Stdout;
-        var qA = Fixture.Run("keyed", "CannotUseNoPower", "--config", cfgA, "--snapshot", "a").Stdout;
-        var qB = Fixture.Run("keyed", "CannotUseNoPower", "--config", cfgB, "--snapshot", "b").Stdout;
+        // 点库要写 --db:Fixture.Run 在 argv 里没有 --db 时会**追加**主 fixture 的库,
+        // 而追加的那个压过 --snapshot —— 前一版就是这么写的,于是查询侧读的一直是主语料,
+        // 闸照绿(那两条断言碰巧只吃 config)。**空转的参数不会报错,只会让闸名不副实。**
+        var dbA = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "harvestcalA", "a.db");
+        var dbB = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "harvestcalB", "b.db");
+        Assert.True(File.Exists(dbA) && File.Exists(dbB), "两份快照没落到预期路径");
+        var qA = Fixture.Run("keyed", "CannotUseNoPower", "--config", cfgA, "--db", dbA).Stdout;
+        var qB = Fixture.Run("keyed", "CannotUseNoPower", "--config", cfgB, "--db", dbB).Stdout;
 
         // ① 四份输出都得挡住那个推论。措辞不钉,只钉否定标记在场。
         // 三种说法都是实打实的否定,不是为了让闸变绿凑进来的:`cannot answer whether X exists`

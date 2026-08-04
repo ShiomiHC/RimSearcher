@@ -1042,9 +1042,21 @@ public sealed class SnapshotDb : IDisposable
         //
         // 恰好只多出一条时全列:「plus 1 path shape not shown」这句话占的字比那一项本身还多,
         // 而藏起来的那一项可能正是相关的那条 —— 用一句更长的话换一次可能的漏掉,不划算。
-        var take = paths.Count == Cli.Limits.MaxSuggestions + 1 ? paths.Count : Cli.Limits.MaxSuggestions;
-        var top = rough.OrderByDescending(x => x.Value).ThenBy(x => x.Key, StringComparer.Ordinal)
-                       .Take(take).Select(x => x.Key).ToList();
+        //
+        // 分界线还**不许落在并列上**。被砍掉的首位与展示末位一样大时,谁进展示位只取决于
+        // 同分时的字典序 —— 一个与提问、与数据都无关的量,却印成了看起来有依据的排名。
+        // 消费侧量过(真快照,20 个常见值 × def_type):触发省略的 143 组里 54 组(38%)
+        // 的边界正落在并列上,值 =1 的 ThingDef 那组两边都是 3414 个 def。
+        //
+        // 修法是把并列的一并展示,不是加一句「这里是并列」——那句话得报个数,而排序用的是
+        // 各下标相加的近似值、印出来的是下面第二趟的精确值,两个数在同一句里对不上。
+        // 天花板咬住时分界线又落回并列上,那一小撮(4240 组里 16 组)不再多说,理由同上。
+        var order = rough.OrderByDescending(x => x.Value).ThenBy(x => x.Key, StringComparer.Ordinal).ToList();
+        var take = Cli.Limits.MaxSuggestions;
+        while (take < order.Count && take < Cli.Limits.MaxShownShapes
+               && order[take].Value == order[take - 1].Value) take++;
+        if (order.Count == take + 1) take = order.Count;
+        var top = order.Take(take).Select(x => x.Key).ToList();
 
         // 印出来的是**那个形状自己的 def 数**,不是并集。并集试过,是个更坏的东西:
         // 靶题(值 3.9)的并集是 17,而真值是 11 —— 差额是 statBases[].value 与
