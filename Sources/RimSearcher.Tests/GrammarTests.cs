@@ -1356,6 +1356,13 @@ public class GrammarTests
         Assert.Contains(Denial, Fixture.Run("get", "Bullet_Revolver", "--json").Stdout,
                         StringComparison.Ordinal);
 
+        // 加了 --defaults 之后 Not listed 那句消失(那些行进表了),否定改由
+        // NoteWidelySharedValues 的句尾承载 —— 换了个承载者,不是丢了。
+        // 钉住这两支是因为有人只匹配了 advisory 的开头一句就判「这条路径上没有」。
+        foreach (var extra in new[] { new[] { "--defaults" }, ["--defaults", "--json"] })
+            Assert.Contains(Denial, Fixture.Run(["get", "Bullet_Revolver", .. extra]).Stdout,
+                            StringComparison.Ordinal);
+
         // 「carrying」那个读法不许回来:它把「值相等」说成「它们带的就是类默认」。
         Assert.DoesNotContain("carrying the declaring type's own default", plain, StringComparison.Ordinal);
     }
