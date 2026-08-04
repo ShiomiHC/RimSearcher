@@ -2511,6 +2511,65 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 「磁盘那一层没量过」这件事有**两个独立产地**:造库那一刻(<c>snapshot import</c>)
+    /// 与每次查询(<c>DiskLayer</c>)。这条闸比对的是两者,不复述任何一边的理由 ——
+    /// 前一版的闸把实现的理由(「没配 mod_roots 的机器上没有第二层可漏」)抄进了注释,
+    /// 于是闸与实现成了同一份判断的两个副本,错判断被钉了很久还一路绿。
+    /// **测试与实现共享错误前提时,独立性是名义上的。**
+    ///
+    /// 所以这里只钉两条跨产地的形状,不钉措辞:
+    /// ① 两侧都得带否定标记 —— 「没量过」不许只报事实不挡推论;
+    /// ② <c>mod_roots</c> 这个词两侧同进同出 —— 成因不同则出路不同,而出路是给谁的,
+    /// 两个产地不许各说各话。
+    /// </summary>
+    [Fact]
+    public void 磁盘层没量过这件事在造库与查询两处同口径()
+    {
+        static string Env(string name, string? modRoots)
+        {
+            var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", name);
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+            Directory.CreateDirectory(dir);
+            var config = Path.Combine(dir, "config.toml");
+            var roots = modRoots is null ? "" :
+                "mod_roots = ['" + Path.Combine(dir, modRoots).Replace("\\", "\\\\") + "']\n";
+            if (modRoots is not null) Directory.CreateDirectory(Path.Combine(dir, modRoots));
+            File.WriteAllText(config, roots + "snapshot_dir = '" + dir.Replace("\\", "\\\\") + "'\n");
+            return config;
+        }
+
+        // 两个成因各造一次。A:配了 mod_roots 但显式关掉收割;B:压根没地方扫。
+        var cfgA = Env("harvestcalA", "mods");
+        var cfgB = Env("harvestcalB", null);
+        var impA = Fixture.Run("snapshot", "import", Fixture.ExportPath, "--no-harvest-translations",
+                               "--name", "a", "--config", cfgA).Stdout;
+        var impB = Fixture.Run("snapshot", "import", Fixture.ExportPath,
+                               "--name", "b", "--config", cfgB).Stdout;
+        var qA = Fixture.Run("keyed", "CannotUseNoPower", "--config", cfgA, "--snapshot", "a").Stdout;
+        var qB = Fixture.Run("keyed", "CannotUseNoPower", "--config", cfgB, "--snapshot", "b").Stdout;
+
+        // ① 四份输出都得挡住那个推论。措辞不钉,只钉否定标记在场。
+        // 三种说法都是实打实的否定,不是为了让闸变绿凑进来的:`cannot answer whether X exists`
+        // 与 `is not evidence that…` 挡的是同一个推断,只是一个从工具说、一个从证据说。
+        // (放宽标记集之前先按实质判过一遍 —— 否则就成了「照着实现写闸」,而那正是
+        // 这条闸要绕开的东西。)
+        static bool Denies(string s) => s.Contains("not an answer", StringComparison.Ordinal)
+                                     || s.Contains("not evidence", StringComparison.Ordinal)
+                                     || s.Contains("cannot answer", StringComparison.Ordinal);
+        foreach (var (what, text) in new[] { ("import A", impA), ("import B", impB),
+                                             ("query A", qA), ("query B", qB) })
+            Assert.True(Denies(text), $"{what} 报了「没量过」却没挡住「所以磁盘上也没有」这个推论");
+
+        // ② mod_roots 两侧同进同出:B 是「没地方扫」,出路只能是去配它;A 有地方扫,
+        //    出路是收回那个开关 —— 提了 mod_roots 反而把人支去改一个已经对的配置。
+        const string Roots = "mod_roots";
+        Assert.Contains(Roots, impB, StringComparison.Ordinal);
+        Assert.Contains(Roots, qB, StringComparison.Ordinal);
+        Assert.DoesNotContain(Roots, impA, StringComparison.Ordinal);
+        Assert.DoesNotContain(Roots, qA, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 数据键的**声明侧**:一个键要么在声明里就说明白它恒在(<see cref="JsonKeySpec.Rows"/>),
     /// 要么在它自己那句 <c>What</c> 的开头说明白它是有条件的 —— 两者都不占的键会掉进裂缝。
     ///
