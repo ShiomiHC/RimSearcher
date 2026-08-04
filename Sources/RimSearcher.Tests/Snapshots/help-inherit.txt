@@ -1,0 +1,37 @@
+$ rimsearcher inherit --help
+exit 0
+--- stdout ---
+Usage: rimsearcher inherit <name> [options]
+
+Show what an XML node inherits from and what inherits from it, including abstract parents.
+
+This is the one part of a snapshot that is read from the mods' XML rather than from the objects the game had in memory, because the game resolves inheritance while loading and then discards it. Abstract parents exist only here: they never become defs, so 'get' will not find them.
+
+What is shown is the XML before PatchOperations are applied. Each node that declares Name= reports how many patch operations name it with @Name= in an xpath — that is the whole of what the count covers, and an xpath that reaches a node any other way is counted nowhere in this layer. A 0 is therefore not evidence that the node reached the game unpatched; a node without a Name= reports 'n/a' rather than 0 because there the count was never taken at all. For the merged, post-patch values, read any concrete child with 'get' — everything a parent contributes is already in each of its children.
+
+Arguments:
+  <name>  A Name= of an XML node, or the defName of a def. Both are looked up.
+
+Options:
+  -n, --limit <n|all>         How many children to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: 25.
+                              Also accepted: --max-results, --count, --top, --rows, --num, --head.
+      --path-contains <text>  Ask which layer a field comes from. For every layer in the chain, count the other defs descending from it that carry a field path containing this text, and how many of those carry the same value. Matching is the substring match 'get --path-contains' uses, so the same word selects the same fields in both commands.
+                              Also accepted: --filter, --grep, --field-contains, --path-filter, --field, --fieldPath.
+
+Global options (every command takes these, written after the command):
+      --snapshot <name>  Query this named snapshot instead of the one that would be picked automatically. An explicit choice always wins over auto-detection.
+                         Also accepted: --snap, --env.
+      --db <path>        Query the snapshot database at this path directly, bypassing the registry.
+                         Also accepted: --database, --snapshot-path.
+      --json             Emit machine-readable JSON. Anything the text output would have said in prose moves into a 'notes' array, so nothing is lost. The command's own table key is always present — an empty array when nothing matched, never a missing key.
+      --config <path>    Use this config file instead of the default one.
+
+--json keys (besides 'notes'):
+  nodes  one object per XML node answering to the name — each with 'node' (identity and patch count), 'ancestors', 'children' when it has any, and 'witnesses' when --path-contains is given.
+
+Examples:
+  rimsearcher inherit BaseBullet
+  rimsearcher inherit Bullet_Revolver
+  rimsearcher inherit BaseHumanlike --limit all
+  rimsearcher inherit Bullet_Revolver --path-contains damageAmountBase
+--- stderr ---

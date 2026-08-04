@@ -180,6 +180,9 @@ public class OutputSnapshotTests
         // 并把该打的那一条(`<command> --help`)原样给出来。
         { "help-with-command",     ["--help", "search"] },
         { "help-get",              ["get", "--help"] },
+        // Remarks 里那段 patch 口径与 identity 块的 patch_ops 说的是同一件事,而 r14 抓到
+        // 一个受测者读了输出的新句、再引这里的旧句把它降格成「通用免责措辞」驳回。
+        { "help-inherit",          ["inherit", "--help"] },
         // where 的 --limit / --offset 数的是**行**((def, 路径)对),而模板的 what 一度传的是
         // "defs" —— 这条命令是全套里唯一一行不等于一个 def 的,那个词在别处都是真话。
         { "help-where",            ["where", "--help"] },

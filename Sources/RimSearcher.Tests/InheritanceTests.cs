@@ -71,6 +71,30 @@ public class InheritanceTests
     }
 
     /// <summary>
+    /// patch 计数的口径在**两处**出声:identity 块那三支,与 <c>inherit --help</c> 的 Remarks。
+    /// 两处必须同形 —— r14 抓到一个受测者读了输出的新句、再引 help 的旧句把它降格成
+    /// 「通用免责措辞」驳回,而 help 那句还多带一句更强的正面断言(「0 就是游戏读到的原样」)。
+    /// 一句话在两个信道上强度不同时,读者取强的那个。
+    ///
+    /// 钉的三件事各是那次失效的一级台阶:遗漏面不许举 defName 当代表(抽象节点根本没有
+    /// defName,举它等于说「这个漏检面对我不存在」)、口径半句 @Name= 两处都要在、
+    /// 「0 = 原样」这类正面断言不许回来。
+    /// </summary>
+    [Fact]
+    public void patch计数的口径在输出与help两处同形()
+    {
+        foreach (var text in new[] { Text("inherit", "--help"), Text("inherit", "BaseProjectile") })
+        {
+            Assert.Contains("@Name=", text, StringComparison.Ordinal);
+            Assert.Contains("any other way", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("by defName", text, StringComparison.Ordinal);
+        }
+
+        Assert.DoesNotContain("exactly what the game read", Text("inherit", "--help"),
+                              StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 「链到根了」与「父节点所在的 mod 没启用」必须分得开。两者在祖先表上长得一模一样:
     /// 都是表格到此为止。不说破,读的人会把「看不见」读成「没有」。
     /// </summary>

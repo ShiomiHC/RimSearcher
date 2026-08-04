@@ -26,10 +26,18 @@ public sealed class InheritCommand : Command
             "This is the one part of a snapshot that is read from the mods' XML rather than from the objects the " +
             "game had in memory, because the game resolves inheritance while loading and then discards it. " +
             "Abstract parents exist only here: they never become defs, so 'get' will not find them.\n\n" +
+            // 与 identity 块那三支同口径 —— 它们说的是同一个计数,而 r14 抓到一个受测者
+            // 读了输出的新句、再引这里的旧句把它降格成「通用免责措辞」驳回。旧句三处错:
+            // ① 「0 there means what you see is exactly what the game read」是假话,正是
+            // 7065749 从代码注释里推翻的那一句;② 「by defName」把遗漏面窄化成一条,而计数
+            // 的正则只认 @Name=,漏的是所有其他定位方式(852e863 已在输出侧修掉);
+            // ③ 只把 unanswered 给了无 Name= 的节点 —— 那正好暗示有 Name= 的是 answered,
+            // 而那是受测者驳回新句时踩的那级台阶。
             "What is shown is the XML before PatchOperations are applied. Each node that declares Name= reports how " +
-            "many patch operations target it by name, so 0 there means what you see is exactly what the game read. " +
-            "A node without a Name= reports 'n/a' rather than 0: patches that reach a def by defName are counted " +
-            "nowhere in this layer, so for those defs the question stays unanswered. " +
+            "many patch operations name it with @Name= in an xpath — that is the whole of what the count covers, " +
+            "and an xpath that reaches a node any other way is counted nowhere in this layer. A 0 is therefore not " +
+            "evidence that the node reached the game unpatched; a node without a Name= reports 'n/a' rather than 0 " +
+            "because there the count was never taken at all. " +
             "For the merged, post-patch values, read any concrete child with 'get' — everything a parent " +
             "contributes is already in each of its children.",
         Positionals =

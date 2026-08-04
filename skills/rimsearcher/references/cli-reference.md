@@ -319,7 +319,7 @@ rimsearcher inherit <name> [options]
 
 This is the one part of a snapshot that is read from the mods' XML rather than from the objects the game had in memory, because the game resolves inheritance while loading and then discards it. Abstract parents exist only here: they never become defs, so 'get' will not find them.
 
-What is shown is the XML before PatchOperations are applied. Each node that declares Name= reports how many patch operations target it by name, so 0 there means what you see is exactly what the game read. A node without a Name= reports 'n/a' rather than 0: patches that reach a def by defName are counted nowhere in this layer, so for those defs the question stays unanswered. For the merged, post-patch values, read any concrete child with 'get' — everything a parent contributes is already in each of its children.
+What is shown is the XML before PatchOperations are applied. Each node that declares Name= reports how many patch operations name it with @Name= in an xpath — that is the whole of what the count covers, and an xpath that reaches a node any other way is counted nowhere in this layer. A 0 is therefore not evidence that the node reached the game unpatched; a node without a Name= reports 'n/a' rather than 0 because there the count was never taken at all. For the merged, post-patch values, read any concrete child with 'get' — everything a parent contributes is already in each of its children.
 
 | Argument | Meaning |
 |---|---|
