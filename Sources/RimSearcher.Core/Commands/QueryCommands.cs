@@ -2334,7 +2334,9 @@ internal static class Advisory
             $"Naming a field narrows to that field: '{Quote(value)}' also sits on " +
             $"{Tally.Complete(el.OtherShapes).Render("path shape")} of " +
             $"{string.Join("/", el.Types.OrderBy(t => t, StringComparer.Ordinal))} not matched here" +
-            $"{(el.OtherShapes > 1 ? ", the largest" : "")} being {el.Shape} on " +
+            // 只有一条时没有「最大的」可言 —— 此前这里在单数支上留下
+            // 「not matched here being soundInteract」,读基线 diff 时才看见。
+            $"{(el.OtherShapes > 1 ? ", the largest being " : ", namely ")}{el.Shape} on " +
             $"{Tally.Complete(el.Defs).Render("def")}. Whether any of those is the same thing " +
             $"the question is about does not follow from the value — 'rimsearcher where --value " +
             $"{Quote(value)}{(exact ? " --exact" : "")}' lists every path holding it, to be read as paths.");

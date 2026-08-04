@@ -101,6 +101,12 @@ public class OutputSnapshotTests
         // 它改的是每一行怎么读,沉到表下就是批 B 那个盲区。
         { "where-generated-mixed",  ["where", "soundDrop", "Standard_Drop", "--limit", "all"] },
         { "where-generated-offpage", ["where", "soundDrop", "Standard_Drop", "--limit", "1"] },
+        // 点名字段时同一个值还坐在别的路径形状上(Standard_Pickup 同时在 soundPickup 与
+        // soundInteract 上)。补这一份的**理由本身值得记**:`where <字段> --value` 这个
+        // 命令形态早就有基线(上面两份就是),但没有一份的**数据**满足触发条件,于是这条
+        // 分支在字节层从没出过声。字节闸覆盖的是命令形态,不是数据形态 —— 一条分支可以
+        // 在命令面上全覆盖、而永远不触发。
+        { "where-value-elsewhere",  ["where", "soundPickup", "--value", "Standard_Pickup", "--exact"] },
         // 打进 fields 的名字不是 def 类型,而反编译树里有同名类型 —— 那儿才答得出这个问题。
         // 三档摆一起:唯一一棵树命中、跨树同名(不许把一个挑选说成一个事实)、哪儿都没有
         // (那时一个字都不许多说,否则它就成了免责声明)。
