@@ -93,10 +93,14 @@ public class SkillPromiseTests
             nameof(OutputSnapshotTests.keyed层为空时说破是快照的缘故而不是查不到)),
 
         // ---- 子串匹配与同块兄弟 ----
-        new("the output says when nothing matched as a whole segment",
-            nameof(GrammarTests.子串匹配要说破自己不是整段命中)),
-        new("the output names hand-set fields in the block it cut away",
-            nameof(GrammarTests.同一块里有人设过的兄弟字段要点名)),
+        // 2026-08-04(15 §十二):这两条的 doc 侧钉子退役,与 31-38 行 `inherit`、41-51 行
+        // 三态计数那两次同理 —— **住处变了,契约没变,behaviour 侧的闸原样留着**。
+        // 它们说的都是「CLI 会自己印」,而现敲逐条确认过 CLI 印的比这半句还全:
+        //   `get Bullet_Revolver --path-contains soundImpact` →「None of those has 'soundImpact'
+        //     as a whole path segment: … this line removes none of the matched fields」
+        //   `where stat` →「Set by hand in the same block as the rows above: value. Fields in
+        //     one statBases[0] entry bind and override each other」
+        // 下面两个 nameof 原样留着,闸没退役,只是不再有 doc 句子指着它们。
         // 2026-08-04(14 批 C):导出期截断那条同批退役 —— `get` 在被砍过的 def 上自报
         // 「at least N fields were dropped」,`where`/`values`/`fields` 那条边界这次还从
         // 脚注区搬到了表上方。`完整性尾注指的命令要走得到它刚说的那批` 原样留着。
@@ -133,8 +137,10 @@ public class SkillPromiseTests
             "没读完的零结果与真零结果分得开"),
         new("reports matches and files as two numbers",
             nameof(code的匹配数与文件数是两个数)),
-        new("pointed at a data question it says so",
-            nameof(code的零结果指路回快照而不是硬说没有)),
+        // 2026-08-04(15 §十二)同批退役。现敲:`code-search Meat_Muffalo` →「If you were
+        // looking for a def rather than code, 'rimsearcher search' and 'rimsearcher where'
+        // answer that from the snapshot — the XML is not searched here.」
+        // 闸 `code的零结果指路回快照而不是硬说没有` 原样留着。
         // 2026-08-03 R10-N1:改写过一次。原文「starts at the tree name」在**夹具上**是完整的
         // (夹具树是 vanilla/Verse/…),在**真实盘上**不是 —— 真实布局是
         // <packageId>/<assembly>/<命名空间目录>/<file>.cs,树名之后还有一层 assembly。
@@ -177,8 +183,9 @@ public class SkillPromiseTests
             nameof(未知选项的报错点名接受它的那条命令)),
         // 播报判据是「展开与你输入的字面不同」,不是「多于一个 mod」——
         // `--scope ludeon.rimworld` 展开成一个 mod 时也要播报。
-        new("the output spells out what a scope resolved to",
-            "scope在散文里展开成实际圈住的mod"),
+        // 2026-08-04(15 §十二)同批退役。基线 `where-scope-group` 逐字钉着
+        // 「--scope vanilla (= ludeon.rimworld).」,闸 `scope在散文里展开成实际圈住的mod`
+        // 原样留着。
 
         // ---- 落空的成因 ----
         // 2026-08-04(14 批 C):doc 侧那条成因清单退役,`零结果按算得出来的落点分流` 留着。
@@ -191,8 +198,9 @@ public class SkillPromiseTests
             nameof(GrammarTests.find给一个词落空时要说破那个词其实是什么)),
         new("it says so instead of handing back a query that would come back empty",
             nameof(GrammarTests.find给一个词落空时要说破那个词其实是什么)),
-        new("another registered snapshot holding the def is named in the zero result",
-            "别的快照里有时点名说出来"),
+        // 2026-08-04(15 §十二)同批退役。现敲:`where capacity Consciousness --scope
+        // rimsearcher.datamod` →「Another registered snapshot does have it — 'ce': 89 defs,
+        // …。Add '--snapshot ce' to ask there」。闸 `别的快照里有时点名说出来` 原样留着。
         // 位置本身成了承诺:只扫表头的读法会漏掉沉到表下的那一条,而这句话就是在
         // 说破那个新的沉默形状 —— 于是它比大多数承诺更需要一道闸看着。
         new("It is repositioned, never suppressed",
