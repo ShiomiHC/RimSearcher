@@ -127,10 +127,9 @@ any depth.
 - **`values <field>` already answers "which def types have this field"** — its `def_types`
   row names them with `n of m` coverage. `fields <DefType>` goes the other way and needs
   the type up front.
-- **Give `read` the bare file name; never build a path from the namespace** — folders are
-  not namespaces. `--member`/`--type`/`--outline` match **braces, not C#**: a name they
-  miss is not proof of absence — recheck with `code-search` or `--lines`. A member of a
-  *loaded assembly* is still the MCP's job.
+- **A name `--member`/`--type`/`--outline` misses is not proof of absence** — they match
+  **braces, not C#**; recheck with `code-search` or `--lines`. A member of a *loaded
+  assembly* is still the MCP's job.
 
 ## Reading the output
 

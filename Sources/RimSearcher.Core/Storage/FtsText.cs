@@ -113,6 +113,19 @@ public static class FtsText
         return result;
     }
 
+    /// <summary>
+    /// 这个查询词里一个字母数字都没有 —— 于是 FTS 侧**根本没被问过**,它返回的零
+    /// 是关于查询词的,不是关于库的。
+    ///
+    /// 抽出来是因为两条命令都要判它,而判错的方向一致且很贵:`search ''` 的 FTS 零会
+    /// 触发译文原文兜底,兜底拿原串跑 <c>LIKE '%%'</c> 匹配全体,顶着一句
+    /// 「什么都没匹配到」印出上万行。**零结果与「问都没问」不同形,这个判据是那道分界。**
+    ///
+    /// 空串包含在内,而且它是最贵的一档:<see cref="EffectiveTerms"/> 对它的返回与
+    /// <c>query.Trim()</c> 恰好相等,于是「归一化改动过你的查询词」那条判据看不见它。
+    /// </summary>
+    public static bool HasNothingToMatch(string userQuery) => EffectiveTerms(userQuery).Count == 0;
+
     private static List<string> Tokenize(string q)
     {
         var result = new List<string>();

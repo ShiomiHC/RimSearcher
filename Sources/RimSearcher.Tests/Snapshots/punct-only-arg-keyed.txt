@@ -1,7 +1,6 @@
 $ rimsearcher keyed *
 exit 1
 --- stdout ---
-'*' was not matched as typed: only letters and digits take part, so what ran was an empty query. '*' is not a wildcard here: it is dropped like any other punctuation, which is why moving it elsewhere in the query brings back the same rows.
+'*' holds no letter or digit, and only those take part in matching, so there was nothing left to look up — the zero below is about the query, not about this layer. '*' is not a wildcard here: it is dropped like any other punctuation. Leaving the argument out is a different call, not an empty one: 'rimsearcher keyed' lists all 2107 keyed translations.
 No keyed translation matches '*'.
-Two things are outside this layer by construction. A def's own label or description is translated through DefInjected, not through a key: 'rimsearcher search *' covers those. And a key the code assembles at runtime ('"Stat_" + x') exists in the language files but appears in no source line as a literal, so searching the code for it finds nothing even though this command can still show it by name.
 --- stderr ---

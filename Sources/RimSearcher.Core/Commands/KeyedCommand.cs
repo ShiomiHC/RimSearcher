@@ -144,14 +144,30 @@ public sealed class KeyedCommand : Command
             // 只在这条路上说:精确 key 那一路走的是 SQL 等值比较,规范化碰不到它,
             // 在那儿说就是错话。
             var terms = FtsText.EffectiveTerms(query);
-            if (!string.Equals(string.Join(" ", terms), query.Trim(), StringComparison.Ordinal))
+            if (terms.Count == 0)
+                // 一个字母数字都不剩,与「剥掉了几个字符」是两种病,分开说。
+                //
+                // **不许说「跑了一个空查询」** —— 这条命令自己的 help 写着「把参数去掉就列
+                // 整层」,空查询在它的口径里等于全部。原先那句让「空」在同一屏里既指全体
+                // 又指零,而读的人手上正好有一个零。
+                //
+                // 触发判据也从「归一化改动过原串」换成 terms.Count:空串两边恰好相等,
+                // 于是这条解释以前正好在最该说的那个输入上不发(见 FtsText.HasNothingToMatch)。
+                ctx.Report.Notice(NoticeKind.Boundary,
+                    $"'{query}' holds no letter or digit, and only those take part in matching, so there was " +
+                    "nothing left to look up — the zero below is about the query, not about this layer. " +
+                    (query.Contains('*', StringComparison.Ordinal)
+                        ? "'*' is not a wildcard here: it is dropped like any other punctuation. "
+                        : "") +
+                    "Leaving the argument out is a different call, not an empty one: 'rimsearcher keyed' " +
+                    $"lists all {Tally.Complete(total).Render("keyed translation")}.");
+            else if (!string.Equals(string.Join(" ", terms), query.Trim(), StringComparison.Ordinal))
                 ctx.Report.Notice(NoticeKind.Boundary,
                     $"'{query}' was not matched as typed: only letters and digits take part, so what ran was " +
-                    (terms.Count == 0
-                        ? "an empty query."
-                        : $"{NameList.Render(terms, Limits.MaxSuggestions)}.") +
+                    $"{NameList.Render(terms, Limits.MaxSuggestions)}." +
                     // 只在查询词里真有 `*` 时讲它 —— 否则这句话是答非所问,而下划线那种
-                    // 剥离与通配符无关。
+                    // 剥离与通配符无关。这里说得比上面那支多一句「换个位置回来的是同一批」:
+                    // 那句只在查询词里另有内容时才有意义,而上面那支按定义没有。
                     (query.Contains('*', StringComparison.Ordinal)
                         ? " '*' is not a wildcard here: it is dropped like any other punctuation, which is why " +
                           "moving it elsewhere in the query brings back the same rows."
@@ -212,7 +228,10 @@ public sealed class KeyedCommand : Command
             var sighting = NameLookup.Locate(ctx, query);
             if (sighting is not null)
                 ctx.Report.Notice(NoticeKind.NextStep, sighting.Sentence);
-            else
+            // 「这句话还可能住在别处」对一个没有内容的查询词无话可说,而照直填进去的
+            // `rimsearcher search ''` 跑不了、`rimsearcher search *` 正好走进同一个坑 ——
+            // 递出去的下一步必须是敲得动的。上面那支已经把该说的说完了。
+            else if (!FtsText.HasNothingToMatch(query))
                 // 两条射程线,都是这一层原理上到不了的地方 —— 说破它们,免得「这里没有」
                 // 被读成「游戏里没有这句话」。
                 ctx.Report.Notice(NoticeKind.Boundary,

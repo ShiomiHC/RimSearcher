@@ -72,6 +72,23 @@ public sealed class SearchCommand : Command
             }
         }
 
+        // 查询词里一个字母数字都没有:FTS 侧**根本没被问过**,它给的零是关于查询词的。
+        // 不先说破的话,下面那条兜底会拿着这个零去断言「什么都没匹配到」,再用
+        // `LIKE '%<原串>%'` 去扫 —— 空串是每一行的子串,于是 `search ''` 顶着一句
+        // 「没有」印出装机库上的 9963 条。零结果与「问都没问」在这里必须不同形。
+        var nothingToMatch = FtsText.HasNothingToMatch(query);
+        if (nothingToMatch)
+            ctx.Report.Notice(NoticeKind.Boundary,
+                $"'{query}' holds no letter or digit, and only those take part in full-text matching, so the " +
+                "index was never asked about it: whatever appears below came from scanning text for " +
+                $"'{query}' as a plain substring." +
+                // 空串这一档单说:它是每一行的子串,那个计数是被扫的那张表的大小,
+                // 不是一个结果。别的标点(`.`)只是命中得宽,不是必然命中全体。
+                (query.Length == 0
+                    ? " An empty query is a substring of every row, so any count below is the size of what was " +
+                      "scanned rather than an answer. 'rimsearcher list <DefType>' enumerates on purpose."
+                    : ""));
+
         // 译文原文那一侧的兜底:FTS 只索引 translated,中文快照上英文原名一个也搜不到。
         // **必须排在模糊回退之前** —— 否则英文查询会先被一批拼写相近的中文名挤掉真答案。
         if (rows.Count == 0 && offset == 0)
@@ -82,7 +99,11 @@ public sealed class SearchCommand : Command
                 (rows, total) = ctx.Db.ByNames(byOriginal, limit.Effective);
                 how = "translation original";
                 ctx.Report.Notice(NoticeKind.Boundary,
-                    $"No name, label or translated text in this snapshot contains '{query}'; these defs have it " +
+                    // 首句是一个**断言**,而它只在 FTS 真被问过时才成立。查询词没内容时
+                    // FTS 的零什么也没证明,照印就是拿没查过的事当查过的结论。
+                    (nothingToMatch
+                        ? "These defs have it "
+                        : $"No name, label or translated text in this snapshot contains '{query}'; these defs have it ") +
                     "in the original text a translation replaced. This snapshot's language is " +
                     $"{ctx.Db.Meta.Language}, so the English wording survives only where a translation " +
                     "recorded what it was translated from.");

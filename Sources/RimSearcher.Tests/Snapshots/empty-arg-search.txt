@@ -1,7 +1,8 @@
 $ rimsearcher search ''
 exit 0
 --- stdout ---
-No name, label or translated text in this snapshot contains ''; these defs have it in the original text a translation replaced. This snapshot's language is ChineseSimplified, so the English wording survives only where a translation recorded what it was translated from.
+'' holds no letter or digit, and only those take part in full-text matching, so the index was never asked about it: whatever appears below came from scanning text for '' as a plain substring. An empty query is a substring of every row, so any count below is the size of what was scanned rather than an answer. 'rimsearcher list <DefType>' enumerates on purpose.
+These defs have it in the original text a translation replaced. This snapshot's language is ChineseSimplified, so the English wording survives only where a translation recorded what it was translated from.
 3 defs.
 
 Same in every row, not repeated below: mod=ludeon.rimworld.
