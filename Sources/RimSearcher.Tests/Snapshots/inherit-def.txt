@@ -12,7 +12,8 @@ patch_ops      n/a
 2 ancestors.
 
 Same in every row, not repeated below: def_type=ThingDef, abstract=yes, mod=ludeon.rimworld, source=Projectiles_Guns.xml.
-name
-BaseBullet
-BaseProjectile
+name            patch_ops
+BaseBullet      2
+BaseProjectile  0
+A def inherits its ancestors' fields, so a patch that rewrites an ancestor changes what the game read for 'Bullet_Revolver' as well — and the patch_ops on 'Bullet_Revolver' itself does not count that. Above, patch_ops is not zero for 1 ancestor.
 --- stderr ---

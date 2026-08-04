@@ -131,7 +131,11 @@ public class OutputSnapshotTests
         // 抽象节点侧的 same_value:参照值从子树众数来,而那一列在场与否是这条命令
         // 唯一分得开「这层声明了它」与「后代各写各的」的地方。
         { "inherit-abstract-path", ["inherit", "BaseProjectile", "--path-contains", "soundDrop"] },
+        // 祖先侧的 patch_ops 列有无各钉一份。Bullet_Revolver 自己 0、父 BaseBullet 是 2
+        // (与真快照里 BaseMechanoid → BasePawn 同构);Firefoam 的整条链全 0,那一列不许出现 ——
+        // 全零时它每行同值,是纯噪声。
         { "inherit-def",           ["inherit", "Bullet_Revolver"] },
+        { "inherit-ancestors-clean", ["inherit", "Firefoam"] },
         { "inherit-broken-chain",  ["inherit", "TestModGun"] },
         { "inherit-not-in-layer",  ["inherit", "Apparel_ShieldBelt"] },
         { "inherit-missing",       ["inherit", "NoSuchNode"] },

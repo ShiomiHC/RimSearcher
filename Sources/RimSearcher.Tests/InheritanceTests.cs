@@ -95,6 +95,32 @@ public class InheritanceTests
     }
 
     /// <summary>
+    /// 祖先被 patch 点名 = 这个节点从它继承来的字段跟着变,而 identity 块那一格看不见这件事 ——
+    /// 它只数点名本节点自己的 xpath。r15 抓到的正是这个缺口:真快照里 <c>BaseMechanoid</c> 自己
+    /// patch_ops 是 0、父 <c>BasePawn</c> 是 1(全部机械族的 comps 都被那条改了),六个受测者里
+    /// 只有两个想到再往上跑一次 <c>inherit BasePawn</c>,其余四个答「节点自身未被改」——
+    /// 字面不错,漏掉的是真正生效的那条。判据当场算得出来:那些数就在祖先表已经查出的行里。
+    ///
+    /// **列条件化不是为省地方**:全零时渲染器会把它折进「Same in every row」那句、印成
+    /// <c>patch_ops=0</c>,而那正是本文件另外两条闸一直在修的形态 —— 一个沉默的 0 断言假事。
+    /// 条件化之后,沉默只发生在「祖先侧确实没有已知 patch」时,而那时沉默推不出错结论。
+    /// </summary>
+    [Fact]
+    public void 祖先被点名时在祖先表上就看得见()
+    {
+        // Bullet_Revolver 自己 n/a,父 BaseBullet 是 2 —— 与 BaseMechanoid → BasePawn 同构。
+        var viaParent = Text("inherit", "Bullet_Revolver");
+        Assert.Contains("inherits its ancestors' fields", viaParent, StringComparison.Ordinal);
+        // 带上数字才省得掉「再往上跑一次」那个动作;只说「有祖先被改过」等于把活推回去。
+        Assert.Contains("not zero for 1 ancestor", viaParent, StringComparison.Ordinal);
+
+        // Firefoam 的整条链全 0:那句话一个字不许出现。列的在场与否由字节闸
+        // inherit-def / inherit-ancestors-clean 两份基线对照钉住。
+        Assert.DoesNotContain("inherits its ancestors' fields", Text("inherit", "Firefoam"),
+                              StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 「链到根了」与「父节点所在的 mod 没启用」必须分得开。两者在祖先表上长得一模一样:
     /// 都是表格到此为止。不说破,读的人会把「看不见」读成「没有」。
     /// </summary>

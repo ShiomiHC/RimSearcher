@@ -1,0 +1,17 @@
+$ rimsearcher inherit Firefoam
+exit 0
+--- stdout ---
+def_name       Firefoam
+def_type       ThingDef
+abstract       no
+inherits_from  BaseProjectile
+mod            ludeon.rimworld
+source         Buildings_Special.xml
+patch_ops      n/a
+'Firefoam' declares no Name=, so patch_ops is not measured for it: only xpaths naming a node with @Name= are counted, and a patch that reaches this def by defName leaves no trace here.
+1 ancestor.
+
+name            def_type  abstract  mod              source
+BaseProjectile  ThingDef  yes       ludeon.rimworld  Projectiles_Guns.xml
+Outside this layer: 1 def also named 'Firefoam', declaring no Name=, ParentName= or Abstract= (StatDef). An ordinary def takes part in no inheritance, which is why 'rimsearcher get Firefoam' counts 2 where this command counts 1.
+--- stderr ---

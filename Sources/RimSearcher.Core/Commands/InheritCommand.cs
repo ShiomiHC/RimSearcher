@@ -209,16 +209,42 @@ public sealed class InheritCommand : Command
             if (chain.Count > 0)
                 ctx.Report.CountNotice(Tally.Complete(chain.Count), "ancestor", "");
 
+            // 祖先被点名 = 这个节点从它继承来的字段跟着变,而 identity 块那一格看不见这件事:
+            // 它只数点名本节点自己的 xpath。实测里 BaseMechanoid 自己 0、父 BasePawn 是 1
+            // (全部机械族的 comps 都被那条改了),六个受测者里四个就此答「节点自身未被改」——
+            // 字面不错,漏掉的是真正生效的那条。这些数在上面那趟往上走里已经查出来了。
+            //
+            // 列按 list --own-class 的先例条件化,但理由不是省地方:全零时渲染器会把它折进
+            // 「Same in every row」那句、印成 patch_ops=0,而那正是这条命令改了三轮的形态 ——
+            // 一个沉默的 0 断言假事。条件化之后沉默只发生在祖先侧确实没有已知 patch 时。
+            var patchedUp = chain.Where(n => n.PatchOps > 0).ToList();
             if (chain.Count > 0)
-                ctx.Report.Table("ancestors", ["name", "def_type", "abstract", "mod", "source"],
-                    chain.Select(n => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+                ctx.Report.Table("ancestors",
+                    patchedUp.Count > 0
+                        ? ["name", "def_type", "abstract", "patch_ops", "mod", "source"]
+                        : ["name", "def_type", "abstract", "mod", "source"],
+                    chain.Select(n =>
                     {
-                        ["name"] = n.Name,
-                        ["def_type"] = n.DefType,
-                        ["abstract"] = n.Abstract,
-                        ["mod"] = n.SourceMod,
-                        ["source"] = n.SourceFile,
+                        var row = new Dictionary<string, object?>
+                        {
+                            ["name"] = n.Name,
+                            ["def_type"] = n.DefType,
+                            ["abstract"] = n.Abstract,
+                            ["mod"] = n.SourceMod,
+                            ["source"] = n.SourceFile,
+                        };
+                        if (patchedUp.Count > 0) row["patch_ops"] = n.PatchOps;
+                        return (IReadOnlyDictionary<string, object?>)row;
                     }).ToList());
+
+            // 带上数字才省得掉「再往上跑一次 inherit」那个动作;只说「祖先里有被改的」
+            // 等于把活推回去。计数放句尾,免得动词跟着单复数变 —— NounRegistry 不管动词。
+            if (patchedUp.Count > 0)
+                ctx.Report.Notice(NoticeKind.Boundary,
+                    $"A def inherits its ancestors' fields, so a patch that rewrites an ancestor changes " +
+                    $"what the game read for '{label}' as well — and the patch_ops on '{label}' itself " +
+                    $"does not count that. Above, patch_ops is not zero for " +
+                    $"{Tally.Complete(patchedUp.Count).Render("ancestor")}.");
 
             // 断链要说破:ParentName 指着一个本快照里没有的名字,意思是那个 mod 没启用,
             // 而不是「到根了」。两者在表格上长得一模一样。
