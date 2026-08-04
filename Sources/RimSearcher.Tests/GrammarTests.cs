@@ -3398,4 +3398,75 @@ public class GrammarTests
             Assert.DoesNotContain("Def and ", line, StringComparison.Ordinal);
         }
     }
+
+    /// <summary>
+    /// 显式点了名的快照,**当场**验名字 —— 不等到有人开库。
+    ///
+    /// 寻址是懒的,而懒寻址顺带把「这个名字对不对」也变懒了:<c>code-search</c> 只有印出来
+    /// 的行里带 <c>.Translate()</c> 才碰快照,于是同一个查无此名的 <c>--snapshot vanilla</c>,
+    /// 在 <c>search</c> 上是 exit 2 的硬错、在它上面一声不吭照常出结果。一个参数在两条命令
+    /// 上两种命运,读的人只能得出「它在这条命令上生效了」。
+    ///
+    /// 判的是**两条命令给同一个答案**,不判措辞挂在哪个类上。
+    /// </summary>
+    [Fact]
+    public void 查无此名的快照在碰不碰库的命令上给同一个答案()
+    {
+        foreach (var argv in new[]
+                 {
+                     new[] { "search", "shield", "--snapshot", "vanilla", Fixture.Pinned },
+                     // 这一条从头到尾不需要快照 —— 正是懒寻址让它此前静默放行的那条路。
+                     ["code-search", ": ThingComp", "--snapshot", "vanilla", Fixture.Pinned],
+                     // 一个字都不查库的命令同样要认这道闸。
+                     ["sources", "list", "--snapshot", "vanilla", Fixture.Pinned],
+                 })
+        {
+            var (out_, err, code) = Fixture.Run(argv);
+            Assert.Equal(2, code);
+            Assert.Contains("No snapshot named 'vanilla'", err, StringComparison.Ordinal);
+            // 名单要给出来:这个名字不在册,而「在册的是哪些」正是下一句要问的。
+            Assert.Contains("Registered:", err, StringComparison.Ordinal);
+            // 错的参数不许还印出一份看着正常的结果 —— 那正是此前 code-search 干的事。
+            Assert.Equal("", out_);
+        }
+    }
+
+    /// <summary>
+    /// <c>--snapshot</c> 在 <c>code-search</c> 上一寸范围都不收,而这件事必须说破。
+    ///
+    /// <c>--snapshot vanilla</c> 与 <c>--source vanilla</c> 逐字同形,写前者的人要的正是后者;
+    /// 而计数句尾巴上那句「across N source trees」是常规取景,不会纠正任何人。
+    ///
+    /// **这句否定不许跟着结果分支**:有命中、零命中、连快照都真被查过(印出来的行里有
+    /// <c>.Translate()</c>)—— 三条路上「它没有收窄这次搜索」同样成立。
+    /// </summary>
+    [Fact]
+    public void 快照参数收不窄代码搜索这件事在每条路上都说()
+    {
+        const string denial = "did not narrow this search";
+
+        foreach (var argv in new[]
+                 {
+                     new[] { "code-search", ": ThingComp", "--snapshot", "core", Fixture.Pinned },
+                     ["code-search", "zzzznothing", "--snapshot", "core", Fixture.Pinned],
+                     // 快照真被查过的那条:key 解析拿它去查了,而搜索范围照旧一寸没收。
+                     ["code-search", "Translate", "--snapshot", "core", Fixture.Pinned],
+                     // 已经给了 --source 也照说:那时它只是碰巧不再需要,不是它生效了。
+                     ["code-search", ": ThingComp", "--source", "vanilla", "--snapshot", "core", Fixture.Pinned],
+                 })
+        {
+            var (text, _, _) = Fixture.Run(argv);
+            Assert.Contains(denial, text, StringComparison.Ordinal);
+            // 出路要指到真正的那个旋钮上,否则说破了也无处可去。
+            Assert.Contains("--source is what picks among those", text, StringComparison.Ordinal);
+        }
+
+        // 没给 --snapshot 就一个字都不说 —— 恒真的横幅读到第五遍会把整个声明区训练成盲区。
+        var (quiet, _, _) = Fixture.Run("code-search", ": ThingComp");
+        Assert.DoesNotContain(denial, quiet, StringComparison.Ordinal);
+
+        // --db 是路径,不进这道闸:混淆是**名字形状**的,一条路径不会被当成树名。
+        var (byPath, _, _) = Fixture.Run("code-search", ": ThingComp", "--db", Fixture.Db);
+        Assert.DoesNotContain(denial, byPath, StringComparison.Ordinal);
+    }
 }

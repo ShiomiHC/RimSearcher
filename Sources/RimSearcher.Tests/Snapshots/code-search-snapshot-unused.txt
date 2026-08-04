@@ -1,0 +1,12 @@
+$ rimsearcher code-search : ThingComp --snapshot core --fixture-pinned
+exit 0
+--- stdout ---
+2 matches in 2 files; 9 files read across 2 of 3 source trees on disk — the rest hold no file matching --file-glob '*.cs', and 'sources list' says which have never been decompiled.
+--snapshot core did not narrow this search. A snapshot holds the game's defs and translations; the C# read here comes from the decompiled trees on disk, and --source is what picks among those. 'rimsearcher sources list' names them.
+
+vanilla/RimWorld/CompShield.cs  1 match
+3: 	public class CompShield : ThingComp
+
+zz.othermod/Patches.cs  1 match
+3: 	public class MyComp : ThingComp
+--- stderr ---

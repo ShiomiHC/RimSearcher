@@ -248,6 +248,13 @@ public class OutputSnapshotTests
         // --source 已经给出时,补救措施里不许再列 --source。
         { "code-search-source-cap", ["code-search", "public", "--source", "vanilla", "--max-files", "1"] },
         { "code-search-no-tree",   ["code-search", "public", "--source", "HAR"] },
+        // --snapshot 在这条命令上一寸范围都不收。两份钉的是**位置**:那句话紧跟计数句,
+        // 落在取景区而不是末尾脚注区 —— 会写 `--snapshot vanilla` 的人正是把它当成范围
+        // 过滤器的人,而计数句尾巴上「across N source trees」不会纠正他。
+        { "code-search-snapshot-unused", ["code-search", ": ThingComp", "--snapshot", "core", Fixture.Pinned] },
+        // 查无此名的那一档在别的命令上一直是硬错,这条命令此前静默放行(懒寻址顺带把
+        // 名字校验也变懒了)。名字取 'vanilla' —— 实证里出问题的就是它。
+        { "code-search-snapshot-no-such", ["code-search", ": ThingComp", "--snapshot", "vanilla", Fixture.Pinned] },
         // 界面文案接上代码行。语料那三行各是一种形态,这一份同时钉住三件事:
         // 查得到的 key 进表、查不到的字面量点名、运行时拼出来的 key 单独说。
         { "code-search-ui-text",   ["code-search", "Translate"] },

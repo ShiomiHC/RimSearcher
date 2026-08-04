@@ -258,6 +258,10 @@ public static class Runner
         var ctx = new CommandContext(config, parsed) { Progress = stderr };
         try
         {
+            // 显式点名的快照先验一遍,**不管这条命令后面用不用得上库**。寻址懒是有道理的,
+            // 「参数合不合法」跟着懒没有:成因与两种命运见 SnapshotCatalog.ValidateExplicit。
+            SnapshotCatalog.ValidateExplicit(config, parsed.Value("db"), parsed.Value("snapshot"));
+
             // 数据键恒在,产地在声明层(JsonKeySpec.Rows)。在**开查之前**发,而不是在
             // 零行分支里补。条件性的键(互斥的那几对)仍由命令在自己那条分支上认领。
             foreach (var key in command.Spec.JsonKeys.Where(k => k.Rows))

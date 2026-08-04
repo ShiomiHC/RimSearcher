@@ -327,6 +327,25 @@ public sealed class CodeSearchCommand : Command
                     : Framing(root, sourceName, treesTotal, glob)) + ".");
         }
 
+        // `--snapshot vanilla` 与 `--source vanilla` 逐字同形,而在这条命令上前者一寸范围都
+        // 不收 —— 扫的是磁盘上的反编译树,快照只在解释 .Translate() 时才碰得到。实证:
+        // `code-search "class \w+ : Pawn" --snapshot vanilla` 印出七条全在某个 mod 树里的
+        // 命中,而调用方据此判定「指定了 vanilla 还是串了别的源」。
+        //
+        // **无条件发**,不看这次开没开库:哪怕印出来的行里有 .Translate()、快照真被查过,
+        // 「它没有收窄这次搜索」照样成立,而那正是要说破的那一件。否定不许跟着分支。
+        //
+        // 位置在计数句之后、各条闸之前 —— 这是取景不是脚注。唯一与之并排的信号是计数句
+        // 尾巴上那句「across 26 source trees」,它读起来是常规取景,不会纠正任何人。
+        //
+        // 只对 --snapshot 发,不对 --db:混淆是**名字形状**的(一个别名看起来就像一棵树名),
+        // 而一条路径不会被当成树名。
+        if (ctx.Args.Has("snapshot"))
+            ctx.Report.Notice(NoticeKind.Boundary,
+                $"--snapshot {ctx.Args.Value("snapshot")} did not narrow this search. A snapshot holds the " +
+                "game's defs and translations; the C# read here comes from the decompiled trees on disk, and " +
+                "--source is what picks among those. 'rimsearcher sources list' names them.");
+
         // 不带 '/' 也不带 '.' 的 glob 是**按命名空间取景**的写法落到了文件名上。
         // 盲测里六份里六份把「只搜 Verse 命名空间」写成 --file-glob '*Verse*',而它挑出的
         // 45 个文件没有一个在 Verse 下 —— Overseer、HediffGiverSet 这些名字里恰好含 verse。

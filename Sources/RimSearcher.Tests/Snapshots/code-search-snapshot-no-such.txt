@@ -1,0 +1,5 @@
+$ rimsearcher code-search : ThingComp --snapshot vanilla --fixture-pinned
+exit 2
+--- stdout ---
+--- stderr ---
+No snapshot named 'vanilla'. Registered: core, fixture, modern, other.

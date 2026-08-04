@@ -110,6 +110,31 @@ public static class SnapshotCatalog
         return result.Values.OrderBy(e => e.Alias, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
+    /// <summary>
+    /// 显式点了名的快照当场校验,**不开库**。
+    ///
+    /// 寻址是懒的(命令第一次碰 <c>ctx.Db</c> 才走 <see cref="Resolve"/>),这本身是性能
+    /// 考虑:<c>code-search</c> 只有印出来的行里带 <c>.Translate()</c> 才需要快照。可懒
+    /// 寻址顺带把**「这个名字对不对」也变懒了** —— 同一个 <c>--snapshot vanilla</c>
+    /// (查无此名),<c>search</c> 上是硬错、<c>code-search</c> 上一声不吭照常出结果。
+    /// 一个参数在两条命令上两种命运,读的人只能得出「它在这条命令上生效了」。
+    ///
+    /// 只校验、不开库,是因为开了库 <c>AnnounceSnapshot</c> 那句「这次用的是哪份快照」
+    /// 就会长到本来不碰快照的输出里去。没显式给就什么都不做:自动检测那一层要逐个开库
+    /// 比指纹,不该由一条不查 def 的命令去付这笔钱。
+    /// </summary>
+    public static void ValidateExplicit(RimConfig config, string? explicitDb, string? explicitAlias)
+    {
+        if (explicitDb is { Length: > 0 })
+        {
+            if (!File.Exists(explicitDb)) throw new SnapshotFormatError(SnapshotDb.NoDatabaseAt(explicitDb));
+            return;
+        }
+
+        // 名字不在册就在这里抛,措辞与懒路径逐字同源。
+        if (explicitAlias is { Length: > 0 }) _ = Resolve(config, null, explicitAlias);
+    }
+
     public static SnapshotSelection Resolve(RimConfig config, string? explicitDb, string? explicitAlias)
     {
         if (explicitDb is { Length: > 0 })

@@ -115,12 +115,17 @@ public sealed class SnapshotDb : IDisposable
         _db = db; Path = path; Meta = meta; Mods = mods; Harvested = harvested; Content = content;
     }
 
+    /// <summary>
+    /// 「这个路径上没有库」的措辞,产地唯一。校验先于开库发生(见
+    /// <see cref="Snapshot.SnapshotCatalog.ValidateExplicit"/>),两处各写一句就会漂。
+    /// </summary>
+    public static string NoDatabaseAt(string path)
+        => $"No snapshot database at '{path}'. Run 'rimsearcher snapshot list' to see what is registered, " +
+           "or 'rimsearcher export' to produce one from the game.";
+
     public static SnapshotDb Open(string path)
     {
-        if (!File.Exists(path))
-            throw new SnapshotFormatError(
-                $"No snapshot database at '{path}'. Run 'rimsearcher snapshot list' to see what is registered, " +
-                "or 'rimsearcher export' to produce one from the game.");
+        if (!File.Exists(path)) throw new SnapshotFormatError(NoDatabaseAt(path));
 
         var db = new SqliteConnection(new SqliteConnectionStringBuilder
         {
