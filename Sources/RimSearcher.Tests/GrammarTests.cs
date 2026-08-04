@@ -1283,7 +1283,10 @@ public class GrammarTests
         foreach (var quiet in new[]
                  {
                      Fixture.Run("list", "HediffDef", "--scope", "all,-test.mod").Stdout,   // 那半边真的空
-                     Fixture.Run("list", "ThingDef", "--scope", "ludeon.rimworld").Stdout,  // 白名单式
+                     // 纯白名单:补集非空(test.mod 那 4 条)且拼得出(all,-ludeon.rimworld),
+                     // 所以这一格测的是**不说**而不是算不出 —— 理由见 ScopeFilter.Complement。
+                     // 消费侧薄层拿这份沉默当判据,别当成漏补的不对称给「修」了。
+                     Fixture.Run("list", "ThingDef", "--scope", "ludeon.rimworld").Stdout,
                      Fixture.Run("list", "ThingDef").Stdout,                                // 没给 scope
                      // 中途并进来一个词:补集不再等于被排除的那些词,拼不出下一步命令。
                      Fixture.Run("list", "ThingDef", "--scope", "all,-test.mod,ludeon.rimworld").Stdout,

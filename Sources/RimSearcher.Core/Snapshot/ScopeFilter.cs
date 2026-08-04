@@ -17,9 +17,10 @@ public sealed class ScopeFilter
     private readonly HashSet<string> _included;
     private readonly bool _all;
     private readonly HashSet<string> _universe;
-    // 「除了 X 之外的全部」里那个 X 的原文(逗号拼接)。补集只在起点是全集时说得清,
-    // 那时它恰好就是这些词的并集 —— 于是句子里给得出一条能直接敲的命令,而不是
-    // 回显一串 packageId。null = 这个表达式不是那个形态。
+    // 「除了 X 之外的全部」里那个 X 的原文(逗号拼接)。这个形态下补集恰好就是这些词的
+    // 并集,于是句子里给得出一条能直接敲的命令,而不是回显一串 packageId。
+    // null = 这个表达式不是那个形态 —— 但那有两种成因,见 Complement 的注释,
+    // 别把它们当成同一件事。
     private readonly string? _complementExpression;
 
     public string Expression { get; }
@@ -38,12 +39,23 @@ public sealed class ScopeFilter
 
     /// <summary>
     /// 这个 scope 排除掉的那一半,本身也是个可用的 scope。**只对起点是全集的排除式**
-    /// (<c>all,-X</c> / <c>-X</c>)给得出:<c>vanilla,-core</c> 那种白名单再减,补集里
-    /// 混着全部第三方 mod,拼不出一条能直接敲的命令,那时返回 null。
+    /// (<c>all,-X</c> / <c>-X</c>)给得出。
     ///
-    /// 用处是止住一张**静默的错表**:排除式的心智模型是「我只是不想要 X」,而 X 里可能
-    /// 正是答案。实测 <c>where compClass --value Vethara --scope all,-vanilla</c> 返回 92 个
-    /// 干净、完整、看不出任何问题的 def —— 而问的那 7 个宿主全在被排除的 vanilla 里。
+    /// 用处是止住一张**静默的错表**:排除式的心智模型是「我几乎什么都有,只是不想要 X」,
+    /// 而 X 里可能正是答案。实测 <c>where compClass --value Vethara --scope all,-vanilla</c>
+    /// 返回 92 个干净、完整、看不出任何问题的 def —— 而问的那 7 个宿主全在被排除的 vanilla 里。
+    ///
+    /// 返回 null 有**两种成因,别混**:
+    /// <list type="bullet">
+    /// <item><c>vanilla,-core</c> 这种白名单再减 —— 补集里混着全部第三方 mod,
+    /// **拼不出**一条能直接敲的命令。算不出。</item>
+    /// <item>纯白名单 <c>--scope vanilla</c> —— 补集**拼得出**(就是 <c>all,-vanilla</c>),
+    /// 这里是**不说**。白名单的心智模型是「我要的恰好是这些」,边界本来就是明说的;
+    /// 这句话瞄的是「我几乎什么都有」那个假完整感,对白名单一律为真,就成了纯噪声。</item>
+    /// </list>
+    /// 后一条的沉默现在是**承重的**:消费侧薄层拿「白名单侧没有这句」当判据,读成
+    /// 「那边的排除就是你的本意」。要给白名单也开这句,得先知会那边 —— 别当成
+    /// 一处漏补的不对称顺手改了。闸在 <c>排除式scope说破被排除的那一半</c> 里。
     /// </summary>
     public ScopeFilter? Complement()
     {
