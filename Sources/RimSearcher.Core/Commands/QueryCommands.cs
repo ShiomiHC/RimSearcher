@@ -2348,7 +2348,10 @@ internal static class Advisory
     public static void NoteMixedPathShapes(CommandContext ctx, IReadOnlyList<(string Shape, int Count)> shapes)
     {
         if (shapes.Count < 2) return;
-        var shown = shapes.Take(Limits.MaxSuggestions).ToList();
+        // 恰好只多出一条时全列 —— 与相邻那句同一条:那句「plus 1 not shown」占的字
+        // 比那一项本身还多。两句现在挨着读,列表长度的规矩不许两样。
+        var shown = shapes.Take(shapes.Count == Limits.MaxSuggestions + 1
+                                    ? shapes.Count : Limits.MaxSuggestions).ToList();
         ctx.Report.Notice(NoticeKind.Boundary,
             "These rows span more than one path shape: " +
             string.Join(", ", shown.Select(x => $"{x.Shape} ({x.Count})")) +

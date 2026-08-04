@@ -1039,8 +1039,12 @@ public sealed class SnapshotDb : IDisposable
         // 根本没被点名。**「最大」跟「相关」没有关系** —— 而这正是这句话自己说的道理,
         // 却在选样时用了一个与相关性无关的标准。
         // 改成列若干条让读者自己判,与紧邻的跨形状那句同形(那句一直是这么做的)。
+        //
+        // 恰好只多出一条时全列:「plus 1 path shape not shown」这句话占的字比那一项本身还多,
+        // 而藏起来的那一项可能正是相关的那条 —— 用一句更长的话换一次可能的漏掉,不划算。
+        var take = paths.Count == Cli.Limits.MaxSuggestions + 1 ? paths.Count : Cli.Limits.MaxSuggestions;
         var top = rough.OrderByDescending(x => x.Value).ThenBy(x => x.Key, StringComparer.Ordinal)
-                       .Take(Cli.Limits.MaxSuggestions).Select(x => x.Key).ToList();
+                       .Take(take).Select(x => x.Key).ToList();
 
         // 印出来的是**那个形状自己的 def 数**,不是并集。并集试过,是个更坏的东西:
         // 靶题(值 3.9)的并集是 17,而真值是 11 —— 差额是 statBases[].value 与
