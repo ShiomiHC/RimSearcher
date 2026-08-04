@@ -50,6 +50,15 @@ public class OutputSnapshotTests
         // 位置参数可选的命令(list / keyed)落点最贵:输出与**真·无参调用**逐字同形。
         { "punct-only-arg-list",   ["list", "%"] },
         { "punct-only-arg-keyed",  ["keyed", "*"] },
+        // 空串是同一族里最贵的一档,而它一直在闸外:上面那两份靠「归一化后与原串不等」
+        // 触发说破,空串两边相等,于是唯一那句解释正好在最该说的输入上不发。
+        // keyed 的裸调用列整层,`keyed ""` 却报零 —— 两者必须摆在一起看。
+        { "empty-arg-keyed",       ["keyed", ""] },
+        { "empty-arg-keyed-bare",  ["keyed"] },
+        // search 一侧更贵:FTS 无词返回零 → 触发译文原文兜底 → 兜底拿原串跑 LIKE '%%'
+        // 匹配全体,而兜底那句 Boundary 的措辞假定了「主搜真的没命中」。
+        { "empty-arg-search",      ["search", ""] },
+        { "punct-only-arg-search", ["search", "."] },
         // 快照标签。别的用例一律显式传 --db(= 调用方自己选的,不报),于是这条输出
         // 在闸上一个字都不响了很久 —— 落点只有「没人指定库 + 目录里不止一份 + 配置钉了一份」
         // 这一个组合。两份摆一起:有声明行时标签贴在第一条上,没有时它自己成行。
@@ -296,7 +305,10 @@ public class OutputSnapshotTests
 
         // stdout / stderr / 退出码是同一个契约的三面,三者一起进基线。
         var actual = new StringBuilder()
-            .Append("$ rimsearcher ").Append(string.Join(' ', argv)).Append('\n')
+            // 空参数照直拼进去是隐形的:`keyed ""` 与真·无参调用的回显行只差一个尾空格,
+            // 而尾空格闸自己不许留 —— 于是两条不同的调用在基线里长成一样。加引号。
+            .Append("$ rimsearcher ").Append(string.Join(' ', argv.Select(a => a.Length == 0 ? "''" : a)))
+            .Append('\n')
             .Append("exit ").Append(code).Append('\n')
             .Append("--- stdout ---\n").Append(stdout)
             .Append("--- stderr ---\n").Append(stderr)
