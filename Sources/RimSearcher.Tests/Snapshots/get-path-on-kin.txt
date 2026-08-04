@@ -1,11 +1,12 @@
 $ rimsearcher get Apparel_ShieldBelt --path-contains ingestible
 exit 0
 --- stdout ---
+No field path contains 'ingestible'; the def does have 12 fields. Drop --path-contains to see them. Other defs of this type do have it: 1 def across 2 field paths. So it is missing from this def, not from ThingDef — a field that is null on a def never entered the index. 'rimsearcher fields ThingDef --path-contains ingestible' names those paths.
+
 def_name     Apparel_ShieldBelt
 def_type     ThingDef
 label        shield belt
 class        Verse.ThingDef
 mod          ludeon.rimworld
 source       Apparel_Belts.xml
-No field path contains 'ingestible'; the def does have 12 fields. Drop --path-contains to see them. Other defs of this type do have it: 1 def across 2 field paths. So it is missing from this def, not from ThingDef — a field that is null on a def never entered the index. 'rimsearcher fields ThingDef --path-contains ingestible' names those paths.
 --- stderr ---

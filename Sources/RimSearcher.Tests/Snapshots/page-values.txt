@@ -1,10 +1,11 @@
 $ rimsearcher values thingClass --limit 1 --offset 1
 exit 0
 --- stdout ---
+1 of 4 values, starting at 2; pass --offset 2 for the next page.
+
 matched_paths    thingClass (6)
 def_types        ThingDef (6 of 9)
 defs_with_field  6
-1 of 4 values, starting at 2; pass --offset 2 for the next page.
 
 value              defs
 RimWorld.Building  2

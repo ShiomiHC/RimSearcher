@@ -395,7 +395,14 @@ public sealed class GetCommand : Command
             if (xmlNode?.ParentName is { Length: > 0 } parentName)
                 pairs.Add(new("inherits_from", $"{parentName} (see 'rimsearcher inherit {def.DefName}')"));
 
-            ctx.Report.Detail("def", pairs);
+            // 只有一个 def 时,identity 块**不**排在最前:它是一叠名字,而 line 1 是管道下
+            // 唯一的幸存者,那个位置得留给「几条、全不全」。名字是调用方自己敲进来的,
+            // 少看一眼不会把截断读成完整。块改挂在字段表正上方(见下面那句 Detail)。
+            //
+            // 撞名连印时**不动**:那时 line 1 已经是撞名那句,而各段的计数一旦提到自己的
+            // identity 块之前,就会紧贴着上一段的表尾,读成上一段的数 —— 上面那句
+            // 「读每块顶部的 def_type 行」正是拿这个当分界的。
+            if (matches.Count > 1) ctx.Report.Detail("def", pairs);
 
             // 默认不列「与 C# 声明默认值无从区分」的那些行。两个例外都指向同一条:
             // **调用方点了名的东西不许消失** —— --path-contains 已经点名了要哪些路径,--defaults
@@ -556,6 +563,8 @@ public sealed class GetCommand : Command
                 ctx.Report.Notice(NoticeKind.Boundary,
                     $"The exporter stopped short on this def: {ExportCap.OnDef(def.FieldsTruncated)}, " +
                     "so a path missing from the list below is not proof that the def lacks it.");
+
+            if (matches.Count == 1) ctx.Report.Detail("def", pairs);
 
             ctx.Report.Table("fields", ["path", "value", FieldDefault.Column],
                 fields.Select(f => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
@@ -1653,8 +1662,6 @@ public sealed class ValuesCommand : Command
             return 1;
         }
 
-        // 值的产地:后缀匹配天然会把语义不同的路径并进一张表,不说清就会被读成
-        // 「这个字段到处都是这个值」。
         var cov = ctx.Db.ValueCoverage(pq, scope, Limits.MaxSuggestions, type);
 
         // 这里的省略不是 NameList 那种「我取了前几条」—— cov.Paths 已经在 SQL 侧截过,
@@ -1667,6 +1674,13 @@ public sealed class ValuesCommand : Command
         var typeList = string.Join(", ", cov.DefTypes.Select(x =>
             $"{x.DefType} ({x.Count} of {ctx.Db.CountDefsOfType(x.DefType, scope)})"));
 
+        // 计数行走在产地块前面,而不是跟着它下面那张表。line 1 是管道下唯一的幸存者,
+        // 那个位置得留给「一共几个、看到了几个」;产地三行是口径,少看一眼不会把
+        // 截断读成完整。
+        ctx.Report.PageNotice("value", rows.Count, offset, total);
+
+        // 值的产地:后缀匹配天然会把语义不同的路径并进一张表,不说清就会被读成
+        // 「这个字段到处都是这个值」。
         ctx.Report.Detail("field", [
             new("matched_paths", pathList),
             new("def_types", typeList),
@@ -1682,7 +1696,6 @@ public sealed class ValuesCommand : Command
                 "alone; '[]' there stands for any index.",
                 footnote: true);
 
-        ctx.Report.PageNotice("value", rows.Count, offset, total);
         ctx.Report.Table("values", ["value", "defs"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {

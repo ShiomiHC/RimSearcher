@@ -1,13 +1,14 @@
 $ rimsearcher get Meat_Muffalo
 exit 0
 --- stdout ---
+7 fields.
+
 def_name     Meat_Muffalo
 def_type     ThingDef
 label        muffalo meat
 class        Verse.ThingDef
 mod          ludeon.rimworld
 source       ImpliedDefs (created in code, not from an XML file)
-7 fields.
 
 Same in every row, not repeated below: code_default=no.
 path                    value

@@ -1,14 +1,15 @@
 $ rimsearcher get Apparel_ShieldBelt
 exit 0
 --- stdout ---
+11 fields.
+Not listed: 1 field carrying the declaring type's own default; --defaults lists them. The snapshot holds 12 field paths for this def; a null-valued field never entered the index and is in neither count. Every list index the def has appears below.
+
 def_name     Apparel_ShieldBelt
 def_type     ThingDef
 label        shield belt
 class        Verse.ThingDef
 mod          ludeon.rimworld
 source       Apparel_Belts.xml
-11 fields.
-Not listed: 1 field carrying the declaring type's own default; --defaults lists them. The snapshot holds 12 field paths for this def; a null-valued field never entered the index and is in neither count. Every list index the def has appears below.
 
 Same in every row, not repeated below: code_default=no.
 path                                value

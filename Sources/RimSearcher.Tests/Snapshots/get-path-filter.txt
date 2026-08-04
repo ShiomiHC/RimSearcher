@@ -1,13 +1,14 @@
 $ rimsearcher get Apparel_ShieldBelt --path-contains comps
 exit 0
 --- stdout ---
+Matching 'comps': 3 fields, out of 12 fields on the def.
+
 def_name     Apparel_ShieldBelt
 def_type     ThingDef
 label        shield belt
 class        Verse.ThingDef
 mod          ludeon.rimworld
 source       Apparel_Belts.xml
-Matching 'comps': 3 fields, out of 12 fields on the def.
 
 path                                value                code_default
 comps[0].compClass                  RimWorld.CompShield  yes

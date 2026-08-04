@@ -904,6 +904,35 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// line 1 得自己就说清「几条、全不全」。
+    ///
+    /// 判据是**误导**,不是**空洞**:`| head` 是预训练习惯,两轮盲测(read 与 Mood)都证明
+    /// 文字禁令拦不住它,所以出路是让被砍之后剩下的那一行不至于骗人。`get` 与 `values`
+    /// 此前把 identity / 产地块排在最前,砍到二十行看着就是一份完整的答案 —— 那是误导。
+    /// (`inherit` 不在此列:它砍完剩下的是一叠名字,不像个继承答案,空洞不等于骗人。)
+    /// </summary>
+    [Fact]
+    public void 计数行走在数据块前面()
+    {
+        // 撞名时 line 1 已经是撞名那句,identity 块照旧留在最前 —— 各段的计数一旦提到
+        // 自己的 identity 块之前,就会紧贴上一段的表尾,读成上一段的数。
+        var (collide, _, _) = Fixture.Run("get", "Firefoam");
+        Assert.StartsWith("2 defs share the name 'Firefoam'", collide, StringComparison.Ordinal);
+        var head = collide.Split('\n')[1].TrimEnd('\r');
+        Assert.Contains("read the def_type line at the top of a block", head, StringComparison.Ordinal);
+
+        foreach (var (argv, want) in new[]
+                 {
+                     ((string[])["get", "Apparel_ShieldBelt"], "11 fields."),
+                     (["values", "compClass"], "2 values."),
+                 })
+        {
+            var (text, _, _) = Fixture.Run(argv);
+            Assert.StartsWith(want, text, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
     /// 分页:总行数与下一页的参数恒在 —— 走不下去的第二页会把调用方逼回自己编正则。
     /// </summary>
     [Fact]

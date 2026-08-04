@@ -24,6 +24,8 @@ public static class NameCollision
                (others.Count == 1
                    ? $"The other is a {others[0]}"
                    : $"The others are {NameList.Render(others, others.Count)}") +
-               ", shown only without --type. Fields, parent node and translations above are this def's own.";
+               // 方位词说的是这句话下面那几段。这句永远排在 def 循环之前,所以它上面
+               // 一个字都没有 —— 原先写的 above 指着一片不存在的上文。
+               ", shown only without --type. Fields, parent node and translations below are this def's own.";
     }
 }
