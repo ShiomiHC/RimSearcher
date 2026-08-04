@@ -275,23 +275,29 @@ public class GrammarTests
             ? notes.EnumerateArray().Select(n => n.GetProperty("kind").GetString()).ToList()
             : [];
 
-        // find compClass 落在 ThingDef 上,而语料里有一个 ThingDef 在导出时被砍过字段 ——
-        // 那条 boundary 是**有据的**,不是免责声明:它点名了成因,并给出交叉验证的命令。
-        Assert.Equal(["count", "boundary"], kinds);
-        Assert.Contains("snapshot truncated",
-            notes.EnumerateArray().Last().GetProperty("text").GetString());
+        // 两条 boundary 都是**有据的**,不是免责声明 —— 判据是「这一次的数据里真有那个东西」,
+        // 而它们各自点名了是什么:
+        //   1. 语料里有一个 ThingDef 在导出时被砍过字段,句子点名类型并给出交叉验证命令;
+        //   2. 这张表里真有 code_default=yes 行(整列同值,折叠行上就写着),而 R10 的 C1
+        //      量到那一格在没有释义时 2/2 被读成确信的错答 —— 两个相反方向各一次。
+        // 判它们不是免责声明的那条线:数据换一批就不出声。下面那条
+        // `没有边界可申报时完整结果集只有计数` 走的正是这条对照。
+        Assert.Equal(["count", "boundary", "boundary"], kinds);
+        var texts = notes.EnumerateArray().Select(n => n.GetProperty("text").GetString()!).ToList();
+        Assert.Contains("snapshot truncated", texts[1]);
+        Assert.Contains("code_default", texts[2]);
 
         var (stdout, _, _) = Fixture.Run("where", "compClass", "RimWorld.CompShield");
         var lines = stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal("2 defs.", lines[0]);
-        // 那条 boundary 摆在表**上面**,这是它的位置而不只是它的存在:沉到表下时,
-        // `| head` 砍掉尾巴之后剩下的输出与完整输出逐字相同 —— line 1 的计数只担保表,
-        // 对表下的东西一个字都没说,于是那一刀不留任何痕迹。
+        // 两条都摆在表**上面**,这是位置而不只是存在:沉到表下时,`| head` 砍掉尾巴之后
+        // 剩下的输出与完整输出逐字相同 —— line 1 的计数只担保表,对表下的东西一个字都
+        // 没说,于是那一刀不留任何痕迹。
         Assert.Contains("snapshot truncated", lines[1]);
+        Assert.Contains("code_default", lines[2]);
         // 折叠行是**表的一部分** —— 整列同值的列提到表上方说一次,搬的是数据不是散文。
-        // 「不许有免责声明」那一侧由上面的 kinds 断言把着:notices 里仍然只有 count 与
-        // boundary 两条,渲染器折出来的这行根本不进 notes。
-        var header = lines[2].StartsWith("Same in every row", StringComparison.Ordinal) ? lines[3] : lines[2];
+        // 「不许有免责声明」那一侧由上面的 kinds 断言把着:渲染器折出来的这行根本不进 notes。
+        var header = lines[3].StartsWith("Same in every row", StringComparison.Ordinal) ? lines[4] : lines[3];
         Assert.StartsWith("def_name", header);
     }
 
@@ -309,6 +315,46 @@ public class GrammarTests
         var kinds = doc.RootElement.GetProperty("notes")
                        .EnumerateArray().Select(n => n.GetProperty("kind").GetString()).ToList();
         Assert.Equal(["count"], kinds);
+    }
+
+    /// <summary>
+    /// `code_default` 的释义**双向**,且只在 `yes` 行真进表时出声。
+    ///
+    /// R10 的 C1 是八条契约里唯一**两组都答错**的一条,而且是在 SKILL.md 写着规则的情况下
+    /// 答错的:当时的措辞只堵一个方向(「别把 yes 读成『这个 def 设了 X』」),两组栽的都是
+    /// 反方向 ——「所以不是 def 设的,是 C# 构造函数的默认值」。所以**两句都得在**,
+    /// 缺一句这道闸就是绿的而契约是破的 —— 那正是 C1 迭代 1 当时的状态。
+    ///
+    /// 「只在 yes 行在场时」那一半同样承重:释义变成每次都挂的横幅之后,它连同它上面的
+    /// 计数行会一起被读成盲区(参见 0b31bb1 那次快照横幅的盲测)。
+    /// </summary>
+    [Fact]
+    public void code_default的释义双向且只在yes行在场时出现()
+    {
+        const string Marker = "in code_default means";
+
+        // 语料里 Bullet_Revolver 的 yes 行只有 projectile.burstCount,默认不列。
+        var (hidden, _, _) = Fixture.Run("get", "Bullet_Revolver");
+        Assert.DoesNotContain("code_default=yes", hidden, StringComparison.Ordinal);
+        Assert.DoesNotContain(Marker, hidden, StringComparison.Ordinal);
+
+        var (shown, _, _) = Fixture.Run("get", "Bullet_Revolver", "--defaults");
+        Assert.Contains(Marker, shown, StringComparison.Ordinal);
+        // 两个方向逐条钉住。**别把这两句合并成一次 Contains** —— 合并之后删掉其中一句
+        // 仍然可能绿,而「只堵半边」正是这条契约上一次失效的方式。
+        Assert.Contains("neither 'the def sets this'", shown, StringComparison.Ordinal);
+        Assert.Contains("nor 'the def leaves it to the class default'", shown, StringComparison.Ordinal);
+        // 模型看完 yes 之后的下一步动作是去读构造函数,而那一步回答不了本问题。
+        Assert.Contains("never whether the XML repeats it", shown, StringComparison.Ordinal);
+        // 那份语料里 projectile.speed 是 unknown:第三态不许被并进 yes 或 no 任一边。
+        Assert.Contains("`unknown` is not a third answer", shown, StringComparison.Ordinal);
+
+        // class 字段那一支:两种取值同时是常态,而且这一列答不了「谁挂的这个 comp」。
+        var (onClassField, _, _) = Fixture.Run("where", "compClass", "RimWorld.CompShield");
+        Assert.Contains("both values are ordinary", onClassField, StringComparison.Ordinal);
+        Assert.Contains("who mounted the comp", onClassField, StringComparison.Ordinal);
+        // 反向:不落在那几个字段上时这半句不出现,否则它就是横幅而不是判据。
+        Assert.DoesNotContain("both values are ordinary", shown, StringComparison.Ordinal);
     }
 
     /// <summary>

@@ -11,6 +11,7 @@ class          Verse.ThingDef
 mod            ludeon.rimworld
 source         Projectiles_Guns.xml
 inherits_from  BaseBullet (see 'rimsearcher inherit Bullet_Revolver')
+A `yes` in code_default means the value is identical to what a freshly constructed instance carries, and this snapshot cannot tell those two apart: it supports neither 'the def sets this' nor 'the def leaves it to the class default'. Reading the C# constructor shows where a default could come from, never whether the XML repeats it. Only `no` decides: something set that value. `unknown` is not a third answer: the type could not be constructed, so nothing was compared.
 
 path                         value                code_default
 soundImpactDefault           BulletImpact_Ground  no

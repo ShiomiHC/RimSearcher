@@ -587,6 +587,9 @@ public sealed class GetCommand : Command
 
             if (matches.Count == 1) ctx.Report.Detail("def", pairs);
 
+            if (FieldDefault.Legend(fields.Select(f => (f.Path, f.Default))) is { } legend)
+                ctx.Report.Notice(NoticeKind.Boundary, legend);
+
             ctx.Report.Table("fields", ["path", "value", FieldDefault.Column],
                 fields.Select(f => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
                 {
@@ -1059,6 +1062,11 @@ public sealed class FindCommand : Command
         // 等于 CompShield,多半是 CompProperties_Shield 的声明里写死的,不是谁在 XML 里挑的。
         Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(pq, scope),
             "every def type that uses this path at all, not just the ones in the rows above");
+
+        // where 的这一列比 get 更容易被整列折叠掉 —— 全 yes 时折叠行只剩 `code_default=yes`
+        // 一句,而那正是 C1 两组栽进去的形状。
+        if (FieldDefault.Legend(rows.Select(r => (r.Path, r.Default))) is { } legend)
+            ctx.Report.Notice(NoticeKind.Boundary, legend);
 
         ctx.Report.Table("matches", ["def_name", "def_type", "path", "value", FieldDefault.Column, "mod"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
