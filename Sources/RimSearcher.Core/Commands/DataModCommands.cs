@@ -100,7 +100,19 @@ public sealed class DataModDetachCommand : Command
     }
 }
 
-/// <summary>接挂点现在是什么样。三种状态的下一步动作各不相同,所以三句话分开说。</summary>
+/// <summary>
+/// 接挂点现在是什么样。<see cref="DataModLink.LinkState"/> 的**四**种状态下一步动作各不
+/// 相同,所以四句话分开说。
+///
+/// (原先这里写的是「三种」,而枚举一直是四个 —— <c>Installed</c> 那一档由 <c>_</c> 兜着,
+/// 从注释上看不见。**注释里关于自己覆盖面的数字,正是别人判断「还需不需要补」的依据**,
+/// 数错了挡住的不是一次误读,是后续所有补漏动机。同一形态本轮在 `where` 的子串提示上
+/// 出过一次大的。)
+///
+/// <c>_</c> 没改成点名 <c>Installed</c>:本仓只把 nullable 当错误,枚举加一档时非穷尽
+/// switch 只是个警告,而运行期会抛。宁可让新状态先落到一句**已知会被念出来**的话上,
+/// 也不让它在使用者手里炸 —— 但那句话届时是错的,所以加状态时这里必须一起改。
+/// </summary>
 public sealed class DataModStatusCommand : Command
 {
     public override CommandSpec Spec => new()
@@ -133,6 +145,8 @@ public sealed class DataModStatusCommand : Command
             DataModLink.LinkState.Attached =>
                 "The exporter is attached, so the game lists it. That is expected while an export is running; " +
                 "otherwise 'rimsearcher datamod detach' removes it.",
+            // Installed(及将来任何新档):见类型注释 —— 兜底而不是点名是有意的,
+            // 代价是新档会先被念成这一句,所以加档时这里必须一起改。
             _ =>
                 "A real folder is installed at the attach point, so the game always lists the exporter. " +
                 "Nothing is attached or detached while that folder is there.",
