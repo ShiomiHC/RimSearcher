@@ -18,6 +18,10 @@ exit 0
     {
       "kind": "count",
       "text": "1 translation."
+    },
+    {
+      "kind": "boundary",
+      "text": "This snapshot never scanned the language files on disk, so every row here is one the game actually had: the absence of an 'on disk' row is not evidence that no installed mod translates it. No 'mod_roots' is configured on this machine, so there is nowhere to scan: set it in the config file and import again to measure that layer."
     }
   ],
   "defs": [

@@ -387,21 +387,33 @@ internal static class ExportCap
 ///
 /// 发在表**旁边**而不是表里:少一整层与某一行缺一格是两回事,写进列里会被当成行的属性。
 ///
-/// 条件里带上 <c>mod_roots</c> 配没配:没配的机器上不存在第二层,那句话就成了废话;
-/// 配了却没量才有补救(重导一次)可言。
+/// <c>mod_roots</c> 配没配**只换出路,不换说不说**。此前它进了闭嘴条件,理由是
+/// 「没配的机器上不存在第二层」—— 那句话把「本机没配扫描目录」当成了「磁盘上没有译文」。
+/// 第二层照旧在(玩家装着的 mod 就在那儿),缺的只是去够它的路,而那条路也说得出来
+/// (去配 <c>mod_roots</c> 再导一次)。<c>snapshot import</c> 那条路上同一件事一直是说的,
+/// 措辞还写明了「That is a gap in this snapshot, not an answer about the mods on this machine」——
+/// 两处产地矛盾时,闭嘴的那处是假话,不是省话。
+///
+/// 更一般的形态:**否定与出路捆在一句里时,出路不适用会把否定一起带走**。
+/// 这跟 `code_default` 那条改了四轮的东西同型 —— 出路可以分支,否定不许跟着分支。
 /// </summary>
 internal static class DiskLayer
 {
     public static void NoteIfUnmeasured(CommandContext ctx)
     {
-        if (ctx.Db.Harvested || ctx.Config.ModRoots.Count == 0) return;
+        if (ctx.Db.Harvested) return;
         ctx.Report.Notice(NoticeKind.Boundary,
             // 「import 默认就扫」是那条命令自己的 help 文本(cli-reference 的
             // --no-harvest-translations 行就是它渲染的),不在每次查询上重念;
             // 补救留一句,不留就把这条边界写成了死路。
             "This snapshot never scanned the language files on disk, so every row here is one the game actually " +
             "had: the absence of an 'on disk' row is not evidence that no installed mod translates it. " +
-            "Re-import to measure that layer.", footnote: true);
+            // 出路分两支,与 snapshot import 那两句同口径:没配 mod_roots 时「重导一次」
+            // 是句空话 —— 再导一遍照样没地方扫。
+            (ctx.Config.ModRoots.Count > 0
+                ? "Re-import to measure that layer."
+                : "No 'mod_roots' is configured on this machine, so there is nowhere to scan: set it in the " +
+                  "config file and import again to measure that layer."), footnote: true);
     }
 }
 

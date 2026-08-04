@@ -2459,9 +2459,21 @@ public class GrammarTests
         var (get, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--config", config);
         Assert.Contains(Says, get, StringComparison.Ordinal);
 
-        // 没配 mod_roots 时闭嘴 —— 这台机器上没有第二层可漏。
-        var (quiet, _, _) = Fixture.Run("keyed", "CannotUseNoPower");
-        Assert.DoesNotContain(Says, quiet, StringComparison.Ordinal);
+        // 没配 mod_roots 时**照说**,只换出路。此前这一支是闭嘴的,理由写的是
+        // 「这台机器上没有第二层可漏」—— 那句话把「本机没配扫描目录」当成了
+        // 「磁盘上没有译文」。第二层照旧在(玩家装着的 mod 就在那儿),缺的是去够它的路。
+        // 而 snapshot import 那条路上同一件事一直是说的,还明说了
+        // 「That is a gap in this snapshot, not an answer about the mods on this machine」——
+        // 两处产地矛盾时,闭嘴的那处是假话。
+        var (noRoots, _, _) = Fixture.Run("keyed", "CannotUseNoPower");
+        Assert.Contains(Says, noRoots, StringComparison.Ordinal);
+        Assert.Contains("No 'mod_roots' is configured", noRoots, StringComparison.Ordinal);
+        // 配了的那支出路不许跟着变 —— 那边重导一次就够,不用先去改配置。
+        Assert.DoesNotContain("No 'mod_roots' is configured", keyed, StringComparison.Ordinal);
+        Assert.Contains("Re-import to measure that layer", keyed, StringComparison.Ordinal);
+
+        // 量过的库两支都闭嘴 —— 这条边界本身不在场。
+        Assert.DoesNotContain(Says, Fixture.Run("snapshot", "list").Stdout, StringComparison.Ordinal);
     }
 
     /// <summary>

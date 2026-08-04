@@ -6,4 +6,6 @@ exit 0
 key      translated  original            origin     placeholder  mod  source
 TodoKey  TODO        Not translated yet  in effect  yes               Misc.xml:34
 Placeholder means the language file declares the key without a translation, so the game displays the English text instead of what the translated column shows: that is the case for 1 keyed translation above.
+
+This snapshot never scanned the language files on disk, so every row here is one the game actually had: the absence of an 'on disk' row is not evidence that no installed mod translates it. No 'mod_roots' is configured on this machine, so there is nowhere to scan: set it in the config file and import again to measure that layer.
 --- stderr ---

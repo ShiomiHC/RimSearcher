@@ -6,4 +6,6 @@ exit 0
 key            translated  original  origin     placeholder  mod  source
 CommandSettle  定居        Settle    in effect  no                GameplayCommands.xml:386
 'CommandSettle' is itself a key, so the answer above is that one key — matching stopped being a prefix search. Beyond it, 1 key in this layer starts with it (CommandSettleDesc); shorten the query to see them together.
+
+This snapshot never scanned the language files on disk, so every row here is one the game actually had: the absence of an 'on disk' row is not evidence that no installed mod translates it. No 'mod_roots' is configured on this machine, so there is nowhere to scan: set it in the config file and import again to measure that layer.
 --- stderr ---

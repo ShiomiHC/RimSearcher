@@ -29,4 +29,6 @@ Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_
 
 path   translated  original     language           origin
 label  护盾腰带    shield belt  ChineseSimplified  in effect
+
+This snapshot never scanned the language files on disk, so every row here is one the game actually had: the absence of an 'on disk' row is not evidence that no installed mod translates it. No 'mod_roots' is configured on this machine, so there is nowhere to scan: set it in the config file and import again to measure that layer.
 --- stderr ---

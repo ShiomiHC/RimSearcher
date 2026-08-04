@@ -30,4 +30,6 @@ FillerKey0017      填充17                filler line                    Filler
 FillerKey0018      填充18                filler line                    Filler.xml:19
 FillerKey0019      填充19                filler line                    Filler.xml:20
 FillerKey0020      填充20                filler line                    Filler.xml:21
+
+This snapshot never scanned the language files on disk, so every row here is one the game actually had: the absence of an 'on disk' row is not evidence that no installed mod translates it. No 'mod_roots' is configured on this machine, so there is nowhere to scan: set it in the config file and import again to measure that layer.
 --- stderr ---

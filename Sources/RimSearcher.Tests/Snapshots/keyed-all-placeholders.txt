@@ -8,4 +8,6 @@ key            translated  original            mod  source
 FillerKey2099  填充2099    filler line              Filler.xml:2100
 TodoKey        TODO        Not translated yet       Misc.xml:34
 Placeholder means the language file declares the key without a translation, so the game displays the English text instead of what the translated column shows. Every row above is one of those, which is what --empty-translation selects.
+
+This snapshot never scanned the language files on disk, so every row here is one the game actually had: the absence of an 'on disk' row is not evidence that no installed mod translates it. No 'mod_roots' is configured on this machine, so there is nowhere to scan: set it in the config file and import again to measure that layer.
 --- stderr ---
