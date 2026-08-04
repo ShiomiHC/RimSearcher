@@ -127,9 +127,6 @@ any depth.
 - **`values <field>` already answers "which def types have this field"** — its `def_types`
   row names them with `n of m` coverage. `fields <DefType>` goes the other way and needs
   the type up front.
-- **Never guess a class from a defName** — across what Ludeon ships, 98 of 167 `GenStepDef`s
-  run a class not named after the def. Class names come only from `get`'s `*Class` rows. A zero from
-  `code-search "class GenStep_<defName>"` is evidence about the name you invented.
 - **Give `read` the bare file name; never build a path from the namespace** — folders are
   not namespaces. `--member`/`--type`/`--outline` match **braces, not C#**: a name they
   miss is not proof of absence — recheck with `code-search` or `--lines`. A member of a
