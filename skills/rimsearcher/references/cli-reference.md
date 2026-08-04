@@ -292,7 +292,7 @@ The 'source' line is the bare file name the game reported for that def — no di
 | `-n`, `--limit` <n|all> | How many fields to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `60`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--path-contains` <text> | Only show field paths containing this text. Repeat it to widen the selection. | `--filter`, `--grep`, `--field-contains`, `--path-filter`, `--field`, `--field-path`, `--only` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind`, `--category` |
-| `--defaults` | Also list fields whose value is the one a fresh instance of the declaring type already carries. Those rows are left out by default because they are the ones most often read as something an author chose, when the snapshot cannot tell whether anything set them at all. How many were left out is always printed, and --path-contains shows a named field either way. | `--with-defaults`, `--all-fields` |
+| `--defaults` | Also list fields whose value is the one a fresh instance of the declaring type already carries. The snapshot cannot tell whether anything set those at all; they are left out by default because they are the ones most often read as something an author chose. How many were left out is always printed, and --path-contains shows a named field either way. | `--with-defaults`, `--all-fields` |
 
 `--json` keys, besides the global `notes`:
 
@@ -852,8 +852,8 @@ The field path is matched from the end, so 'compClass' finds 'comps[3].compClass
 
 | Option | Meaning | Also accepted |
 |---|---|---|
-| `-n`, `--limit` <n|all> | How many defs to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
-| `--offset` <n> | Skip this many defs before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
+| `-n`, `--limit` <n|all> | How many matches to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+| `--offset` <n> | Skip this many matches before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
 | `--exact` | Require the whole value to match, with either a field path or --value. Without it, the value is matched as a substring. | `--exact-match`, `--whole` |
 | `--exact-path` | Match the field path as a whole instead of as a suffix. Write '[]' for any index, so a path shape such as 'lifeStages[].bodyGraphicData.shaderType' can be pasted straight back in. | `--whole-path`, `--path-exact` |

@@ -148,7 +148,14 @@ public sealed class InheritCommand : Command
             // 全部块之后,离所解释的那一格隔着两张表。
             //
             // 逐条申报,不是一句总的免责声明。计数恒在 identity 块的 patch_ops 上,
-            // 这里只在非零时补说后果 —— 0 就是游戏读到的原样,不需要解释。
+            // 三支各说一件不同的事,**包括 0 那一支**:此前这里写着「0 就是游戏读到的原样,
+            // 不需要解释」,而 Human 是这句的反例 —— 它声明了 Name=、patch_ops 是 0,
+            // 同时被 HAR 换掉了 class、插进两个 comp,那些补丁按 defName 定位,不点 Name=。
+            // 一个沉默的 0 于是断言了一件假事,而这一支覆盖的是 named 节点里的多数。
+            //
+            // 说破它省不掉下游那次双快照 diff —— 「这个 def 被 patch 改过没有」在单快照里
+            // 本就不可判定(存的是 pre-patch 的节点身份 + post-patch 的字段值,没有 pre-patch
+            // 的值可比)。省掉的是另一件事:不必先把 0 当答案用一遍,再从别处撞见反证。
             if (!named)
                 ctx.Report.Notice(NoticeKind.Boundary,
                     $"'{label}' declares no Name=, so patch_ops is not measured for it: only xpaths naming a " +
@@ -161,6 +168,13 @@ public sealed class InheritCommand : Command
                     $"{Tally.Complete(node.PatchOps).Render("patch operation")} in this snapshot. " +
                     "This layer is the XML before patches, so what the game finally used differs from it " +
                     "by whatever those operations did.");
+            else
+                // 后半句与 !named 那支同一个措辞产地:漏掉的那一类补丁是同一类,
+                // 两支的区别只在这一格量没量过。
+                ctx.Report.Notice(NoticeKind.Boundary,
+                    $"No patch operation's xpath names '{label}' in this snapshot — that is what the 0 " +
+                    "counts. A patch that reaches it by defName instead leaves no trace here, so the 0 is " +
+                    "not evidence that the game read this node unpatched.");
 
             // 往上走到根。带环保护是必要的:XML 里写得出环,游戏在这一层之后才检出来,
             // 快照存的正是检出之前的原文。

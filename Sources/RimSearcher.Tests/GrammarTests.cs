@@ -126,6 +126,30 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 被导出期截断的 def 自报字段下界,不把加法留给读者。
+    ///
+    /// 两个加数此前分在两句里(索引数在上一段、丢掉数在这一段,中间还常隔着一大截),
+    /// 而「这个 def 一共有多少字段」的正解只有那个和。实测六个闭卷样本全都认出「索引数
+    /// 是下界」,只有两个把 <c>+N</c> 做完 —— 而两个加数从头到尾都在 CLI 手上。
+    ///
+    /// 和必须是 <c>at least</c> 口径:两个加数里有一个本身就是下界(导出器是停了,
+    /// 不是数完了),而 null 字段从来没进过任何一个加数。
+    /// </summary>
+    [Fact]
+    public void 被截断的def自报字段下界而不是让读者相加()
+    {
+        var (text, _, _) = Fixture.Run("get", "Bullet_Revolver");
+        Assert.Contains("at least 3 fields were dropped", text, StringComparison.Ordinal);
+        Assert.Contains("Added to the 8 paths that did get indexed", text, StringComparison.Ordinal);
+        Assert.Contains("at least 11 field paths", text, StringComparison.Ordinal);
+
+        // --path-contains 那一支逐字相同 —— 那里的上文给的是「out of 8 fields on the def」,
+        // 句子不许改成依赖上文那个数,否则换一支就指空。
+        var (narrowed, _, _) = Fixture.Run("get", "Bullet_Revolver", "--path-contains", "burstCount");
+        Assert.Contains("at least 11 field paths", narrowed, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// scope 筛空了不许说成「快照里没有」:零结果分流的判据都是 scope 过滤过的,
     /// 分不清成因就会报最强的那一种。
     /// </summary>

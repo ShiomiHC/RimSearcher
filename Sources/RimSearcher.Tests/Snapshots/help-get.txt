@@ -19,7 +19,7 @@ Options:
                               Also accepted: --filter, --grep, --field-contains, --path-filter, --field, --field-path, --only.
       --type <DefType>        Restrict results to one def type, for example ThingDef or HediffDef.
                               Also accepted: --def-type, --kind, --category.
-      --defaults              Also list fields whose value is the one a fresh instance of the declaring type already carries. Those rows are left out by default because they are the ones most often read as something an author chose, when the snapshot cannot tell whether anything set them at all. How many were left out is always printed, and --path-contains shows a named field either way.
+      --defaults              Also list fields whose value is the one a fresh instance of the declaring type already carries. The snapshot cannot tell whether anything set those at all; they are left out by default because they are the ones most often read as something an author chose. How many were left out is always printed, and --path-contains shows a named field either way.
                               Also accepted: --with-defaults, --all-fields.
 
 Global options (every command takes these, written after the command):

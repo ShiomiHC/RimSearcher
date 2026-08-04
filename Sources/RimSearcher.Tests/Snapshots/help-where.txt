@@ -1,0 +1,45 @@
+$ rimsearcher where --help
+exit 0
+--- stdout ---
+Usage: rimsearcher where [fieldPath] [value] [options]
+
+Find defs by the value of a field. This is the reverse lookup: from a C# class or a value back to the defs that use it.
+
+The field path is matched from the end, so 'compClass' finds 'comps[3].compClass' without you knowing the index. That suffix is plain text and does not stop at a '.', so 'graphicData.shaderType' also matches 'swimmingGraphicData.shaderType'; --exact-path pins the whole path. This replaces grepping the XML: the values here are the merged, post-patch ones, and a class reference is an exact match rather than a text hit.
+
+Arguments:
+  <fieldPath>  A field path or just its last segment, such as compClass or defaultProjectile. Omit it to search every field instead. (optional)
+  <value>      The value to look for. '--value' spells out this same argument, so give it one way or the other. Omit it to list every def that has the field at all. (optional)
+
+Options:
+  -n, --limit <n|all>  How many matches to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: 25.
+                       Also accepted: --max-results, --count, --top, --rows, --num, --head.
+      --offset <n>     Skip this many matches before listing. The total is always reported, so you can tell when you have reached the end. Default: 0.
+                       Also accepted: --skip, --start, --page-from.
+      --scope <expr>   Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: all.
+                       Also accepted: --mod, --mods, --source, --from.
+      --exact          Require the whole value to match, with either a field path or --value. Without it, the value is matched as a substring.
+                       Also accepted: --exact-match, --whole.
+      --exact-path     Match the field path as a whole instead of as a suffix. Write '[]' for any index, so a path shape such as 'lifeStages[].bodyGraphicData.shaderType' can be pasted straight back in.
+                       Also accepted: --whole-path, --path-exact.
+      --value <text>   The value to look for, same as giving it as an argument. Without a field path, every field is searched and the report names which paths hold it.
+                       Also accepted: --any-field, --search-values, --holding.
+
+Global options (every command takes these, written after the command):
+      --snapshot <name>  Query this named snapshot instead of the one that would be picked automatically. An explicit choice always wins over auto-detection.
+                         Also accepted: --snap, --env.
+      --db <path>        Query the snapshot database at this path directly, bypassing the registry.
+                         Also accepted: --database, --snapshot-path.
+      --json             Emit machine-readable JSON. Anything the text output would have said in prose moves into a 'notes' array, so nothing is lost. The command's own table key is always present — an empty array when nothing matched, never a missing key.
+      --config <path>    Use this config file instead of the default one.
+
+--json keys (besides 'notes'):
+  matches  with a field path: one row per def that has it — def_name, def_type, value, mod. 'mod' is where the def was declared, not who wrote the value: a comp another mod bolts onto a vanilla def still reads as the vanilla mod, and --scope filters that same column.
+  paths    without a field path: one row per field path that holds the value — path, def_type, defs, example_value. This is the key that question produces; 'matches' is absent then.
+
+Examples:
+  rimsearcher where compClass RimWorld.CompShield
+  rimsearcher where compClass --value RimWorld.CompShield
+  rimsearcher where defaultProjectile Bullet_Revolver
+  rimsearcher where --value World/WorldObjects/Expanding
+--- stderr ---

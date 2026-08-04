@@ -279,9 +279,17 @@ public sealed class GetCommand : Command
                 Name = "defaults",
                 Arity = Arity.Flag,
                 Aliases = ["with-defaults", "all-fields"],
+                // 「快照判不了」从 when 从句提到主句,内容一个字没加也没减 —— 只换语法位置。
+                // 旧版把描述性的那半句(「值等于新实例已有的值」)放主句、把规定性的那半句
+                // 放从句,而实测的失败推理链正是从主句那半截推出来的:「值等于类默认 ⇒ 这个
+                // def 没设过它」。SKILL.md 里同一件事是主句(`yes` = the snapshot cannot
+                // tell whether anyone set it),两处产地此前强度不同。
+                //
+                // 不把 SKILL 里那句「照着默认值写一遍与根本没写完全同形」搬进来:那会同时
+                // 改语法位置与信息量,而 legend 的信道复验还没跑,两个变量混在一起就归不了因。
                 Help = "Also list fields whose value is the one a fresh instance of the declaring type already "
-                     + "carries. Those rows are left out by default because they are the ones most often read as "
-                     + "something an author chose, when the snapshot cannot tell whether anything set them at all. "
+                     + "carries. The snapshot cannot tell whether anything set those at all; they are left out by "
+                     + "default because they are the ones most often read as something an author chose. "
                      + "How many were left out is always printed, and --path-contains shows a named field either way.",
             },
         ],
@@ -580,10 +588,19 @@ public sealed class GetCommand : Command
 
             // 「字段被截」与「没有该字段」必须可区分。这一句自己的措辞就把位置钉死了 ——
             // 它说的是 the list below。
+            //
+            // 加法由这里做完,不留给读者:两个加数此前分在两句里(索引数在上一段、丢掉数在
+            // 这一段,中间还常隔着 hiddenIdx 那一大截),而「这个 def 一共有多少字段」的正解
+            // 只有那个和。实测六个样本全都认出「索引数是下界」,只有两个把 +N 做完 ——
+            // 而两个加数从头到尾都在 CLI 手上。
             if (def.FieldsTruncated > 0)
                 ctx.Report.Notice(NoticeKind.Boundary,
                     $"The exporter stopped short on this def: {ExportCap.OnDef(def.FieldsTruncated)}, " +
-                    "so a path missing from the list below is not proof that the def lacks it.");
+                    "so a path missing from the list below is not proof that the def lacks it. " +
+                    // 主语自带,不靠上文:--path-contains 那一支的上文说的是「matching N, out of
+                    // M on the def」,而这一句在两支下逐字相同。
+                    $"Added to the {total} paths that did get indexed, that is " +
+                    $"{Tally.AtLeast(total + def.FieldsTruncated).Render("field path")} on this def.");
 
             if (matches.Count == 1) ctx.Report.Detail("def", pairs);
 
@@ -696,8 +713,13 @@ public sealed class FindCommand : Command
         ],
         Options =
         [
-            CommonOptions.Limit("defs"),
-            CommonOptions.Offset("defs"),
+            // 这两处数的是**行**,不是 def:一行是一个 (def, 路径) 对,而后缀匹配一放开,
+            // 同一个 def 就常在多条路径上命中。41f9a3a 把输出侧的四处口径改到了行,
+            // 漏了这里 —— 全套命令里只有 where 一行不等于一个 def,那个 "defs" 在别处都是真话。
+            // 名词恒定叫 match:help 是静态的,算不出输出那边「两数相等就叫 def」的判据,
+            // 而 match 在两种情形下都是真话。
+            CommonOptions.Limit("matches"),
+            CommonOptions.Offset("matches"),
             CommonOptions.Scope,
             new OptionSpec
             {

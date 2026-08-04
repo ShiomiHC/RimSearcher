@@ -125,6 +125,9 @@ public class OutputSnapshotTests
         // 继承层的四条路各钉一份:抽象节点(有子、被 patch 点名)、具体 def(往上走)、
         // 断链(父不在快照里)、名字不在这一层 —— 四条的措辞各说一件不同的事。
         { "inherit-abstract",      ["inherit", "BaseBullet"] },
+        // 第三条分支:声明了 Name= 而没有 xpath 点它。此前这一支一个字不说,于是那个 0
+        // 沉默地断言「游戏读到的就是这份原样」—— 而按 defName 定位的补丁不进这个计数。
+        { "inherit-named-unpatched", ["inherit", "BaseProjectile"] },
         // 抽象节点侧的 same_value:参照值从子树众数来,而那一列在场与否是这条命令
         // 唯一分得开「这层声明了它」与「后代各写各的」的地方。
         { "inherit-abstract-path", ["inherit", "BaseProjectile", "--path-contains", "soundDrop"] },
@@ -177,6 +180,9 @@ public class OutputSnapshotTests
         // 并把该打的那一条(`<command> --help`)原样给出来。
         { "help-with-command",     ["--help", "search"] },
         { "help-get",              ["get", "--help"] },
+        // where 的 --limit / --offset 数的是**行**((def, 路径)对),而模板的 what 一度传的是
+        // "defs" —— 这条命令是全套里唯一一行不等于一个 def 的,那个词在别处都是真话。
+        { "help-where",            ["where", "--help"] },
         { "help-code-search",      ["code-search", "--help"] },
         { "help-sources-sync",     ["sources", "sync", "--help"] },
         // 没配 decompiled_dir 时说的那句话。反编译树是**唯一**不在快照里的数据源,

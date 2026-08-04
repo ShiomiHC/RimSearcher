@@ -38,20 +38,33 @@ public class InheritanceTests
     }
 
     /// <summary>
-    /// patch 差异是**逐条**申报的:被点名的节点说,没被点名的一个字都不说 ——
-    /// 恒在的免责声明不提供信息,还会淹掉真正有据的那几条。
+    /// patch 差异逐条申报,三支各说一件不同的事 —— **包括 0 那一支**。
+    ///
+    /// 此前这里钉的是「没被点名的一个字都不说」,理由是「恒在的免责声明不提供信息」。
+    /// 那条理由建立在「0 = 没什么可说的」上,而 <c>Human</c> 是反例:它声明了 Name=、
+    /// patch_ops 是 0,同时被 HAR 换掉 class、插进两个 comp —— 那些补丁按 defName 定位,
+    /// 不点 Name=。沉默的 0 于是断言了一件假事,而旧断言里那个变量就叫 clean。
+    ///
+    /// **这条改动与原纪律是真冲突,待盲测裁决**:反方的顾虑(这一支覆盖 named 节点里的
+    /// 多数,效果上接近恒在,会淹掉真正有据的那几条)没有被证伪,只是被「那个 0 是假话」
+    /// 压过。裁决判据是**绕道率**不是答对率 —— 实测里所有运行都不信任这个 0、一致改用
+    /// 双快照全字段 diff,而这句话省不掉那次 diff(单快照里这件事本就不可判定),
+    /// 它省的是「先把 0 当答案用一遍」。
     /// </summary>
     [Fact]
-    public void patch差异按条申报而不是常驻声明()
+    public void patch差异按条申报三支各说各的()
     {
         // BaseBullet 有 2 条 xpath 点名 —— 该说,并且要说出数字。
         var patched = Text("inherit", "BaseBullet");
         Assert.Contains("targeted by name by 2 patch operations", patched, StringComparison.Ordinal);
 
-        // BaseProjectile 一条都没有 —— 一个字都不许说。
-        var clean = Text("inherit", "BaseProjectile");
-        Assert.DoesNotContain("patch operation", clean, StringComparison.Ordinal);
-        Assert.DoesNotContain("before patches", clean, StringComparison.Ordinal);
+        // BaseProjectile 一条都没有:说破这个 0 数的是什么,而不是沉默。
+        var unpatched = Text("inherit", "BaseProjectile");
+        Assert.Contains("that is what the 0 counts", unpatched, StringComparison.Ordinal);
+        Assert.Contains("by defName instead leaves no trace", unpatched, StringComparison.Ordinal);
+        // 不许串到 ops>0 那一支的话上:那句说的是「这一层与游戏最终读到的不同」,
+        // 而这里没有任何已知的补丁让它不同 —— 只是这个计数看不见另一类。
+        Assert.DoesNotContain("before patches", unpatched, StringComparison.Ordinal);
     }
 
     /// <summary>
