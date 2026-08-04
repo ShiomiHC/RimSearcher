@@ -1153,6 +1153,11 @@ public sealed class FindCommand : Command
 
         // 表上方 —— 理由同 list 那处。数 def 而不是 matches:这条命令一行是一个
         // (def, 路径)对,而「被排除的那半边还有多少」问的是有多少个 def 落在外面。
+        // 排在这一组的最前面:另外三句说的是「你手上这张表不是全集」,而这一句说的是
+        // 「这张表里的行未必是你问的那个值」—— 后者改变的是眼前这些行怎么读,得先于
+        // 「外面还有什么」。
+        Advisory.NoteSubstringWidened(ctx, pq, value, exact, scope, defs);
+
         ctx.AnnounceExcluded(scope, rest => ctx.Db.FindByField(pq, value, exact, rest, 0, 0).Defs, "def");
 
         // 同样在表上方,且排在 scope 补集那句之后:两句都在说「你手上这张表不是全集」,
@@ -2301,7 +2306,9 @@ internal static class Advisory
     /// <summary>
     /// 点名了字段的那次查询,**外延不足**的那一半。
     ///
-    /// `where` 对「结果比预期多」已经处理得很齐(跨形状那句、子串那句、scope 补集那句);
+    /// `where` 对「结果比预期多」已经处理得较齐(跨形状那句、子串那句、scope 补集那句);
+    /// (**这行原先写的是「很齐」,而「子串那句」当时只长在 `--value` 不点名字段那条路上** ——
+    /// 点名字段这条路一个字都没有。注释断言了一个不存在的覆盖,见 <see cref="NoteSubstringWidened"/>。)
     /// 这一句管的是反向:`where explosionRadius --value 3.9 --exact` 返回的两行每一行都对,
     /// 只是**不是全部** —— 同一个值另有 <c>comps[].explosiveRadius</c> 九个 ThingDef,
     /// 而这张表计数准确、路径明确、code_default=no、mod 归属清楚,**没有一处看得出问题**。
@@ -2343,6 +2350,41 @@ internal static class Advisory
                 : "") +
             ". Which of those is the same thing the question is about does not follow from the value — " +
             $"'rimsearcher where --value {Quote(value)}{(exact ? " --exact" : "")}' lists every path holding it.");
+    }
+
+    /// <summary>
+    /// 不带 <c>--exact</c> 时值是**子串**匹配,而点名字段这条路此前一句话都不说。
+    ///
+    /// `where explosionRadius --value 2` 回 11 行,其中只有 2 行真的等于 2 ——
+    /// 其余是 <c>2.49</c> / <c>2.4</c> / <c>2.9</c>,还有一行是 <c>7.2</c>(它也含 "2")。
+    /// 表本身没撒谎(value 列就印着),但首行只说「11 defs」,而读者问的是 2。
+    ///
+    /// **这是一处跨产地口径不一致**:同一件事在 `where --value 2`(不点名字段)那条路上
+    /// 一直说着(「Value exactly '2': 530 field paths; containing it: 3072」),点名字段
+    /// 这条路上零。两条路答的是同一个问题的两种问法,不许一条说一条不说。
+    ///
+    /// 数取 def 而不是行,并且**它就是读者眼前那张表的行数来源**——句子里引用的量必须
+    /// 是同屏看得见的那个,否则读者核不动。
+    ///
+    /// 沉默有两种,都不是「没算」:带了 <c>--exact</c>(那时子串根本没参与),
+    /// 以及**算过了、这次子串一条都没多收**(每一行都精确相等)。后者尤其要留着不说 ——
+    /// 常见值上这句话会次次出声,而它每次给的数都随查询变,不是同一句免责声明重播。
+    /// </summary>
+    public static void NoteSubstringWidened(CommandContext ctx, PathQuery own, string? value, bool exact,
+                                            Snapshot.ScopeFilter scope, int here)
+    {
+        if (exact || value is not { Length: > 0 } || here == 0) return;
+        var strict = ctx.Db.FindByField(own, value, true, scope, 0, 0).Defs;
+        if (strict == here) return;
+        ctx.Report.Notice(NoticeKind.Boundary,
+            strict == 0
+                ? $"Nothing here holds exactly '{Quote(value)}': every row has it inside a longer value — " +
+                  "read the value column before treating this as an answer about " +
+                  $"'{Quote(value)}'. --exact would return nothing at all."
+                : $"'{Quote(value)}' is matched as a substring, not as a whole value: of the " +
+                  $"{Tally.Complete(here).Render("def")} here, {strict} hold exactly '{Quote(value)}' and " +
+                  $"{here - strict} hold it inside a longer value. The value column says which; " +
+                  "--exact keeps the first group only.");
     }
 
     public static void NoteMixedPathShapes(CommandContext ctx, IReadOnlyList<(string Shape, int Count)> shapes)

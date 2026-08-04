@@ -107,6 +107,10 @@ public class OutputSnapshotTests
         // 分支在字节层从没出过声。字节闸覆盖的是命令形态,不是数据形态 —— 一条分支可以
         // 在命令面上全覆盖、而永远不触发。
         { "where-value-elsewhere",  ["where", "soundPickup", "--value", "Standard_Pickup", "--exact"] },
+        // 同一条理由的第二次:不带 --exact 时值是子串匹配,而点名字段这条路此前一个字
+        // 都不说(不点名字段那条路一直说着 —— 跨产地口径不一致)。上面那份带着 --exact,
+        // 于是整套基线里**没有一份走过缺省态**,而缺省态才是多数人走的路。
+        { "where-value-substring",  ["where", "texPath", "--value", "Things/Building"] },
         // 打进 fields 的名字不是 def 类型,而反编译树里有同名类型 —— 那儿才答得出这个问题。
         // 三档摆一起:唯一一棵树命中、跨树同名(不许把一个挑选说成一个事实)、哪儿都没有
         // (那时一个字都不许多说,否则它就成了免责声明)。

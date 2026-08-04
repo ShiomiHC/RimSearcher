@@ -321,10 +321,16 @@ public static class Fixture
             Def("CapDef", "Cap" + i, [.. f]);
         }
 
+        // 子串匹配的**混合**那一档:同一个字段上,一个 def 精确等于 5、另一个是它的超串。
+        // 主语料里凑不出这一档 —— 那里的超串对(Standard_Pickup / Standard_PickupFood)
+        // 坐在两条不同的字段上,而这句话问的是「点名的这一个字段上有几行不是你要的值」。
+        Def("WideDef", "WideExact", ("w", "5"));
+        Def("WideDef", "WideLonger", ("w", "5.5"));
+
         w.WriteLine(new JsonLine()
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindEnd)
             .Int(IntermediateFormat.KeyRecords, records + 1)
-            .Int(IntermediateFormat.KeyDefs, 7)
+            .Int(IntermediateFormat.KeyDefs, 9)
             .Int(IntermediateFormat.KeyInjections, 0)
             .Int(IntermediateFormat.KeyXmlNodes, 0)
             .ToString());

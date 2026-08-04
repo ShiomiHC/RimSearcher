@@ -2649,6 +2649,58 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 不带 <c>--exact</c> 时值是**子串**匹配,而点名字段这条路此前一句话都不说。
+    ///
+    /// 真快照上 `where explosionRadius --value 2` 回 11 行,只有 2 行真的等于 2,
+    /// 其余是 2.49 / 2.4 / 2.9,还有一行是 **7.2**(它也含 "2")。首行只说「11 defs」。
+    ///
+    /// 这条闸的形态是**跨产地**:同一件事在 `where --value <值>`(不点名字段)那条路上
+    /// 一直说着,点名字段这条路上零 —— 两条路是同一个问题的两种问法。所以不钉措辞,
+    /// 钉「两侧都得把 exact 与 containing 分开报」。
+    ///
+    /// 三档数据形态各钉一次,它们走的是不同分支,而字节闸只覆盖命令形态:
+    /// 全是超串 / 精确与超串混着 / 全部精确(此时沉默,且沉默是「算过了没多收」)。
+    /// </summary>
+    [Fact]
+    public void 子串匹配把别的值收进来时点名字段这条路不许沉默()
+    {
+        static bool Splits(string s) => s.Contains("exactly", StringComparison.Ordinal)
+                                     && (s.Contains("longer value", StringComparison.Ordinal)
+                                         || s.Contains("containing it", StringComparison.Ordinal));
+
+        // ① 跨产地:同一个值、同一份快照,不点名字段那条路一直会分开报。
+        Assert.True(Splits(Fixture.Run("where", "--value", "Standard_Pickup").Stdout),
+                    "不点名字段那条路本来就分开报,它是这条闸的另一个产地");
+
+        // ② 全是超串:主语料里 texPath 的两个值都以 Things/Building 开头,没有一个等于它。
+        var none = Fixture.Run("where", "texPath", "--value", "Things/Building").Stdout;
+        Assert.True(Splits(none), "点名字段这条路对同一件事不许沉默");
+        Assert.Contains("--exact would return nothing", none, StringComparison.Ordinal);
+
+        // ③ 混合:一个精确等于 5、另一个是 5.5。主语料凑不出这一档,走专用语料。
+        // 每次重导。复用上一个用例留下的 tie.db 会让这一格测到**上一版语料** ——
+        // 语料一改、这条闸就静默地测起了旧数据,而它照绿。
+        var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "widesnap");
+        if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        Directory.CreateDirectory(dir);
+        var cfg = Path.Combine(dir, "config.toml");
+        File.WriteAllText(cfg, "snapshot_dir = '" + dir.Replace("\\", "\\\\") + "'\n");
+        Fixture.Run("snapshot", "import", Fixture.TieExportPath, "--name", "wide", "--config", cfg);
+        var mixed = Fixture.Run("where", "w", "--value", "5", "--db", Path.Combine(dir, "wide.db")).Stdout;
+        Assert.True(Splits(mixed), "混合那一档也得分开报");
+        // 两个数都要在,且加起来就是首行那个数 —— 引用的量必须是读者同屏看得见的那个。
+        Assert.Contains("2 defs here, 1 hold", mixed, StringComparison.Ordinal);
+
+        // ④ 沉默的两处。带 --exact 时子串没参与;全部精确时是「算过了没多收」,不是没算。
+        foreach (var quiet in new[]
+                 {
+                     Fixture.Run("where", "texPath", "--value", "Things/Building", "--exact").Stdout,
+                     Fixture.Run("where", "soundPickup", "--value", "Standard_Pickup").Stdout,
+                 })
+            Assert.DoesNotContain("matched as a substring, not as a whole value", quiet, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 「磁盘那一层没量过」这件事有**两个独立产地**:造库那一刻(<c>snapshot import</c>)
     /// 与每次查询(<c>DiskLayer</c>)。这条闸比对的是两者,不复述任何一边的理由 ——
     /// 前一版的闸把实现的理由(「没配 mod_roots 的机器上没有第二层可漏」)抄进了注释,
