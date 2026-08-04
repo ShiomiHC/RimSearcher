@@ -1,0 +1,6 @@
+$ rimsearcher fields Outline
+exit 1
+--- stdout ---
+No def type named 'Outline' in this snapshot. 'rimsearcher list' with no def type lists them all.
+'Outline' is a type in the decompiled source all the same — vanilla/Verse/Outline.cs, zz.othermod/Outline.cs. Only a def type gets a def database, so this command has nothing of its own to read for it, while the source does: 'rimsearcher read vanilla/Verse/Outline.cs --outline' names every field, property and method with its line range.
+--- stderr ---

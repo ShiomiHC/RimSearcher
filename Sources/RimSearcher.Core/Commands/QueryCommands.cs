@@ -1604,6 +1604,10 @@ public sealed class FieldsCommand : Command
                 return 1;
             }
             ctx.Report.Notice(NoticeKind.NextStep, DefTypeMiss.Say(type, ctx.Db.Types(ctx.Scope()).Select(t => t.Type), "fields"));
+            // 叠加不替换:上面那句说的是「def 类型里没有它」,这条说的是「它在别处,而且
+            // 那儿正好答得出你问的这件事」。两句都真,少了后一句人就留在 def 那一层了。
+            if (DefTypeMiss.InSourceInstead(ctx, type) is { } inSource)
+                ctx.Report.Notice(NoticeKind.NextStep, inSource);
             return 1;
         }
 
@@ -1840,6 +1844,52 @@ internal static class DefTypeMiss
                (close.Count == 0
                    ? " 'rimsearcher list' with no def type lists them all."
                    : Suggestion.Say(close) + $" 'rimsearcher {verb} {close[0]}' if that is the one.");
+    }
+
+    /// <summary>
+    /// 打进 <c>fields</c> 的名字不是 def 类型,而反编译树里有一个同名类型 —— 那个类型
+    /// 就是问的人要的东西,只是它没有自己的 def 数据库。
+    ///
+    /// 第十二轮盲测:<c>fields ThingDefCountClass</c> 落空后,四格里有三格改去从
+    /// <c>costList[0].*</c> 的样本里凑字段,交出的名单是六个里的三个 —— 而权威名单
+    /// 就在 <c>ThingDefCountClass.cs</c> 里,ILSpy 按类型名给每个文件命名,当场找得到。
+    /// 上面那句「没有这个 def 类型」是真话,可它把人留在了 def 那一层。
+    ///
+    /// 判据必须**当场算得出来**(NameLookup 的纪律):真去找那个文件,找不到就一个字不说。
+    /// 只认纯标识符,既挡住通配符进 <c>EnumerateFiles</c>,也挡住路径分隔符。
+    /// 这一句只给 <c>fields</c>,不给 <c>list</c>:「这个类的字段有哪些」与「这个类的 def
+    /// 有哪些」是两个问题,后者的答案是 <c>list &lt;DefType&gt; --own-class</c>。
+    /// </summary>
+    public static string? InSourceInstead(CommandContext ctx, string typed)
+    {
+        var root = ctx.Config.DecompiledDir;
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) return null;
+        if (!typed.All(c => char.IsAsciiLetterOrDigit(c) || c == '_')) return null;
+
+        var hits = new List<string>();
+        try
+        {
+            foreach (var tree in SourcesShared.TreeNames(root))
+                hits.AddRange(Directory
+                    .EnumerateFiles(Path.Combine(root, tree), typed + ".cs", SearchOption.AllDirectories)
+                    .Select(f => Path.GetRelativePath(root, f).Replace('\\', '/')));
+        }
+        catch (IOException) { return null; }
+        catch (UnauthorizedAccessException) { return null; }
+
+        if (hits.Count == 0) return null;
+        hits.Sort(StringComparer.OrdinalIgnoreCase);
+
+        // 几棵树里各有一个同名文件是常态(mod 重打包了游戏的类)。只报头一条会把一个
+        // 挑选说成一个事实,而下一步那条命令自己会在这上面停下来问 —— 先说清楚。
+        // 不写「它只出现在别的 def 的字段里,所以够不着」:那是**猜**这个名字在数据里扮
+        // 什么角色,而这里一个字都没查过它。说得住的只有机制本身 —— 只有 def 类型才有
+        // def 数据库,这条命令读的正是那个。
+        return $"'{typed}' is a type in the decompiled source all the same — " +
+               $"{NameList.Render(hits, Limits.MaxSuggestions)}. Only a def type gets a def database, so this " +
+               "command has nothing of its own to read for it, while the source does: " +
+               $"'rimsearcher read {(hits.Count > 1 ? hits[0] : typed + ".cs")} --outline' names every field, " +
+               "property and method with its line range.";
     }
 }
 
