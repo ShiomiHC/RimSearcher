@@ -61,7 +61,10 @@ public class InheritanceTests
         // BaseProjectile 一条都没有:说破这个 0 数的是什么,而不是沉默。
         var unpatched = Text("inherit", "BaseProjectile");
         Assert.Contains("that is what the 0 counts", unpatched, StringComparison.Ordinal);
-        Assert.Contains("by defName instead leaves no trace", unpatched, StringComparison.Ordinal);
+        Assert.Contains("with @Name= in this snapshot", unpatched, StringComparison.Ordinal);
+        Assert.Contains("any other way leaves no trace", unpatched, StringComparison.Ordinal);
+        // 不许举 defName 当遗漏面:这一支的对象可以是抽象节点,而它没有 defName。
+        Assert.DoesNotContain("by defName", unpatched, StringComparison.Ordinal);
         // 不许串到 ops>0 那一支的话上:那句说的是「这一层与游戏最终读到的不同」,
         // 而这里没有任何已知的补丁让它不同 —— 只是这个计数看不见另一类。
         Assert.DoesNotContain("before patches", unpatched, StringComparison.Ordinal);

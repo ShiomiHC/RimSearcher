@@ -169,12 +169,16 @@ public sealed class InheritCommand : Command
                     "This layer is the XML before patches, so what the game finally used differs from it " +
                     "by whatever those operations did.");
             else
-                // 后半句与 !named 那支同一个措辞产地:漏掉的那一类补丁是同一类,
-                // 两支的区别只在这一格量没量过。
+                // 不写「by defName」:这一支的对象可以是**抽象节点**,而抽象节点从不变成 def、
+                // 根本没有 defName —— 举那一条当遗漏面,读者顺着推就得出「那条路对它不存在,
+                // 所以这个 0 可靠」,正好反了。而计数的正则(XmlNodeExporter.NameInXPath)
+                // 只认 @Name=,漏掉的是**所有**其他定位方式:defName、label、thingClass、
+                // 通配……所以遗漏面只能整个说,不能举其中一条。
+                // 口径写进句子:不点明数的是 @Name=,「that is what the 0 counts」就没有内容。
                 ctx.Report.Notice(NoticeKind.Boundary,
-                    $"No patch operation's xpath names '{label}' in this snapshot — that is what the 0 " +
-                    "counts. A patch that reaches it by defName instead leaves no trace here, so the 0 is " +
-                    "not evidence that the game read this node unpatched.");
+                    $"No patch operation's xpath names '{label}' with @Name= in this snapshot — that is " +
+                    "what the 0 counts. An xpath that reaches it any other way leaves no trace here, so " +
+                    "the 0 is not evidence that the game read this node unpatched.");
 
             // 往上走到根。带环保护是必要的:XML 里写得出环,游戏在这一层之后才检出来,
             // 快照存的正是检出之前的原文。
