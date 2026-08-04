@@ -1,4 +1,4 @@
-using RimSearcher.Cli;
+﻿using RimSearcher.Cli;
 using RimSearcher.Output;
 using RimSearcher.Search;
 using RimSearcher.Snapshot;
@@ -1869,6 +1869,32 @@ public sealed class ValuesCommand : Command
         // 表上方 —— 理由同 list 那处。
         ctx.AnnounceExcluded(scope, rest => ctx.Db.DistinctValues(pq, rest, 0, type, 0).Total, "value");
 
+        // **这张表的轴是字段,不是值。** 两个闭卷样本把它读反了,而且在两个不同的时点:
+        // 一个在读到 where 的外延提示**之前**跑它探路,拿到取值域就认定范围锁定;
+        // 一个在读到提示**之后**跑它去证伪那条提示,拿到一个真的否定读数就写下
+        // 「不存在其他路径」—— 比不复核时更自信。时序不同只是表象,混淆是同一个:
+        // `values <字段>` 给的是**这个字段的取值域**,`where --value <值>` 给的才是
+        // **这个值的字段分布**,方向反了。
+        //
+        // 零结果那一支早就有这条互指了(「finds which path holds a value you already
+        // know」),有结果时反而沉默 —— 而踩坑的人拿到的正是有结果的那一份。
+        // **话早写好了,只是没长在读者会走的那条路上。**
+        //
+        // 不写成光秃秃的免责句:把**这张表自己第一行那个值**填进反方向那条命令,
+        // 于是它是一条能直接敲的下一步,而不是一句每次都一样的提醒。
+        //
+        // **试过带一个数(「这个值坐在 N 条 field path 上」),那是个更坏的东西**:
+        // N 常常就是 1,而那 1 条正是被问的这个字段自己 —— 句子于是在最该警醒的场合
+        // 读成「这个值确实只在这儿」,把结尾那句否定当场抵消。与「报最大的那个」同型:
+        // 一个从数据算出来的量,在常见情形下恰好说「你没事」。
+        // 数交给那条命令自己去报 —— 它报得对,而且带着它自己那一套边界说明。
+        if (rows.Count > 0 && rows[0].Value is { Length: > 0 and <= 40 } top)
+            ctx.Report.Notice(NoticeKind.Boundary,
+                $"This table's axis is the field: it lists the values '{path}' takes. Which fields hold a " +
+                "value you already have is the inverse question and a different command — " +
+                $"'rimsearcher where --value {Advisory.Quote(top)} --exact' asks it for '{top}', the first " +
+                "row here. A value domain read here does not bound where those values occur.");
+
         ctx.Report.Table("values", ["value", "defs"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
@@ -2281,7 +2307,8 @@ internal static class Advisory
             $"the text index, so 'rimsearcher search {Quote(value)}' reaches it and {reachedBy} cannot.");
     }
 
-    private static string Quote(string v) => v.Contains(' ') ? $"\"{v}\"" : v;
+    // internal:values 那句互指要拼一条能直接敲的命令,而引号规则不该有第二份。
+    internal static string Quote(string v) => v.Contains(' ') ? $"\"{v}\"" : v;
 
     /// <summary>
     /// 这一屏里有两行的 label **逐字相同**。

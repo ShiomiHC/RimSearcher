@@ -2649,6 +2649,39 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// `values &lt;字段&gt;` 答的是**这个字段的取值域**,`where --value &lt;值&gt;` 答的才是
+    /// **这个值的字段分布**。两个闭卷样本把方向读反了,而且在两个不同的时点:一个在读到
+    /// `where` 的外延提示**之前**跑它探路、拿到取值域就认定范围锁定;一个在读到提示
+    /// **之后**跑它去证伪那条提示、拿到一个真的否定读数就写下「不存在其他路径」。
+    /// 时序不同只是表象,混淆是同一个。
+    ///
+    /// 零结果那一支早就有这条互指,有结果时反而沉默 —— 而踩坑的人拿到的正是有结果的
+    /// 那一份。所以这条闸钉的是**两支都得有**,不钉措辞。
+    ///
+    /// 还钉一条否定:这句话里不许出现「这个值坐在 N 条 field path 上」那种数。
+    /// 试过,而 N 常常就是 1、且那 1 条正是被问的字段自己 —— 句子于是在最该警醒的场合
+    /// 读成「这个值确实只在这儿」。
+    /// </summary>
+    [Fact]
+    public void values答的是字段的值域这件事两支都要说破()
+    {
+        const string Inverse = "rimsearcher where --value";
+
+        // ① 有结果那一支:命令要**填好参数**,填的是这张表自己第一行的值。
+        var hit = Fixture.Run("values", "compClass").Stdout;
+        Assert.Contains("axis is the field", hit, StringComparison.Ordinal);
+        Assert.Contains($"{Inverse} RimWorld.CompShield --exact", hit, StringComparison.Ordinal);
+
+        // ② 零结果那一支:同一件事早就在说,两支不许只剩一支。
+        Assert.Contains(Inverse, Fixture.Run("values", "noSuchFieldXYZ").Stdout, StringComparison.Ordinal);
+
+        // ③ 不许带那个会说「你没事」的数。fixture 上它恒为 1,真快照上才看得出问题 ——
+        //    所以钉措辞而不是钉数值,否则这道闸在 fixture 上永远绿。
+        Assert.DoesNotContain("field path in this snapshot", hit, StringComparison.Ordinal);
+        Assert.DoesNotContain("field paths in this snapshot", hit, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 不带 <c>--exact</c> 时值是**子串**匹配,而点名字段这条路此前一句话都不说。
     ///
     /// 真快照上 `where explosionRadius --value 2` 回 11 行,只有 2 行真的等于 2,
