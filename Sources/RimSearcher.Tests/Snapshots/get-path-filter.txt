@@ -9,7 +9,6 @@ label        shield belt
 class        Verse.ThingDef
 mod          ludeon.rimworld
 source       Apparel_Belts.xml
-A `yes` in code_default means the value is identical to what a freshly constructed instance carries, and this snapshot cannot tell those two apart: it supports neither 'the def sets this' nor 'the def leaves it to the class default'. Reading the C# constructor shows where a default could come from, never whether the XML repeats it. Only `no` decides: something set that value. On compClass/thingClass/workerClass both values are ordinary — those are usually constructor-assigned — so neither one says who mounted the comp. The `mod` column and the block's `Class` row do.
 
 path                                value                code_default
 comps[0].compClass                  RimWorld.CompShield  yes

@@ -119,12 +119,21 @@ any depth.
   **Everything lands on stdout except a usage error** — the reasoning behind a zero
   included. `2` is the exception: its message is on stderr with stdout empty, so
   `2>/dev/null` turns a mistyped option into a silent empty result.
-- **`code_default` is about attribution, and it prints its own legend** whenever a `yes` row
-  is in the table — read that sentence rather than this one; `yes` rows hide until
-  `--defaults` or a named `--path-contains`. What the legend cannot know is your question:
-  one that merely *reads* the value (thresholds, comparisons, what the game will do) answers
-  fine off a `yes` row — the value is real either way. It is only *who set it* that a `yes`
-  refuses to answer.
+- **`code_default` decides what a value is worth.** `no` = something set it (differs from
+  a fresh instance). `yes` = the snapshot **cannot tell** whether anyone set it — quoting a
+  `yes` row as "this def sets X" is the top confident-wrong answer here — and **"so the def
+  did not set it, it comes from the class default" is the same error facing the other way**.
+  An XML line whose value happens to equal the default is indistinguishable from no line at
+  all, so neither direction is available: the honest answer off a `yes` row is that this
+  cannot be told from here. Reading the C# constructor shows where the default *could* come
+  from, never whether the XML says it too. `unknown` = type
+  not constructible. Exemptions cut both ways: rules that *read* the value (thresholds,
+  comparisons) answer fine from a `yes` row — the value is real either way;
+  `compClass`/`thingClass`/`workerClass` are usually
+  constructor-assigned, so a `yes` there is **no signal in either direction** — and a `no`
+  beside it is just as ordinary, reached by more than one route. Neither value says who mounted the
+  comp; the `mod` column and the block's `Class` row do. `yes` rows hide by default (a line
+  says how many); `--defaults` shows them; `--path-contains` always shows a named field.
 - **The shared-value line after `get`'s table** (`soundDrop (3347)`) names values most
   defs of the type also carry — inherited or engine-filled far more often than authored,
   so a `no` row on that list is still not the def author's decision.

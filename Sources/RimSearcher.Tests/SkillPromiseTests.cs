@@ -54,12 +54,8 @@ public class SkillPromiseTests
         // 消费侧提的原案是「第三方以 `Class=` 挂上去的会是 `no`」—— 用他们自己那张表就能
         // 证伪(第三方 comp 经 `Class=` 挂上去恰恰是 `yes`),而 vanilla 自己有一千多条 `no`。
         // 收下的是他们的观察(「normal state」把 `no` 推成异常),不是他们的规则。
-        // 2026-08-04(14 批 A):这句连同整条 `code_default` 释义搬进了 CLI ——
-        // `FieldDefault.Legend` 在表里真有 yes 行时印它,落在 compClass/thingClass/workerClass
-        // 上时补这半句。`class字段上的yes与no同时是常态` 原样留着,另有
-        // `GrammarTests.code_default的释义双向且只在yes行在场时出现` 逐句钉新住处。
-        // **这条是全部八条契约里唯一实测「在场也答错」的**,所以换的是机制不是措辞:
-        // 判据(表里有没有 yes 行、落在哪个字段上)一直在 CLI 手上。
+        new("a `no` beside it is just as ordinary, reached by more than one route",
+            nameof(class字段上的yes与no同时是常态)),
         new("The last page says it is the last one; an `--offset` past the end is reported as an overshoot, not as \"nothing found\"",
             "分页的三个位置各说各的话"),
 
@@ -123,11 +119,12 @@ public class SkillPromiseTests
         // 2026-08-04(14 批 C):doc 侧那句退役 —— 输出里逐字就是「Same in every row, not
         // repeated below:」,「对每一行仍然成立」这半句它自己说了。另两半(首列不折、
         // `--json` 不折)没人观察得到:折叠只发生在文本渲染器里,而 json 消费方拿到的是整行。
-        // 2026-08-04(14 批 A):这三句同批退役,三道闸一道没动 ——
-        // `默认值行被拿掉时当场说清有多少条` / `点了名的字段不因为是默认值而消失` /
-        // `没法比的那一档照常显示且不与被改过的同形`。前两件 CLI 本来就在印(「Not listed:
-        // N fields carrying the declaring type's own default; --defaults lists them.」,
-        // 以及 --path-contains 那一支根本不过滤);第三件进了 Legend 的 unknown 半句。
+        new("`yes` rows hide by default (a line says how many)",
+            nameof(GrammarTests.默认值行被拿掉时当场说清有多少条)),
+        new("`--path-contains` always shows a named field",
+            nameof(GrammarTests.点了名的字段不因为是默认值而消失)),
+        new("`unknown` = type not constructible",
+            nameof(GrammarTests.没法比的那一档照常显示且不与被改过的同形)),
 
         // ---- code-search 的三道闸 ----
         new("`--limit` and `--max-per-file` only shape what is printed (the count stays exact)",

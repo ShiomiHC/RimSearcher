@@ -1,5 +1,4 @@
 using RimSearcher.Contract;
-using RimSearcher.Search;
 
 namespace RimSearcher.Output;
 
@@ -29,47 +28,4 @@ public static class FieldDefault
         DefaultState.Unknown => "unknown",
         _ => "no",
     };
-
-    /// <summary>构造函数惯常自己填的那几个字段 —— 那里的 yes 连「异常」都算不上。</summary>
-    private static readonly string[] ConstructorAssigned = ["compClass", "thingClass", "workerClass"];
-
-    /// <summary>
-    /// `yes` 行在场时,这一列的**双向**释义。
-    ///
-    /// R10 的 C1 是八条契约里唯一**两组都答错**的一条,而且是在 SKILL.md 写着这条规则的
-    /// 情况下答错的:当时的措辞只堵一个方向(「别把 yes 读成『这个 def 设了 X』」),
-    /// 两组栽的都是反方向 ——「所以不是 def 设的,是 C# 构造函数的默认值」。
-    /// **只堵半边的规则写在哪条信道上都不管用**,所以这段话双向,且跟着那张表走。
-    ///
-    /// 不是恒定横幅:`yes` 行默认就不列,只有 `--defaults` 或 `--path-contains` 指名字段
-    /// 时才进表 —— 与 <c>Completeness.NoteIndexedPathsOnly</c> 同一条位置判据。
-    ///
-    /// <returns>表里一条 `yes` 都没有时 <c>null</c>。</returns>
-    /// </summary>
-    public static string? Legend(IEnumerable<(string Path, int State)> rows)
-    {
-        var listed = rows.ToList();
-        if (!listed.Any(r => r.State == DefaultState.Same)) return null;
-
-        // 「C# 构造函数里是什么」是模型看完 yes 之后的下一步动作,而那一步**回答不了**
-        // 本问题 —— C1 两组栽的正是这一步。所以出路与陷阱写在同一句里。
-        var text = "A `yes` in " + Column + " means the value is identical to what a freshly constructed " +
-                   "instance carries, and this snapshot cannot tell those two apart: it supports neither " +
-                   "'the def sets this' nor 'the def leaves it to the class default'. Reading the C# " +
-                   "constructor shows where a default could come from, never whether the XML repeats it. " +
-                   "Only `no` decides: something set that value.";
-
-        if (listed.Any(r => r.State == DefaultState.Unknown))
-            text += " `unknown` is not a third answer: the type could not be constructed, so nothing was compared.";
-
-        // 消费侧提过「第三方以 Class= 挂上去的会是 no」—— 恰恰相反,而 vanilla 自己就有
-        // 一千多条 no。两种取值在这几个字段上同时是常态,所以这半句两边都说。
-        if (listed.Any(r => r.State == DefaultState.Same &&
-                            PathSegments.IsWholeSegment(r.Path, ConstructorAssigned)))
-            text += " On " + string.Join("/", ConstructorAssigned) + " both values are ordinary — those are " +
-                    "usually constructor-assigned — so neither one says who mounted the comp. The `mod` " +
-                    "column and the block's `Class` row do.";
-
-        return text;
-    }
 }
