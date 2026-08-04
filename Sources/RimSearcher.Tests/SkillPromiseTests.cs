@@ -38,14 +38,17 @@ public class SkillPromiseTests
         // 早已改掉,不是这次退的东西。
 
         // ---- 三态计数与分页 ----
-        new("A count is always printed above the table",
-            nameof(每条查询的第一句都是计数)),
-        new("`12 defs.` — all of them",
-            "完整集合裸写数字不多说一个字"),
-        new("`at least 12 matches` — the scan stopped early, true total unknown",
-            "只知道下界时写成at_least"),
-        new("A `--path-contains` match count is a filter, not a truncation (`kind: \"filter\"` vs `\"truncation\"` in `--json`)",
-            nameof(过滤与截断在json里是两种kind)),
+        // 2026-08-04(14 批 C):三态计数那条的 doc 侧钉子退役,与 31-38 行 `inherit` 那次同理 ——
+        // 住处变了,契约没变,**behaviour 侧的闸原样留着**(它们不靠钉子活)。逐条现敲过:
+        // `12 defs.` / `3 of 6085 field paths.` / `at least 5 matches in 1 file; …` 三态都在,
+        // 第三态还自己补「读了几个文件、哪些树一个字没读」。
+        //
+        // 其中两句删的理由与「CLI 已自印」不同,记下来免得下次照抄判据:
+        // - `--offset 12` 那半句是 `Report.PageNotice` **量到 `--offset` 全史零使用后特意
+        //   去掉的**,文档在把它请回来;
+        // - filter/truncation 那句不假(`get --path-contains` 的 kind 确实是 filter,
+        //   `过滤与截断在json里是两种kind` 守着),但 `filter` / `truncation` 这两个词自解释,
+        //   文本侧另有 `within --path-contains comps` 后缀 —— 读的人不需要先被告知去看 kind。
         new("Fields the exporter dropped are `kind: \"boundary\"` instead",
             nameof(导出期丢字段与本次分页截断在json里是两种kind)),
         // 消费侧提的原案是「第三方以 `Class=` 挂上去的会是 `no`」—— 用他们自己那张表就能
@@ -94,8 +97,9 @@ public class SkillPromiseTests
             nameof(GrammarTests.子串匹配要说破自己不是整段命中)),
         new("the output names hand-set fields in the block it cut away",
             nameof(GrammarTests.同一块里有人设过的兄弟字段要点名)),
-        new("(narrow `--type`, `--def`), which the footnote prints already filled in",
-            nameof(GrammarTests.完整性尾注指的命令要走得到它刚说的那批)),
+        // 2026-08-04(14 批 C):导出期截断那条同批退役 —— `get` 在被砍过的 def 上自报
+        // 「at least N fields were dropped」,`where`/`values`/`fields` 那条边界这次还从
+        // 脚注区搬到了表上方。`完整性尾注指的命令要走得到它刚说的那批` 原样留着。
         new("Global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the command name",
             nameof(GrammarTests.全局参数的位置约束要写在它自己的标题上)),
         // find --value --exact 在 skill 文档里没有专属句子,兜住它的是下面那条
@@ -110,9 +114,11 @@ public class SkillPromiseTests
 
         // ---- 代码默认值 ----
         // 折叠行在消费侧统计里出现 120 次,而契约此前只在 SKILL.md 里躺着 —— 守它的断言
-        // 是别的测试顺带带上的一句,改掉那个测试就一起没了。
-        new("the folded column\n  still applies to every row; the first column (the row's identity) and `--json` never fold",
-            nameof(GrammarTests.折叠掉的列对每一行仍然成立而json一列都不折)),
+        // 是别的测试顺带带上的一句,改掉那个测试就一起没了。于是有了
+        // `折叠掉的列对每一行仍然成立而json一列都不折` 这道独立的闸,它留着。
+        // 2026-08-04(14 批 C):doc 侧那句退役 —— 输出里逐字就是「Same in every row, not
+        // repeated below:」,「对每一行仍然成立」这半句它自己说了。另两半(首列不折、
+        // `--json` 不折)没人观察得到:折叠只发生在文本渲染器里,而 json 消费方拿到的是整行。
         new("`yes` rows hide by default (a line says how many)",
             nameof(GrammarTests.默认值行被拿掉时当场说清有多少条)),
         new("`--path-contains` always shows a named field",
@@ -173,8 +179,10 @@ public class SkillPromiseTests
             "scope在散文里展开成实际圈住的mod"),
 
         // ---- 落空的成因 ----
-        new("A zero result names its own cause",
-            "零结果按算得出来的落点分流"),
+        // 2026-08-04(14 批 C):doc 侧那条成因清单退役,`零结果按算得出来的落点分流` 留着。
+        // 现敲的四种落空里,CLI 印的都比清单全 —— 它点名成因、给出填好参数的命令,还划出
+        // 「这不是那个类不存在的证据」那条界。清单是恒定知识却写成七个名词,而 CLI 说的是
+        // 这一次的事实;两边同时在的时候,占位符版本在前、实参版本在后,连说两遍。
         // 同一条规矩在 find 上的样子。第二句是**不给死路**那一半:算出来是个 def 名不等于
         // 有人引用它,指一条必然空手的命令与不指路一样贵。
         new("given a single word that is not a field path, `where` works out what that word actually is",

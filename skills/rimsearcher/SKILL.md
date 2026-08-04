@@ -133,25 +133,12 @@ any depth.
 
 ## Reading the output
 
-- **A count is always printed above the table**, in three forms: `12 defs.` — all of them;
-  `12 of 347 defs` — cut off, 347 exist, and the next page is `--offset 12`;
-  `at least 12 matches` — the scan stopped early, true total unknown. A `--path-contains` match count is a filter, not a truncation
-  (`kind: "filter"` vs `"truncation"` in `--json`).
-- **`Same in every row, not repeated below:` is part of the table** — the folded column
-  still applies to every row; the first column (the row's identity) and `--json` never fold.
 - **Exit codes**: `0` ran, `1` zero rows, `2` usage error, `70` tool defect. **`1` is an
   answer, not a failure** — chain with `;`, never `&&`, or an informative zero drops what
   you queued after it. A `;` chain reports only the last code, so read the output.
   **Everything lands on stdout except a usage error** — the reasoning behind a zero
   included. `2` is the exception: its message is on stderr with stdout empty, so
   `2>/dev/null` turns a mistyped option into a silent empty result.
-- **A zero result names its own cause** — hidden by `--scope`, abstract parent, def type,
-  class, mod, UI text, or present in another named snapshot. Read that sentence before
-  concluding: "not here" ≠ "not anywhere".
-- **Truncation at export**: `get` warns on the affected def, and then a missing field path
-  is *not* evidence of absence. Same boundary on `where`/`values`/`fields` (counts are over
-  indexed paths); cross-check with `rimsearcher snapshot truncated` (narrow `--type`,
-  `--def`), which the footnote prints already filled in.
 - **`code_default` decides what a value is worth.** `no` = something set it (differs from
   a fresh instance). `yes` = the snapshot **cannot tell** whether anyone set it — quoting a
   `yes` row as "this def sets X" is the top confident-wrong answer here — and **"so the def
