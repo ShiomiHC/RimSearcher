@@ -13,7 +13,7 @@ exit 0
     },
     {
       "kind": "advisory",
-      "text": "Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_default' is not this def having made a choice — the count in brackets: soundDrop (9), soundImpactDefault (9). Only rows whose 'code_default' is no were compared: a yes is a declared default already."
+      "text": "Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_default' is not this def having made a choice — the count in brackets: soundDrop (9), soundImpactDefault (9). Only rows whose 'code_default' is no were compared: a yes only says the value matches what a fresh instance of the declaring type carries — whether anything wrote it is not recorded."
     },
     {
       "kind": "count",

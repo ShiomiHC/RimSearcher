@@ -2066,17 +2066,26 @@ internal static class Completeness
         // 范围也得写进句子:shared_values 建表时就把「与声明默认值相同」的行整批排除了
         // (见那张表的建表注释),于是一行 yes 从来没进过候选。不说破的话,「上面没有一个」
         // 印在一张只有 yes 行的表下面会被读成结论 —— 而那是没比过,不是比过了没有。
+        //
+        // 「为什么没比」这个理由不许写成身份断言。此前两支共用的后半句是
+        // 「a yes is a declared default already」,而 yes 的真实含义只是**值与新 new 的
+        // 一模一样**(产地注释 FieldDefault.Render 写得很准:「这不等于没人设过它 ——
+        // XML 里照着默认值再写一遍是常事,能证的只有『无从区分』」)。
+        // 那句话把「值相等」说成了「它就是那个默认值」,读者顺着推就得出「所以作者没写」——
+        // 正是 r13 题 2 那个错答的方向。输出与它自己的产地注释矛盾,是假话,不是天花板。
+        var yesMeans = $"a yes only says the value matches what a fresh instance of the declaring " +
+                       "type carries — whether anything wrote it is not recorded";
         ctx.Report.Notice(NoticeKind.Advisory, listed.Count > 0
             ? $"Values that most of the {total} {def.DefType}s in this snapshot also carry, so their " +
               $"'{FieldDefault.Column}' is not this def having made a choice — the count in brackets: " +
               $"{NameList.Render(listed, listed.Count)}. " +
-              $"Only rows whose '{FieldDefault.Column}' is no were compared: a yes is a declared default already."
+              $"Only rows whose '{FieldDefault.Column}' is no were compared: {yesMeans}."
             // 否定支砍掉「所以没有一个是透过那一列显出来的全类默认值」:那是前半句的改写,
-            // 而 SKILL.md 讲过这条线是干什么的。「yes 没参与比较」那半句一个字不动 ——
+            // 而 SKILL.md 讲过这条线是干什么的。「yes 没参与比较」那半句留着 ——
             // 它守的是「没比过」被读成「比过了没有」,而那正是这一支印在一张全 yes 表下面时的样子。
             : $"No value above with '{FieldDefault.Column}'=no is one that most of the {total} " +
               $"{def.DefType}s in this snapshot also carry. " +
-              $"Rows marked yes were not compared: a yes is a declared default already.");
+              $"Rows marked yes were not compared: {yesMeans}.");
     }
 
     /// <summary>

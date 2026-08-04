@@ -13,5 +13,5 @@ inherits_from  BaseProjectile (see 'rimsearcher inherit VariantOne')
 
 path         value             code_default
 workerClass  Verse.TestWorker  no
-No value above with 'code_default'=no is one that most of the 2 TestBaseDefs in this snapshot also carry. Rows marked yes were not compared: a yes is a declared default already.
+No value above with 'code_default'=no is one that most of the 2 TestBaseDefs in this snapshot also carry. Rows marked yes were not compared: a yes only says the value matches what a fresh instance of the declaring type carries — whether anything wrote it is not recorded.
 --- stderr ---

@@ -1248,6 +1248,39 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// <c>code_default</c> 的口径在**三处**出声:这两句结语、<c>--defaults</c> 的 Help、
+    /// 与 SKILL.md。三处必须同形 —— 而此前只有输出侧说反了:两句结语共用的后半句是
+    /// 「a yes is a declared default already」,把「值与新 new 的相等」说成「它就是那个
+    /// 默认值」,读者顺着推得出「所以作者没写」,正是 r13 题 2 那个错答的方向。
+    ///
+    /// **它与自己的产地注释矛盾**(<c>FieldDefault.Render</c>:「这不等于没人设过它 ——
+    /// XML 里照着默认值再写一遍是常事,能证的只有『无从区分』」),所以是假话不是天花板。
+    /// 天花板那条(「XML 写没写不在快照里」)说的是答不出来,而这句给了个答案。
+    ///
+    /// 钉两件事:身份断言不许回来、限定半句两支都要在。SKILL.md 那份措辞不同
+    /// (<c>cannot tell whether anyone set it</c>)但概念同,不进这条闸 —— 它不经过 CLI,
+    /// 改它时回来看这条注释。
+    /// </summary>
+    [Fact]
+    public void code_default的口径在输出与help两处同形()
+    {
+        var (onlyYes, _, _) = Fixture.Run("get", "Bullet_Revolver", "--path-contains", "burstCount");
+        var (hit, _, _) = Fixture.Run("get", "Apparel_ShieldBelt");
+        var (help, _, _) = Fixture.Run("get", "--help");
+
+        foreach (var text in new[] { onlyYes, hit, help })
+        {
+            Assert.DoesNotContain("is a declared default", text, StringComparison.Ordinal);
+            Assert.Contains("fresh instance of the declaring type", text, StringComparison.Ordinal);
+        }
+
+        // 「写没写不在记录里」在输出侧两支都要在;help 侧由 --defaults 那条 Help 自己说
+        // (措辞是 The snapshot cannot tell whether anything set those at all)。
+        foreach (var text in new[] { onlyYes, hit })
+            Assert.Contains("whether anything wrote it is not recorded", text, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// <c>inherit</c> 数节点、<c>get</c> 数 def,两个数**必然**对不上,而两条命令都用绝对语气
     /// 报自己那个。差额不解释的话,读的人只能自己编一个理由 —— 盲测里编的是「那几个是
     /// code-generated」,而它们明明来自具名 XML 文件,那个解释当场被自己推翻。
