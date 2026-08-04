@@ -988,7 +988,8 @@ public sealed class SnapshotDb : IDisposable
     /// 计数相加 —— 同一个 def 在两个下标上都带这个值时,相加会多报。排序用相加的近似值
     /// (只影响挑谁,不影响印出来的数),印出来的那个数走第二趟精确查询。
     /// </summary>
-    public (string Shape, int Defs, int OtherShapes, IReadOnlyCollection<string> Types)? ValueElsewhere(
+    public (IReadOnlyList<(string Shape, int Defs)> Shown, int OtherShapes,
+            IReadOnlyCollection<string> Types)? ValueElsewhere(
         PathQuery own, string value, ValueMatch match, ScopeFilter scope)
     {
         // 「调用方这次命中了哪些形状、哪些 def_type」要按**整个结果集**算,不是按这一页 ——
@@ -1032,7 +1033,14 @@ public sealed class SnapshotDb : IDisposable
             }
         if (paths.Count == 0) return null;
 
-        var top = rough.OrderByDescending(x => x.Value).ThenBy(x => x.Key, StringComparer.Ordinal).First().Key;
+        // **只报「最大的那个」是错的**,实测:同一道题从 explosionRadius 起手时最大项是
+        // comps[].explosiveRadius(9),正是要找的另一半;从 explosiveRadius 起手时最大项
+        // 变成 statBases[].value(3),一个无关字段,而真正的另一半 projectile.explosionRadius
+        // 根本没被点名。**「最大」跟「相关」没有关系** —— 而这正是这句话自己说的道理,
+        // 却在选样时用了一个与相关性无关的标准。
+        // 改成列若干条让读者自己判,与紧邻的跨形状那句同形(那句一直是这么做的)。
+        var top = rough.OrderByDescending(x => x.Value).ThenBy(x => x.Key, StringComparer.Ordinal)
+                       .Take(Cli.Limits.MaxSuggestions).Select(x => x.Key).ToList();
 
         // 印出来的是**那个形状自己的 def 数**,不是并集。并集试过,是个更坏的东西:
         // 靶题(值 3.9)的并集是 17,而真值是 11 —— 差额是 statBases[].value 与
@@ -1042,14 +1050,19 @@ public sealed class SnapshotDb : IDisposable
         //
         // 这个数走第二趟精确查询,不靠把 comps[0] 与 comps[4] 的计数相加 ——
         // 同一个 def 在两个下标上都带这个值时,相加会多报。排序才用相加的近似值。
-        var pp = new Dictionary<string, object?>();
-        var pw = ValueWhere(value, match, scope, pp);
-        var pk = new List<string>();
-        foreach (var path in paths[top]) { var k = $"@p{pk.Count}"; pp[k] = path; pk.Add(k); }
-        var defs = Scalar(
-            "SELECT COUNT(DISTINCT d.id) FROM field_values fv JOIN defs d ON d.id = fv.def_id " +
-            $"{pw} AND fv.path IN ({string.Join(",", pk)})", pp);
-        return (top, defs, paths.Count, defTypes);
+        var shown = new List<(string Shape, int Defs)>();
+        foreach (var shape in top)
+        {
+            var pp = new Dictionary<string, object?>();
+            var pw = ValueWhere(value, match, scope, pp);
+            var pk = new List<string>();
+            foreach (var path in paths[shape]) { var k = $"@p{pk.Count}"; pp[k] = path; pk.Add(k); }
+            shown.Add((shape, Scalar(
+                "SELECT COUNT(DISTINCT d.id) FROM field_values fv JOIN defs d ON d.id = fv.def_id " +
+                $"{pw} AND fv.path IN ({string.Join(",", pk)})", pp)));
+        }
+        return (shown.OrderByDescending(s => s.Defs).ThenBy(s => s.Shape, StringComparer.Ordinal).ToList(),
+                paths.Count, defTypes);
     }
 
     /// <summary>

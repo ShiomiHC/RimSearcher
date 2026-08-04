@@ -2330,16 +2330,19 @@ internal static class Advisory
         //
         // 也不写成「N 对 M」那种比较:自己就是最大项时那场比较赢了,于是这句话在
         // 最该警醒的场合读成了「你没事」。
+        // **列若干条,不报「最大的那个」。** 只报最大项时,起手字段一换,指向就从
+        // 「正是要找的另一半」变成「一个无关字段」—— 而选样标准(def 数)与相关性无关,
+        // 恰恰是这句话自己在说的那件事。列出来交给读者判,与紧邻的跨形状那句同形。
         ctx.Report.Notice(NoticeKind.Boundary,
             $"Naming a field narrows to that field: '{Quote(value)}' also sits on " +
             $"{Tally.Complete(el.OtherShapes).Render("path shape")} of " +
-            $"{string.Join("/", el.Types.OrderBy(t => t, StringComparer.Ordinal))} not matched here" +
-            // 只有一条时没有「最大的」可言 —— 此前这里在单数支上留下
-            // 「not matched here being soundInteract」,读基线 diff 时才看见。
-            $"{(el.OtherShapes > 1 ? ", the largest being " : ", namely ")}{el.Shape} on " +
-            $"{Tally.Complete(el.Defs).Render("def")}. Whether any of those is the same thing " +
-            $"the question is about does not follow from the value — 'rimsearcher where --value " +
-            $"{Quote(value)}{(exact ? " --exact" : "")}' lists every path holding it, to be read as paths.");
+            $"{string.Join("/", el.Types.OrderBy(t => t, StringComparer.Ordinal))} not matched here: " +
+            string.Join(", ", el.Shown.Select(s => $"{s.Shape} ({s.Defs})")) +
+            (el.OtherShapes > el.Shown.Count
+                ? $", plus {Tally.Complete(el.OtherShapes - el.Shown.Count).Render("path shape")} not shown"
+                : "") +
+            ". Which of those is the same thing the question is about does not follow from the value — " +
+            $"'rimsearcher where --value {Quote(value)}{(exact ? " --exact" : "")}' lists every path holding it.");
     }
 
     public static void NoteMixedPathShapes(CommandContext ctx, IReadOnlyList<(string Shape, int Count)> shapes)
