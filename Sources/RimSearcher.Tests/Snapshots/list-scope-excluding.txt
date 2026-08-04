@@ -1,0 +1,15 @@
+$ rimsearcher list ThingDef --scope all,-test.mod
+exit 0
+--- stdout ---
+--scope all,-test.mod (= ludeon.rimworld).
+5 defs within --scope all,-test.mod.
+
+Same in every row, not repeated below: mod=ludeon.rimworld.
+def_name            label
+Apparel_ShieldBelt  shield belt
+Bullet_Revolver     revolver bullet
+Firefoam            firefoam
+FoamPopper          firefoam
+Meat_Muffalo        muffalo meat
+What --scope all,-test.mod left out is not empty for this query: with --scope test.mod instead, it finds 4 defs.
+--- stderr ---

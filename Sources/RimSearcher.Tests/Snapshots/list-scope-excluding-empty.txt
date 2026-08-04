@@ -1,0 +1,9 @@
+$ rimsearcher list HediffDef --scope all,-test.mod
+exit 0
+--- stdout ---
+--scope all,-test.mod (= ludeon.rimworld).
+1 def within --scope all,-test.mod.
+
+def_name    label       mod
+Anesthetic  anesthetic  ludeon.rimworld
+--- stderr ---

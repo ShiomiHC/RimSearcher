@@ -16,16 +16,42 @@ public sealed class ScopeFilter
 
     private readonly HashSet<string> _included;
     private readonly bool _all;
+    private readonly HashSet<string> _universe;
+    // 「除了 X 之外的全部」里那个 X 的原文(逗号拼接)。补集只在起点是全集时说得清,
+    // 那时它恰好就是这些词的并集 —— 于是句子里给得出一条能直接敲的命令,而不是
+    // 回显一串 packageId。null = 这个表达式不是那个形态。
+    private readonly string? _complementExpression;
 
     public string Expression { get; }
     public IReadOnlyCollection<string> UnknownTokens { get; }
 
-    private ScopeFilter(string expression, HashSet<string> included, bool all, List<string> unknown)
+    private ScopeFilter(string expression, HashSet<string> included, bool all, List<string> unknown,
+                        HashSet<string> universe, string? complementExpression)
     {
         Expression = expression;
         _included = included;
         _all = all;
         UnknownTokens = unknown;
+        _universe = universe;
+        _complementExpression = complementExpression;
+    }
+
+    /// <summary>
+    /// 这个 scope 排除掉的那一半,本身也是个可用的 scope。**只对起点是全集的排除式**
+    /// (<c>all,-X</c> / <c>-X</c>)给得出:<c>vanilla,-core</c> 那种白名单再减,补集里
+    /// 混着全部第三方 mod,拼不出一条能直接敲的命令,那时返回 null。
+    ///
+    /// 用处是止住一张**静默的错表**:排除式的心智模型是「我只是不想要 X」,而 X 里可能
+    /// 正是答案。实测 <c>where compClass --value Vethara --scope all,-vanilla</c> 返回 92 个
+    /// 干净、完整、看不出任何问题的 def —— 而问的那 7 个宿主全在被排除的 vanilla 里。
+    /// </summary>
+    public ScopeFilter? Complement()
+    {
+        if (_complementExpression is null || _all) return null;
+        var rest = new HashSet<string>(_universe, StringComparer.OrdinalIgnoreCase);
+        rest.ExceptWith(_included);
+        if (rest.Count == 0) return null;
+        return new ScopeFilter(_complementExpression, rest, false, [], _universe, null);
     }
 
     public bool IsAll => _all;
@@ -87,6 +113,10 @@ public sealed class ScopeFilter
             ? new HashSet<string>(universe, StringComparer.OrdinalIgnoreCase)
             : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var sawAll = startsWithExclusion;
+        // 补集表达式只有在「起点全集、之后只做排除」时才等于这些词的并集。
+        // 中途再并进来一个词(vanilla,-core,mods)就不成立了,那时置 null 不发声。
+        var excludedWords = new List<string>();
+        var addedAfterStart = false;
 
         foreach (var token in tokens)
         {
@@ -103,12 +133,15 @@ public sealed class ScopeFilter
 
             var resolved = Resolve(name, universe, config);
             if (resolved.Count == 0) { unknown.Add(name); continue; }
-            if (exclude) set.ExceptWith(resolved);
-            else set.UnionWith(resolved);
+            if (exclude) { set.ExceptWith(resolved); excludedWords.Add(name); }
+            else { set.UnionWith(resolved); addedAfterStart = true; }
         }
 
         var isAll = sawAll && set.SetEquals(universe);
-        return new ScopeFilter(expression, set, isAll, unknown);
+        var complement = sawAll && !addedAfterStart && excludedWords.Count > 0
+            ? string.Join(",", excludedWords)
+            : null;
+        return new ScopeFilter(expression, set, isAll, unknown, universe, complement);
     }
 
     private static readonly string[] VanillaPrefixes = ["ludeon.rimworld"];

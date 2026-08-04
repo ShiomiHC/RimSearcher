@@ -296,6 +296,9 @@ public sealed class SnapshotTruncatedCommand : Command
                     : "No def in this snapshot lost fields at export time" +
                       (scope.IsAll ? "" : $" within --scope {scope.Expression}") +
                       ", so counts over field paths are complete for it.");
+            // 零结果这一支最该说:上面刚担保「计数是完整的」,而排除掉的那半边有截断的话,
+            // 那句担保只对你留下的那半边成立。
+            ctx.AnnounceExcluded(scope, rest => ctx.Db.TruncatedDefs(rest, 0, types, defName).Total, "def");
             return 0;
         }
 
@@ -309,6 +312,7 @@ public sealed class SnapshotTruncatedCommand : Command
             }).ToList());
         ctx.Report.Notice(NoticeKind.Boundary,
             "The count is a lower bound per def: the exporter stopped, it did not finish counting.");
+        ctx.AnnounceExcluded(scope, rest => ctx.Db.TruncatedDefs(rest, 0, types, defName).Total, "def");
         return 0;
     }
 }

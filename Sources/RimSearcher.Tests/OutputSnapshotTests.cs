@@ -142,6 +142,20 @@ public class OutputSnapshotTests
         { "get-xml-node-only",     ["get", "BaseBullet"] },
         { "list-limited",          ["list", "ThingDef", "--limit", "2"] },
         { "list-scope-empty",      ["list", "HediffDef", "--scope", "test.mod"] },
+        // 排除式 scope 的静默错表:被排除掉的那部分照样有命中,而留下的结果表干净、完整、
+        // 看不出任何问题。上面那几条 scope 闸全是白名单形式,照不出这个形态。
+        // 三份摆一起:被排除部分有命中(该说)、被排除部分为空(不许说)、白名单式(不许说)。
+        { "list-scope-excluding",  ["list", "ThingDef", "--scope", "all,-test.mod"] },
+        { "list-scope-excluding-empty", ["list", "HediffDef", "--scope", "all,-test.mod"] },
+        // 吃 scope 的每条命令各钉一份 —— 这句话的产地是 CommandContext.AnnounceExcluded 一处,
+        // 但**每条命令各自决定数什么**(def / def type / path / value),数错口径的话
+        // 「被排除的那半边有多少」与表上那个数不可比。search 那条还兼测模糊回退:
+        // vanilla 侧一个 Void 都没有,表里印的是拼写最接近的,而 test.mod 侧有三个真命中。
+        { "search-scope-excluding", ["search", "Void", "--scope", "all,-test.mod"] },
+        { "where-scope-excluding",  ["where", "soundDrop", "--scope", "all,-test.mod"] },
+        { "where-value-scope-excluding", ["where", "--value", "Standard_Drop", "--scope", "all,-test.mod"] },
+        { "values-scope-excluding", ["values", "soundDrop", "--scope", "all,-test.mod"] },
+        { "truncated-scope-excluding", ["snapshot", "truncated", "--scope", "all,-test.mod"] },
         // 打错类型名再带 --own-class:此前这一支手抄了 DefTypeMiss.Say,抄的是产地后来长出
         // 近似候选之前的那一版,于是拼错 + --own-class 是唯一拿不到拼写建议的路。两支同一个问题。
         { "list-typo-classed",     ["list", "ThingDf", "--own-class", "TestVariantDef"] },

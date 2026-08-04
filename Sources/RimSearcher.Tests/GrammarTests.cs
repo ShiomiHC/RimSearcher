@@ -1248,6 +1248,43 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// <c>--scope all,-X</c> 排除掉的那一半非空时要说破 —— **这里的沉默推得出错结论**。
+    ///
+    /// 实测:<c>where compClass --value Vethara --scope all,-vanilla</c> 返回 92 个 def,
+    /// 表干净、完整、看不出任何问题,而问的「这个 mod 挂到哪些宿主上」那 7 个宿主全在被排除的
+    /// vanilla 里。一张静默的错表比零结果贵得多 —— 零结果至少当场知道自己没拿到东西。
+    ///
+    /// 三条反面各挡一种误发声:被排除的那半边真的空、白名单式 scope(排除就是意图本身)、
+    /// 以及**补集说不清的写法**。最后一条是设计的一半:补集表达式只有在「起点全集、
+    /// 之后只做排除」时才等于那些词的并集,中途再并进一个词就不成立,那时宁可闭嘴 ——
+    /// 给不出一条能直接敲的命令的话,这句话就退化成一个没有下一步的免责声明。
+    /// </summary>
+    [Fact]
+    public void 排除式scope说破被排除的那一半()
+    {
+        const string Says = "left out is not empty";
+
+        var (excl, _, _) = Fixture.Run("list", "ThingDef", "--scope", "all,-test.mod");
+        Assert.Contains(Says, excl, StringComparison.Ordinal);
+        // 带数字,并给出一条能直接敲的下一步 —— 只说「还有别的」等于把活推回去。
+        Assert.Contains("--scope test.mod instead, it finds 4 defs", excl, StringComparison.Ordinal);
+
+        // 补集用**组名**时展开也要在:读者据此知道那个词实际圈住了谁。
+        var (group, _, _) = Fixture.Run("list", "ThingDef", "--scope", "all,-vanilla");
+        Assert.Contains("--scope vanilla (= ludeon.rimworld) instead", group, StringComparison.Ordinal);
+
+        foreach (var quiet in new[]
+                 {
+                     Fixture.Run("list", "HediffDef", "--scope", "all,-test.mod").Stdout,   // 那半边真的空
+                     Fixture.Run("list", "ThingDef", "--scope", "ludeon.rimworld").Stdout,  // 白名单式
+                     Fixture.Run("list", "ThingDef").Stdout,                                // 没给 scope
+                     // 中途并进来一个词:补集不再等于被排除的那些词,拼不出下一步命令。
+                     Fixture.Run("list", "ThingDef", "--scope", "all,-test.mod,ludeon.rimworld").Stdout,
+                 })
+            Assert.DoesNotContain(Says, quiet, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// <c>code_default</c> 的口径在**三处**出声:这两句结语、<c>--defaults</c> 的 Help、
     /// 与 SKILL.md。三处必须同形 —— 而此前只有输出侧说反了:两句结语共用的后半句是
     /// 「a yes is a declared default already」,把「值与新 new 的相等」说成「它就是那个

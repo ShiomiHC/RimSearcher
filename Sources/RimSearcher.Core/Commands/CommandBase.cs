@@ -207,6 +207,32 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
     public ScopeFilter Unscoped() => ScopeFilter.Parse("all", Db.PackageIds(), Config);
 
     /// <summary>
+    /// <c>--scope all,-X</c> 排除掉的那一半里,有多少也满足这次查询 —— 非零就说破。
+    ///
+    /// **这里的沉默推得出错结论**,与本项目别处的沉默不同:排除式的心智模型是
+    /// 「我只是不想要 X」,而 X 里可能正是答案。实测
+    /// <c>where compClass --value Vethara --scope all,-vanilla</c> 返回 92 个 def,
+    /// 表干净、完整、看不出任何问题 —— 而问的「这个 mod 挂到哪些宿主上」那 7 个宿主
+    /// 全在被排除的 vanilla 里,一个都没进表,零提示。**一张静默的错表比零结果贵得多**,
+    /// 零结果至少当场知道自己没拿到东西。
+    ///
+    /// 判据当场算得出来:补集在 <see cref="ScopeFilter"/> 里就是 universe 减 included,
+    /// 不用重新解析表达式;数一遍多跑一次查询,那是同一条 SQL 换个谓词。
+    ///
+    /// 计数放句尾,免得动词跟着单复数变 —— NounRegistry 管名词,不管动词。
+    /// </summary>
+    public void AnnounceExcluded(ScopeFilter scope, Func<ScopeFilter, int> count, string noun)
+    {
+        var rest = scope.Complement();
+        if (rest is null) return;
+        var n = count(rest);
+        if (n == 0) return;
+        Report.Notice(NoticeKind.Boundary,
+            $"What --scope {scope.Expression} left out is not empty for this query: with " +
+            $"--scope {rest.Describe()} instead, it finds {Tally.Complete(n).Render(noun)}.");
+    }
+
+    /// <summary>
     /// 快照寻址与过期自证是同一次比对的两个产出。**正常态一个字都不说** —— 一致时发声
     /// 等于每次查询都交一次上下文税。
     /// </summary>

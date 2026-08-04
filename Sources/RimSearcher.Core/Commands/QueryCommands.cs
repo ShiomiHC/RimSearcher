@@ -197,7 +197,28 @@ public sealed class SearchCommand : Command
 
         Advisory.NoteOutsideTranslations(ctx, rows.Select(r => r.DefName));
         Advisory.NoteSameLabel(ctx, rows);
+
+        // 主结果退到模糊候选时这句更要紧:表里印的是「拼写最接近的」,而被排除的那半边
+        // 可能有真命中 —— 两者在表上长得一样,只有这个数分得开。
+        ctx.AnnounceExcluded(scope, rest => CountIn(ctx, query, rest, type), "def");
         return rows.Count == 0 ? 1 : 0;
+    }
+
+    /// <summary>
+    /// 同一个查询换个 scope 命中多少 —— 只出数,不取行。
+    ///
+    /// **口径必须与 <see cref="Run"/> 里那三段一致**:FTS、复合词的子串补扫、
+    /// 零命中时的译文原文回退。三段各自的理由见 Run 里的注释。少一段就会把
+    /// 「被排除的那半边有」少报成 0,而这句话一旦报 0 就整个沉默 —— 那正是它要修的东西。
+    ///
+    /// 模糊回退不进这个数:那一段产出的是「拼写最接近的」候选,不是命中。
+    /// </summary>
+    private static int CountIn(CommandContext ctx, string query, ScopeFilter scope, string? type)
+    {
+        var (_, total) = ctx.Db.SearchFts(query, scope, type, 0, 0);
+        if (IsCompoundToken(query)) total += ctx.Db.NamesContainingUnmatched(query, scope, type).Count;
+        if (total == 0) total = ctx.Db.NamesByTranslationOriginal(query, scope, type).Count;
+        return total;
     }
 
     /// <summary>
@@ -1137,6 +1158,10 @@ public sealed class FindCommand : Command
 
         Advisory.NoteAuthoredSiblings(ctx, rows.Where(r => r.Default != Contract.DefaultState.Same)
                                                 .Select(r => (r.Def.DefName, r.Def.Id, r.Path)));
+
+        // 数 def 而不是数 matches:这条命令一行是一个(def, 路径)对,而「被排除的那半边
+        // 还有多少」问的是有多少个 def 落在外面。
+        ctx.AnnounceExcluded(scope, rest => ctx.Db.FindByField(pq, value, exact, rest, 0, 0).Defs, "def");
         return 0;
     }
 
@@ -1215,6 +1240,10 @@ public sealed class FindCommand : Command
                 ["defs"] = r.Defs,
                 ["example_value"] = r.Sample,
             }).ToList());
+
+        // 名词用 field path 而不是 path:NounRegistry 只认前者,而这张表一行就是一条字段路径。
+        ctx.AnnounceExcluded(scope, rest => ctx.Db.PathsWithValue(
+            value, rest, 0, exact ? ValueMatch.Exact : ValueMatch.Substring).Total, "field path");
         return 0;
     }
 }
@@ -1388,6 +1417,15 @@ public sealed class ListCommand : Command
                 ["def_type"] = r.Type,
                 ["defs"] = r.Count,
             }).ToList());
+
+        // --find 也要跟着过去,否则补集那一半按更宽的口径数,两个数不可比。
+        ctx.AnnounceExcluded(scope, rest =>
+        {
+            var there = ctx.Db.Types(rest);
+            return typeFind is null
+                ? there.Count
+                : there.Count(t => t.Type.Contains(typeFind, StringComparison.OrdinalIgnoreCase));
+        }, "def type");
         return 0;
     }
 
@@ -1549,6 +1587,9 @@ public sealed class ListCommand : Command
                 ["mod"] = r.SourceMod,
             }).ToList());
 
+        // 同样的筛条件,只把 scope 换成被排除的那一半 —— 那边非空的话,上面这张表就是
+        // 一份沉默的部分答案。
+        ctx.AnnounceExcluded(scope, rest => ctx.Db.ListByType(type, rest, 0, 0, wantClass, find).Total, "def");
         return 0;
     }
 
@@ -1799,6 +1840,8 @@ public sealed class ValuesCommand : Command
                 ["value"] = r.Value,
                 ["defs"] = r.Count,
             }).ToList());
+
+        ctx.AnnounceExcluded(scope, rest => ctx.Db.DistinctValues(pq, rest, 0, type, 0).Total, "value");
         return 0;
     }
 }
