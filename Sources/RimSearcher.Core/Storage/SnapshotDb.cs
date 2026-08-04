@@ -558,6 +558,43 @@ public sealed class SnapshotDb : IDisposable
     }
 
     /// <summary>
+    /// 同一次 <see cref="FindByField"/> 的命中里,有几个 def 是加载期由 C# 造出来的。
+    ///
+    /// 与 <see cref="FindPathShapes"/> 同理,**数在分页之前** —— 首页二十五行按 def 名
+    /// 排序,而 ImpliedDefs 的名字扎堆在 <c>Meat_</c> / <c>Corpse_</c> / <c>Blueprint_</c>
+    /// 这几处,首页往往一个都碰不上;拿 <c>--limit all</c> 灌进脚本的人拿到的却是全集。
+    /// 页内口径会让这句话恰好在最该出声的那次哑火。
+    ///
+    /// 按 <c>DISTINCT d.id</c> 数:同一个 def 可以在多条路径上命中(后缀匹配一放开就常有),
+    /// 按行数会数大。
+    /// </summary>
+    public (IReadOnlyList<string> Names, int Total) FindGeneratedDefs(
+        PathQuery path, string? value, bool exact, ScopeFilter scope, int limit)
+    {
+        var p = new Dictionary<string, object?>();
+        var conds = new List<string> { "d.generated = 1" };
+
+        PathCondition(path, p, conds);
+
+        if (value is { Length: > 0 })
+        {
+            if (exact) { p["@v"] = value; conds.Add("fv.value = @v COLLATE NOCASE"); }
+            else { p["@v"] = "%" + Escape(value) + "%"; conds.Add("fv.value LIKE @v ESCAPE '\\'"); }
+        }
+        if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
+
+        var where = "FROM field_values fv JOIN defs d ON d.id = fv.def_id " +
+                    $"WHERE {string.Join(" AND ", conds)}";
+        var total = Scalar($"SELECT COUNT(DISTINCT d.id) {where}", p);
+
+        var names = new List<string>();
+        using var rd = Query(
+            $"SELECT DISTINCT d.def_name {where} ORDER BY d.def_name LIMIT {limit}", p);
+        while (rd.Read()) names.Add(rd.GetString(0));
+        return (names, total);
+    }
+
+    /// <summary>
     /// 同类型的 def 里,有几个在含这段文本的路径上有值 —— 以及那摊路径有几条。
     ///
     /// def 数按 <c>DISTINCT def_id</c> 数,不是把每条路径的行数相加:同一个 def 往往在多条

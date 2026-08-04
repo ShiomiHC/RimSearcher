@@ -1,0 +1,19 @@
+$ rimsearcher where soundDrop Standard_Drop --limit all
+exit 0
+--- stdout ---
+9 defs.
+Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans every def type that uses this path at all, not just the ones in the rows above — ThingDef, holding 1 def cut short between them. 'rimsearcher snapshot truncated --type ThingDef' lists them.
+1 of the 9 defs matched here is created by the game in code at load time, from no XML node at all: Meat_Muffalo. A PatchOperation addressed by defName cannot reach them — patches run on the XML, where these do not exist. The 'declared_in' column marks which is which.
+
+Same in every row, not repeated below: def_type=ThingDef, path=soundDrop, value=Standard_Drop, code_default=no.
+def_name            declared_in  mod
+Apparel_ShieldBelt  xml          ludeon.rimworld
+Bullet_Revolver     xml          ludeon.rimworld
+Firefoam            xml          ludeon.rimworld
+FoamPopper          xml          ludeon.rimworld
+GleamingVoidNode    xml          test.mod
+Meat_Muffalo        code         ludeon.rimworld
+TestModGun          xml          test.mod
+VoidNode            xml          test.mod
+VoidNodeShard       xml          test.mod
+--- stderr ---

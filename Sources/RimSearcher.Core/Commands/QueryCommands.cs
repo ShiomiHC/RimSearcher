@@ -1089,7 +1089,19 @@ public sealed class FindCommand : Command
         Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(pq, scope),
             "every def type that uses this path at all, not just the ones in the rows above");
 
-        ctx.Report.Table("matches", ["def_name", "def_type", "path", "value", FieldDefault.Column, "mod"],
+        // 代码造出来的 def 混在结果里时,那件事必须落在**行上**,不能只落在声明里 ——
+        // 这份结果最常见的下游是「--limit all --json 灌进脚本批量生成补丁」,而脚本不读 notes。
+        //
+        // 句子数整个结果集(与上面两句同口径),列跟着这一页 —— 于是首页一个 ImpliedDef
+        // 都没碰上时,句子照样出声,而那句会自己说清楚「不都在这一页上」。
+        var generated = ctx.Db.FindGeneratedDefs(pq, value, exact, scope, Limits.MaxSuggestions);
+        Advisory.NoteGeneratedDefs(ctx, generated.Names, generated.Total, defs,
+            rows.Count(r => r.Def.Generated));
+
+        ctx.Report.Table("matches",
+            generated.Total > 0
+                ? ["def_name", "def_type", "path", "value", FieldDefault.Column, DeclaredIn.Column, "mod"]
+                : new[] { "def_name", "def_type", "path", "value", FieldDefault.Column, "mod" },
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
                 ["def_name"] = r.Def.DefName,
@@ -1097,6 +1109,7 @@ public sealed class FindCommand : Command
                 ["path"] = r.Path,
                 ["value"] = r.Value,
                 [FieldDefault.Column] = FieldDefault.Render(r.Default),
+                [DeclaredIn.Column] = generated.Total > 0 ? DeclaredIn.Render(r.Def.Generated) : null,
                 ["mod"] = r.Def.SourceMod,
             }).ToList());
 
@@ -2139,6 +2152,39 @@ internal static class Advisory
             "unless the path column is read row by row. Pasting one of those shapes back with " +
             "--exact-path keeps that one alone.",
             footnote: true);
+    }
+
+    /// <summary>
+    /// 这一屏里混着加载期由 C# 造出来的 def。
+    ///
+    /// 盲测实证:`where` 的结果最常见的下游是 `--limit all --json` 灌进脚本批量生成
+    /// PatchOperation,而按 defName 寻址的补丁**打不到**这批 def —— 满配文档的四个臂里
+    /// 有三个照样交出了一串够不着的 `Blueprint_*`。文档在场没能挡住,所以这件事得落在输出上。
+    ///
+    /// 光有这一句还不够,真正管用的是同时出现的 <see cref="DeclaredIn.Column"/> 列:
+    /// 出事的那次是 `--json` 进脚本,而**脚本不读 notes**。这一句是给人看的入口,
+    /// 说清楚那一列是干什么的;判定要落在行上。
+    ///
+    /// 因此它不是 footnote —— 它改的是每一行怎么读,不是给某一行加注。
+    /// </summary>
+    public static void NoteGeneratedDefs(
+        CommandContext ctx, IReadOnlyList<string> names, int generated, int defs, int onThisPage)
+    {
+        if (generated == 0) return;
+        // 分母取 def 数不取行数:两边都按 DISTINCT def 数,才是一个比例。表头那个数
+        // 数的是(def, 路径)行,拿它当分母会把比例算小(`capacity Consciousness`
+        // 是 155 行 / 80 个 def)。
+        ctx.Report.Notice(NoticeKind.Boundary,
+            $"{generated} of the {Tally.Complete(defs).Render("def")} matched here " +
+            $"{(generated == 1 ? "is" : "are")} created by the game in code at load time, from no XML node " +
+            $"at all: {NameList.Render(names, Limits.MaxSuggestions, generated)}. " +
+            "A PatchOperation addressed by defName cannot reach them — patches run on the XML, where these " +
+            "do not exist. " +
+            // 页内一个都没有时不许沉默:名字扎堆,首页排序上常常一个都碰不到,而这句话
+            // 说的是整个结果集。不点破的话读的人会拿这一页当全集,而列在这里一格都不动。
+            (onThisPage == 0
+                ? $"None of them are on this page; the '{DeclaredIn.Column}' column marks them where they are."
+                : $"The '{DeclaredIn.Column}' column marks which is which."));
     }
 
     private static readonly IEqualityComparer<(string, string DefType)> TupleComparer =

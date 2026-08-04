@@ -95,6 +95,12 @@ public class OutputSnapshotTests
         // 是 155 行 / 80 个 def(AlcoholHigh 一个占四行)。两份摆一起:两数不等时补一句
         // 说破,相等时(where-hit)一个字都不许多。
         { "where-rows-not-defs",    ["where", "stat"] },
+        // 加载期由 C# 造出来的 def 混在结果里的两种看相。判定落在**行上**(declared_in),
+        // 而句子数的是整个结果集 —— 两份摆一起:整页那份带着 code 与 xml 两种行,
+        // 一行那份把唯一的 code 行挤了出去而句子照样在。位置也一起钉住:句子在表**上方**,
+        // 它改的是每一行怎么读,沉到表下就是批 B 那个盲区。
+        { "where-generated-mixed",  ["where", "soundDrop", "Standard_Drop", "--limit", "all"] },
+        { "where-generated-offpage", ["where", "soundDrop", "Standard_Drop", "--limit", "1"] },
         { "where-miss-compprops",   ["where", "compClass", "CompProperties_Shield"] },
         { "where-miss-field",       ["where", "noSuchField", "x"] },
         // 单位置参数落空的三档。敲一个词进来的人多半给的是**值**而不是字段路径

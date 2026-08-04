@@ -1354,6 +1354,50 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// <c>where</c> 的结果里混着加载期由 C# 造出来的 def,而它们与 XML 里写出来的完全同形。
+    ///
+    /// 第十二轮盲测:满配文档的四个臂里有三个拿 <c>where … --limit all --json</c> 灌进脚本,
+    /// 交出一串按 defName 寻址的 <c>Blueprint_*</c> 补丁 —— 那批 def 根本没有 XML 节点,
+    /// 补丁一条都打不上。文档里写着这件事,四取三照样踩,所以判定得落在输出上。
+    ///
+    /// 闸盯三处,少一处就还原成那次事故:
+    /// 一是**逐行**分得开(出事那次是 <c>--json</c> 进脚本,而脚本不读 notes);
+    /// 二是句子按**整个结果集**数,不是按这一页 —— 名字扎堆,首页常常一个都碰不上;
+    /// 三是一个都没有时,那一列不许出现:那时它每行同值,是纯噪声。
+    /// </summary>
+    [Fact]
+    public void where把代码造出来的def逐行标出来而句子数的是整个结果集()
+    {
+        // 混合:Meat_Muffalo 是 ImpliedDefs,同 soundDrop 值的其余几个是 XML 写的。
+        var (mixed, _, code) = Fixture.Run("where", "soundDrop", "Standard_Drop", "--limit", "all");
+        Assert.Equal(0, code);
+        Assert.Contains("declared_in", mixed, StringComparison.Ordinal);
+        Assert.Contains("created by the game in code at load time", mixed, StringComparison.Ordinal);
+        Assert.Contains("Meat_Muffalo", mixed, StringComparison.Ordinal);
+        Assert.Contains("PatchOperation addressed by defName cannot reach them", mixed, StringComparison.Ordinal);
+
+        // 逐行:JSON 的每一行都带着判据,不必回头读 notes。
+        var (json, _, _) = Fixture.Run("where", "soundDrop", "Standard_Drop", "--limit", "all", "--json");
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var rows = doc.RootElement.GetProperty("matches").EnumerateArray().ToList();
+        Assert.Contains(rows, r => r.GetProperty("def_name").GetString() == "Meat_Muffalo"
+                                   && r.GetProperty("declared_in").GetString() == "code");
+        Assert.Contains(rows, r => r.GetProperty("def_name").GetString() != "Meat_Muffalo"
+                                   && r.GetProperty("declared_in").GetString() == "xml");
+
+        // 整集口径:把 Meat_Muffalo 挤出这一页,句子照样在,并且说破它不在页上。
+        var (paged, _, _) = Fixture.Run("where", "soundDrop", "Standard_Drop", "--limit", "1");
+        Assert.DoesNotContain("Meat_Muffalo\n", paged, StringComparison.Ordinal);
+        Assert.Contains("created by the game in code at load time", paged, StringComparison.Ordinal);
+        Assert.Contains("None of them are on this page", paged, StringComparison.Ordinal);
+
+        // 一个都没有时,这一列与这句话一起消失。
+        var (none, _, _) = Fixture.Run("where", "thingClass", "--scope", "test.mod", "--limit", "all");
+        Assert.DoesNotContain("declared_in", none, StringComparison.Ordinal);
+        Assert.DoesNotContain("created by the game in code at load time", none, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 抽象节点自己没有值,而 <c>same_value</c> 此前就整个不出 —— 于是 <c>165 of 165</c>
     /// 看着像铁证,实际上「这一层声明了它」与「后代各写各的」在数上分不开,分得开的
     /// 那一列不在场,而说破这件事的那句话埋在第四条脚注里。
