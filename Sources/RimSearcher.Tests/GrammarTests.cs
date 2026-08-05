@@ -2646,10 +2646,14 @@ public class GrammarTests
                 var total = totalEl.GetInt32();
                 if (total > shown)
                 {
-                    // 取「句子里存在这一对」而不是「第一对就是它」:同一句里可以有别的 tally
-                    // (见下面那条注释),按位置取会误判。
-                    Assert.Contains(Regex.Matches(text, @"(\d+) of (\d+)").AsEnumerable(),
-                        m => int.Parse(m.Groups[1].Value) == shown && int.Parse(m.Groups[2].Value) == total);
+                    // 两个数都得出现在句子里,**不钉它们的排布**。原先这里钉的是 `N of M`
+                    // 这个形状,而那不是「不钉措辞」—— 换一种语序(总数占锚点位)当场就红,
+                    // 与本条注释自称的性质矛盾。能真正做到与措辞无关的只有「数在不在」。
+                    // 代价说清楚:这样就验不了「它俩是同一对」。可接受 —— 结构化那对与句子
+                    // 同出一个 Tally,真正的风险是句子里**不再印总数**或印成别的数,这两样
+                    // 下面都拦得住。
+                    Assert.Matches($@"\b{shown}\b", text);
+                    Assert.Matches($@"\b{total}\b", text);
                 }
                 else
                 {
