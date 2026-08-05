@@ -1075,20 +1075,27 @@ public class GrammarTests
     /// 新成因,分不清就会报最强的那种。
     ///
     /// **哪一页都不给下一页的参数。** 「pass --offset N for the next page」印了 34 次而
-    /// `--offset` 全史使用 0 次(08),而同形判据不认它:`2 of 9 defs` 自己就带着截断
-    /// 信号,去掉那半句没有任何错误结论变得同形。它省的是一次查表,不是防一次误判 ——
-    /// 而它占的是 line 1,管道下唯一的幸存者。
+    /// `--offset` 全史使用 0 次(08)。它省的是一次查表,不是防一次误判 —— 而它占的是
+    /// line 1,管道下唯一的幸存者。这半条依据是使用率实证,不受下面那条更正影响。
+    ///
+    /// **【count-anchor 分支】原先同处还写着一句「`2 of 9 defs` 自己就带着截断信号」——
+    /// 那句已被反例推翻**:一个读者读到 `25 of 79 defs.` 复述了 25,对 `of 79` 零反应。
+    /// 那句断言当时同时写在实现注释(<c>Report.PageNotice</c>)和这条闸的注释里,两份
+    /// 不是独立判断而是同一份判断的副本,所以从内部读只看到自洽。
+    /// 本分支据此把截断态换成**总数占锚点位**:`9 defs, showing the first 2.` ——
+    /// 依据不是措辞好坏,是两个数性质不对等(2 是 --limit 缺省造出来的,9 是数据里的)。
+    /// 效果待盲测;不通过就整条分支丢掉,别把这几个断言留在 master 上。
     /// </summary>
     [Fact]
     public void 分页的三个位置各说各的话()
     {
         var (mid, _, midCode) = Fixture.Run("list", "ThingDef", "--limit", "2", "--offset", "2");
         Assert.Equal(0, midCode);
-        Assert.Contains("2 of 9 defs, starting at 3", mid, StringComparison.Ordinal);
+        Assert.Contains("9 defs, showing 2, starting at 3", mid, StringComparison.Ordinal);
         Assert.DoesNotContain("next page", mid, StringComparison.Ordinal);
 
         var (first, _, _) = Fixture.Run("list", "ThingDef", "--limit", "2");
-        Assert.StartsWith("2 of 9 defs.", first, StringComparison.Ordinal);
+        Assert.StartsWith("9 defs, showing the first 2.", first, StringComparison.Ordinal);
 
         var (last, _, lastCode) = Fixture.Run("list", "ThingDef", "--limit", "4", "--offset", "5");
         Assert.Equal(0, lastCode);

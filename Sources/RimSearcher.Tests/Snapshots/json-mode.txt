@@ -5,7 +5,7 @@ exit 0
   "notes": [
     {
       "kind": "truncation",
-      "text": "Showing 2 of 11 fields.",
+      "text": "11 fields, showing the first 2.",
       "shown": 2,
       "total": 11
     },

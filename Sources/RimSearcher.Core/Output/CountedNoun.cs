@@ -43,6 +43,28 @@ public readonly record struct Tally
         if (Total is { } t && t > Shown) return $"{Shown} of {t} {word}";
         return $"{Shown} {NounRegistry.Form(noun, Shown)}";
     }
+
+    /// <summary>
+    /// 同样三态,但**总数占第一个数的位置**。只给计数说明那一行用,句中的 tally 不换 ——
+    /// 「across 3 source trees, showing the first 1」在从句里读不通。
+    ///
+    /// 换位的依据不是措辞好坏,是这两个数性质不对等:<c>Shown</c> 是 <c>--limit</c> 缺省
+    /// 造出来的数,<c>Total</c> 是数据里的数。注意力锚落在第一个数上,那个位置该给后者。
+    ///
+    /// 【实验中】效果待盲测,产地见 count-anchor 分支说明。
+    /// </summary>
+    /// <param name="fromStart">
+    /// 这一批是不是从头取的。<c>false</c> 时不许说 "the first" —— <c>--offset</c> 翻到中间那页
+    /// 时那句话是**假的**(`22 field paths, showing the first 3, starting at 4`),
+    /// 而起始位置由调用方在后面自己补。
+    /// </param>
+    public string RenderTotalFirst(string noun, bool fromStart = true)
+    {
+        if (LowerBound) return $"at least {Shown} {NounRegistry.Form(noun, Shown)}";
+        if (Total is { } t && t > Shown)
+            return $"{t} {NounRegistry.Form(noun, t)}, showing {(fromStart ? "the first " : "")}{Shown}";
+        return $"{Shown} {NounRegistry.Form(noun, Shown)}";
+    }
 }
 
 /// <summary>

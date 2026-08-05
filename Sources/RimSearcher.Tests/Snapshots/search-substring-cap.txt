@@ -1,7 +1,7 @@
 $ rimsearcher search VoidNode --limit 2
 exit 0
 --- stdout ---
-2 of 3 defs.
+3 defs, showing the first 2.
 
 Same in every row, not repeated below: def_type=ThingDef, matched_on=def_name, mod=test.mod.
 def_name       label

@@ -1,7 +1,7 @@
 $ rimsearcher list ThingDef --limit 4 --offset 5
 exit 0
 --- stdout ---
-4 of 9 defs, starting at 6; that is the last page.
+9 defs, showing 4, starting at 6; that is the last page.
 
 def_name       label            mod
 Meat_Muffalo   muffalo meat     ludeon.rimworld
