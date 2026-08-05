@@ -1,7 +1,7 @@
 $ rimsearcher read Outline.cs --source vanilla --outline --limit 2
 exit 0
 --- stdout ---
-vanilla/Verse/Outline.cs, 9 declarations, showing the first 2; raise --limit to see the rest.
+9 declarations in vanilla/Verse/Outline.cs, showing the first 2; raise --limit to see the rest.
 
 Same in every row, not repeated below: in=Outer, lines=1.
 kind   modifiers                name    at

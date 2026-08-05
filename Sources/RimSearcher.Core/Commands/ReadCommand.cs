@@ -216,9 +216,20 @@ public sealed class ReadCommand : Command
         var tally = Tally.Of(shown.Count, decls.Count);
         // 截断态与 where / list / search 同文法(总数占锚点位)—— 这条原先自己拼句子,
         // 于是 ece5f54 换掉的是那三个 helper,漏了这里,同一个工具出现了两种截断文法。
+        //
+        // 截断态把路径挪到总数**后面**:只换语序而路径仍占句首的话,319 落到第三个语块,
+        // 而那句话赢的机制正是「总数进主语位」—— 等于看着像修好了、锚点没拿到。
+        // 完整态不动:只有一个数,没有锚点之争,而 `{rel}, 9 declarations.` 是常见形态。
+        //
+        // 这一格是**推出来的**,不是测出来的:盲测覆盖的是 where/list/search/keyed 那一支。
+        // 曝光面也小得多 —— 这条命令不带 --limit 时全印,截断句只在用户自己传了数字上限时
+        // 出现(全史 42 次 --outline 里 15 次带 limit,其中 7 次是 --limit all,不截断),
+        // 而那三条是缺省 25、没要求就被截断。**两种风险不同级:后者的读者不知道自己被截了。**
         ctx.Report.Notice(tally.IsTruncated ? NoticeKind.Truncation : NoticeKind.Count,
-            $"{rel}, {(tally.IsTruncated ? tally.RenderTotalFirst("declaration") : tally.Render("declaration"))}" +
-            (tally.IsTruncated ? "; raise --limit to see the rest." : "."), count: tally);
+            tally.IsTruncated
+                ? $"{tally.RenderTotalFirst("declaration", qualifier: $" in {rel}")}; " +
+                  "raise --limit to see the rest."
+                : $"{rel}, {tally.Render("declaration")}.", count: tally);
         ctx.Report.Table("declarations", ["kind", "modifiers", "name", "in", "lines", "at"],
             shown.Select(d => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {

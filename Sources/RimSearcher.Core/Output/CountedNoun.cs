@@ -70,12 +70,18 @@ public readonly record struct Tally
     /// 时那句话是**假的**(`22 field paths, showing the first 3, starting at 4`),
     /// 而起始位置由调用方在后面自己补。
     /// </param>
-    public string RenderTotalFirst(string noun, bool fromStart = true)
+    /// <param name="qualifier">
+    /// 紧跟名词的限定语(<c>" in vanilla/Verse/ThingDef.cs"</c>),**要插在名词后面而不是
+    /// 句尾** —— 缀在句尾会挂到错的从句上(`9 declarations, showing the first 2 in X`
+    /// 读成「X 里的前 2 条」,而那 9 反倒没了归属)。
+    /// </param>
+    public string RenderTotalFirst(string noun, bool fromStart = true, string qualifier = "")
     {
-        if (LowerBound) return $"at least {Shown} {NounRegistry.Form(noun, Shown)}";
+        if (LowerBound) return $"at least {Shown} {NounRegistry.Form(noun, Shown)}{qualifier}";
         if (Total is { } t && t > Shown)
-            return $"{t} {NounRegistry.Form(noun, t)}, showing {(fromStart ? "the first " : "")}{Shown}";
-        return $"{Shown} {NounRegistry.Form(noun, Shown)}";
+            return $"{t} {NounRegistry.Form(noun, t)}{qualifier}, " +
+                   $"showing {(fromStart ? "the first " : "")}{Shown}";
+        return $"{Shown} {NounRegistry.Form(noun, Shown)}{qualifier}";
     }
 }
 
