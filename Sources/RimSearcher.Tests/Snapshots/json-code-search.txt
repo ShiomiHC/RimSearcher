@@ -5,7 +5,9 @@ exit 0
   "notes": [
     {
       "kind": "count",
-      "text": "4 matches in 1 file; 1 file read across 1 of 3 source trees on disk — the rest hold no file matching --file-glob 'ThingComp.cs', and 'sources list' says which have never been decompiled."
+      "text": "4 matches in 1 file; 1 file read across 1 of 3 source trees on disk — the rest hold no file matching --file-glob 'ThingComp.cs', and 'sources list' says which have never been decompiled.",
+      "shown": 4,
+      "total": 4
     }
   ],
   "matches": [

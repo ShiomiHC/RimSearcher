@@ -2602,6 +2602,71 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// JSON 侧的计数不许只活在句子里:<c>shown</c> / <c>total</c> 与那句话里的数必须是同一对。
+    ///
+    /// 理由与 <c>snapshot</c> 键逐字相同 —— 机器侧要总数时从散文里抠字符串是两份数据,
+    /// 而措辞会改(2026-08-05 一轮就改了三条说明)。抠字符串的失配还是**坏的那一种**:
+    /// 正则不匹配与「这次没截断」同形,下游拿不到数却以为拿到了完整集。
+    ///
+    /// 闸只比两处的**数**,不钉措辞 —— 句子怎么改都照绿,两边岔开才红。
+    /// 三态各测一次:裸 N(完整)、N of M(截断)、at least N(只知下界)。
+    /// </summary>
+    [Fact]
+    public void JSON侧的计数要有结构化形态且与句子里的数相符()
+    {
+        var checkedNotes = 0;
+        foreach (var argv in new[]
+                 {
+                     new[] { "list", "ThingDef", "--limit", "2", "--json" },    // 截断
+                     new[] { "list", "ThingDef", "--limit", "all", "--json" },  // 完整
+                     new[] { "where", "compClass", "--json" },
+                     new[] { "get", "Anesthetic", "--json" },
+                     // 复合那句一定要在名单里:它一句话里有四个数,最容易岔的就是这条。
+                     new[] { "code-search", "ThingComp", "--json" },
+                 })
+        {
+            var (json, _, _) = Fixture.Run(argv);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("notes", out var notes)) continue;
+            foreach (var n in notes.EnumerateArray())
+            {
+                if (!n.TryGetProperty("shown", out var shownEl)) continue;
+                checkedNotes++;
+                var shown = shownEl.GetInt32();
+                var totalEl = n.GetProperty("total");
+                var text = n.GetProperty("text").GetString() ?? "";
+
+                if (totalEl.ValueKind == System.Text.Json.JsonValueKind.Null)
+                {
+                    // 第三态:总数未知。句子里得是下界形态,不能是个看着像总数的数。
+                    Assert.Contains($"at least {shown}", text, StringComparison.Ordinal);
+                    continue;
+                }
+
+                var total = totalEl.GetInt32();
+                if (total > shown)
+                {
+                    // 取「句子里存在这一对」而不是「第一对就是它」:同一句里可以有别的 tally
+                    // (见下面那条注释),按位置取会误判。
+                    Assert.Contains(Regex.Matches(text, @"(\d+) of (\d+)").AsEnumerable(),
+                        m => int.Parse(m.Groups[1].Value) == shown && int.Parse(m.Groups[2].Value) == total);
+                }
+                else
+                {
+                    // 完整态。这里**不能**顺手断言「句子里不许出现 N of M」:一句话里合法地
+                    // 含着别的 tally —— code-search 那句报的是「4 matches …across 1 of 3
+                    // source trees」,行是完整的而树是截断的,两件事。
+                    Assert.Equal(shown, total);
+                    Assert.Matches($@"\b{shown}\b", text);
+                }
+            }
+        }
+
+        // 一条都没查到时上面整个循环零次通过,与「全对上了」同形。
+        Assert.True(checkedNotes >= 4, $"只比对了 {checkedNotes} 条计数");
+    }
+
+    /// <summary>
     /// 另有几处全称量词,先行词是对的(`mods` 列的就是快照里的 mod、裸 `list` 列的就是
     /// 全部 def 类型)。这一格钉的不是措辞,是**先行词还对得上** —— 尤其是
     /// 「lists them all」这句话身处一个 --limit 缺省为 25 的工具里,哪天裸 `list` 也跟着

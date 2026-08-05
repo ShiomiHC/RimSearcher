@@ -33,9 +33,14 @@ public static class GlobalOptions
     {
         Name = "json",
         Arity = Arity.Flag,
+        // 这两个键的存在必须写在自述里,否则下游根本不知道有,照旧去正则抠句子 ——
+        // 而句子是会改的。写清「缺席 = 这条不是计数」,别让缺席被读成「没有截断」。
         Help = "Emit machine-readable JSON. Anything the text output would have said in prose " +
                "moves into a 'notes' array, so nothing is lost. The command's own table key is " +
-               "always present — an empty array when nothing matched, never a missing key.",
+               "always present — an empty array when nothing matched, never a missing key. " +
+               "A note that reports a count also carries 'shown' and 'total' as numbers, so the " +
+               "figures never have to be parsed back out of its text; 'total' is null when only a " +
+               "lower bound is known, and both keys are absent on notes that are not counts.",
     };
 
     public static readonly OptionSpec Config = new()

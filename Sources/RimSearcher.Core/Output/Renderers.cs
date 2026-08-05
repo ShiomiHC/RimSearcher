@@ -260,10 +260,22 @@ public static class JsonRenderer
 
         if (report.Notices.Count > 0)
             root["notes"] = report.Notices
-                .Select(n => new Dictionary<string, object?>
+                .Select(n =>
                 {
-                    ["kind"] = SnakeCase(n.Kind.ToString()),
-                    ["text"] = n.Text,
+                    var note = new Dictionary<string, object?>
+                    {
+                        ["kind"] = SnakeCase(n.Kind.ToString()),
+                        ["text"] = n.Text,
+                    };
+                    // 计数句才有这两个键 —— 缺席说的是「这条不是计数」,不是「没截断」。
+                    // total 显式为 null 是第三态(只知道下界,扫描没跑完),与「total 等于
+                    // shown」不是一回事,所以写出 null 而不是省掉这个键。
+                    if (n.Count is { } c)
+                    {
+                        note["shown"] = c.Shown;
+                        note["total"] = c.Total;
+                    }
+                    return note;
                 })
                 .ToList();
 

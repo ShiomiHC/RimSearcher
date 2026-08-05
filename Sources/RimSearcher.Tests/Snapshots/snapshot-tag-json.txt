@@ -6,7 +6,9 @@ exit 0
   "notes": [
     {
       "kind": "count",
-      "text": "1 def."
+      "text": "1 def.",
+      "shown": 1,
+      "total": 1
     }
   ],
   "defs": [

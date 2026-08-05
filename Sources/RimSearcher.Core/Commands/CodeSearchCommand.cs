@@ -324,7 +324,10 @@ public sealed class CodeSearchCommand : Command
                 $"; {fileTally.Render("file")} read" +
                 (treesRead < treesTotal
                     ? $" across {treeTally.Render("source tree")}"
-                    : Framing(root, sourceName, treesTotal, glob)) + ".");
+                    : Framing(root, sourceName, treesTotal, glob)) + ".",
+                // 这句话里有四个数(命中 / 文件 / 读了几个文件 / 几棵树),进 JSON 结构化那对
+                // 只能有一个口径 —— 全仓统一取「本命令那张表的行」,这里就是印出来的命中行。
+                count: printed < totalMatches ? Tally.Of(printed, totalMatches) : Tally.Complete(printed));
         }
 
         // `--snapshot vanilla` 与 `--source vanilla` 逐字同形,而在这条命令上前者一寸范围都

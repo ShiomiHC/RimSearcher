@@ -5,7 +5,9 @@ exit 0
   "notes": [
     {
       "kind": "count",
-      "text": "8 fields."
+      "text": "8 fields.",
+      "shown": 8,
+      "total": 8
     },
     {
       "kind": "boundary",

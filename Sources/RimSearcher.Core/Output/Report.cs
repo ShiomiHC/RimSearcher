@@ -37,7 +37,20 @@ public enum NoticeKind
 /// </summary>
 public abstract record ReportEntry;
 
-public sealed record Notice(NoticeKind Kind, string Text, bool Footnote = false) : ReportEntry;
+public sealed record Notice(NoticeKind Kind, string Text, bool Footnote = false) : ReportEntry
+{
+    /// <summary>
+    /// 这条说明所报的计数,结构化形态。<c>null</c> = 它不是一句计数。
+    ///
+    /// 理由与 <c>snapshot</c> 键逐字相同(见 <c>JsonRenderer</c> 那处注释):机器侧要拿总数时,
+    /// 从一句话里抠字符串是**两份数据**。而措辞是会改的 —— 2026-08-05 一轮就改了三条说明,
+    /// 抠字符串的下游会静默失配(错的那种失配:正则不匹配与「没有截断」同形)。
+    ///
+    /// 口径:这对数描述的是**本命令那张表的行**,不是句子里出现的任何一个数。
+    /// <c>code-search</c> 那句同时报了命中数 / 文件数 / 读了几棵树,只有行那一对进这里。
+    /// </summary>
+    public Tally? Count { get; init; }
+}
 
 public abstract record Block : ReportEntry
 {
@@ -129,9 +142,9 @@ public sealed class Report
         return this;
     }
 
-    public Report Notice(NoticeKind kind, string text, bool footnote = false)
+    public Report Notice(NoticeKind kind, string text, bool footnote = false, Tally? count = null)
     {
-        _entries.Add(new Notice(kind, text, footnote));
+        _entries.Add(new Notice(kind, text, footnote) { Count = count });
         return this;
     }
 
@@ -219,8 +232,8 @@ public sealed class Report
         => tally.IsTruncated
             ? Notice(NoticeKind.Truncation,
                      $"Showing {tally.Render(noun)}{Within}" +
-                     (howToSeeMore.Length == 0 ? "." : $"; {howToSeeMore}"))
-            : Notice(NoticeKind.Count, $"{tally.Render(noun)}{Within}.");
+                     (howToSeeMore.Length == 0 ? "." : $"; {howToSeeMore}"), count: tally)
+            : Notice(NoticeKind.Count, $"{tally.Render(noun)}{Within}.", count: tally);
 
     /// <summary>
     /// 分页态的计数,产地唯一。
@@ -246,7 +259,7 @@ public sealed class Report
         return Notice(tally.IsTruncated ? NoticeKind.Truncation : NoticeKind.Count,
             tally.Render(noun) + Within +
             (offset > 0 ? $", starting at {offset + 1}" : "") +
-            (seen >= total && offset > 0 ? "; that is the last page." : "."));
+            (seen >= total && offset > 0 ? "; that is the last page." : "."), count: tally);
     }
 
     /// <summary>
@@ -266,7 +279,7 @@ public sealed class Report
     {
         if (!tally.IsTruncated) return this;
         return Notice(NoticeKind.Truncation,
-            $"Showing {tally.Render(noun)}; {howToSeeMore}");
+            $"Showing {tally.Render(noun)}; {howToSeeMore}", count: tally);
     }
 
     private string? _collection;
