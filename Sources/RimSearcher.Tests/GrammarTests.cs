@@ -2613,6 +2613,52 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// **截断态在全工具只有一种文法:总数占锚点位。** 不许有哪条路径还印 `N of M`。
+    ///
+    /// 起因是 <c>ece5f54</c> 换文法时换的是 <c>Report</c> 那三个 helper,而
+    /// <c>read --outline</c> 与 <c>get --path-contains</c> **自己拼句子**,于是漏在旧文法上 ——
+    /// 同一个工具对同一件事出现两种说法,而其中一种正是盲测里 0/7 的那种。
+    /// 漏的这两处同时也没带结构化计数,一个成因两处症状。
+    ///
+    /// 判据用的是 ④ 加的结构化那对数,不是扫文本:句子里合法地含着别的 tally
+    /// (<c>code-search</c> 那句的 `1 of 3 source trees`),按文本扫会误伤。
+    /// 拿 <c>shown</c>/<c>total</c> 去比,只咬这条说明自己报的那一对。
+    /// </summary>
+    [Fact]
+    public void 截断计数在全工具只有一种文法()
+    {
+        var seen = 0;
+        foreach (var argv in new[]
+                 {
+                     new[] { "list", "ThingDef", "--limit", "2", "--json" },
+                     new[] { "where", "compClass", "--limit", "1", "--json" },
+                     new[] { "get", "Apparel_ShieldBelt", "--path-contains", "comps", "--limit", "1", "--json" },
+                     new[] { "read", "vanilla/Verse/Outline.cs", "--outline", "--limit", "1", "--json" },
+                 })
+        {
+            var (json, _, _) = Fixture.Run(argv);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("notes", out var notes)) continue;
+            foreach (var n in notes.EnumerateArray())
+            {
+                if (!n.TryGetProperty("shown", out var s)) continue;
+                var totalEl = n.GetProperty("total");
+                if (totalEl.ValueKind == System.Text.Json.JsonValueKind.Null) continue;
+                var (shown, total) = (s.GetInt32(), totalEl.GetInt32());
+                if (total <= shown) continue;
+                seen++;
+                var text = n.GetProperty("text").GetString() ?? "";
+                Assert.DoesNotContain($"{shown} of {total}", text, StringComparison.Ordinal);
+                // 总数还得真在句子里 —— 光是「不印旧文法」可以靠把总数删掉来满足。
+                Assert.Matches($@"\b{total}\b", text);
+            }
+        }
+
+        // 四条命令都没造出截断态时,上面整个循环零次通过,与「全合规」同形。
+        Assert.True(seen >= 4, $"只查到 {seen} 条截断计数,这条闸没测到东西");
+    }
+
+    /// <summary>
     /// JSON 侧的计数不许只活在句子里:<c>shown</c> / <c>total</c> 与那句话里的数必须是同一对。
     ///
     /// 理由与 <c>snapshot</c> 键逐字相同 —— 机器侧要总数时从散文里抠字符串是两份数据,

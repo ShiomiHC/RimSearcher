@@ -74,6 +74,10 @@ public class OutputSnapshotTests
         { "search-substring-cap",  ["search", "VoidNode", "--limit", "2"] },
         { "get-full",              ["get", "Apparel_ShieldBelt"] },
         { "get-path-filter",       ["get", "Apparel_ShieldBelt", "--path-contains", "comps"] },
+        // 这条与上一条只差一个 --limit,而**整套基线此前没有一份走到过这两条命令的截断态** ——
+        // 于是 ece5f54 换截断文法时,这两处漏在旧文法上,字节闸一声不响(它覆盖的是命令形态,
+        // 不是数据形态)。
+        { "get-path-filter-truncated", ["get", "Apparel_ShieldBelt", "--path-contains", "comps", "--limit", "1"] },
         { "get-path-no-match",     ["get", "Apparel_ShieldBelt", "--path-contains", "zzzz"] },
         { "get-truncated-export",  ["get", "Bullet_Revolver"] },
         // 代码默认值的三个落点:字段名与提问一字不差、值却是声明默认值 ——
@@ -301,6 +305,7 @@ public class OutputSnapshotTests
         // 轮廓:注释/字符串/字符字面量里的括号不许算数,方法体里的 if 不许变成成员,
         // 带初值的字段不许被初值里的括号认成方法。
         { "read-outline",          ["read", "Outline.cs", "--source", "vanilla", "--outline"] },
+        { "read-outline-truncated", ["read", "Outline.cs", "--source", "vanilla", "--outline", "--limit", "2"] },
         // 同名成员分属两个类型:不带 --type 全给并说破归属,带 --type 只给一份。
         { "read-member",           ["read", "vanilla/Verse/Outline.cs", "--member", "Shared"] },
         { "read-member-typed",     ["read", "vanilla/Verse/Outline.cs", "--member", "Shared", "--type", "Inner"] },

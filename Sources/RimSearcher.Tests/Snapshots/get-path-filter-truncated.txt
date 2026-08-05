@@ -1,0 +1,17 @@
+$ rimsearcher get Apparel_ShieldBelt --path-contains comps --limit 1
+exit 0
+--- stdout ---
+Matching 'comps': 3 fields, out of 12 fields on the def.
+3 fields, showing the first 1; raise --limit for the rest.
+
+def_name     Apparel_ShieldBelt
+def_type     ThingDef
+label        shield belt
+class        Verse.ThingDef
+mod          ludeon.rimworld
+source       Apparel_Belts.xml
+
+path                value                code_default
+comps[0].compClass  RimWorld.CompShield  yes
+No value above with 'code_default'=no is one that most of the 9 ThingDefs in this snapshot also carry. Rows marked yes were not compared: a yes is not evidence that nothing wrote the value — it only says the value matches what a fresh instance of the declaring type carries.
+--- stderr ---

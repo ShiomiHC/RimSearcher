@@ -550,8 +550,11 @@ public sealed class GetCommand : Command
                                   $"inside a longer name: {Tally.Complete(matched - whole).Render("field")}."
                                 : ""));
                     if (fields.Count < matched)
+                        // 同 ReadCommand 那处:自己拼句子,于是没跟上 ece5f54 换的文法。
+                        // "Showing" 前缀跟着去掉 —— 新文法里 "showing" 已经在句中了。
                         ctx.Report.Notice(NoticeKind.Truncation,
-                            $"Showing {Tally.Of(fields.Count, matched).Render("field")}; raise --limit for the rest.");
+                            $"{Tally.Of(fields.Count, matched).RenderTotalFirst("field")}; " +
+                            "raise --limit for the rest.", count: Tally.Of(fields.Count, matched));
 
                     // --path-contains 是调用方自己收窄的,而收窄之后同一块里的其它字段就看不见了。
                     Advisory.NoteAuthoredSiblings(ctx, fields.Where(f => f.Default != Contract.DefaultState.Same)

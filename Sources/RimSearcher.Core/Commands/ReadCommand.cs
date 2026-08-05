@@ -214,9 +214,11 @@ public sealed class ReadCommand : Command
         // 只报个数 —— 名字是按裸文件名解析出来的时候,读的人手上没有一条能粘回去的路径,
         // 下一条 --member 只好再赌一次同样的名字。
         var tally = Tally.Of(shown.Count, decls.Count);
+        // 截断态与 where / list / search 同文法(总数占锚点位)—— 这条原先自己拼句子,
+        // 于是 ece5f54 换掉的是那三个 helper,漏了这里,同一个工具出现了两种截断文法。
         ctx.Report.Notice(tally.IsTruncated ? NoticeKind.Truncation : NoticeKind.Count,
-            $"{rel}, {tally.Render("declaration")}" +
-            (tally.IsTruncated ? "; raise --limit to see the rest." : "."));
+            $"{rel}, {(tally.IsTruncated ? tally.RenderTotalFirst("declaration") : tally.Render("declaration"))}" +
+            (tally.IsTruncated ? "; raise --limit to see the rest." : "."), count: tally);
         ctx.Report.Table("declarations", ["kind", "modifiers", "name", "in", "lines", "at"],
             shown.Select(d => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
