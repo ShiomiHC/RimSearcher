@@ -174,8 +174,14 @@ internal static class NameLookup
                 (holdingTotal > 1
                     ? $", and it turns up under {holdingTotal} path and def-type combinations in all"
                     : "") +
+                // 「covers every path at once」是**对答案**的全称担保,而被推荐的那条命令
+                // 自己跑起来会说「导出被砍短的 def 可能不在这个答案里」—— 同一个能力,
+                // 自述处诚实、推荐处全称,而读者先读的是这一句。改成只说它**怎么问**
+                // (不必先点名一条路径),完整性交给那条命令自己按当次数据讲。
+                // 不在这里把那个数算出来印上:推荐侧要另跑一次截断查询,而被推荐命令自己
+                // 就印同一个数 —— 两处各算各的,口径迟早会岔。
                 $". 'rimsearcher where {tail} {name}' lists the defs that use it, and " +
-                $"'rimsearcher where --value {name}' covers every path at once.");
+                $"'rimsearcher where --value {name}' asks the same without naming a path.");
         }
 
         // (8) mod,报的是外号(输入 `Milira`,packageId 是 Ancot.MiliraRace)。

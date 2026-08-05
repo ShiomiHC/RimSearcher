@@ -2566,6 +2566,97 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 上一条的第二个实例,形态逐字相同:`where --value` 被推荐时说「覆盖**全部**路径」,
+    /// 而它自己跑起来当场说「导出被砍短的 def **可能不在**这个答案里」——
+    /// 自述处诚实、被推荐处全称,而读者是先读推荐那句的。
+    ///
+    /// 比 `--outline` 那处更硬的地方:那边的盲区只能定性,这边的盲区**带着一个数**
+    /// (真快照上 232 个 def,fixture 上也非零),推荐句却把它抹平成 every。
+    ///
+    /// 成因不是「深度太浅」一种,所以「调大上限就没这事」不成立:<c>DefExporter</c> 里
+    /// 每 def 字段数 / 嵌套深度 / 集合项数三个上限记的是同一个 <c>Truncated</c> 计数。
+    ///
+    /// 三个入口一起钉。同一句话有两个产地(<c>NameLookup</c> 与 <c>QueryCommands</c>),
+    /// 修一处留一处的话,读者从另一条路进来看到的还是那句全称。
+    /// </summary>
+    [Fact]
+    public void 推荐按值反查时不许担保它覆盖全部路径()
+    {
+        // 自述侧:被推荐的那条命令自己说了什么。这是被比对的基准,不复述它的理由。
+        var (target, _, _) = Fixture.Run("where", "--value", "CompShield");
+        Assert.Contains("can be missing from this answer", target, StringComparison.Ordinal);
+
+        foreach (var argv in new[]
+                 {
+                     new[] { "search", "CompShield" },                                        // NameLookup
+                     new[] { "where", "CompShield" },                                          // 同一句的另一条入口
+                     new[] { "get", "Apparel_ShieldBelt", "--path-contains", "MarketValue" },  // QueryCommands
+                 })
+        {
+            var (rec, _, _) = Fixture.Run(argv);
+            Assert.Contains("rimsearcher where --value", rec, StringComparison.Ordinal);
+            // 钉「这个能力被说成完整的」,不逐字钉某个词 —— 判据与 --outline 那条共用。
+            foreach (var absolute in new[] { "every path", "all paths", "covers every", "names every" })
+                Assert.DoesNotContain(absolute, rec, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// 另有几处全称量词,先行词是对的(`mods` 列的就是快照里的 mod、裸 `list` 列的就是
+    /// 全部 def 类型)。这一格钉的不是措辞,是**先行词还对得上** —— 尤其是
+    /// 「lists them all」这句话身处一个 --limit 缺省为 25 的工具里,哪天裸 `list` 也跟着
+    /// 吃上缺省上限,这句话就当场变假,而输出形状一个字都不变(照印一张干净的表)。
+    ///
+    /// 与上面两条的关系:那两条是「推荐处强于自述」,这一条是「全称与它的先行词之间」。
+    /// 分开写是因为判据不同 —— 那边比两份措辞,这边比数。
+    /// </summary>
+    [Fact]
+    public void 说了列全的那几条命令要真的列全()
+    {
+        // ① 裸 list:自报的类型数,与表里真有的行数。
+        var (types, _, _) = Fixture.Run("list", "--json");
+        using var listed = System.Text.Json.JsonDocument.Parse(types);
+        var claimed = Regex.Match(
+            string.Join(" ", listed.RootElement.GetProperty("notes").EnumerateArray()
+                .Select(n => n.GetProperty("text").GetString())),
+            @"(\d+) def types?\.");
+        Assert.True(claimed.Success, types);
+        Assert.Equal(int.Parse(claimed.Groups[1].Value),
+                     listed.RootElement.GetProperty("types").GetArrayLength());
+
+        // ② --scope 认不出时那句「'rimsearcher mods' lists them all」:它当场点名了一批
+        //    packageId,那批必须在 mods 里全找得到 —— 否则被推荐的出路走不到刚说的那批。
+        // 用法错走 stderr,不是 stdout。
+        var (_, bad, _) = Fixture.Run("list", "ThingDef", "--scope", "zzznope");
+        // 名单里的点不能当句号:packageId 自己就带点(ludeon.rimworld),所以吃到那句结尾为止。
+        var named = Regex.Match(bad, @"This snapshot contains: (.+?)\. 'rimsearcher mods' lists them all");
+        Assert.True(named.Success, bad);
+        var (mods, _, _) = Fixture.Run("mods", "--limit", "all");
+        var ids = named.Groups[1].Value.Split(',').Select(s => s.Trim())
+            .Where(s => s.Length > 0 && !s.StartsWith("and ", StringComparison.Ordinal)).ToList();
+        Assert.NotEmpty(ids);   // 名单空掉时这个循环会零次通过,和「全找到了」同形
+        foreach (var id in ids) Assert.Contains(id, mods, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 同一件事的第三档,而**跨产地比对够不着它**:`--value` 的 --help 自述本身就是
+    /// 「every field is searched」。两侧同强时,上面那条闸照绿,而话照样是假的。
+    ///
+    /// 所以这一格换判据:不拿两份措辞互比,拿第三方事实比 —— 导出器有上限,于是
+    /// 索引 ⊊ 数据。本仓对这件事已有既定词是 <c>indexed</c>
+    /// (<c>NoteIndexHoldsValuesOnly</c> 的 "no indexed value sits at that path"),
+    /// 帮助里得用同一个词,否则 every 就横跨了它够不到的那部分。
+    /// </summary>
+    [Fact]
+    public void 按值搜索的帮助文本不许把索引说成全部字段()
+    {
+        var (help, _, _) = Fixture.Run("where", "--help");
+        // 切的是这个 option 自己那段:光按 "--value" 切会落到 examples 里那次出现上。
+        var seg = help.Split("--value <text>", StringSplitOptions.None)[1].Split("Global options")[0];
+        Assert.Contains("indexed field", seg, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 点名字段的那次查询,**外延不足**的那一半。`where` 对「结果比预期多」处理得很齐
     /// (跨形状、子串、scope 补集三句),反向一直是零提示 —— 而那种局面下表是干净完整的,
     /// 没有一处看得出问题。闭卷实测四个样本零反查,带着「字段名一律反查」那条文档的

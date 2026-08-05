@@ -22,7 +22,7 @@ Options:
                        Also accepted: --exact-match, --whole.
       --exact-path     Match the field path as a whole instead of as a suffix. Write '[]' for any index, so a path shape such as 'lifeStages[].bodyGraphicData.shaderType' can be pasted straight back in.
                        Also accepted: --whole-path, --path-exact.
-      --value <text>   The value to look for, same as giving it as an argument. Without a field path, every field is searched and the report names which paths hold it.
+      --value <text>   The value to look for, same as giving it as an argument. Without a field path, every indexed field is searched and the report names which paths hold it.
                        Also accepted: --any-field, --search-values, --holding.
 
 Global options (every command takes these, written after the command):

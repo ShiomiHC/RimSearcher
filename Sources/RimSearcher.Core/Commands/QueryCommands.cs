@@ -492,7 +492,9 @@ public sealed class GetCommand : Command
                         // 动词不进登记处:冒号在前、名单在后,主句就没有随数量变形的成分。
                         (asValue.Count > 0
                             ? " Found on this def as a field's value rather than anywhere in a path: " +
-                              $"{PathFilterText.Say(asValue)}. 'rimsearcher where --value {asValue[0]}' names every path holding it."
+                              // 「names every path」同 NameLookup 那处:被推荐的命令自己
+                              // 声明会漏,推荐句不许替它担保全集。去掉全称,内容一点没少。
+                              $"{PathFilterText.Say(asValue)}. 'rimsearcher where --value {asValue[0]}' names the paths holding it."
                             : "") +
                         (kin > 0
                             ? $" Other defs of this type do have it: {Tally.Complete(kin).Render("def")} across " +
@@ -774,7 +776,11 @@ public sealed class FindCommand : Command
                 Name = "value",
                 Aliases = ["any-field", "search-values", "holding"],
                 Placeholder = "<text>",
-                Help = "The value to look for, same as giving it as an argument. Without a field path, every field " +
+                // 「every field」横跨了它够不到的那部分:导出器有三个上限(每 def 字段数 /
+                // 嵌套深度 / 集合项数),索引 ⊊ 数据。这一格的全称落在**搜法**上而不是答案上,
+                // 本来就比上面那两处轻,但 every 不带限定时读者读到的仍是「全部字段」。
+                // indexed 是本仓对这件事的既定词(见 NoteIndexHoldsValuesOnly)。
+                Help = "The value to look for, same as giving it as an argument. Without a field path, every indexed field " +
                        "is searched and the report names which paths hold it.",
             },
         ],

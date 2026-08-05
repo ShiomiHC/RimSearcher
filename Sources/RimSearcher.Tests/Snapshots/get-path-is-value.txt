@@ -1,7 +1,7 @@
 $ rimsearcher get Apparel_ShieldBelt --path-contains MarketValue
 exit 0
 --- stdout ---
-No field path contains 'MarketValue'; the def does have 12 fields. Drop --path-contains to see them. Found on this def as a field's value rather than anywhere in a path: 'MarketValue'. 'rimsearcher where --value MarketValue' names every path holding it.
+No field path contains 'MarketValue'; the def does have 12 fields. Drop --path-contains to see them. Found on this def as a field's value rather than anywhere in a path: 'MarketValue'. 'rimsearcher where --value MarketValue' names the paths holding it.
 
 def_name     Apparel_ShieldBelt
 def_type     ThingDef
