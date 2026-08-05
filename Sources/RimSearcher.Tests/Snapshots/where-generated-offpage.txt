@@ -1,7 +1,7 @@
 $ rimsearcher where soundDrop Standard_Drop --limit 1
 exit 0
 --- stdout ---
-1 of 9 defs.
+9 defs, showing the first 1.
   - Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans every def type that uses this path at all, not just the ones in the rows above — ThingDef, holding 1 def cut short between them. 'rimsearcher snapshot truncated --type ThingDef' lists them.
   - 1 of the 9 defs matched here is created by the game in code at load time, from no XML node at all: Meat_Muffalo. A PatchOperation addressed by defName cannot reach them — patches run on the XML, where these do not exist. None of them are on this page; the 'declared_in' column marks them where they are.
 

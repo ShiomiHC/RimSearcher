@@ -231,7 +231,7 @@ public sealed class Report
     public Report CountNotice(Tally tally, string noun, string howToSeeMore = "")
         => tally.IsTruncated
             ? Notice(NoticeKind.Truncation,
-                     $"Showing {tally.Render(noun)}{Within}" +
+                     $"{tally.RenderTotalFirst(noun)}{Within}" +
                      (howToSeeMore.Length == 0 ? "." : $"; {howToSeeMore}"), count: tally)
             : Notice(NoticeKind.Count, $"{tally.Render(noun)}{Within}.", count: tally);
 
@@ -257,7 +257,7 @@ public sealed class Report
         var seen = offset + shown;
         var tally = shown < total ? Tally.Of(shown, total) : Tally.Complete(shown);
         return Notice(tally.IsTruncated ? NoticeKind.Truncation : NoticeKind.Count,
-            tally.Render(noun) + Within +
+            (tally.IsTruncated ? tally.RenderTotalFirst(noun, offset == 0) : tally.Render(noun)) + Within +
             (offset > 0 ? $", starting at {offset + 1}" : "") +
             (seen >= total && offset > 0 ? "; that is the last page." : "."), count: tally);
     }
@@ -279,7 +279,7 @@ public sealed class Report
     {
         if (!tally.IsTruncated) return this;
         return Notice(NoticeKind.Truncation,
-            $"Showing {tally.Render(noun)}; {howToSeeMore}", count: tally);
+            $"{tally.RenderTotalFirst(noun)}; {howToSeeMore}", count: tally);
     }
 
     private string? _collection;

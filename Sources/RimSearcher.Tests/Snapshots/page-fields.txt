@@ -1,7 +1,7 @@
 $ rimsearcher fields ThingDef --limit 3 --offset 3
 exit 0
 --- stdout ---
-3 of 22 field paths, starting at 4.
+22 field paths, showing 3, starting at 4.
 Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans all of ThingDef, whatever --path-contains says, holding 1 def cut short. 'rimsearcher snapshot truncated --type ThingDef' lists them.
 
 path                defs
