@@ -2,7 +2,7 @@ $ rimsearcher search Void --scope all,-test.mod
 exit 1
 --- stdout ---
 --scope all,-test.mod (= ludeon.rimworld).
-Nothing matched 'Void' in this snapshot within --scope all,-test.mod.
-'rimsearcher list' with no def type lists what kinds of def this snapshot holds, and 'rimsearcher mods' lists which mods it covers.
-What --scope all,-test.mod left out is not empty for this query: with --scope test.mod instead, it finds 3 defs.
+  - Nothing matched 'Void' in this snapshot within --scope all,-test.mod.
+  - 'rimsearcher list' with no def type lists what kinds of def this snapshot holds, and 'rimsearcher mods' lists which mods it covers.
+  - What --scope all,-test.mod left out is not empty for this query: with --scope test.mod instead, it finds 3 defs.
 --- stderr ---

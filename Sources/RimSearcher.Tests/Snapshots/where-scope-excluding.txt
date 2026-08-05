@@ -2,10 +2,10 @@ $ rimsearcher where soundDrop --scope all,-test.mod
 exit 0
 --- stdout ---
 --scope all,-test.mod (= ludeon.rimworld).
-5 defs within --scope all,-test.mod.
-Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans every def type that uses this path at all, not just the ones in the rows above — ThingDef, holding 1 def cut short between them. 'rimsearcher snapshot truncated --type ThingDef' lists them.
-1 of the 5 defs matched here is created by the game in code at load time, from no XML node at all: Meat_Muffalo. A PatchOperation addressed by defName cannot reach them — patches run on the XML, where these do not exist. The 'declared_in' column marks which is which.
-What --scope all,-test.mod left out is not empty for this query: with --scope test.mod instead, it finds 4 defs.
+  - 5 defs within --scope all,-test.mod.
+  - Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans every def type that uses this path at all, not just the ones in the rows above — ThingDef, holding 1 def cut short between them. 'rimsearcher snapshot truncated --type ThingDef' lists them.
+  - 1 of the 5 defs matched here is created by the game in code at load time, from no XML node at all: Meat_Muffalo. A PatchOperation addressed by defName cannot reach them — patches run on the XML, where these do not exist. The 'declared_in' column marks which is which.
+  - What --scope all,-test.mod left out is not empty for this query: with --scope test.mod instead, it finds 4 defs.
 
 Same in every row, not repeated below: def_type=ThingDef, path=soundDrop, value=Standard_Drop, code_default=no, mod=ludeon.rimworld.
 def_name            declared_in

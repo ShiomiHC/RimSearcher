@@ -2,8 +2,8 @@ $ rimsearcher where --value CompShield
 exit 0
 --- stdout ---
 1 field path.
-No value here is exactly 'CompShield'; each match has it inside a longer value — see example_value. --exact would return nothing.
-Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans every def type that holds this value anywhere, not just the ones in the rows above — ThingDef, holding 1 def cut short between them. 'rimsearcher snapshot truncated --type ThingDef' lists them.
+  - No value here is exactly 'CompShield'; each match has it inside a longer value — see example_value. --exact would return nothing.
+  - Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans every def type that holds this value anywhere, not just the ones in the rows above — ThingDef, holding 1 def cut short between them. 'rimsearcher snapshot truncated --type ThingDef' lists them.
 
 path                def_type  defs  example_value
 comps[0].compClass  ThingDef  2     RimWorld.CompShield

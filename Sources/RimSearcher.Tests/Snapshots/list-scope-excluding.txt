@@ -2,8 +2,8 @@ $ rimsearcher list ThingDef --scope all,-test.mod
 exit 0
 --- stdout ---
 --scope all,-test.mod (= ludeon.rimworld).
-5 defs within --scope all,-test.mod.
-What --scope all,-test.mod left out is not empty for this query: with --scope test.mod instead, it finds 4 defs.
+  - 5 defs within --scope all,-test.mod.
+  - What --scope all,-test.mod left out is not empty for this query: with --scope test.mod instead, it finds 4 defs.
 
 Same in every row, not repeated below: mod=ludeon.rimworld.
 def_name            label

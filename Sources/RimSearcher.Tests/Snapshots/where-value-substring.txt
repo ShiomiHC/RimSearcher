@@ -2,10 +2,10 @@ $ rimsearcher where texPath --value Things/Building
 exit 0
 --- stdout ---
 3 matches.
-Those 3 matches come from 2 defs: a def that matches on more than one path has a row for each, so the def_name column repeats.
-Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans every def type that uses this path at all, not just the ones in the rows above — ThingDef, holding 1 def cut short between them. 'rimsearcher snapshot truncated --type ThingDef' lists them.
-Nothing here holds exactly 'Things/Building': every row has it inside a longer value — read the value column before treating this as an answer about 'Things/Building'. --exact would return nothing at all.
-These rows span more than one path shape: graphicData.texPath (2), building.blueprintGraphicData.texPath (1). The suffix matched them all; a set operation over this result treats them as one field unless the path column is read row by row. Pasting one of those shapes back with --exact-path keeps that one alone.
+  - Those 3 matches come from 2 defs: a def that matches on more than one path has a row for each, so the def_name column repeats.
+  - Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans every def type that uses this path at all, not just the ones in the rows above — ThingDef, holding 1 def cut short between them. 'rimsearcher snapshot truncated --type ThingDef' lists them.
+  - Nothing here holds exactly 'Things/Building': every row has it inside a longer value — read the value column before treating this as an answer about 'Things/Building'. --exact would return nothing at all.
+  - These rows span more than one path shape: graphicData.texPath (2), building.blueprintGraphicData.texPath (1). The suffix matched them all; a set operation over this result treats them as one field unless the path column is read row by row. Pasting one of those shapes back with --exact-path keeps that one alone.
 
 Same in every row, not repeated below: def_type=ThingDef, code_default=no, mod=ludeon.rimworld.
 def_name    path                                   value

@@ -25,6 +25,16 @@ public static class TextRenderer
 
         // 按 Add 的先后走,声明与数据块交错 —— 每句话就落在它所讲的那个块旁边,而调用方
         // pipe 一个 head 先拿到的是数据。位置由写命令的人决定,不由这里统一提到最前。
+        // 连着三条以上时,第二条起挂一个记号。**不加标题**:标题是个标签,而标签会被学会
+        // 跳过 —— 这几句偏偏不是免责声明,是承重的更正(子串那句改变的是每一行怎么读)。
+        // 记号只做一件事:让读者看出这是 N 件互不相干的事,而不是一段连着的话。
+        //
+        // 第一行始终不挂记号,因为它是 `| head -1` 唯一的幸存者,那个位置留给计数。
+        // 门槛取 3 而不是 2:两句话不构成墙,加记号只是多两个字符。
+        // 实测最高的一堵是 `where <字段> --value <值>` 不带 --exact:5 段、1169 字,
+        // 而多数命令是 1~3 段。
+        var runs = NoticeRuns(report);
+        var seen = 0;
         foreach (var entry in report.Entries)
         {
             switch (entry)
@@ -33,8 +43,11 @@ public static class TextRenderer
                     // 脚注另有归处,在最后统一收。
                     if (!n.Footnote)
                     {
-                        sb.Append(tag).Append(n.Text).Append(OutputText.Newline);
+                        sb.Append(tag)
+                          .Append(runs.Contains(seen) ? OutputText.NoticeMark : "")
+                          .Append(n.Text).Append(OutputText.Newline);
                         tag = "";
+                        seen++;
                     }
                     break;
 
@@ -61,6 +74,47 @@ public static class TextRenderer
         }
 
         return OutputText.Finish(sb.ToString());
+    }
+
+    /// <summary>
+    /// 哪些声明该挂记号:**连续三条以上的那一段里,除第一条之外的每一条**。
+    ///
+    /// 「连续」按渲染顺序算,中间夹了一个数据块就断开 —— 隔着一张表的两句话本来就
+    /// 不是一段。脚注不参与:它们在最后统一收,与这里的连续性无关。
+    ///
+    /// 返回的下标是**非脚注声明在渲染序列里的序号**,与 <c>report.Notices</c> 的下标
+    /// 不是一回事(后者含脚注)。
+    /// </summary>
+    private static HashSet<int> NoticeRuns(Report report)
+    {
+        var marked = new HashSet<int>();
+        var index = 0;
+        var runStart = 0;
+        var runLength = 0;
+
+        void Flush()
+        {
+            if (runLength >= 3)
+                for (var i = runStart + 1; i < runStart + runLength; i++) marked.Add(i);
+            runLength = 0;
+        }
+
+        foreach (var entry in report.Entries)
+            switch (entry)
+            {
+                case Notice { Footnote: false }:
+                    if (runLength == 0) runStart = index;
+                    runLength++;
+                    index++;
+                    break;
+                // 空块不渲染,所以它也不该断开一段 —— 判据与 IsEmpty 共用,
+                // 否则「块在但印不出来」会在这里造出一个看不见的分段。
+                case Block b when !IsEmpty(b):
+                    Flush();
+                    break;
+            }
+        Flush();
+        return marked;
     }
 
     /// <summary>

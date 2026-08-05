@@ -310,6 +310,15 @@ public static class OutputText
     public const string Newline = "\n";
 
     /// <summary>
+    /// 连着三条以上的声明,第二条起挂这个记号。
+    ///
+    /// 是记号不是标题:标题会被学会跳过,而这几句偏偏是承重的更正(「值是子串匹配」
+    /// 那句改变的是表里每一行怎么读)。记号只做一件事 —— 让读者看出这是 N 件互不相干
+    /// 的事,而不是一段连着的话。第一行永远不挂,那是 <c>| head -1</c> 唯一的幸存者。
+    /// </summary>
+    public const string NoticeMark = "  - ";
+
+    /// <summary>
     /// 收口:行尾一律 LF(AppendLine 在 Windows 出 CRLF 会与写死的 \n 混形)、
     /// TrimEnd 尾空行。所有走 stdout 的文本都必须过这里。
     /// </summary>

@@ -2,6 +2,6 @@ $ rimsearcher keyed Apparel_ShieldBelt
 exit 1
 --- stdout ---
 'Apparel_ShieldBelt' was not matched as typed: only letters and digits take part, so what ran was Apparel, ShieldBelt.
-No keyed translation matches 'Apparel_ShieldBelt'.
-'Apparel_ShieldBelt' is a def in this snapshot, and a def's label and description are translated through DefInjected rather than through a key: 'rimsearcher get Apparel_ShieldBelt' shows them with the translation table attached, and 'rimsearcher search' matches on translated text too.
+  - No keyed translation matches 'Apparel_ShieldBelt'.
+  - 'Apparel_ShieldBelt' is a def in this snapshot, and a def's label and description are translated through DefInjected rather than through a key: 'rimsearcher get Apparel_ShieldBelt' shows them with the translation table attached, and 'rimsearcher search' matches on translated text too.
 --- stderr ---

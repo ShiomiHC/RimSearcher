@@ -2649,6 +2649,46 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 表上方连着三条以上说明时,第二条起挂记号 —— 让读者看出这是 N 件互不相干的事,
+    /// 而不是一段连着的话。实测最高的一堵是 `where &lt;字段&gt; --value &lt;值&gt;` 不带
+    /// <c>--exact</c>:5 段、1169 字,而多数命令是 1~3 段。
+    ///
+    /// **钉住的是「记号不是标题」**:标题会被学会跳过,而这几句偏偏是承重的更正 ——
+    /// 「值是子串匹配」那句改变的是表里每一行怎么读,不是免责声明。
+    ///
+    /// 另外两条同样承重:
+    /// ① 第一行永远不挂记号 —— 它是 <c>| head -1</c> 唯一的幸存者,那个位置留给计数;
+    /// ② <c>--json</c> 一个字节不动 —— 分段是渲染,不是数据。记号漏进 notes 的话,
+    ///    读 JSON 的下游会把它当成正文的一部分。
+    /// </summary>
+    [Fact]
+    public void 连着三条以上的说明挂记号而不是加标题()
+    {
+        const string Mark = "  - ";
+
+        var many = Fixture.Run("where", "texPath", "--value", "Things/Building").Stdout;
+        var lines = many.Split('\n').TakeWhile(l => l.Length > 0).ToList();
+        Assert.True(lines.Count >= 3, "这条用例得有三条以上说明,否则它测的是别的东西");
+        Assert.False(lines[0].StartsWith(Mark, StringComparison.Ordinal), "第一行不挂记号");
+        Assert.All(lines.Skip(1), l => Assert.StartsWith(Mark, l, StringComparison.Ordinal));
+
+        // 不是标题:说明区里不许多出一行「标签」—— 每一行都得是实打实的一句话。
+        Assert.DoesNotContain(lines, l => l.TrimEnd().EndsWith(':') && l.Length < 40);
+
+        // 两条时不挂:两句话不构成墙,加记号只是多两个字符。
+        var few = Fixture.Run("where", "compClass", "RimWorld.CompShield").Stdout;
+        Assert.DoesNotContain(Mark, few.Split('\n')[0], StringComparison.Ordinal);
+        Assert.All(few.Split('\n').TakeWhile(l => l.Length > 0),
+                   l => Assert.False(l.StartsWith(Mark, StringComparison.Ordinal)));
+
+        // --json 不动:记号是渲染,不是数据。
+        var json = Fixture.Run("where", "texPath", "--value", "Things/Building", "--json").Stdout;
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        foreach (var n in doc.RootElement.GetProperty("notes").EnumerateArray())
+            Assert.False(n.GetProperty("text").GetString()!.StartsWith(Mark, StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// `values &lt;字段&gt;` 答的是**这个字段的取值域**,`where --value &lt;值&gt;` 答的才是
     /// **这个值的字段分布**。两个闭卷样本把方向读反了,而且在两个不同的时点:一个在读到
     /// `where` 的外延提示**之前**跑它探路、拿到取值域就认定范围锁定;一个在读到提示
