@@ -172,6 +172,12 @@ public static class SnapshotSchema
         CREATE INDEX idx_fv_def     ON field_values(def_id);
         CREATE INDEX idx_fv_leaf    ON field_values(leaf);
         CREATE INDEX idx_fv_value   ON field_values(value);
+        -- 查这两列一律带 COLLATE NOCASE(见 SnapshotDb 的 PathCondition / ValueWhere),
+        -- 而上面两条是 BINARY 的:collation 不匹配时 SQLite 不用索引,于是每条谓词都全表扫。
+        -- 加一对 NOCASE 的而不是改上面两条 —— DistinctValues 的 DISTINCT/GROUP BY fv.value
+        -- 是 BINARY,改掉就轮到它失去索引。
+        CREATE INDEX idx_fv_leaf_nc  ON field_values(leaf COLLATE NOCASE);
+        CREATE INDEX idx_fv_value_nc ON field_values(value COLLATE NOCASE);
         CREATE INDEX idx_tr_defname ON translations(def_name);
         CREATE INDEX idx_keyed_key   ON keyed(key);
         CREATE INDEX idx_xn_name    ON xml_nodes(name);
