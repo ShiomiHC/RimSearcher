@@ -654,7 +654,9 @@ public sealed class GetCommand : Command
 
             // 表之后:这句讲的是刚读过的那些行(措辞里就是 above)。
             // --path-contains 那条分支同样要说 —— 按 path 收窄恰恰是最容易只盯着一行读的用法。
-            Completeness.NoteWidelySharedValues(ctx, def, fields);
+            // 后两个参数只服务句尾那半句「yes 行没参与比较」:它得知道本次取景里到底有没有
+            // yes 行,以及这条否定是不是已经由上面的 Not listed 那句承住了(见那边的注释)。
+            Completeness.NoteWidelySharedValues(ctx, def, fields, withDefaults, defaulted);
 
             // --limit 与 --path-contains 同样管译文表:不管的话,`get Muffalo --limit 5` 会吐出八十行,
             // 而字段表刚报的「一个都没匹配上」会被一批译文块淹掉。
@@ -2148,7 +2150,8 @@ internal static class Completeness
     /// 两边都说 —— 不靠沉默承载「都是这个 def 自己的」。
     /// </summary>
     public static void NoteWidelySharedValues(
-        CommandContext ctx, DefRow def, IReadOnlyList<FieldRow> fields)
+        CommandContext ctx, DefRow def, IReadOnlyList<FieldRow> fields,
+        bool defaultRowsListed, int defaulted)
     {
         if (fields.Count == 0) return;
         var shared = ctx.Db.SharedValues(def.DefType, fields.Select(f => (f.Path, f.Value)));
@@ -2192,17 +2195,33 @@ internal static class Completeness
         // 破折号后**,于是只读前半句的人读到的是一句可独立成立的陈述。
         var yesMeans = "a yes is not evidence that nothing wrote the value — it only says the value " +
                        "matches what a fresh instance of the declaring type carries";
+
+        // 这半句只在**本次取景里真有 yes 行**时才拼。两条被砍掉的路径各有各的毛病:
+        //   不加 --defaults 时,yes 行被整批滤走、表折成 `code_default=no`,而
+        //     「Not listed: N fields…」那句已经带着逐字同义的否定(`That match is not evidence
+        //     that nothing wrote them`)。两句同屏说同一件事,后一句还指着一个屏幕上不出现的
+        //     取值 —— 读的人得先假设有 yes 行才读得懂它;
+        //   defaulted 为 0 时(MoteGlow --defaults 是实例),整个 def 一行 yes 都没有,
+        //     这句指的是一个读者当场能验证为空的集合,只会制造「是不是还藏着几行」的疑问。
+        // **否定没有跟着分支消失**:它与上面那条 Filter notice 的条件恰好互补
+        //   (那边是 `!withDefaults && defaulted > 0`),于是「存在一个 yes」的每条路径上,
+        //   这条否定都还在,只是换了承载者 —— 分支的是位置,不是有无。
+        // 判据用 defaulted 而不是「渲染出来的行里有没有 Same」:defaulted 是过滤后、
+        //   **截断前**的数(见 SnapshotDb.Fields),否则同一个 def 换个 --limit 就换一句结论。
+        var carryYesMeans = defaultRowsListed && defaulted > 0;
         ctx.Report.Notice(NoticeKind.Advisory, listed.Count > 0
             ? $"Values that most of the {total} {def.DefType}s in this snapshot also carry, so their " +
               $"'{FieldDefault.Column}' is not this def having made a choice — the count in brackets: " +
-              $"{NameList.Render(listed, listed.Count)}. " +
-              $"Only rows whose '{FieldDefault.Column}' is no were compared: {yesMeans}."
+              $"{NameList.Render(listed, listed.Count)}." +
+              (carryYesMeans
+                  ? $" Only rows whose '{FieldDefault.Column}' is no were compared: {yesMeans}."
+                  : "")
             // 否定支砍掉「所以没有一个是透过那一列显出来的全类默认值」:那是前半句的改写,
             // 而 SKILL.md 讲过这条线是干什么的。「yes 没参与比较」那半句留着 ——
             // 它守的是「没比过」被读成「比过了没有」,而那正是这一支印在一张全 yes 表下面时的样子。
             : $"No value above with '{FieldDefault.Column}'=no is one that most of the {total} " +
-              $"{def.DefType}s in this snapshot also carry. " +
-              $"Rows marked yes were not compared: {yesMeans}.");
+              $"{def.DefType}s in this snapshot also carry." +
+              (carryYesMeans ? $" Rows marked yes were not compared: {yesMeans}." : ""));
     }
 
     /// <summary>

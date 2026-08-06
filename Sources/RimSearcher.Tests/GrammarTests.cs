@@ -1246,6 +1246,10 @@ public class GrammarTests
     /// 「上面没有一个」印在一张**只有 yes 行**的表下面时读起来像结论,其实是没比过。
     ///
     /// 闸盯两句:正反两句共用同一个范围声明,不许只改一句。
+    ///
+    /// 另一头是**取景里没有 yes 行时不许说这半句**:它谈的集合读者当场能验证为空,
+    /// 只会制造「是不是还藏着几行」的疑问。两条被砍的路径各自有人承住那条否定,
+    /// 见 <see cref="值相等不等于没人写这句落在默认路径上"/>。
     /// </summary>
     [Fact]
     public void 共享值结语说破自己只比过非默认行()
@@ -1256,8 +1260,20 @@ public class GrammarTests
         Assert.Contains("No value above with 'code_default'=no", onlyYes, StringComparison.Ordinal);
 
         // 有命中的那一句用同一个取景。
-        var (hit, _, _) = Fixture.Run("get", "Apparel_ShieldBelt");
+        var (hit, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--defaults");
         Assert.Contains("Only rows whose 'code_default' is no were compared", hit, StringComparison.Ordinal);
+
+        // 不加 --defaults:yes 行整批不在表里(表折成 code_default=no),这半句无所指,
+        // 而否定由上面的 Not listed 那句承住 —— 换承载者,不是丢。
+        var (plain, _, _) = Fixture.Run("get", "Apparel_ShieldBelt");
+        Assert.DoesNotContain("were compared", plain, StringComparison.Ordinal);
+        Assert.Contains("is not evidence that nothing wrote", plain, StringComparison.Ordinal);
+
+        // 加了 --defaults 却一行 yes 都没有(VariantOne 的字段全与新实例不同):这半句
+        // 谈的集合读者当场能验证为空,而这里的沉默推不出任何东西 —— 没有 yes 可误读。
+        var (noYes, _, _) = Fixture.Run("get", "VariantOne", "--defaults");
+        Assert.DoesNotContain("Not listed:", noYes, StringComparison.Ordinal);
+        Assert.DoesNotContain("yes", noYes, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1324,8 +1340,11 @@ public class GrammarTests
     [Fact]
     public void code_default的口径在输出与help两处同形()
     {
+        // 两支都取**取景里真有 yes 行**的那一次:限定半句只在那时才拼(见
+        // NoteWidelySharedValues)。不加 --defaults 的那条路上,同一条否定由
+        // 「Not listed: …」承载,措辞另立,不进这条闸。
         var (onlyYes, _, _) = Fixture.Run("get", "Bullet_Revolver", "--path-contains", "burstCount");
-        var (hit, _, _) = Fixture.Run("get", "Apparel_ShieldBelt");
+        var (hit, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--defaults");
         var (help, _, _) = Fixture.Run("get", "--help");
 
         foreach (var text in new[] { onlyYes, hit, help })
