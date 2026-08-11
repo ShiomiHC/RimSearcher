@@ -635,9 +635,15 @@ public class GateTests
             var file = Path.Combine(dir, type.Name + ".cs");
             if (!File.Exists(file)) continue;
 
-            // Fixture.SnapshotDir 是 %TEMP% 下的快照库目录,与基线目录无关 —— 排掉它,
-            // 免得这道闸把不相干的类也拖进串行。
-            if (!Regex.IsMatch(File.ReadAllText(file), @"(?<!Fixture\.)\bSnapshotDir\b")) continue;
+            // 判据按**产地**走,不按标识符名:基线目录只有 OutputSnapshotTests.SnapshotDir
+            // 这一个产地(它自己在类内裸用)。此前这里匹配裸 `SnapshotDir`、只排掉 Fixture.
+            // 前缀,于是每一个同名成员都会被误抓 —— RimConfig.SnapshotDir 是配置里的快照库
+            // 路径,与基线目录毫无关系,写一句 `new RimConfig { SnapshotDir = ... }` 就被判成
+            // 「碰了基线」,然后为一场不存在的竞态被拖进串行。同名不是同物,而按名字匹配
+            // 读不出这个区别:两边在源码里长得一模一样。
+            if (type != typeof(OutputSnapshotTests) &&
+                !File.ReadAllText(file).Contains("OutputSnapshotTests.SnapshotDir", StringComparison.Ordinal))
+                continue;
 
             // xunit 2.x 的 CollectionAttribute 只有构造参数、没有 Name 属性,只能读 attribute data。
             var name = type.GetCustomAttributesData()

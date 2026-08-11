@@ -91,15 +91,21 @@ public sealed record EnvironmentReport(EnvironmentMatch Match, IReadOnlyList<str
 /// </summary>
 public static class SnapshotCatalog
 {
-    public static IReadOnlyList<SnapshotEntry> Enumerate(RimConfig config)
+    public static IReadOnlyList<SnapshotEntry> Enumerate(RimConfig config) => Enumerate(config, out _);
+
+    /// <summary>
+    /// <inheritdoc cref="Enumerate(RimConfig)"/>
+    /// <paramref name="dirUnreadable"/> 非 <c>null</c> 时,自动发现那一半**没跑成** ——
+    /// 空列表在这种情况下不是「一个都没有」。只有会说出「没有快照」的出口需要它。
+    /// </summary>
+    public static IReadOnlyList<SnapshotEntry> Enumerate(RimConfig config, out string? dirUnreadable)
     {
         var result = new Dictionary<string, SnapshotEntry>(StringComparer.OrdinalIgnoreCase);
         var dir = config.ResolveSnapshotDir();
 
-        if (Directory.Exists(dir))
-            foreach (var file in Directory.EnumerateFiles(dir, "*.db").OrderBy(f => f, StringComparer.Ordinal))
-                result[Path.GetFileNameWithoutExtension(file)] =
-                    new SnapshotEntry(Path.GetFileNameWithoutExtension(file), file);
+        foreach (var file in DbFilesIn(dir, out dirUnreadable))
+            result[Path.GetFileNameWithoutExtension(file)] =
+                new SnapshotEntry(Path.GetFileNameWithoutExtension(file), file);
 
         foreach (var (alias, target) in config.Snapshots)
         {
@@ -108,6 +114,41 @@ public static class SnapshotCatalog
         }
 
         return result.Values.OrderBy(e => e.Alias, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    /// <summary>
+    /// 快照目录里的 <c>.db</c>。**目录不存在 = 一个都没有**(还没导出过,那是正常的开局),
+    /// 但**目录在却读不进来**要把原因带出去 —— 见 <paramref name="unreadable"/>。
+    ///
+    /// 与 <see cref="Config.Toml.Load"/> 同一个坑:<c>Directory.Exists</c> 在 access-denied 上
+    /// 也返回 <c>false</c>,于是「读不到你的家目录」与「你还没有快照」在这里合流,
+    /// 而下游那句出路是「去 export 一个」—— 在一个连目录都读不了的环境里,那条路同样走不通。
+    ///
+    /// 这里**不抛**:config.toml 里按名字注册的快照可以指向别处,目录读不了不代表它们也没了;
+    /// 而 <see cref="Enumerate"/> 还被零结果的跨快照分流当辅助路径调用,在那里抛会把一次
+    /// 正常的零结果查询变成硬错。原因只在**真的答不出东西**的那两个出口上说出口。
+    /// </summary>
+    private static IReadOnlyList<string> DbFilesIn(string dir, out string? unreadable)
+    {
+        unreadable = null;
+        try
+        {
+            return Directory.EnumerateFiles(dir, "*.db").OrderBy(f => f, StringComparer.Ordinal).ToList();
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return [];
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // 同 Config.Toml.Load:形状判得出来就直说,判不出来不硬猜。
+            var shape = File.Exists(dir) ? "That path is a file, not a directory. " : "";
+            unreadable =
+                $"The snapshot directory '{dir}' is there but cannot be read: {ex.Message} {shape}" +
+                "That is a permission or filesystem problem, not an empty directory — " +
+                "exporting again would hit the same wall.";
+            return [];
+        }
     }
 
     /// <summary>
@@ -140,7 +181,7 @@ public static class SnapshotCatalog
         if (explicitDb is { Length: > 0 })
             return new SnapshotSelection(explicitDb, null, SelectionSource.ExplicitDb);
 
-        var entries = Enumerate(config);
+        var entries = Enumerate(config, out var dirUnreadable);
 
         if (explicitAlias is { Length: > 0 })
         {
@@ -148,9 +189,9 @@ public static class SnapshotCatalog
             if (hit is null)
                 throw new SnapshotFormatError(
                     $"No snapshot named '{explicitAlias}'. " +
-                    (entries.Count == 0
-                        ? "No snapshots are registered yet; run 'rimsearcher export' to make one."
-                        : $"Registered: {string.Join(", ", entries.Select(e => e.Alias))}."));
+                    (entries.Count > 0
+                        ? $"Registered: {string.Join(", ", entries.Select(e => e.Alias))}."
+                        : dirUnreadable ?? "No snapshots are registered yet; run 'rimsearcher export' to make one."));
             return new SnapshotSelection(hit.Path, hit.Alias, SelectionSource.ExplicitAlias);
         }
 
@@ -161,7 +202,10 @@ public static class SnapshotCatalog
         }
 
         if (entries.Count == 0)
+            // 「读不到目录」优先于「你还没导出过」:后者是一句可信、可操作、而且照着做
+            // 还会再撞一次的错答案。出路可以分支,否定不许跟着分支。
             throw new SnapshotFormatError(
+                dirUnreadable ??
                 "No snapshot is available. A snapshot is produced inside the game: run 'rimsearcher export --modlist <name>' " +
                 "to drive it, or press the export button in the mod's settings page and then " +
                 "'rimsearcher snapshot import <file>'.");

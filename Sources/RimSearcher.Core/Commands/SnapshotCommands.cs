@@ -20,10 +20,12 @@ public sealed class SnapshotListCommand : Command
 
     public override int Run(CommandContext ctx)
     {
-        var entries = SnapshotCatalog.Enumerate(ctx.Config);
+        var entries = SnapshotCatalog.Enumerate(ctx.Config, out var dirUnreadable);
         if (entries.Count == 0)
         {
+            // 空列表有两种成因,而「去 export 一个」只对得上其中一种。
             ctx.Report.Notice(NoticeKind.NextStep,
+                dirUnreadable ??
                 "No snapshots yet. A snapshot comes out of the game: run 'rimsearcher export --modlist <name>' " +
                 "to drive the game unattended, or use the export button on the mod's settings page and then " +
                 "'rimsearcher snapshot import <file>'.");

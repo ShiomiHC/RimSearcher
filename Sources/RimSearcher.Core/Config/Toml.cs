@@ -83,8 +83,41 @@ public static class Toml
         return root;
     }
 
+    /// <summary>
+    /// 读一份 TOML。**不存在返回空表** —— 首次运行还没有 config,而 <c>--config</c> 指向一个
+    /// 不存在的路径是「这次别读本机配置」的正当写法(测试全靠它隔离)。但**存在却打不开就抛**。
+    ///
+    /// 不能拿 <c>File.Exists</c> 分流:它在 access-denied 上返回 <c>false</c>,与「不存在」
+    /// 逐字同形。只读挂载或权限不足时,配置于是被当成一份空配置,快照目录跟着落回默认、
+    /// 同样读不到,最后印出来的是「你还没有快照,去 export 一个」—— 一个可信、可操作、
+    /// 而且照着做还会再撞一次的错答案。判据的缺席被印成了判据的否定值。
+    /// 直接读、按异常分类,「读不到」才说得出口。
+    /// </summary>
     public static Table Load(string path)
-        => File.Exists(path) ? Parse(File.ReadAllText(path), Path.GetFileName(path)) : new Table();
+    {
+        string text;
+        try
+        {
+            text = File.ReadAllText(path);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return new Table();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // 「这个路径上是个目录」判得出来就直说 —— 运行时给的那句往往只有
+            // 「拒绝访问」,而两种成因的处置完全不同。判不出来时不硬猜:只读挂载下
+            // Directory.Exists 同样返回 false,那时退回通用措辞才是诚实的。
+            var shape = Directory.Exists(path) ? "That path is a directory, not a file. " : "";
+            throw new TomlError(
+                $"Cannot read '{path}': {ex.Message} {shape}" +
+                "The file is there but unreadable — a permission or filesystem problem, " +
+                "not a missing configuration. Nothing was read, so no setting in it is in effect.");
+        }
+
+        return Parse(text, Path.GetFileName(path));
+    }
 
     private static object ParseValue(string v, string origin, int lineNo)
     {
