@@ -193,6 +193,14 @@ rather than assuming. These four it has no way to state:
 
 ## Snapshots
 
+**How a snapshot is made**: `rimsearcher export --modlist <name>` **runs the game
+headless** — launches RimWorld windowless, loads the modlist, dumps every def in
+memory, exits. Hence "in memory at export time", minutes-long exports on large
+modlists, and stderr stall reports being progress rather than verdicts: one appears
+after 120s without progress in a stage and the game **keeps running**; nothing stops
+it before the 900s default, which only `rimsearcher export --modlist <name> --timeout 1800`
+raises. A stall report is 2 minutes of silence, not a failure — do not interrupt on it.
+
 One export = one game version, one ordered mod list, one language; several coexist.
 `snapshot list` shows them, `--snapshot <name>` picks per command, `snapshot use <name>`
 sticks; `snapshot status` is the full comparison with the installed game. Queries raise
