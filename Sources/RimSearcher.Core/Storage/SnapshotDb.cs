@@ -733,7 +733,12 @@ public sealed class SnapshotDb : IDisposable
         }
         else if (path.Text.Contains('.') || path.Text.Contains('['))
         {
-            p["@path"] = "%" + Escape(path.Text);
+            // `[]` 在这一支也是下标通配。两件事正交:`--exact-path` 管「整条还是后缀」,
+            // `[]` 管「下标不限」—— 通配此前只在前者开启时生效,于是摘要自己印的形状
+            // 原样粘回来是空的。不写成「含 [] 就当 --exact-path」,那救不了自己写的
+            // 一段尾巴(`filter.thingDefs[]` 不是整条路径,加了旗照样空)。
+            // 字面含 `[]` 的路径实测一条都没有(三份快照各 0,含 `[` 的有 34 万),旧行为无损。
+            p["@path"] = "%" + Escape(path.Text).Replace("[]", "[%]", StringComparison.Ordinal);
             conds.Add("fv.path LIKE @path ESCAPE '\\'");
         }
         else

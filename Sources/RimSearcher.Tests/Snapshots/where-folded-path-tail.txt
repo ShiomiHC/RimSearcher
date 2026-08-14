@@ -1,0 +1,12 @@
+$ rimsearcher where thingDefs[] Bloomstone
+exit 0
+--- stdout ---
+2 defs.
+  - 'Bloomstone' also sits on 1 path shape beyond this one, 1 of them on def types other than MoltenRecipeDef, all on AlloyPartDef: costList[].thingDef (4).
+  - These rows span more than one path shape: fixedIngredientFilter.thingDefs[] (1), ingredients[].filter.thingDefs[] (1). The suffix matched them all; a set operation over this result treats them as one field unless the path column is read row by row. Pasting one of those shapes back with --exact-path keeps that one alone.
+
+Same in every row, not repeated below: def_type=MoltenRecipeDef, value=Bloomstone, code_default=no, mod=test.mod.
+def_name          path
+RecipeBloomIngot  ingredients[0].filter.thingDefs[0]
+RecipeBloomPlate  fixedIngredientFilter.thingDefs[0]
+--- stderr ---

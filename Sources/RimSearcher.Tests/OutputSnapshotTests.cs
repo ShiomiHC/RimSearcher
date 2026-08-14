@@ -126,6 +126,12 @@ public class OutputSnapshotTests
         // 「真的没有别处」,不是「没算」—— 这一份在,放开 def_type 之后那句话才不会变成
         // 每查必出的背景噪声(恒定出现的文字会被当噪声过滤掉,与它说不说得对无关)。
         { "where-value-cross-type-none", ["where", "workerClass", "--value", "Verse.TestWorker", "--exact"] },
+        // 上面那句话印出来的形状,**原样粘回来**要能跑。它印的是折叠形状
+        // (`costList[].thingDef`),而 `[]` 的下标通配此前只在 --exact-path 下生效 ——
+        // 不加旗时 `[]` 走字面匹配,恒空。两份摆一起:折叠形状当后缀用(完整路径),
+        // 以及只给尾巴一段(部分路径)—— 后者 --exact-path 也救不了,它匹配的是整条。
+        { "where-folded-path",        ["where", "costList[].thingDef", "Bloomstone"] },
+        { "where-folded-path-tail",   ["where", "thingDefs[]", "Bloomstone"] },
         // 打进 fields 的名字不是 def 类型,而反编译树里有同名类型 —— 那儿才答得出这个问题。
         // 三档摆一起:唯一一棵树命中、跨树同名(不许把一个挑选说成一个事实)、哪儿都没有
         // (那时一个字都不许多说,否则它就成了免责声明)。
