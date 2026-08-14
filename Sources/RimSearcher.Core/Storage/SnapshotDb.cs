@@ -980,16 +980,25 @@ public sealed class SnapshotDb : IDisposable
     /// <c>ScopeFilter.Complement</c> 那条同源:一次合法查询返回一张干净完整的表,
     /// 而它是不是全集,读的人从表里看不出来。
     ///
-    /// 按 def_type 收窄不是省地方,是「最大的那个」这个词的正确性前提:值 3.9 的真·最大项
-    /// 是 <c>PsychicRitualDef.invocationCircleRadius</c>(16),而问 ThingDef 爆炸半径的人
-    /// 被指到那儿只会更糊涂。
+    /// **不按 def_type 收窄。** 这里原先收窄,理由写的是「『最大的那个』这个词的正确性前提」——
+    /// 而下面那批注释后来推翻了「只报最大的那个」,改成列若干条让读者自己判。收窄活了下来,
+    /// 它的理由没有:**一个决定被它当初的目的固化,而那个目的早已撤销**。
+    ///
+    /// 撤销它的代价实测为负 —— 去掉 <c>def_type IN</c> 后最坏值(baseline 上的 "1",
+    /// 1800 条形状)从 0.184s 变 0.179s:<c>idx_fv_value_nc</c> 已经把 value 那一侧走成索引,
+    /// 类型过滤是 JOIN 之后的额外判断,不省 IO。
+    ///
+    /// 收窄挡掉的是**跨类型的那一半**,而那半常常正是答案:消费侧 2026-08-14 的实例里,
+    /// 材料 Shard 在起手的 RecipeDef 上只有 3 条形状,全类型有 17 条 —— 82% 在别的类型上,
+    /// 且那 82% 才是「谁在消费这个材料」的答案。收窄版给的是个自洽的小数字,
+    /// 没有任何一处看得出它不是全集。
     ///
     /// 形状内的 def 数**单独精确数一次**,不靠把 <c>comps[0]</c> 与 <c>comps[4]</c> 的
     /// 计数相加 —— 同一个 def 在两个下标上都带这个值时,相加会多报。排序用相加的近似值
     /// (只影响挑谁,不影响印出来的数),印出来的那个数走第二趟精确查询。
     /// </summary>
-    public (IReadOnlyList<(string Shape, int Defs)> Shown, int OtherShapes,
-            IReadOnlyCollection<string> Types)? ValueElsewhere(
+    public (IReadOnlyList<(string Shape, int Defs, string Types)> Shown, int OtherShapes,
+            int CrossTypeShapes, IReadOnlyCollection<string> Types)? ValueElsewhere(
         PathQuery own, string value, ValueMatch match, ScopeFilter scope)
     {
         // 「调用方这次命中了哪些形状、哪些 def_type」要按**整个结果集**算,不是按这一页 ——
@@ -1001,37 +1010,50 @@ public sealed class SnapshotDb : IDisposable
         else { op["@v"] = "%" + Escape(value) + "%"; oc.Add("fv.value LIKE @v ESCAPE '\\'"); }
         if (scope.SqlPredicate("d.source_mod", op) is { } osc) oc.Add(osc);
 
-        var ownShapes = new HashSet<string>(StringComparer.Ordinal);
+        // 「自己命中的形状」要连**类型**一起记。只按形状名排除,在放开 def_type 之后会
+        // 误伤:同名形状坐在另一个类型上时(`costList[].thingDef` 在 ThingDef 与 RecipeDef
+        // 上都有),那条正是要找的另一半,却因为名字与起手的相同而被当成「自己」排掉。
+        // 收窄版看不见这个 bug —— 那时候候选集里压根没有别的类型。
+        var ownShapes = new HashSet<(string Shape, string Type)>();
         var defTypes = new HashSet<string>(StringComparer.Ordinal);
         using (var rd = Query(
             "SELECT DISTINCT fv.path, d.def_type FROM field_values fv JOIN defs d ON d.id = fv.def_id " +
             $"WHERE {string.Join(" AND ", oc)}", op))
             while (rd.Read())
             {
-                ownShapes.Add(Search.PathSegments.Shape(rd.GetString(0)));
+                ownShapes.Add((Search.PathSegments.Shape(rd.GetString(0)), rd.GetString(1)));
                 defTypes.Add(rd.GetString(1));
             }
         if (defTypes.Count == 0) return null;
 
         var p = new Dictionary<string, object?>();
         var where = ValueWhere(value, match, scope, p);
-        var keys = new List<string>();
-        foreach (var t in defTypes) { var k = $"@dt{keys.Count}"; p[k] = t; keys.Add(k); }
 
         // 形状 → 该形状下的具体路径,以及一个用来排序的近似 def 数。
+        // 形状 → 它坐在哪些 def_type 上:放开之后这一列**必须印出来**,否则读者手里
+        // 一条 `costList[].thingDef (4)` 看不出它根本不在自己问的那个类型上。
         var paths = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         var rough = new Dictionary<string, int>(StringComparer.Ordinal);
+        var types = new Dictionary<string, SortedSet<string>>(StringComparer.Ordinal);
         using (var rd = Query(
-            "SELECT fv.path, COUNT(DISTINCT d.id) FROM field_values fv JOIN defs d ON d.id = fv.def_id " +
-            $"{where} AND d.def_type IN ({string.Join(",", keys)}) GROUP BY fv.path", p))
+            "SELECT fv.path, d.def_type, COUNT(DISTINCT d.id) FROM field_values fv " +
+            $"JOIN defs d ON d.id = fv.def_id {where} GROUP BY fv.path, d.def_type", p))
             while (rd.Read())
             {
                 var shape = Search.PathSegments.Shape(rd.GetString(0));
-                if (ownShapes.Contains(shape)) continue;
+                var type = rd.GetString(1);
+                if (ownShapes.Contains((shape, type))) continue;
+                // GROUP BY 多了一列 def_type,同一条 path 会分成几行回来 —— 具体路径要去重,
+                // 否则第二趟的 `path IN (...)` 里同一个值出现好几次。
                 (paths.TryGetValue(shape, out var list) ? list : paths[shape] = []).Add(rd.GetString(0));
-                rough[shape] = rough.GetValueOrDefault(shape) + rd.GetInt32(1);
+                rough[shape] = rough.GetValueOrDefault(shape) + rd.GetInt32(2);
+                (types.TryGetValue(shape, out var ts) ? ts : types[shape] = new(StringComparer.Ordinal)).Add(type);
             }
         if (paths.Count == 0) return null;
+
+        // 「有几条压根不在你问的那个类型上」—— 这个数进主语位。它是可加的(形状计数),
+        // 不是 def 数的并集:并集是个看着像答案的错数,下面那段注释说的就是这件事。
+        var crossType = types.Count(kv => kv.Value.Any(t => !defTypes.Contains(t)));
 
         // **只报「最大的那个」是错的**,实测:同一道题从 explosionRadius 起手时最大项是
         // comps[].explosiveRadius(9),正是要找的另一半;从 explosiveRadius 起手时最大项
@@ -1066,19 +1088,21 @@ public sealed class SnapshotDb : IDisposable
         //
         // 这个数走第二趟精确查询,不靠把 comps[0] 与 comps[4] 的计数相加 ——
         // 同一个 def 在两个下标上都带这个值时,相加会多报。排序才用相加的近似值。
-        var shown = new List<(string Shape, int Defs)>();
+        var shown = new List<(string Shape, int Defs, string Types)>();
         foreach (var shape in top)
         {
             var pp = new Dictionary<string, object?>();
             var pw = ValueWhere(value, match, scope, pp);
             var pk = new List<string>();
-            foreach (var path in paths[shape]) { var k = $"@p{pk.Count}"; pp[k] = path; pk.Add(k); }
+            foreach (var path in paths[shape].Distinct(StringComparer.Ordinal))
+            { var k = $"@p{pk.Count}"; pp[k] = path; pk.Add(k); }
             shown.Add((shape, Scalar(
                 "SELECT COUNT(DISTINCT d.id) FROM field_values fv JOIN defs d ON d.id = fv.def_id " +
-                $"{pw} AND fv.path IN ({string.Join(",", pk)})", pp)));
+                $"{pw} AND fv.path IN ({string.Join(",", pk)})", pp),
+                string.Join("/", types[shape])));
         }
         return (shown.OrderByDescending(s => s.Defs).ThenBy(s => s.Shape, StringComparer.Ordinal).ToList(),
-                paths.Count, defTypes);
+                paths.Count, crossType, defTypes);
     }
 
     /// <summary>

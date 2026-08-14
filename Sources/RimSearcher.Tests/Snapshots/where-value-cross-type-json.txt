@@ -1,0 +1,29 @@
+$ rimsearcher where ingredients[0].filter.thingDefs[0] --value Bloomstone --exact --json
+exit 0
+--- stdout ---
+{
+  "notes": [
+    {
+      "kind": "count",
+      "text": "1 def within --exact.",
+      "shown": 1,
+      "total": 1
+    },
+    {
+      "kind": "boundary",
+      "text": "'Bloomstone' also sits on 2 path shapes beyond this one, 1 of them on def types other than MoltenRecipeDef: costList[].thingDef (4, AlloyPartDef), fixedIngredientFilter.thingDefs[] (1, MoltenRecipeDef)."
+    }
+  ],
+  "matches": [
+    {
+      "def_name": "RecipeBloomIngot",
+      "def_type": "MoltenRecipeDef",
+      "path": "ingredients[0].filter.thingDefs[0]",
+      "value": "Bloomstone",
+      "code_default": "no",
+      "declared_in": null,
+      "mod": "test.mod"
+    }
+  ]
+}
+--- stderr ---

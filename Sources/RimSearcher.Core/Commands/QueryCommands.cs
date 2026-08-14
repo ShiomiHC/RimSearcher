@@ -2395,16 +2395,44 @@ internal static class Advisory
         // **列若干条,不报「最大的那个」。** 只报最大项时,起手字段一换,指向就从
         // 「正是要找的另一半」变成「一个无关字段」—— 而选样标准(def 数)与相关性无关,
         // 恰恰是这句话自己在说的那件事。列出来交给读者判,与紧邻的跨形状那句同形。
+        // **数在主语位,不在从句里。** 原先的主句是「Naming a field narrows to that field」——
+        // 讲的是读者做了什么,而出路挂在句尾从句上。实测过的形状(`N of M` → `M defs,
+        // showing the first N`,haiku 闭卷 0/7 → 7/7)说的正是这件事:换个说法是措辞,
+        // 换哪个数当主语是**结构**,而弱档只吃后者。
+        //
+        // 跨类型那一半单独报数。它是这句话现在最要紧的一件事:起手字段决定了 def_type,
+        // 而答案常常整个坐在别的类型上(消费侧实例里 82% 如此),读者手上那张表却
+        // 一行都看不出这回事。
+        //
+        // **这句话到主句+枚举为止,没有尾巴。** 原先句尾挂着「相关性从值里推不出来 +
+        // `where --value` 兜底」那 184 字符,2026-08-14 的开卷盲测(152 个受试、四臂
+        // × 三模型档)把它删了:
+        //   · 尾巴喂的是检索行为,而检索行为 agent 自己就有 —— **只留主句的 D 臂输出里
+        //     一个命令字都没有,Sonnet 兜底率仍是 8/8**,四臂兜底率齐平(8/8/7/8);
+        //   · 枚举段喂的是答案本身:note 印的 `costList[].thingDef (14, ThingDef)` 里
+        //     那个 14 会被**直接搬进答案** —— 带枚举 22/32 答出 14,不带 14/32,p≈0.023。
+        // 三档排序 C ≥ A > B > D,C(主句+枚举)在 Sonnet 与 Opus 上均分都是第一。
+        //
+        // 留档以免重犯:先前依据 Sonnet 单档 n=8(7/8、轮数最低)得出过相反的
+        // 「砍枚举」建议,被扩样 + Haiku 复现失败 + D 臂一起推翻。
+        // **单档、小 n、且判据已饱和时的优势,不是优势。**
+        var others = el.CrossTypeShapes > 0
+            ? $", {el.CrossTypeShapes} of them on def types other than " +
+              $"{string.Join("/", el.Types.OrderBy(t => t, StringComparer.Ordinal))}"
+            : "";
+        // 每条带上自己的 def_type —— 少了它,一条跨类型的形状与一条同类型的在这行里同形。
+        // **但全都落在同一个类型上时,那一列逐条相同**,此时它不再区分任何东西,只是
+        // 每条重复一遍同一个词:提到前面说一次。判据是「这段字每次出现是否都一样」,
+        // 一样就等于背景噪声 —— 与 crossType=0 时不出那句从句同一条理由。
+        var lone = el.Shown.Select(s => s.Types).Distinct(StringComparer.Ordinal).ToList();
+        var oneType = lone.Count == 1 && el.OtherShapes == el.Shown.Count;
         ctx.Report.Notice(NoticeKind.Boundary,
-            $"Naming a field narrows to that field: '{Quote(value)}' also sits on " +
-            $"{Tally.Complete(el.OtherShapes).Render("path shape")} of " +
-            $"{string.Join("/", el.Types.OrderBy(t => t, StringComparer.Ordinal))} not matched here: " +
-            string.Join(", ", el.Shown.Select(s => $"{s.Shape} ({s.Defs})")) +
+            $"'{Quote(value)}' also sits on {Tally.Complete(el.OtherShapes).Render("path shape")} " +
+            "beyond this one" + others + (oneType ? $", all on {lone[0]}" : "") + ": " +
+            string.Join(", ", el.Shown.Select(s => oneType ? $"{s.Shape} ({s.Defs})" : $"{s.Shape} ({s.Defs}, {s.Types})")) +
             (el.OtherShapes > el.Shown.Count
                 ? $", plus {Tally.Complete(el.OtherShapes - el.Shown.Count).Render("path shape")} not shown"
-                : "") +
-            ". Which of those is the same thing the question is about does not follow from the value — " +
-            $"'rimsearcher where --value {Quote(value)}{(exact ? " --exact" : "")}' lists every path holding it.");
+                : "") + ".");
     }
 
     /// <summary>

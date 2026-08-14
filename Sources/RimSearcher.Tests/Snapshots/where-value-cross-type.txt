@@ -1,0 +1,9 @@
+$ rimsearcher where ingredients[0].filter.thingDefs[0] --value Bloomstone --exact
+exit 0
+--- stdout ---
+1 def within --exact.
+'Bloomstone' also sits on 2 path shapes beyond this one, 1 of them on def types other than MoltenRecipeDef: costList[].thingDef (4, AlloyPartDef), fixedIngredientFilter.thingDefs[] (1, MoltenRecipeDef).
+
+def_name          def_type         path                                value       code_default  mod
+RecipeBloomIngot  MoltenRecipeDef  ingredients[0].filter.thingDefs[0]  Bloomstone  no            test.mod
+--- stderr ---

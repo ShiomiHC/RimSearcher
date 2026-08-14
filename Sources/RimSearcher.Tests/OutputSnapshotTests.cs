@@ -115,6 +115,17 @@ public class OutputSnapshotTests
         // 都不说(不点名字段那条路一直说着 —— 跨产地口径不一致)。上面那份带着 --exact,
         // 于是整套基线里**没有一份走过缺省态**,而缺省态才是多数人走的路。
         { "where-value-substring",  ["where", "texPath", "--value", "Things/Building"] },
+        // 同一条理由的**第三次**,而这一次差的不是 flag 是 def_type:上面那两份的别处形状
+        // 与命中行同类型,于是「按命中行的 def_type 收窄」这个决定在字节层从没出过声 ——
+        // 收窄掉与没收窄掉,在那两份基线里逐字相同。这一组的答案大头在**另一个类型**上。
+        // 文本与 --json 各钉一份:--json 那条路上这句话是 notes[] 里的一项,措辞改动
+        // 只动文本不动 notes 的话,两边会漂。
+        { "where-value-cross-type",      ["where", "ingredients[0].filter.thingDefs[0]", "--value", "Bloomstone", "--exact"] },
+        { "where-value-cross-type-json", ["where", "ingredients[0].filter.thingDefs[0]", "--value", "Bloomstone", "--exact", "--json"] },
+        // 同一句话的**沉默**那一侧:值只坐在这一条路径上,别的类型也没有。沉默此时是
+        // 「真的没有别处」,不是「没算」—— 这一份在,放开 def_type 之后那句话才不会变成
+        // 每查必出的背景噪声(恒定出现的文字会被当噪声过滤掉,与它说不说得对无关)。
+        { "where-value-cross-type-none", ["where", "workerClass", "--value", "Verse.TestWorker", "--exact"] },
         // 打进 fields 的名字不是 def 类型,而反编译树里有同名类型 —— 那儿才答得出这个问题。
         // 三档摆一起:唯一一棵树命中、跨树同名(不许把一个挑选说成一个事实)、哪儿都没有
         // (那时一个字都不许多说,否则它就成了免责声明)。

@@ -2559,7 +2559,11 @@ public class GrammarTests
         Assert.True(head > shapes, "跨形状那句要排在表上方,不许留在末尾脚注区");
 
         // 同一次查询两条都出场时必须相邻 —— 中间隔着别的段落就又成了两处分开的警告。
-        var elsewhere = text.IndexOf("Naming a field narrows", StringComparison.Ordinal);
+        // **锚点跟着那句话的第一个词走**:原先锚在句尾的「Naming a field narrows」上,
+        // 而 2026-08-14 删掉尾巴之后那串不存在了,`elsewhere` 恒为 -1 —— 下面这个
+        // `if` 会一声不响地整段跳过,闸从此永远绿。锚点落在会被改掉的部位上时,
+        // 「没触发」与「通过了」在测试报告里逐字同形。
+        var elsewhere = text.IndexOf("also sits on", StringComparison.Ordinal);
         if (elsewhere >= 0)
         {
             var between = text[Math.Min(elsewhere, shapes)..Math.Max(elsewhere, shapes)];
@@ -2809,10 +2813,19 @@ public class GrammarTests
     /// 没有一处看得出问题。闭卷实测四个样本零反查,带着「字段名一律反查」那条文档的
     /// 那个照样踩。
     ///
-    /// 三条一起钉,少一条这句话就退化:
-    /// ① 别处那个形状要**点名**并带 def 数 —— 只说「还有别处」等于把活推回去;
-    /// ② 「哪些形状跟提问是同一件事,从值里推不出来」这半句不许掉 —— 试过给并集
-    ///    (靶题 17,真值 11),那是个看着像答案的错数;
+    /// 三条一起钉,少一条这句话就退化。**①②的结论留着,理由换了** —— 换它们的是
+    /// 2026-08-14 的开卷盲测(152 个受试、四臂 × 三模型档,产地 `rsblind-arms\结论.md`):
+    ///
+    /// ① 别处那个形状要**点名**并带 def 数。原先的理由写的是「只说『还有别处』等于把活
+    ///    推回去」—— **这条被直接否证**:砍掉枚举的 B 臂检索率 Sonnet 8/8、轮数反而比
+    ///    完整版少 2.2,活一点没被推回去。真正的作用在**答案侧**:note 印的
+    ///    `costList[].thingDef (14, ThingDef)` 里那个 14 会被直接搬进答案 ——
+    ///    带枚举 22/32 答出 14,不带 14/32(p≈0.023)。**点名要的是那个数能落地,
+    ///    不是逼读者去查。**
+    /// ② 不许把各形状的 def 数**加起来**给一个总数(靶题并集 17,真值 11)。原先这条
+    ///    是靠句尾「相关性从值里推不出来」那半句话守的,而那半句连同整条尾巴已被删 ——
+    ///    同一场盲测测出尾巴喂的只是检索行为,而**只留主句的 D 臂输出里一个命令字都没有,
+    ///    Sonnet 兜底率仍 8/8**。话没了,禁令还在,所以这条闸改成直接钉那件不许做的事。
     /// ③ 位置在表上方。
     /// </summary>
     [Fact]
@@ -2822,11 +2835,15 @@ public class GrammarTests
         var (hit, _, _) = Fixture.Run("where", "soundPickup", "--value", "Standard_Pickup", "--exact");
         Assert.Contains("soundInteract", hit, StringComparison.Ordinal);
         Assert.Contains("path shape", hit, StringComparison.Ordinal);
-        // 相关性判不出来这件事要写在句子里,不留给读者自己想到。
-        Assert.Contains("does not follow from the value", hit, StringComparison.Ordinal);
+        // ① 形状要带着**它自己的 def 数**,那个数就是被搬进答案的东西。
+        Assert.Contains("soundInteract (9", hit, StringComparison.Ordinal);
+
+        // ② 不许出现把各形状加起来的那个总数。这里 soundInteract 9 + 自身命中 9 = 18,
+        //    而 18 不是任何真值 —— 并集这种「看着像答案的错数」比不给数更坏。
+        Assert.DoesNotContain("18", hit, StringComparison.Ordinal);
 
         // 表上方 —— 与补集句同一条纪律:受众定义上就是拿到一张表的人。
-        var said = hit.IndexOf("Naming a field narrows", StringComparison.Ordinal);
+        var said = hit.IndexOf("also sits on", StringComparison.Ordinal);
         var head = hit.IndexOf("def_name", StringComparison.Ordinal);
         Assert.True(said >= 0 && head > said, "这句要排在表上方,不许落进末尾脚注区");
 
@@ -2837,7 +2854,7 @@ public class GrammarTests
                      // 值只在这一条路径上 —— 沉默此时是真的没有别处,不是没算。
                      Fixture.Run("where", "shortHash", "--value", "12345", "--exact").Stdout,
                  })
-            Assert.DoesNotContain("Naming a field narrows", quiet, StringComparison.Ordinal);
+            Assert.DoesNotContain("also sits on", quiet, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -2876,7 +2893,9 @@ public class GrammarTests
 
         // ① 三条并列的横跨第 3 名 —— 要么都在,要么都不在,不许留下一个。
         var tie = Ask("aim", "7.77");
-        foreach (var both in new[] { "delta (3)", "epsilon (3)", "gamma[].size (3)" })
+        // 每条形状后面跟的是 `(def 数, def_type)` —— def_type 那一列是放开跨类型时加的,
+        // 少了它,一条跨类型的形状与一条同类型的在这行里长得一模一样。
+        foreach (var both in new[] { "delta (3, TieDef)", "epsilon (3, TieDef)", "gamma[].size (3, TieDef)" })
             Assert.Contains(both, tie, StringComparison.Ordinal);
         // 而它确实还在省略,不是碰巧全列了 —— 否则这条闸测的是「一共没几条」。
         Assert.Contains("plus 2 path shapes not shown", tie, StringComparison.Ordinal);

@@ -530,6 +530,33 @@ public static class Fixture
             ("workerClass", "Verse.TestWorker", DefaultState.Differs));
         DefAs("TestBaseDef", "Verse.TestBaseDef", "PlainOne", "plain one", "test.mod", "Variants.xml", false, 0);
 
+        // 「同值坐在**别的 def_type** 上」那句提示的语料。
+        //
+        // 上面 Standard_Pickup 那一组(soundPickup / soundInteract)跨的是路径、**不跨类型**,
+        // 于是那句话按命中行的 def_type 收窄之后照样说得出话 —— 收窄这件事在字节层从没
+        // 出过声。这一组专补那个缺口:起手字段落在一个类型上,答案的大头在另一个类型上。
+        //
+        // 形状取自真实一例(消费侧 2026-08-14 报的 Shard):
+        // `RecipeDef.ingredients[].filter.thingDefs[]` 上只坐着 1 个 def,而同一个材料的
+        // 消费面另有 14 个 def 坐在 `ThingDef.costList[].thingDef` 上 —— 跨类型。
+        // 起手查 ingredients 那条路的人拿到「1」,而那是个干净、自洽、**看着像全集**的小数字。
+        Def("MoltenRecipeDef", "RecipeBloomIngot", "bloom ingot", "test.mod", "Recipes_Molten.xml", false, 0,
+            ("ingredients[0].filter.thingDefs[0]", "Bloomstone", DefaultState.Differs));
+        // 同类型的第二条路径 —— 收窄版**也**看得见这一条。留着它,是为了让改动前后的差别
+        // 落在「1 条 → 3 条」而不是「沉默 → 出声」:后者两种病都能解释,前者只有收窄能解释。
+        Def("MoltenRecipeDef", "RecipeBloomPlate", "bloom plate", "test.mod", "Recipes_Molten.xml", false, 0,
+            ("fixedIngredientFilter.thingDefs[0]", "Bloomstone", DefaultState.Differs));
+        // 答案的大头,跨在另一个 def_type 上:四个 def 走 costList[0]、其中两个还走 costList[1]。
+        // 两条形状的 def 数(4 与 2)不相等 —— 展示位的并列边界由 tie 语料管,这里不许再触发它。
+        foreach (var (n, second) in new[] { ("PartAnvil", true), ("PartCrucible", true),
+                                            ("PartLadle", false), ("PartTongs", false) })
+        {
+            var f = new List<(string, string, int)>
+                { ("costList[0].thingDef", "Bloomstone", DefaultState.Differs) };
+            if (second) f.Add(("costList[1].thingDef", "Bloomstone", DefaultState.Differs));
+            Def("AlloyPartDef", n, null, "test.mod", "Alloys.xml", false, 0, [.. f]);
+        }
+
         void XmlNode(string defType, string name, string parentName, bool isAbstract,
                      string defName, string mod, string file, int patchOps)
         {

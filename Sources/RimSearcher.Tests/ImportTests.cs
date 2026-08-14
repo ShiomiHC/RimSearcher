@@ -184,7 +184,8 @@ public class ImportTests
     public void 导入后def数量与结束标记一致()
     {
         using var db = Build("count");
-        Assert.Equal(13, db.AllDefNames(ScopeFilter.Parse("all", db.PackageIds(), NoConfig)).Count);
+        // 13 → 19:跨类型语料那 6 条(MoltenRecipeDef ×2、AlloyPartDef ×4)。
+        Assert.Equal(19, db.AllDefNames(ScopeFilter.Parse("all", db.PackageIds(), NoConfig)).Count);
     }
 
     [Fact]

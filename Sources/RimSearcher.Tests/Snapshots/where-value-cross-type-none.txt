@@ -1,0 +1,8 @@
+$ rimsearcher where workerClass --value Verse.TestWorker --exact
+exit 0
+--- stdout ---
+1 def within --exact.
+
+def_name    def_type     path         value             code_default  mod
+VariantOne  TestBaseDef  workerClass  Verse.TestWorker  no            test.mod
+--- stderr ---

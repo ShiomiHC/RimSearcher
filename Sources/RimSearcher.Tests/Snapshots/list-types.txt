@@ -1,11 +1,13 @@
 $ rimsearcher list
 exit 0
 --- stdout ---
-4 def types.
+6 def types.
 
-def_type     defs
-ThingDef     9
-TestBaseDef  2
-HediffDef    1
-StatDef      1
+def_type         defs
+ThingDef         9
+AlloyPartDef     4
+MoltenRecipeDef  2
+TestBaseDef      2
+HediffDef        1
+StatDef          1
 --- stderr ---
