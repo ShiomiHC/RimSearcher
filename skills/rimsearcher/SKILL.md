@@ -86,8 +86,14 @@ a different question. None of them announces itself.
   collects `swimmingGraphicData.shaderType`. `--exact-path` pins the whole path, with `[]`
   standing for any index. This changes the answer, not the row count.
 - **`get --path-contains`/`--value` match substrings too** — `--path-contains soundImpact`
-  also returns `soundImpactDefault`, opposite meaning. `--type <DefType>` picks between
-  same-named defs (common).
+  also returns `soundImpactDefault`, opposite meaning.
+- **One defName can belong to several def types, and `get` then prints one block per def** —
+  `HospitalBed` is both a ThingDef and a ResearchProjectDef. Under `--json` that is a
+  `defs[]` of more than one entry in **no guaranteed order**, so `defs[0].fields` reads
+  *another def's* fields and shows up as "this def has no such field", never as an error.
+  Pick the entry by its `defs[].def.def_type`, or pin it with `--type <DefType>` — which exits `1`
+  naming the types it does have, rather than handing back a different def. A `boundary`
+  note announces the collision every time, including under `--type`.
 - **Reverse-look-up field names, never guess.** `where --value <value>` reports which paths
   hold the value. A guessed field name that happens to exist returns a clean,
   complete-looking table for the wrong field — the most expensive failure here.
