@@ -159,9 +159,18 @@ namespace RimSearcher.DataMod
                     .Num(IntermediateFormat.KeyEconomyProfitRate, null);
             }
 
+            // CostListString 在**成本表为空**时走 ToCommaList 的空集分支,那一支返回的是
+            // "none".Translate() —— 中文客户端下就是「无」。它是一句 UI 文本,不是数据:
+            // 同一个游戏换个语言,同一列会变成 "none",而两份快照按字节比就对不上。
+            //
+            // 所以这里不去认那个字符串(认它就得钉死某个语言),而是**在调用前判空**:
+            // 该函数产出非空内容的充要条件就是下面这个条件,自己不 Producible 时它也返回 ""。
+            // 「不可生产」与「可生产但无耗材」这两态并没有因此糊在一起 —— producible 是自己
+            // 一列,分辨它用那一列,不是靠这一列碰巧长什么样。
+            var hasCostEntries = (def.CostList != null && def.CostList.Count > 0) || def.MadeFromStuff;
             line.Num(IntermediateFormat.KeyEconomyWorkToProduce, work > 0f ? (float?)work : null)
                 .Str(IntermediateFormat.KeyEconomyCostList,
-                     DebugOutputsEconomy.CostListString(def, false, false) ?? "");
+                     hasCostEntries ? (DebugOutputsEconomy.CostListString(def, false, false) ?? "") : "");
 
             // 难度相关的成本变体。**读的是字段本身,不是 CostList 的结果** —— 结果里看不出
             // 这件事:Applies 在没有 storyteller 时无条件为假,于是变体存不存在都长成同一个数。
