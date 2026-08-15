@@ -172,6 +172,11 @@ public class OutputSnapshotTests
         { "inherit-missing",       ["inherit", "NoSuchNode"] },
         { "get-xml-node-only",     ["get", "BaseBullet"] },
         { "list-limited",          ["list", "ThingDef", "--limit", "2"] },
+        // class 那一列同质时不印,而 JSON 里照样得有值 —— 文本面看不出这件事,
+        // 上一行那份基线对它一个字都不响。两份:同质(列不印)与显式点了 class 的那次
+        // (用户敲的就是它,回答里更不能是 null)。
+        { "list-limited-json",     ["list", "ThingDef", "--limit", "2", "--json"] },
+        { "list-classed-json",     ["list", "ThingDef", "--own-class", "Verse.ThingDef", "--limit", "2", "--json"] },
         { "list-scope-empty",      ["list", "HediffDef", "--scope", "test.mod"] },
         // 排除式 scope 的静默错表:被排除掉的那部分照样有命中,而留下的结果表干净、完整、
         // 看不出任何问题。上面那几条 scope 闸全是白名单形式,照不出这个形态。

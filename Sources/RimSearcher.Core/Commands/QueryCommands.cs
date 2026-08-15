@@ -1653,6 +1653,10 @@ public sealed class ListCommand : Command
                 NameList.Render([.. classes.Select(c => $"{Tail(c.Class)} ({c.Count})")], Limits.MaxSuggestions) +
                 ". Pass --own-class to pick one.");
 
+        // 同质时不印这一列(见上),但**值照填** —— 不印是排版,而 JSON 里的 null 在这套
+        // 输出里恒读作「查不出来」。同质恰恰是查得最清楚的那种,而 `--own-class` 点了名的
+        // 那次更刺眼:用户敲的就是这个 class,回答里它却是 null。
+        // 数据里真没有 class 时才是 null,而那时它是实话。
         var columns = heterogeneous
             ? new[] { "def_name", "class", "label", "mod" }
             : ["def_name", "label", "mod"];
@@ -1661,7 +1665,7 @@ public sealed class ListCommand : Command
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
                 ["def_name"] = r.DefName,
-                ["class"] = heterogeneous ? Tail(r.Class ?? "") : null,
+                ["class"] = r.Class is { } c ? Tail(c) : null,
                 ["label"] = r.Label,
                 ["mod"] = r.SourceMod,
             }).ToList());

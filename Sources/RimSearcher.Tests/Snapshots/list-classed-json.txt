@@ -1,0 +1,28 @@
+$ rimsearcher list ThingDef --own-class Verse.ThingDef --limit 2 --json
+exit 0
+--- stdout ---
+{
+  "notes": [
+    {
+      "kind": "truncation",
+      "text": "9 defs, showing the first 2 within --own-class Verse.ThingDef.",
+      "shown": 2,
+      "total": 9
+    }
+  ],
+  "defs": [
+    {
+      "def_name": "Apparel_ShieldBelt",
+      "class": "ThingDef",
+      "label": "shield belt",
+      "mod": "ludeon.rimworld"
+    },
+    {
+      "def_name": "Bullet_Revolver",
+      "class": "ThingDef",
+      "label": "revolver bullet",
+      "mod": "ludeon.rimworld"
+    }
+  ]
+}
+--- stderr ---
