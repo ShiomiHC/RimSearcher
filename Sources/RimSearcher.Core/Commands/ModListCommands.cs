@@ -202,7 +202,7 @@ public sealed class ModListShowCommand : Command
         ],
         // 「装没装」不是一列,是表旁边的一句话 —— 声明里写成列名的话,按列去读的人
         // 会拿到 null 并把它读成「没装」。
-        JsonKeys = [new() { Key = "mods", Rows = true, What = "one row per mod in the list, in load order: order, package_id, name. Whether they are installed here is a note beside the table, not a column." }],
+        JsonKeys = [new() { Key = "mods", Rows = true, What = "one row per mod in the list, in load order: modlist, order, package_id, name. Whether they are installed here is a note beside the table, not a column. modlist is in every row either way, so one parser handles both a named list and --find across all of them; the text table prints it only when searching all lists, where it varies." }],
     };
 
     public override int Run(CommandContext ctx)
@@ -227,9 +227,16 @@ public sealed class ModListShowCommand : Command
             filter is null ? Tally.Complete(rows.Count) : Tally.Of(rows.Count, list.Ids.Count),
             "mod", "drop --find to see the whole list.");
 
+        // modlist 这一键两条路都发,尽管指名这一路上它整列同值 —— --find 那路带着它,
+        // 而按它分组的消费代码在这一路上拿到的会是 null,读出来是「这行不属于任何列表」。
+        // 值取 list.Name(而不是用户敲的 which):与 --find 那路的 entry.Name 同源,
+        // 于是两条路上同一份列表的名字逐字相同。
+        // 文本面不印它:整列同值时 Fold 会折成表上一句话,而这里连那一句都是废话 ——
+        // 列表名就是用户刚敲的那个词。
         ctx.Report.Table("mods", ["order", "package_id", "name"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
+                ["modlist"] = list.Name,
                 ["order"] = r.Order,
                 ["package_id"] = r.Id,
                 ["name"] = r.Name,

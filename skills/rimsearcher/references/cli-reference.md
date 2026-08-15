@@ -545,7 +545,7 @@ rimsearcher modlist show [name] [options]
 
 | Key | Holds |
 |---|---|
-| `mods` | one row per mod in the list, in load order: order, package_id, name. Whether they are installed here is a note beside the table, not a column. |
+| `mods` | one row per mod in the list, in load order: modlist, order, package_id, name. Whether they are installed here is a note beside the table, not a column. modlist is in every row either way, so one parser handles both a named list and --find across all of them; the text table prints it only when searching all lists, where it varies. |
 
 Examples:
 

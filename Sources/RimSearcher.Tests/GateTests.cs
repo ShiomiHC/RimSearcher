@@ -119,6 +119,11 @@ public class GateTests
     /// </summary>
     [Theory]
     [InlineData("things", new[] { "economy" }, new[] { "economy", "TestModGun" })]
+    // modlist show 的两条路:指名一份 vs --find 搜全部。后者多一个 modlist 键 ——
+    // 方向与 economy 相反(多而不是少),而代价一样:按 modlist 分组的消费代码在指名那条路上
+    // 拿到 null,读出来是「这行不属于任何列表」。
+    [InlineData("mods", new[] { "modlist", "show", "fixture-current" },
+                        new[] { "modlist", "show", "--find", "test.mod" })]
     public void 同一个键的两条路发出同一套键(string key, string[] listing, string[] detail)
     {
         Assert.Equal(KeysOf(key, listing), KeysOf(key, detail));
