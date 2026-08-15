@@ -1,0 +1,80 @@
+$ rimsearcher economy TestModGun --json
+exit 0
+--- stdout ---
+{
+  "notes": [
+    {
+      "kind": "count",
+      "text": "1 thing.",
+      "shown": 1,
+      "total": 1
+    },
+    {
+      "kind": "boundary",
+      "text": "A tag like '(holds when classicMortars=on)' above names the difficulty setting a number depends on, and the position it holds under. Put the setting the other way and the def swaps in a second cost list, which the tagged number is not from. An export cannot tell which way a given game has it: the setting is read off the storyteller, and no storyteller exists while the game is loading. 'rimsearcher get <defName> --path-contains costListForDifficulty' shows the other list."
+    },
+    {
+      "kind": "boundary",
+      "text": "2 recipes can produce this thing, so its calculatedMarketValue depends on def load order: the game takes whichever of them comes first in the database. A bulk recipe usually scales its ingredients but not its work amount, so which one wins changes the number."
+    },
+    {
+      "kind": "boundary",
+      "text": "A recipe above accepts this very thing as one of its own ingredients, so the calculated market value has the thing's own hand-written price folded into it — which is the opposite of deriving a price from ingredients."
+    }
+  ],
+  "things": [
+    {
+      "defName": "TestModGun",
+      "label": "test gun",
+      "mod": "test.mod",
+      "category": "Item",
+      "marketValue": 320,
+      "marketValueDefined": true,
+      "calcState": "recipe",
+      "calculatedMarketValue": 298.5,
+      "costToMake": 141.2,
+      "profit": 178.8,
+      "profitRate": 1104.94,
+      "workToProduce": 1618,
+      "costList": "40 x Bloomstone (80), 1 x Firefoam (61.2)",
+      "costDifficultyVar": "classicMortars",
+      "costDifficultyInverted": false,
+      "chainEndShare": 0.57,
+      "costDeep": 156.4,
+      "profitDeep": 163.6,
+      "producible": true,
+      "madeFromStuff": false,
+      "isWeapon": true,
+      "isApparel": false
+    }
+  ],
+  "costChain": [
+    {
+      "thingDef": "Bloomstone",
+      "count": 40,
+      "unitValue": 2,
+      "chainEnd": true
+    },
+    {
+      "thingDef": "Firefoam",
+      "count": 1,
+      "unitValue": 61.2,
+      "chainEnd": false
+    }
+  ],
+  "recipes": [
+    {
+      "defName": "Make_TestModGun",
+      "productCount": 1,
+      "workAmount": 1618,
+      "selfReferential": false
+    },
+    {
+      "defName": "Make_TestModGunBulk",
+      "productCount": 4,
+      "workAmount": 4200,
+      "selfReferential": true
+    }
+  ]
+}
+--- stderr ---

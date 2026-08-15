@@ -1,0 +1,148 @@
+$ rimsearcher economy --json
+exit 0
+--- stdout ---
+{
+  "notes": [
+    {
+      "kind": "count",
+      "text": "5 things.",
+      "shown": 5,
+      "total": 5
+    },
+    {
+      "kind": "boundary",
+      "text": "chainEndShare is 1 for 1 row above, which means the whole cost came from ingredients that have no recipe of their own. For those rows 'profit' is the market value minus a few other hand-written market values, not minus what producing the thing actually consumes."
+    },
+    {
+      "kind": "boundary",
+      "text": "calculatedMarketValue is 0 on 1 row above whose calcState is 'ok'. Read that as 'the game could not work it out', not as a price of zero: calcState only says the thing is producible and declares a market value, and the sum underneath can still come out empty. Vanilla does this a lot — Steel and Bioferrite among them."
+    },
+    {
+      "kind": "boundary",
+      "text": "A tag like '(holds when classicMortars=on)' above names the difficulty setting a number depends on, and the position it holds under. Put the setting the other way and the def swaps in a second cost list, which the tagged number is not from. An export cannot tell which way a given game has it: the setting is read off the storyteller, and no storyteller exists while the game is loading. 'rimsearcher get <defName> --path-contains costListForDifficulty' shows the other list."
+    }
+  ],
+  "things": [
+    {
+      "defName": "VoidNode",
+      "label": "void node",
+      "mod": "test.mod",
+      "category": "Item",
+      "marketValue": 1200,
+      "marketValueDefined": true,
+      "calcState": "not_producible",
+      "calculatedMarketValue": null,
+      "costToMake": null,
+      "profit": null,
+      "profitRate": null,
+      "workToProduce": null,
+      "costList": "",
+      "costDifficultyVar": null,
+      "costDifficultyInverted": false,
+      "chainEndShare": null,
+      "costDeep": 1200,
+      "profitDeep": 0,
+      "producible": false,
+      "madeFromStuff": false,
+      "isWeapon": false,
+      "isApparel": false
+    },
+    {
+      "defName": "Apparel_ShieldBelt",
+      "label": "shield belt",
+      "mod": "ludeon.rimworld",
+      "category": "Item",
+      "marketValue": 480,
+      "marketValueDefined": true,
+      "calcState": "ok",
+      "calculatedMarketValue": 412.75,
+      "costToMake": 220,
+      "profit": 260,
+      "profitRate": 866.67,
+      "workToProduce": 3000,
+      "costList": "60 x Bloomstone (120), 100 x Firefoam (100)",
+      "costDifficultyVar": null,
+      "costDifficultyInverted": false,
+      "chainEndShare": 1,
+      "costDeep": 220,
+      "profitDeep": 260,
+      "producible": true,
+      "madeFromStuff": false,
+      "isWeapon": false,
+      "isApparel": true
+    },
+    {
+      "defName": "TestModGun",
+      "label": "test gun",
+      "mod": "test.mod",
+      "category": "Item",
+      "marketValue": 320,
+      "marketValueDefined": true,
+      "calcState": "recipe",
+      "calculatedMarketValue": 298.5,
+      "costToMake": 141.2,
+      "profit": 178.8,
+      "profitRate": 1104.94,
+      "workToProduce": 1618,
+      "costList": "40 x Bloomstone (80), 1 x Firefoam (61.2)",
+      "costDifficultyVar": "classicMortars",
+      "costDifficultyInverted": false,
+      "chainEndShare": 0.57,
+      "costDeep": 156.4,
+      "profitDeep": 163.6,
+      "producible": true,
+      "madeFromStuff": false,
+      "isWeapon": true,
+      "isApparel": false
+    },
+    {
+      "defName": "Firefoam",
+      "label": "firefoam",
+      "mod": "ludeon.rimworld",
+      "category": "Building",
+      "marketValue": 18,
+      "marketValueDefined": false,
+      "calcState": "used",
+      "calculatedMarketValue": null,
+      "costToMake": 12.5,
+      "profit": 5.5,
+      "profitRate": null,
+      "workToProduce": null,
+      "costList": "5 x Bloomstone (10), 1 x Firefoam (2.5)",
+      "costDifficultyVar": "classicMortars",
+      "costDifficultyInverted": true,
+      "chainEndShare": 0.8,
+      "costDeep": 12.5,
+      "profitDeep": 5.5,
+      "producible": true,
+      "madeFromStuff": false,
+      "isWeapon": false,
+      "isApparel": false
+    },
+    {
+      "defName": "Meat_Muffalo",
+      "label": "muffalo meat",
+      "mod": "ludeon.rimworld",
+      "category": "Item",
+      "marketValue": 2.05,
+      "marketValueDefined": true,
+      "calcState": "ok",
+      "calculatedMarketValue": 0,
+      "costToMake": null,
+      "profit": null,
+      "profitRate": null,
+      "workToProduce": null,
+      "costList": "",
+      "costDifficultyVar": null,
+      "costDifficultyInverted": false,
+      "chainEndShare": null,
+      "costDeep": 2.05,
+      "profitDeep": 0,
+      "producible": true,
+      "madeFromStuff": false,
+      "isWeapon": false,
+      "isApparel": false
+    }
+  ]
+}
+--- stderr ---

@@ -321,6 +321,11 @@ public class OutputSnapshotTests
         // 经济面。这一层的每一种「空」都有自己的成因,而它们印出来同形 ——
         // 一份基线守一种成因,合并任何两份都会让区别在字节上消失。
         { "economy-all",           ["economy"] },
+        // JSON 面两条路各一份。这一层此前**九份基线全是文本面**,于是整层少七个键这件事
+        // 在字节闸上一声不响 —— 文本面本来就只印十五列,少的正好是没印的那些。
+        // 两份摆一起,守的是「键集不随命中方式变」;文本列可以不同,键不许。
+        { "economy-all-json",      ["economy", "--json"] },
+        { "economy-one-json",      ["economy", "TestModGun", "--json"] },
         // 齐全的一行 + 两张子表。两个配方能产它,于是推算价有加载顺序依赖;
         // 第二个还是自引用的 —— 两句说破都在这一份里。
         { "economy-one",           ["economy", "TestModGun"] },

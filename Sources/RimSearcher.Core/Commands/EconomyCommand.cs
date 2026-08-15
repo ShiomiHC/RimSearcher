@@ -37,6 +37,36 @@ public sealed class EconomyCommand : Command
         ["chain-end-share"] = "chain_end_share",
     };
 
+    /// <summary>
+    /// <c>things</c> 一行的键集,**两条路(单条详情与整层列表)共用这一份**。
+    ///
+    /// 2026-08-15 之前是抄了两遍,而整层那一份少七个键 —— 消费侧照单条写的解析代码在整层
+    /// 结果上拿到 null,而这一层处处以 null 表示「算不出」,于是缺席的键与一个真实的
+    /// 「游戏算不出来」逐字同形。最贵的是 <c>costDifficultyInverted</c>:整层印着
+    /// <c>costDifficultyVar</c> 却不发方向,而文本面早已把方向贴在数上(见 <see cref="Qual"/>),
+    /// 于是同一份输出的两面说的不是一件事。
+    ///
+    /// 文本面的列可以是这份的子集(见 <see cref="ListColumns"/>),JSON 面不许 ——
+    /// 键集是契约,列宽是排版。
+    /// </summary>
+    private static readonly string[] ThingKeys =
+        ["defName", "label", "mod", "category", "marketValue", "marketValueDefined", "calcState",
+         "calculatedMarketValue", "costToMake", "profit", "profitRate", "workToProduce", "costList",
+         "costDifficultyVar", "costDifficultyInverted", "chainEndShare", "costDeep", "profitDeep",
+         "producible", "madeFromStuff", "isWeapon", "isApparel"];
+
+    /// <summary>
+    /// 整层列表**文本面**印的列。<see cref="ThingKeys"/> 的子集,少掉的七个仍在 JSON 里。
+    ///
+    /// 不印全的理由是排版而不是数据:<c>costList</c> 一格能到 72 字符
+    /// (<c>TextRenderer.MaxCellWidth</c> 的上限),四个布尔列各自只在筛选时有用,
+    /// 而这条命令的常见调用是几十行一屏。单条详情那一路只有一行,印全不占地方。
+    /// </summary>
+    private static readonly string[] ListColumns =
+        ["defName", "label", "mod", "category", "marketValue", "calcState", "calculatedMarketValue",
+         "costToMake", "profit", "profitRate", "workToProduce", "costDifficultyVar", "chainEndShare",
+         "costDeep", "profitDeep"];
+
     public override CommandSpec Spec => new()
     {
         Name = "economy",
@@ -130,12 +160,13 @@ public sealed class EconomyCommand : Command
             {
                 Key = "things",
                 Rows = true,
-                What = "one row per priced thing — defName, label, mod, category, marketValue, " +
-                       "calcState, calculatedMarketValue, costToMake, profit, profitRate, workToProduce, " +
-                       "costDifficultyVar, costDifficultyInverted, chainEndShare, costDeep, profitDeep. " +
+                // 键名不在这里手抄第三遍 —— 上一次抄出来的差额就是这次修的 bug。
+                What = "one row per priced thing — " + string.Join(", ", ThingKeys) + ". " +
                        "Null means the game cannot work that number " +
                        "out; it is never a stand-in for zero. Always an array, including when one defName " +
                        "matched exactly, so the shape does not change with the kind of match. " +
+                       "Every key above is present either way; the text table drops seven of them when " +
+                       "listing the layer, to keep the rows readable, but the JSON never does. " +
                        "The text output tags cost numbers whose def declares a difficulty variant; here " +
                        "the numbers stay bare and costDifficultyVar/costDifficultyInverted carry that " +
                        "instead, so a number never arrives as a string.",
@@ -298,40 +329,41 @@ public sealed class EconomyCommand : Command
     private static object? QualMarketValue(EconomyRow row)
         => row.MarketValueDefined ? row.MarketValue : Qual(row.MarketValue, row);
 
+    /// <summary>
+    /// 一行 <c>things</c>。**两条路唯一的产地** —— 键与值都在这里定,调用方只挑印哪几列。
+    /// </summary>
+    private static IReadOnlyDictionary<string, object?> ThingRow(EconomyRow row) =>
+        new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["defName"] = row.DefName,
+            ["label"] = row.Label,
+            ["mod"] = row.Mod,
+            ["category"] = row.Category,
+            ["marketValue"] = QualMarketValue(row),
+            ["marketValueDefined"] = row.MarketValueDefined,
+            ["calcState"] = row.CalcState,
+            ["calculatedMarketValue"] = row.CalculatedMarketValue,
+            ["costToMake"] = Qual(row.CostToMake, row),
+            ["profit"] = row.Profit,
+            ["profitRate"] = row.ProfitRate,
+            ["workToProduce"] = row.WorkToProduce,
+            ["costList"] = row.CostList,
+            ["costDifficultyVar"] = row.CostDifficultyVar,
+            ["costDifficultyInverted"] = row.CostDifficultyInverted,
+            ["chainEndShare"] = row.ChainEndShare,
+            ["costDeep"] = row.CostDeep,
+            ["profitDeep"] = row.ProfitDeep,
+            ["producible"] = row.Producible,
+            ["madeFromStuff"] = row.MadeFromStuff,
+            ["isWeapon"] = row.IsWeapon,
+            ["isApparel"] = row.IsApparel,
+        };
+
     private static void EmitOne(CommandContext ctx, EconomyRow row)
     {
         // 单条命中照样走表,不走 detail 块:形状不随命中方式变,消费侧的解析代码就不必
-        // 分两支写(与 keyed 同一条纪律)。
-        ctx.Report.Table("things",
-            ["defName", "label", "mod", "category", "marketValue", "marketValueDefined", "calcState",
-             "calculatedMarketValue", "costToMake", "profit", "profitRate", "workToProduce", "costList",
-             "costDifficultyVar", "costDifficultyInverted", "chainEndShare", "costDeep", "profitDeep",
-             "producible", "madeFromStuff", "isWeapon", "isApparel"],
-            [new Dictionary<string, object?>
-            {
-                ["defName"] = row.DefName,
-                ["label"] = row.Label,
-                ["mod"] = row.Mod,
-                ["category"] = row.Category,
-                ["marketValue"] = QualMarketValue(row),
-                ["marketValueDefined"] = row.MarketValueDefined,
-                ["calcState"] = row.CalcState,
-                ["calculatedMarketValue"] = row.CalculatedMarketValue,
-                ["costToMake"] = Qual(row.CostToMake, row),
-                ["profit"] = row.Profit,
-                ["profitRate"] = row.ProfitRate,
-                ["workToProduce"] = row.WorkToProduce,
-                ["costList"] = row.CostList,
-                ["costDifficultyVar"] = row.CostDifficultyVar,
-                ["costDifficultyInverted"] = row.CostDifficultyInverted,
-                ["chainEndShare"] = row.ChainEndShare,
-                ["costDeep"] = row.CostDeep,
-                ["profitDeep"] = row.ProfitDeep,
-                ["producible"] = row.Producible,
-                ["madeFromStuff"] = row.MadeFromStuff,
-                ["isWeapon"] = row.IsWeapon,
-                ["isApparel"] = row.IsApparel,
-            }]);
+        // 分两支写(与 keyed 同一条纪律)。这一路只有一行,所以文本面也印全。
+        ctx.Report.Table("things", ThingKeys, [ThingRow(row)]);
 
         var chain = ctx.Db.EconomyChain(row.Id);
         if (chain.Count > 0)
@@ -415,28 +447,9 @@ public sealed class EconomyCommand : Command
 
         ctx.Report.PageNotice("thing", rows.Count, offset, total);
 
-        ctx.Report.Table("things",
-            ["defName", "label", "mod", "category", "marketValue", "calcState", "calculatedMarketValue",
-             "costToMake", "profit", "profitRate", "workToProduce", "costDifficultyVar", "chainEndShare",
-             "costDeep", "profitDeep"],
-            rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
-            {
-                ["defName"] = r.DefName,
-                ["label"] = r.Label,
-                ["mod"] = r.Mod,
-                ["category"] = r.Category,
-                ["marketValue"] = QualMarketValue(r),
-                ["calcState"] = r.CalcState,
-                ["calculatedMarketValue"] = r.CalculatedMarketValue,
-                ["costToMake"] = Qual(r.CostToMake, r),
-                ["profit"] = r.Profit,
-                ["profitRate"] = r.ProfitRate,
-                ["workToProduce"] = r.WorkToProduce,
-                ["costDifficultyVar"] = r.CostDifficultyVar,
-                ["chainEndShare"] = r.ChainEndShare,
-                ["costDeep"] = r.CostDeep,
-                ["profitDeep"] = r.ProfitDeep,
-            }).ToList());
+        // 行照单条那一路整份造,只是文本面挑 ListColumns 印 —— JSON 面不受列参数约束,
+        // 拿到的是整份(见 JsonRenderer 里 TableBlock 那一支)。
+        ctx.Report.Table("things", ListColumns, rows.Select(ThingRow).ToList());
 
         Caveats(ctx, rows, null);
         return 0;

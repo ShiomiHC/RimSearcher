@@ -107,20 +107,58 @@ public class GateTests
     }
 
     /// <summary>
-    /// 「冒号后、句号前」那一段里的逗号分隔标识符。括号里的解释先剥掉
+    /// 同一个数据键由两条路发出时,两边的键集必须逐键相等。
+    ///
+    /// 上面那条闸比的是 <c>--help</c> 与**一条**路,所以另一条路自己漂了它看不见:
+    /// economy 的整层列表少七个键、单条详情齐全,而 help 点的名两边都不完全等于 ——
+    /// 三份两两不同,却没有一处能自己发现。
+    ///
+    /// 缺键在这一层尤其贵:JSON 里没有的键,消费侧读出来是 null,而这一层**处处**以 null
+    /// 表示「游戏算不出这个数」—— 于是「这条路不发这个键」与「这个东西没有难度变体」
+    /// 逐字节同形,两者的下一步完全相反。
+    /// </summary>
+    [Theory]
+    [InlineData("things", new[] { "economy" }, new[] { "economy", "TestModGun" })]
+    public void 同一个键的两条路发出同一套键(string key, string[] listing, string[] detail)
+    {
+        Assert.Equal(KeysOf(key, listing), KeysOf(key, detail));
+
+        static List<string> KeysOf(string key, string[] argv)
+        {
+            var (json, _, _) = Fixture.Run([.. argv, "--json"]);
+            var rows = System.Text.Json.JsonDocument.Parse(json).RootElement.GetProperty(key);
+            Assert.NotEqual(0, rows.GetArrayLength());
+            return [.. rows[0].EnumerateObject().Select(p => p.Name).Order(StringComparer.Ordinal)];
+        }
+    }
+
+    /// <summary>
+    /// 「引导符之后、句号之前」那一段里的逗号分隔标识符。括号里的解释先剥掉
     /// (<c>defs (how many defs use it)</c> 点的列名是 <c>defs</c>)。
+    ///
+    /// **两道缝,叠着的**,都在 2026-08-15 补上 —— 而它们的沉默与「查过了,没问题」同形:
+    /// 上面 <c>uncovered</c> 那条断言只查探针在不在,探针都在,覆盖率读出来是满的。
+    ///
+    /// 一、引导符原先只认冒号,而三条命令(economy / code-search / keyed)的 What 写的是
+    /// 破折号,于是整条 <c>continue</c> 掉;
+    /// 二、标识符正则原先只认 snake_case,而 economy 一层的键全是驼峰(<c>defName</c>),
+    /// 逐个被滤光 —— 单修第一道时这道闸仍是绿的。
+    ///
+    /// economy 的全表投影少七个键正是从这两道缝里一起过去的。
     /// </summary>
     private static List<string> ColumnsNamedIn(string what)
     {
-        var colon = what.IndexOf(':');
-        if (colon < 0) return [];
-        var tail = what[(colon + 1)..];
+        var lead = what.IndexOfAny([':', '—']);
+        if (lead < 0) return [];
+        var tail = what[(lead + 1)..];
         var stop = tail.IndexOf('.');
         if (stop >= 0) tail = tail[..stop];
 
         return [.. tail.Split(',')
             .Select(part => Regex.Replace(part, @"\(.*", "").Trim())
-            .Where(part => Regex.IsMatch(part, "^[a-z][a-z0-9_]*$"))];
+            // 小写开头,内部允许驼峰 —— 两种键名风格本仓都在用。首字母大写不收:
+            // 那多半是清单里的一个普通英文词或一个值(Item / Building),不是列名。
+            .Where(part => Regex.IsMatch(part, "^[a-z][a-zA-Z0-9_]*$"))];
     }
 
     /// <summary>
