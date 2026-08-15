@@ -4049,6 +4049,18 @@ public class GrammarTests
         Assert.Equal(1, code);
         foreach (var other in new[] { notMeasured, skipped, unavailable })
             Assert.NotEqual(other, measuredEmpty);
+
+        // ⑥ 答不了的那三种还得说破**绕路**那件事。第十五轮第三轮实证:被拒之后并不停下,
+        //    而是转去 'values marketValue' 排个序当成「最赚钱的」交卷 —— 那条路上没有任何
+        //    错误信号,因为那个字段是真的、那条命令是对的,只是量不是同一个。
+        //    第四种不发这句:那一路量过了,没有要绕的路。
+        foreach (var (what, text) in new[] { ("not measured", notMeasured), ("skipped", skipped),
+                                             ("unavailable", unavailable) })
+        {
+            Assert.Contains("not the price the game computes", text, StringComparison.Ordinal);
+            Assert.Contains("different question", text, StringComparison.Ordinal);
+        }
+        Assert.DoesNotContain("different question", measuredEmpty, StringComparison.Ordinal);
     }
 
     /// <summary>

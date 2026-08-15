@@ -176,6 +176,7 @@ public sealed class EconomyCommand : Command
                     "This snapshot was built before this tool measured prices at all, so it has no answer " +
                     "here — that is a property of the snapshot, not a fact about the game. Export again " +
                     "('rimsearcher export'); 'rimsearcher snapshot status' names the snapshot in use.");
+                NoteTheDetour(ctx);
                 return true;
 
             case IntermediateFormat.EconomyStateSkipped:
@@ -183,6 +184,7 @@ public sealed class EconomyCommand : Command
                     "The export that produced this snapshot was told to skip the economy layer, so nothing " +
                     "here was measured. Export again without that switch; every other layer in this " +
                     "snapshot is complete.");
+                NoteTheDetour(ctx);
                 return true;
 
             default:
@@ -194,9 +196,25 @@ public sealed class EconomyCommand : Command
                     "no prices in it. Everything else in the snapshot is complete and usable — the export " +
                     "did not fail. " +
                     (ctx.Db.EconomyError ?? "The export recorded no reason, which should not happen."));
+                NoteTheDetour(ctx);
                 return true;
         }
     }
+
+    /// <summary>
+    /// 拒绝之后还得说一句邻居的事。实测:被拒之后并不停下,而是转去
+    /// 'values marketValue' 取 statBases 里那个数,把它排个序当成「最赚钱的」交卷 ——
+    /// 那一步没读到任何错误,因为那个数是真的、那条命令是对的,只是它回答的不是这个问题。
+    ///
+    /// 所以这句话不能写成「这份快照上按价格排序的结论都不成立」:能排,排出来也没算错。
+    /// 要说破的是**排的不是同一个量**。
+    /// </summary>
+    private static void NoteTheDetour(CommandContext ctx)
+        => ctx.Report.Notice(NoticeKind.Boundary,
+            "Note before going around: fields called marketValue are still in this snapshot, but that is " +
+            "the base value written in XML, not the price the game computes from it, and no field anywhere " +
+            "holds cost to make or profit. Ranking defs by that field is a valid query — it just answers a " +
+            "different question, and nothing in its output will say so.");
 
     private static int RunOne(CommandContext ctx, string defName)
     {
@@ -248,15 +266,18 @@ public sealed class EconomyCommand : Command
     /// 第二版 "variant when off" 短到没被截,却被 sonnet 与 opus **同向读反** ——
     /// 那句话说的是变体的条件,而它贴在另一支的数上,于是「off」被顺理成章地挂到了这个数身上。
     ///
-    /// 现在写成 <c>值 (开关=位置)</c>:直接陈述**这个数在什么条件下成立**,句子里不再有
-    /// 「变体」这个名词可供把条件挂错地方。方向由 <c>invert</c> 反推 —— 变体在
-    /// <c>invert</c> 时于开关为假处生效,所以无条件那支反过来,在开关为真处成立。
+    /// 第三版去掉了「变体」这个名词,写成 <c>值 (开关=位置)</c>,不再有人把条件挂错地方 ——
+    /// 但也没人挂对:三档模型无一说出方向,最好的一次退成「导出数据无法判定实际取哪套」。
+    /// <c>=</c> 本身没主语,读作「变体是 on」与读作「此数成立于 on」一样通顺。
+    /// 于是第四版把主语补进句子里(<c>holds when …=on</c>)—— 谓语指向被印出来的这个数,
+    /// 而这正是前三版每次都漏掉的那一半。方向由 <c>invert</c> 反推:变体在 <c>invert</c>
+    /// 时于开关为假处生效,所以无条件那支反过来,在开关为真处成立。
     /// </summary>
     private static object? Qual(object? value, EconomyRow row)
         => row.CostDifficultyVar is null || value is null
             ? value
             : new Qualified(value,
-                row.CostDifficultyVar + "=" + (row.CostDifficultyInverted ? "on" : "off"));
+                "holds when " + row.CostDifficultyVar + "=" + (row.CostDifficultyInverted ? "on" : "off"));
 
     /// <summary>
     /// marketValue 受不受这件事影响,取决于它是不是**推出来的**。
@@ -458,8 +479,8 @@ public sealed class EconomyCommand : Command
         var withVariant = shown.Count(r => r.CostDifficultyVar is not null);
         if (withVariant > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
-                "A tag like '(classicMortars=on)' above names the difficulty setting a number depends on " +
-                "and the position that number holds under. Put the setting the other way and the def " +
+                "A tag like '(holds when classicMortars=on)' above names the difficulty setting a number " +
+                "depends on, and the position it holds under. Put the setting the other way and the def " +
                 "swaps in a second cost list, which the tagged number is not from. An export cannot tell " +
                 "which way a given game has it: the setting is read off the storyteller, and no storyteller " +
                 "exists while the game is loading. 'rimsearcher get <defName> --path-contains " +
