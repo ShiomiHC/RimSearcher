@@ -279,14 +279,23 @@ public static class JsonRenderer
                 })
                 .ToList();
 
+        static object? Bare(object? v) => v is Qualified q ? q.Value : v;
+        static IReadOnlyDictionary<string, object?> Unwrap(IReadOnlyDictionary<string, object?> row)
+            => row.Values.Any(v => v is Qualified)
+                ? row.ToDictionary(kv => kv.Key, kv => Bare(kv.Value), StringComparer.Ordinal)
+                : row;
+
         var collections = new Dictionary<string, List<Dictionary<string, object?>>>(StringComparer.Ordinal);
 
         foreach (var block in report.Blocks)
         {
             var (name, value) = block switch
             {
-                TableBlock t => (t.Name, (object?)t.Rows),
-                DetailBlock d => (d.Name, d.Pairs.ToDictionary(p => p.Key, p => p.Value)),
+                // Unwrap:带限定词的格在 JSON 面只出值本身。不脱这层壳的话,一个本该是
+                // 数字的字段会变成 {"Value":635,"Note":"…"},整列类型就毁了 —— 而限定词
+                // 本身在 JSON 面另有独立列(见 Qualified 的注释)。
+                TableBlock t => (t.Name, (object?)t.Rows.Select(Unwrap).ToList()),
+                DetailBlock d => (d.Name, d.Pairs.ToDictionary(p => p.Key, p => Bare(p.Value))),
                 // 有结构化形态就用它,不要让消费方去拆 "path:line:text"。
                 TextBlock x => (x.Name, x.Rows is null ? x.Lines : (object)x.Rows),
                 _ => ("", null),

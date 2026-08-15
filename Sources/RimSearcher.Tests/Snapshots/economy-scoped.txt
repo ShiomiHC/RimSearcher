@@ -4,8 +4,8 @@ exit 0
 2 things within --scope test.mod.
 
 Same in every row, not repeated below: mod=test.mod, category=Item.
-defName     label      marketValue  calcState       calculatedMarketValue  costToMake  profit  profitRate  workToProduce  costDifficultyVar  chainEndShare  costDeep  profitDeep
-VoidNode    void node  1200         not_producible                                                                                                          1200      0
-TestModGun  test gun   320          recipe          298.5                  141.2       178.8   1104.94     1618           classicMortars     0.57           156.4     163.6
-1 row above declares a second cost list that a difficulty setting switches to, and an export cannot tell which one a game would use: the switch is read off the storyteller, and no storyteller exists while the game is loading. Every cost number above is therefore the unconditional list. 'rimsearcher get <defName> --path-contains costListForDifficulty' shows the other list.
+defName     label      marketValue  calcState       calculatedMarketValue  costToMake               profit  profitRate  workToProduce  costDifficultyVar  chainEndShare  costDeep  profitDeep
+VoidNode    void node  1200         not_producible                                                                                                                       1200      0
+TestModGun  test gun   320          recipe          298.5                  141.2 (variant when on)  178.8   1104.94     1618           classicMortars     0.57           156.4     163.6
+A '(variant when off)' or '(variant when on)' tag above means the def declares a second cost list that the difficulty setting named in costDifficultyVar swaps in, and the tag says which position of that setting swaps it in. The tagged number comes from the other, unconditional list: an export cannot tell which one a game would use, because the setting is read off the storyteller and no storyteller exists while the game is loading. 'rimsearcher get <defName> --path-contains costListForDifficulty' shows the other list.
 --- stderr ---

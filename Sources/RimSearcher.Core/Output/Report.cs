@@ -335,6 +335,20 @@ public sealed class Report
         => Add(new TextBlock(name, lines, rows));
 }
 
+/// <summary>
+/// 一个带限定词的单元格值:文本面渲染成 <c>值 (限定词)</c>,JSON 面**只出值本身**。
+///
+/// 两面分叉是有意的,而且只在这一件事上分叉。缘起是第十五轮盲测里可复现的一次失败:
+/// `economy Turret_Mortar` 把限定这个数的整段说破印在表下方,受测模型把 <c>635</c> 抄走、
+/// 那段话一个字没带 —— 同一张表里相邻的 <c>costDifficultyVar</c> 一列也同样没被带走。
+/// **相邻不够,得贴在数上**:抄走那个数的动作必须顺带抄走限定词。
+///
+/// JSON 面不跟着分叉,因为脚本消费方拿的是 <c>costDifficultyInverted</c> 这类独立布尔列,
+/// 那比在数字里塞括号强 —— 往数值字段里混字符串会把整列的类型毁掉。
+/// 同一份数据,两种取用方式,不是两份数据。
+/// </summary>
+public readonly record struct Qualified(object? Value, string Note);
+
 public static class OutputText
 {
     public const string Newline = "\n";
@@ -362,6 +376,7 @@ public static class OutputText
     public static string Cell(object? v) => v switch
     {
         null => "",
+        Qualified q => q.Value is null ? "" : $"{Cell(q.Value)} ({q.Note})",
         bool b => b ? "yes" : "no",
         string s => s.Replace("\r", "").Replace("\n", " "),
         _ => v.ToString() ?? "",

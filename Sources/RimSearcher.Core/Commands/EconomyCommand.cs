@@ -123,10 +123,13 @@ public sealed class EconomyCommand : Command
                 Rows = true,
                 What = "one row per priced thing — defName, label, mod, category, marketValue, " +
                        "calcState, calculatedMarketValue, costToMake, profit, profitRate, workToProduce, " +
-                       "costDifficultyVar, chainEndShare, costDeep, profitDeep. Null means the game cannot " +
-                       "work that number " +
+                       "costDifficultyVar, costDifficultyInverted, chainEndShare, costDeep, profitDeep. " +
+                       "Null means the game cannot work that number " +
                        "out; it is never a stand-in for zero. Always an array, including when one defName " +
-                       "matched exactly, so the shape does not change with the kind of match.",
+                       "matched exactly, so the shape does not change with the kind of match. " +
+                       "The text output tags cost numbers whose def declares a difficulty variant; here " +
+                       "the numbers stay bare and costDifficultyVar/costDifficultyInverted carry that " +
+                       "instead, so a number never arrives as a string.",
             },
             new()
             {
@@ -230,6 +233,37 @@ public sealed class EconomyCommand : Command
         return 0;
     }
 
+    /// <summary>
+    /// 给受难度变体影响的那几格贴上限定词。**贴在数上,不贴在旁边一列**:第十五轮盲测里
+    /// 相邻的 <c>costDifficultyVar</c> 一列与表下那整段说破被同一个受测模型一起丢掉了,
+    /// 只有 <c>635</c> 被抄走。
+    ///
+    /// 措辞不预设那个难度开关的缺省值。<c>invert</c> 只说得出「变体在开关为何值时生效」,
+    /// 而开关自己的缺省是每个 difficultyVar 各自的事(vanilla 的 classicMortars 缺省关,
+    /// 但 mod 可以定义别的),所以这里只陈述条件,不替读者判断哪一支在跑。
+    ///
+    /// **必须短。** 头一版写的是 "variant applies when classicMortars is off",在
+    /// <c>costList</c> 那种长字符串格上被表宽截成 "…when classic…" —— 截断的限定词比没有
+    /// 更糟:它不带含义,还长得像数据坏了。开关名不进标签(<c>costDifficultyVar</c> 自己有一列),
+    /// 标签也只贴数值格,不贴长文本格。
+    /// </summary>
+    private static object? Qual(object? value, EconomyRow row)
+        => row.CostDifficultyVar is null || value is null
+            ? value
+            : new Qualified(value, row.CostDifficultyInverted
+                ? "variant when off"
+                : "variant when on");
+
+    /// <summary>
+    /// marketValue 受不受这件事影响,取决于它是不是**推出来的**。
+    /// def 自己声明了 MarketValue 时那是个手填数,与成本表无关;没声明时
+    /// <c>StatWorker_MarketValue</c> 回退到 <c>CalculatedBaseMarketValue</c>,而那条路把
+    /// 成本表加进去 —— 于是同一个难度变体连带把 marketValue 也换掉了。
+    /// 说破原先只说 "every cost number",读起来不含这一列,而 Turret_Mortar 的 635 正是这一列。
+    /// </summary>
+    private static object? QualMarketValue(EconomyRow row)
+        => row.MarketValueDefined ? row.MarketValue : Qual(row.MarketValue, row);
+
     private static void EmitOne(CommandContext ctx, EconomyRow row)
     {
         // 单条命中照样走表,不走 detail 块:形状不随命中方式变,消费侧的解析代码就不必
@@ -245,11 +279,11 @@ public sealed class EconomyCommand : Command
                 ["label"] = row.Label,
                 ["mod"] = row.Mod,
                 ["category"] = row.Category,
-                ["marketValue"] = row.MarketValue,
+                ["marketValue"] = QualMarketValue(row),
                 ["marketValueDefined"] = row.MarketValueDefined,
                 ["calcState"] = row.CalcState,
                 ["calculatedMarketValue"] = row.CalculatedMarketValue,
-                ["costToMake"] = row.CostToMake,
+                ["costToMake"] = Qual(row.CostToMake, row),
                 ["profit"] = row.Profit,
                 ["profitRate"] = row.ProfitRate,
                 ["workToProduce"] = row.WorkToProduce,
@@ -357,10 +391,10 @@ public sealed class EconomyCommand : Command
                 ["label"] = r.Label,
                 ["mod"] = r.Mod,
                 ["category"] = r.Category,
-                ["marketValue"] = r.MarketValue,
+                ["marketValue"] = QualMarketValue(r),
                 ["calcState"] = r.CalcState,
                 ["calculatedMarketValue"] = r.CalculatedMarketValue,
-                ["costToMake"] = r.CostToMake,
+                ["costToMake"] = Qual(r.CostToMake, r),
                 ["profit"] = r.Profit,
                 ["profitRate"] = r.ProfitRate,
                 ["workToProduce"] = r.WorkToProduce,
@@ -414,21 +448,18 @@ public sealed class EconomyCommand : Command
         //    是玩家基本见不到的。两档分开说:合并的话最刺眼的那种会被读成无害的那种。
         //    (2026-08-15 与 Vethara /economy 端点的交叉校验里,2822 个共有 def 上唯一那处
         //    不一致就是这个,而它在数字上与一个正常的数逐字同形。)
-        var inverted = shown.Count(r => r.CostDifficultyVar is not null && r.CostDifficultyInverted);
-        var plain = shown.Count(r => r.CostDifficultyVar is not null) - inverted;
-        if (inverted + plain > 0)
+        //    措辞在 2026-08-15 盲测后大幅收短:两档严重度、以及「哪一支在跑」原先全写在
+        //    这段话里,而实测表明这段话会被整段丢掉。现在条件贴在数上(见 Qual),这里只留
+        //    那两件贴不进单元格的事:**为什么导出判不了**,以及**去哪看另一支**。
+        var withVariant = shown.Count(r => r.CostDifficultyVar is not null);
+        if (withVariant > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
-                $"{Tally.Complete(inverted + plain).Render("row")} above " +
-                $"{(inverted + plain == 1 ? "declares" : "declare")} a second cost list that a difficulty " +
-                "setting switches to, and an export cannot tell which one a game would use: the switch is " +
-                "read off the storyteller, and no storyteller exists while the game is loading. Every cost " +
-                "number above is therefore the unconditional list. " +
-                (inverted > 0
-                    ? $"For {Tally.Complete(inverted).Render("row")} of those the variant applies when the " +
-                      "setting is OFF, which is the usual state of a game — vanilla's Turret_Mortar is one — " +
-                      "so the numbers shown are the ones a player would almost never meet. " +
-                      "'rimsearcher get <defName> --path-contains costListForDifficulty' shows the other list."
-                    : "'rimsearcher get <defName> --path-contains costListForDifficulty' shows the other list."));
+                "A '(variant when off)' or '(variant when on)' tag above means the def declares a second " +
+                "cost list that the difficulty setting named in costDifficultyVar swaps in, and the tag " +
+                "says which position of that setting swaps it in. The tagged number comes from the other, " +
+                "unconditional list: an export cannot tell which one a game would use, because the setting " +
+                "is read off the storyteller and no storyteller exists while the game is loading. " +
+                "'rimsearcher get <defName> --path-contains costListForDifficulty' shows the other list.");
 
         // 4. 多配方 = calculatedMarketValue 有加载顺序依赖(CalculableRecipe 取 DefDatabase 里
         //    第一个匹配,而等比放大的 bulk 配方 workAmount 通常不等比)。

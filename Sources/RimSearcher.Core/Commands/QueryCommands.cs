@@ -658,6 +658,22 @@ public sealed class GetCommand : Command
             // yes 行,以及这条否定是不是已经由上面的 Not listed 那句承住了(见那边的注释)。
             Completeness.NoteWidelySharedValues(ctx, def, fields, withDefaults, defaulted);
 
+            // 经济面的指路。**这句必须长在 get 上,不能只长在 economy 上** —— 第十五轮盲测:
+            // 十五个受测样本里,凡是走到 `economy` 的都读对了,而单 def 的价格/造价题上
+            // 三档里两档从没走到过,因为 `get` 已经给了看着完整的一屏,没有任何东西提示
+            // 还有别的地方。`economy --help` 里那句「asking 'get' for a cost returns nothing」
+            // 说的正是这件事,却印在门的另一侧:要读到它,你得先找到这扇门。
+            //
+            // 只指路、不搬数:handoff §4 明令经济语义不进 get 的 def 查询含义,而且那些数
+            // 不是字段,混进字段表会正好造成这一层要防的那个误读。
+            // 判据是**这个 def 在经济表里有没有行**,不是「它像不像商品」;没量过经济面的
+            // 快照上 EconomyByName 恒空,于是这句自动不出现 —— 不需要额外的在场判断。
+            if (ctx.Db.EconomyByName(def.DefName).Count > 0)
+                ctx.Report.Notice(NoticeKind.NextStep,
+                    $"The game also prices this thing. Its market value, cost to make and work amount are " +
+                    $"computed, not stored, so no field above holds them and none ever will — " +
+                    $"'rimsearcher economy {def.DefName}' is the only road to those numbers.");
+
             // --limit 与 --path-contains 同样管译文表:不管的话,`get Muffalo --limit 5` 会吐出八十行,
             // 而字段表刚报的「一个都没匹配上」会被一批译文块淹掉。
             // 归属策略与 inherits_from 同源:def_type 对得上的归自己;对不上的一律不要;

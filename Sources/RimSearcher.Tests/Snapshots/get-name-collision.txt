@@ -24,7 +24,8 @@ statBases[0].stat                      MarketValue
 graphicData.texPath                    Things/Building/Nozzle
 building.blueprintGraphicData.texPath  Things/Building/Blueprint_Nozzle
 Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_default' is not this def having made a choice — the count in brackets: soundDrop (9), soundImpactDefault (9), soundInteract (9), soundPickup (9).
-2 translations.
+  - The game also prices this thing. Its market value, cost to make and work amount are computed, not stored, so no field above holds them and none ever will — 'rimsearcher economy Firefoam' is the only road to those numbers.
+  - 2 translations.
 
 Same in every row, not repeated below: language=ChineseSimplified, origin=in effect.
 path         translated      original
@@ -37,6 +38,7 @@ class        Verse.StatDef
 mod          ludeon.rimworld
 source       Stats_Basics.xml
 0 fields.
+The game also prices this thing. Its market value, cost to make and work amount are computed, not stored, so no field above holds them and none ever will — 'rimsearcher economy Firefoam' is the only road to those numbers.
 
 This snapshot never scanned the language files on disk, so every row here is one the game actually had: the absence of an 'on disk' row is not evidence that no installed mod translates it. No 'mod_roots' is configured on this machine, so there is nowhere to scan: set it in the config file and import again to measure that layer.
 --- stderr ---

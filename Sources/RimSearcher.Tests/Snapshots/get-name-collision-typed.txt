@@ -9,4 +9,5 @@ def_type     StatDef
 class        Verse.StatDef
 mod          ludeon.rimworld
 source       Stats_Basics.xml
+The game also prices this thing. Its market value, cost to make and work amount are computed, not stored, so no field above holds them and none ever will — 'rimsearcher economy Firefoam' is the only road to those numbers.
 --- stderr ---
