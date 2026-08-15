@@ -1,0 +1,449 @@
+using RimSearcher.Cli;
+using RimSearcher.Contract;
+using RimSearcher.Output;
+using RimSearcher.Search;
+using RimSearcher.Storage;
+
+namespace RimSearcher.Commands;
+
+/// <summary>
+/// 经济面 —— 游戏自己说一件东西值多少钱、造价多少、要多少工时。
+///
+/// **这一层与 def 字段无关**:这些数没有一个躺在 XML 里,它们是 vanilla 在 Debug Output
+/// 「Economy」那张表上现算的(市场价可以是推算的、造价要递归展开成本链)。<c>get</c> 给的是
+/// 字段值,而字段里根本没有「造价」这一项 —— 拿 <c>get</c> 问它得到的零与「查不到」同形。
+///
+/// 数字与游戏内那张表对齐,两处有意的偏离已在
+/// <see cref="IntermediateFormat.KeyEconomyProfit"/>(游戏那一格印 0.0,这里给 null)
+/// 与小数位数(F2 / F1)上写明。
+/// </summary>
+public sealed class EconomyCommand : Command
+{
+    /// <summary>
+    /// 排序列的闭集。用户输入不拼进 SQL —— 这一条是硬的,不是风格问题。
+    /// 键是给人看的名字,值是列名。
+    /// </summary>
+    private static readonly Dictionary<string, string> SortColumns = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["market-value"] = "market_value",
+        ["value"] = "market_value",
+        ["profit"] = "profit",
+        ["profit-rate"] = "profit_rate",
+        ["cost"] = "cost_to_make",
+        ["cost-to-make"] = "cost_to_make",
+        ["work"] = "work_to_produce",
+        ["cost-deep"] = "cost_deep",
+        ["profit-deep"] = "profit_deep",
+        ["chain-end-share"] = "chain_end_share",
+    };
+
+    public override CommandSpec Spec => new()
+    {
+        Name = "economy",
+        Aliases = ["price", "value", "cost", "market", "prices"],
+        Summary = "Show what the game says a thing is worth, what it costs to make, and how long it takes.",
+        Remarks =
+            "These numbers are not def fields — none of them is written in any XML. The game computes them " +
+            "in its own Debug Output 'Economy' table: a market value can be derived from a recipe, and a " +
+            "cost is a cost list expanded recursively. Asking 'get' for a cost therefore returns nothing, " +
+            "and that nothing looks exactly like a thing having no cost.\n\n" +
+            "The rows are the same set the game's own table covers: items with a market value above 0.01, " +
+            "plus buildings the player can build or minify. Nothing else in the snapshot is priced.\n\n" +
+            "Read the empty cells as 'the game cannot work this out', not as zero. A profit needs a " +
+            "recipeMaker; a profit rate needs a positive work amount; a calculated market value needs the " +
+            "thing to be producible and to declare one. Those are four different reasons for a blank, and " +
+            "the columns keep them apart.",
+        Positionals =
+        [
+            new PositionalSpec
+            {
+                Name = "defName",
+                Required = false,
+                Help = "A thing's defName, for the full picture including its cost chain and every recipe " +
+                       "that can produce it. Leave it out to list the layer, highest market value first.",
+            },
+        ],
+        Options =
+        [
+            CommonOptions.Limit("things"),
+            CommonOptions.Offset("things"),
+            CommonOptions.Scope,
+            new OptionSpec
+            {
+                Name = "category",
+                Aliases = ["cat"],
+                Placeholder = "<Item|Building>",
+                Help = "Keep only items or only buildings. The two are not comparable: a building's market " +
+                       "value is what you get back for deconstructing it, not what it sells for.",
+                Narrows = true,
+            },
+            new OptionSpec
+            {
+                Name = "calc-state",
+                Aliases = ["state"],
+                Placeholder = "<ok|recipe|used|not_producible>",
+                Help = "Keep only rows whose calculated market value came about a particular way. " +
+                       "'recipe' means it was derived from a recipe, 'ok' that the thing declares its own; " +
+                       "'used' and 'not_producible' are the two kinds of row the game cannot calculate at all.",
+                Narrows = true,
+            },
+            new OptionSpec
+            {
+                Name = "producible",
+                Arity = Arity.Flag,
+                Aliases = ["makeable"],
+                Help = "Keep only things that some recipe produces or that the player can build. Without it " +
+                       "the list also holds things you can only find or be given, which are priced but " +
+                       "have no cost to compare against.",
+                Narrows = true,
+            },
+            new OptionSpec
+            {
+                Name = "sort",
+                Aliases = ["order", "by"],
+                Placeholder = "<field>",
+                Help = "Sort by market-value (the default), profit, profit-rate, cost, work, cost-deep, " +
+                       "profit-deep, or chain-end-share. Highest first; rows the game cannot work out sort " +
+                       "last rather than mixing in with the low end.",
+                Default = "market-value",
+            },
+        ],
+        Examples =
+        [
+            "rimsearcher economy Gun_Autopistol",
+            "rimsearcher economy --sort profit-rate --limit 20",
+            "rimsearcher economy --scope vethara --category Item --limit all",
+            "rimsearcher economy --calc-state recipe --sort chain-end-share",
+        ],
+        JsonKeys =
+        [
+            new()
+            {
+                Key = "things",
+                Rows = true,
+                What = "one row per priced thing — defName, label, mod, category, marketValue, " +
+                       "calcState, calculatedMarketValue, costToMake, profit, profitRate, workToProduce, " +
+                       "costDifficultyVar, chainEndShare, costDeep, profitDeep. Null means the game cannot " +
+                       "work that number " +
+                       "out; it is never a stand-in for zero. Always an array, including when one defName " +
+                       "matched exactly, so the shape does not change with the kind of match.",
+            },
+            new()
+            {
+                Key = "costChain",
+                What = "with a defName: one row per ingredient — thingDef, count, unitValue, chainEnd. " +
+                       "chainEnd marks an ingredient with no recipe of its own, where the cost recursion " +
+                       "stops and falls back to that ingredient's hand-written market value.",
+            },
+            new()
+            {
+                Key = "recipes",
+                What = "with a defName: every recipe that produces this thing — defName, productCount, " +
+                       "workAmount, selfReferential. More than one row means the calculated market value " +
+                       "depends on def load order.",
+            },
+        ],
+    };
+
+    public override int Run(CommandContext ctx)
+    {
+        // 在场判定走 meta 里那一格,**不是 COUNT(*)** —— 零行有四种成因,而其中一种
+        // (量过了、这个名单下确实没有可生产物)是完整的肯定回答,不能与另外三种同形。
+        if (Absent(ctx)) return 1;
+
+        var query = ctx.Args.Positional(0);
+        return query is null ? RunAll(ctx) : RunOne(ctx, query);
+    }
+
+    /// <summary>
+    /// 四态里的三种「答不了」。返回 true 表示已经说完话了,调用方直接收场。
+    ///
+    /// 分开说而不是合成一句「这份快照没有经济数据」:三种的下一步各不相同,而合并之后
+    /// 最刺眼的那种(vanilla 签名对不上,得去看源码)会被读成最无害的那种(重导出就行)。
+    /// </summary>
+    private static bool Absent(CommandContext ctx)
+    {
+        switch (ctx.Db.EconomyState)
+        {
+            case IntermediateFormat.EconomyStateOk:
+                return false;
+
+            case null:
+                ctx.Report.Notice(NoticeKind.Boundary,
+                    "This snapshot was built before this tool measured prices at all, so it has no answer " +
+                    "here — that is a property of the snapshot, not a fact about the game. Export again " +
+                    "('rimsearcher export'); 'rimsearcher snapshot status' names the snapshot in use.");
+                return true;
+
+            case IntermediateFormat.EconomyStateSkipped:
+                ctx.Report.Notice(NoticeKind.Boundary,
+                    "The export that produced this snapshot was told to skip the economy layer, so nothing " +
+                    "here was measured. Export again without that switch; every other layer in this " +
+                    "snapshot is complete.");
+                return true;
+
+            default:
+                // 点名的那句原样端出,不概括 —— 它是唯一的下一步,而这一层不回退到自写实现:
+                // 回退能让命令继续出数,但出的是与游戏内表格不一致的数,且没有任何迹象说明
+                // 口径已经换了一套。
+                ctx.Report.Notice(NoticeKind.Boundary,
+                    "The economy layer could not be measured when this snapshot was exported, so there are " +
+                    "no prices in it. Everything else in the snapshot is complete and usable — the export " +
+                    "did not fail. " +
+                    (ctx.Db.EconomyError ?? "The export recorded no reason, which should not happen."));
+                return true;
+        }
+    }
+
+    private static int RunOne(CommandContext ctx, string defName)
+    {
+        // 这一路恒发 things,另外两张只在这一路上存在 —— 在开查之前认领,而不是在有行的
+        // 分支里补:后者漏一条分支就漏一个形状。
+        ctx.Report.Promises("things");
+        var rows = ctx.Db.EconomyByName(defName);
+        if (rows.Count == 0)
+        {
+            var close = Suggestion.Closest(ctx.Db.AllEconomyNames(), defName);
+            ctx.Report.Notice(NoticeKind.NextStep,
+                $"Nothing named '{defName}' is priced in this snapshot." + Suggestion.Say(close));
+
+            // 「它是个 def,只是不在这一层里」是这条命令最常见的落空成因,而它与打错名字
+            // 的下一步完全不同。这一层只收 ThingDef,且只收有市场价的物与可建的建筑。
+            var defs = ctx.Db.GetDefsNamed(defName);
+            ctx.Report.Notice(NoticeKind.Boundary, defs.Count > 0
+                ? $"'{defName}' is a def in this snapshot, so this is not a spelling problem: the game " +
+                  "prices only items with a market value above 0.01 and buildings the player can build " +
+                  $"or minify. 'rimsearcher get {defName}' shows what it does have."
+                // 名字在快照里根本不存在,而这条命令的候选池只有几千个被定价的物 ——
+                // 「这一层没有」与「这个快照没有」是两件事,不说破就会被读成后者。
+                : $"No def is named '{defName}' either, so this is not just a thing the game leaves " +
+                  $"unpriced. 'rimsearcher search {defName}' matches on labels and translated text as " +
+                  "well as defNames, which is the way in when you have the in-game name rather than the " +
+                  "defName.");
+            return 1;
+        }
+
+        // 计数恒在,单条命中也报 —— 靠沉默传达「就这一条」一定会被读错。数的是这个名字下
+        // 有几行,而这一层只收 ThingDef,所以实际上恒为 1;报它是为了形状不随命中数变。
+        ctx.Report.PageNotice("thing", rows.Count, 0, rows.Count);
+        foreach (var row in rows) EmitOne(ctx, row);
+        return 0;
+    }
+
+    private static void EmitOne(CommandContext ctx, EconomyRow row)
+    {
+        // 单条命中照样走表,不走 detail 块:形状不随命中方式变,消费侧的解析代码就不必
+        // 分两支写(与 keyed 同一条纪律)。
+        ctx.Report.Table("things",
+            ["defName", "label", "mod", "category", "marketValue", "marketValueDefined", "calcState",
+             "calculatedMarketValue", "costToMake", "profit", "profitRate", "workToProduce", "costList",
+             "costDifficultyVar", "costDifficultyInverted", "chainEndShare", "costDeep", "profitDeep",
+             "producible", "madeFromStuff", "isWeapon", "isApparel"],
+            [new Dictionary<string, object?>
+            {
+                ["defName"] = row.DefName,
+                ["label"] = row.Label,
+                ["mod"] = row.Mod,
+                ["category"] = row.Category,
+                ["marketValue"] = row.MarketValue,
+                ["marketValueDefined"] = row.MarketValueDefined,
+                ["calcState"] = row.CalcState,
+                ["calculatedMarketValue"] = row.CalculatedMarketValue,
+                ["costToMake"] = row.CostToMake,
+                ["profit"] = row.Profit,
+                ["profitRate"] = row.ProfitRate,
+                ["workToProduce"] = row.WorkToProduce,
+                ["costList"] = row.CostList,
+                ["costDifficultyVar"] = row.CostDifficultyVar,
+                ["costDifficultyInverted"] = row.CostDifficultyInverted,
+                ["chainEndShare"] = row.ChainEndShare,
+                ["costDeep"] = row.CostDeep,
+                ["profitDeep"] = row.ProfitDeep,
+                ["producible"] = row.Producible,
+                ["madeFromStuff"] = row.MadeFromStuff,
+                ["isWeapon"] = row.IsWeapon,
+                ["isApparel"] = row.IsApparel,
+            }]);
+
+        var chain = ctx.Db.EconomyChain(row.Id);
+        if (chain.Count > 0)
+            ctx.Report.Table("costChain", ["thingDef", "count", "unitValue", "chainEnd"],
+                chain.Select(c => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+                {
+                    ["thingDef"] = c.ThingDef,
+                    ["count"] = c.Count,
+                    ["unitValue"] = c.UnitValue,
+                    ["chainEnd"] = c.ChainEnd,
+                }).ToList());
+
+        var recipes = ctx.Db.EconomyRecipes(row.Id);
+        if (recipes.Count > 0)
+            ctx.Report.Table("recipes", ["defName", "productCount", "workAmount", "selfReferential"],
+                recipes.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+                {
+                    ["defName"] = r.DefName,
+                    ["productCount"] = r.ProductCount,
+                    ["workAmount"] = r.WorkAmount,
+                    ["selfReferential"] = r.SelfReferential,
+                }).ToList());
+
+        Caveats(ctx, [row], recipes);
+    }
+
+    private static int RunAll(CommandContext ctx)
+    {
+        var limit = ctx.Limit();
+        var offset = ctx.Args.Int("offset", 0);
+        var scope = ctx.Scope();
+        var category = ctx.Args.Value("category");
+        var calcState = ctx.Args.Value("calc-state");
+        var producible = ctx.Args.Flag("producible");
+
+        var sortName = ctx.Args.Value("sort") ?? "market-value";
+        if (!SortColumns.TryGetValue(sortName, out var sortColumn))
+            throw new CliUsageException(
+                $"--sort does not know '{sortName}'. It takes one of: " +
+                NameList.Render([.. SortColumns.Keys.Distinct(StringComparer.OrdinalIgnoreCase)], 12) + ".");
+
+        var layerTotal = ctx.Db.EconomyCount();
+        var (rows, total) = ctx.Db.EconomyAll(scope, category, calcState, producible,
+                                              sortColumn, limit.Effective, offset);
+
+        if (rows.Count == 0)
+        {
+            // 翻过头排在最前:它与「没有」差得最远。
+            if (offset > 0 && total > 0)
+            {
+                ctx.Report.PastEnd(offset, $"{Tally.Complete(total).Render("thing")} match in all.");
+                return 1;
+            }
+
+            if (total == 0 && layerTotal > 0)
+            {
+                // 点名是哪几个开关筛空的,而不是笼统说「那些筛子」—— 一次调用里可以同时挂
+                // 四个,而收回哪一个是读的人下一步要敲的东西。
+                var applied = new List<string>();
+                if (!scope.IsAll) applied.Add("--scope");
+                if (category is not null) applied.Add("--category");
+                if (calcState is not null) applied.Add("--calc-state");
+                if (producible) applied.Add("--producible");
+
+                ctx.Report.Notice(NoticeKind.Filter,
+                    $"No priced thing is left after {NameList.Render(applied, 4)}. This snapshot prices " +
+                    $"{Tally.Complete(layerTotal).Render("thing")} in all — drop one of those to see them.");
+                return 1;
+            }
+
+            // 整层为零而 state 是 ok:量过了,这个 mod 列表下确实没有可生产物。
+            // **这是完整的肯定回答**,不是一次落空 —— 零行照约定仍走 exit 1,所以句子必须
+            // 自己说清,读退出码的脚本会读成失败。
+            ctx.Report.Notice(NoticeKind.Boundary,
+                "The economy layer was measured for this snapshot and came out empty: nothing in these mods " +
+                "is an item with a market value or a building the player can build. That is a complete " +
+                "answer rather than a lookup that came up short — the exit code is still non-zero because " +
+                "no rows were printed.");
+            return 1;
+        }
+
+        ctx.Report.PageNotice("thing", rows.Count, offset, total);
+
+        ctx.Report.Table("things",
+            ["defName", "label", "mod", "category", "marketValue", "calcState", "calculatedMarketValue",
+             "costToMake", "profit", "profitRate", "workToProduce", "costDifficultyVar", "chainEndShare",
+             "costDeep", "profitDeep"],
+            rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+            {
+                ["defName"] = r.DefName,
+                ["label"] = r.Label,
+                ["mod"] = r.Mod,
+                ["category"] = r.Category,
+                ["marketValue"] = r.MarketValue,
+                ["calcState"] = r.CalcState,
+                ["calculatedMarketValue"] = r.CalculatedMarketValue,
+                ["costToMake"] = r.CostToMake,
+                ["profit"] = r.Profit,
+                ["profitRate"] = r.ProfitRate,
+                ["workToProduce"] = r.WorkToProduce,
+                ["costDifficultyVar"] = r.CostDifficultyVar,
+                ["chainEndShare"] = r.ChainEndShare,
+                ["costDeep"] = r.CostDeep,
+                ["profitDeep"] = r.ProfitDeep,
+            }).ToList());
+
+        Caveats(ctx, rows, null);
+        return 0;
+    }
+
+    /// <summary>
+    /// 三条只有这一层说得出口的说破。它们属于 vanilla 的语义 —— 任何消费方都会踩,
+    /// 所以是这条命令的义务,不是下游各自去发现。
+    ///
+    /// 判据一律取自**印出来的那些行**,不是整层:说「其中 N 条」时那个 N 必须是读的人
+    /// 数得出来的那个数。
+    /// </summary>
+    private static void Caveats(CommandContext ctx, IReadOnlyList<EconomyRow> shown,
+                                IReadOnlyList<EconomyRecipeRow>? recipes)
+    {
+        // 1. 造价全部来自链尾物手填的市场价 —— 那一行的 profit 不反映真实生产消耗。
+        //    判据是这个数,**不是「看着像掉落物」**:用手写 RecipeDef 生产的物同样是链尾,
+        //    而它们明明可造。
+        var allHandWritten = shown.Count(r => r.ChainEndShare is >= 0.999);
+        if (allHandWritten > 0)
+            ctx.Report.Notice(NoticeKind.Boundary,
+                // 印出来那一格是 `1`,不是 `1.00` —— 渲染侧不补零。说破时引用的数必须是
+                // 读的人眼睛看得见的那个,否则这句话会被当成在说另一行。
+                $"chainEndShare is 1 for {Tally.Complete(allHandWritten).Render("row")} above, which means " +
+                "the whole cost came from ingredients that have no recipe of their own. For those rows " +
+                "'profit' is the market value minus a few other hand-written market values, not minus what " +
+                "producing the thing actually consumes.");
+
+        // 2. ok 且推算价为零 = **算不出**,不是「推算价是零」。calc_state 只反映「可生产 +
+        //    声明了 MarketValue」,四个加数全为零时它照样是 ok。vanilla 自己大量如此
+        //    (Steel / Bioferrite 都是),读成一个数就会被当成极便宜的东西统计进分布。
+        var zeroCalc = shown.Count(r => r.CalcState == IntermediateFormat.EconomyCalcOk
+                                        && r.CalculatedMarketValue is <= 0);
+        if (zeroCalc > 0)
+            ctx.Report.Notice(NoticeKind.Boundary,
+                $"calculatedMarketValue is 0 on {Tally.Complete(zeroCalc).Render("row")} above whose calcState " +
+                "is 'ok'. Read that as 'the game could not work it out', not as a price of zero: calcState " +
+                "only says the thing is producible and declares a market value, and the sum underneath can " +
+                "still come out empty. Vanilla does this a lot — Steel and Bioferrite among them.");
+
+        // 3. 成本表有难度变体 —— 而导出那一刻判不了那个条件。这条的严重度分两档,
+        //    因为 invert 决定了导出取到的是常见的那一支还是罕见的那一支,而后者印出来的数
+        //    是玩家基本见不到的。两档分开说:合并的话最刺眼的那种会被读成无害的那种。
+        //    (2026-08-15 与 Vethara /economy 端点的交叉校验里,2822 个共有 def 上唯一那处
+        //    不一致就是这个,而它在数字上与一个正常的数逐字同形。)
+        var inverted = shown.Count(r => r.CostDifficultyVar is not null && r.CostDifficultyInverted);
+        var plain = shown.Count(r => r.CostDifficultyVar is not null) - inverted;
+        if (inverted + plain > 0)
+            ctx.Report.Notice(NoticeKind.Boundary,
+                $"{Tally.Complete(inverted + plain).Render("row")} above " +
+                $"{(inverted + plain == 1 ? "declares" : "declare")} a second cost list that a difficulty " +
+                "setting switches to, and an export cannot tell which one a game would use: the switch is " +
+                "read off the storyteller, and no storyteller exists while the game is loading. Every cost " +
+                "number above is therefore the unconditional list. " +
+                (inverted > 0
+                    ? $"For {Tally.Complete(inverted).Render("row")} of those the variant applies when the " +
+                      "setting is OFF, which is the usual state of a game — vanilla's Turret_Mortar is one — " +
+                      "so the numbers shown are the ones a player would almost never meet. " +
+                      "'rimsearcher get <defName> --path-contains costListForDifficulty' shows the other list."
+                    : "'rimsearcher get <defName> --path-contains costListForDifficulty' shows the other list."));
+
+        // 4. 多配方 = calculatedMarketValue 有加载顺序依赖(CalculableRecipe 取 DefDatabase 里
+        //    第一个匹配,而等比放大的 bulk 配方 workAmount 通常不等比)。
+        //    只有单条详情那一路手上有配方表;列表那一路不逐行查,那要 N 次查询。
+        if (recipes is { Count: > 1 })
+            ctx.Report.Notice(NoticeKind.Boundary,
+                $"{Tally.Complete(recipes.Count).Render("recipe")} can produce this thing, so its " +
+                "calculatedMarketValue depends on def load order: the game takes whichever of them comes " +
+                "first in the database. A bulk recipe usually scales its ingredients but not its work " +
+                "amount, so which one wins changes the number.");
+
+        if (recipes is not null && recipes.Any(r => r.SelfReferential))
+            ctx.Report.Notice(NoticeKind.Boundary,
+                "A recipe above accepts this very thing as one of its own ingredients, so the calculated " +
+                "market value has the thing's own hand-written price folded into it — which is the opposite " +
+                "of deriving a price from ingredients.");
+    }
+}

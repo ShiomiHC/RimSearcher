@@ -13,6 +13,7 @@ Answers questions about RimWorld's defs and C# from a snapshot of what the game 
 | `datamod detach` | Hide the exporter mod from the game again. |
 | `datamod status` | Report whether the game can currently see the exporter mod. |
 | `docs` | Render the command reference from the declarations in the code. |
+| `economy` | Show what the game says a thing is worth, what it costs to make, and how long it takes. |
 | `export` | Run the game unattended with a chosen mod list and import what it exports. |
 | `fields` | List the field paths that a def type actually uses, with how often each occurs. |
 | `get` | Show one def in full: its identity, its fields, and any translations of it. |
@@ -196,6 +197,51 @@ rimsearcher docs
 rimsearcher docs --out skills/rimsearcher/references/cli-reference.md
 ```
 
+## `economy`
+
+Show what the game says a thing is worth, what it costs to make, and how long it takes.
+
+```
+rimsearcher economy [defName] [options]
+```
+
+These numbers are not def fields — none of them is written in any XML. The game computes them in its own Debug Output 'Economy' table: a market value can be derived from a recipe, and a cost is a cost list expanded recursively. Asking 'get' for a cost therefore returns nothing, and that nothing looks exactly like a thing having no cost.
+
+The rows are the same set the game's own table covers: items with a market value above 0.01, plus buildings the player can build or minify. Nothing else in the snapshot is priced.
+
+Read the empty cells as 'the game cannot work this out', not as zero. A profit needs a recipeMaker; a profit rate needs a positive work amount; a calculated market value needs the thing to be producible and to declare one. Those are four different reasons for a blank, and the columns keep them apart.
+
+| Argument | Meaning |
+|---|---|
+| `<defName>` | A thing's defName, for the full picture including its cost chain and every recipe that can produce it. Leave it out to list the layer, highest market value first. *(optional)* |
+
+| Option | Meaning | Also accepted |
+|---|---|---|
+| `-n`, `--limit` <n|all> | How many things to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+| `--offset` <n> | Skip this many things before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
+| `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods`, `--source`, `--from` |
+| `--category` <Item|Building> | Keep only items or only buildings. The two are not comparable: a building's market value is what you get back for deconstructing it, not what it sells for. | `--cat` |
+| `--calc-state` <ok|recipe|used|not_producible> | Keep only rows whose calculated market value came about a particular way. 'recipe' means it was derived from a recipe, 'ok' that the thing declares its own; 'used' and 'not_producible' are the two kinds of row the game cannot calculate at all. | `--state` |
+| `--producible` | Keep only things that some recipe produces or that the player can build. Without it the list also holds things you can only find or be given, which are priced but have no cost to compare against. | `--makeable` |
+| `--sort` <field> | Sort by market-value (the default), profit, profit-rate, cost, work, cost-deep, profit-deep, or chain-end-share. Highest first; rows the game cannot work out sort last rather than mixing in with the low end. Default: `market-value`. | `--order`, `--by` |
+
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `things` | one row per priced thing — defName, label, mod, category, marketValue, calcState, calculatedMarketValue, costToMake, profit, profitRate, workToProduce, costDifficultyVar, chainEndShare, costDeep, profitDeep. Null means the game cannot work that number out; it is never a stand-in for zero. Always an array, including when one defName matched exactly, so the shape does not change with the kind of match. |
+| `costChain` | with a defName: one row per ingredient — thingDef, count, unitValue, chainEnd. chainEnd marks an ingredient with no recipe of its own, where the cost recursion stops and falls back to that ingredient's hand-written market value. |
+| `recipes` | with a defName: every recipe that produces this thing — defName, productCount, workAmount, selfReferential. More than one row means the calculated market value depends on def load order. |
+
+Examples:
+
+```
+rimsearcher economy Gun_Autopistol
+rimsearcher economy --sort profit-rate --limit 20
+rimsearcher economy --scope vethara --category Item --limit all
+rimsearcher economy --calc-state recipe --sort chain-end-share
+```
+
 ## `export`
 
 Run the game unattended with a chosen mod list and import what it exports.
@@ -216,6 +262,7 @@ The game runs headless: no window appears and nothing is written to the display 
 | `--name` <name> | Name to register the resulting snapshot under. Defaults to the mod list's name. | `--as`, `--alias` |
 | `--timeout` <seconds> | How long to wait for the game to finish, and the only thing that will stop it. A large mod list can take minutes to load; if a stage sits still for a while this command says so and keeps waiting, so raise this rather than trusting a stall report. Default: `900`. | `--timeout-seconds`, `--wait` |
 | `--show-window` | Start the game with its window instead of headless. Only needed if a mod in the list requires a graphics device while loading; headless is otherwise identical and faster. | `--window`, `--windowed`, `--graphics` |
+| `--no-economy` | Skip the economy layer — prices, costs, work amounts and cost chains. It walks every recipe in the game once per priced thing, so it is the slowest part of a large export. The snapshot records that it was skipped, so 'rimsearcher economy' says so rather than reporting that the game prices nothing. | `--skip-economy`, `--without-economy` |
 | `--keep-temp` | Keep the temporary save-data folder afterwards, for looking at what the game was given. |  |
 | `--dry-run` | Do everything except start the game: resolve the list, check every mod is installed, and report what would be run. | `--check`, `--validate` |
 | `--harvest-translations` | Passed through to the import step, and on by default there: also index language files of installed mods that the list does not enable. Pass it explicitly only to be sure. | `--harvest` |

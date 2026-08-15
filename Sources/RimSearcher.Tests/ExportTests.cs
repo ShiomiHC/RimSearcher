@@ -35,6 +35,26 @@ public class ExportTests
     }
 
     /// <summary>
+    /// 跳过经济面那个开关得是**无值**的:游戏侧读它走 <c>CommandLineArgPassed</c>,
+    /// 而那一支不认 <c>key=value</c>(<c>TryGetCommandLineArg</c> 才认,它先判
+    /// <c>Contains('=')</c>)。写成带值的形式不会报错,只会静默地永远为假 ——
+    /// 于是「跳过了」在快照里长成「量过了、这个名单下没有可生产物」。
+    /// </summary>
+    [Fact]
+    public void 跳过经济面的开关不带值()
+    {
+        var with = ExportCommand.BuildGameArguments(Temp, Out, showWindow: false, skipEconomy: true);
+        Assert.Contains("-" + Contract.IntermediateFormat.SkipEconomySwitch, with);
+        Assert.DoesNotContain(with, a => a.StartsWith(
+            "-" + Contract.IntermediateFormat.SkipEconomySwitch + "=", StringComparison.Ordinal));
+
+        // 不给就一个字都不传 —— 默认必须是「量」。
+        var without = ExportCommand.BuildGameArguments(Temp, Out, showWindow: false);
+        Assert.DoesNotContain(without, a => a.Contains(
+            Contract.IntermediateFormat.SkipEconomySwitch, StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// 隔离不许有缺口。<c>-screen-width</c>/<c>-screen-height</c> 也能跑通导出,但它把窗口
     /// 尺寸写进 <c>HKCU\…\Screenmanager*</c> —— 注册表是 <c>-savedatafolder</c> 隔离不到的地方,
     /// 而「真实配置永不触碰」这条约定里注册表也算真实配置。

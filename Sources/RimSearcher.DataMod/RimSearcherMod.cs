@@ -64,7 +64,10 @@ namespace RimSearcher.DataMod
 
             try
             {
-                var written = DefExporter.Export(target);
+                // 布尔开关走 CommandLineArgPassed:TryGetCommandLineArg 先判 Contains('='),
+                // 拿它读一个没有值的开关会静默地永远为假。
+                var written = DefExporter.Export(
+                    target, GenCommandLine.CommandLineArgPassed(IntermediateFormat.SkipEconomySwitch));
                 Log.Message("[RimSearcher] exported to " + written);
             }
             catch (Exception ex)

@@ -48,6 +48,25 @@ namespace RimSearcher.Contract
             return this;
         }
 
+        /// <summary>
+        /// 定点两位的数,或 <c>null</c>。
+        ///
+        /// <c>"F2"</c> 而不是默认格式化:JSON 数字侧禁科学计数法(读侧只认十进制字面量)。
+        /// <c>InvariantCulture</c> 防的是小数点在别的 locale 下变逗号 —— 那会写出
+        /// <c>1,50</c> 这种既不报错也解析不回来的东西。
+        ///
+        /// <c>null</c> 与 <c>0</c> 在经济面上处处是两件事(工时为 0 的利润率、
+        /// 没有成本链的链尾占比),所以这里收 <see cref="System.Nullable{T}"/> 而不是拿
+        /// 哨兵值代替。
+        /// </summary>
+        public JsonLine Num(string key, float? value)
+        {
+            Key(key);
+            if (value.HasValue) _sb.Append(value.Value.ToString("F2", CultureInfo.InvariantCulture));
+            else _sb.Append("null");
+            return this;
+        }
+
         /// <summary>原样嵌入一段已经是合法 JSON 的文本(数组/对象)。</summary>
         public JsonLine Raw(string key, string json)
         {

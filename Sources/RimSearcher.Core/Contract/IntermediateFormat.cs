@@ -10,6 +10,7 @@
 //                      kind=definj  —— 运行时 defInjection 一条一行(游戏语言为英文时无此类行)
 //                      kind=keyed   —— Keyed 译文一条一行(界面文案;与 def 无关,key 不带点)
 //                      kind=xmlnode —— 继承层:XML 里一个带 Name/ParentName/Abstract 的节点一行
+//                      kind=economy —— 经济面:一条可生产物的市场价/造价/工时/成本链
 //   第 N 行(尾行)     kind=end     —— 记录数标记,完整性自证
 //
 // 尾行缺失 = 游戏中途崩溃或被杀,import 拒收。
@@ -23,17 +24,29 @@ namespace RimSearcher.Contract
         /// 2:加了 kind=xmlnode 继承层。
         /// 3:fields 从二元组变三元组,第三位是 <see cref="DefaultState"/>。
         /// 4:加了 kind=keyed(界面文案译文)。
+        /// 5:加了 kind=economy(经济面)与尾行的 economy_state 三态。
         ///
         /// 每一档都必须拒收前一档,而不是降级读:缺的那一层在查询结果里与
         /// 「事实上就没有」逐字同形,库里无从区分。
+        ///
+        /// 5 这一档尤其不能省:import 侧对**不认识的 kind 是静默落空**(没有 else 分支),
+        /// 而 records 计数按行数走、尾行声明数也照样对得上 —— 不涨版本时,一个带经济行的
+        /// 新文件被旧 CLI 读的结果是导入成功、退出码 0、经济面整个不存在,没有任何迹象。
         /// </remarks>
-        public const int FormatVersion = 4;
+        public const int FormatVersion = 5;
 
         /// <summary>导出文件的推荐扩展名。</summary>
         public const string FileExtension = ".rsx.jsonl.gz";
 
         /// <summary>无人值守导出的命令行开关(GenCommandLine.TryGetCommandLineArg 读取)。</summary>
         public const string CommandLineSwitch = "rimsearcher-export";
+
+        /// <summary>
+        /// 跳过经济面抽取。**布尔开关走 <c>GenCommandLine.CommandLineArgPassed</c>**,
+        /// 不走 <c>TryGetCommandLineArg</c> —— 后者只认 <c>key=value</c> 形式
+        /// (它先判 <c>Contains('=')</c>),拿它做布尔开关会静默地永远为假。
+        /// </summary>
+        public const string SkipEconomySwitch = "rimsearcher-no-economy";
 
         /// <summary>
         /// 导出器自己的 packageId,必须与 About.xml 一致:游戏侧靠它被启用,
@@ -47,6 +60,7 @@ namespace RimSearcher.Contract
         public const string KindDefInjection = "definj";
         public const string KindKeyed = "keyed";
         public const string KindXmlNode = "xmlnode";
+        public const string KindEconomy = "economy";
         public const string KindEnd = "end";
 
         // 字段名(两侧共用,防手写漂移)
@@ -105,11 +119,167 @@ namespace RimSearcher.Contract
         /// </summary>
         public const string KeyPatchOps = "patch_ops";
 
+        // ---- 经济面(kind=economy)。def_name / label / source_mod 不共用上面那批,见下 ----
+        //
+        // 外延与 vanilla `DebugOutputsEconomy.ItemAndBuildingAcquisition` 的 where 子句逐字一致:
+        // 有市场价的物品(category==Item && BaseMarketValue > 0.01),加上玩家可建或可小型化的
+        // 建筑。偏离这个筛子会让分布分位数无法与游戏内那张表对照。
+        //
+        // 数字一律定点两位(见 JsonLine.Num):JSON 数字侧禁科学计数法,且恒用 InvariantCulture。
+        // **NULL 与 0 在这一层处处是两件事**,逐条见下面各字段的注释。
+
+        /// <summary>
+        /// 这一行属于哪个 mod。<c>modContentPack?.PackageId ?? "unknown"</c> ——
+        /// 兜底值与 def 行的 <see cref="KeySourceMod"/>(空串)**有意不同**:
+        /// Vethara 的 `/economy` 端点用的是 "unknown",而那个端点是这次迁移唯一的正确性闸
+        /// (逐字段交叉校验),让这一格逐字可比比库内命名整齐值钱。
+        /// 两种写法在真正的理由(Patch 新增的顶层 def 拿不到 modContentPack,丢掉该行会让
+        /// 对照池静默缺项)上等价。
+        /// </summary>
+        public const string KeyEconomyMod = "mod";
+
+        public const string KeyEconomyCategory = "category";
+        public const string KeyEconomyMarketValue = "market_value";
+        public const string KeyEconomyProducible = "producible";
+        public const string KeyEconomyMadeFromStuff = "made_from_stuff";
+        public const string KeyEconomyIsWeapon = "is_weapon";
+        public const string KeyEconomyIsApparel = "is_apparel";
+        public const string KeyEconomyMarketValueDefined = "market_value_defined";
+
+        /// <summary>
+        /// 四态,**不可合并**:<c>not_producible</c>(无配方也不可建)/ <c>used</c>(未声明
+        /// MarketValue statBase)/ <c>recipe</c>(CalculableRecipe 非空)/ <c>ok</c>。
+        /// 前两态的 <see cref="KeyEconomyCalculatedMarketValue"/> 为 null —— 把两种「空」混成
+        /// 一个,消费侧就会把它们统计进分布、拉低整段分位。
+        /// </summary>
+        public const string KeyEconomyCalcState = "calc_state";
+
+        public const string EconomyCalcNotProducible = "not_producible";
+        public const string EconomyCalcUsed = "used";
+        public const string EconomyCalcRecipe = "recipe";
+        public const string EconomyCalcOk = "ok";
+
+        /// <summary>仅 <c>recipe</c> / <c>ok</c> 两态有值。</summary>
+        public const string KeyEconomyCalculatedMarketValue = "calculated_market_value";
+
+        /// <summary>vanilla 的 CostToMake。<c>recipeMaker</c> 为空时 null(游戏那张表印 "-")。</summary>
+        public const string KeyEconomyCostToMake = "cost_to_make";
+
+        /// <summary>
+        /// <c>market_value − cost_to_make</c>,同样只在 <c>recipeMaker</c> 非空时有值。
+        /// **这是与游戏那张表的一处有意偏离**:vanilla 的 profit 列无条件相减,而 CostToMake
+        /// 首句 <c>recipeMaker == null → return BaseMarketValue</c>,于是那一格印 0.0 ——
+        /// 一个与真的零利润逐字同形的数。
+        /// </summary>
+        public const string KeyEconomyProfit = "profit";
+
+        /// <summary>
+        /// <c>(market_value − cost_to_make) / work × 10000</c>。**work &lt;= 0 时必须给 null**:
+        /// vanilla 表在这里无条件除,工时为 −1 时那一格是负数噪声,原样传出去会被当成极端值
+        /// 统计进分布。
+        /// </summary>
+        public const string KeyEconomyProfitRate = "profit_rate";
+
+        /// <summary><c>WorkToProduceBest</c>,<c>&lt;= 0</c> 给 null。</summary>
+        public const string KeyEconomyWorkToProduce = "work_to_produce";
+
+        /// <summary><c>CostListString(def, false, false)</c> 的原字符串。</summary>
+        public const string KeyEconomyCostList = "cost_list";
+
+        /// <summary>
+        /// 这个 def 的成本表有一支**由难度开关决定**的变体时,这里是那个开关名
+        /// (<c>CostListForDifficulty.difficultyVar</c>);没有变体时为 null。
+        ///
+        /// 为什么必须随行带出:<c>BuildableDef.CostList</c> 在变体生效时返回的是另一张表,
+        /// 而判据 <c>CostListForDifficulty.Applies</c> 的第一句是
+        /// <c>if (Find.Storyteller == null) return false;</c> —— 导出跑在
+        /// <c>StaticConstructorOnStartup</c>,那一刻没有 storyteller,**于是它永远取非变体那支**。
+        ///
+        /// 这不是一句可以省的免责声明:带 <see cref="KeyEconomyCostDifficultyInverted"/> 的 def
+        /// (vanilla 的 <c>Turret_Mortar</c> 就是)变体恰恰在开关**关着**时生效,而那是绝大多数
+        /// 存档的实际状态 —— 快照给出的那个数是玩家基本见不到的那一支,却与一个正常的数逐字同形。
+        ///
+        /// 2026-08-15 与 Vethara <c>/economy</c> 端点(跑在 Playing 状态)的逐字段交叉校验里,
+        /// 2822 个共有 def 上只有这一处不一致,成因就是它。
+        /// </summary>
+        public const string KeyEconomyCostDifficultyVar = "cost_difficulty_var";
+
+        /// <summary>
+        /// <c>CostListForDifficulty.invert</c> —— 真表示变体在那个开关**关着**时生效。
+        /// 与 <see cref="KeyEconomyCostDifficultyVar"/> 分开带:它决定导出取到的是常见的那一支
+        /// 还是罕见的那一支,而这正是「小提醒」与「这个数没人会遇到」的分界。
+        /// </summary>
+        public const string KeyEconomyCostDifficultyInverted = "cost_difficulty_inverted";
+
+        /// <summary>逐项 <c>{thing_def, count, unit_value, chain_end}</c>。</summary>
+        public const string KeyEconomyCostChain = "cost_chain";
+        public const string KeyEconomyThingDef = "thing_def";
+        public const string KeyEconomyCount = "count";
+        public const string KeyEconomyUnitValue = "unit_value";
+        /// <summary>这一项自己没有 recipeMaker —— CostToMake 的递归在它身上停住。</summary>
+        public const string KeyEconomyChainEnd = "chain_end";
+
+        /// <summary>
+        /// 链尾项价值占比。**total &lt;= 0 时给 null**,不给 0.00 —— 无 costList 与
+        /// 「costList 全是零价物」两种来源都不该长得像「没问题」。
+        /// 等于 1.0 时该行的 profit 只是「市场价减去你自己填的另外几个数」。
+        /// </summary>
+        public const string KeyEconomyChainEndShare = "chain_end_share";
+
+        /// <summary>
+        /// **自有指标,不是 vanilla 的量** —— 命名上必须与 <see cref="KeyEconomyCostToMake"/>
+        /// 分开。与它的唯一差别是链尾改用 <c>StatWorker_MarketValue.CalculatedBaseMarketValue</c>,
+        /// 那同样是 vanilla 自己的算法,且对手写 RecipeDef(而非 &lt;recipeMaker&gt; 节)产出的物
+        /// 有效,正好补上 CostToMake 的盲区。两者并列输出,差异本身即信息。
+        /// </summary>
+        public const string KeyEconomyCostDeep = "cost_deep";
+
+        public const string KeyEconomyProfitDeep = "profit_deep";
+
+        /// <summary>
+        /// 逐项 <c>{def_name, product_count, work_amount, self_referential}</c>。
+        /// 长度 &gt; 1 即表示该行的 <see cref="KeyEconomyCalculatedMarketValue"/> 有**加载顺序
+        /// 依赖**:<c>CalculableRecipe</c> 返回 DefDatabase 里第一个匹配,而等比放大的 bulk
+        /// 配方 workAmount 通常不等比,单位成本更低。
+        /// </summary>
+        public const string KeyEconomyRecipeCandidates = "recipe_candidates";
+        public const string KeyEconomyProductCount = "product_count";
+        public const string KeyEconomyWorkAmount = "work_amount";
+        /// <summary>某个 ingredient 的 filter 放行产物自己 —— 推算价里混进了手填价。</summary>
+        public const string KeyEconomySelfReferential = "self_referential";
+
+        // ---- 尾行 ----
+
         public const string KeyRecords = "records";
         public const string KeyDefs = "defs";
         public const string KeyInjections = "injections";
         public const string KeyKeyedCount = "keyed";
         public const string KeyXmlNodes = "xml_nodes";
+        public const string KeyEconomyRows = "economy";
+
+        /// <summary>
+        /// 经济面这一次到底量没量成,三态。**判据不是 <c>COUNT(*)</c>** —— 经济抽取要调
+        /// vanilla 的 private 方法,会部分失败,而 keyed 不会;零行有四种成因
+        /// (没量过 / 主动跳过 / 签名缺失 / 量过了确实没有),计数把它们压成同一个数。
+        ///
+        /// 落在**尾行**而不是 meta 行:meta 是第一行,那时抽取还没跑;尾行本来就是「这次导出
+        /// 实际产出了什么」的自证行,且尾行缺失一律拒收,所以这几个字段必定伴随一次完整导出。
+        /// </summary>
+        public const string KeyEconomyState = "economy_state";
+
+        /// <summary>量过了。</summary>
+        public const string EconomyStateOk = "ok";
+        /// <summary>导出时带了 <see cref="SkipEconomySwitch"/>。</summary>
+        public const string EconomyStateSkipped = "skipped";
+        /// <summary>vanilla 签名对不上,或抽取中途抛了 —— 详情在 <see cref="KeyEconomyError"/>。</summary>
+        public const string EconomyStateUnavailable = "unavailable";
+
+        /// <summary>
+        /// <see cref="EconomyStateUnavailable"/> 时点名缺了什么。**不得回退到自写的等价实现**:
+        /// 一旦回退,调用方拿到的是与游戏内表格不一致的数字,而输出里没有任何迹象说明口径
+        /// 已经换了一套。
+        /// </summary>
+        public const string KeyEconomyError = "economy_error";
 
         /// <summary>ImpliedDefs 批次在 source_file 上留的事实值 —— 是来源标记,不是文件路径。</summary>
         public const string ImpliedDefsSourceFile = "ImpliedDefs";

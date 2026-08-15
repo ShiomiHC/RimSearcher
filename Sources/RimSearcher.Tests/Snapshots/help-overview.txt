@@ -11,6 +11,7 @@ Commands:
   datamod detach      Hide the exporter mod from the game again.
   datamod status      Report whether the game can currently see the exporter mod.
   docs                Render the command reference from the declarations in the code.
+  economy             Show what the game says a thing is worth, what it costs to make, and how long it takes.
   export              Run the game unattended with a chosen mod list and import what it exports.
   fields              List the field paths that a def type actually uses, with how often each occurs.
   get                 Show one def in full: its identity, its fields, and any translations of it.

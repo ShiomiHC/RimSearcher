@@ -32,6 +32,7 @@ Global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the com
 | Everything of one kind | `rimsearcher list <DefType>` + `--find <text>`; no type = the def types |
 | Which saved mod lists name this mod? | `rimsearcher modlist show --find <text>` |
 | What inherits from this / vice versa? | `rimsearcher inherit <name>` |
+| What is this worth / what does it cost to make? | `rimsearcher economy <defName>` — not a def field, `get` cannot answer it |
 | UI text ↔ translation key | `rimsearcher keyed <key or phrase>` |
 | Which UI text is untranslated? | `rimsearcher keyed --empty-translation` with no query |
 | The game's C#: bodies, callers, overrides, hierarchy | `mcp__decompiler__get_decompiled_source`, `find_callers`, `get_overrides`, `find_derived_types`, `search_types` |
@@ -169,6 +170,13 @@ rather than assuming. These four it has no way to state:
   `--empty-translation` with no query lists every untranslated key — **do not invent a
   stand-in query**: `""`, `*`, `.` are not wildcards, and a real word silently answers a
   different question.
+- **Prices are computed, not stored** — `economy` is the only road to them. A market value
+  can be derived from a recipe and a cost is a cost list expanded recursively, so none of
+  these numbers is a def field and `get` returns nothing for them. Read a blank cell as *the
+  game cannot work this out*, never as zero: `calcState` keeps the four reasons apart, and a
+  `calculatedMarketValue` of `0` under `calcState=ok` means the sum came out empty, not that
+  the thing is free. `chainEndShare` of 1 means that row's `profit` is one hand-written
+  number minus a few others.
 - **Abstract parents are not defs**: `get` cannot reach them — it names `inherit` instead.
   `inherit` answers four things off the XML layer: who inherits from whom, which nodes are
   abstract, which layer declares a field (`--path-contains`), and how many patches target a

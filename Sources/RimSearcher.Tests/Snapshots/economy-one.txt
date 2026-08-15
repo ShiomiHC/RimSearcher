@@ -1,0 +1,19 @@
+$ rimsearcher economy TestModGun
+exit 0
+--- stdout ---
+1 thing.
+
+defName     label     mod       category  marketValue  marketValueDefined  calcState  calculatedMarketValue  costToMake  profit  profitRate  workToProduce  costList                                   costDifficultyVar  costDifficultyInverted  chainEndShare  costDeep  profitDeep  producible  madeFromStuff  isWeapon  isApparel
+TestModGun  test gun  test.mod  Item      320          yes                 recipe     298.5                  141.2       178.8   1104.94     1618           40 x Bloomstone (80), 1 x Firefoam (61.2)  classicMortars     no                      0.57           156.4     163.6       yes         no             yes       no
+
+thingDef    count  unitValue  chainEnd
+Bloomstone  40     2          yes
+Firefoam    1      61.2       no
+
+defName              productCount  workAmount  selfReferential
+Make_TestModGun      1             1618        no
+Make_TestModGunBulk  4             4200        yes
+1 row above declares a second cost list that a difficulty setting switches to, and an export cannot tell which one a game would use: the switch is read off the storyteller, and no storyteller exists while the game is loading. Every cost number above is therefore the unconditional list. 'rimsearcher get <defName> --path-contains costListForDifficulty' shows the other list.
+  - 2 recipes can produce this thing, so its calculatedMarketValue depends on def load order: the game takes whichever of them comes first in the database. A bulk recipe usually scales its ingredients but not its work amount, so which one wins changes the number.
+  - A recipe above accepts this very thing as one of its own ingredients, so the calculated market value has the thing's own hand-written price folded into it — which is the opposite of deriving a price from ingredients.
+--- stderr ---

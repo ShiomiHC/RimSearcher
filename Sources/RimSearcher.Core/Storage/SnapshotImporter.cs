@@ -9,7 +9,13 @@ namespace RimSearcher.Storage;
 public sealed record ImportStats(
     int Defs, int FieldValues, int NoiseDropped, int RuntimeTranslations,
     int HarvestedTranslations, int KeyedInEffect, int KeyedHarvested,
-    int TruncatedDefs, int XmlNodes, ExportMeta Meta, string DbPath);
+    int TruncatedDefs, int XmlNodes, int EconomyRows,
+    /// <summary>
+    /// 经济面的三态,<c>null</c> 是第四态(这份导出建于经济面之前)。
+    /// <see cref="EconomyRows"/> 单独看不出这四种成因的分别。
+    /// </summary>
+    string? EconomyState,
+    ExportMeta Meta, string DbPath);
 
 /// <summary>
 /// 中间格式 → SQLite。建库整个在这一侧:产地唯一由进程边界保证,策略变化免重导。
@@ -47,8 +53,12 @@ public sealed class SnapshotImporter
 
         ExportMeta? meta = null;
         var defs = 0; var fieldValues = 0; var noise = 0; var runtimeTr = 0; var truncatedDefs = 0;
-        var xmlNodes = 0; var keyedInEffect = 0;
+        var xmlNodes = 0; var keyedInEffect = 0; var economyRows = 0;
         long? declaredRecords = null;
+        // 经济面的三态从尾行来。**null 是第四态** —— 尾行没这个字段 = 这份导出建于经济面
+        // 进中间格式之前。四态在 meta 表里必须分得开,见 SnapshotSchema.MetaKeyEconomyState。
+        string? economyState = null;
+        string? economyError = null;
         var sawEnd = false;
         var records = 0L;
 
@@ -77,6 +87,24 @@ public sealed class SnapshotImporter
                 """);
             using var insertKeyedFts = Prepare(db,
                 "INSERT INTO keyed_fts (rowid, key, translated, original) VALUES ($id,$k,$tr,$o)");
+            using var insertEcon = Prepare(db, """
+                INSERT INTO economy (id, def_name, label, category, mod, market_value, producible,
+                                     made_from_stuff, is_weapon, is_apparel, market_value_defined,
+                                     calc_state, calculated_market_value, cost_to_make, profit,
+                                     profit_rate, work_to_produce, cost_list, cost_difficulty_var,
+                                     cost_difficulty_inverted, chain_end_share, cost_deep, profit_deep)
+                VALUES ($id,$n,$l,$cat,$mod,$mv,$prod,$stuff,$wep,$app,$mvd,$cs,$cmv,$ctm,$pf,
+                        $pr,$work,$cl,$cdv,$cdi,$ces,$cd,$pd)
+                """);
+            using var insertEconChain = Prepare(db, """
+                INSERT INTO economy_cost_chain (economy_id, ordinal, thing_def, count, unit_value, chain_end)
+                VALUES ($id,$o,$td,$c,$uv,$ce)
+                """);
+            using var insertEconRecipe = Prepare(db, """
+                INSERT INTO economy_recipes (economy_id, ordinal, def_name, product_count, work_amount,
+                                             self_referential)
+                VALUES ($id,$o,$n,$pc,$wa,$sr)
+                """);
 
             // 一个 defName 下可能挂着**几个** def(同名跨 def 类型是 RimWorld 常态),
             // 所以是 name → 列表:取单个 id 会让归属取决于导出顺序。
@@ -87,6 +115,7 @@ public sealed class SnapshotImporter
             // keyed 自己的 id 序列。显式维护而不是问 last_insert_rowid():FTS 那一行要用同一个
             // rowid,而两条 INSERT 之间夹着别的语句。
             long nextKeyedId = 1;
+            long nextEconomyId = 1;
 
             foreach (var line in ReadLines(exportPath))
             {
@@ -105,6 +134,8 @@ public sealed class SnapshotImporter
                 {
                     sawEnd = true;
                     declaredRecords = root.TryGetProperty(IntermediateFormat.KeyRecords, out var r) ? r.GetInt64() : null;
+                    economyState = Str(root, IntermediateFormat.KeyEconomyState);
+                    economyError = Str(root, IntermediateFormat.KeyEconomyError);
                     continue;
                 }
 
@@ -215,6 +246,74 @@ public sealed class SnapshotImporter
                     continue;
                 }
 
+                // 经济行同样不依赖任何 def:它按 def_name 与 mod 被消费,不必找回 def id。
+                if (kind == IntermediateFormat.KindEconomy)
+                {
+                    var eid = nextEconomyId++;
+                    Bind(insertEcon, "$id", eid);
+                    Bind(insertEcon, "$n", Str(root, IntermediateFormat.KeyDefName) ?? "");
+                    Bind(insertEcon, "$l", Str(root, IntermediateFormat.KeyLabel));
+                    Bind(insertEcon, "$cat", Str(root, IntermediateFormat.KeyEconomyCategory));
+                    Bind(insertEcon, "$mod", Str(root, IntermediateFormat.KeyEconomyMod));
+                    // Num() 把 JSON 的 null 原样带成 SQL NULL。写成 0 的话,「工时为零所以
+                    // 利润率算不出」就与「利润率正好是零」在库里同形了。
+                    Bind(insertEcon, "$mv", Num(root, IntermediateFormat.KeyEconomyMarketValue));
+                    Bind(insertEcon, "$prod", Flag(root, IntermediateFormat.KeyEconomyProducible));
+                    Bind(insertEcon, "$stuff", Flag(root, IntermediateFormat.KeyEconomyMadeFromStuff));
+                    Bind(insertEcon, "$wep", Flag(root, IntermediateFormat.KeyEconomyIsWeapon));
+                    Bind(insertEcon, "$app", Flag(root, IntermediateFormat.KeyEconomyIsApparel));
+                    Bind(insertEcon, "$mvd", Flag(root, IntermediateFormat.KeyEconomyMarketValueDefined));
+                    Bind(insertEcon, "$cs", Str(root, IntermediateFormat.KeyEconomyCalcState) ?? "");
+                    Bind(insertEcon, "$cmv", Num(root, IntermediateFormat.KeyEconomyCalculatedMarketValue));
+                    Bind(insertEcon, "$ctm", Num(root, IntermediateFormat.KeyEconomyCostToMake));
+                    Bind(insertEcon, "$pf", Num(root, IntermediateFormat.KeyEconomyProfit));
+                    Bind(insertEcon, "$pr", Num(root, IntermediateFormat.KeyEconomyProfitRate));
+                    Bind(insertEcon, "$work", Num(root, IntermediateFormat.KeyEconomyWorkToProduce));
+                    Bind(insertEcon, "$cl", Str(root, IntermediateFormat.KeyEconomyCostList));
+                    Bind(insertEcon, "$cdv", Str(root, IntermediateFormat.KeyEconomyCostDifficultyVar));
+                    Bind(insertEcon, "$cdi", Flag(root, IntermediateFormat.KeyEconomyCostDifficultyInverted));
+                    Bind(insertEcon, "$ces", Num(root, IntermediateFormat.KeyEconomyChainEndShare));
+                    Bind(insertEcon, "$cd", Num(root, IntermediateFormat.KeyEconomyCostDeep));
+                    Bind(insertEcon, "$pd", Num(root, IntermediateFormat.KeyEconomyProfitDeep));
+                    insertEcon.ExecuteNonQuery();
+                    economyRows++;
+
+                    if (root.TryGetProperty(IntermediateFormat.KeyEconomyCostChain, out var chain) &&
+                        chain.ValueKind == JsonValueKind.Array)
+                    {
+                        var ord = 0;
+                        foreach (var part in chain.EnumerateArray())
+                        {
+                            Bind(insertEconChain, "$id", eid);
+                            Bind(insertEconChain, "$o", ord++);
+                            Bind(insertEconChain, "$td", Str(part, IntermediateFormat.KeyEconomyThingDef) ?? "");
+                            Bind(insertEconChain, "$c", part.TryGetProperty(IntermediateFormat.KeyEconomyCount, out var cEl)
+                                ? cEl.GetInt32() : 0);
+                            Bind(insertEconChain, "$uv", Num(part, IntermediateFormat.KeyEconomyUnitValue));
+                            Bind(insertEconChain, "$ce", Flag(part, IntermediateFormat.KeyEconomyChainEnd));
+                            insertEconChain.ExecuteNonQuery();
+                        }
+                    }
+
+                    if (root.TryGetProperty(IntermediateFormat.KeyEconomyRecipeCandidates, out var cands) &&
+                        cands.ValueKind == JsonValueKind.Array)
+                    {
+                        var ord = 0;
+                        foreach (var cand in cands.EnumerateArray())
+                        {
+                            Bind(insertEconRecipe, "$id", eid);
+                            Bind(insertEconRecipe, "$o", ord++);
+                            Bind(insertEconRecipe, "$n", Str(cand, IntermediateFormat.KeyDefName) ?? "");
+                            Bind(insertEconRecipe, "$pc", cand.TryGetProperty(IntermediateFormat.KeyEconomyProductCount, out var pcEl)
+                                ? pcEl.GetInt32() : 0);
+                            Bind(insertEconRecipe, "$wa", Num(cand, IntermediateFormat.KeyEconomyWorkAmount));
+                            Bind(insertEconRecipe, "$sr", Flag(cand, IntermediateFormat.KeyEconomySelfReferential));
+                            insertEconRecipe.ExecuteNonQuery();
+                        }
+                    }
+                    continue;
+                }
+
                 if (kind == IntermediateFormat.KindDefInjection)
                 {
                     pendingInjections.Add((
@@ -315,6 +414,15 @@ public sealed class SnapshotImporter
                 Put(SnapshotSchema.MetaKeySourcePath, Path.GetFileName(exportPath));
                 Put(SnapshotSchema.MetaKeyHarvestedRoots, ModRoots.Count.ToString());
 
+                // 尾行没这个字段就一个字也不写 —— **缺席是有意义的一态**(这份导出建于经济面
+                // 之前),和 content_fingerprint 同一道缝。写个 "unknown" 进去会把「没资格回答」
+                // 变成一个看着像答案的值。
+                if (economyState is not null)
+                {
+                    Put(SnapshotSchema.MetaKeyEconomyState, economyState);
+                    if (economyError is not null) Put(SnapshotSchema.MetaKeyEconomyError, economyError);
+                }
+
                 // 扫盘发生在游戏已经退出之后,所以这一份指纹严格说是「导出结束那一刻」的磁盘,
                 // 不是「游戏读 XML 那一刻」的。中间这几十秒里有人改了文件的话,这一层会把它
                 // 记成基线 —— 少报一次,不会多报。
@@ -355,7 +463,8 @@ public sealed class SnapshotImporter
             File.Move(tempDb, dbPath);
 
             return new ImportStats(defs, fieldValues, noise, runtimeTr, harvested,
-                                   keyedInEffect, keyedHarvested, truncatedDefs, xmlNodes, meta, dbPath);
+                                   keyedInEffect, keyedHarvested, truncatedDefs, xmlNodes,
+                                   economyRows, economyState, meta, dbPath);
         }
     }
 
@@ -571,6 +680,18 @@ public sealed class SnapshotImporter
 
     private static string? Str(JsonElement el, string key)
         => el.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+
+    /// <summary>
+    /// 数,或 <c>null</c>。JSON 里的 <c>null</c> 与字段缺席都回 <c>null</c>,由 <see cref="Bind"/>
+    /// 落成 SQL NULL —— 经济面上「算不出」与「算出来是零」处处是两件事,把前者写成 0
+    /// 就等于给了一个会被统计进分布的数。
+    /// </summary>
+    private static double? Num(JsonElement el, string key)
+        => el.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : null;
+
+    /// <summary>布尔落成 0/1。缺席作假 —— 这几列都是 NOT NULL,没有第三态可表达。</summary>
+    private static int Flag(JsonElement el, string key)
+        => el.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.True ? 1 : 0;
 
     private static SqliteCommand Prepare(SqliteConnection db, string sql)
     {

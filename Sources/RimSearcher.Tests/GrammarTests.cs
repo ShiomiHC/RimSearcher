@@ -3995,4 +3995,59 @@ public class GrammarTests
         var (byPath, _, _) = Fixture.Run("code-search", ": ThingComp", "--db", Fixture.Db);
         Assert.DoesNotContain(denial, byPath, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// 经济面零行的四种成因各说各的。**这是这一层唯一不许合并的地方**:四种在
+    /// <c>COUNT(*)</c> 上是同一个零,而它们的下一步两两不同 ——
+    ///
+    ///   没量过     → 重导出
+    ///   跳过了     → 别加那个开关(重导出也对,但原因不同,说错了人会以为是自己的库坏了)
+    ///   签名对不上 → 去看 vanilla 的 DebugOutputsEconomy 现在长什么样
+    ///   量过了没有 → 没有下一步,这是**完整的肯定回答**
+    ///
+    /// 合成一句「这份快照没有经济数据」的话,最刺眼的第三种会被读成最无害的第一种。
+    /// </summary>
+    [Fact]
+    public void 经济面四态各说各的()
+    {
+        const string signature = "Verse.DebugOutputsEconomy.CostToMake(ThingDef, bool)";
+
+        var (notMeasured, _, _) = Fixture.Run("economy", "--db", Fixture.OtherDb);
+        var (skipped, _, _) = Fixture.Run("economy", "--db",
+            Fixture.EconomyStateDb(Contract.IntermediateFormat.EconomyStateSkipped));
+        var (unavailable, _, _) = Fixture.Run("economy", "--db",
+            Fixture.EconomyStateDb(Contract.IntermediateFormat.EconomyStateUnavailable,
+                                   "Missing: " + signature + ". Compare the declarations."));
+
+        // ① 三句两两不同。逐字相同的两句等于这一格从没被分开过。
+        foreach (var (a, b) in new[] { (notMeasured, skipped), (notMeasured, unavailable),
+                                       (skipped, unavailable) })
+            Assert.NotEqual(a, b);
+
+        // ② 点名的那个签名原样在场 —— 概括掉它,「去看哪个方法」就无处可查,而这一层
+        //    刻意不回退到自写实现,那句话是唯一的下一步。
+        Assert.Contains(signature, unavailable, StringComparison.Ordinal);
+        Assert.DoesNotContain(signature, notMeasured, StringComparison.Ordinal);
+        Assert.DoesNotContain(signature, skipped, StringComparison.Ordinal);
+
+        // ③ 三句都得挡住「所以游戏里这些东西没有价格」这个推论 —— 缺席是这份库的性质,
+        //    不是关于游戏的事实。
+        foreach (var (what, text) in new[] { ("not measured", notMeasured), ("skipped", skipped),
+                                             ("unavailable", unavailable) })
+            Assert.True(text.Contains("property of the snapshot", StringComparison.Ordinal)
+                     || text.Contains("was measured", StringComparison.Ordinal)
+                     || text.Contains("could not be measured", StringComparison.Ordinal),
+                $"'{what}' 报了零却没挡住「所以游戏里没有价格」这个推论");
+
+        // ④ 失败那一句必须同时说清爆炸半径:def 导出照常完成了。不说的话,一次 RimWorld
+        //    更新会被读成整个快照坏了。
+        Assert.Contains("did not fail", unavailable, StringComparison.Ordinal);
+
+        // ⑤ 第四种(量过了确实没有)与上面三种分得开,且自称是完整回答而非一次落空 ——
+        //    它照约定仍走 exit 1,读退出码的脚本会读成失败。
+        var (measuredEmpty, _, code) = Fixture.Run("economy", "--scope", "-all");
+        Assert.Equal(1, code);
+        foreach (var other in new[] { notMeasured, skipped, unavailable })
+            Assert.NotEqual(other, measuredEmpty);
+    }
 }

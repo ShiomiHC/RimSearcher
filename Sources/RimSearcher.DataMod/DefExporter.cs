@@ -36,7 +36,13 @@ namespace RimSearcher.DataMod
 
         public static ExportLimits Limits = new ExportLimits();
 
-        public static string Export(string targetPath)
+        public static string Export(string targetPath) => Export(targetPath, false);
+
+        /// <summary>
+        /// <paramref name="skipEconomy"/> 为真时经济面整段不跑,尾行记 <c>skipped</c> ——
+        /// 与「量过了、这个名单下没有可生产物」是两件事,不许在库里长成同一个零。
+        /// </summary>
+        public static string Export(string targetPath, bool skipEconomy)
         {
             var dir = Path.GetDirectoryName(Path.GetFullPath(targetPath));
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
@@ -50,6 +56,44 @@ namespace RimSearcher.DataMod
             var injections = 0;
             var keyed = 0;
             var xmlNodes = 0;
+
+            // 经济面在**开流之前**整批攒好 —— 这一段是唯一会因 RimWorld 版本更新而失败的
+            // emitter(它调 vanilla 的 private 方法),而它失败时 def 导出必须照常完成、
+            // 快照照常可用,只是不带经济表。爆炸半径与收益不成比例的反面就是:一次 RimWorld
+            // 更新让整个 rimsearcher 挂掉,而不只是经济体检不可用。
+            //
+            // 攒完再写而不是边算边写:抽取中途抛异常时,流式写法已经把前半截落进文件了。
+            List<string> economyLines = null;
+            var economyState = IntermediateFormat.EconomyStateSkipped;
+            string economyError = null;
+
+            if (!skipEconomy)
+            {
+                try
+                {
+                    economyError = EconomyExporter.ResolveReflection();
+                    if (economyError == null)
+                    {
+                        economyLines = EconomyExporter.Build();
+                        economyState = IntermediateFormat.EconomyStateOk;
+                    }
+                    else
+                    {
+                        economyState = IntermediateFormat.EconomyStateUnavailable;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    economyLines = null;
+                    economyState = IntermediateFormat.EconomyStateUnavailable;
+                    economyError = "The economy extraction threw partway through and its rows were discarded: "
+                                 + ex.GetType().Name + ": " + ex.Message
+                                 + ". The rest of this snapshot is complete and usable.";
+                }
+
+                if (economyState == IntermediateFormat.EconomyStateUnavailable)
+                    Log.Warning("[RimSearcher] economy layer unavailable: " + economyError);
+            }
 
             using (var file = new FileStream(temp, FileMode.CreateNew, FileAccess.Write))
             using (var gz = new GZipStream(file, CompressionLevel.Optimal))
@@ -102,16 +146,34 @@ namespace RimSearcher.DataMod
                     xmlNodes++;
                 }
 
+                var economy = 0;
+                if (economyLines != null)
+                {
+                    foreach (var line in economyLines)
+                    {
+                        writer.WriteLine(line);
+                        records++;
+                        economy++;
+                    }
+                }
+
                 // 尾行记录数标记 —— 完整性自证。游戏中途崩 = 这一行不在,import 拒收。
+                //
+                // 经济面的三态也落在这里而不是 meta 行:meta 是第一行,那时抽取还没跑;
+                // 而尾行缺失一律拒收,所以这几个字段必定伴随一次完整导出,不存在「字段自己
+                // 也可能缺」的二阶问题。
                 records++;
-                writer.WriteLine(new JsonLine()
+                var end = new JsonLine()
                     .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindEnd)
                     .Int(IntermediateFormat.KeyRecords, records)
                     .Int(IntermediateFormat.KeyDefs, defs)
                     .Int(IntermediateFormat.KeyInjections, injections)
                     .Int(IntermediateFormat.KeyKeyedCount, keyed)
                     .Int(IntermediateFormat.KeyXmlNodes, xmlNodes)
-                    .ToString());
+                    .Int(IntermediateFormat.KeyEconomyRows, economy)
+                    .Str(IntermediateFormat.KeyEconomyState, economyState);
+                if (economyError != null) end.Str(IntermediateFormat.KeyEconomyError, economyError);
+                writer.WriteLine(end.ToString());
 
                 writer.Flush();
             }

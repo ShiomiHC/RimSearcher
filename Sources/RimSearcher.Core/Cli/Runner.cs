@@ -40,6 +40,7 @@ public sealed class CommandRegistry
         new ListCommand(),
         new InheritCommand(),
         new KeyedCommand(),
+        new EconomyCommand(),
         new FieldsCommand(),
         new ValuesCommand(),
         new ModsCommand(),

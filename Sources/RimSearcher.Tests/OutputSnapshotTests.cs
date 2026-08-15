@@ -318,6 +318,27 @@ public class OutputSnapshotTests
         // 以及问的其实是个 def 名 —— 后者该被指回 get/search,而不是报「没有」。
         { "keyed-miss",            ["keyed", "NoSuchUiKey"] },
         { "keyed-miss-def",        ["keyed", "Apparel_ShieldBelt"] },
+        // 经济面。这一层的每一种「空」都有自己的成因,而它们印出来同形 ——
+        // 一份基线守一种成因,合并任何两份都会让区别在字节上消失。
+        { "economy-all",           ["economy"] },
+        // 齐全的一行 + 两张子表。两个配方能产它,于是推算价有加载顺序依赖;
+        // 第二个还是自引用的 —— 两句说破都在这一份里。
+        { "economy-one",           ["economy", "TestModGun"] },
+        // chainEndShare 到顶:profit 只是「市场价减去你自己填的另外几个数」。
+        // 引用的那个数必须与表里印出来的逐字一致(是 1 不是 1.00)。
+        { "economy-chain-end",     ["economy", "Apparel_ShieldBelt"] },
+        // calcState=ok 而推算价是 0 —— **算不出**,不是「值零」。
+        { "economy-zero-calc",     ["economy", "Meat_Muffalo"] },
+        // 收窄参数在场时计数要念回它划的那道线。
+        { "economy-scoped",        ["economy", "--scope", "test.mod"] },
+        { "economy-sort-profit",   ["economy", "--sort", "profit-rate"] },
+        // 零结果的两种成因:筛干净了(整层非空),与问的是个不在这一层里的 def。
+        { "economy-filtered-empty", ["economy", "--calc-state", "not_producible", "--category", "Building"] },
+        { "economy-miss-def",      ["economy", "Bullet_Revolver"] },
+        { "economy-miss",          ["economy", "NoSuchThingAtAll"] },
+        // 四态里另外三种(没量过 / 跳过了 / 签名对不上)不在这里:它们要各自一份库,
+        // 而库路径是绝对的、含机器名,进不了回显行。守它们的是 GrammarTests 里
+        // 「经济面四态各说各的」那条。
         // read 的两处错法:定位到哪个文件、以及配平括号找到的是不是那一段。
         // 轮廓:注释/字符串/字符字面量里的括号不许算数,方法体里的 if 不许变成成员,
         // 带初值的字段不许被初值里的括号认成方法。

@@ -127,7 +127,8 @@ public static class Fixture
     /// 让「换一份快照就能拿到」可判定。
     /// </summary>
     private static void WriteOtherExport(string path, string defName = "OnlyInOtherSnapshot",
-                                         string compClass = "OtherMod.CompOnlyElsewhere")
+                                         string compClass = "OtherMod.CompOnlyElsewhere",
+                                         string? economyState = null, string? economyError = null)
     {
         using var fs = File.Create(path);
         using var gz = new GZipStream(fs, CompressionLevel.Optimal);
@@ -165,15 +166,42 @@ public static class Fixture
             .Int(IntermediateFormat.KeyFieldsTruncated, 0)
             .ToString());
 
-        w.WriteLine(new JsonLine()
+        // economyState 为 null 时这两个字段整个不写 —— 那正是第四态(这份导出建于经济面
+        // 之前),它在库里靠 meta 键的缺席表达,不许被兜底成某个字符串。
+        var end = new JsonLine()
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindEnd)
             .Int(IntermediateFormat.KeyRecords, 3)
             .Int(IntermediateFormat.KeyDefs, 1)
             .Int(IntermediateFormat.KeyInjections, 0)
-            .Int(IntermediateFormat.KeyXmlNodes, 0)
-            .ToString());
+            .Int(IntermediateFormat.KeyXmlNodes, 0);
+        if (economyState is not null)
+        {
+            end.Int(IntermediateFormat.KeyEconomyRows, 0).Str(IntermediateFormat.KeyEconomyState, economyState);
+            if (economyError is not null) end.Str(IntermediateFormat.KeyEconomyError, economyError);
+        }
+        w.WriteLine(end.ToString());
 
         w.Flush();
+    }
+
+    /// <summary>
+    /// 一份除了经济态之外与 <see cref="OtherDb"/> 同形的库,用来验四态各说各的。
+    ///
+    /// 四态里只有「没量过」能靠现成语料表达(那份的尾行压根没有 economy_state),
+    /// 另外两种要各造一次导出 —— 而它们恰恰是最要紧的两种:<c>skipped</c> 的下一步是
+    /// 「别加那个开关」,<c>unavailable</c> 的下一步是「去看 vanilla 源码」,
+    /// 混成一句话就会把后者读成前者。
+    /// </summary>
+    public static string EconomyStateDb(string state, string? error = null)
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "economy-state");
+        Directory.CreateDirectory(dir);
+        var export = Path.Combine(dir, state + IntermediateFormat.FileExtension);
+        var db = Path.Combine(dir, state + ".db");
+
+        WriteOtherExport(export, economyState: state, economyError: error);
+        new SnapshotImporter().Import(export, db);
+        return db;
     }
 
     /// <summary>
@@ -656,6 +684,111 @@ public static class Fixture
         Injection("Firefoam", "label", "灭火泡沫", "firefoam");
         Injection("Firefoam", "description", "一团灭火泡沫。", "A blob of firefoam.");
 
+        void Economy(string defName, string label, string mod, string category, float marketValue,
+                     bool producible, string calcState, float? calculated, float? costToMake,
+                     float? profit, float? profitRate, float? work, string costList,
+                     string chain, float? chainEndShare, float costDeep, float profitDeep,
+                     string recipes, bool marketValueDefined = true, bool madeFromStuff = false,
+                     bool isWeapon = false, bool isApparel = false,
+                     string? difficultyVar = null, bool difficultyInverted = false)
+        {
+            w.WriteLine(new JsonLine()
+                .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindEconomy)
+                .Str(IntermediateFormat.KeyDefName, defName)
+                .Str(IntermediateFormat.KeyLabel, label)
+                .Str(IntermediateFormat.KeyEconomyMod, mod)
+                .Str(IntermediateFormat.KeyEconomyCategory, category)
+                .Num(IntermediateFormat.KeyEconomyMarketValue, marketValue)
+                .Bool(IntermediateFormat.KeyEconomyProducible, producible)
+                .Bool(IntermediateFormat.KeyEconomyMadeFromStuff, madeFromStuff)
+                .Bool(IntermediateFormat.KeyEconomyIsWeapon, isWeapon)
+                .Bool(IntermediateFormat.KeyEconomyIsApparel, isApparel)
+                .Bool(IntermediateFormat.KeyEconomyMarketValueDefined, marketValueDefined)
+                .Str(IntermediateFormat.KeyEconomyCalcState, calcState)
+                .Num(IntermediateFormat.KeyEconomyCalculatedMarketValue, calculated)
+                .Num(IntermediateFormat.KeyEconomyCostToMake, costToMake)
+                .Num(IntermediateFormat.KeyEconomyProfit, profit)
+                .Num(IntermediateFormat.KeyEconomyProfitRate, profitRate)
+                .Num(IntermediateFormat.KeyEconomyWorkToProduce, work)
+                .Str(IntermediateFormat.KeyEconomyCostList, costList)
+                .Raw(IntermediateFormat.KeyEconomyCostChain, chain)
+                .Num(IntermediateFormat.KeyEconomyChainEndShare, chainEndShare)
+                .Num(IntermediateFormat.KeyEconomyCostDeep, costDeep)
+                .Num(IntermediateFormat.KeyEconomyProfitDeep, profitDeep)
+                .Raw(IntermediateFormat.KeyEconomyRecipeCandidates, recipes)
+                // null 走 Str 的 null 分支写字面量 null;契约文件不带可空标注,故 !
+                .Str(IntermediateFormat.KeyEconomyCostDifficultyVar, difficultyVar!)
+                .Bool(IntermediateFormat.KeyEconomyCostDifficultyInverted, difficultyInverted)
+                .ToString());
+            records++;
+        }
+
+        static string ChainItem(string thingDef, int count, float unitValue, bool chainEnd)
+            => new JsonLine()
+                .Str(IntermediateFormat.KeyEconomyThingDef, thingDef)
+                .Int(IntermediateFormat.KeyEconomyCount, count)
+                .Num(IntermediateFormat.KeyEconomyUnitValue, unitValue)
+                .Bool(IntermediateFormat.KeyEconomyChainEnd, chainEnd)
+                .ToString();
+
+        static string RecipeItem(string defName, int productCount, float workAmount, bool selfReferential)
+            => new JsonLine()
+                .Str(IntermediateFormat.KeyDefName, defName)
+                .Int(IntermediateFormat.KeyEconomyProductCount, productCount)
+                .Num(IntermediateFormat.KeyEconomyWorkAmount, workAmount)
+                .Bool(IntermediateFormat.KeyEconomySelfReferential, selfReferential)
+                .ToString();
+
+        // 经济面语料。五种形态,因为这一层的每一种「空」都有自己的成因,而它们印出来同形:
+        //
+        //   TestModGun          齐全的一行,且**有两个配方能产它** —— 推算价的加载顺序依赖
+        //                       只在这个形状上说得出口;第二个配方还是自引用的。
+        //   Apparel_ShieldBelt  chainEndShare = 1.00 —— 造价全部来自链尾物手填的市场价,
+        //                       那一行的 profit 不反映真实生产消耗。判据是这个数,不是
+        //                       「看着像掉落物」。
+        //   Meat_Muffalo        calcState=ok 而推算价是 0 —— **算不出**,不是「值零」。
+        //                       vanilla 自己大量如此(Steel / Bioferrite)。
+        //   VoidNode            not_producible —— 三个成本数与推算价全 null。
+        //   Firefoam            Building,且 calcState=used(没声明 MarketValue statBase);
+        //                       工时为 0,于是 profitRate 必须是 null 而不是一个负数噪声。
+        //
+        // 另外两行带 costListForDifficulty:TestModGun 是 invert=false(导出取到的是玩家
+        // 关掉该选项时的那支)、Firefoam 是 invert=true(导出取到的是玩家开着它才见到的那支)。
+        // 两支的措辞不同,所以语料里两个都得有 —— 只留一个的话另一支永远走不到。
+        Economy("TestModGun", "test gun", "test.mod", "Item", 320f, true,
+                IntermediateFormat.EconomyCalcRecipe, 298.5f, 141.2f, 178.8f, 1104.94f, 1618f,
+                "40 x Bloomstone (80), 1 x Firefoam (61.2)",
+                "[" + ChainItem("Bloomstone", 40, 2f, true) + "," + ChainItem("Firefoam", 1, 61.2f, false) + "]",
+                80f / 141.2f, 156.4f, 163.6f,
+                "[" + RecipeItem("Make_TestModGun", 1, 1618f, false) + "," +
+                      RecipeItem("Make_TestModGunBulk", 4, 4200f, true) + "]",
+                isWeapon: true, difficultyVar: "classicMortars");
+
+        Economy("Apparel_ShieldBelt", "shield belt", "ludeon.rimworld", "Item", 480f, true,
+                IntermediateFormat.EconomyCalcOk, 412.75f, 220f, 260f, 866.67f, 3000f,
+                "60 x Bloomstone (120), 100 x Firefoam (100)",
+                "[" + ChainItem("Bloomstone", 60, 2f, true) + "," + ChainItem("Firefoam", 100, 1f, true) + "]",
+                1f, 220f, 260f,
+                "[" + RecipeItem("Make_Apparel_ShieldBelt", 1, 3000f, false) + "]",
+                isApparel: true);
+
+        Economy("Meat_Muffalo", "muffalo meat", "ludeon.rimworld", "Item", 2.05f, true,
+                IntermediateFormat.EconomyCalcOk, 0f, null, null, null, null,
+                "", "[]", null, 2.05f, 0f, "[]");
+
+        Economy("VoidNode", "void node", "test.mod", "Item", 1200f, false,
+                IntermediateFormat.EconomyCalcNotProducible, null, null, null, null, null,
+                "", "[]", null, 1200f, 0f, "[]");
+
+        // 工时 0:vanilla 表在 recipeMaker 非空时无条件除,那一格会是噪声。这里给 null。
+        Economy("Firefoam", "firefoam", "ludeon.rimworld", "Building", 18f, true,
+                IntermediateFormat.EconomyCalcUsed, null, 12.5f, 5.5f, null, null,
+                "5 x Bloomstone (10), 1 x Firefoam (2.5)",
+                "[" + ChainItem("Bloomstone", 5, 2f, true) + "," + ChainItem("Firefoam", 1, 2.5f, false) + "]",
+                10f / 12.5f, 12.5f, 5.5f,
+                "[" + RecipeItem("Make_Firefoam", 1, 400f, false) + "]",
+                marketValueDefined: false, difficultyVar: "classicMortars", difficultyInverted: true);
+
         if (!omitEndMarker)
         {
             records++;
@@ -666,6 +799,8 @@ public static class Fixture
                 .Int(IntermediateFormat.KeyInjections, 3)
                 .Int(IntermediateFormat.KeyKeyedCount, 5)
                 .Int(IntermediateFormat.KeyXmlNodes, 6)
+                .Int(IntermediateFormat.KeyEconomyRows, 5)
+                .Str(IntermediateFormat.KeyEconomyState, IntermediateFormat.EconomyStateOk)
                 .ToString());
         }
 

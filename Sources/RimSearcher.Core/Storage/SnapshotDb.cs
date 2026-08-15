@@ -85,6 +85,31 @@ public sealed record XmlNodeRow(string DefType, string? Name, string? ParentName
                                 int PatchOps);
 
 /// <summary>
+/// 经济面的一行。**每个可空的数都是「算不出」而不是「算出来是零」** —— 两者在这一层处处
+/// 并存,合并任何一对都会让消费侧把算不出的那些统计进分布。
+/// </summary>
+public sealed record EconomyRow(long Id, string DefName, string? Label, string? Category, string? Mod,
+                                double? MarketValue, bool Producible, bool MadeFromStuff,
+                                bool IsWeapon, bool IsApparel, bool MarketValueDefined,
+                                string CalcState, double? CalculatedMarketValue,
+                                double? CostToMake, double? Profit, double? ProfitRate,
+                                double? WorkToProduce, string? CostList,
+                                /// <summary>
+                                /// 成本表那一支由难度开关决定的变体的开关名,<c>null</c> = 没有变体。
+                                /// 有值就意味着**上面那几个成本数是非变体那支** —— 导出时没有
+                                /// storyteller,那个条件判不了。
+                                /// </summary>
+                                string? CostDifficultyVar, bool CostDifficultyInverted,
+                                double? ChainEndShare, double? CostDeep, double? ProfitDeep);
+
+/// <summary>成本链的一项。<paramref name="ChainEnd"/> = 它自己没有 recipeMaker。</summary>
+public sealed record EconomyChainRow(string ThingDef, int Count, double? UnitValue, bool ChainEnd);
+
+/// <summary>能产出同一个物的一个配方。同一个物有多行 = 推算价有加载顺序依赖。</summary>
+public sealed record EconomyRecipeRow(string DefName, int ProductCount, double? WorkAmount,
+                                      bool SelfReferential);
+
+/// <summary>
 /// 快照库的只读查询面。所有带上限的查询都同时回传总数 —— 三态文法要求调用方能区分
 /// 「就这么多」与「被截了」(上游全 CLI 返回裸数组,LIMIT 命中与否不可区分)。
 /// </summary>
@@ -109,10 +134,23 @@ public sealed class SnapshotDb : IDisposable
     /// </summary>
     public ContentScan? Content { get; }
 
+    /// <summary>
+    /// 经济面量没量成:<c>ok</c> / <c>skipped</c> / <c>unavailable</c>,而 <c>null</c> 是
+    /// **第四态** —— 这份库建于经济面进导出之前,它对这件事没有资格回答。
+    ///
+    /// 这一条是经济面的在场判据,<c>SELECT COUNT(*) FROM economy</c> 不是:计数把四种成因
+    /// 压成同一个零,而其中一种(量过了、这个名单下确实没有可生产物)是完整的肯定回答。
+    /// </summary>
+    public string? EconomyState { get; }
+
+    /// <summary><see cref="EconomyState"/> 为 unavailable 时点名缺了什么,原样端出。</summary>
+    public string? EconomyError { get; }
+
     private SnapshotDb(SqliteConnection db, string path, ExportMeta meta, IReadOnlyList<ModRef> mods,
-                       bool harvested, ContentScan? content)
+                       bool harvested, ContentScan? content, string? economyState, string? economyError)
     {
         _db = db; Path = path; Meta = meta; Mods = mods; Harvested = harvested; Content = content;
+        EconomyState = economyState; EconomyError = economyError;
     }
 
     /// <summary>
@@ -180,7 +218,11 @@ public sealed class SnapshotDb : IDisposable
             ? ContentScan.FromJson(cf)
             : null;
 
-        return new SnapshotDb(db, path, exportMeta, mods, harvested, content);
+        // 缺席照实传 null。给它一个兜底字符串会把「这份库没资格回答」变成一个看着像答案的值。
+        meta.TryGetValue(SnapshotSchema.MetaKeyEconomyState, out var econState);
+        meta.TryGetValue(SnapshotSchema.MetaKeyEconomyError, out var econError);
+
+        return new SnapshotDb(db, path, exportMeta, mods, harvested, content, econState, econError);
     }
 
     public void Dispose() => _db.Dispose();
@@ -1412,6 +1454,126 @@ public sealed class SnapshotDb : IDisposable
         using var rd = Query("SELECT DISTINCT key FROM keyed ORDER BY key");
         while (rd.Read()) keys.Add(rd.GetString(0));
         return keys;
+    }
+
+    // ---------- 经济面 ----------
+
+    /// <summary>
+    /// 经济表里有多少行。**这不是在场判据** —— 判据是 <see cref="EconomyState"/>,
+    /// 因为零行有四种成因而这个数只有一个。命令层拿它报数,不拿它判有没有。
+    /// </summary>
+    public int EconomyCount() => Scalar("SELECT COUNT(*) FROM economy");
+
+    private const string EconomyColumns =
+        "id, def_name, label, category, mod, market_value, producible, made_from_stuff, is_weapon, " +
+        "is_apparel, market_value_defined, calc_state, calculated_market_value, cost_to_make, profit, " +
+        "profit_rate, work_to_produce, cost_list, cost_difficulty_var, cost_difficulty_inverted, " +
+        "chain_end_share, cost_deep, profit_deep";
+
+    private IReadOnlyList<EconomyRow> ReadEconomy(string sql, Dictionary<string, object?>? p = null)
+    {
+        var rows = new List<EconomyRow>();
+        using var rd = Query(sql, p);
+        while (rd.Read())
+            rows.Add(new EconomyRow(
+                rd.GetInt64(0),
+                rd.GetString(1),
+                rd.IsDBNull(2) ? null : rd.GetString(2),
+                rd.IsDBNull(3) ? null : rd.GetString(3),
+                rd.IsDBNull(4) ? null : rd.GetString(4),
+                rd.IsDBNull(5) ? null : rd.GetDouble(5),
+                rd.GetInt32(6) != 0,
+                rd.GetInt32(7) != 0,
+                rd.GetInt32(8) != 0,
+                rd.GetInt32(9) != 0,
+                rd.GetInt32(10) != 0,
+                rd.GetString(11),
+                rd.IsDBNull(12) ? null : rd.GetDouble(12),
+                rd.IsDBNull(13) ? null : rd.GetDouble(13),
+                rd.IsDBNull(14) ? null : rd.GetDouble(14),
+                rd.IsDBNull(15) ? null : rd.GetDouble(15),
+                rd.IsDBNull(16) ? null : rd.GetDouble(16),
+                rd.IsDBNull(17) ? null : rd.GetString(17),
+                rd.IsDBNull(18) ? null : rd.GetString(18),
+                rd.GetInt32(19) != 0,
+                rd.IsDBNull(20) ? null : rd.GetDouble(20),
+                rd.IsDBNull(21) ? null : rd.GetDouble(21),
+                rd.IsDBNull(22) ? null : rd.GetDouble(22)));
+        return rows;
+    }
+
+    /// <summary>
+    /// 按名字取。**可能多于一条**:同名跨 def 类型是 RimWorld 常态,而这一层只筛 ThingDef,
+    /// 所以实际上至多一条 —— 仍回列表,免得形状随命中数变。
+    /// </summary>
+    public IReadOnlyList<EconomyRow> EconomyByName(string defName)
+        => ReadEconomy($"SELECT {EconomyColumns} FROM economy WHERE def_name = @n COLLATE NOCASE",
+                       new Dictionary<string, object?> { ["@n"] = defName });
+
+    /// <summary>
+    /// 整层枚举,带过滤。<paramref name="total"/> 是**过滤之后、分页之前**的数 ——
+    /// 分页三件事按它报,而「筛掉了多少」由命令层拿 <see cref="EconomyCount"/> 另说。
+    /// </summary>
+    public (IReadOnlyList<EconomyRow> Rows, int Total) EconomyAll(
+        ScopeFilter scope, string? category, string? calcState, bool producibleOnly,
+        string orderBy, int limit, int offset)
+    {
+        var p = new Dictionary<string, object?>();
+        var conds = new List<string>();
+        // scope 走全仓同一套(config 里的 mod 组、'-' 排除、vanilla 展开)—— 对照池切分
+        // 正是这一层的主要用法,自建一个 --mod 会让同一个词在两条命令里选中不同的集合。
+        if (scope.SqlPredicate("mod", p) is { } modWhere) conds.Add(modWhere);
+        if (category is not null) { conds.Add("category = @cat COLLATE NOCASE"); p["@cat"] = category; }
+        if (calcState is not null) { conds.Add("calc_state = @cs COLLATE NOCASE"); p["@cs"] = calcState; }
+        if (producibleOnly) conds.Add("producible = 1");
+        var where = conds.Count == 0 ? "" : " WHERE " + string.Join(" AND ", conds);
+
+        var total = Scalar($"SELECT COUNT(*) FROM economy{where}", p);
+
+        // 排序列由调用方从一个闭集里挑(见 EconomyCommand),不拼用户输入。
+        // NULL 排最后:它们是「算不出」,让它们混在最小值那一头会被读成一串零。
+        var rows = ReadEconomy(
+            $"SELECT {EconomyColumns} FROM economy{where} " +
+            $"ORDER BY ({orderBy} IS NULL), {orderBy} DESC, def_name LIMIT @lim OFFSET @off",
+            new Dictionary<string, object?>(p) { ["@lim"] = limit, ["@off"] = offset });
+        return (rows, total);
+    }
+
+    public IReadOnlyList<EconomyChainRow> EconomyChain(long economyId)
+    {
+        var rows = new List<EconomyChainRow>();
+        using var rd = Query(
+            "SELECT thing_def, count, unit_value, chain_end FROM economy_cost_chain " +
+            "WHERE economy_id = @id ORDER BY ordinal",
+            new Dictionary<string, object?> { ["@id"] = economyId });
+        while (rd.Read())
+            rows.Add(new EconomyChainRow(rd.GetString(0), rd.GetInt32(1),
+                                         rd.IsDBNull(2) ? null : rd.GetDouble(2), rd.GetInt32(3) != 0));
+        return rows;
+    }
+
+    public IReadOnlyList<EconomyRecipeRow> EconomyRecipes(long economyId)
+    {
+        var rows = new List<EconomyRecipeRow>();
+        using var rd = Query(
+            "SELECT def_name, product_count, work_amount, self_referential FROM economy_recipes " +
+            "WHERE economy_id = @id ORDER BY ordinal",
+            new Dictionary<string, object?> { ["@id"] = economyId });
+        while (rd.Read())
+            rows.Add(new EconomyRecipeRow(rd.GetString(0), rd.IsDBNull(1) ? 0 : rd.GetInt32(1),
+                                          rd.IsDBNull(2) ? null : rd.GetDouble(2), rd.GetInt32(3) != 0));
+        return rows;
+    }
+
+    /// <summary>
+    /// 全部出现在经济表里的 defName。零结果时的模糊候选池 —— 与 def 侧、keyed 侧同一条路子。
+    /// </summary>
+    public IReadOnlyList<string> AllEconomyNames()
+    {
+        var names = new List<string>();
+        using var rd = Query("SELECT def_name FROM economy ORDER BY def_name");
+        while (rd.Read()) names.Add(rd.GetString(0));
+        return names;
     }
 
     // ---------- 继承层 ----------

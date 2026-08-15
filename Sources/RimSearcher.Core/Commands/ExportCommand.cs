@@ -71,6 +71,16 @@ public sealed class ExportCommand : Command
             },
             new OptionSpec
             {
+                Name = "no-economy",
+                Arity = Arity.Flag,
+                Aliases = ["skip-economy", "without-economy"],
+                Help = "Skip the economy layer — prices, costs, work amounts and cost chains. It walks every " +
+                       "recipe in the game once per priced thing, so it is the slowest part of a large export. " +
+                       "The snapshot records that it was skipped, so 'rimsearcher economy' says so rather " +
+                       "than reporting that the game prices nothing.",
+            },
+            new OptionSpec
+            {
                 Name = "keep-temp",
                 Arity = Arity.Flag,
                 Help = "Keep the temporary save-data folder afterwards, for looking at what the game was given.",
@@ -145,7 +155,8 @@ public sealed class ExportCommand : Command
     ///
     /// 无头是默认,理由在调用处的注释里(渲染零帧、注册表隔离不到)。
     /// </summary>
-    public static IReadOnlyList<string> BuildGameArguments(string temp, string outFile, bool showWindow)
+    public static IReadOnlyList<string> BuildGameArguments(string temp, string outFile, bool showWindow,
+                                                           bool skipEconomy = false)
     {
         var argv = new List<string>
         {
@@ -156,6 +167,9 @@ public sealed class ExportCommand : Command
             $"-logfile={Path.Combine(temp, GameLogName)}",
         };
         if (!showWindow) { argv.Add("-batchmode"); argv.Add("-nographics"); }
+        // 无值开关。游戏侧读它用的是 CommandLineArgPassed —— 那一支不认 `key=value`,
+        // 所以这里也不许写成 `-x=1`。
+        if (skipEconomy) argv.Add($"-{IntermediateFormat.SkipEconomySwitch}");
         return argv;
     }
 
@@ -378,7 +392,8 @@ public sealed class ExportCommand : Command
         var outFile = Path.GetFullPath(Path.Combine(exportDir, snapshotName + IntermediateFormat.FileExtension));
 
         var temp = Path.Combine(Path.GetTempPath(), "rimsearcher-export-" + Guid.NewGuid().ToString("N")[..8]);
-        var argv = BuildGameArguments(temp, outFile, ctx.Args.Flag("show-window"));
+        var argv = BuildGameArguments(temp, outFile, ctx.Args.Flag("show-window"),
+                                      ctx.Args.Flag("no-economy"));
 
         if (ctx.Args.Flag("dry-run"))
         {

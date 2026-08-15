@@ -130,6 +130,14 @@ public static class NounRegistry
         // 数的是「按当前页大小还要翻几次」,与 "line"(总量)不是一回事 —— 同一个文件换个
         // --limit 就换一个页数,而行数不变。
         ["page"] = "pages",
+        // 经济面数的是「游戏给它定了价的东西」,与 "def" 分开登记:那一层只收有市场价的
+        // 物与玩家可建的建筑,快照里绝大多数 def 不在其中,借 "def" 会让读的人以为
+        // 分母是全库。
+        ["thing"] = "things",
+        ["recipe"] = "recipes",
+        // 数的是**印出来的表格行**,不是某一类东西 —— 说破那几条口径边界时,指的就是
+        // 读的人眼前数得出来的那几行。
+        ["row"] = "rows",
     };
 
     public static IReadOnlyCollection<string> Known => Plurals.Keys;

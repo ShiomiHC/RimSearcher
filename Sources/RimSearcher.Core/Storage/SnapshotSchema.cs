@@ -15,8 +15,9 @@ public static class SnapshotSchema
     /// 5:加了 keyed 表 —— 界面文案那一层译文。
     /// 6:加了 shared_values —— 一条值在同类型里有多普遍。
     /// 7:加了 harvested_roots —— 磁盘那一层**量没量过**,见下。
+    /// 8:加了 economy 三表 + economy_state —— 经济面,以及它**量没量成**,见下。
     /// </remarks>
-    public const int Version = 7;
+    public const int Version = 8;
 
     public const string MetaKeySchemaVersion = "schema_version";
     public const string MetaKeyRaw = "export_meta_json";
@@ -43,6 +44,23 @@ public static class SnapshotSchema
     /// 所以它没有涨 schema_version:旧库照旧能读,只是少一条判据。
     /// </summary>
     public const string MetaKeyContent = "content_fingerprint";
+
+    /// <summary>
+    /// 经济面这一次到底量没量成:<c>ok</c> / <c>skipped</c> / <c>unavailable</c>,
+    /// 原样取自导出尾行(<see cref="Contract.IntermediateFormat.KeyEconomyState"/>)。
+    ///
+    /// **缺席是第四态**,和上面两条同一道缝:这个键不在 = 这份库建于经济面进导出之前,
+    /// 它对「游戏说这东西值多少钱」没有资格回答。所以查询侧的判据是这个键,
+    /// **不是 <c>SELECT COUNT(*) FROM economy</c>** —— 计数把四种成因压成同一个零,
+    /// 而其中一种(量过了、这个名单下确实没有可生产物)是完整的肯定回答。
+    /// </summary>
+    public const string MetaKeyEconomyState = "economy_state";
+
+    /// <summary>
+    /// <c>unavailable</c> 时点名缺了什么(vanilla 的哪个签名)。原样端给用户 ——
+    /// 这一层不回退到自写实现,所以这句话是唯一的下一步。
+    /// </summary>
+    public const string MetaKeyEconomyError = "economy_error";
 
     public const string Ddl = """
         PRAGMA journal_mode = OFF;
@@ -144,6 +162,77 @@ public static class SnapshotSchema
             defs     INTEGER NOT NULL
         );
 
+        -- 经济面。外延与 vanilla DebugOutputsEconomy.ItemAndBuildingAcquisition 的 where
+        -- 子句逐字一致(有市场价的物品 + 玩家可建或可小型化的建筑),偏离它会让分布分位数
+        -- 无法与游戏内那张表对照。
+        --
+        -- 不与 defs 建外键:这一层的消费方(分布统计、对照池切分)全程只用 def_name 与 mod,
+        -- 而 translations 那套「按名字找回 def id」在这里是纯开销。
+        --
+        -- **列一律可空、不设 DEFAULT 0** —— NULL 与 0 在这张表里处处是两件事:
+        -- 工时为 0 的利润率、没有成本链的链尾占比、vanilla 自己都算不出的推算价,
+        -- 给一个 0 就等于给了一个会被统计进分布的数。
+        --
+        -- REAL 而不是 TEXT:定点两位是**中间格式**那一侧的规则(防科学计数法与 locale
+        -- 小数点),进了库还存字符串只会让排序与分位数查询变成字符串比较。
+        CREATE TABLE economy (
+            id                      INTEGER PRIMARY KEY,
+            def_name                TEXT NOT NULL,
+            label                   TEXT,
+            category                TEXT,
+            mod                     TEXT,
+            market_value            REAL,
+            producible              INTEGER NOT NULL,
+            made_from_stuff         INTEGER NOT NULL,
+            is_weapon               INTEGER NOT NULL,
+            is_apparel              INTEGER NOT NULL,
+            market_value_defined    INTEGER NOT NULL,
+            -- 四态:not_producible / used / recipe / ok。前两态的 calculated_market_value
+            -- 为 NULL —— 两种「空」混成一个,消费侧就会把它们统计进分布、拉低整段分位。
+            calc_state              TEXT NOT NULL,
+            calculated_market_value REAL,
+            cost_to_make            REAL,
+            profit                  REAL,
+            profit_rate             REAL,
+            work_to_produce         REAL,
+            cost_list               TEXT,
+            -- 成本表有一支由难度开关决定的变体时,这里是那个开关名;NULL = 没有变体。
+            -- 导出跑在没有 storyteller 的那一刻,而 CostListForDifficulty.Applies 在那时
+            -- 无条件为假 —— 于是上面几列**永远是非变体那支**,而变体存不存在在数字上看不出来。
+            -- inverted 为真时变体在开关关着时生效(vanilla 的 Turret_Mortar),那正是绝大多数
+            -- 存档的状态,于是这一行印出来的数是玩家基本见不到的那一支。
+            cost_difficulty_var     TEXT,
+            cost_difficulty_inverted INTEGER NOT NULL DEFAULT 0,
+            -- 1.0 = 造价全部来自链尾物**手填的**市场价,该行 profit 不反映真实生产消耗。
+            chain_end_share         REAL,
+            -- 自有指标,不是 vanilla 的量。命名与 cost_to_make 分开是硬要求。
+            cost_deep               REAL,
+            profit_deep             REAL
+        );
+
+        -- 成本链逐项。拆表而不是在 economy 上塞一列 JSON:「谁的成本链里有 Steel」是会被
+        -- 问到的反查方向,而 JSON 列上问它只能全表扫 + 字符串匹配。
+        CREATE TABLE economy_cost_chain (
+            economy_id INTEGER NOT NULL,
+            ordinal    INTEGER NOT NULL,
+            thing_def  TEXT NOT NULL,
+            count      INTEGER NOT NULL,
+            unit_value REAL,
+            -- 这一项自己没有 recipeMaker —— vanilla CostToMake 的递归在它身上停住。
+            chain_end  INTEGER NOT NULL
+        );
+
+        -- 能产出同一个物的全部配方。行数 > 1 即表示该物的 calculated_market_value 有
+        -- **加载顺序依赖**:CalculableRecipe 返回 DefDatabase 里第一个匹配。
+        CREATE TABLE economy_recipes (
+            economy_id       INTEGER NOT NULL,
+            ordinal          INTEGER NOT NULL,
+            def_name         TEXT NOT NULL,
+            product_count    INTEGER,
+            work_amount      REAL,
+            self_referential INTEGER NOT NULL
+        );
+
         CREATE TABLE mods (
             ordinal    INTEGER PRIMARY KEY,
             package_id TEXT NOT NULL,
@@ -184,6 +273,12 @@ public static class SnapshotSchema
         CREATE INDEX idx_xn_parent  ON xml_nodes(parent_name);
         CREATE INDEX idx_xn_defname ON xml_nodes(def_name);
         CREATE INDEX idx_sv_type    ON shared_values(def_type);
+        CREATE INDEX idx_econ_name  ON economy(def_name);
+        CREATE INDEX idx_econ_mod   ON economy(mod);
+        CREATE INDEX idx_econ_chain ON economy_cost_chain(economy_id);
+        -- 反查方向:哪些物的成本链里有这个原料。
+        CREATE INDEX idx_econ_chain_thing ON economy_cost_chain(thing_def);
+        CREATE INDEX idx_econ_recipes ON economy_recipes(economy_id);
         """;
 
     public static void Create(SqliteConnection db)

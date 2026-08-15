@@ -1,0 +1,17 @@
+$ rimsearcher economy Apparel_ShieldBelt
+exit 0
+--- stdout ---
+1 thing.
+
+defName             label        mod              category  marketValue  marketValueDefined  calcState  calculatedMarketValue  costToMake  profit  profitRate  workToProduce  costList                                     costDifficultyVar  costDifficultyInverted  chainEndShare  costDeep  profitDeep  producible  madeFromStuff  isWeapon  isApparel
+Apparel_ShieldBelt  shield belt  ludeon.rimworld  Item      480          yes                 ok         412.75                 220         260     866.67      3000           60 x Bloomstone (120), 100 x Firefoam (100)                     no                      1              220       260         yes         no             no        yes
+
+Same in every row, not repeated below: chainEnd=yes.
+thingDef    count  unitValue
+Bloomstone  60     2
+Firefoam    100    1
+
+defName                  productCount  workAmount  selfReferential
+Make_Apparel_ShieldBelt  1             3000        no
+chainEndShare is 1 for 1 row above, which means the whole cost came from ingredients that have no recipe of their own. For those rows 'profit' is the market value minus a few other hand-written market values, not minus what producing the thing actually consumes.
+--- stderr ---

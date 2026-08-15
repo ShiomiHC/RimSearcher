@@ -62,6 +62,7 @@ public class GateTests
             ["mods.mods"] = ["mods"],
             ["inherit.nodes"] = ["inherit", "BaseBullet"],
             ["keyed.keys"] = ["keyed", "CannotUseNoPower"],
+            ["economy.things"] = ["economy"],
             ["code-search.matches"] = ["code-search", "Translate"],
             ["code-search.ui_text"] = ["code-search", "Translate"],
             ["read.source"] = ["read", "CompShield.cs", "--lines", "1-5"],
