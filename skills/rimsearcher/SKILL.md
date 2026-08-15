@@ -176,7 +176,10 @@ rather than assuming. These four it has no way to state:
   game cannot work this out*, never as zero: `calcState` keeps the four reasons apart, and a
   `calculatedMarketValue` of `0` under `calcState=ok` means the sum came out empty, not that
   the thing is free. `chainEndShare` of 1 means that row's `profit` is one hand-written
-  number minus a few others.
+  number minus a few others. A snapshot may not hold this layer at all — `economy` then says
+  which of three things happened instead of answering, and **there is no way around it**: the
+  indexed `marketValue` is the XML base value, not the computed price, and no field holds cost
+  or profit, so ranking by it answers a different question with nothing to say so.
 - **Abstract parents are not defs**: `get` cannot reach them — it names `inherit` instead.
   `inherit` answers four things off the XML layer: who inherits from whom, which nodes are
   abstract, which layer declares a field (`--path-contains`), and how many patches target a

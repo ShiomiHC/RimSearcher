@@ -52,7 +52,16 @@ public sealed class EconomyCommand : Command
             "Read the empty cells as 'the game cannot work this out', not as zero. A profit needs a " +
             "recipeMaker; a profit rate needs a positive work amount; a calculated market value needs the " +
             "thing to be producible and to declare one. Those are four different reasons for a blank, and " +
-            "the columns keep them apart.",
+            "the columns keep them apart.\n\n" +
+            "A snapshot need not hold this layer at all: it can predate the layer, have been exported with " +
+            "'--no-economy', or have failed to measure it. This command says which of those happened rather " +
+            "than reporting that the game prices nothing, and the answer is never a number. There is no " +
+            "second road to these numbers on such a snapshot — a field called marketValue is still indexed, " +
+            "but that is the base value written in XML, not the price the game computes from it, and " +
+            "nothing anywhere holds cost or profit.\n\n" +
+            "A number printed as '635 (holds when classicMortars=on)' depends on a difficulty setting that " +
+            "an export cannot read: the setting lives on the storyteller, and no storyteller exists while " +
+            "the game is loading. The tag names the setting and the position the printed number holds under.",
         Positionals =
         [
             new PositionalSpec
