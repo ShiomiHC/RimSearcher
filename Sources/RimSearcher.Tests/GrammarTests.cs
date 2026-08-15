@@ -4050,4 +4050,42 @@ public class GrammarTests
         foreach (var other in new[] { notMeasured, skipped, unavailable })
             Assert.NotEqual(other, measuredEmpty);
     }
+
+    /// <summary>
+    /// 没量过经济面的库上,<c>get</c> 那条指路**不许沉默**。
+    ///
+    /// 头一版按「这个 def 在经济表里有没有行」判在场,于是降级过的库上它整句消失 ——
+    /// 「这个 def 没被定价」与「这份库根本没量过定价」压成了同一个沉默。第十五轮第二轮
+    /// 实证:races2(--no-economy)上问「最赚钱的是什么」,受测档一次 economy 都没跑、
+    /// get 也不吭声,于是它拿 statBases 的价当利润交了卷。
+    /// </summary>
+    [Fact]
+    public void 没量过经济面时get照样指路()
+    {
+        const string priced = "The game also prices this thing";
+
+        // 三种 ThingDef,三种该有的反应。
+        var (measuredPriced, _, _) = Fixture.Run("get", "Apparel_ShieldBelt");
+        var (measuredNot, _, _) = Fixture.Run("get", "Bullet_Revolver");
+        var (unmeasured, _, _) = Fixture.Run("get", "OnlyInOtherSnapshot", "--db",
+            Fixture.EconomyStateDb(Contract.IntermediateFormat.EconomyStateSkipped));
+
+        // ① 量过且被定价:指路。
+        Assert.Contains(priced, measuredPriced, StringComparison.Ordinal);
+        Assert.Contains("rimsearcher economy Apparel_ShieldBelt", measuredPriced, StringComparison.Ordinal);
+
+        // ② 量过而这个 def 确实没被定价:**沉默是对的** —— 那时「没有」是量出来的结论。
+        Assert.DoesNotContain(priced, measuredNot, StringComparison.Ordinal);
+        Assert.DoesNotContain("rimsearcher economy", measuredNot, StringComparison.Ordinal);
+
+        // ③ 没量过:不许沉默,而且不许说成 ②。这两者的差别正是本仓的立命之处 ——
+        //    ② 的沉默背后有一次测量,③ 的沉默背后什么都没有,而它们印出来同形。
+        Assert.Contains("rimsearcher economy OnlyInOtherSnapshot", unmeasured, StringComparison.Ordinal);
+        Assert.Contains("never measured", unmeasured, StringComparison.Ordinal);
+
+        // ④ 而它也不许滑到 ① 去:降级库压根不知道这东西是不是被定价的,
+        //    断言它「被定价了」是拿没量过的东西冒充量过的结论。
+        Assert.DoesNotContain(priced, unmeasured, StringComparison.Ordinal);
+        Assert.Contains("cannot say whether", unmeasured, StringComparison.Ordinal);
+    }
 }

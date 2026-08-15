@@ -666,13 +666,30 @@ public sealed class GetCommand : Command
             //
             // 只指路、不搬数:handoff §4 明令经济语义不进 get 的 def 查询含义,而且那些数
             // 不是字段,混进字段表会正好造成这一层要防的那个误读。
-            // 判据是**这个 def 在经济表里有没有行**,不是「它像不像商品」;没量过经济面的
-            // 快照上 EconomyByName 恒空,于是这句自动不出现 —— 不需要额外的在场判断。
-            if (ctx.Db.EconomyByName(def.DefName).Count > 0)
-                ctx.Report.Notice(NoticeKind.NextStep,
-                    $"The game also prices this thing. Its market value, cost to make and work amount are " +
-                    $"computed, not stored, so no field above holds them and none ever will — " +
-                    $"'rimsearcher economy {def.DefName}' is the only road to those numbers.");
+            // 在场判据是**四态 meta**,不是经济表的行数。
+            //
+            // 头一版按行数判,并把「没量过经济面的快照上这句自动消失」当成了特性写进注释 ——
+            // 那正是本仓拿命防的那件事:它把「这个 def 没被定价」与「这份快照根本没量过定价」
+            // 压成同一个沉默。第十五轮第二轮实证:races2(--no-economy)上问「最赚钱的是什么」,
+            // 受测档一次 economy 都没跑,`get` 也不吭声,于是它拿 statBases 的价当利润交了卷。
+            //
+            // 没量过的时候恰恰**更要说**。那时无从知道这个 def 会不会被定价,所以判据退到
+            // ThingDef —— 经济面只覆盖 ThingDef,而这一句宁可在没被定价的 ThingDef 上多出一次,
+            // 也不能在被定价的那个上沉默。噪声只落在明确降级过的快照上,那是划算的。
+            if (ctx.Db.EconomyState == Contract.IntermediateFormat.EconomyStateOk)
+            {
+                if (ctx.Db.EconomyByName(def.DefName).Count > 0)
+                    ctx.Report.Notice(NoticeKind.NextStep,
+                        $"The game also prices this thing. Its market value, cost to make and work amount are " +
+                        $"computed, not stored, so no field above holds them and none ever will — " +
+                        $"'rimsearcher economy {def.DefName}' is the only road to those numbers.");
+            }
+            else if (DefTypes.Same(def.DefType, "ThingDef"))
+                ctx.Report.Notice(NoticeKind.Boundary,
+                    "The game also prices things like this — market value, cost to make, work amount — and " +
+                    "those are computed rather than stored, so no field above would hold them either way. " +
+                    "This snapshot never measured them, so it cannot say whether this def is one of the " +
+                    $"priced ones: 'rimsearcher economy {def.DefName}' says why and what to re-export.");
 
             // --limit 与 --path-contains 同样管译文表:不管的话,`get Muffalo --limit 5` 会吐出八十行,
             // 而字段表刚报的「一个都没匹配上」会被一批译文块淹掉。

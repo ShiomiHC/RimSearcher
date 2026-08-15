@@ -242,17 +242,21 @@ public sealed class EconomyCommand : Command
     /// 而开关自己的缺省是每个 difficultyVar 各自的事(vanilla 的 classicMortars 缺省关,
     /// 但 mod 可以定义别的),所以这里只陈述条件,不替读者判断哪一支在跑。
     ///
-    /// **必须短。** 头一版写的是 "variant applies when classicMortars is off",在
-    /// <c>costList</c> 那种长字符串格上被表宽截成 "…when classic…" —— 截断的限定词比没有
-    /// 更糟:它不带含义,还长得像数据坏了。开关名不进标签(<c>costDifficultyVar</c> 自己有一列),
-    /// 标签也只贴数值格,不贴长文本格。
+    /// **必须短**,且**必须描述被印出来的这个数,不是变体。** 两版都栽在后一句上:
+    /// 第一版 "variant applies when classicMortars is off" 在长文本格上被表宽截成
+    /// "…when classic…"(截断的限定词比没有更糟 —— 不带含义,还长得像数据坏了);
+    /// 第二版 "variant when off" 短到没被截,却被 sonnet 与 opus **同向读反** ——
+    /// 那句话说的是变体的条件,而它贴在另一支的数上,于是「off」被顺理成章地挂到了这个数身上。
+    ///
+    /// 现在写成 <c>值 (开关=位置)</c>:直接陈述**这个数在什么条件下成立**,句子里不再有
+    /// 「变体」这个名词可供把条件挂错地方。方向由 <c>invert</c> 反推 —— 变体在
+    /// <c>invert</c> 时于开关为假处生效,所以无条件那支反过来,在开关为真处成立。
     /// </summary>
     private static object? Qual(object? value, EconomyRow row)
         => row.CostDifficultyVar is null || value is null
             ? value
-            : new Qualified(value, row.CostDifficultyInverted
-                ? "variant when off"
-                : "variant when on");
+            : new Qualified(value,
+                row.CostDifficultyVar + "=" + (row.CostDifficultyInverted ? "on" : "off"));
 
     /// <summary>
     /// marketValue 受不受这件事影响,取决于它是不是**推出来的**。
@@ -454,12 +458,12 @@ public sealed class EconomyCommand : Command
         var withVariant = shown.Count(r => r.CostDifficultyVar is not null);
         if (withVariant > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
-                "A '(variant when off)' or '(variant when on)' tag above means the def declares a second " +
-                "cost list that the difficulty setting named in costDifficultyVar swaps in, and the tag " +
-                "says which position of that setting swaps it in. The tagged number comes from the other, " +
-                "unconditional list: an export cannot tell which one a game would use, because the setting " +
-                "is read off the storyteller and no storyteller exists while the game is loading. " +
-                "'rimsearcher get <defName> --path-contains costListForDifficulty' shows the other list.");
+                "A tag like '(classicMortars=on)' above names the difficulty setting a number depends on " +
+                "and the position that number holds under. Put the setting the other way and the def " +
+                "swaps in a second cost list, which the tagged number is not from. An export cannot tell " +
+                "which way a given game has it: the setting is read off the storyteller, and no storyteller " +
+                "exists while the game is loading. 'rimsearcher get <defName> --path-contains " +
+                "costListForDifficulty' shows the other list.");
 
         // 4. 多配方 = calculatedMarketValue 有加载顺序依赖(CalculableRecipe 取 DefDatabase 里
         //    第一个匹配,而等比放大的 bulk 配方 workAmount 通常不等比)。
