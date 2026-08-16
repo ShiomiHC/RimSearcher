@@ -405,6 +405,75 @@ public class SourcesTests
             "and that repository is the only thing that can answer 'what changed'.");
     }
 
+    // ---- git 工作区 ----
+
+    /// <summary>
+    /// 不是 git 仓就没有历史可丢,覆盖不该被拦。拦的判据是「git 说这棵脏」,
+    /// 不是「目录里有文件」。
+    /// </summary>
+    [Fact]
+    public void 不是git仓的树不算有未提交改动()
+    {
+        using var dir = new TempMod();
+        dir.File("vanilla/A.cs", "class A {}");
+        Assert.False(SourceGit.HasUncommittedChanges(dir.Root, "vanilla"));
+    }
+
+    /// <summary>计划里还没有这棵树时,status 是空的 —— 第一次 sync 必须能落盘。</summary>
+    [Fact]
+    public void 仓里还没有的树不算脏()
+    {
+        using var repo = new TempGit();
+        Assert.False(SourceGit.HasUncommittedChanges(repo.Root, "vanilla"));
+    }
+
+    /// <summary>
+    /// 上次 sync 写下、还没 commit 的树是未跟踪目录。下一次覆盖会把那份工作区 diff 抹掉,
+    /// 而这正是拦的对象。
+    /// </summary>
+    [Fact]
+    public void 未跟踪的树算脏()
+    {
+        using var repo = new TempGit();
+        repo.File("vanilla/A.cs", "class A {}");
+        Assert.True(SourceGit.HasUncommittedChanges(repo.Root, "vanilla"));
+    }
+
+    /// <summary>已经进历史、工作区没改:可以覆盖(覆盖前会先变成脏,那是下一轮的事)。</summary>
+    [Fact]
+    public void 已提交且工作区干净的树不算脏()
+    {
+        using var repo = new TempGit();
+        repo.File("vanilla/A.cs", "class A {}");
+        repo.CommitAll("initial");
+        Assert.False(SourceGit.HasUncommittedChanges(repo.Root, "vanilla"));
+    }
+
+    /// <summary>跟踪之后又改了:拦。这是「忘了提交就又 sync」会丢掉的那一版。</summary>
+    [Fact]
+    public void 已跟踪但工作区有改动的树算脏()
+    {
+        using var repo = new TempGit();
+        repo.File("vanilla/A.cs", "class A {}");
+        repo.CommitAll("initial");
+        repo.File("vanilla/A.cs", "class A { int x; }");
+        Assert.True(SourceGit.HasUncommittedChanges(repo.Root, "vanilla"));
+    }
+
+    /// <summary>
+    /// 脏是按树问的。另一棵没提交,不该挡住这一棵 —— 否则一次漏提交会把整个 sync 卡死。
+    /// </summary>
+    [Fact]
+    public void 另一棵树脏不连坐()
+    {
+        using var repo = new TempGit();
+        repo.File("vanilla/A.cs", "class A {}");
+        repo.CommitAll("vanilla");
+        repo.File("some.mod/B.cs", "class B {}");
+        Assert.False(SourceGit.HasUncommittedChanges(repo.Root, "vanilla"));
+        Assert.True(SourceGit.HasUncommittedChanges(repo.Root, "some.mod"));
+    }
+
     /// <summary>
     /// <c>--source</c> 打不中时不许只给一个「看起来像」的答案。树名是 packageId(全名),
     /// 而人记得的往往是外号,外号不在任何数据里 —— 实测 <c>--source HAR</c> 打分打出
@@ -451,6 +520,63 @@ public class SourcesTests
         public void Dispose()
         {
             try { Directory.Delete(Root, recursive: true); } catch { }
+        }
+    }
+
+    /// <summary>一次性的假 git 仓。只改这个目录的 config,不动使用者的全局设置。</summary>
+    private sealed class TempGit : IDisposable
+    {
+        public string Root { get; } = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "rimsearcher-sources-git-tests", Guid.NewGuid().ToString("N"));
+
+        public TempGit()
+        {
+            Directory.CreateDirectory(Root);
+            Git("init");
+            Git("config", "user.email", "sources-tests@rimsearcher.local");
+            Git("config", "user.name", "sources-tests");
+            Git("config", "commit.gpgsign", "false");
+        }
+
+        public void File(string relative, string content)
+        {
+            var full = System.IO.Path.Combine(Root, relative.Replace('/', System.IO.Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(full)!);
+            System.IO.File.WriteAllText(full, content);
+        }
+
+        public void CommitAll(string message)
+        {
+            Git("add", "-A");
+            Git("commit", "-m", message);
+        }
+
+        public void Dispose()
+        {
+            try { Directory.Delete(Root, recursive: true); } catch { }
+        }
+
+        private void Git(params string[] args)
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo("git")
+            {
+                WorkingDirectory = Root,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+            };
+            psi.ArgumentList.Add("-c");
+            psi.ArgumentList.Add("safe.directory=*");
+            foreach (var a in args) psi.ArgumentList.Add(a);
+
+            using var proc = System.Diagnostics.Process.Start(psi)
+                ?? throw new InvalidOperationException("git is not on PATH; these tests need it.");
+            var stdout = proc.StandardOutput.ReadToEnd();
+            var stderr = proc.StandardError.ReadToEnd();
+            proc.WaitForExit(30_000);
+            Assert.True(proc.ExitCode == 0,
+                $"git {string.Join(' ', args)} in '{Root}' exited {proc.ExitCode}. {stderr}{stdout}");
         }
     }
 }

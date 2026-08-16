@@ -33,7 +33,7 @@ internal static class SourcesShared
            "Symbol-level questions do not need it: the DecompilerServer MCP reads the assemblies directly.";
 
     /// <summary>这个目录是不是一个 git 工作树的根。</summary>
-    internal static bool IsGitRoot(string dir) => Directory.Exists(Path.Combine(dir, ".git"));
+    internal static bool IsGitRoot(string dir) => SourceGit.IsRepository(dir);
 
     /// <summary>
     /// 根目录下哪些子目录算一棵源码树。判据只此一处 —— 顺序不共用(list 要纯字母序,
@@ -263,7 +263,10 @@ public sealed class SourcesSyncCommand : Command
             "mutually-exclusive branches stay out.\n\n" +
             "A tree whose source assemblies have not changed is left alone. Comparing versions is not this " +
             "command's job: keep the tree in git and 'git diff' answers it, with rename detection and history " +
-            "that a bespoke comparison cannot offer.",
+            "that a bespoke comparison cannot offer. A tree with uncommitted git changes is also left alone — " +
+            "overwriting it would discard the working diff, which is the only record of the last sync until " +
+            "you commit. Commit or restore that tree, then run this again. --force does not override this: " +
+            "that flag only rebuilds trees whose assemblies have not changed.",
         Options =
         [
             new OptionSpec
@@ -285,7 +288,7 @@ public sealed class SourcesSyncCommand : Command
                 Name = "force",
                 Arity = Arity.Flag,
                 Aliases = ["rebuild", "all"],
-                Help = "Rebuild even the trees whose assemblies have not changed.",
+                Help = "Rebuild even the trees whose assemblies have not changed. Does not overwrite a tree that has uncommitted git changes.",
             },
             new OptionSpec
             {
@@ -358,6 +361,7 @@ public sealed class SourcesSyncCommand : Command
         var work = new List<(SourceTreePlan Plan, SourceTreeState Manifest, string Reason)>();
         var skipped = new List<string>();
         var blocked = new List<string>();
+        var dirty = new List<string>();
 
         foreach (var plan in plans)
         {
@@ -377,6 +381,13 @@ public sealed class SourcesSyncCommand : Command
                 continue;
             }
 
+            // 只拦「本来要写」的树:当前且干净的不必报脏,另一棵的未提交改动也不该挡住这一棵。
+            if (SourceGit.HasUncommittedChanges(root, plan.Name))
+            {
+                dirty.Add(plan.Name);
+                continue;
+            }
+
             work.Add((plan, manifest, existing is null ? "new" : "assemblies changed"));
         }
 
@@ -387,6 +398,15 @@ public sealed class SourcesSyncCommand : Command
                 $"{(blocked.Count == 1 ? "it was" : "they were")} left untouched rather than overwritten: " +
                 $"{string.Join(", ", blocked)}. Move the directory aside if you want it rebuilt.");
 
+        if (dirty.Count > 0)
+            ctx.Report.Notice(NoticeKind.Boundary,
+                $"{Tally.Complete(dirty.Count).Render("source tree")} " +
+                $"{(dirty.Count == 1 ? "has" : "have")} uncommitted changes in git, so " +
+                $"{(dirty.Count == 1 ? "it was" : "they were")} left untouched rather than overwritten: " +
+                $"{string.Join(", ", dirty)}. Commit or restore " +
+                $"{(dirty.Count == 1 ? "it" : "them")}, then run this again. --force does not override this — " +
+                "that flag only rebuilds trees whose assemblies have not changed.");
+
         if (notInstalled.Count > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
                 $"{Tally.Complete(notInstalled.Count).Render("mod")} in {from} " +
@@ -395,6 +415,12 @@ public sealed class SourcesSyncCommand : Command
 
         if (work.Count == 0)
         {
+            if (dirty.Count > 0)
+            {
+                SourcesShared.SayHowToDiff(ctx, root);
+                return 1;
+            }
+
             ctx.Report.Notice(NoticeKind.Boundary,
                 $"Every one of {Tally.Complete(skipped.Count).Render("source tree")} already came from the " +
                 "assemblies now on disk; nothing was decompiled. --force rebuilds them anyway.");

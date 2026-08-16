@@ -144,6 +144,9 @@ a scan that stopped short says so and does **not** point you at the snapshot.
 Neither command compares versions. The tree is a **git repository**, so what changed between
 builds is a `git diff` / `git log -p` question — which also buys rename detection and
 per-file history. Do not add a remote to it: it holds decompiled game code and stays local.
+`sources sync` will not overwrite a tree that still has uncommitted changes: that working
+diff is the last sync's only record until you commit. `--force` does not override this — it
+only rebuilds trees whose assemblies have not changed. Commit or restore, then sync again.
 
 ## Worked examples and derivations
 

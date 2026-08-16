@@ -248,6 +248,8 @@ public class SkillPromiseTests
             "版本来自ModsConfig时说破它会落后"),
         new("which the game only rewrites when you save a change on\nits mod list page",
             "版本来自ModsConfig时说破它会落后"),
+        new("will not overwrite a tree that still has uncommitted changes",
+            "已跟踪但工作区有改动的树算脏"),
     ];
 
     /// <summary>SKILL.md + references 下的手写页(生成的 cli-reference.md 除外),拼成一份扫。</summary>
