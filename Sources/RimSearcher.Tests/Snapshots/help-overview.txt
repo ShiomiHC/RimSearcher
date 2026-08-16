@@ -24,6 +24,7 @@ Commands:
   mods                List the mods that were active when the snapshot was taken, in load order.
   read                Read source out of the decompiled tree — one member, one type, or a line range.
   search              Find defs by name, label, description, or translated text.
+  snapshot diff       Compare the resolved defs and fields of two named snapshots.
   snapshot import     Build a queryable snapshot database out of a file the in-game exporter wrote.
   snapshot list       List the snapshots this machine knows about.
   snapshot status     Explain in full which snapshot is in use and how it compares with the game as installed right now.

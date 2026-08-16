@@ -11,7 +11,23 @@ and — for snapshots exported once this was measured — the size and timestamp
 file under `Defs/` and `Patches/` of each mod it could locate on disk. The `xml_fingerprint`
 row says how many mods that covers, which is usually fewer than the snapshot holds. That last
 one catches a mod whose contents changed without its `About.xml` version moving, which is the
-ordinary shape of a Steam workshop update. It reports which mods moved, by name.
+ordinary shape of a Steam workshop update. Ordinary queries name up to three of those mods.
+`snapshot status` lists every one in an `xml` table, and every packageId only on one side of
+the enabled list in a `mod_list` table; `--json` exposes both as row arrays, empty when
+nothing differs.
+
+**What `snapshot diff` compares.** Two already-imported snapshots, by name from
+`snapshot list`. It does not take `--scope`: the `mod` column is the declaring packageId,
+not who changed the value, and filtering it to the mods `snapshot status` named as changed
+would drop vanilla defs those mods patched. Snapshots exported with different ordered mod
+lists are refused — that comparison is `snapshot status` and its `mod_list` table.
+A comparison that has any difference prints `0 defs added.` / `0 defs removed.` /
+`0 fields.` for a quiet side rather than omitting it; only an all-zero comparison
+collapses to one sentence. `--json` always has the three arrays.
+Re-exporting the same name keeps the previous file as `<name>.prev` once. A further
+replace while that generation still differs is refused: pass `--name <other>` to keep both
+and still take a new snapshot, or `--replace-prev` to discard it. An incoming snapshot
+whose resolved defs and fields already match leaves both files alone.
 
 **The fingerprint's edges** — the output states most of them, but only beside a verdict that
 everything compared matches: size and timestamp are not file contents, so a re-download of
@@ -76,6 +92,8 @@ data sits under a key that depends on the command. `<command> --help` lists each
 | `keyed` | `keys` |
 | `code-search` | `matches`, plus `ui_text` when a printed matching line calls `.Translate()` on a literal key the snapshot can resolve |
 | `read` | `source`, or `declarations` with `--outline` — never both |
+| `snapshot status` | `snapshot` (object), plus `xml` and `mod_list` — one row per packageId; both arrays are present and empty when nothing differs |
+| `snapshot diff` | `defs_added`, `defs_removed`, `fields` — all three present and empty when nothing differs |
 
 Code output is rows too, so nothing is parsed back out of `path:line:text`:
 `code-search` rows are `{file, line, is_match, group, text}`, `read` rows are

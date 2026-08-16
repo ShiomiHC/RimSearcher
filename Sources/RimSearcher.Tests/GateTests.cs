@@ -68,7 +68,12 @@ public class GateTests
             ["read.source"] = ["read", "CompShield.cs", "--lines", "1-5"],
             ["read.declarations"] = ["read", "CompShield.cs", "--outline"],
             ["snapshot list.snapshots"] = ["snapshot", "list"],
+            ["snapshot status.xml"] = ["snapshot", "status"],
+            ["snapshot status.mod_list"] = ["snapshot", "status"],
             ["snapshot truncated.truncated"] = ["snapshot", "truncated"],
+            ["snapshot diff.defs_added"] = ["snapshot", "diff"],
+            ["snapshot diff.defs_removed"] = ["snapshot", "diff"],
+            ["snapshot diff.fields"] = ["snapshot", "diff"],
             ["modlist list.modlists"] = ["modlist", "list"],
             ["modlist show.mods"] = ["modlist", "show", "fixture-current"],
             ["sources list.trees"] = ["sources", "list"],
@@ -89,7 +94,14 @@ public class GateTests
             var named = ColumnsNamedIn(what);
             if (named.Count == 0) continue;
 
-            var (json, _, _) = Fixture.Run([.. probes[$"{command}.{key}"], "--json"]);
+            // snapshot status 的两张表在共享 fixture 上经常是空的(那正是「一致」);
+            // snapshot diff 不能走 Fixture.Run(它会塞 --db)。列名得拿到真有行的环境里验。
+            var json = command switch
+            {
+                "snapshot status" => StalenessTests.StatusJsonFor(key),
+                "snapshot diff" => SnapshotDiffTests.DiffJsonFor(key),
+                _ => Fixture.Run([.. probes[$"{command}.{key}"], "--json"]).Stdout,
+            };
             var root = System.Text.Json.JsonDocument.Parse(json).RootElement;
             if (!root.TryGetProperty(key, out var rows) ||
                 rows.ValueKind != System.Text.Json.JsonValueKind.Array || rows.GetArrayLength() == 0)

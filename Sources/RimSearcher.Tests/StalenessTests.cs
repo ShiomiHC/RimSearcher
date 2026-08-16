@@ -321,6 +321,23 @@ public class StalenessTests
         return stdout.ToString();
     }
 
+    /// <summary>
+    /// 给 GateTests 的列名探针:共享 fixture 上这两张表经常是空的,得造出至少一行。
+    /// </summary>
+    internal static string StatusJsonFor(string table)
+    {
+        if (table == "xml")
+        {
+            var (db, _, modDir, configPath) = SnapshotOfModTree("gate-status-xml");
+            File.AppendAllText(Path.Combine(modDir, "Defs", "Things.xml"), "<!-- edited -->");
+            return Run(configPath, db, "snapshot", "status", "--json");
+        }
+
+        var (db2, _, _, configPath2) = SnapshotOfModTree(
+            "gate-status-modlist", ["ludeon.rimworld", "test.mod", "extra.mod"]);
+        return Run(configPath2, db2, "snapshot", "status", "--json");
+    }
+
     [Fact]
     public void 导入时把参考侧XML指纹记进库()
     {
@@ -468,6 +485,24 @@ public class StalenessTests
 
         Assert.Contains("erdelf.humanoidalienraces", sentence, StringComparison.Ordinal);
         Assert.Contains("Re-export", sentence, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// status 那条路把名单交给表,句子里不再举例 —— 四个 id 时查询会收成
+    /// <c>and 1 more</c>,status 不许走那条截断。
+    /// </summary>
+    [Fact]
+    public void status句不截成andNmore()
+    {
+        var four = new ContentComparison(["a.mod", "b.mod", "c.mod", "d.mod"], [], 5);
+        var status = ContentDrift.Sentence("s", four, names: 0);
+        Assert.DoesNotContain("more", status, StringComparison.Ordinal);
+        Assert.DoesNotContain("a.mod", status, StringComparison.Ordinal);
+        Assert.Contains("4 mods", status, StringComparison.Ordinal);
+
+        var query = ContentDrift.Sentence("s", four);
+        Assert.Contains("and 1 more", query, StringComparison.Ordinal);
+        Assert.Contains("a.mod", query, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -649,8 +684,47 @@ public class StalenessTests
 
         Assert.Contains("1 enabled that this snapshot lacks", stdout, StringComparison.Ordinal);
         Assert.Contains("Ordinary queries stay silent", stdout, StringComparison.Ordinal);
+        Assert.Contains("extra.mod", stdout, StringComparison.Ordinal);
+        Assert.Contains("enabled_not_in_snapshot", stdout, StringComparison.Ordinal);
         // 版本与文件那两层的背书不许把 mod 列表也一起背下去。
         Assert.DoesNotContain("same mods", stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// XML 漂移在 status 里是一张全量表:packageId 在行里,不在句子的括号里。
+    /// </summary>
+    [Fact]
+    public void 漂移在status里列出全部packageId()
+    {
+        var (db, _, modDir, configPath) = SnapshotOfModTree("e2e-status-xml");
+        File.AppendAllText(Path.Combine(modDir, "Defs", "Things.xml"), "<!-- edited -->");
+        var stdout = Run(configPath, db, "snapshot", "status");
+
+        Assert.Contains("test.mod", stdout, StringComparison.Ordinal);
+        Assert.Contains("changed", stdout, StringComparison.Ordinal);
+        Assert.Contains("package_id", stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain("(test.mod)", stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain("and ", stdout.Split('\n').FirstOrDefault(l => l.Contains("changed on disk")) ?? "",
+            StringComparison.Ordinal);
+
+        using var json = System.Text.Json.JsonDocument.Parse(
+            Run(configPath, db, "snapshot", "status", "--json"));
+        var xml = json.RootElement.GetProperty("xml");
+        Assert.Equal(1, xml.GetArrayLength());
+        Assert.Equal("test.mod", xml[0].GetProperty("package_id").GetString());
+        Assert.Equal("changed", xml[0].GetProperty("state").GetString());
+        Assert.Equal(0, json.RootElement.GetProperty("mod_list").GetArrayLength());
+    }
+
+    /// <summary>一致时两张表在 JSON 里仍是空数组,不是缺键。</summary>
+    [Fact]
+    public void 一致时status的json仍有空的xml与mod_list()
+    {
+        var (db, _, _, configPath) = SnapshotOfModTree("e2e-status-empty-keys");
+        using var json = System.Text.Json.JsonDocument.Parse(
+            Run(configPath, db, "snapshot", "status", "--json"));
+        Assert.Equal(0, json.RootElement.GetProperty("xml").GetArrayLength());
+        Assert.Equal(0, json.RootElement.GetProperty("mod_list").GetArrayLength());
     }
 
     /// <summary>

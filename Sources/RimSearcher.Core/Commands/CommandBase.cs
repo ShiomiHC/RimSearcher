@@ -341,24 +341,35 @@ public static class ContentDrift
     /// 与答案无关时沉到表下,那时一句 "answers below" 指的是一片不存在的下文。
     /// 而且旧的那部分只是那几个 mod,不是整份答案 —— 指名道姓比指方位既准又不会指错。
     /// </summary>
-    public static string Sentence(string name, ContentComparison content)
+    public static string Sentence(string name, ContentComparison content, int names = 3)
     {
         var parts = new List<string>();
 
         if (content.Changed.Count > 0)
-            parts.Add($"{Tally.Complete(content.Changed.Count).Render("mod")} in snapshot '{name}' " +
-                      $"({NameList.Render(content.Changed, 3)}) " +
+            parts.Add($"{Tally.Complete(content.Changed.Count).Render("mod")}" +
+                      Named(name, content.Changed, names) +
                       $"{(content.Changed.Count == 1 ? "has" : "have")} Defs or Patches XML that changed on disk " +
                       "since the export, so anything read from " +
                       $"{(content.Changed.Count == 1 ? "it" : "them")} describes the older files. " +
                       "Re-export to pick them up.");
 
         if (content.Missing.Count > 0)
-            parts.Add($"{Tally.Complete(content.Missing.Count).Render("mod")} the export read " +
-                      $"({NameList.Render(content.Missing, 3)}) cannot be found on disk now, so whether " +
+            parts.Add($"{Tally.Complete(content.Missing.Count).Render("mod")} the export read" +
+                      Named(null, content.Missing, names) +
+                      "cannot be found on disk now, so whether " +
                       $"{(content.Missing.Count == 1 ? "its" : "their")} files still match cannot be checked at all.");
 
         return string.Join(" ", parts);
+    }
+
+    /// <summary>
+    /// 查询最多举 <paramref name="names"/> 个 id;<c>snapshot status</c> 传 0,名单改由表承担。
+    /// </summary>
+    private static string Named(string? snapshot, IReadOnlyList<string> ids, int names)
+    {
+        var where = snapshot is { Length: > 0 } ? $" in snapshot '{snapshot}'" : "";
+        if (names <= 0) return $"{where} ";
+        return $"{where} ({NameList.Render(ids, names)}) ";
     }
 }
 

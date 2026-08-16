@@ -50,6 +50,7 @@ public sealed class CommandRegistry
         new SourcesSyncCommand(),
         new SnapshotListCommand(),
         new SnapshotStatusCommand(),
+        new SnapshotDiffCommand(),
         new SnapshotUseCommand(),
         new SnapshotTruncatedCommand(),
         new SnapshotImportCommand(),

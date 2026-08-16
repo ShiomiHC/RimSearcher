@@ -231,7 +231,12 @@ raises. A stall report is 2 minutes of silence, not a failure — do not interru
 
 One export = one game version, one ordered mod list, one language; several coexist.
 `snapshot list` shows them, `--snapshot <name>` picks per command, `snapshot use <name>`
-sticks; `snapshot status` is the full comparison with the installed game. Queries raise
+sticks; `snapshot status` is the full comparison with the installed game. `snapshot
+status` names which mods' Defs/Patches XML moved on disk; `snapshot diff <old> <new>`
+compares two snapshots' resolved defs and fields. Re-exporting the same name keeps the
+previous file as `<name>.prev` once; a further replace is refused while that generation
+still differs — pass `--name <other>` to keep both, or `--replace-prev` to discard it.
+A re-export whose resolved defs and fields already match leaves both files alone. Queries raise
 staleness themselves when they detect it — but the check is size and timestamp, so an edit
 preserving both, or anything under `Languages/`, passes unseen. Re-export before concluding
 the tool is wrong: `rimsearcher export --modlist <name>`, where `<name>` is required and

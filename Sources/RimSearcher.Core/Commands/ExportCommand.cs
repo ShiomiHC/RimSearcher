@@ -30,6 +30,10 @@ public sealed class ExportCommand : Command
             "against what is installed before the game is started, so a typo costs a second rather than a whole launch.\n\n" +
             "When it finishes, the mods the game reported are compared with the mods that were asked for, and the " +
             "import is rejected if they differ.\n\n" +
+            "Replacing an existing snapshot name keeps the previous file as '{name}.prev' once. A further replace " +
+            "while that file still differs is refused — pass --name <other> to keep both, or --replace-prev to " +
+            "discard that generation. An incoming snapshot whose resolved defs and fields already match is left " +
+            "in place.\n\n" +
             "The game runs headless: no window appears and nothing is written to the display settings the game " +
             "keeps outside its save-data folder. Pass --show-window if a mod in the list needs a graphics device " +
             "while it loads.",
@@ -109,6 +113,7 @@ public sealed class ExportCommand : Command
                 Help = "Passed through to the import step: skip the language-file scan, and record in the snapshot " +
                        "that the disk layer was never measured.",
             },
+            SnapshotRetention.ReplacePrev,
         ],
         Examples = ["rimsearcher export --modlist vanilla", "rimsearcher export --modlist vanilla --dry-run"],
         JsonKeys =
@@ -488,7 +493,14 @@ public sealed class ExportCommand : Command
             Environment = ctx.Config,
         };
         var dbPath = Path.Combine(ctx.Config.ResolveSnapshotDir(), snapshotName + ".db");
-        var stats = importer.Import(outFile, dbPath);
+        var incoming = SnapshotRetention.IncomingPath(dbPath);
+        var stats = importer.Import(outFile, incoming);
+        var outcome = SnapshotRetention.Install(incoming, dbPath, snapshotName, ctx.Args.Flag("replace-prev"),
+                                               reuseExportFile: outFile);
+        if (outcome == SnapshotInstallKind.Unchanged)
+            ctx.Report.Notice(NoticeKind.Count, SnapshotRetention.Unchanged(snapshotName));
+        else if (outcome == SnapshotInstallKind.Replaced)
+            ctx.Report.Notice(NoticeKind.NextStep, SnapshotRetention.KeptPrevious(snapshotName));
 
         // 指纹自校 —— 请求的 ids 序列必须等于产出 meta 的 ids 序列。
         //

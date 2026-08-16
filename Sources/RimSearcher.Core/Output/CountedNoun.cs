@@ -94,6 +94,10 @@ public static class NounRegistry
     private static readonly Dictionary<string, string> Plurals = new(StringComparer.Ordinal)
     {
         ["def"] = "defs",
+        // snapshot diff 的两侧。不能借光杆 "def"：加与删是两张同列的表,文本又不印表名,
+        // 零的那一侧若再沉默,就和「被省略」同形。
+        ["def added"] = "defs added",
+        ["def removed"] = "defs removed",
         ["def type"] = "def types",
         // 运行时 class 与存储桶不是一回事:数 class 的地方不能借「def type」这个词。
         ["def class"] = "def classes",

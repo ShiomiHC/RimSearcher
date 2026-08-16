@@ -46,20 +46,24 @@ public enum GameVersionSource
 public sealed record EnvironmentReport(EnvironmentMatch Match, IReadOnlyList<string> ActiveMods, string? GameVersion)
 {
     /// <summary>
-    /// 集合差:游戏这边多开了几个 / 快照这边有几个已不再启用。
+    /// 集合差:游戏这边多开了哪些 / 快照这边有哪些已不再启用。
     ///
     /// **不进 <see cref="Match"/>,于是每次查询不为它发声** —— 它是环境选择,不是过期。
     /// 拿一份刻意精简的基线快照(本体 + 官方 DLC)当 pin,「你的环境和它不一样」每次查询
     /// 都成立、而且永远不会「修好」:那正是那份快照存在的理由。恒真的警告不携带信息,
     /// 却与真过期同形同位,久了会把真的那几条一起训练成噪声。
     ///
-    /// 需要它的两处各自更准:<c>snapshot status</c> 逐条讲(它是被显式问的),
+    /// 需要它的两处各自更准:<c>snapshot status</c> 逐条列出 packageId(它是被显式问的),
     /// 而零结果会点名「这个 def 不在你查的这份里,在 'modded' 那份里」。
     /// </summary>
-    public int Added { get; init; }
+    public IReadOnlyList<string> AddedMods { get; init; } = [];
 
-    /// <inheritdoc cref="Added"/>
-    public int Removed { get; init; }
+    /// <inheritdoc cref="AddedMods"/>
+    public IReadOnlyList<string> RemovedMods { get; init; } = [];
+
+    public int Added => AddedMods.Count;
+
+    public int Removed => RemovedMods.Count;
 
     /// <summary>
     /// 快照描述的那批 mod,在当前列表里的**相对次序**变了。
@@ -305,8 +309,9 @@ public static class SnapshotCatalog
             var envSet = activeIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
             env = env with
             {
-                Added = envSet.Except(snapSet, StringComparer.OrdinalIgnoreCase).Count(),
-                Removed = snapSet.Except(envSet, StringComparer.OrdinalIgnoreCase).Count(),
+                // 名单跟着各自那一侧的加载序,方便直接拿去对 modlist / --scope。
+                AddedMods = [.. activeIds.Where(id => !snapSet.Contains(id))],
+                RemovedMods = [.. snapshotIds.Where(id => !envSet.Contains(id))],
                 // 次序只在**两边都在**的那些 mod 之间判 —— 拿全表去判的话,多开一个
                 // 或禁用一个都会让它响,而那两件事按上面的口径不发声。
                 Reordered = !IsSubsequence([.. snapshotIds.Where(envSet.Contains)], activeIds),
