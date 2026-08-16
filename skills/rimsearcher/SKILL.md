@@ -27,6 +27,7 @@ Global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the com
 | What is this called? I only know part. | `rimsearcher search <words>` |
 | Which defs use this class / value? | `rimsearcher where <field> <value>` |
 | Which defs pick this class with `Class="…"`? | `rimsearcher where Class <ClassName>` |
+| One field across a whole batch of defs | `rimsearcher where <field>` with **no value** — one flat row per def that has it. Never `list` + a `get` per name: that is N processes for one table, and `get` nests its output per def while `where` does not. |
 | What can this field be set to? | `rimsearcher values <field>` |
 | What fields does this def type have? | `rimsearcher fields <DefType>` |
 | Everything of one kind | `rimsearcher list <DefType>` + `--find <text>`; no type = the def types |
@@ -154,6 +155,16 @@ rather than assuming. These four it has no way to state:
   depends on the command but is always present when produced, empty array and all. **A
   missing key means you asked the wrong key, never an empty result.** Key map:
   usage-notes; `<command> --help` is authoritative.
+- **The same key name is not the same row shape.** Every command's key holds flat rows
+  except two: `get`'s `defs` is one nested object per def (`{def, fields, translations?}`)
+  and `inherit`'s `nodes` is one per XML node (`{node, ancestors, children?, witnesses?}`).
+  So `search` and `get` both answer under `defs` while nesting differently, and a def's
+  field table is `defs[i].fields`, never a `fields` key at the root. Take the shape from the
+  command's own `--help`, and
+  **index the one real path rather than probing** — a script written as
+  `j.fields || j.rows || []` turns a wrong guess into an empty array, and empty is exactly
+  what a def with no such field looks like. That failure writes a complete-looking file and
+  exits 0.
 
 ## Layers a query cannot cross
 

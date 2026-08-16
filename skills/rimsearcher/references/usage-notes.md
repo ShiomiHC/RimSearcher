@@ -64,14 +64,15 @@ data sits under a key that depends on the command. `<command> --help` lists each
 
 | Command | Data key(s) |
 |---|---|
-| `search`, `get` | `defs` |
-| `list` | `defs` (with a def type) or `types` (without) — never both |
+| `search` | `defs` — one flat row per def |
+| `get` | `defs` — **not rows**: one nested object per def, each `{def, fields, translations?}`. A def's field table is `defs[i].fields`; there is no `fields` key at the root. It stays an array for a single def because a name can belong to several def types. |
+| `list` | `defs` (with a def type) or `types` (without) — never both; flat rows either way |
 | `where` with a field path | `matches` |
 | `where --value` | `paths` |
 | `values` | `values`, plus `field` (which full paths and def types the value space was drawn from) whenever the path matched something — absent when nothing did |
 | `fields` | `fields` |
 | `mods` | `mods` |
-| `inherit` | `nodes` |
+| `inherit` | `nodes` — **not rows**: one nested object per XML node, each `{node, ancestors, children?, witnesses?}` |
 | `keyed` | `keys` |
 | `code-search` | `matches`, plus `ui_text` when a printed matching line calls `.Translate()` on a literal key the snapshot can resolve |
 | `read` | `source`, or `declarations` with `--outline` — never both |
