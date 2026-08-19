@@ -51,7 +51,7 @@ public sealed class EconomyCommand : Command
     /// </summary>
     private static readonly string[] ThingKeys =
         ["defName", "label", "mod", "category", "marketValue", "marketValueDefined", "calcState",
-         "calculatedMarketValue", "costToMake", "profit", "profitRate", "workToProduce", "costList",
+         "fallbackMarketValue", "costToMake", "profit", "profitRate", "workToProduce", "costList",
          "costDifficultyVar", "costDifficultyInverted", "chainEndShare", "costDeep", "profitDeep",
          "producible", "madeFromStuff", "isWeapon", "isApparel"];
 
@@ -63,7 +63,7 @@ public sealed class EconomyCommand : Command
     /// 而这条命令的常见调用是几十行一屏。单条详情那一路只有一行,印全不占地方。
     /// </summary>
     private static readonly string[] ListColumns =
-        ["defName", "label", "mod", "category", "marketValue", "calcState", "calculatedMarketValue",
+        ["defName", "label", "mod", "category", "marketValue", "calcState", "fallbackMarketValue",
          "costToMake", "profit", "profitRate", "workToProduce", "costDifficultyVar", "chainEndShare",
          "costDeep", "profitDeep"];
 
@@ -79,10 +79,12 @@ public sealed class EconomyCommand : Command
             "and that nothing looks exactly like a thing having no cost.\n\n" +
             "The rows are the same set the game's own table covers: items with a market value above 0.01, " +
             "plus buildings the player can build or minify. Nothing else in the snapshot is priced.\n\n" +
-            "Read the empty cells as 'the game cannot work this out', not as zero. A profit needs a " +
-            "recipeMaker; a profit rate needs a positive work amount; a calculated market value needs the " +
-            "thing to be producible and to declare one. Those are four different reasons for a blank, and " +
-            "the columns keep them apart.\n\n" +
+            "marketValue is the price the game actually uses. fallbackMarketValue is the ingredient-and-work " +
+            "figure it falls back to only when no MarketValue is declared, so that column is empty for two " +
+            "opposite reasons — nothing produces the thing, or the fallback is already the marketValue in " +
+            "that same row — and when it does print, it is the counterfactual price, not the one in effect. " +
+            "Read any other empty cell as 'the game cannot work this out', not as zero: a profit needs a " +
+            "recipeMaker, and a profit rate needs a positive work amount.\n\n" +
             "A snapshot need not hold this layer at all: it can predate the layer, have been exported with " +
             "'--no-economy', or have failed to measure it. This command says which of those happened rather " +
             "than reporting that the game prices nothing, and the answer is never a number. There is no " +
@@ -121,9 +123,12 @@ public sealed class EconomyCommand : Command
                 Name = "calc-state",
                 Aliases = ["state"],
                 Placeholder = "<ok|recipe|used|not_producible>",
-                Help = "Keep only rows whose calculated market value came about a particular way. " +
-                       "'recipe' means it was derived from a recipe, 'ok' that the thing declares its own; " +
-                       "'used' and 'not_producible' are the two kinds of row the game cannot calculate at all.",
+                Help = "Keep only rows whose fallback market value came about a particular way. " +
+                       "'ok' and 'recipe' both mean the thing declares its own market value, so the " +
+                       "fallback is only the counterfactual — 'recipe' derives it from a recipe, 'ok' " +
+                       "from the cost list. 'used' means nothing is declared, so the fallback is the " +
+                       "market value itself. 'not_producible' means nothing produces the thing, so " +
+                       "there is no fallback at all.",
                 Narrows = true,
             },
             new OptionSpec
@@ -162,9 +167,12 @@ public sealed class EconomyCommand : Command
                 Rows = true,
                 // 键名不在这里手抄第三遍 —— 上一次抄出来的差额就是这次修的 bug。
                 What = "one row per priced thing — " + string.Join(", ", ThingKeys) + ". " +
-                       "Null means the game cannot work that number " +
-                       "out; it is never a stand-in for zero. Always an array, including when one defName " +
-                       "matched exactly, so the shape does not change with the kind of match. " +
+                       "marketValue is the price the game actually uses. fallbackMarketValue is the " +
+                       "ingredient-and-work figure it falls back to only when no MarketValue is declared, " +
+                       "so it is non-empty only as the counterfactual beside a declared value, and empty " +
+                       "when it already is the marketValue. Any other null means the game cannot work " +
+                       "that number out; it is never a stand-in for zero. Always an array, including when " +
+                       "one defName matched exactly, so the shape does not change with the kind of match. " +
                        "Every key above is present either way; the text table drops seven of them when " +
                        "listing the layer, to keep the rows readable, but the JSON never does. " +
                        "The text output tags cost numbers whose def declares a difficulty variant; here " +
@@ -182,7 +190,7 @@ public sealed class EconomyCommand : Command
             {
                 Key = "recipes",
                 What = "with a defName: every recipe that produces this thing — defName, productCount, " +
-                       "workAmount, selfReferential. More than one row means the calculated market value " +
+                       "workAmount, selfReferential. More than one row means the fallback market value " +
                        "depends on def load order.",
             },
         ],
@@ -342,7 +350,9 @@ public sealed class EconomyCommand : Command
             ["marketValue"] = QualMarketValue(row),
             ["marketValueDefined"] = row.MarketValueDefined,
             ["calcState"] = row.CalcState,
-            ["calculatedMarketValue"] = row.CalculatedMarketValue,
+            // 输出键与存储键(calculated_market_value)有意不同:fallback 点破这个数的身份 ——
+            // 只在没声明 MarketValue 时才被采用,而那时它已经折进 marketValue、这一格反而不印。
+            ["fallbackMarketValue"] = row.CalculatedMarketValue,
             ["costToMake"] = Qual(row.CostToMake, row),
             ["profit"] = row.Profit,
             ["profitRate"] = row.ProfitRate,
@@ -485,7 +495,7 @@ public sealed class EconomyCommand : Command
                                         && r.CalculatedMarketValue is <= 0);
         if (zeroCalc > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
-                $"calculatedMarketValue is 0 on {Tally.Complete(zeroCalc).Render("row")} above whose calcState " +
+                $"fallbackMarketValue is 0 on {Tally.Complete(zeroCalc).Render("row")} above whose calcState " +
                 "is 'ok'. Read that as 'the game could not work it out', not as a price of zero: calcState " +
                 "only says the thing is producible and declares a market value, and the sum underneath can " +
                 "still come out empty. Vanilla does this a lot — Steel and Bioferrite among them.");
@@ -508,19 +518,19 @@ public sealed class EconomyCommand : Command
                 "exists while the game is loading. 'rimsearcher get <defName> --path-contains " +
                 "costListForDifficulty' shows the other list.");
 
-        // 4. 多配方 = calculatedMarketValue 有加载顺序依赖(CalculableRecipe 取 DefDatabase 里
+        // 4. 多配方 = fallbackMarketValue 有加载顺序依赖(CalculableRecipe 取 DefDatabase 里
         //    第一个匹配,而等比放大的 bulk 配方 workAmount 通常不等比)。
         //    只有单条详情那一路手上有配方表;列表那一路不逐行查,那要 N 次查询。
         if (recipes is { Count: > 1 })
             ctx.Report.Notice(NoticeKind.Boundary,
                 $"{Tally.Complete(recipes.Count).Render("recipe")} can produce this thing, so its " +
-                "calculatedMarketValue depends on def load order: the game takes whichever of them comes " +
+                "fallbackMarketValue depends on def load order: the game takes whichever of them comes " +
                 "first in the database. A bulk recipe usually scales its ingredients but not its work " +
                 "amount, so which one wins changes the number.");
 
         if (recipes is not null && recipes.Any(r => r.SelfReferential))
             ctx.Report.Notice(NoticeKind.Boundary,
-                "A recipe above accepts this very thing as one of its own ingredients, so the calculated " +
+                "A recipe above accepts this very thing as one of its own ingredients, so the fallback " +
                 "market value has the thing's own hand-written price folded into it — which is the opposite " +
                 "of deriving a price from ingredients.");
     }

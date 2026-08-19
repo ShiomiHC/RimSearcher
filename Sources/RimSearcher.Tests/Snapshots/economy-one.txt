@@ -3,8 +3,8 @@ exit 0
 --- stdout ---
 1 thing.
 
-defName     label     mod       category  marketValue  marketValueDefined  calcState  calculatedMarketValue  costToMake                             profit  profitRate  workToProduce  costList                                   costDifficultyVar  costDifficultyInverted  chainEndShare  costDeep  profitDeep  producible  madeFromStuff  isWeapon  isApparel
-TestModGun  test gun  test.mod  Item      320          yes                 recipe     298.5                  141.2 (holds when classicMortars=off)  178.8   1104.94     1618           40 x Bloomstone (80), 1 x Firefoam (61.2)  classicMortars     no                      0.57           156.4     163.6       yes         no             yes       no
+defName     label     mod       category  marketValue  marketValueDefined  calcState  fallbackMarketValue  costToMake                             profit  profitRate  workToProduce  costList                                   costDifficultyVar  costDifficultyInverted  chainEndShare  costDeep  profitDeep  producible  madeFromStuff  isWeapon  isApparel
+TestModGun  test gun  test.mod  Item      320          yes                 recipe     298.5                141.2 (holds when classicMortars=off)  178.8   1104.94     1618           40 x Bloomstone (80), 1 x Firefoam (61.2)  classicMortars     no                      0.57           156.4     163.6       yes         no             yes       no
 
 thingDef    count  unitValue  chainEnd
 Bloomstone  40     2          yes
@@ -14,6 +14,6 @@ defName              productCount  workAmount  selfReferential
 Make_TestModGun      1             1618        no
 Make_TestModGunBulk  4             4200        yes
 A tag like '(holds when classicMortars=on)' above names the difficulty setting a number depends on, and the position it holds under. Put the setting the other way and the def swaps in a second cost list, which the tagged number is not from. An export cannot tell which way a given game has it: the setting is read off the storyteller, and no storyteller exists while the game is loading. 'rimsearcher get <defName> --path-contains costListForDifficulty' shows the other list.
-  - 2 recipes can produce this thing, so its calculatedMarketValue depends on def load order: the game takes whichever of them comes first in the database. A bulk recipe usually scales its ingredients but not its work amount, so which one wins changes the number.
-  - A recipe above accepts this very thing as one of its own ingredients, so the calculated market value has the thing's own hand-written price folded into it — which is the opposite of deriving a price from ingredients.
+  - 2 recipes can produce this thing, so its fallbackMarketValue depends on def load order: the game takes whichever of them comes first in the database. A bulk recipe usually scales its ingredients but not its work amount, so which one wins changes the number.
+  - A recipe above accepts this very thing as one of its own ingredients, so the fallback market value has the thing's own hand-written price folded into it — which is the opposite of deriving a price from ingredients.
 --- stderr ---

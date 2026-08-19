@@ -3,7 +3,7 @@ exit 0
 --- stdout ---
 1 thing.
 
-defName       label         mod              category  marketValue  marketValueDefined  calcState  calculatedMarketValue  costToMake  profit  profitRate  workToProduce  costList  costDifficultyVar  costDifficultyInverted  chainEndShare  costDeep  profitDeep  producible  madeFromStuff  isWeapon  isApparel
-Meat_Muffalo  muffalo meat  ludeon.rimworld  Item      2.05         yes                 ok         0                                                                                                  no                                     2.05      0           yes         no             no        no
-calculatedMarketValue is 0 on 1 row above whose calcState is 'ok'. Read that as 'the game could not work it out', not as a price of zero: calcState only says the thing is producible and declares a market value, and the sum underneath can still come out empty. Vanilla does this a lot — Steel and Bioferrite among them.
+defName       label         mod              category  marketValue  marketValueDefined  calcState  fallbackMarketValue  costToMake  profit  profitRate  workToProduce  costList  costDifficultyVar  costDifficultyInverted  chainEndShare  costDeep  profitDeep  producible  madeFromStuff  isWeapon  isApparel
+Meat_Muffalo  muffalo meat  ludeon.rimworld  Item      2.05         yes                 ok         0                                                                                                no                                     2.05      0           yes         no             no        no
+fallbackMarketValue is 0 on 1 row above whose calcState is 'ok'. Read that as 'the game could not work it out', not as a price of zero: calcState only says the thing is producible and declares a market value, and the sum underneath can still come out empty. Vanilla does this a lot — Steel and Bioferrite among them.
 --- stderr ---

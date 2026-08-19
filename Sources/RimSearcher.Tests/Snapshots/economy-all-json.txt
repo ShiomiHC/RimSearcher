@@ -15,7 +15,7 @@ exit 0
     },
     {
       "kind": "boundary",
-      "text": "calculatedMarketValue is 0 on 1 row above whose calcState is 'ok'. Read that as 'the game could not work it out', not as a price of zero: calcState only says the thing is producible and declares a market value, and the sum underneath can still come out empty. Vanilla does this a lot — Steel and Bioferrite among them."
+      "text": "fallbackMarketValue is 0 on 1 row above whose calcState is 'ok'. Read that as 'the game could not work it out', not as a price of zero: calcState only says the thing is producible and declares a market value, and the sum underneath can still come out empty. Vanilla does this a lot — Steel and Bioferrite among them."
     },
     {
       "kind": "boundary",
@@ -31,7 +31,7 @@ exit 0
       "marketValue": 1200,
       "marketValueDefined": true,
       "calcState": "not_producible",
-      "calculatedMarketValue": null,
+      "fallbackMarketValue": null,
       "costToMake": null,
       "profit": null,
       "profitRate": null,
@@ -55,7 +55,7 @@ exit 0
       "marketValue": 480,
       "marketValueDefined": true,
       "calcState": "ok",
-      "calculatedMarketValue": 412.75,
+      "fallbackMarketValue": 412.75,
       "costToMake": 220,
       "profit": 260,
       "profitRate": 866.67,
@@ -79,7 +79,7 @@ exit 0
       "marketValue": 320,
       "marketValueDefined": true,
       "calcState": "recipe",
-      "calculatedMarketValue": 298.5,
+      "fallbackMarketValue": 298.5,
       "costToMake": 141.2,
       "profit": 178.8,
       "profitRate": 1104.94,
@@ -103,7 +103,7 @@ exit 0
       "marketValue": 18,
       "marketValueDefined": false,
       "calcState": "used",
-      "calculatedMarketValue": null,
+      "fallbackMarketValue": null,
       "costToMake": 12.5,
       "profit": 5.5,
       "profitRate": null,
@@ -127,7 +127,7 @@ exit 0
       "marketValue": 2.05,
       "marketValueDefined": true,
       "calcState": "ok",
-      "calculatedMarketValue": 0,
+      "fallbackMarketValue": 0,
       "costToMake": null,
       "profit": null,
       "profitRate": null,

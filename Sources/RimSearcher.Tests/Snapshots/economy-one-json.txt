@@ -15,11 +15,11 @@ exit 0
     },
     {
       "kind": "boundary",
-      "text": "2 recipes can produce this thing, so its calculatedMarketValue depends on def load order: the game takes whichever of them comes first in the database. A bulk recipe usually scales its ingredients but not its work amount, so which one wins changes the number."
+      "text": "2 recipes can produce this thing, so its fallbackMarketValue depends on def load order: the game takes whichever of them comes first in the database. A bulk recipe usually scales its ingredients but not its work amount, so which one wins changes the number."
     },
     {
       "kind": "boundary",
-      "text": "A recipe above accepts this very thing as one of its own ingredients, so the calculated market value has the thing's own hand-written price folded into it — which is the opposite of deriving a price from ingredients."
+      "text": "A recipe above accepts this very thing as one of its own ingredients, so the fallback market value has the thing's own hand-written price folded into it — which is the opposite of deriving a price from ingredients."
     }
   ],
   "things": [
@@ -31,7 +31,7 @@ exit 0
       "marketValue": 320,
       "marketValueDefined": true,
       "calcState": "recipe",
-      "calculatedMarketValue": 298.5,
+      "fallbackMarketValue": 298.5,
       "costToMake": 141.2,
       "profit": 178.8,
       "profitRate": 1104.94,
