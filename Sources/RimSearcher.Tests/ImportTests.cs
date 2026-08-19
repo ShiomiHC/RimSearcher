@@ -150,7 +150,30 @@ public class ImportTests
 
         Assert.DoesNotContain("shortHash", paths);
         Assert.DoesNotContain("comps[0].index", paths);
+        Assert.DoesNotContain("uiIcon.m_CachedPtr", paths);
         Assert.DoesNotContain(paths, p => p.StartsWith("modContentPack.", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// 委托的 <c>method</c> 与 <c>ScenPart.method</c> 同名,值一个是函数指针一个是 DropPods。
+    /// 按名字拦会把后者一起吃掉,所以这一类的判据是名字**加**值 —— 两条各守一边。
+    /// </summary>
+    [Fact]
+    public void 函数指针丢掉而同名的真实字段留下()
+    {
+        using var db = Build("pointer");
+        var def = db.GetDefsNamed("Apparel_ShieldBelt").Single();
+        var paths = db.Fields(def.Id, int.MaxValue).Rows.Select(f => f.Path).ToList();
+        Assert.DoesNotContain("wanderDestValidator.method", paths);
+
+        // 同名的真实字段是 ScenPart.method,值是个枚举名 —— 判据里的「值」这一半就为它而设。
+        Assert.True(NoiseFilter.IsNoise("thinkRoot.subNodes[1].wanderDestValidator.method", "1391637031208"));
+        Assert.False(NoiseFilter.IsNoise("scenario.parts[3].method", "DropPods"));
+        // 值没给就等于这一类不判:宁可漏几个指针,也不吃掉同名的真实字段。
+        Assert.False(NoiseFilter.IsNoise("scenario.parts[3].method"));
+        // 名字够专有的那几个照旧只看名字。
+        Assert.True(NoiseFilter.IsNoise("uiIcon.m_CachedPtr"));
+        Assert.True(NoiseFilter.IsNoise("root.options[2].thingSetMaker.nextSeed"));
     }
 
     [Fact]

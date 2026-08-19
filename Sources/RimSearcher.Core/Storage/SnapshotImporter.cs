@@ -176,11 +176,12 @@ public sealed class SnapshotImporter
                         {
                             if (triple.GetArrayLength() < 3) continue;
                             var path = triple[0].GetString() ?? "";
-                            if (NoiseFilter.IsNoise(path)) { noise++; continue; }
+                            var value = triple[1].GetString();
+                            if (NoiseFilter.IsNoise(path, value)) { noise++; continue; }
                             Bind(insertFv, "$id", id);
                             Bind(insertFv, "$p", path);
                             Bind(insertFv, "$lf", NoiseFilter.Leaf(path));
-                            Bind(insertFv, "$v", triple[1].GetString());
+                            Bind(insertFv, "$v", value);
                             Bind(insertFv, "$def", triple[2].GetInt32());
                             insertFv.ExecuteNonQuery();
                             fieldValues++;

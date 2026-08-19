@@ -443,6 +443,11 @@ public static class Fixture
             // 噪声:末段匹配应把这两条挡掉
             ("shortHash", "12345", DefaultState.Differs),
             ("comps[0].index", "0", DefaultState.Same),
+            // Unity 原生对象的地址,每次进程启动都不同。
+            ("uiIcon.m_CachedPtr", "2656448295920", DefaultState.Differs),
+            // 委托的内部字段。同名的**真实**字段(ScenPart.method = DropPods)不许被一起吃掉,
+            // 那一半由 NoiseFilter 的单元测试守 —— 放进这里会多出一行,撑破输出基线。
+            ("wanderDestValidator.method", "1391637031208", DefaultState.Differs),
             ("modContentPack.name", "Core", DefaultState.Differs));
 
         // burstCount 的形状:**字段名与提问一字不差,值却是代码默认值** ——
