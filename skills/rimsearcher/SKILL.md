@@ -233,9 +233,10 @@ One export = one game version, one ordered mod list, one language; several coexi
 `snapshot list` shows them, `--snapshot <name>` picks per command, `snapshot use <name>`
 sticks; `snapshot status` is the full comparison with the installed game. `snapshot
 status` names which mods' Defs/Patches XML moved on disk; `snapshot diff <old> <new>`
-compares two snapshots' resolved defs and fields. Re-exporting the same name keeps the
-previous file as `<name>.prev` once; a further replace is refused while that generation
-still differs — pass `--name <other>` to keep both, or `--replace-prev` to discard it.
+compares two snapshots' resolved defs and fields. Re-exporting the same name rotates the
+old file to `<name>.prev`, the one before it to `<name>.prev2`, and so on; `snapshot_keep`
+in the config file, or `--keep <n>`, says how many generations that name holds, counting
+the one being written, and whatever falls past that count is deleted and said so.
 A re-export whose resolved defs and fields already match leaves both files alone. Queries raise
 staleness themselves when they detect it — but the check is size and timestamp, so an edit
 preserving both, or anything under `Languages/`, passes unseen. Re-export before concluding

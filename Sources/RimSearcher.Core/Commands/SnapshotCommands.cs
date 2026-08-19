@@ -253,9 +253,8 @@ public sealed class SnapshotDiffCommand : Command
             "on disk may differ; that is the point of re-exporting the same list after a mod update.\n\n" +
             "This command has no mod filter. The 'mod' column is the packageId that declared the def, not who " +
             "patched the value, so restricting it to the mods 'snapshot status' named as changed would drop " +
-            "vanilla defs those mods patched. Re-exporting the same name keeps one previous generation as " +
-            "'<name>.prev'; a further replace is refused while that file still differs, so pass --name to keep " +
-            "both. --limit caps the " +
+            "vanilla defs those mods patched. Re-exporting a name keeps its previous generations as " +
+            "'<name>.prev', '<name>.prev2' and so on, and each is nameable here. --limit caps the " +
             "fields table, and the two def tables if they grow past it. Each side still reports its total, " +
             "including zero.",
         Positionals =
@@ -509,8 +508,9 @@ public sealed class SnapshotImportCommand : Command
             "The export file is refused rather than half-imported if it lacks the end marker the game writes last, " +
             "which is what a crash mid-export looks like. Everything about how the data is filtered and indexed is " +
             "decided here rather than in the game, so a change of policy only costs a re-import, not another play session. " +
-            "Replacing a name that already has a still-different '{name}.prev' is refused; pass --name to keep both, " +
-            "or --replace-prev to discard that generation.",
+            "Re-importing a name rotates its old file to '{name}.prev' and the one before it to '{name}.prev2'; " +
+            "'snapshot_keep' in the config file, or --keep here, says how many generations to keep, counting the " +
+            "one being written. Whatever falls past that count is deleted, and the output says which.",
         Positionals =
         [
             new PositionalSpec
@@ -547,6 +547,7 @@ public sealed class SnapshotImportCommand : Command
                 Help = "Index only the translations the game actually had, and record in the snapshot that the " +
                        "disk layer was never measured, so a later 'nothing on disk' is not read as an answer.",
             },
+            SnapshotRetention.Keep,
             SnapshotRetention.ReplacePrev,
         ],
         Examples =
@@ -594,12 +595,14 @@ public sealed class SnapshotImportCommand : Command
         };
         var incoming = SnapshotRetention.IncomingPath(dbPath);
         var stats = importer.Import(file, incoming);
-        var outcome = SnapshotRetention.Install(incoming, dbPath, name, ctx.Args.Flag("replace-prev"),
-                                               reuseExportFile: file);
-        if (outcome == SnapshotInstallKind.Unchanged)
+        var keep = SnapshotRetention.ResolveKeep(ctx.Config, ctx.Args);
+        var install = SnapshotRetention.Install(incoming, dbPath, keep);
+        if (install.Kind == SnapshotInstallKind.Unchanged)
             ctx.Report.Notice(NoticeKind.Count, SnapshotRetention.Unchanged(name));
-        else if (outcome == SnapshotInstallKind.Replaced)
-            ctx.Report.Notice(NoticeKind.NextStep, SnapshotRetention.KeptPrevious(name));
+        else if (install.Kind == SnapshotInstallKind.Replaced)
+            ctx.Report.Notice(NoticeKind.NextStep, SnapshotRetention.KeptPrevious(name, install.Kept));
+        if (install.Dropped is { Length: > 0 } dropped)
+            ctx.Report.Notice(NoticeKind.Boundary, SnapshotRetention.DroppedOldest(dropped, keep));
 
         ctx.Report.Detail("imported",
         [

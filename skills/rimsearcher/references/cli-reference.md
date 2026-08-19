@@ -274,7 +274,8 @@ The game runs headless: no window appears and nothing is written to the display 
 | `--dry-run` | Do everything except start the game: resolve the list, check every mod is installed, and report what would be run. | `--check`, `--validate` |
 | `--harvest-translations` | Passed through to the import step, and on by default there: also index language files of installed mods that the list does not enable. Pass it explicitly only to be sure. | `--harvest` |
 | `--no-harvest-translations` | Passed through to the import step: skip the language-file scan, and record in the snapshot that the disk layer was never measured. | `--no-harvest` |
-| `--replace-prev` | Discard '{name}.prev' when replacing a snapshot that still differs from it. Without this the write is refused, so an unread comparison is not lost. Prefer --name <other> to keep both. | `--replace-previous`, `--discard-prev` |
+| `--keep` <n> | How many generations of this name to keep, counting the one being written. The one it pushes past that count is deleted. 1 overwrites with no comparison left behind. The default is the config file's 'snapshot_keep'. Default: `3`. | `--generations`, `--keep-generations` |
+| `--replace-prev` | Keep no previous generation of this name at all: the same as --keep 1. Every '{name}.prev' already on disk is deleted along with it. | `--replace-previous`, `--discard-prev` |
 
 `--json` keys, besides the global `notes`:
 
@@ -675,7 +676,7 @@ The two names are from 'snapshot list'. This command never opens the live snapsh
 
 The snapshots must have been exported with the same ordered mod list. A different list is refused — that comparison belongs on 'snapshot status' and its mod_list table — because mixing list changes with content changes would make every added def look like a data change. The game build and the XML on disk may differ; that is the point of re-exporting the same list after a mod update.
 
-This command has no mod filter. The 'mod' column is the packageId that declared the def, not who patched the value, so restricting it to the mods 'snapshot status' named as changed would drop vanilla defs those mods patched. Re-exporting the same name keeps one previous generation as '<name>.prev'; a further replace is refused while that file still differs, so pass --name to keep both. --limit caps the fields table, and the two def tables if they grow past it. Each side still reports its total, including zero.
+This command has no mod filter. The 'mod' column is the packageId that declared the def, not who patched the value, so restricting it to the mods 'snapshot status' named as changed would drop vanilla defs those mods patched. Re-exporting a name keeps its previous generations as '<name>.prev', '<name>.prev2' and so on, and each is nameable here. --limit caps the fields table, and the two def tables if they grow past it. Each side still reports its total, including zero.
 
 | Argument | Meaning |
 |---|---|
@@ -708,7 +709,7 @@ Build a queryable snapshot database out of a file the in-game exporter wrote.
 rimsearcher snapshot import [file] [options]
 ```
 
-The export file is refused rather than half-imported if it lacks the end marker the game writes last, which is what a crash mid-export looks like. Everything about how the data is filtered and indexed is decided here rather than in the game, so a change of policy only costs a re-import, not another play session. Replacing a name that already has a still-different '{name}.prev' is refused; pass --name to keep both, or --replace-prev to discard that generation.
+The export file is refused rather than half-imported if it lacks the end marker the game writes last, which is what a crash mid-export looks like. Everything about how the data is filtered and indexed is decided here rather than in the game, so a change of policy only costs a re-import, not another play session. Re-importing a name rotates its old file to '{name}.prev' and the one before it to '{name}.prev2'; 'snapshot_keep' in the config file, or --keep here, says how many generations to keep, counting the one being written. Whatever falls past that count is deleted, and the output says which.
 
 | Argument | Meaning |
 |---|---|
@@ -719,7 +720,8 @@ The export file is refused rather than half-imported if it lacks the end marker 
 | `--name` <name> | Name to register the snapshot under. Defaults to the export file's name. | `--as`, `--alias` |
 | `--harvest-translations` | On by default whenever 'mod_roots' is configured: also scan the language files of every installed mod, including ones not enabled in the snapshot, so that a translated name still finds the def. Harvested rows are marked 'on disk' and never replace the values the game actually had. Pass it explicitly only to be sure; pass --no-harvest-translations to skip it. | `--harvest`, `--scan-languages` |
 | `--no-harvest-translations` | Index only the translations the game actually had, and record in the snapshot that the disk layer was never measured, so a later 'nothing on disk' is not read as an answer. | `--no-harvest`, `--skip-languages` |
-| `--replace-prev` | Discard '{name}.prev' when replacing a snapshot that still differs from it. Without this the write is refused, so an unread comparison is not lost. Prefer --name <other> to keep both. | `--replace-previous`, `--discard-prev` |
+| `--keep` <n> | How many generations of this name to keep, counting the one being written. The one it pushes past that count is deleted. 1 overwrites with no comparison left behind. The default is the config file's 'snapshot_keep'. Default: `3`. | `--generations`, `--keep-generations` |
+| `--replace-prev` | Keep no previous generation of this name at all: the same as --keep 1. Every '{name}.prev' already on disk is deleted along with it. | `--replace-previous`, `--discard-prev` |
 
 `--json` keys, besides the global `notes`:
 

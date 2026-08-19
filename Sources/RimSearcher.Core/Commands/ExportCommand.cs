@@ -113,6 +113,7 @@ public sealed class ExportCommand : Command
                 Help = "Passed through to the import step: skip the language-file scan, and record in the snapshot " +
                        "that the disk layer was never measured.",
             },
+            SnapshotRetention.Keep,
             SnapshotRetention.ReplacePrev,
         ],
         Examples = ["rimsearcher export --modlist vanilla", "rimsearcher export --modlist vanilla --dry-run"],
@@ -495,12 +496,14 @@ public sealed class ExportCommand : Command
         var dbPath = Path.Combine(ctx.Config.ResolveSnapshotDir(), snapshotName + ".db");
         var incoming = SnapshotRetention.IncomingPath(dbPath);
         var stats = importer.Import(outFile, incoming);
-        var outcome = SnapshotRetention.Install(incoming, dbPath, snapshotName, ctx.Args.Flag("replace-prev"),
-                                               reuseExportFile: outFile);
-        if (outcome == SnapshotInstallKind.Unchanged)
+        var keep = SnapshotRetention.ResolveKeep(ctx.Config, ctx.Args);
+        var install = SnapshotRetention.Install(incoming, dbPath, keep);
+        if (install.Kind == SnapshotInstallKind.Unchanged)
             ctx.Report.Notice(NoticeKind.Count, SnapshotRetention.Unchanged(snapshotName));
-        else if (outcome == SnapshotInstallKind.Replaced)
-            ctx.Report.Notice(NoticeKind.NextStep, SnapshotRetention.KeptPrevious(snapshotName));
+        else if (install.Kind == SnapshotInstallKind.Replaced)
+            ctx.Report.Notice(NoticeKind.NextStep, SnapshotRetention.KeptPrevious(snapshotName, install.Kept));
+        if (install.Dropped is { Length: > 0 } dropped)
+            ctx.Report.Notice(NoticeKind.Boundary, SnapshotRetention.DroppedOldest(dropped, keep));
 
         // 指纹自校 —— 请求的 ids 序列必须等于产出 meta 的 ids 序列。
         //

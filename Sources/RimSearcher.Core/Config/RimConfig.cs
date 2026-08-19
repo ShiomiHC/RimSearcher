@@ -32,6 +32,16 @@ public sealed class RimConfig
     public IReadOnlyList<string> ModRoots { get; init; } = [];
     public string? ActiveSnapshot { get; init; }
 
+    /// <summary>
+    /// 同名快照保留几代,**含当前那一份**。2 就是「当前 + 一份 .prev」。
+    ///
+    /// 每次重导出都换个名字,是这个数太小逼出来的:名字用来当代数,库就再也不会被回收。
+    /// 所以旧代由这个数管,超出的自动删,而不是让写入失败。
+    /// </summary>
+    public int SnapshotKeep { get; init; } = SnapshotKeepDefault;
+
+    public const int SnapshotKeepDefault = 3;
+
     /// <summary>别名 → 快照文件名(相对 SnapshotDir)或绝对路径。</summary>
     public IReadOnlyDictionary<string, string> Snapshots { get; init; } =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -87,9 +97,22 @@ public sealed class RimConfig
             ModsConfig = root.String("mods_config"),
             ModRoots = root.Strings("mod_roots"),
             ActiveSnapshot = state.String("active_snapshot") ?? root.String("active_snapshot"),
+            SnapshotKeep = ReadKeep(root, path),
             Snapshots = snapshots,
             ScopeGroups = groups,
         };
+    }
+
+    /// <summary>写错类型静默回落到默认值,就等于「配了没生效」而输出里没人说 —— 所以这里报错。</summary>
+    private static int ReadKeep(Toml.Table root, string path)
+    {
+        if (!root.Values.TryGetValue("snapshot_keep", out var raw)) return SnapshotKeepDefault;
+        if (raw is not long n || n < 1)
+            throw new TomlError(
+                $"{path}: 'snapshot_keep' is how many generations of a snapshot name to keep, counting the " +
+                $"current one, so it is a whole number of at least 1. Got '{raw}'. " +
+                "1 means each re-export overwrites and leaves no comparison behind.");
+        return (int)n;
     }
 
     public void SaveActiveSnapshot(string alias)

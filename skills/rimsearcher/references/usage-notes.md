@@ -24,9 +24,11 @@ lists are refused — that comparison is `snapshot status` and its `mod_list` ta
 A comparison that has any difference prints `0 defs added.` / `0 defs removed.` /
 `0 fields.` for a quiet side rather than omitting it; only an all-zero comparison
 collapses to one sentence. `--json` always has the three arrays.
-Re-exporting the same name keeps the previous file as `<name>.prev` once. A further
-replace while that generation still differs is refused: pass `--name <other>` to keep both
-and still take a new snapshot, or `--replace-prev` to discard it. An incoming snapshot
+Re-exporting the same name rotates the old file to `<name>.prev`, the one before it to
+`<name>.prev2`, and so on — each generation is a snapshot of its own, so `snapshot diff
+<name>.prev2 <name>` works. `snapshot_keep` in the config file, or `--keep <n>`, says how
+many generations that name holds, counting the one being written; what falls past that
+count is deleted and the output says which. `--replace-prev` is `--keep 1`. An incoming snapshot
 whose resolved defs and fields already match leaves both files alone.
 
 **The fingerprint's edges** — the output states most of them, but only beside a verdict that

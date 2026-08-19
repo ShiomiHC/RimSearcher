@@ -8,7 +8,7 @@ using RimSearcher.Storage;
 namespace RimSearcher.Tests;
 
 /// <summary>
-/// 同名快照的一代对照物:旋转、<c>.prev</c> 仍不同时拒绝、解析结果相同则不动。
+/// 同名快照的世代轮转:旋转、超出 <c>snapshot_keep</c> 的自动丢、解析结果相同则不动。
 /// </summary>
 public class SnapshotRetentionTests
 {
@@ -37,23 +37,78 @@ public class SnapshotRetentionTests
     }
 
     [Fact]
-    public void 第三次同名拒并指路改名()
+    public void 第三次同名继续旋转不再拒()
     {
-        var dir = FreshDir("refuse");
+        var dir = FreshDir("third");
         Import(dir, "current", 10);
         Import(dir, "current", 20);
-        var prevWrite = File.GetLastWriteTimeUtc(Path.Combine(dir, "current.prev.db"));
-        var destWrite = File.GetLastWriteTimeUtc(Path.Combine(dir, "current.db"));
-
         var (stdout, stderr, code) = Import(dir, "current", 30);
+        Assert.Equal(0, code);
+        Assert.Equal("", stderr);
+        Assert.DoesNotContain("would discard", stdout, StringComparison.Ordinal);
+
+        // 三代都在,且各是一份能点名的快照。
+        Assert.Contains("\"old\": \"20\"", Run(dir, "snapshot", "diff", "current.prev", "current", "--json").Stdout, StringComparison.Ordinal);
+        Assert.Contains("\"old\": \"10\"", Run(dir, "snapshot", "diff", "current.prev2", "current", "--json").Stdout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void 超出keep的最老一代被删并说出来()
+    {
+        var dir = FreshDir("drop");
+        Import(dir, "current", 10);
+        Import(dir, "current", 20);
+        Import(dir, "current", 30);
+        var (stdout, _, code) = Import(dir, "current", 40);
+        Assert.Equal(0, code);
+        Assert.Contains("'current.prev2' fell out of the 3 generations", stdout, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(dir, "current.prev3.db")));
+
+        Assert.Contains("\"old\": \"30\"", Run(dir, "snapshot", "diff", "current.prev", "current", "--json").Stdout, StringComparison.Ordinal);
+        Assert.Contains("\"old\": \"20\"", Run(dir, "snapshot", "diff", "current.prev2", "current", "--json").Stdout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void keep由config定且命令行盖得住()
+    {
+        var dir = FreshDir("keep-config", keep: 2);
+        Import(dir, "current", 10);
+        Import(dir, "current", 20);
+        Import(dir, "current", 30);
+        Assert.False(File.Exists(Path.Combine(dir, "current.prev2.db")));
+        Assert.Contains("\"old\": \"20\"", Run(dir, "snapshot", "diff", "current.prev", "current", "--json").Stdout, StringComparison.Ordinal);
+
+        // 代数是一次一代长出来的:--keep 4 只是不再截断,不会凭空补齐更老的几代。
+        var (_, _, code) = Import(dir, "current", 40, "--keep", "4");
+        Assert.Equal(0, code);
+        Assert.True(File.Exists(Path.Combine(dir, "current.prev2.db")));
+        Assert.False(File.Exists(Path.Combine(dir, "current.prev3.db")));
+        Assert.Contains("\"old\": \"20\"", Run(dir, "snapshot", "diff", "current.prev2", "current", "--json").Stdout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void keep与replaceprev冲突时不猜()
+    {
+        var dir = FreshDir("conflict");
+        Import(dir, "current", 10);
+        var (_, stderr, code) = Import(dir, "current", 20, "--keep", "3", "--replace-prev");
         Assert.Equal(Runner.ExitUsage, code);
-        Assert.Equal("", stdout);
-        Assert.Contains("would discard 'current.prev'", stderr, StringComparison.Ordinal);
-        Assert.Contains("snapshot diff current.prev current", stderr, StringComparison.Ordinal);
-        Assert.Contains("--name current-0817", stderr, StringComparison.Ordinal);
-        Assert.Contains("--replace-prev", stderr, StringComparison.Ordinal);
-        Assert.Equal(prevWrite, File.GetLastWriteTimeUtc(Path.Combine(dir, "current.prev.db")));
-        Assert.Equal(destWrite, File.GetLastWriteTimeUtc(Path.Combine(dir, "current.db")));
+        Assert.Contains("--replace-prev means --keep 1", stderr, StringComparison.Ordinal);
+
+        var (_, bad, badCode) = Import(dir, "current", 20, "--keep", "0");
+        Assert.Equal(Runner.ExitUsage, badCode);
+        Assert.Contains("at least 1", bad, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void config里keep写错类型是错不是静默默认()
+    {
+        var dir = FreshDir("badconfig");
+        File.WriteAllText(Path.Combine(dir, "config.toml"),
+            $"snapshot_dir = '{dir}'\nsnapshot_keep = 'three'\n", new UTF8Encoding(false));
+        var (_, stderr, code) = Import(dir, "current", 10);
+        Assert.Equal(Runner.ExitUsage, code);
+        Assert.Contains("'snapshot_keep'", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -95,40 +150,46 @@ public class SnapshotRetentionTests
     }
 
     [Fact]
-    public void replaceprev才丢掉仍不同的上一代()
+    public void replaceprev一代不留且旧代一起收掉()
     {
         var dir = FreshDir("force");
         Import(dir, "current", 10);
         Import(dir, "current", 20);
-        var (_, stderr, code) = Import(dir, "current", 30, "--replace-prev");
+        Import(dir, "current", 30);
+        Assert.True(File.Exists(Path.Combine(dir, "current.prev2.db")));
+
+        var (_, stderr, code) = Import(dir, "current", 40, "--replace-prev");
         Assert.Equal(0, code);
         Assert.Equal("", stderr);
-
-        var diff = Run(dir, "snapshot", "diff", "current.prev", "current", "--json").Stdout;
-        Assert.Contains("\"old\": \"20\"", diff, StringComparison.Ordinal);
-        Assert.Contains("\"new\": \"30\"", diff, StringComparison.Ordinal);
-        Assert.DoesNotContain("\"old\": \"10\"", diff, StringComparison.Ordinal);
+        Assert.False(File.Exists(Path.Combine(dir, "current.prev.db")));
+        Assert.False(File.Exists(Path.Combine(dir, "current.prev2.db")));
+        // 留下的那一份是新的,不是被删剩的旧代:与另建的同内容库比,零差异。
+        Import(dir, "other", 40);
+        Assert.Contains("No difference", Run(dir, "snapshot", "diff", "other", "current").Stdout, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void 两条造库口都声明replaceprev且拒绝句指路改名()
+    public void 两条造库口共用同一组保留选项()
     {
         var specs = new CommandRegistry().Specs.ToDictionary(s => s.Name);
         foreach (var name in new[] { "export", "snapshot import" })
+        {
             Assert.Contains(specs[name].Options, o => o.Name == "replace-prev" && ReferenceEquals(o, SnapshotRetention.ReplacePrev));
+            Assert.Contains(specs[name].Options, o => o.Name == "keep" && ReferenceEquals(o, SnapshotRetention.Keep));
+        }
 
-        var refuse = SnapshotRetention.WouldDiscard("current");
-        Assert.Contains("--name current-0817", refuse, StringComparison.Ordinal);
-        Assert.Contains("snapshot diff current.prev current", refuse, StringComparison.Ordinal);
+        Assert.Contains("snapshot diff current.prev current", SnapshotRetention.KeptPrevious("current", 1), StringComparison.Ordinal);
+        Assert.Contains("current.prev3", SnapshotRetention.KeptPrevious("current", 3), StringComparison.Ordinal);
     }
 
-    private static string FreshDir(string name)
+    private static string FreshDir(string name, int? keep = null)
     {
         var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "snapshot-retention", name);
         if (Directory.Exists(dir)) Directory.Delete(dir, true);
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "config.toml"),
-            $"snapshot_dir = '{dir}'\n", new UTF8Encoding(false));
+            $"snapshot_dir = '{dir}'\n" + (keep is null ? "" : $"snapshot_keep = {keep}\n"),
+            new UTF8Encoding(false));
         return dir;
     }
 
