@@ -1424,11 +1424,13 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// <c>--path-contains</c> 命中了几条、却没一条是整段时,那两句只穷举了两种读法,而漏掉的第三种
-    /// 正是名值对结构:<c>statBases[N].stat = MarketValue</c> 把**字段自己的名字搬进了值那
-    /// 一列**,<c>--path-contains</c> 结构上够不着它。于是表干净、完整,答的却是另一个问题。
+    /// <c>--path-contains</c> 命中了几条、却没一条是整段时,名值对结构够不着:
+    /// <c>statBases[N].stat = MarketValue</c> 把**字段自己的名字搬进了值那一列**,
+    /// <c>--path-contains</c> 结构上到不了它。于是表干净、完整,答的却是另一个问题。
     ///
     /// 闸盯两头:够得着时报出来,而整段命中过的那些不许多这一句(那时没有歧义)。
+    /// 钉的是那句机制(「它也作为一个值出现在这个 def 上」),不是承载它的措辞 ——
+    /// 原先钉「A third reading is in play here」,那半句是**读法**不是机制,已经删了。
     /// </summary>
     [Fact]
     public void path部分命中时说破那个词也可能是个值()
@@ -1437,12 +1439,12 @@ public class GrammarTests
         // statBases[1].stat 的值 EnergyShieldRechargeRate 的一部分。
         var (both, _, code) = Fixture.Run("get", "Apparel_ShieldBelt", "--path-contains", "energy");
         Assert.Equal(0, code);
-        Assert.Contains("A third reading is in play here", both, StringComparison.Ordinal);
+        Assert.Contains("as a field's value, not in any path", both, StringComparison.Ordinal);
         Assert.Contains("where --value energy", both, StringComparison.Ordinal);
 
         // 整段命中过:没有这种歧义,不许多话。
         var (whole, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--path-contains", "stat");
-        Assert.DoesNotContain("A third reading", whole, StringComparison.Ordinal);
+        Assert.DoesNotContain("as a field's value", whole, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1838,10 +1840,11 @@ public class GrammarTests
         // 而没有任何一段整个叫 energy。
         var (get0, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--path-contains", "energy");
         Assert.Contains("whole path segment", get0, StringComparison.Ordinal);
-        Assert.Contains("nothing here is called exactly that", get0, StringComparison.Ordinal);
         // 这句话不许收在关于存在性的强断言上 —— 「前缀式列举」是正常用法,要的字段就在
         // 下面那张表里,所以「这一行一条都没滤掉」这半句是承重的。
-        Assert.Contains("removes none of the matched fields", get0, StringComparison.Ordinal);
+        // (原先还钉「nothing here is called exactly that」:那是把上面这句机制翻译成
+        //  两种读法让人挑,机制自己已经说全,已删。)
+        Assert.Contains("removes none of them", get0, StringComparison.Ordinal);
 
         // 查 "comps" 则条条整段命中 —— 这时候一个字都不许多说。
         var (getAll, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--path-contains", "comps");
@@ -2495,7 +2498,7 @@ public class GrammarTests
         // 「这台机器上没有第二层可漏」—— 那句话把「本机没配扫描目录」当成了
         // 「磁盘上没有译文」。第二层照旧在(玩家装着的 mod 就在那儿),缺的是去够它的路。
         // 而 snapshot import 那条路上同一件事一直是说的,还明说了
-        // 「That is a gap in this snapshot, not an answer about the mods on this machine」——
+        // 「That is a gap in this snapshot, not evidence about the mods on this machine」——
         // 两处产地矛盾时,闭嘴的那处是假话。
         var (noRoots, _, _) = Fixture.Run("keyed", "CannotUseNoPower");
         Assert.Contains(Says, noRoots, StringComparison.Ordinal);
@@ -2574,7 +2577,7 @@ public class GrammarTests
     /// <summary>
     /// **一个能力被推荐时的描述,不许强于它自述时的描述。**
     ///
-    /// `--outline` 自己的末尾说「a name not listed here may still be in the file」,而
+    /// `--outline` 自己的末尾说「a name not listed here is not evidence the file lacks it」,而
     /// `--member` 落空时曾推荐它说「lists **every** declaration」—— 同一个能力,自述处诚实、
     /// 被推荐处夸大,而读者是**先**读推荐那句、带着更强的预期去看清单的。
     /// 实证:`CostListCalculator.cs` 的 `operator ==` 两边都列不出来,而 "every" 把那份
@@ -2589,7 +2592,7 @@ public class GrammarTests
         var (outline, _, _) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--outline");
 
         // 自述侧:盲区说破,这是被比对的那个基准。
-        Assert.Contains("may still be in the file", outline, StringComparison.Ordinal);
+        Assert.Contains("not evidence the file lacks it", outline, StringComparison.Ordinal);
 
         // 推荐侧:不许出现全称量词。逐字钉 every 太窄 —— 钉的是「这个能力被说成完整的」。
         foreach (var absolute in new[] { "every declaration", "all declarations", "the complete list" })

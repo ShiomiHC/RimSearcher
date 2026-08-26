@@ -480,8 +480,7 @@ public sealed class InheritCommand : Command
         if (truncated > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
                 $"{Tally.Complete(truncated).Render("def")} counted in other_defs had the field list cut short " +
-                "at export, so any of those can miss with_path for that reason alone — the direction that makes " +
-                "a layer look innocent.");
+                "at export, so any of those can miss with_path for that reason alone.");
     }
 
     private static string Quote(string v) => v.Length == 0 ? "an empty value" : $"'{v}'";

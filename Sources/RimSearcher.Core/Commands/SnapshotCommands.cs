@@ -137,7 +137,7 @@ public sealed class SnapshotStatusCommand : Command
         if (truncated > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
                 $"{ExportCap.OverDefs(truncated, " in this snapshot")}. " +
-                "For those, a field path missing from 'get' is not proof that the def lacks it.");
+                "For those, a field path missing from 'get' is not evidence that the def lacks it.");
 
         // 集合差在**这里**逐条列出 packageId,而每次查询一个字都不说(成因见
         // EnvironmentReport.AddedMods)—— 于是「为什么查询不提这件事」的答案得在这一句里,
@@ -147,9 +147,8 @@ public sealed class SnapshotStatusCommand : Command
         {
             ctx.Report.Notice(NoticeKind.Boundary,
                 $"The game currently has a different mod list: {env.Added} enabled that this snapshot lacks, " +
-                $"{env.Removed} in this snapshot that are no longer enabled. This is not automatically wrong — " +
-                "you may be querying another environment on purpose — but nothing here reflects those mods. " +
-                "Ordinary queries stay silent about this; they report only the differences below.");
+                $"{env.Removed} in this snapshot that are no longer enabled, so nothing here reflects those " +
+                "mods. Ordinary queries stay silent about this; the list below is the only place it is said.");
             ctx.Report.Table("mod_list", ["package_id", "state"],
                 Roster(
                     env.AddedMods.Select(id => (id, "enabled_not_in_snapshot")),
@@ -623,8 +622,9 @@ public sealed class SnapshotImportCommand : Command
 
         if (stats.TruncatedDefs > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
+                // 与 snapshot status 那处逐字同句 —— 同一件事不许两种说法。
                 $"{ExportCap.OverDefs(stats.TruncatedDefs)}. " +
-                "'get' says so per def, so that a missing path is never mistaken for an absent field.");
+                "For those, a field path missing from 'get' is not evidence that the def lacks it.");
 
         // 没收割要说破,两个成因分开说 —— 补救不一样(收回参数 / 去配 mod_roots)。
         if (!harvest)
@@ -635,7 +635,7 @@ public sealed class SnapshotImportCommand : Command
         else if (ctx.Config.ModRoots.Count == 0)
             ctx.Report.Notice(NoticeKind.Boundary,
                 "No 'mod_roots' is configured, so there was nowhere to scan for language files and only the " +
-                "translations the game actually had are indexed. That is a gap in this snapshot, not an answer " +
+                "translations the game actually had are indexed. That is a gap in this snapshot, not evidence " +
                 "about the mods on this machine: set 'mod_roots' in the config file and import again.");
 
         return 0;

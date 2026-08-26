@@ -407,7 +407,7 @@ internal static class ExportCap
 /// 「没配的机器上不存在第二层」—— 那句话把「本机没配扫描目录」当成了「磁盘上没有译文」。
 /// 第二层照旧在(玩家装着的 mod 就在那儿),缺的只是去够它的路,而那条路也说得出来
 /// (去配 <c>mod_roots</c> 再导一次)。<c>snapshot import</c> 那条路上同一件事一直是说的,
-/// 措辞还写明了「That is a gap in this snapshot, not an answer about the mods on this machine」——
+/// 措辞还写明了「That is a gap in this snapshot, not evidence about the mods on this machine」——
 /// 两处产地矛盾时,闭嘴的那处是假话,不是省话。
 ///
 /// 更一般的形态:**否定与出路捆在一句里时,出路不适用会把否定一起带走**。

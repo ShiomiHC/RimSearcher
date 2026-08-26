@@ -429,7 +429,7 @@ public sealed class CodeSearchCommand : Command
             ctx.Report.Notice(NoticeKind.Boundary,
                 $"{Tally.Complete(literal.Distinct(StringComparer.Ordinal).Count()).Render("translation key")} " +
                 "appear in the printed lines, but no snapshot could be opened to say what they display, so " +
-                "this answer says nothing either way about them. 'rimsearcher snapshot list' shows what is " +
+                "this answer is not evidence either way about them. 'rimsearcher snapshot list' shows what is " +
                 "registered; pass --no-resolve-keys to stop asking.");
             return;
         }
@@ -450,10 +450,13 @@ public sealed class CodeSearchCommand : Command
         var missing = distinct.Count - resolved.Count;
         if (missing > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
+                // 末句曾给这个零补一个死因(「没人声明的 key 就是代码够不着的 key」)——
+                // 站不住:查的是 TranslationOrigin.Runtime,即**导出时游戏实际加载了的**那层,
+                // 而快照的语言、当时启用的 mod、语言文件有没有跟上新 key,每一条都能造出同一个
+                // 零。归因留给 keyed / snapshot status,那边按快照量到哪一步说话。
                 $"This snapshot has no keyed translation for " +
                 $"{Tally.Complete(missing).Render("translation key")} in these lines. A def's own label goes " +
-                "through DefInjected rather than a key ('rimsearcher get' and 'search' cover those), and a key " +
-                "no language file declares is one the code no longer reaches.");
+                "through DefInjected rather than a key ('rimsearcher get' and 'search' cover those).");
 
         if (assembled > 0)
             ctx.Report.Notice(NoticeKind.Boundary,

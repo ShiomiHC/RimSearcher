@@ -532,15 +532,13 @@ public sealed class GetCommand : Command
                         $"{Tally.Complete(total).Render("field")} on the def." +
                         (whole == 0
                             // 这里不能下存在性的强断言:「前缀式列举」是正常用法,而要找的
-                            // 字段往往就在这句话下面那张表里。只摆事实、两种读法都点出来,
-                            // 并说破这句话**一行都没滤掉**。
+                            // 字段往往就在这句话下面那张表里。只摆事实,并说破这句 Filter
+                            // **一行都没滤掉** —— 上一句的「N out of M」会被读成表已经被剔过。
                             ? $" None of those has {PathFilterText.Say(paths)} as a whole path segment: each match contains " +
-                              "it inside a longer name. Either those longer names are the fields you meant, or " +
-                              "nothing here is called exactly that — this line removes none of the matched " +
-                              "fields, so read them before deciding which." +
+                              "it inside a longer name, and this line removes none of them." +
                               (alsoValue.Count > 0
-                                  ? " A third reading is in play here: this def also carries " +
-                                    $"{PathFilterText.Say(alsoValue)} as a field's *value*, not in any path. " +
+                                  ? " This def also carries " +
+                                    $"{PathFilterText.Say(alsoValue)} as a field's value, not in any path. " +
                                     "A name/value pair puts the field's own name in the value column " +
                                     "(statBases[N].stat = MarketValue), where --path-contains cannot reach it — " +
                                     $"'rimsearcher where --value {alsoValue[0]}' goes at it from that side."
@@ -615,10 +613,8 @@ public sealed class GetCommand : Command
                         // 于是这两句写着 above 却印在表前,指的是一片不存在的上文。
                         (hiddenIdx.Count > 0
                             ? " Nothing below shows any field of these list entries, which the def has all the " +
-                              $"same: {NameList.Render(hiddenIdx, Limits.MaxSuggestions)} — so the lists run " +
-                              "longer than they look here."
-                            // 正面态只报事实,不把事实翻译成读法 —— 「每个下标都在下面」到
-                            // 「列表长度如实」只隔一步,而藏了的那一态才是坑,解释留在那边。
+                              $"same: {NameList.Render(hiddenIdx, Limits.MaxSuggestions)}."
+                            // 两态都只报事实,不把事实翻译成读法(「所以列表比看着长」)。
                             : " Every list index the def has appears below."));
                 }
             }
@@ -633,7 +629,7 @@ public sealed class GetCommand : Command
             if (def.FieldsTruncated > 0)
                 ctx.Report.Notice(NoticeKind.Boundary,
                     $"The exporter stopped short on this def: {ExportCap.OnDef(def.FieldsTruncated)}, " +
-                    "so a path missing from the list below is not proof that the def lacks it. " +
+                    "so a path missing from the list below is not evidence that the def lacks it. " +
                     // 主语自带,不靠上文:--path-contains 那一支的上文说的是「matching N, out of
                     // M on the def」,而这一句在两支下逐字相同。
                     $"Added to the {total} paths that did get indexed, that is " +
@@ -681,7 +677,7 @@ public sealed class GetCommand : Command
                 if (ctx.Db.EconomyByName(def.DefName).Count > 0)
                     ctx.Report.Notice(NoticeKind.NextStep,
                         $"The game also prices this thing. Its market value, cost to make and work amount are " +
-                        $"computed, not stored, so no field above holds them and none ever will — " +
+                        $"computed, not stored, so no field above holds them — " +
                         $"'rimsearcher economy {def.DefName}' is the only road to those numbers.");
             }
             else if (DefTypes.Same(def.DefType, "ThingDef"))
@@ -1122,13 +1118,14 @@ public sealed class FindCommand : Command
                             $"'rimsearcher where {path} {resolved}' is the query you meant."
                           // 「给了个名字」不等于「说了下一步」:那几条只是最近的,真值域没看过。
                           : $" 'rimsearcher values {path} --limit all' lists the whole value domain.")
-                    // 「如果 X 是抽象基类」是一句**未经验证的猜测摆在输出位置**,读的人会当
-                    // 结论用。判据从严(ClassNameShape 把 `True`、`.ogg`、`1.5` 挡在外面),
-                    // 并指向能当场证实或证伪它的 code-search。
+                    // 曾经这里只写「X 大概是个抽象基类」—— 一句**未经验证的猜测摆在输出
+                    // 位置**,读的人会当结论用。`GenStep_ScatterLumpsMineable` 是个被 C# 直接
+                    // new 出来的**具体类**,而那句话把人推去查一批不存在的子类,第九轮盲测 S1
+                    // 正是这么走完全程的。
                     //
-                    // 两种成因并列,不许只说抽象基类那一种:`GenStep_ScatterLumpsMineable` 是个
-                    // 被 C# 直接 new 出来的**具体类**,而单说抽象基类会把人推去查一批不存在的
-                    // 子类 —— 第九轮盲测 S1 正是这么走完全程的。
+                    // 现在这句是修完的样子,不是那句猜测:主语是**这个零**(两种情况长得一样),
+                    // 不是那个类;两种成因并列,各配一条参数填好、能当场证实或证伪它的
+                    // code-search。判据也从严(ClassNameShape 把 `True`、`.ogg`、`1.5` 挡在外面)。
                     : $" 'rimsearcher values {path} --limit all' lists them." +
                       (ClassNameShape.Looks(value) && !indexGap && hiddenByScope == 0
                           ? $" Two things look like this zero when '{value}' is a class: it is an abstract base " +
@@ -1176,8 +1173,7 @@ public sealed class FindCommand : Command
                    "what is in it" +
                    (referenced
                        ? $", and 'rimsearcher where --value {name}' names the fields that point at it."
-                       : ", and no indexed field value points at it — nothing in this snapshot refers to it " +
-                         "by name.");
+                       : ", and no indexed field value points at it.");
         }
 
         // 这里不像 get 那样把默认值行滤掉:调用方点名了一个字段与一个值,「哪些 def 取到过它」
@@ -1691,7 +1687,7 @@ public sealed class FieldsCommand : Command
             "Use this before 'where' when you are not sure what a field is called. The counts tell you whether a " +
             "path is universal for the type or only present on a handful of defs.\n\n" +
             "What is listed is every path the exporter recorded a value for. A field whose value was null on " +
-            "every def of the type is in none of them, so a path missing here is not proof that the field does " +
+            "every def of the type is in none of them, so a path missing here is not evidence that the field does " +
             "not exist — for the shape of a nested object, read its class with 'code-search' and 'read'.",
         Positionals = [new PositionalSpec { Name = "defType", Help = "A def type such as ThingDef." }],
         Options =
@@ -1762,9 +1758,8 @@ public sealed class FieldsCommand : Command
             ctx.Report.Notice(NoticeKind.Filter,
                 whole == 0
                     ? $"None of those has {PathFilterText.Say(filters)} as a whole path segment: each match contains it " +
-                      $"inside a longer name. Either those longer names are the paths you meant, or '{type}' " +
-                      $"has no field called exactly {PathFilterText.Say(filters)} — this line removes none of the " +
-                      $"{Tally.Complete(total).Render("field path")} that matched, so read them before deciding which."
+                      $"inside a longer name, and this line removes none of the " +
+                      $"{Tally.Complete(total).Render("field path")} that matched."
                     : $"Whole path segment: {Tally.Complete(whole).Render("field path")}; " +
                       $"inside a longer name: {Tally.Complete(total - whole).Render("field path")}.");
 
@@ -2060,8 +2055,10 @@ internal static class DefTypeMiss
         return $"'{typed}' is a type in the decompiled source all the same — " +
                $"{NameList.Render(hits, Limits.MaxSuggestions)}. Only a def type gets a def database, so this " +
                "command has nothing of its own to read for it, while the source does: " +
-               $"'rimsearcher read {(hits.Count > 1 ? hits[0] : typed + ".cs")} --outline' names every field, " +
-               "property and method with its line range.";
+               // 不许写 "every":--outline 匹配的是花括号,CostListCalculator.cs 的
+               // `operator ==` 两边都列不出来。口径与 ReadCommand.SayNoDeclaration 同。
+               $"'rimsearcher read {(hits.Count > 1 ? hits[0] : typed + ".cs")} --outline' lists what brace " +
+               "matching finds there, each with its line range.";
     }
 }
 
@@ -2499,8 +2496,7 @@ internal static class Advisory
         ctx.Report.Notice(NoticeKind.Boundary,
             strict == 0
                 ? $"Nothing here holds exactly '{Quote(value)}': every row has it inside a longer value — " +
-                  "read the value column before treating this as an answer about " +
-                  $"'{Quote(value)}'. --exact would return nothing at all."
+                  "see the value column. --exact would return nothing at all."
                 : $"'{Quote(value)}' is matched as a substring, not as a whole value: of the " +
                   $"{Tally.Complete(here).Render("def")} here, {strict} hold exactly '{Quote(value)}' and " +
                   $"{here - strict} hold it inside a longer value. The value column says which; " +
@@ -2522,8 +2518,7 @@ internal static class Advisory
             (shapes.Count > shown.Count
                 ? $", plus {Tally.Complete(shapes.Count - shown.Count).Render("path shape")} not shown"
                 : "") +
-            ". The suffix matched them all; a set operation over this result treats them as one field " +
-            "unless the path column is read row by row. Pasting one of those shapes back with " +
+            ". The suffix matched them all. Pasting one of those shapes back with " +
             "--exact-path keeps that one alone.");
     }
 

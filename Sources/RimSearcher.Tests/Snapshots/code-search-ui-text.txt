@@ -10,6 +10,6 @@ vanilla/Verse/Widgets.cs  3 matches
 
 key               translated  original
 CannotUseNoPower  没有电力    No power
-This snapshot has no keyed translation for 1 translation key in these lines. A def's own label goes through DefInjected rather than a key ('rimsearcher get' and 'search' cover those), and a key no language file declares is one the code no longer reaches.
+This snapshot has no keyed translation for 1 translation key in these lines. A def's own label goes through DefInjected rather than a key ('rimsearcher get' and 'search' cover those).
 The key is not a literal in 1 line here — assembled at runtime, or held in a variable — so what those lines display cannot be resolved from the text. 'rimsearcher keyed' can still show such a key by name once you know it.
 --- stderr ---

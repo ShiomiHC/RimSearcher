@@ -222,7 +222,7 @@ public sealed class EconomyCommand : Command
             case null:
                 ctx.Report.Notice(NoticeKind.Boundary,
                     "This snapshot was built before this tool measured prices at all, so it has no answer " +
-                    "here — that is a property of the snapshot, not a fact about the game. Export again " +
+                    "here — that is a property of the snapshot, not evidence about the game. Export again " +
                     "('rimsearcher export'); 'rimsearcher snapshot status' names the snapshot in use.");
                 NoteTheDetour(ctx);
                 return true;
@@ -259,10 +259,9 @@ public sealed class EconomyCommand : Command
     /// </summary>
     private static void NoteTheDetour(CommandContext ctx)
         => ctx.Report.Notice(NoticeKind.Boundary,
-            "Note before going around: fields called marketValue are still in this snapshot, but that is " +
-            "the base value written in XML, not the price the game computes from it, and no field anywhere " +
-            "holds cost to make or profit. Ranking defs by that field is a valid query — it just answers a " +
-            "different question, and nothing in its output will say so.");
+            "Fields called marketValue are still in this snapshot, but that is the base value written in " +
+            "XML, not the price the game computes from it, and no field anywhere holds cost to make or " +
+            "profit. Ranking defs by that field answers a different question, and its output does not say so.");
 
     private static int RunOne(CommandContext ctx, string defName)
     {

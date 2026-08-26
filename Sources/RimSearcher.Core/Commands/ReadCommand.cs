@@ -28,7 +28,7 @@ public sealed class ReadCommand : Command
             "instead of picking one.\n\n" +
             "--member and --type find the declaration by matching braces, not by parsing C#. That is enough " +
             "for decompiled output, which is machine-formatted, but it means a name this command cannot see " +
-            "is not proof the file lacks it — 'code-search' searches the text and --lines reads it raw.\n\n" +
+            "is not evidence the file lacks it — 'code-search' searches the text and --lines reads it raw.\n\n" +
             "For who calls a method, what it overrides, and what derives from a type, the DecompilerServer " +
             "MCP answers from metadata and is both faster and exact. This command answers a different " +
             "question: what the decompiled file on disk actually says.\n\n" +
@@ -402,7 +402,7 @@ public sealed class ReadCommand : Command
     /// </summary>
     private static void SayBraceMatched(CommandContext ctx)
         => ctx.Report.Notice(NoticeKind.Boundary,
-            "Found by matching braces, not by parsing C#: a name not listed here may still be in the file.",
+            "Found by matching braces, not by parsing C#: a name not listed here is not evidence the file lacks it.",
             footnote: true);
 
     private static void SayNoDeclaration(CommandContext ctx, string rel, string[] text,
@@ -435,17 +435,14 @@ public sealed class ReadCommand : Command
             $"({Tally.Complete(text.Length).Render("line")}, " +
             $"{Tally.Complete(decls.Count).Render("declaration")})." +
             Suggestion.Say(close) +
-            // 出路不许比它自己的自述更自信。此前这里写 "lists every declaration",而
-            // --outline 自己的末尾写的是「a name not listed here may still be in the file」——
-            // 同一个能力,在自述处诚实、在被推荐处被夸大,而读者是**先**读到推荐的那句、
-            // 带着一个更强的预期去看那份清单的。实证:CostListCalculator.cs 里
-            // `operator ==` 两边都列不出来,而 "every" 让那份清单成了「文件里没有」的证据。
-            //
-            // 顺序也调了:--outline 与 --member 共用花括号匹配,对这次落空**没有诊断力**——
-            // 拿同一把尺子去校验它自己量出来的结果。真出路是 code-search,排它在前。
-            " 'rimsearcher code-search' searches the text itself and does not go through brace matching, " +
-            "which is what just came up empty — 'rimsearcher read " + rel + " --outline' lists what that " +
-            "same matching does find, so a name missing there is missing for the same reason.");
+            // 三件事换措辞时都不许丢:①「不是没有」这个否定无条件在场;②真出路是 code-search,
+            // 排在前 —— --outline 与 --member 同一把花括号尺子,对这次落空没有诊断力;
+            // ③ --outline 的能力不许写得比它自己的自述强(曾写 "every",而 CostListCalculator.cs
+            // 的 `operator ==` 两边都列不出来,于是那份清单被当成了「文件里没有」的证据)。
+            // 为什么能压这么短:这三条的完整版常驻 SKILL.md,落空路径不必再讲一遍。
+            " The match runs on braces, not C# parsing, so this is not evidence the file lacks it — " +
+            "'rimsearcher code-search' searches the text itself; '--outline' lists what the same " +
+            "matching does find.");
 
         // 「这个文件里没有」会被读成「这个类型没有这个成员」。反编译产物**不重复父类的成员**:
         // `read MapPortal.cs --member Destroy` 落空,而 Destroy 在再上一层的 Thing 里。
@@ -461,9 +458,8 @@ public sealed class ReadCommand : Command
             if (bases.Count > 0)
                 ctx.Report.Notice(NoticeKind.NextStep,
                     NameList.Render([.. bases.Select(b => $"{b.Type} extends {b.Base}")], Limits.MaxSuggestions) +
-                    ". Inherited members are not repeated by the decompiler, so one declared further up the " +
-                    $"chain is not in this file at all: 'rimsearcher read {bases[0].Base}.cs --member {member}' " +
-                    "looks one level up, and these trees hold one file per type.");
+                    ". The decompiler does not repeat inherited members: 'rimsearcher read " +
+                    $"{bases[0].Base}.cs --member {member}' looks one level up.");
         }
     }
 

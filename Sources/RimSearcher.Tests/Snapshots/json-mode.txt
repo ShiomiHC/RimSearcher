@@ -11,7 +11,7 @@ exit 0
     },
     {
       "kind": "filter",
-      "text": "Not listed: 1 field whose value matches the declaring type's own default; --defaults lists them. That match is not evidence that nothing wrote them. The snapshot holds 12 field paths for this def; a null-valued field never entered the index and is in neither count. Nothing below shows any field of these list entries, which the def has all the same: comps[0], statBases[0], statBases[1] — so the lists run longer than they look here."
+      "text": "Not listed: 1 field whose value matches the declaring type's own default; --defaults lists them. That match is not evidence that nothing wrote them. The snapshot holds 12 field paths for this def; a null-valued field never entered the index and is in neither count. Nothing below shows any field of these list entries, which the def has all the same: comps[0], statBases[0], statBases[1]."
     },
     {
       "kind": "advisory",
@@ -19,7 +19,7 @@ exit 0
     },
     {
       "kind": "next_step",
-      "text": "The game also prices this thing. Its market value, cost to make and work amount are computed, not stored, so no field above holds them and none ever will — 'rimsearcher economy Apparel_ShieldBelt' is the only road to those numbers."
+      "text": "The game also prices this thing. Its market value, cost to make and work amount are computed, not stored, so no field above holds them — 'rimsearcher economy Apparel_ShieldBelt' is the only road to those numbers."
     },
     {
       "kind": "count",

@@ -103,7 +103,7 @@ public sealed class KeyedCommand : Command
             ctx.Report.Notice(NoticeKind.Boundary,
                 "This snapshot has no keyed translations at all, so nothing here can be looked up — that is a " +
                 "property of the snapshot, " +
-                (query is null ? "not an answer about what this layer holds. " : $"not an answer about '{query}'. ") +
+                (query is null ? "not evidence about what this layer holds. " : $"not evidence about '{query}'. ") +
                 "Two exports look like this and " +
                 "this line cannot tell them apart: one written before this layer was measured at all, and one " +
                 "written from a game whose language data was not loaded. The fix is the same either way — export " +
@@ -166,11 +166,9 @@ public sealed class KeyedCommand : Command
                     $"'{query}' was not matched as typed: only letters and digits take part, so what ran was " +
                     $"{NameList.Render(terms, Limits.MaxSuggestions)}." +
                     // 只在查询词里真有 `*` 时讲它 —— 否则这句话是答非所问,而下划线那种
-                    // 剥离与通配符无关。这里说得比上面那支多一句「换个位置回来的是同一批」:
-                    // 那句只在查询词里另有内容时才有意义,而上面那支按定义没有。
+                    // 剥离与通配符无关。与上面那支逐字同句。
                     (query.Contains('*', StringComparison.Ordinal)
-                        ? " '*' is not a wildcard here: it is dropped like any other punctuation, which is why " +
-                          "moving it elsewhere in the query brings back the same rows."
+                        ? " '*' is not a wildcard here: it is dropped like any other punctuation."
                         : "") +
                     // 零结果时下面没有计数可指 —— 方位词只在真有东西可指时才用。
                     (hits.Count > 0 ? " The count below is for what ran, not for what you typed." : ""));
@@ -237,9 +235,8 @@ public sealed class KeyedCommand : Command
                 ctx.Report.Notice(NoticeKind.Boundary,
                     "Two things are outside this layer by construction. A def's own label or description is " +
                     "translated through DefInjected, not through a key: 'rimsearcher search " + query + "' " +
-                    "covers those. And a key the code assembles at runtime ('\"Stat_\" + x') exists in the " +
-                    "language files but appears in no source line as a literal, so searching the code for it " +
-                    "finds nothing even though this command can still show it by name.");
+                    "covers those. And a key the code assembles at runtime ('\"Stat_\" + x') is in the " +
+                    "language files by name, but appears in no source line as a literal.");
             return 1;
         }
 
@@ -274,14 +271,15 @@ public sealed class KeyedCommand : Command
         {
             var keys = shown.Select(r => r.Key).Distinct(StringComparer.Ordinal).ToList();
             ctx.Report.Notice(NoticeKind.NextStep, keys.Count == 1
+                // 末句是那条出路的射程,不是替它的落空开脱:拼装出来的 key 不以字面量
+                // 落在任何一行源码里,零就是这么来的。两支逐字相同。
                 ? "To find the code that prints it, search for the key as a literal: " +
-                  $"'rimsearcher code-search \"\\\"{keys[0]}\\\"\"'. Most call sites write the key inline, " +
-                  "but not all of them do — a key assembled from parts will not appear that way."
+                  $"'rimsearcher code-search \"\\\"{keys[0]}\\\"\"'. A key assembled from parts is not " +
+                  "written inline anywhere, so that search does not reach it."
                   // 计数上面那句已经报过,这句要说的不是「有几个」,是「哪一个由你挑」。
                 : "These rows do not all carry the same key, so the code search goes after whichever row is " +
                   "the one you meant: 'rimsearcher code-search \"\\\"<key>\\\"\"' with the key from that row. " +
-                  "Most call sites write the key inline, but not all of them do — a key assembled from parts " +
-                  "will not appear that way.");
+                  "A key assembled from parts is not written inline anywhere, so that search does not reach it.");
         }
 
         return 0;
@@ -368,8 +366,7 @@ public sealed class KeyedCommand : Command
                 // --empty-translation 在场时表里每一行都是占位,计数上面已报过 ——
                 // 这句要说的只剩「占位是什么意思」。
                 ? "Placeholder means the language file declares the key without a translation, so the game " +
-                  "displays the English text instead of what the translated column shows. Every row above is " +
-                  "one of those, which is what --empty-translation selects."
+                  "displays the English text instead of what the translated column shows."
                 : "Placeholder means the language file declares the key without a translation, so the game " +
                   "displays the English text instead of what the translated column shows: that is the case for " +
                   // 这里数的是**表里的行**,所以名词固定是 keyed translation,不跟着上面那句
