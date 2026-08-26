@@ -418,7 +418,7 @@ public class GrammarTests
         Assert.Contains("Not listed:", text);
 
         // 「列出全部字段」和「这个 def 一共有 N 个字段」都不成立,一个字都不许出现。
-        Assert.DoesNotContain("list every one", text);
+        Assert.DoesNotContain(FossilListsEverything, text);
         Assert.DoesNotContain("in all", text);
 
         // 第四态要说破,否则这两个开关的边界读起来就是「加上它们就齐了」。
@@ -726,7 +726,7 @@ public class GrammarTests
         Assert.Equal(1, code);
 
         // 措辞可以改,这个断言钉的是**不许说的那件事**。
-        Assert.DoesNotContain("does not index those", stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain(FossilNotIndexed, stdout, StringComparison.Ordinal);
         Assert.Contains("rimsearcher where Class", stdout, StringComparison.Ordinal);
         Assert.Contains("code-search", stdout, StringComparison.Ordinal);
 
@@ -976,7 +976,7 @@ public class GrammarTests
         // Widgets.cs 末尾有三行 .Translate() 语料(keyed 那一层的落点),所以是 12 行。
         var (whole, _, _) = Fixture.Run("read", "vanilla/Verse/Widgets.cs");
         Assert.Contains("all 12 lines", whole, StringComparison.Ordinal);
-        Assert.DoesNotContain("next page", whole, StringComparison.Ordinal);
+        Assert.DoesNotContain(NextPageOffer, whole, StringComparison.Ordinal);
 
         // 印刷上限咬下去时,接着读的那一段是算得出来的,就得给出来。
         var (capped, _, _) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--type", "Outer", "--limit", "4");
@@ -1098,7 +1098,7 @@ public class GrammarTests
         var (mid, _, midCode) = Fixture.Run("list", "ThingDef", "--limit", "2", "--offset", "2");
         Assert.Equal(0, midCode);
         Assert.Contains("9 defs, showing 2, starting at 3", mid, StringComparison.Ordinal);
-        Assert.DoesNotContain("next page", mid, StringComparison.Ordinal);
+        Assert.DoesNotContain(NextPageOffer, mid, StringComparison.Ordinal);
 
         var (first, _, _) = Fixture.Run("list", "ThingDef", "--limit", "2");
         Assert.StartsWith("9 defs, showing the first 2.", first, StringComparison.Ordinal);
@@ -1106,7 +1106,7 @@ public class GrammarTests
         var (last, _, lastCode) = Fixture.Run("list", "ThingDef", "--limit", "4", "--offset", "5");
         Assert.Equal(0, lastCode);
         Assert.Contains("starting at 6", last, StringComparison.Ordinal);
-        Assert.DoesNotContain("next page", last, StringComparison.Ordinal);
+        Assert.DoesNotContain(NextPageOffer, last, StringComparison.Ordinal);
         // 「到头了」不许由那句话的缺席承载 —— 末页要自己说出来。
         Assert.Contains("that is the last page", last, StringComparison.Ordinal);
 
@@ -1349,7 +1349,7 @@ public class GrammarTests
 
         foreach (var text in new[] { onlyYes, hit, help })
         {
-            Assert.DoesNotContain("is a declared default", text, StringComparison.Ordinal);
+            Assert.DoesNotContain(FossilDeclaredDefault, text, StringComparison.Ordinal);
             Assert.Contains("fresh instance of the declaring type", text, StringComparison.Ordinal);
         }
 
@@ -1399,7 +1399,7 @@ public class GrammarTests
                             StringComparison.Ordinal);
 
         // 「carrying」那个读法不许回来:它把「值相等」说成「它们带的就是类默认」。
-        Assert.DoesNotContain("carrying the declaring type's own default", plain, StringComparison.Ordinal);
+        Assert.DoesNotContain(FossilCarryingDefault, plain, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1526,7 +1526,7 @@ public class GrammarTests
         Assert.Contains("come from 3 defs", many, StringComparison.Ordinal);
 
         // 没给值的问法也走这里 —— 句子里不许出现指不到东西的「这个值」。
-        Assert.DoesNotContain("this value", many, StringComparison.Ordinal);
+        Assert.DoesNotContain(CountSubjectIsValue, many, StringComparison.Ordinal);
 
         // 两数相等:一个字都不许多。
         var (one, _, _) = Fixture.Run("where", "compClass", "RimWorld.CompShield");
@@ -1594,7 +1594,7 @@ public class GrammarTests
         Assert.Contains("is a node, not a def, so it carries no value of its own", byMode, StringComparison.Ordinal);
         Assert.Contains("'Standard_Drop'", byMode, StringComparison.Ordinal);
         // 这条降级出路已经不存在,它指的那个动作也不再有意义。
-        Assert.DoesNotContain("Give a def rather than an abstract node", byMode, StringComparison.Ordinal);
+        Assert.DoesNotContain(FossilGiveADef, byMode, StringComparison.Ordinal);
         // 口径不同就得说破:这一列比的是众数,不是节点声明的值。
         Assert.Contains("not one the node declares", byMode, StringComparison.Ordinal);
 
@@ -1993,7 +1993,7 @@ public class GrammarTests
 
         // 句子不许写「defs of **the same def types**」:它指的是「哪些类型能带这条路径」,
         // 与表里那几行的类型没有关系,而「the same」是唯一让人去对照的那个词。
-        Assert.DoesNotContain("the same def types", stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain(FossilSameTypes, stdout, StringComparison.Ordinal);
 
         // 类型要在散文里点名,而且与命令里那几个逐字一致 —— 不点名就没法核对。
         foreach (var t in argv.Where(a => !a.StartsWith("--", StringComparison.Ordinal)))
@@ -2977,7 +2977,7 @@ public class GrammarTests
 
         // ③ 不许带那个会说「你没事」的数。fixture 上它恒为 1,真快照上才看得出问题 ——
         //    所以钉措辞而不是钉数值,否则这道闸在 fixture 上永远绿。
-        Assert.DoesNotContain("field path in this snapshot", hit, StringComparison.Ordinal);
+        Assert.DoesNotContain(FossilPathCount, hit, StringComparison.Ordinal);
         Assert.DoesNotContain("field paths in this snapshot", hit, StringComparison.Ordinal);
     }
 
@@ -3706,15 +3706,15 @@ public class GrammarTests
     {
         // 0.4:量全了 —— 不许再指一遍刚跑过的那条查询。
         var (modern, _, _) = Fixture.Run("where", "Class", "RimWorld.NotAnyClassHere", "--db", Fixture.ModernDb);
-        Assert.DoesNotContain("in a list or on a single field", modern, StringComparison.Ordinal);
-        Assert.DoesNotContain("is the query that reaches it", modern, StringComparison.Ordinal);
+        Assert.DoesNotContain(ClassLineBothShapes, modern, StringComparison.Ordinal);
+        Assert.DoesNotContain(ClassLineReaches, modern, StringComparison.Ordinal);
 
         // 0.2:只量了列表元素 —— 必须点名它够不着的是哪一类,且不许说成「查得到」。
         var (mid, _, _) = Fixture.Run("where", "Class", "RimWorld.NotAnyClassHere");
         Assert.Contains("for list elements only", mid, StringComparison.Ordinal);
         Assert.Contains("GenStepDef.genStep", mid, StringComparison.Ordinal);
         Assert.Contains("not evidence about it", mid, StringComparison.Ordinal);
-        Assert.DoesNotContain("in a list or on a single field", mid, StringComparison.Ordinal);
+        Assert.DoesNotContain(ClassLineBothShapes, mid, StringComparison.Ordinal);
 
         // 0.1:一点没量。
         var (old, _, _) = Fixture.Run("where", "Class", "RimWorld.NotAnyClassHere", "--db", Fixture.OtherDb);
@@ -4188,5 +4188,88 @@ public class GrammarTests
         Assert.True(caught.Count == 0,
             "这些句子带着「某次误读的反面」的措辞指纹。判据:它说的是工具的性质,还是某个读者当年" +
             "读错的反面?后者换成机制陈述;确是机制就加进 allowed 并写明理由。\n" + string.Join("\n", caught));
+    }
+
+    // ---- 反向闸钉的句子:与产地绑在一起 ----
+
+    /// <remarks>
+    /// 下面这些常量各被一条 <c>Assert.DoesNotContain</c> 用着 —— 「这一档不许说这句」。
+    ///
+    /// 反向断言有个正向断言没有的毛病:**它的失效是静默的**。产地把措辞一改,断言还在、
+    /// 测试还绿,而它盯着的那句话已经不存在了,从此什么都不再检查。红了有人看,绿了没人看。
+    ///
+    /// 所以每一句都登记进 <see cref="反向闸钉的句子与产地对得上"/>,分两组:
+    /// **活锚**(产地里还有这句)与**化石**(产地里已经没有,断言防的是它回来)。那道闸把
+    /// 「措辞改了」和「旧句回来了」都变成红的 —— 这正是反向断言自己给不出的信号。
+    /// </remarks>
+    private const string ClassLineBothShapes = "in a list or on a single field";
+    private const string ClassLineReaches = "is the query that reaches it";
+    private const string NextPageOffer = "next page";
+    private const string CountSubjectIsValue = "this value";
+
+    private const string FossilListsEverything = "list every one";
+    private const string FossilNotIndexed = "does not index those";
+    private const string FossilDeclaredDefault = "is a declared default";
+    private const string FossilCarryingDefault = "carrying the declaring type's own default";
+    private const string FossilGiveADef = "Give a def rather than an abstract node";
+    private const string FossilPathCount = "field path in this snapshot";
+    private const string FossilSameTypes = "the same def types";
+
+    /// <summary>
+    /// **反向闸钉的句子,要么在产地里活着,要么登记成化石 —— 两种都得对得上。**
+    ///
+    /// `Assert.DoesNotContain("一整句英文", …)` 是本仓最容易假绿的写法:产地改一个词,
+    /// 断言就此盯着一句不存在的话,再也拦不住任何东西,而测试一路绿。上一轮改文案时
+    /// 正向断言红了三次(有人看),反向断言一次没红 —— 那不是它们都还好,是它们不会说话。
+    ///
+    /// 这道闸把两个方向的漂移都变成红的:
+    /// **活锚**改了措辞 → 红,提醒把常量与那条反向断言一起更新;
+    /// **化石**回到生产代码 → 红,那正是当初禁它的理由。
+    ///
+    /// 化石这一组只能拦「旧句原样回来」,拦不住「换个说法把同一件事又说一遍」——
+    /// 「永不」类的禁令固有如此,但它比假绿诚实:至少这条闸红的时候,红得有内容。
+    /// </summary>
+    [Fact]
+    public void 反向闸钉的句子与产地对得上()
+    {
+        (string Text, string Where)[] live =
+        [
+            (ClassLineBothShapes, "Completeness.NestedClassLine 的 0.4 档"),
+            (ClassLineReaches, "Completeness.NestedClassLine 的 0.4 档"),
+            (NextPageOffer, "read 的分页说明(list 侧禁它,read 侧要说)"),
+            (CountSubjectIsValue, "where 的计数句"),
+        ];
+
+        (string Text, string Why)[] fossils =
+        [
+            (FossilListsEverything, "默认值声明曾承诺「列出全部字段」,而索引里没有 null 值字段"),
+            (FossilNotIndexed, "曾声称快照不索引嵌套 Class=\"…\" —— 确定的假话"),
+            (FossilDeclaredDefault, "曾把 code_default 的 yes 说成「声明的默认值」"),
+            (FossilCarryingDefault, "曾把「值与类默认相等」说成「带的就是类默认」"),
+            (FossilGiveADef, "一条已经不存在的降级出路"),
+            (FossilPathCount, "互指句曾带上「这个值坐在 N 条 field path 上」,N 常为 1,读成「你没事」"),
+            (FossilSameTypes, "「the same def types」把读者支去对照表里那几行的类型"),
+        ];
+
+        var code = new System.Text.StringBuilder();
+        foreach (var file in Directory.EnumerateFiles(
+                     Path.Combine(DeclarationTests.RepoRoot(), "Sources", "RimSearcher.Core"),
+                     "*.cs", SearchOption.AllDirectories))
+            foreach (var line in File.ReadAllLines(file))
+                if (!line.TrimStart().StartsWith("//", StringComparison.Ordinal))
+                    code.Append(line).Append('\n');
+        // 拼接缝合上,否则跨行的句子在产地里「找不到」,活锚会被误判成化石。
+        var text = Regex.Replace(code.ToString(), "\"\\s*\\+\\s*\n?\\s*[$@]?\"", "");
+
+        var drifted = new List<string>();
+        foreach (var (sentence, where) in live)
+            if (!text.Contains(sentence, StringComparison.Ordinal))
+                drifted.Add($"活锚不在产地里了:\"{sentence}\"(应在 {where})—— 钉它的那条 " +
+                            "DoesNotContain 从此什么都不拦。改措辞的话,常量与那条断言一起更新。");
+        foreach (var (sentence, why) in fossils)
+            if (text.Contains(sentence, StringComparison.Ordinal))
+                drifted.Add($"化石回到产地了:\"{sentence}\" —— 当初禁它是因为{why}。");
+
+        Assert.True(drifted.Count == 0, string.Join("\n", drifted));
     }
 }
