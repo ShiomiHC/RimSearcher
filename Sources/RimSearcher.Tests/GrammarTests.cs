@@ -4103,4 +4103,90 @@ public class GrammarTests
         Assert.DoesNotContain(priced, unmeasured, StringComparison.Ordinal);
         Assert.Contains("cannot say whether", unmeasured, StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// **输出里不许写「某个读者当年读错的反面」。**
+    ///
+    /// 一条 notice 的骨架是**事实 + 机制 + 出路**。超出这三段的成分,判据只有一句:
+    /// 它描述的是**工具的性质**,还是**某个具体读者当年读错的反面**?后者删掉或换成
+    /// 机制陈述 —— 机制说清楚了,当年那次误读自然也堵住,而且不占篇幅。
+    ///
+    /// 这类成分**只增不减**:每修一次误读就贴一句反面,而反面从句子内部读不出
+    /// 「已经不必要」—— 它当时确实修好了一个真问题,注释里还记着实证。判据只能来自
+    /// 外部,所以立在这里。五种形态与全部样本在 <c>Docs/20-prose-doctrine.md</c>。
+    ///
+    /// **这是一道弱闸。** 它认的是这五种形态在 2026-08-26 那轮清理里留下的**措辞指纹**,
+    /// 不是形态本身 —— 换一套词写同样的东西,它看不见。所以它红了是个提示,不是判决;
+    /// 而它绿着也不构成「这批文案干净」的证据。
+    ///
+    /// 红了先按上面那句判据判。判定是机制就把那句连同**理由**加进 <c>allowed</c>,
+    /// 不要改指纹去迁就句子 —— 指纹一旦松到不误报,它也就不再认得下一个了。
+    /// </summary>
+    [Fact]
+    public void 输出里不许写某次误读的反面()
+    {
+        // 指纹、它认的形态,以及那轮**真被删掉的原句**。样本不是注释 —— 下面拿它自检,
+        // 因为一个写错的正则会静默全绿,而「没扫到」与「扫过了没有」印出来同形。
+        //
+        // 都取自真删掉的句子,不是一般化的祈使句:「see the value column」那种**替掉**
+        // 长规程的短指路是留着的,不许被扫中。
+        //
+        // 曾有第十条 `\bwhich is why\b`,已撤:本仓拿它做的是**因果归因**(两条命令的计数
+        // 为什么不同、keyed 为什么不归任何 def、英文查询为什么能在中文快照上出行),三处
+        // 全是机制,误报率 100%。那轮真该删的那句(`'*' … which is why moving it elsewhere
+        // in the query brings back the same rows`)坏在后面接了一次**假想的用户动作**,
+        // 不坏在这个连接词 —— 而「后接假想动作」正则认不出来。一个恒误报的指纹会把人训练成
+        // 忽略这道闸,或者去改文案迁就它,那比漏报更贵。
+        (string Pattern, string Shape, string Sample)[] fingerprints =
+        [
+            (@"\bbefore (deciding|treating|reading|going|assuming)\b", "阅读规程:指挥读者先做什么再下结论",
+             "this line removes none of the matched fields, so read them before deciding which"),
+            (@"\bso read (them|the)\b", "阅读规程:祈使句直接对着读者",
+             "so read them before deciding which"),
+            (@"\bis in play\b", "阅读规程:给眼前这张表编号读法",
+             "A third reading is in play here: this def also carries"),
+            (@"\bnone ever will\b", "同义重述:绝对化的尾巴",
+             "computed, not stored, so no field above holds them and none ever will"),
+            (@"\bthan (they|it) looks?\b", "同义重述:把事实翻译成读法",
+             "so the lists run longer than they look here"),
+            (@"\bis one of those\b", "同义重述:把读者刚传的开关再念一遍",
+             "Every row above is one of those, which is what --empty-translation selects"),
+            (@"\bnot automatically (wrong|right)\b", "预先打消一个假想的犹豫",
+             "This is not automatically wrong — you may be querying another environment on purpose"),
+            (@"\byou may be\b", "预先打消一个假想的犹豫:替读者假设意图",
+             "you may be querying another environment on purpose"),
+        ];
+
+        // 自检:每条指纹都得认得自己的样本。管道不通时这道闸会一路绿到底。
+        foreach (var (pattern, shape, sample) in fingerprints)
+            Assert.True(Regex.IsMatch(sample, pattern), $"指纹认不出自己的样本({shape}):{pattern}");
+
+        // 判定是机制、故意留下的句子写这里,连同理由。空着是常态。
+        (string Fragment, string Why)[] allowed = [];
+
+        var caught = new List<string>();
+        foreach (var file in Directory.EnumerateFiles(
+                     Path.Combine(DeclarationTests.RepoRoot(), "Sources", "RimSearcher.Core"),
+                     "*.cs", SearchOption.AllDirectories))
+        {
+            // 注释里可以引用被删掉的原句(本轮就引了好几条),那是历史该待的地方,不扫。
+            var text = string.Join("\n", File.ReadAllLines(file)
+                .Where(l => !l.TrimStart().StartsWith("//", StringComparison.Ordinal)));
+            // 把 C# 的拼接缝合上:`"… before " + "deciding …"` 跨两行时逐行扫看不见它。
+            text = Regex.Replace(text, "\"\\s*\\+\\s*\n?\\s*[$@]?\"", "");
+
+            foreach (var (pattern, shape, _) in fingerprints)
+                foreach (Match m in Regex.Matches(text, pattern))
+                {
+                    var from = Math.Max(0, m.Index - 70);
+                    var quoted = text[from..Math.Min(text.Length, m.Index + m.Length + 70)].Replace("\n", " ");
+                    if (allowed.Any(a => quoted.Contains(a.Fragment, StringComparison.Ordinal))) continue;
+                    caught.Add($"{Path.GetFileName(file)}: …{quoted}… — {shape}");
+                }
+        }
+
+        Assert.True(caught.Count == 0,
+            "这些句子带着「某次误读的反面」的措辞指纹。判据:它说的是工具的性质,还是某个读者当年" +
+            "读错的反面?后者换成机制陈述;确是机制就加进 allowed 并写明理由。\n" + string.Join("\n", caught));
+    }
 }
