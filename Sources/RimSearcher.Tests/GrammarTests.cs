@@ -4218,7 +4218,7 @@ public class GrammarTests
     /// <summary>
     /// **反向闸钉的句子,要么在产地里活着,要么登记成化石 —— 两种都得对得上。**
     ///
-    /// `Assert.DoesNotContain("一整句英文", …)` 是本仓最容易假绿的写法:产地改一个词,
+    /// 逐字钉一整句英文的反向断言是本仓最容易假绿的写法:产地改一个词,
     /// 断言就此盯着一句不存在的话,再也拦不住任何东西,而测试一路绿。上一轮改文案时
     /// 正向断言红了三次(有人看),反向断言一次没红 —— 那不是它们都还好,是它们不会说话。
     ///
@@ -4249,6 +4249,8 @@ public class GrammarTests
             (FossilGiveADef, "一条已经不存在的降级出路"),
             (FossilPathCount, "互指句曾带上「这个值坐在 N 条 field path 上」,N 常为 1,读成「你没事」"),
             (FossilSameTypes, "「the same def types」把读者支去对照表里那几行的类型"),
+            // 单复数是一对,改一留一就假绿了一半。
+            ("field paths in this snapshot", "同上,复数形态"),
         ];
 
         var code = new System.Text.StringBuilder();
@@ -4271,5 +4273,117 @@ public class GrammarTests
                 drifted.Add($"化石回到产地了:\"{sentence}\" —— 当初禁它是因为{why}。");
 
         Assert.True(drifted.Count == 0, string.Join("\n", drifted));
+    }
+
+    /// <summary>
+    /// 上一条的全量版:**本文件里每一条逐字钉句子的反向断言,都得在产地里找得到那句话。**
+    ///
+    /// 上一条护的是手工登记的那十几句;这一条不用登记,自己去 <c>GrammarTests.cs</c> 的源码里
+    /// 把所有 <c>Assert.DoesNotContain("…")</c> 的字面量抠出来,逐个到 <c>RimSearcher.Core</c>
+    /// 里找。找不到的只有四种可能,前三种登记进 <c>expected</c>,第四种就是本闸要抓的:
+    ///
+    /// 1. **占位符/形态禁令** —— 禁的正是「这个占位符没被换掉就印出来了」,产地本就不该有它;
+    /// 2. **fixture 数据** —— def 名、文件名、译文、字段路径,产地代码里当然没有;
+    /// 3. **插值拼出来的** —— 产地是 <c>$"…{x}…"</c>,整句在源码里搜不到;
+    /// 4. **漂移** —— 产地改了措辞,而这条断言还盯着旧句子,从此什么都不拦。
+    ///
+    /// 2026-08-26 立闸时跑了一遍:115 条字面量,20 条没有活锚,逐个判下来 **1、2、3 三类各有
+    /// 若干,漂移一条都没有** —— 也就是说这批反向断言当时还全都活着。这条闸防的是以后。
+    ///
+    /// **它证不了的事,有两层。**
+    ///
+    /// 一层是位置:句子还在产地里,不等于它还在**该在的那条命令**上。整句从 A 命令搬到 B 命令,
+    /// 这条闸照绿。要那种保证,只能让断言与产地共用同一个字面量(economy 那条闸的 <c>priced</c>
+    /// 就是),而那要逐条改 —— 这条闸把「静默失效」变成「会红」,不替代那件事。
+    ///
+    /// 另一层是**锚本身可能落在无关的那处**,而这是立闸时做注入实验才发现的:把
+    /// <c>--own-class cannot tell them apart</c> 改掉之后,闸**没有红** —— 因为
+    /// <c>KeyedCommand</c> 里另有一句完全无关的话也含 <c>cannot tell them apart</c>。
+    /// 于是「在产地里找得到」成立,而它找到的根本不是那条断言要盯的句子。
+    ///
+    /// 所以本闸只对**唯一锚**(产地里恰好一处)作保证。产地里出现两处以上的,连同那批词级禁令
+    /// (<c>' if '</c> 在产地里 977 处、<c>index</c> 50 处),一律列进 <c>ambiguous</c> 并
+    /// **明说本闸不保护它们** —— 让它们混在里面假装被保护,比没有闸更坏。那份名单的条数钉住:
+    /// 新增一条就红,提醒写的人他刚加的反向断言没有任何保护。
+    /// </summary>
+    [Fact]
+    public void 每条反向断言钉的句子都在产地里()
+    {
+        // 三类合法的「产地里没有」。写清楚是哪一类 —— 判错了就等于给一条漂移开了免死金牌。
+        (string Literal, string Why)[] expected =
+        [
+            ("comps[N]", "占位符禁令:下标必须被换成真数字,印出 [N] 就是 bug"),
+            ("<block>", "占位符禁令:help 里的占位符不许漏进数据输出"),
+            ("\\\"kind\\\": \\\"next_step\\\"", "JSON 合同:产地按键名分开写,整段拼出来的形态搜不到"),
+            ("'rimsearcher where --value Firefoam'", "插值:产地是 $\"…--value {name}'\""),
+            ("No def in this snapshot has a field path ending in 'defName'.", "插值:同一模板,值来自查询"),
+            ("within --type", "插值:产地按参数名拼"),
+            ("Def def", "生成器语法病:禁的是生成出来的坏 C#,不是一句输出"),
+            ("Def and ", "同上"),
+            ("EnergyShieldRechargeRate", "fixture 数据"),
+            ("Meat_Muffalo\\n", "fixture 数据(带换行,钉的是「不在表行里」)"),
+            ("Sneaky.cs", "fixture 数据"),
+            ("test.notinsnapshot", "fixture 数据"),
+            ("灭火泡沫", "fixture 数据(译文)"),
+            ("Outer.Shared", "fixture 数据(类型名)"),
+            ("class Outer", "fixture 数据(源码片段)"),
+            ("blueprintGraphicData", "fixture 数据(字段路径)"),
+            ("projectile.burstCount", "fixture 数据(字段路径)"),
+            ("field paths in this snapshot", "化石,已登记在上一条闸里"),
+        ];
+
+        var code = new System.Text.StringBuilder();
+        foreach (var file in Directory.EnumerateFiles(
+                     Path.Combine(DeclarationTests.RepoRoot(), "Sources", "RimSearcher.Core"),
+                     "*.cs", SearchOption.AllDirectories))
+            foreach (var line in File.ReadAllLines(file))
+                if (!line.TrimStart().StartsWith("//", StringComparison.Ordinal))
+                    code.Append(line).Append('\n');
+        var core = Regex.Replace(code.ToString(), "\"\\s*\\+\\s*\n?\\s*[$@]?\"", "");
+
+        var self = File.ReadAllText(Path.Combine(
+            DeclarationTests.RepoRoot(), "Sources", "RimSearcher.Tests", "GrammarTests.cs"));
+        var literals = Regex.Matches(self, "Assert\\.DoesNotContain\\(\"((?:[^\"\\\\]|\\\\.)*)\"")
+                            .Select(m => m.Groups[1].Value).Distinct(StringComparer.Ordinal).ToList();
+
+        // 自检:抠不出字面量就说明正则跟不上写法的变化,而那时它会一路绿 ——
+        // 「没扫到」与「扫过了都有锚」印出来同形。基数掉太多先看这里。
+        Assert.True(literals.Count >= 100,
+            $"只从 GrammarTests.cs 抠出 {literals.Count} 条 DoesNotContain 字面量,2026-08-26 时是 115 条。" +
+            "正则可能跟不上写法了 —— 这条闸此后扫的是一个空集。");
+
+        // 2026-08-26 的实测基数。锚不唯一的一条都不受本闸保护,所以这个数只许降不许升 ——
+        // 升了说明又写了一条没有保护的反向断言,那正是要拦住的那一刻。
+        const int AmbiguousAnchors = 40;
+
+        var unanchored = new List<string>();
+        var ambiguous = new List<string>();
+        foreach (var raw in literals)
+        {
+            if (expected.Any(e => string.Equals(e.Literal, raw, StringComparison.Ordinal))) continue;
+            var sentence = raw.Replace("\\\"", "\"").Replace("\\\\", "\\").Replace("\\n", "\n").Replace("\\t", "\t");
+
+            var at = 0;
+            var hits = 0;
+            while (hits < 2 && (at = core.IndexOf(sentence, at, StringComparison.Ordinal)) >= 0)
+            {
+                hits++;
+                at += sentence.Length;
+            }
+
+            if (hits == 0) unanchored.Add($"\"{raw}\"");
+            else if (hits > 1) ambiguous.Add($"\"{raw}\"");
+        }
+
+        Assert.True(unanchored.Count == 0,
+            "这些反向断言钉的句子在 RimSearcher.Core 里找不到了。要么产地改了措辞而它没跟上" +
+            "(那它从此什么都不拦,是假绿),要么它属于占位符禁令 / fixture 数据 / 插值模板 —— " +
+            "后者登记进 expected 并写明是哪一类。\n" + string.Join("\n", unanchored));
+
+        Assert.True(ambiguous.Count <= AmbiguousAnchors,
+            $"锚不唯一的反向断言从 {AmbiguousAnchors} 条涨到了 {ambiguous.Count} 条。这些句子在产地里" +
+            "有两处以上同形出处,**本闸对它们不作任何保证** —— 产地改了要盯的那一处,闸会在另一处" +
+            "找到它,照绿(立闸时的注入实验正是这么失手的)。新加的那条要么钉一句在产地里唯一的话," +
+            "要么与产地共用同一个字面量。\n" + string.Join("\n", ambiguous));
     }
 }
