@@ -16,6 +16,12 @@ namespace RimSearcher.Commands;
 /// </summary>
 public sealed class ReadCommand : Command
 {
+    /// <summary>
+    /// 回声句的连接词。与 GrammarTests 那条反向断言共用同一个字面量 —— 「产地里找得到」
+    /// 这条保证对它不成立:别处另有两句无关的话也含 `read as`,闸会在那里找到锚照绿。
+    /// </summary>
+    public const string ReadAsPhrase = " read as ";
+
     public override CommandSpec Spec => new()
     {
         Name = "read",
@@ -332,12 +338,15 @@ public sealed class ReadCommand : Command
     /// <summary>裸行。翻页靠它,所以总行数与下一页的参数恒在。</summary>
     private static int Raw(CommandContext ctx, string rel, string[] text, string? range, int cap)
     {
-        var (from, to) = ParseRange(range, text.Length);
+        var (from, to) = ParseRange(range, text.Length, out var rewritten);
+
+        // 归一化改过写法就先说改成了什么。放在句首而不是句尾:后面每个行号的意思都由它决定。
+        var echo = rewritten is null ? "" : $"--lines {range!.Trim()}{ReadAsPhrase}{rewritten}. ";
 
         if (from > text.Length)
         {
             ctx.Report.Notice(NoticeKind.NextStep,
-                $"{rel} has {Tally.Complete(text.Length).Render("line")}, so --lines {range} starts past " +
+                echo + $"{rel} has {Tally.Complete(text.Length).Render("line")}, so --lines {range} starts past " +
                 "the end of it.");
             return 1;
         }
@@ -371,7 +380,8 @@ public sealed class ReadCommand : Command
         var morePages = pageSize > 0 ? (text.Length - to + pageSize - 1) / pageSize : 0;
 
         ctx.Report.Notice(complete ? NoticeKind.Count : NoticeKind.Truncation,
-            complete
+            echo +
+            (complete
                 ? $"{rel}, all {Tally.Complete(text.Length).Render("line")}."
                 : $"{rel}, lines {from}-{to} of {text.Length}." +
                   (clipped > 0
@@ -383,7 +393,7 @@ public sealed class ReadCommand : Command
                   (morePages >= 3
                       ? $" Reaching the end that way takes {Tally.Complete(morePages).Render("page")} at this size; " +
                         "--outline instead lists the file's declarations with each one's line range, to pass back to --lines."
-                      : ""));
+                      : "")));
 
         // 裸行读没有任何推断,不挂那条能力边界 —— 挂上去就成了每次返回的常驻免责声明。
         ctx.Report.Text("source", lines, rows);
@@ -583,11 +593,48 @@ public sealed class ReadCommand : Command
         throw new CliUsageException($"--limit takes a positive number or 'all'; got '{raw}'.");
     }
 
+    /// <summary>
+    /// 区间写法归一:`–` `—` `−` `..` `:` `,` 都当分隔符,数字前的 `L` 丢掉。
+    ///
+    /// 这些形状在调用方那边是既成事实(Markdown 粘贴把 `-` 变 en dash,`L690-L725` 是
+    /// GitHub 链接),而且没有第二种读法 —— 除了逗号,它可能是千分位。改写过就得回声,
+    /// 因为 `1,234` 读成 1-234 之后,输出逐字看起来完全正常。
+    /// </summary>
+    private static string Normalize(string spec)
+    {
+        var s = spec.Replace(" ", "").Replace("\t", "");
+        var chars = new List<char>(s.Length);
+        for (var i = 0; i < s.Length; i++)
+        {
+            var c = s[i];
+            if (c is 'L' or 'l' && i + 1 < s.Length && char.IsAsciiDigit(s[i + 1])) continue;
+            if (c is '–' or '—' or '−' or ':' or ',') { chars.Add('-'); continue; }
+            if (c == '.' && i + 1 < s.Length && s[i + 1] == '.') { chars.Add('-'); i++; continue; }
+            chars.Add(c);
+        }
+
+        return new string(chars.ToArray());
+    }
+
     /// <summary>`a-b` / `a+n` / `a` / `all` / 不给。行号 1 起,两端都含。</summary>
     internal static (int From, int To) ParseRange(string? spec, int total)
+        => ParseRange(spec, total, out _);
+
+    /// <summary>
+    /// <paramref name="rewritten"/>:归一化真的改动了写法时给出改动后的样子,否则 null。
+    /// 调用方拿它印回声 —— 空格不算改动,`7 - 12` 与 `7-12` 是同一句话。
+    /// </summary>
+    internal static (int From, int To) ParseRange(string? spec, int total, out string? rewritten)
     {
+        rewritten = null;
         if (string.IsNullOrEmpty(spec)) return (1, Math.Min(total, Limits.ReadWindow));
-        if (spec is "all") return (1, Math.Max(total, 1));
+
+        var given = spec.Trim();
+        if (given is "all") return (1, Math.Max(total, 1));
+
+        var normalized = Normalize(given);
+        if (!Same(normalized, given.Replace(" ", ""))) rewritten = normalized;
+        spec = normalized;
 
         int At(string s, string what)
             => int.TryParse(s.Trim(), out var v) && v > 0

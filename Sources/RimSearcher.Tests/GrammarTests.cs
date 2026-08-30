@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using RimSearcher.Cli;
+using RimSearcher.Commands;
 using RimSearcher.Contract;
 using RimSearcher.Output;
 using RimSearcher.Search;
@@ -981,6 +982,46 @@ public class GrammarTests
         // 印刷上限咬下去时,接着读的那一段是算得出来的,就得给出来。
         var (capped, _, _) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--type", "Outer", "--limit", "4");
         Assert.Contains("--lines 9-33", capped, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 行号区间的几种写法都收:破折号(en/em dash)、`..`、`:`、`,`、`L` 前缀。
+    ///
+    /// 收的理由是这些写法在调用方那边是既成事实(Markdown 粘贴会把 `-` 变成 en dash,
+    /// `L690-L725` 是 GitHub 链接的形状),而它们**没有第二种读法** —— 除了逗号。
+    ///
+    /// 逗号有:`1,234` 可能是千分位。这棵树最长的文件 81033 行、真源码最长 13521 行,
+    /// 六位数行号本来就不可达,所以千分位那条读法在四位数上才残余一点点。于是不靠拒绝,
+    /// 靠**回声**:凡改写过就把改写结果印在计数句前面,写 `1,234` 而拿到 1-234 的人
+    /// 当场看得见。回声只在真改写了才出现 —— 常驻的话它就是每次读都要跳过的一行。
+    /// </summary>
+    [Fact]
+    public void 区间的几种写法都收且改写过就说出来()
+    {
+        foreach (var (spec, echo) in new[]
+                 {
+                     ("7–12", "--lines 7–12 read as 7-12."),
+                     ("7—12", "--lines 7—12 read as 7-12."),
+                     ("7..12", "--lines 7..12 read as 7-12."),
+                     ("7:12", "--lines 7:12 read as 7-12."),
+                     ("7,12", "--lines 7,12 read as 7-12."),
+                     ("L7-L12", "--lines L7-L12 read as 7-12."),
+                 })
+        {
+            var (text, _, code) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--lines", spec);
+            Assert.Equal(0, code);
+            Assert.Contains("lines 7-12 of 34", text, StringComparison.Ordinal);
+            Assert.Contains(echo, text, StringComparison.Ordinal);
+        }
+
+        // 千分位那条读法不许静默生效:`1,20` 是 1-20,而且这件事印在正文之前。
+        var (thousands, _, _) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--lines", "1,20");
+        Assert.Contains("--lines 1,20 read as 1-20.", thousands, StringComparison.Ordinal);
+        Assert.Contains("lines 1-20 of 34", thousands, StringComparison.Ordinal);
+
+        // 没改写就没有这一句 —— 否则它是每次裸行读都常驻的噪声。
+        var (plain, _, _) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--lines", "7-12");
+        Assert.DoesNotContain(ReadCommand.ReadAsPhrase, plain, StringComparison.Ordinal);
     }
 
     /// <summary>
