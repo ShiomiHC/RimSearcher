@@ -280,9 +280,10 @@ public sealed class GetCommand : Command
             "from a sibling value on the same list entry, including two-level tags (things.AncientAmmoStack.chance), " +
             "and using XML lines written by this def or by an ancestor. After that join, here/parent means the " +
             "line is there, and no means this field was not written — a determined miss, including when the list " +
-            "entry itself is present. A fourth value, 'under <container>', is the rarer remainder: the XML wrote " +
-            "that container, but this row still does not join to a line, so neither answer is available. Older " +
-            "snapshots omit the column and say so.",
+            "entry itself is present. A fourth value, 'under <container>', means the XML wrote that container but " +
+            "this row still cannot be pinned to a line in it: the entry did not join, or it joined to a tag such " +
+            "as <Steel>75</Steel> whose text belongs to one of several fields and the index does not record " +
+            "which. Neither answer is available there. Older snapshots omit the column and say so.",
         Positionals = [new PositionalSpec { Name = "defName", Help = "The exact def name. 'search' finds it if you only know part of it." }],
         Options =
         [
@@ -323,8 +324,8 @@ public sealed class GetCommand : Command
                 Help = "Also list fields whose value is the one a fresh instance of the declaring type already "
                      + "carries. They are left out by default because they are the ones most often read as something "
                      + "an author chose. The 'xml' column on those rows says whether this def's own XML wrote the "
-                     + "path (here), only an ancestor did (parent), neither (no), or that the container was "
-                     + "written under a path shape this index still cannot join (under <container>). no is a "
+                     + "path (here), only an ancestor did (parent), neither (no), or that the row cannot be "
+                     + "pinned to a line inside a container the XML did write (under <container>). no is a "
                      + "determined miss — this field was not written. A yes with xml=here is an explicit write of "
                      + "the default. Older snapshots have no xml column, and there a def whose XML "
                      + "writes that same value and a def that never mentions the field look the same. "
@@ -627,8 +628,8 @@ public sealed class GetCommand : Command
                     var xmlLayer = ctx.Db.Meta.IndexesXmlWritten
                         ? $"--defaults lists them, and the '{XmlOrigin.Column}' column there says whether this " +
                           $"def's own XML wrote the path ({XmlOrigin.Here}), only an ancestor did " +
-                          $"({XmlOrigin.Parent}), or neither ({XmlOrigin.No}); a container this index still " +
-                          "cannot join reads as 'under <container>', not as no."
+                          $"({XmlOrigin.Parent}), or neither ({XmlOrigin.No}); a row that cannot be pinned to " +
+                          "a line inside a container the XML did write reads as 'under <container>', not as no."
                         : "--defaults lists them. That match is not evidence that nothing wrote them: a def " +
                           "whose XML writes the default value and a def that never mentions the field are " +
                           "byte-for-byte identical here.";
