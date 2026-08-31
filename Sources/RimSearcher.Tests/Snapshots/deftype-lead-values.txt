@@ -1,6 +1,18 @@
 $ rimsearcher values ThingDef thingClass
-exit 2
+exit 0
 --- stdout ---
+Read 'ThingDef' as --type ThingDef, not as <fieldPath>: on 'values' the def type is an option. Written out, this call is 'rimsearcher values thingClass --type ThingDef'.
+4 values within --type ThingDef.
+
+matched_paths    thingClass (6)
+def_types        ThingDef (6 of 9)
+defs_with_field  6
+Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans all of ThingDef, the type this table is already filtered to, holding 1 def cut short. 'rimsearcher snapshot truncated --type ThingDef' lists them.
+This table's axis is the field: it lists the values 'thingClass' takes. Which fields hold a value you already have is the inverse question and a different command — 'rimsearcher where --value RimWorld.Apparel --exact' asks it for 'RimWorld.Apparel', the first row here. A value domain read here does not bound where those values occur.
+
+value                 defs
+RimWorld.Apparel      2
+RimWorld.Building     2
+RimWorld.Bullet       1
+Verse.ThingWithComps  1
 --- stderr ---
-Unexpected argument(s) 'thingClass'. values takes 1 positional argument(s): <fieldPath>.
-Run 'rimsearcher values --help' to see what this command accepts.

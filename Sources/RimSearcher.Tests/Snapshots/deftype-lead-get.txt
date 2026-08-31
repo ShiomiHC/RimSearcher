@@ -1,6 +1,36 @@
 $ rimsearcher get ThingDef Apparel_ShieldBelt
-exit 2
+exit 0
 --- stdout ---
+Read 'ThingDef' as --type ThingDef, not as <defName>: on 'get' the def type is an option. Written out, this call is 'rimsearcher get Apparel_ShieldBelt --type ThingDef'.
+  - 11 fields.
+  - Not listed: 1 field whose value matches the declaring type's own default; --defaults lists them. That match is not evidence that nothing wrote them. The snapshot holds 12 field paths for this def; a null-valued field never entered the index and is in neither count. Every list index the def has appears below.
+
+def_name     Apparel_ShieldBelt
+def_type     ThingDef
+label        shield belt
+class        Verse.ThingDef
+mod          ludeon.rimworld
+source       Apparel_Belts.xml
+
+Same in every row, not repeated below: code_default=no.
+path                                value
+soundImpactDefault                  BulletImpact_Ground
+soundDrop                           Standard_Drop
+soundPickup                         Standard_Pickup
+soundInteract                       Standard_Pickup
+thingClass                          RimWorld.Apparel
+comps[0].props.energyMax            0.5
+comps[0].props.energyLossPerDamage  0.033
+statBases[0].stat                   MarketValue
+statBases[0].value                  120
+statBases[1].stat                   EnergyShieldRechargeRate
+statBases[1].value                  0.13
+Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_default' is not this def having made a choice — the count in brackets: soundDrop (9), soundImpactDefault (9), soundInteract (9), soundPickup (9).
+  - The game also prices this thing. Its market value, cost to make and work amount are computed, not stored, so no field above holds them — 'rimsearcher economy Apparel_ShieldBelt' is the only road to those numbers.
+  - 1 translation.
+
+path   translated  original     language           origin
+label  护盾腰带    shield belt  ChineseSimplified  in effect
+
+This snapshot never scanned the language files on disk, so every row here is one the game actually had: the absence of an 'on disk' row is not evidence that no installed mod translates it. No 'mod_roots' is configured on this machine, so there is nowhere to scan: set it in the config file and import again to measure that layer.
 --- stderr ---
-Unexpected argument(s) 'Apparel_ShieldBelt'. get takes 1 positional argument(s): <defName>.
-Run 'rimsearcher get --help' to see what this command accepts.

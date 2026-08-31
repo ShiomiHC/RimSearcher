@@ -1,0 +1,6 @@
+$ rimsearcher list ThingDef Bloomstone
+exit 2
+--- stdout ---
+--- stderr ---
+Unexpected argument(s) 'Bloomstone'. list takes 1 positional argument(s): <defType>.
+Run 'rimsearcher list --help' to see what this command accepts.

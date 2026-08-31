@@ -269,6 +269,11 @@ public static class Runner
             foreach (var key in command.Spec.JsonKeys.Where(k => k.Rows))
                 ctx.Report.Promises(key.Key);
 
+            // 解析层接受下来、但改了写法的那些事。发在开查之前:它说的是**这次查询是什么**,
+            // 而不是结果如何 —— 零结果那条路上同样要说得出这句话。
+            foreach (var note in parsed.Notes)
+                ctx.Report.Notice(NoticeKind.Filter, note);
+
             var code = command.Run(ctx);
             // 位置等结果才定得下的那几条,在这里落位 —— 命令自己不必逐个记得收尾。
             ctx.Report.Settle();

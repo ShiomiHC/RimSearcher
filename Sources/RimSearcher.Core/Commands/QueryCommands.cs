@@ -946,6 +946,32 @@ public sealed class FindCommand : Command
             return 1;
         }
 
+        // `where ThingDef Bloomstone` 两个位置参数正好填满,解析层一个字都说不出来;而路径
+        // 按后缀匹配,`ThingDef` 命中的是真实存在的 costList[].thingDef —— 于是问「哪些
+        // ThingDef 用了它」的人拿到一张干净的、答着另一个问题的表。
+        //
+        // 重解释在这里**不许发生**:`thingDef` 是真字段名,路径匹配又是 NOCASE,
+        // 抢走它等于拿一个静默错答换另一个。但「这个词同时是这份快照里的一个 def 类型」
+        // 是当场算得出来的,算得出来就得说。
+        //
+        // 判据**连大小写一起比**,而这条命令自己的路径匹配是 NOCASE —— 两处口径不同是有意的:
+        // 字段名 camelCase、类型名 PascalCase 是 RimWorld 侧的铁律,而它是这里唯一能把两种
+        // 意图分开的信号。NOCASE 比的话,`where thingDef Bloomstone` 这条完全合法的查询
+        // 每次都要挨一句与它无关的话 —— 实测语料里 82 次误形全是 PascalCase。
+        //
+        // 有结果时**照说** —— 那正是最贵的一档:零至少还会让人再看一眼,一张六行的表不会。
+        // 位置排在计数之后:line 1 是管道下唯一的幸存者,那格归「一共几条」。
+        if (type is not { Length: > 0 } &&
+            ctx.Db.Types(ctx.Unscoped())
+                  .FirstOrDefault(t => string.Equals(t.Type, path, StringComparison.Ordinal))
+                is { Type: not null } asType)
+            ctx.Report.Notice(NoticeKind.Boundary,
+                $"'{path}' is also a def type here ({Tally.Complete(asType.Count).Render("def")}), and this query " +
+                $"reads it as a field path: it looks for defs whose field path ends in '{path}', not for defs of " +
+                "that type. Asking about the type is a different query: 'rimsearcher where <fieldPath>" +
+                (value is null ? "" : $" {value}") + $" --type {asType.Type}'.");
+
+
         if (rows.Count == 0)
         {
             // 别的快照里有没有是**算得出来**的,叠加不替换:成因分流照说,这一句排在它后面。

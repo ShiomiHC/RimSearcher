@@ -258,6 +258,12 @@ public class OutputSnapshotTests
         { "where-path-named-like-type", ["where", "thingDef", "Bloomstone"] },
         // inherit 走的是 XML 节点层,没有类型这个过滤面。只说破,不新增能力。
         { "deftype-lead-inherit",  ["inherit", "ThingDef", "Bullet_Revolver"] },
+        // 显式给过 --type 时重解释让位 —— 否则「按位置写的那个」会悄悄盖掉「明写的那个」,
+        // 而两者不一致正是最该出声的时候。
+        { "deftype-lead-type-given", ["get", "ThingDef", "Apparel_ShieldBelt", "--type", "HediffDef"] },
+        // list 的第一个位置参数本来就是类型。这里多出来的那个词不是「放错格的类型」,
+        // 指路语因此不许发 —— 它会把人往一条不存在的写法上带。
+        { "deftype-lead-list-extra", ["list", "ThingDef", "Bloomstone"] },
         // ── where --type ──────────────────────────────────────────────────────
         // 全套查询命令里只有 where 没有类型面,而它恰好是误形最贵的那一条。
         { "where-type",            ["where", "thingDef", "Bloomstone", "--type", "AlloyPartDef"] },

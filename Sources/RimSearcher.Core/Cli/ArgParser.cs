@@ -12,6 +12,15 @@ namespace RimSearcher.Cli;
 /// </summary>
 public static class ArgParser
 {
+    /// <summary>
+    /// def 类型名的形状。判据是**纯静态**的(以 Def 结尾的标识符)—— 解析层没有库,
+    /// 问不出「这个词是不是这份快照里的一个 def 类型」。够用的理由是它只在
+    /// 今天必然硬失败的入参上被问到:认错了的代价是一句诚实的「这份快照里没有这个类型」,
+    /// 而不认的代价是一条 usage 错误。实测语料里 261 次全部以 Def 结尾。
+    /// </summary>
+    private static readonly System.Text.RegularExpressions.Regex DefTypeShape =
+        new(@"^[A-Za-z_][A-Za-z0-9_]*Def$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
     /// <summary>归一化:小写 + 去掉所有非字母数字。fileFilter / file_filter / File-Filter 同归一。</summary>
     public static string Normalize(string s)
     {
@@ -126,13 +135,65 @@ public static class ArgParser
         // 位置参数:数量与必填
         var declared = spec.Positionals;
         var variadic = declared.Length > 0 && declared[^1].Variadic;
+        var notes = new List<string>();
+
+        // 「类型打头」:`<命令> <SomethingDef> <真正的参数>`。list 与 fields 把 def 类型放在
+        // 位置上,get / values / search / where 把它放在 --type 上,而调用方把前者外推到后者
+        // 是稳定行为 —— 2026-08-31 在 9282 次真实调用里量到 get 122 / values 57 / where 82 次。
+        //
+        // **只改今天必然硬失败的入参**。四条判据一起成立:恰好多出一个位置参数、首位形如
+        // <名字>Def、这条命令确实有 --type、--type 没被显式给过。四条同时成立时,原样跑下去
+        // 的唯一结果是下面那条 usage 错误 —— 也就是说这里改写不掉任何一条今天跑得通的命令,
+        // 于是不存在「抢走一个合法查询」这种代价。
+        //
+        // where 的两个位置参数被填满时**不进这里**(那时 positionals.Count == declared.Length),
+        // 而那正是不许重解释的那一档:`thingDef` 是真字段名,路径匹配 NOCASE,
+        // `where ThingDef X` 与 `where thingDef X` 从入参上分不开。那一档只出声,
+        // 由命令自己判 —— 它手上有库,判得出「这个词同时是个 def 类型」。
+        if (!variadic && declared.Length > 0 && positionals.Count == declared.Length + 1 &&
+            byKey.TryGetValue("type", out var typeOpt) && !values.ContainsKey(typeOpt.Name) &&
+            DefTypeShape.IsMatch(positionals[0]))
+        {
+            var lead = positionals[0];
+            positionals.RemoveAt(0);
+            Record(typeOpt, lead);
+            // 静默接受,但不静默 —— 不说的话下次还是这么写,而「within --type X」那句
+            // 只说得出「筛过了」,说不出「你写的那个词是从哪一格挪过去的」。
+            notes.Add($"Read '{lead}' as --type {lead}, not as <{declared[0].Name}>: on '{spec.Name}' the def " +
+                      $"type is an option. Written out, this call is '{CommandRegistry.ExeName} {spec.Name} " +
+                      string.Join(" ", positionals) + $" --type {lead}'.");
+        }
+
         if (!variadic && positionals.Count > declared.Length)
         {
             var extra = string.Join(", ", positionals.Skip(declared.Length).Select(p => $"'{p}'"));
             var shape = declared.Length == 0
                 ? $"{spec.Name} takes no positional arguments"
                 : $"{spec.Name} takes {declared.Length} positional argument(s): {string.Join(" ", declared.Select(d => $"<{d.Name}>"))}";
-            errors.Add($"Unexpected argument(s) {extra}. {shape}.");
+            // 上面那条没接住、而首位仍长得像 def 类型。光说「多了一个参数」的话,读的人下一步
+            // 多半是去掉**后面**那个,而后面那个才是他要查的东西 —— 所以把去掉类型之后的
+            // 那条命令原样给出来。
+            //
+            // 但没接住有两种成因,给的话完全不同,合成一句必然有一种是假话:
+            // 这条命令根本没有类型面(inherit),与它有、只是已经明写过一个(那时按位置
+            // 写的那个不许悄悄盖掉明写的那个 —— 两者不一致正是最该出声的时候)。
+            // list / fields 不进来:它们的第一个位置参数本来就是类型,那个词没放错格。
+            var lead = declared.Length > 0 && !string.Equals(declared[0].Name, "defType", StringComparison.Ordinal) &&
+                       positionals.Count > 0 && DefTypeShape.IsMatch(positionals[0])
+                ? positionals[0] : null;
+            var rest = string.Join(" ", positionals.Skip(1));
+            var given = lead is not null && byKey.TryGetValue("type", out var declaredType) &&
+                        values.TryGetValue(declaredType.Name, out var typeValues) && typeValues.Count > 0
+                ? typeValues[^1] : null;
+            errors.Add($"Unexpected argument(s) {extra}. {shape}." +
+                       (lead is null
+                           ? ""
+                           : given is not null
+                               ? $" The def type is given twice: '{lead}' as an argument and --type {given} as an " +
+                                 $"option. Keep one — with --type {given} the whole query is " +
+                                 $"'{CommandRegistry.ExeName} {spec.Name} {rest} --type {given}'."
+                               : $" '{lead}' looks like a def type, and '{spec.Name}' has no def-type filter to " +
+                                 $"put it in: '{CommandRegistry.ExeName} {spec.Name} {rest}' is the whole query."));
         }
 
         if (!wantsHelp)
@@ -146,7 +207,7 @@ public static class ArgParser
                     errors.Add($"Missing required option --{o.Name}: {o.Help}");
         }
 
-        return new ParseResult(spec, positionals, values, errors, wantsHelp);
+        return new ParseResult(spec, positionals, values, errors, wantsHelp, notes);
     }
 
     private static string UnknownOptionMessage(string raw, string body, IReadOnlyList<OptionSpec> options,
@@ -315,11 +376,15 @@ public sealed class ParseResult(
     List<string> positionals,
     Dictionary<string, List<string>> values,
     List<string> errors,
-    bool wantsHelp)
+    bool wantsHelp,
+    List<string>? notes = null)
 {
     public CommandSpec Spec { get; } = spec;
     public IReadOnlyList<string> Positionals { get; } = positionals;
     public IReadOnlyList<string> Errors => errors;
+
+    /// <summary>解析层**接受**下来、但改了写法的那些事。空表示逐字照收。</summary>
+    public IReadOnlyList<string> Notes => notes ?? [];
     public bool WantsHelp { get; } = wantsHelp;
     public bool HasErrors => errors.Count > 0;
 
