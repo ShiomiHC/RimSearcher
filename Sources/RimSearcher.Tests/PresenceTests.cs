@@ -8,6 +8,23 @@ namespace RimSearcher.Tests;
 /// </summary>
 public class PresenceTests
 {
+    /// <summary>
+    /// yes 行那句免责被 xml 列作废了一半:它说「XML 写了同样的值」与「从没提过这个字段」
+    /// 在这里看起来一样,而 0.5.0 的表里,那两者就是同一行上的 xml=here 与 xml=no。
+    /// 旧快照上没有那一列,原句照旧成立 —— 分档,不是删。
+    /// </summary>
+    [Fact]
+    public void 新快照的yes行不再说两者看起来一样()
+    {
+        var (fresh, _, _) = Fixture.Run("get", "ChildGun", "--defaults", Fixture.PresenceArg);
+        Assert.DoesNotContain("both show yes here", fresh, StringComparison.Ordinal);
+        Assert.Contains(XmlOrigin.Column, fresh, StringComparison.Ordinal);
+
+        // 旧快照:那一列不在,那句话是这条路上唯一说破它的地方,一个字都不许少。
+        var (old, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--defaults");
+        Assert.Contains("both show yes here", old, StringComparison.Ordinal);
+    }
+
     // ---- B2 patch 计数 ----
 
     [Fact]

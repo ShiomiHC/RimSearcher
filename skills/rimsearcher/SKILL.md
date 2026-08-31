@@ -135,7 +135,9 @@ rather than assuming. These four it has no way to state:
   confident-wrong answer here — and **"so the def did not set it, it comes from the class
   default" is the same error facing the other way**. An XML line whose value happens to
   equal the default is indistinguishable from no line at all, so neither direction is
-  available. Reading the C# constructor shows where the default *could* come from, never
+  available **from this column** — on snapshots from exporter 0.5.0 the `xml` column beside
+  it does tell them apart (`here` = an XML line writing that same value, `no` = never
+  mentioned), which is the one place that question is answerable. Reading the C# constructor shows where the default *could* come from, never
   whether the XML says it too. `unknown` = type not constructible. Exemptions cut both
   ways: rules that *read* the value (thresholds, comparisons) answer fine from a `yes` row
   — the value is real either way; `compClass`/`thingClass`/`workerClass` are usually

@@ -2399,8 +2399,15 @@ internal static class Completeness
         // 是 4/10;这是 get 那句同一手法的复制(那边 4/10 对 0/20),两次合并 8/20 对 0/30,
         // p=0.0002。要点是两边都得是读者叫得出、能去核对的东西 —— 抽象地说「工具区分不了」
         // 在 read --outline 那条上实测仍是 0/10。
-        var yesMeans = "a yes is not evidence that nothing wrote the value — a def whose XML writes " +
-                       "that same value and a def that never mentions the field both show yes here";
+        // 0.5.0 起这两者不再同形:xml 列就在同一行上,here 是「写了同样的值」,
+        // no 是「从没提过这个字段」。再说「看起来一样」是假话 —— 分档,不是删,
+        // 旧快照上没有那一列,原句仍是这条路上唯一说破它的地方。
+        var yesMeans = ctx.Db.Meta.IndexesXmlWritten
+            ? $"a yes is not evidence that nothing wrote the value — the '{XmlOrigin.Column}' column on " +
+              $"that same row tells the two apart: {XmlOrigin.Here} is an XML line writing that same " +
+              $"value, {XmlOrigin.No} is a def that never mentions the field"
+            : "a yes is not evidence that nothing wrote the value — a def whose XML writes " +
+              "that same value and a def that never mentions the field both show yes here";
 
         // 这半句只在**本次取景里真有 yes 行**时才拼。两条被砍掉的路径各有各的毛病:
         //   不加 --defaults 时,yes 行被整批滤走、表折成 `code_default=no`,而
