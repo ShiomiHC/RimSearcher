@@ -95,6 +95,8 @@ public class OutputSnapshotTests
                                     Fixture.PresenceTextArg] },
         { "get-xml-text-tie",      ["get", "TwinGun", "--defaults", "--path-contains", "costList",
                                     Fixture.PresenceTextArg] },
+        { "get-xml-text-bare",     ["get", "BareGun", "--defaults", "--path-contains", "costList",
+                                    Fixture.PresenceTextArg] },
         // 代码默认值的三个落点:字段名与提问一字不差、值却是声明默认值 ——
         // 点了名就必须印出来,并且当场说清它是哪一种。
         { "get-code-default-path", ["get", "Bullet_Revolver", "--path-contains", "burstCount"] },

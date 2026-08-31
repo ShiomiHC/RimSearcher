@@ -1,19 +1,19 @@
-$ rimsearcher get PatchedGun --defaults --path-contains costList --fixture-presence-text
+$ rimsearcher get BareGun --defaults --path-contains costList --fixture-presence-text
 exit 0
 --- stdout ---
 Matching 'costList': 3 fields, out of 4 fields on the def.
 
-def_name     PatchedGun
+def_name     BareGun
 def_type     ThingDef
-label        patched gun
+label        bare gun
 class        Verse.ThingDef
 mod          ludeon.rimworld
 source       Guns.xml
 
 path                  value   code_default  xml
 costList[0].thingDef  Steel   no            here
-costList[0].count     100     no            under costList
+costList[0].count     1       yes           under costList
 costList[0].quality   Normal  yes           under costList
 No value above with 'code_default'=no is one that most of the 5 ThingDefs in this snapshot also carry. Rows marked yes were not compared: a yes is not evidence that nothing wrote the value — the 'xml' column on that same row tells the two apart: here is an XML line writing that same value, no is an XML that does not write it (read before patches ran).
-The game also prices things like this — market value, cost to make, work amount — and those are computed rather than stored, so no field above would hold them either way. This snapshot never measured them, so it cannot say whether this def is one of the priced ones: 'rimsearcher economy PatchedGun' says why and what to re-export.
+The game also prices things like this — market value, cost to make, work amount — and those are computed rather than stored, so no field above would hold them either way. This snapshot never measured them, so it cannot say whether this def is one of the priced ones: 'rimsearcher economy BareGun' says why and what to re-export.
 --- stderr ---

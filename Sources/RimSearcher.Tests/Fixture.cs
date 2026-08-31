@@ -443,7 +443,7 @@ public static class Fixture
     ///
     /// ChildGun 的 costList.Steel 文本是 75,于是 count 是 here、quality 是 no;
     /// PatchedGun 的文本对不上任何候选格,退回 under;TwinGun 的 count 与 quality
-    /// 同是 75,对上两格,那两格都 under。
+    /// 同是 75,对上两格,那两格都 under;BareGun 的标签是空的,没有文本可落格。
     /// </summary>
     private static void WritePresenceTextExport(string path)
     {
@@ -513,6 +513,12 @@ public static class Fixture
             new ExportedField("costList[0].thingDef", "Steel", DefaultState.Differs),
             new ExportedField("costList[0].count", "75", DefaultState.Differs),
             new ExportedField("costList[0].quality", "75", DefaultState.Differs));
+        // 空短标签 <Steel />:一个字符的文本都没写,哪一格都没接到。
+        Def("BareGun", "bare gun",
+            new ExportedField("thingClass", "RimWorld.Bullet", DefaultState.Differs),
+            new ExportedField("costList[0].thingDef", "Steel", DefaultState.Differs),
+            new ExportedField("costList[0].count", "1", DefaultState.Same),
+            new ExportedField("costList[0].quality", "Normal", DefaultState.Same));
 
         w.WriteLine(new JsonLine()
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindTypeFields)
@@ -578,6 +584,7 @@ public static class Fixture
             ["ChildGun", "child gun", "12", "75", "-4", "ChildGun", "0.25"]);
         Written("PatchedGun", false, ["defName", "costList.Steel"], ["PatchedGun", "75"]);
         Written("TwinGun", false, ["defName", "costList.Steel"], ["TwinGun", "75"]);
+        Written("BareGun", false, ["defName", "costList.Steel"], ["BareGun", ""]);
 
         records++;
         w.WriteLine(new JsonLine()

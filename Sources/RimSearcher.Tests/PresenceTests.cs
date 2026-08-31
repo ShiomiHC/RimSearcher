@@ -311,6 +311,23 @@ public class PresenceTests
         Assert.Equal(XmlOrigin.Under("costList"), XmlOfJson(json, "costList[0].quality"));
     }
 
+    /// <summary>
+    /// 空短标签 <c>&lt;Steel /&gt;</c>:文本是空串,一个字符都没写给任何一格。
+    ///
+    /// 空串谁都对不上,于是走零匹配那一档 —— 全部候选退回 under。官方 Data 里这样的
+    /// 标签有 96 处(fixedInventory 一类),它们的候选格恰好都停在代码默认值上,所以
+    /// 「说不准」与「其实都没写」在输出里同形;这里钉的是不许因此改判成确定的 no。
+    /// </summary>
+    [Fact]
+    public void 空短标签没有文本落格全都说不准()
+    {
+        var (json, _, _) = Fixture.Run("get", "BareGun", "--defaults", "--json",
+                                       "--db", Fixture.PresenceTextDb);
+        Assert.Equal(XmlOrigin.Here, XmlOfJson(json, "costList[0].thingDef"));
+        Assert.Equal(XmlOrigin.Under("costList"), XmlOfJson(json, "costList[0].count"));
+        Assert.Equal(XmlOrigin.Under("costList"), XmlOfJson(json, "costList[0].quality"));
+    }
+
     [Fact]
     public void 零五快照导入后文本列是空的()
     {
