@@ -79,7 +79,7 @@ public class SnapshotRetentionTests
         Assert.Contains("\"old\": \"20\"", Run(dir, "snapshot", "diff", "current.prev", "current", "--json").Stdout, StringComparison.Ordinal);
 
         // 代数是一次一代长出来的:--keep 4 只是不再截断,不会凭空补齐更老的几代。
-        var (_, _, code) = Import(dir, "current", 40, "--keep", "4");
+        var (_, _, code) = Import(dir, "current", 40, extra: ["--keep", "4"]);
         Assert.Equal(0, code);
         Assert.True(File.Exists(Path.Combine(dir, "current.prev2.db")));
         Assert.False(File.Exists(Path.Combine(dir, "current.prev3.db")));
@@ -91,11 +91,11 @@ public class SnapshotRetentionTests
     {
         var dir = FreshDir("conflict");
         Import(dir, "current", 10);
-        var (_, stderr, code) = Import(dir, "current", 20, "--keep", "3", "--replace-prev");
+        var (_, stderr, code) = Import(dir, "current", 20, extra: ["--keep", "3", "--replace-prev"]);
         Assert.Equal(Runner.ExitUsage, code);
         Assert.Contains("--replace-prev means --keep 1", stderr, StringComparison.Ordinal);
 
-        var (_, bad, badCode) = Import(dir, "current", 20, "--keep", "0");
+        var (_, bad, badCode) = Import(dir, "current", 20, extra: ["--keep", "0"]);
         Assert.Equal(Runner.ExitUsage, badCode);
         Assert.Contains("at least 1", bad, StringComparison.Ordinal);
     }
@@ -150,6 +150,28 @@ public class SnapshotRetentionTests
     }
 
     [Fact]
+    public void 导出器换代时不算相同()
+    {
+        var dir = FreshDir("gen");
+        Import(dir, "current", 10);
+        var (stdout, _, code) = Import(dir, "current", 10, exporterVersion: "0.7.0");
+        Assert.Equal(0, code);
+        Assert.DoesNotContain("left in place", stdout, StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(dir, "current.prev.db")));
+    }
+
+    [Fact]
+    public void xml层多写一行时不算相同()
+    {
+        var dir = FreshDir("xmllayer");
+        Import(dir, "current", 10);
+        var (stdout, _, code) = Import(dir, "current", 10, xmlPaths: 1);
+        Assert.Equal(0, code);
+        Assert.DoesNotContain("left in place", stdout, StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(dir, "current.prev.db")));
+    }
+
+    [Fact]
     public void replaceprev一代不留且旧代一起收掉()
     {
         var dir = FreshDir("force");
@@ -158,7 +180,7 @@ public class SnapshotRetentionTests
         Import(dir, "current", 30);
         Assert.True(File.Exists(Path.Combine(dir, "current.prev2.db")));
 
-        var (_, stderr, code) = Import(dir, "current", 40, "--replace-prev");
+        var (_, stderr, code) = Import(dir, "current", 40, extra: ["--replace-prev"]);
         Assert.Equal(0, code);
         Assert.Equal("", stderr);
         Assert.False(File.Exists(Path.Combine(dir, "current.prev.db")));
@@ -194,10 +216,13 @@ public class SnapshotRetentionTests
     }
 
     private static (string Stdout, string Stderr, int Code) Import(string dir, string name, int damage,
+                                                                   string exporterVersion = "0.4.0",
+                                                                   int xmlPaths = 0,
                                                                    params string[] extra)
     {
-        var export = Path.Combine(dir, name + "-" + damage + IntermediateFormat.FileExtension);
-        WriteMini(export, damage);
+        var export = Path.Combine(dir, name + "-" + damage + "-" + exporterVersion + "-" + xmlPaths
+                                       + IntermediateFormat.FileExtension);
+        WriteMini(export, damage, exporterVersion, xmlPaths);
         return Run(dir, ["snapshot", "import", export, "--name", name, "--no-harvest-translations", .. extra]);
     }
 
@@ -209,7 +234,7 @@ public class SnapshotRetentionTests
         return (stdout.ToString(), stderr.ToString(), code);
     }
 
-    private static void WriteMini(string path, int damage)
+    private static void WriteMini(string path, int damage, string exporterVersion = "0.4.0", int xmlPaths = 0)
     {
         using var fs = File.Create(path);
         using var gz = new GZipStream(fs, CompressionLevel.Optimal);
@@ -220,7 +245,7 @@ public class SnapshotRetentionTests
         w.WriteLine(new JsonLine()
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindMeta)
             .Int(IntermediateFormat.KeyFormatVersion, IntermediateFormat.FormatVersion)
-            .Str(IntermediateFormat.KeyExporterVersion, "0.4.0")
+            .Str(IntermediateFormat.KeyExporterVersion, exporterVersion)
             .Str(IntermediateFormat.KeyExportedAtUtc, "2026-01-01T00:00:00.0000000Z")
             .Str(IntermediateFormat.KeyGameVersion, Fixture.GameVersion)
             .Str(IntermediateFormat.KeyLanguage, Fixture.Language)
@@ -244,9 +269,18 @@ public class SnapshotRetentionTests
             .Int(IntermediateFormat.KeyFieldsTruncated, 0)
             .ToString());
 
+        for (var i = 0; i < xmlPaths; i++)
+            w.WriteLine(new JsonLine()
+                .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindXmlWritten)
+                .Str(IntermediateFormat.KeyDefType, "ThingDef")
+                .Str(IntermediateFormat.KeyNodeKey, "GunA")
+                .Bool(IntermediateFormat.KeyKeyIsName, false)
+                .Strs(IntermediateFormat.KeyPaths, ["damage" + i])
+                .ToString());
+
         w.WriteLine(new JsonLine()
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindEnd)
-            .Int(IntermediateFormat.KeyRecords, 3)
+            .Int(IntermediateFormat.KeyRecords, 3 + xmlPaths)
             .Int(IntermediateFormat.KeyDefs, 1)
             .Int(IntermediateFormat.KeyInjections, 0)
             .Int(IntermediateFormat.KeyXmlNodes, 0)
