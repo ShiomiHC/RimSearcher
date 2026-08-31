@@ -27,6 +27,7 @@ Global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the com
 | What is this called? I only know part. | `rimsearcher search <words>` |
 | Which defs use this class / value? | `rimsearcher where <field> <value>` |
 | Which defs pick this class with `Class="…"`? | `rimsearcher where Class <ClassName>` |
+| Same, but only within one def type | add `--type <DefType>` — it works on `where`, `values`, `search` and `get`. The def type is never the first positional: `where HediffDef compClass X` reads `HediffDef` as a *field path* and answers a different question. |
 | One field across a whole batch of defs | `rimsearcher where <field>` with **no value** — one flat row per def that has it. Never `list` + a `get` per name: that is N processes for one table, and `get` nests its output per def while `where` does not. |
 | What can this field be set to? | `rimsearcher values <field>` |
 | What fields does this def type have? | `rimsearcher fields <DefType>` |
