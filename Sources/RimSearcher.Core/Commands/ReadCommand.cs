@@ -408,11 +408,23 @@ public sealed class ReadCommand : Command
     /// 只在真用了轮廓的两条路上说;裸行读没有任何推断,不需要它。
     ///
     /// 压到一行:路径刚在上面印过,不再复述;「去 code-search」这条下一步写在 SKILL.md 里。
-    /// 留下的是推不出来的那半句 —— 找不到不等于没有。
+    ///
+    /// **「找不到不等于没有」这半句单说是无效的,得说出漏的是哪一类。** 盲测三臂各 10 次,
+    /// 陷阱是 ThinkResult.cs —— 它真有 operator == / !=(65/70 行),而轮廓 16 条声明里
+    /// 一个没有;问「这个 struct 能不能直接写 a == b」(正解:能):
+    ///   原句 0/10 · 补「扫描认不出的声明与不存在的声明在这里同形」0/10 ·
+    ///   再加一句「运算符就是它认不出的一类」5/10(p=0.002)
+    /// 抽象地点名那两个同形状态不够 —— 读者得拿到一个**能去核对的具体名字**。
+    ///
+    /// 举运算符是核过的:AnyEnum / ByteRange / IntVec3 源码里 2/2/12 个 operator,轮廓里
+    /// 全是 0。event 不用提,它在(kind 标成 field,按名字找得到);显式接口实现也在,
+    /// 只是名字被剥了前缀。
     /// </summary>
     private static void SayBraceMatched(CommandContext ctx)
         => ctx.Report.Notice(NoticeKind.Boundary,
-            "Found by matching braces, not by parsing C#: a name not listed here is not evidence the file lacks it.",
+            "Found by matching braces, not by parsing C#: a declaration this scan does not recognise " +
+            "and one that is not in the file look the same here — both are simply absent. Operators " +
+            "are one kind it does not recognise.",
             footnote: true);
 
     private static void SayNoDeclaration(CommandContext ctx, string rel, string[] text,

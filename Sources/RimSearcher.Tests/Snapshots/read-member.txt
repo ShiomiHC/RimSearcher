@@ -18,5 +18,5 @@ vanilla/Verse/Outline.cs:25-27  method Inner.Shared
     26  			{
     27  			}
 
-Found by matching braces, not by parsing C#: a name not listed here is not evidence the file lacks it.
+Found by matching braces, not by parsing C#: a declaration this scan does not recognise and one that is not in the file look the same here — both are simply absent. Operators are one kind it does not recognise.
 --- stderr ---
