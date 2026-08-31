@@ -10,6 +10,8 @@
 //                      kind=definj  —— 运行时 defInjection 一条一行(游戏语言为英文时无此类行)
 //                      kind=keyed   —— Keyed 译文一条一行(界面文案;与 def 无关,key 不带点)
 //                      kind=xmlnode —— 继承层:XML 里一个带 Name/ParentName/Abstract 的节点一行
+//                      kind=xmlwritten —— 一个 XML 节点实际写出来的字段路径(含普通 def)
+//                      kind=typefields —— 一个 def 类型能有的字段路径全集
 //                      kind=economy —— 经济面:一条可生产物的市场价/造价/工时/成本链
 //   第 N 行(尾行)     kind=end     —— 记录数标记,完整性自证
 //
@@ -25,6 +27,13 @@ namespace RimSearcher.Contract
         /// 3:fields 从二元组变三元组,第三位是 <see cref="DefaultState"/>。
         /// 4:加了 kind=keyed(界面文案译文)。
         /// 5:加了 kind=economy(经济面)与尾行的 economy_state 三态。
+        ///
+        /// 0.5.0 起多了 kind=xmlwritten / kind=typefields,以及 xmlnode 上的
+        /// patch_ops_defname / patch_ops_label。不涨这一档:缺的那一层由导出器版本上的
+        /// 能力位说话(与 IndexesNestedClass 同一套),旧文件仍能导入、旧库仍能打开;
+        /// 涨了就会把磁盘上的旧导出整批拒收,而「看不见 ≠ 不存在」要的是宣布缺层,
+        /// 不是把整份快照关掉。旧 CLI 读到不认识的 kind 会静默落空,但它本来就没有
+        /// 对应列,不会把空说成「量过了、是零」。
         ///
         /// 每一档都必须拒收前一档,而不是降级读:缺的那一层在查询结果里与
         /// 「事实上就没有」逐字同形,库里无从区分。
@@ -61,6 +70,10 @@ namespace RimSearcher.Contract
         public const string KindKeyed = "keyed";
         public const string KindXmlNode = "xmlnode";
         public const string KindEconomy = "economy";
+        /// <summary>一个 XML 节点实际写出来的字段路径(patch 前)。</summary>
+        public const string KindXmlWritten = "xmlwritten";
+        /// <summary>一个 def 类型能有的字段路径全集,与值无关。</summary>
+        public const string KindTypeFields = "typefields";
         public const string KindEnd = "end";
 
         // 字段名(两侧共用,防手写漂移)
@@ -118,6 +131,19 @@ namespace RimSearcher.Contract
         /// 这个数申报了偏差的规模。
         /// </summary>
         public const string KeyPatchOps = "patch_ops";
+        /// <summary>有多少条 xpath 用 <c>defName="…"</c> 点了这个节点的 defName。</summary>
+        public const string KeyPatchOpsDefName = "patch_ops_defname";
+        /// <summary>有多少条 xpath 用 <c>label="…"</c> 点了这个节点的 label。</summary>
+        public const string KeyPatchOpsLabel = "patch_ops_label";
+
+        /// <summary>
+        /// xml_written / type_fields 共用的路径数组。<c>["defName","projectile.speed",…]</c>。
+        /// </summary>
+        public const string KeyPaths = "paths";
+        /// <summary>xml_written 的节点键:有 defName 就用 defName,否则用 Name=。</summary>
+        public const string KeyNodeKey = "node_key";
+        /// <summary>node_key 取自 Name= 而非 defName 时为真。</summary>
+        public const string KeyKeyIsName = "key_is_name";
 
         // ---- 经济面(kind=economy)。def_name / label / source_mod 不共用上面那批,见下 ----
         //

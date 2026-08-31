@@ -80,8 +80,16 @@ public sealed class SnapshotImporter
                 """);
             using var insertXn = Prepare(db, """
                 INSERT INTO xml_nodes (def_type, name, parent_name, abstract, def_name, label,
-                                       source_mod, source_file, patch_ops)
-                VALUES ($t,$n,$pn,$a,$dn,$l,$sm,$sf,$po)
+                                       source_mod, source_file, patch_ops, patch_ops_defname, patch_ops_label)
+                VALUES ($t,$n,$pn,$a,$dn,$l,$sm,$sf,$po,$pod,$pol)
+                """);
+            using var insertXw = Prepare(db, """
+                INSERT INTO xml_written (def_type, node_key, key_is_name, path)
+                VALUES ($t,$k,$kn,$p)
+                """);
+            using var insertTf = Prepare(db, """
+                INSERT INTO type_fields (def_type, path)
+                VALUES ($t,$p)
                 """);
             using var insertKeyed = Prepare(db, """
                 INSERT INTO keyed (id, key, translated, original, language, source_file, source_line,
@@ -211,8 +219,53 @@ public sealed class SnapshotImporter
                     Bind(insertXn, "$sm", Str(root, IntermediateFormat.KeySourceMod));
                     Bind(insertXn, "$sf", Str(root, IntermediateFormat.KeySourceFile));
                     Bind(insertXn, "$po", root.TryGetProperty(IntermediateFormat.KeyPatchOps, out var poEl) ? poEl.GetInt32() : 0);
+                    Bind(insertXn, "$pod", root.TryGetProperty(IntermediateFormat.KeyPatchOpsDefName, out var podEl) ? podEl.GetInt32() : 0);
+                    Bind(insertXn, "$pol", root.TryGetProperty(IntermediateFormat.KeyPatchOpsLabel, out var polEl) ? polEl.GetInt32() : 0);
                     insertXn.ExecuteNonQuery();
                     xmlNodes++;
+                    continue;
+                }
+
+                if (kind == IntermediateFormat.KindXmlWritten)
+                {
+                    var nodeKey = Str(root, IntermediateFormat.KeyNodeKey) ?? "";
+                    if (nodeKey.Length == 0) continue;
+                    var defTypeW = Str(root, IntermediateFormat.KeyDefType) ?? "";
+                    var keyIsName = root.TryGetProperty(IntermediateFormat.KeyKeyIsName, out var knEl)
+                                    && knEl.GetBoolean() ? 1 : 0;
+                    if (root.TryGetProperty(IntermediateFormat.KeyPaths, out var wpaths)
+                        && wpaths.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var p in wpaths.EnumerateArray())
+                        {
+                            var path = p.GetString();
+                            if (string.IsNullOrEmpty(path)) continue;
+                            Bind(insertXw, "$t", defTypeW);
+                            Bind(insertXw, "$k", nodeKey);
+                            Bind(insertXw, "$kn", keyIsName);
+                            Bind(insertXw, "$p", path);
+                            insertXw.ExecuteNonQuery();
+                        }
+                    }
+                    continue;
+                }
+
+                if (kind == IntermediateFormat.KindTypeFields)
+                {
+                    var defTypeF = Str(root, IntermediateFormat.KeyDefType) ?? "";
+                    if (defTypeF.Length == 0) continue;
+                    if (root.TryGetProperty(IntermediateFormat.KeyPaths, out var tpaths)
+                        && tpaths.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var p in tpaths.EnumerateArray())
+                        {
+                            var path = p.GetString();
+                            if (string.IsNullOrEmpty(path)) continue;
+                            Bind(insertTf, "$t", defTypeF);
+                            Bind(insertTf, "$p", path);
+                            insertTf.ExecuteNonQuery();
+                        }
+                    }
                     continue;
                 }
 

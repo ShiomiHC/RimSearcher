@@ -56,6 +56,12 @@ public static class Fixture
     public static string OtherDb { get { _ = Db; return Path.Combine(SnapshotDir, "other.db"); } }
 
     /// <summary>
+    /// 导出器 0.5.0:XML 写成的路径、按 defName/label 的 patch 计数、类型字段全集都在。
+    /// 主 fixture 停在 0.2.0,other 停在 0.1.0 —— 新层缺席与在场两条路都要有落点。
+    /// </summary>
+    public static string PresenceDb { get { _ = Db; return Path.Combine(SnapshotDir, "presence.db"); } }
+
+    /// <summary>
     /// 「同值还坐在别的路径形状上」那句提示的**展示位边界**语料 —— 单独一份,不进
     /// <see cref="SnapshotDir"/>。
     ///
@@ -116,6 +122,10 @@ public static class Fixture
                 var modernExport = Path.Combine(dir, "modern" + IntermediateFormat.FileExtension);
                 WriteModernExport(modernExport);
                 new SnapshotImporter().Import(modernExport, Path.Combine(SnapshotDir, "modern.db"));
+
+                var presenceExport = Path.Combine(dir, "presence" + IntermediateFormat.FileExtension);
+                WritePresenceExport(presenceExport);
+                new SnapshotImporter().Import(presenceExport, Path.Combine(SnapshotDir, "presence.db"));
 
                 return _dbPath = db;
             }
@@ -268,6 +278,129 @@ public static class Fixture
             .Int(IntermediateFormat.KeyXmlNodes, 0)
             .ToString());
 
+        w.Flush();
+    }
+
+    /// <summary>
+    /// 导出器 0.5.0 的语料 —— XML 写没写、按 defName/label 的 patch 计数、类型字段全集。
+    ///
+    /// ChildGun 自己的 XML 写了 damage,父 BaseGun 写了 speed 与 thingClass;
+    /// neverSet 只在类型字段全集里,每个 def 上都是 null。
+    /// </summary>
+    private static void WritePresenceExport(string path)
+    {
+        using var fs = File.Create(path);
+        using var gz = new GZipStream(fs, CompressionLevel.Optimal);
+        using var w = new StreamWriter(gz, new UTF8Encoding(false)) { NewLine = "\n" };
+
+        long records = 0;
+        w.WriteLine(new JsonLine()
+            .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindMeta)
+            .Int(IntermediateFormat.KeyFormatVersion, IntermediateFormat.FormatVersion)
+            .Str(IntermediateFormat.KeyExporterVersion, "0.5.0")
+            .Str(IntermediateFormat.KeyExportedAtUtc, "2026-01-05T00:00:00.0000000Z")
+            .Str(IntermediateFormat.KeyGameVersion, GameVersion)
+            .Str(IntermediateFormat.KeyLanguage, Language)
+            .Raw(IntermediateFormat.KeyMods,
+                "[" + new JsonLine().Str("package_id", "ludeon.rimworld").Str("name", "Core").Str("version", "1.6") + "]")
+            .Raw(IntermediateFormat.KeyLimits, new JsonLine().Int("max_field_depth", 6).ToString())
+            .Str(IntermediateFormat.KeyModSettingsHash, "")
+            .ToString());
+        records++;
+
+        void Def(string name, params ExportedField[] fields)
+        {
+            w.WriteLine(new JsonLine()
+                .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindDef)
+                .Str(IntermediateFormat.KeyDefType, "ThingDef")
+                .Str(IntermediateFormat.KeyDefName, name)
+                .Str(IntermediateFormat.KeyLabel, name == "ChildGun" ? "child gun" : "other gun")
+                .Str(IntermediateFormat.KeyDescription, "")
+                .Str(IntermediateFormat.KeySourceMod, "ludeon.rimworld")
+                .Str(IntermediateFormat.KeySourceFile, "Guns.xml")
+                .Bool(IntermediateFormat.KeyGenerated, false)
+                .Str(IntermediateFormat.KeyClass, "Verse.ThingDef")
+                .Fields(IntermediateFormat.KeyFields, [.. fields])
+                .Int(IntermediateFormat.KeyFieldsTruncated, 0)
+                .ToString());
+            records++;
+        }
+
+        Def("ChildGun",
+            new ExportedField("thingClass", "RimWorld.Bullet", DefaultState.Differs),
+            new ExportedField("damage", "12", DefaultState.Differs),
+            new ExportedField("speed", "70", DefaultState.Differs),
+            new ExportedField("burstCount", "1", DefaultState.Same));
+        Def("OtherGun",
+            new ExportedField("thingClass", "RimWorld.Bullet", DefaultState.Differs),
+            new ExportedField("damage", "8", DefaultState.Differs));
+
+        w.WriteLine(new JsonLine()
+            .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindTypeFields)
+            .Str(IntermediateFormat.KeyDefType, "ThingDef")
+            .Strs(IntermediateFormat.KeyPaths,
+                ["burstCount", "damage", "defName", "label", "neverSet", "speed", "thingClass"])
+            .ToString());
+        records++;
+
+        w.WriteLine(new JsonLine()
+            .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindXmlNode)
+            .Str(IntermediateFormat.KeyDefType, "ThingDef")
+            .Str(IntermediateFormat.KeyName, "BaseGun")
+            .Str(IntermediateFormat.KeyParentName, "")
+            .Bool(IntermediateFormat.KeyAbstract, true)
+            .Str(IntermediateFormat.KeyDefName, "")
+            .Str(IntermediateFormat.KeyLabel, "")
+            .Str(IntermediateFormat.KeySourceMod, "ludeon.rimworld")
+            .Str(IntermediateFormat.KeySourceFile, "Guns.xml")
+            .Int(IntermediateFormat.KeyPatchOps, 0)
+            .Int(IntermediateFormat.KeyPatchOpsDefName, 0)
+            .Int(IntermediateFormat.KeyPatchOpsLabel, 0)
+            .ToString());
+        records++;
+
+        w.WriteLine(new JsonLine()
+            .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindXmlNode)
+            .Str(IntermediateFormat.KeyDefType, "ThingDef")
+            .Str(IntermediateFormat.KeyName, "")
+            .Str(IntermediateFormat.KeyParentName, "BaseGun")
+            .Bool(IntermediateFormat.KeyAbstract, false)
+            .Str(IntermediateFormat.KeyDefName, "ChildGun")
+            .Str(IntermediateFormat.KeyLabel, "child gun")
+            .Str(IntermediateFormat.KeySourceMod, "ludeon.rimworld")
+            .Str(IntermediateFormat.KeySourceFile, "Guns.xml")
+            .Int(IntermediateFormat.KeyPatchOps, 0)
+            .Int(IntermediateFormat.KeyPatchOpsDefName, 2)
+            .Int(IntermediateFormat.KeyPatchOpsLabel, 1)
+            .ToString());
+        records++;
+
+        w.WriteLine(new JsonLine()
+            .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindXmlWritten)
+            .Str(IntermediateFormat.KeyDefType, "ThingDef")
+            .Str(IntermediateFormat.KeyNodeKey, "BaseGun")
+            .Bool(IntermediateFormat.KeyKeyIsName, true)
+            .Strs(IntermediateFormat.KeyPaths, ["thingClass", "speed"])
+            .ToString());
+        records++;
+
+        w.WriteLine(new JsonLine()
+            .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindXmlWritten)
+            .Str(IntermediateFormat.KeyDefType, "ThingDef")
+            .Str(IntermediateFormat.KeyNodeKey, "ChildGun")
+            .Bool(IntermediateFormat.KeyKeyIsName, false)
+            .Strs(IntermediateFormat.KeyPaths, ["defName", "label", "damage"])
+            .ToString());
+        records++;
+
+        records++;
+        w.WriteLine(new JsonLine()
+            .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindEnd)
+            .Int(IntermediateFormat.KeyRecords, records)
+            .Int(IntermediateFormat.KeyDefs, 2)
+            .Int(IntermediateFormat.KeyInjections, 0)
+            .Int(IntermediateFormat.KeyXmlNodes, 2)
+            .ToString());
         w.Flush();
     }
 

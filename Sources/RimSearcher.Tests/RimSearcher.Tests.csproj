@@ -32,6 +32,9 @@
   <ItemGroup>
     <Compile Include="..\RimSearcher.DataMod\FieldWalk.cs" Link="Exporter\FieldWalk.cs" />
     <Compile Include="..\RimSearcher.DataMod\NestedClass.cs" Link="Exporter\NestedClass.cs" />
+    <Compile Include="..\RimSearcher.DataMod\PatchXPath.cs" Link="Exporter\PatchXPath.cs" />
+    <Compile Include="..\RimSearcher.DataMod\XmlFieldPaths.cs" Link="Exporter\XmlFieldPaths.cs" />
+    <Compile Include="..\RimSearcher.DataMod\TypeFieldWalk.cs" Link="Exporter\TypeFieldWalk.cs" />
   </ItemGroup>
 
 </Project>

@@ -41,6 +41,24 @@ public sealed record ExportMeta(
     /// </summary>
     public bool IndexesAllNestedClass => AtLeast(ExporterVersion, 0, 4);
 
+    /// <summary>
+    /// 这份快照记下了每个 XML 节点实际写出来的字段路径吗(导出器 0.5.0 起)。
+    /// 老快照的 <c>code_default=yes</c> 分不开「XML 写过默认值」与「根本没写」。
+    /// </summary>
+    public bool IndexesXmlWritten => AtLeast(ExporterVersion, 0, 5);
+
+    /// <summary>
+    /// 这份快照除了 <c>@Name=</c> 还数过按 defName / label 定位的 xpath 吗(导出器 0.5.0 起)。
+    /// 老快照的 <c>patch_ops=0</c> 把那两种定位与「没被改过」压成同一个零。
+    /// </summary>
+    public bool IndexesPatchOpsByDefNameLabel => AtLeast(ExporterVersion, 0, 5);
+
+    /// <summary>
+    /// 这份快照记下了每个 def 类型能有的字段路径全集吗(导出器 0.5.0 起)。
+    /// 老快照里「这个类型有这个字段但全是 null」与「类型根本没有这个字段」同形。
+    /// </summary>
+    public bool IndexesTypeFields => AtLeast(ExporterVersion, 0, 5);
+
     private static bool AtLeast(string version, int major, int minor)
     {
         var parts = (version ?? "").Split('.');

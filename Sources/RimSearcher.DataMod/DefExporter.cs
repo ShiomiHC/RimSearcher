@@ -31,8 +31,10 @@ namespace RimSearcher.DataMod
         /// 0.4.0 起 <c>.Class</c> 的判据换成 <see cref="NestedClass.ShouldEmit"/>(运行时类型
         /// ≠ 声明类型),于是**单字段**上的 <c>Class=</c> 也进索引 —— 0.2 那一档只发列表元素,
         /// 而 <c>find Class X</c> 对 <c>GenStepDef.genStep</c> 回的零与「量过了、没人用」同形。
+        /// 0.5.0 起三件「在不在」进索引:XML 实际写出来的字段路径、按 defName/label 定位的
+        /// patch 计数、每个 def 类型能有的字段路径全集(含值为 null 的)。
         /// </summary>
-        public const string ExporterVersion = "0.4.0";
+        public const string ExporterVersion = "0.5.0";
 
         public static ExportLimits Limits = new ExportLimits();
 
@@ -121,6 +123,10 @@ namespace RimSearcher.DataMod
                         records++;
                         defs++;
                     }
+
+                    // 每个 def 类型一份字段全集,与值无关 —— 不要每个 def 存一遍。
+                    writer.WriteLine(BuildTypeFieldsLine(defType));
+                    records++;
                 }
 
                 foreach (var line in BuildInjectionLines())
@@ -246,6 +252,36 @@ namespace RimSearcher.DataMod
                                        .Replace("-", "").Substring(0, 16).ToLowerInvariant();
             }
             catch { return ""; }
+        }
+
+        private static string BuildTypeFieldsLine(Type defType)
+        {
+            var paths = TypeFieldWalk.Collect(defType, Limits.MaxFieldDepth,
+                                              f => Attribute.IsDefined(f, typeof(UnsavedAttribute)),
+                                              IsLeafType);
+            return new JsonLine()
+                .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindTypeFields)
+                .Str(IntermediateFormat.KeyDefType, defType.Name)
+                .Strs(IntermediateFormat.KeyPaths, paths)
+                .ToString();
+        }
+
+        /// <summary>
+        /// 与 <see cref="TryLeaf"/> 同一套叶子:进快照的就是这些类型上的值,
+        /// 类型字段全集必须在同一层停下,否则会把 Def 引用展开成整个 ThingDef。
+        /// </summary>
+        private static bool IsLeafType(Type type)
+        {
+            if (TypeFieldWalk.DefaultIsLeaf(type)) return true;
+            if (typeof(Def).IsAssignableFrom(type)) return true;
+            if (typeof(ModContentPack).IsAssignableFrom(type)) return true;
+            if (type.IsValueType && type.Namespace != null &&
+                (type.Namespace.StartsWith("UnityEngine") || type.Namespace == "Verse"))
+            {
+                if (!type.IsEnum && type.IsLayoutSequential || type.IsExplicitLayout || IsSimpleStruct(type))
+                    return true;
+            }
+            return false;
         }
 
         private static string BuildDefLine(Def def, Type defType)

@@ -16,6 +16,11 @@ public static class SnapshotSchema
     /// 6:加了 shared_values —— 一条值在同类型里有多普遍。
     /// 7:加了 harvested_roots —— 磁盘那一层**量没量过**,见下。
     /// 8:加了 economy 三表 + economy_state —— 经济面,以及它**量没量成**,见下。
+    ///
+    /// 0.5.0 起 xml_nodes 多了 patch_ops_defname / patch_ops_label,并加 xml_written
+    /// 与 type_fields 两张表。不涨这一档:精确相等的 schema 检查会让磁盘上的旧库
+    /// 整份打不开,而缺的那一层由导出器版本上的能力位说话(同 content_fingerprint
+    /// 那条缝)。新导入的库有这些列/表;旧库没有,查询侧能力位为假时不去碰它们。
     /// </remarks>
     public const int Version = 8;
 
@@ -140,7 +145,25 @@ public static class SnapshotSchema
             label       TEXT,
             source_mod  TEXT,
             source_file TEXT,
-            patch_ops   INTEGER NOT NULL DEFAULT 0
+            patch_ops   INTEGER NOT NULL DEFAULT 0,
+            -- 0.5.0 起才有值。旧库没有这两列,查询侧靠能力位决定读不读,不许把缺列当 0。
+            patch_ops_defname INTEGER NOT NULL DEFAULT 0,
+            patch_ops_label   INTEGER NOT NULL DEFAULT 0
+        );
+
+        -- 每个 XML 节点(含不参与继承的普通 def)实际写出来的字段路径。
+        -- patch 之前的原文,用来回答 Replace 还是 Add。
+        CREATE TABLE xml_written (
+            def_type    TEXT NOT NULL,
+            node_key    TEXT NOT NULL,
+            key_is_name INTEGER NOT NULL DEFAULT 0,
+            path        TEXT NOT NULL
+        );
+
+        -- 一个 def 类型能有的字段路径全集,与值无关。用来把「全是 null」和「没有这个字段」分开。
+        CREATE TABLE type_fields (
+            def_type TEXT NOT NULL,
+            path     TEXT NOT NULL
         );
 
         -- 一条「与新实例不同」的值,在同类型的 def 里有多普遍。
@@ -272,6 +295,10 @@ public static class SnapshotSchema
         CREATE INDEX idx_xn_name    ON xml_nodes(name);
         CREATE INDEX idx_xn_parent  ON xml_nodes(parent_name);
         CREATE INDEX idx_xn_defname ON xml_nodes(def_name);
+        CREATE INDEX idx_xw_key     ON xml_written(def_type, node_key);
+        CREATE INDEX idx_xw_path    ON xml_written(path);
+        CREATE INDEX idx_tf_type    ON type_fields(def_type);
+        CREATE INDEX idx_tf_path    ON type_fields(path);
         CREATE INDEX idx_sv_type    ON shared_values(def_type);
         CREATE INDEX idx_econ_name  ON economy(def_name);
         CREATE INDEX idx_econ_mod   ON economy(mod);

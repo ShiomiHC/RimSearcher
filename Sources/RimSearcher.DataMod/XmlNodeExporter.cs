@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text.RegularExpressions;
 using System.Xml;
 using RimSearcher.Contract;
 using Verse;
@@ -20,20 +19,13 @@ namespace RimSearcher.DataMod
     /// 版本目录、同名文件优先级去重。自己扫目录会读到游戏根本没加载的文件。
     ///
     /// 这一层是**打补丁之前**的 XML。每个 Name= 节点随行带出有多少条 PatchOperation 的
-    /// xpath 点了它的名(<c>patch_ops</c>)。
+    /// xpath 点了它的名(<c>patch_ops</c>),以及按 defName / label 定位的两条计数。
+    /// 全部 def 节点(含不参与继承的普通 def)另发 xml_written,收录实际写出来的字段路径。
     /// </summary>
     public static class XmlNodeExporter
     {
         private const string DefsFolder = "Defs/";
         private const string PatchesFolder = "Patches/";
-
-        /// <summary>
-        /// xpath 里点名一个具名节点的写法,如 <c>/Defs/ThingDef[@Name="BaseBullet"]</c>。
-        /// 这是**文本**判据而不是语义判据:patch 到这一步还没跑,真实目标集合不存在。
-        /// 取宁可多报的一侧 —— 漏报会让人以为这条没被动过。
-        /// </summary>
-        private static readonly Regex NameInXPath =
-            new Regex("@Name\\s*=\\s*[\"']([^\"']+)[\"']", RegexOptions.Compiled);
 
         public static IEnumerable<string> BuildLines()
         {
@@ -56,13 +48,39 @@ namespace RimSearcher.DataMod
                         var parentName = el.GetAttribute("ParentName");
                         var isAbstract = string.Equals(el.GetAttribute("Abstract"), "true",
                                                        StringComparison.OrdinalIgnoreCase);
+                        var defName = ChildText(el, "defName");
+                        var label = ChildText(el, "label");
+
+                        // xml_written 覆盖全部 def 节点,包括不参与继承的普通 def ——
+                        // Replace/Add 问的就是「这个节点的 XML 写没写这一行」。
+                        // xml_nodes 的收录口径不变:三样都没有的普通 def 仍不进那张表。
+                        string nodeKey = null;
+                        var keyIsName = false;
+                        if (defName.Length > 0) { nodeKey = defName; keyIsName = false; }
+                        else if (name.Length > 0) { nodeKey = name; keyIsName = true; }
+                        if (nodeKey != null)
+                        {
+                            var written = XmlFieldPaths.Collect(el, DefExporter.Limits.MaxFieldDepth,
+                                                                DefExporter.Limits.MaxCollectionItems);
+                            yield return new JsonLine()
+                                .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindXmlWritten)
+                                .Str(IntermediateFormat.KeyDefType, el.Name)
+                                .Str(IntermediateFormat.KeyNodeKey, nodeKey)
+                                .Bool(IntermediateFormat.KeyKeyIsName, keyIsName)
+                                .Strs(IntermediateFormat.KeyPaths, written)
+                                .ToString();
+                        }
 
                         // 三样都没有 = 一条不参与继承的普通 def,它在 defs 表里已经完整存在
                         // (且带着 patch 与代码生成的结果)。
                         if (name.Length == 0 && parentName.Length == 0 && !isAbstract) continue;
 
                         int ops;
-                        if (name.Length == 0 || !patchOps.TryGetValue(name, out ops)) ops = 0;
+                        if (name.Length == 0 || !patchOps.ByName.TryGetValue(name, out ops)) ops = 0;
+                        int opsDef;
+                        if (defName.Length == 0 || !patchOps.ByDefName.TryGetValue(defName, out opsDef)) opsDef = 0;
+                        int opsLabel;
+                        if (label.Length == 0 || !patchOps.ByLabel.TryGetValue(label, out opsLabel)) opsLabel = 0;
 
                         yield return new JsonLine()
                             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindXmlNode)
@@ -70,11 +88,13 @@ namespace RimSearcher.DataMod
                             .Str(IntermediateFormat.KeyName, name)
                             .Str(IntermediateFormat.KeyParentName, parentName)
                             .Bool(IntermediateFormat.KeyAbstract, isAbstract)
-                            .Str(IntermediateFormat.KeyDefName, ChildText(el, "defName"))
-                            .Str(IntermediateFormat.KeyLabel, ChildText(el, "label"))
+                            .Str(IntermediateFormat.KeyDefName, defName)
+                            .Str(IntermediateFormat.KeyLabel, label)
                             .Str(IntermediateFormat.KeySourceMod, mod.PackageId)
                             .Str(IntermediateFormat.KeySourceFile, asset.name ?? "")
                             .Int(IntermediateFormat.KeyPatchOps, ops)
+                            .Int(IntermediateFormat.KeyPatchOpsDefName, opsDef)
+                            .Int(IntermediateFormat.KeyPatchOpsLabel, opsLabel)
                             .ToString();
                     }
                 }
@@ -82,12 +102,12 @@ namespace RimSearcher.DataMod
         }
 
         /// <summary>
-        /// 每个具名节点被多少条 xpath 点了名。跨 mod 统计:补丁最常见的用法正是
+        /// 每个被 xpath 点到的名字,按三种文本定位分开计。跨 mod 统计:补丁最常见的用法正是
         /// 一个 mod 改另一个 mod(或官方)的基节点。
         /// </summary>
-        private static Dictionary<string, int> CountPatchTargets()
+        private static PatchTargetCounts CountPatchTargets()
         {
-            var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+            var counts = new PatchTargetCounts();
 
             foreach (var mod in LoadedModManager.RunningModsListForReading)
             {
@@ -103,16 +123,18 @@ namespace RimSearcher.DataMod
                     {
                         var text = node.InnerText;
                         if (string.IsNullOrEmpty(text)) continue;
-                        foreach (Match m in NameInXPath.Matches(text))
-                        {
-                            var target = m.Groups[1].Value;
-                            int n;
-                            counts[target] = counts.TryGetValue(target, out n) ? n + 1 : 1;
-                        }
+                        PatchXPath.AddMatches(text, counts.ByName, counts.ByDefName, counts.ByLabel);
                     }
                 }
             }
             return counts;
+        }
+
+        private sealed class PatchTargetCounts
+        {
+            public readonly Dictionary<string, int> ByName = new Dictionary<string, int>(StringComparer.Ordinal);
+            public readonly Dictionary<string, int> ByDefName = new Dictionary<string, int>(StringComparer.Ordinal);
+            public readonly Dictionary<string, int> ByLabel = new Dictionary<string, int>(StringComparer.Ordinal);
         }
 
         /// <summary>

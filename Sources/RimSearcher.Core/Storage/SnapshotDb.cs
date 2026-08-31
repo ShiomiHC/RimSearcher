@@ -82,7 +82,9 @@ public sealed record KeyedRow(string Key, string? Translated, string? Original, 
 /// </summary>
 public sealed record XmlNodeRow(string DefType, string? Name, string? ParentName, bool Abstract,
                                 string? DefName, string? Label, string? SourceMod, string? SourceFile,
-                                int PatchOps);
+                                int PatchOps,
+                                int PatchOpsDefName = 0,
+                                int PatchOpsLabel = 0);
 
 /// <summary>
 /// 经济面的一行。**每个可空的数都是「算不出」而不是「算出来是零」** —— 两者在这一层处处
@@ -1728,17 +1730,102 @@ public sealed class SnapshotDb : IDisposable
 
     private List<XmlNodeRow> ReadNodes(string where, IDictionary<string, object?> p)
     {
+        var extra = Meta.IndexesPatchOpsByDefNameLabel;
+        var cols = extra
+            ? "def_type, name, parent_name, abstract, def_name, label, source_mod, source_file, patch_ops, patch_ops_defname, patch_ops_label"
+            : "def_type, name, parent_name, abstract, def_name, label, source_mod, source_file, patch_ops";
         var rows = new List<XmlNodeRow>();
         using var rd = Query(
-            "SELECT def_type, name, parent_name, abstract, def_name, label, source_mod, source_file, patch_ops " +
-            $"FROM xml_nodes {where} ORDER BY abstract DESC, name, def_name", p);
+            $"SELECT {cols} FROM xml_nodes {where} ORDER BY abstract DESC, name, def_name", p);
         while (rd.Read())
             rows.Add(new XmlNodeRow(rd.GetString(0),
                 rd.IsDBNull(1) ? null : rd.GetString(1), rd.IsDBNull(2) ? null : rd.GetString(2),
                 rd.GetInt32(3) != 0,
                 rd.IsDBNull(4) ? null : rd.GetString(4), rd.IsDBNull(5) ? null : rd.GetString(5),
                 rd.IsDBNull(6) ? null : rd.GetString(6), rd.IsDBNull(7) ? null : rd.GetString(7),
-                rd.GetInt32(8)));
+                rd.GetInt32(8),
+                extra ? rd.GetInt32(9) : 0,
+                extra ? rd.GetInt32(10) : 0));
+        return rows;
+    }
+
+    /// <summary>
+    /// 这个 def 的字段路径在 XML 里写在哪一层。<c>null</c> = 这份快照没量过。
+    /// 字典的值是 <c>here</c> 或 <c>parent</c>;不在字典里的路径就是两边都没写。
+    /// </summary>
+    public Dictionary<string, string>? XmlWrittenMarks(string defType, string defName)
+    {
+        if (!Meta.IndexesXmlWritten) return null;
+
+        var hereKeys = new HashSet<string>(StringComparer.Ordinal);
+        var parentKeys = new HashSet<string>(StringComparer.Ordinal);
+        hereKeys.Add(defName);
+
+        var named = NodesNamed(defName)
+            .Where(n => string.Equals(n.DefName, defName, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var xmlNode = named.FirstOrDefault(n => DefTypes.Same(n.DefType, defType))
+                   ?? (named.Count == 1 ? named[0] : null);
+        if (xmlNode?.Name is { Length: > 0 } ownName) hereKeys.Add(ownName);
+
+        var cursor = xmlNode?.ParentName;
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        while (cursor is { Length: > 0 } && seen.Add(cursor))
+        {
+            parentKeys.Add(cursor);
+            var up = NodesNamed(cursor)
+                .FirstOrDefault(n => string.Equals(n.Name, cursor, StringComparison.OrdinalIgnoreCase));
+            cursor = up?.ParentName;
+        }
+
+        var xmlType = xmlNode?.DefType ?? defType;
+        var marks = new Dictionary<string, string>(StringComparer.Ordinal);
+        void Load(IEnumerable<string> keys, string mark)
+        {
+            foreach (var key in keys)
+            {
+                var p = new Dictionary<string, object?>
+                {
+                    ["@k"] = key, ["@t"] = defType, ["@x"] = xmlType,
+                };
+                using var rd = Query(
+                    "SELECT path FROM xml_written WHERE node_key = @k " +
+                    "AND (def_type = @t COLLATE NOCASE OR def_type = @x COLLATE NOCASE)", p);
+                while (rd.Read())
+                {
+                    var path = rd.GetString(0);
+                    if (!marks.ContainsKey(path)) marks[path] = mark;
+                }
+            }
+        }
+        // here 先写,parent 不覆盖 —— 本节点写过的就是 here,哪怕祖先也写了。
+        Load(hereKeys, "here");
+        Load(parentKeys, "parent");
+        return marks;
+    }
+
+    /// <summary>
+    /// 这个 def 类型声明了哪些字段路径。<c>null</c> = 这份快照没量过。
+    /// </summary>
+    public IReadOnlyList<string>? TypeDeclaredPaths(string defType, IReadOnlyList<string>? pathFilters = null)
+    {
+        if (!Meta.IndexesTypeFields) return null;
+        var p = new Dictionary<string, object?> { ["@t"] = defType };
+        var where = "WHERE def_type = @t COLLATE NOCASE";
+        var filters = (pathFilters ?? []).Where(f => !string.IsNullOrEmpty(f)).ToList();
+        if (filters.Count > 0)
+        {
+            var ors = new List<string>();
+            for (var i = 0; i < filters.Count; i++)
+            {
+                p["@f" + i] = "%" + Escape(filters[i]) + "%";
+                ors.Add($"path LIKE @f{i} ESCAPE '\\'");
+            }
+            where += " AND (" + string.Join(" OR ", ors) + ")";
+        }
+        var rows = new List<string>();
+        using var rd = Query($"SELECT path FROM type_fields {where} ORDER BY path", p);
+        while (rd.Read()) rows.Add(rd.GetString(0));
         return rows;
     }
 

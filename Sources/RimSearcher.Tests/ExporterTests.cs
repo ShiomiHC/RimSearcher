@@ -128,4 +128,95 @@ public class ExporterTests
         Assert.Null(NestedClass.ElementType(typeof(System.Collections.ArrayList)));
         Assert.Null(NestedClass.ElementType(null));
     }
+
+    // ---- xpath 定位 / XML 写成的路径 / 类型字段全集 ----
+
+    [Fact]
+    public void xpath三种文本定位都能数到()
+    {
+        var byName = new Dictionary<string, int>(StringComparer.Ordinal);
+        var byDefName = new Dictionary<string, int>(StringComparer.Ordinal);
+        var byLabel = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        PatchXPath.AddMatches("/Defs/ThingDef[@Name=\"BaseBullet\"]/comps", byName, byDefName, byLabel);
+        PatchXPath.AddMatches("/Defs/ThingDef[defName=\"Bullet_Revolver\"]/projectile", byName, byDefName, byLabel);
+        PatchXPath.AddMatches("/Defs/ThingDef[@defName='Gun']", byName, byDefName, byLabel);
+        PatchXPath.AddMatches("/Defs/ThingDef[label=\"revolver bullet\"]", byName, byDefName, byLabel);
+
+        Assert.Equal(1, byName["BaseBullet"]);
+        Assert.Equal(1, byDefName["Bullet_Revolver"]);
+        Assert.Equal(1, byDefName["Gun"]);
+        Assert.Equal(1, byLabel["revolver bullet"]);
+        Assert.False(byName.ContainsKey("Bullet_Revolver"));
+        Assert.False(byDefName.ContainsKey("BaseBullet"));
+    }
+
+    [Fact]
+    public void XML写成的路径与字段路径同形()
+    {
+        var doc = new System.Xml.XmlDocument();
+        doc.LoadXml("""
+            <ThingDef ParentName="BaseBullet">
+              <defName>Bullet_Revolver</defName>
+              <projectile>
+                <damageAmountBase>12</damageAmountBase>
+              </projectile>
+              <comps>
+                <li Class="CompProperties_Shield">
+                  <energyMax>0.5</energyMax>
+                </li>
+              </comps>
+              <thingCategories>
+                <li>Foods</li>
+              </thingCategories>
+              <genStep Class="GenStep_Scatter" />
+            </ThingDef>
+            """);
+
+        var paths = XmlFieldPaths.Collect(doc.DocumentElement!, 6, 200);
+        Assert.Contains("defName", paths);
+        Assert.Contains("projectile.damageAmountBase", paths);
+        Assert.DoesNotContain("projectile", paths);
+        Assert.Contains("comps[0].Class", paths);
+        Assert.Contains("comps[0].energyMax", paths);
+        Assert.Contains("thingCategories[0]", paths);
+        Assert.Contains("genStep.Class", paths);
+    }
+
+    private class TypeWalkShape
+    {
+        public string label = "";
+        public int? maybe;
+        public List<CompShape> comps = new();
+        public NestedShape nested = new();
+        public string? neverSet;
+    }
+
+    private class CompShape
+    {
+        public string compClass = "";
+        public float energyMax;
+    }
+
+    private class NestedShape
+    {
+        public int speed;
+    }
+
+    [Fact]
+    public void 类型字段全集含null字段且集合只用下标零()
+    {
+        var paths = TypeFieldWalk.Collect(typeof(TypeWalkShape), 6, _ => false, TypeFieldWalk.DefaultIsLeaf);
+        Assert.Contains("label", paths);
+        Assert.Contains("maybe", paths);
+        Assert.Contains("neverSet", paths);
+        Assert.Contains("comps[0].compClass", paths);
+        Assert.Contains("comps[0].energyMax", paths);
+        Assert.Contains("comps[0].Class", paths);
+        Assert.Contains("nested.speed", paths);
+        Assert.Contains("nested.Class", paths);
+        Assert.DoesNotContain("comps", paths);
+        Assert.DoesNotContain("nested", paths);
+        Assert.DoesNotContain("comps[1].compClass", paths);
+    }
 }

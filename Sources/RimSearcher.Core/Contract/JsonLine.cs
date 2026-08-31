@@ -67,6 +67,22 @@ namespace RimSearcher.Contract
             return this;
         }
 
+        /// <summary>字符串数组,如 xml_written / type_fields 的路径表。</summary>
+        public JsonLine Strs(string key, IEnumerable<string> values)
+        {
+            Key(key);
+            _sb.Append('[');
+            var first = true;
+            foreach (var v in values)
+            {
+                if (!first) _sb.Append(',');
+                first = false;
+                AppendQuoted(_sb, v ?? "");
+            }
+            _sb.Append(']');
+            return this;
+        }
+
         /// <summary>原样嵌入一段已经是合法 JSON 的文本(数组/对象)。</summary>
         public JsonLine Raw(string key, string json)
         {
