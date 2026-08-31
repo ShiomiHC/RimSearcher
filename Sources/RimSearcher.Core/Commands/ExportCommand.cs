@@ -393,9 +393,9 @@ public sealed class ExportCommand : Command
                 "It is not part of the snapshot's mod list.");
         }
 
-        var exportDir = ctx.Config.ExportDir ?? Path.Combine(ctx.Config.ResolveSnapshotDir(), "..", "exports");
+        var exportDir = ctx.Config.ResolveExportDir();
         Directory.CreateDirectory(Path.GetFullPath(exportDir));
-        var outFile = Path.GetFullPath(Path.Combine(exportDir, snapshotName + IntermediateFormat.FileExtension));
+        var outFile = SnapshotCatalog.ExportPath(ctx.Config, snapshotName);
 
         var temp = Path.Combine(Path.GetTempPath(), "rimsearcher-export-" + Guid.NewGuid().ToString("N")[..8]);
         var argv = BuildGameArguments(temp, outFile, ctx.Args.Flag("show-window"),
@@ -493,7 +493,7 @@ public sealed class ExportCommand : Command
             ModRoots = ctx.Args.Flag("no-harvest-translations") ? [] : ctx.Config.ModRoots,
             Environment = ctx.Config,
         };
-        var dbPath = Path.Combine(ctx.Config.ResolveSnapshotDir(), snapshotName + ".db");
+        var dbPath = SnapshotCatalog.DatabasePath(ctx.Config, snapshotName);
         var incoming = SnapshotRetention.IncomingPath(dbPath);
         var stats = importer.Import(outFile, incoming);
         var keep = SnapshotRetention.ResolveKeep(ctx.Config, ctx.Args);

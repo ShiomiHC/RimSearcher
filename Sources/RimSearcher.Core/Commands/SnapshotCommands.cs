@@ -406,6 +406,87 @@ public sealed class SnapshotUseCommand : Command
     }
 }
 
+public sealed class SnapshotRenameCommand : Command
+{
+    public override CommandSpec Spec => new()
+    {
+        Name = "snapshot rename",
+        Summary = "Rename a snapshot by moving the files that share its name.",
+        Remarks =
+            "A snapshot name is three files that share it: the database in the snapshot directory " +
+            "('{name}.db'), the mod list next to the config file ('{name}.rml'), and the export file " +
+            "in the export directory ('{name}.rsx.jsonl.gz'). This command moves whichever of those " +
+            "exist and says which were absent — an incomplete set is a normal state, not an error. " +
+            "It never overwrites: if the new name is already used at any of the three places, the " +
+            "command refuses and names the file that is in the way. Previous generations of the " +
+            "database ('{name}.prev', '{name}.prev2' and so on) move with it when the database itself is " +
+            "being renamed.\n\n" +
+            "If 'snapshot use' has pinned the old name, the pin follows, and the output says so. " +
+            "--db and --snapshot do not pick which files to rename; the two names do.\n\n" +
+            "A failure after some files have moved is rolled back; if the rollback itself fails, " +
+            "the output names every file that was left in the new place.",
+        Positionals =
+        [
+            new PositionalSpec { Name = "old", Help = "The current name. Any of the three files is enough." },
+            new PositionalSpec { Name = "new", Help = "The name to move those files to. Must not already be in use." },
+        ],
+        Options = [],
+        Examples = ["rimsearcher snapshot rename vanilla baseline"],
+        JsonKeys =
+        [
+            new()
+            {
+                Key = "renamed",
+                What = "an object: from, to, snapshot, modlist, export, pin. snapshot / modlist / export " +
+                       "each say whether that file was moved or that it was not present in the place this " +
+                       "command looks — absence is never a missing key. pin says whether 'snapshot use' followed.",
+            },
+        ],
+    };
+
+    public override int Run(CommandContext ctx)
+    {
+        var plan = SnapshotRename.Prepare(ctx.Config, ctx.Args.Positional(0)!, ctx.Args.Positional(1)!);
+        SnapshotRename.Execute(plan.Moves);
+
+        var pinUpdated = false;
+        if (plan.PinFollows)
+        {
+            try
+            {
+                ctx.Config.SaveActiveSnapshot(plan.To);
+                pinUpdated = true;
+            }
+            catch (Exception ex)
+            {
+                ctx.Report.Notice(NoticeKind.Boundary,
+                    $"The files were renamed but the pin could not be updated ({ex.Message}). " +
+                    $"state.toml still names '{plan.From}'. Run '{CommandRegistry.ExeName} snapshot use {plan.To}' " +
+                    "to finish.");
+            }
+        }
+
+        ctx.Report.Detail("renamed",
+        [
+            new("from", plan.From),
+            new("to", plan.To),
+            new("snapshot", plan.Status[SnapshotSlot.Snapshot]),
+            new("modlist", plan.Status[SnapshotSlot.ModList]),
+            new("export", plan.Status[SnapshotSlot.Export]),
+            new("pin", pinUpdated ? "followed"
+                : plan.PinFollows ? $"not updated (still '{plan.From}')"
+                : SnapshotRename.PinStatus(plan)),
+        ]);
+
+        if (pinUpdated)
+            ctx.Report.Notice(NoticeKind.SnapshotChoice,
+                $"The pinned snapshot now follows as '{plan.To}'. Later commands that used '{plan.From}' " +
+                "because of 'snapshot use' will use '{plan.To}'.");
+
+        return 0;
+    }
+}
+
 public sealed class SnapshotTruncatedCommand : Command
 {
     public override CommandSpec Spec => new()
@@ -576,7 +657,7 @@ public sealed class SnapshotImportCommand : Command
             throw new CliUsageException($"No export file at '{file}'.");
 
         var name = ctx.Args.Value("name") ?? StripExtensions(Path.GetFileName(file));
-        var dbPath = Path.Combine(ctx.Config.ResolveSnapshotDir(), name + ".db");
+        var dbPath = SnapshotCatalog.DatabasePath(ctx.Config, name);
 
         // 收割默认开:代价约 2% 导入耗时,换来只在磁盘上存在的 key 不被答成「没有」。
         // 没收割的库对「磁盘上有没有」没有资格回答,所以扫了几个根目录要记进 meta。

@@ -1,0 +1,6 @@
+$ rimsearcher snapshot rename fixture
+exit 2
+--- stdout ---
+--- stderr ---
+Missing required argument <new>: The name to move those files to. Must not already be in use.
+Run 'rimsearcher snapshot rename --help' to see what this command accepts.

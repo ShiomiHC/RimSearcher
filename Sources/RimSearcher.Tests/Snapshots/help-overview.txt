@@ -27,6 +27,7 @@ Commands:
   snapshot diff       Compare the resolved defs and fields of two named snapshots.
   snapshot import     Build a queryable snapshot database out of a file the in-game exporter wrote.
   snapshot list       List the snapshots this machine knows about.
+  snapshot rename     Rename a snapshot by moving the files that share its name.
   snapshot status     Explain in full which snapshot is in use and how it compares with the game as installed right now.
   snapshot truncated  List the defs whose fields the exporter stopped short on.
   snapshot use        Pin a snapshot so later commands use it without being told each time.

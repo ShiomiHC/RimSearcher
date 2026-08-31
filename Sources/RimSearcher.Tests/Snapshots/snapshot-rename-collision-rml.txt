@@ -1,0 +1,5 @@
+$ rimsearcher snapshot rename fixture fixture-current
+exit 2
+--- stdout ---
+--- stderr ---
+Cannot rename 'fixture' to 'fixture-current': that name is already used by 'fixture-current.rml' next to the config file. Nothing was moved.

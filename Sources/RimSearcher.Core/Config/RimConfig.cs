@@ -63,6 +63,13 @@ public sealed class RimConfig
                 : System.IO.Path.GetDirectoryName(DefaultPath)!,
             "snapshots");
 
+    /// <summary>
+    /// 导出文件目录。<c>export_dir</c> 没配时落在快照目录的兄弟 <c>exports/</c> ——
+    /// 与 <c>export</c> 写入、以及按名字寻址一份导出,是同一条公式。
+    /// </summary>
+    public string ResolveExportDir()
+        => ExportDir ?? System.IO.Path.Combine(ResolveSnapshotDir(), "..", "exports");
+
     /// <summary>state 文件(activeSnapshot 这类会被命令改写的值)与 config 分家,免得改写用户的注释。</summary>
     public string StatePath
         => System.IO.Path.Combine(

@@ -294,6 +294,15 @@ public class OutputSnapshotTests
         { "help-where",            ["where", "--help"] },
         { "help-code-search",      ["code-search", "--help"] },
         { "help-sources-sync",     ["sources", "sync", "--help"] },
+        // snapshot rename 的契约全在 Remarks 与这几条报错上:三处缺席要说「在哪找过」,
+        // 撞名要说清是哪一处,旧名不存在要说「三处都没有」而不是只报库找不到。
+        { "help-snapshot-rename",  ["snapshot", "rename", "--help"] },
+        { "snapshot-rename-missing", ["snapshot", "rename", "nosuchname", "newname"] },
+        { "snapshot-rename-collision-db", ["snapshot", "rename", "fixture", "other"] },
+        { "snapshot-rename-collision-rml", ["snapshot", "rename", "fixture", "fixture-current"] },
+        { "snapshot-rename-same",  ["snapshot", "rename", "fixture", "fixture"] },
+        { "snapshot-rename-no-args", ["snapshot", "rename"] },
+        { "snapshot-rename-one-arg", ["snapshot", "rename", "fixture"] },
         // 没配 decompiled_dir 时说的那句话。反编译树是**唯一**不在快照里的数据源,
         // 这条路必然被走到,输出必须说清该往哪补一行配置。
         // 这一条要的是**没有**配置,所以自带 --config 覆盖掉 Fixture.Run 默认追加的那份。

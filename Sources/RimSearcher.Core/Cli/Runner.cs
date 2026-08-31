@@ -52,6 +52,7 @@ public sealed class CommandRegistry
         new SnapshotStatusCommand(),
         new SnapshotDiffCommand(),
         new SnapshotUseCommand(),
+        new SnapshotRenameCommand(),
         new SnapshotTruncatedCommand(),
         new SnapshotImportCommand(),
         new ModListListCommand(),

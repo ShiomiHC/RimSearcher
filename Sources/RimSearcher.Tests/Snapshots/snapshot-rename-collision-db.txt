@@ -1,0 +1,5 @@
+$ rimsearcher snapshot rename fixture other
+exit 2
+--- stdout ---
+--- stderr ---
+Cannot rename 'fixture' to 'other': that name is already used by 'other.db' in the snapshot directory. Nothing was moved.
