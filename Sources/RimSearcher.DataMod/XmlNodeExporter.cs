@@ -88,7 +88,7 @@ namespace RimSearcher.DataMod
                                 // 这里要并集而不是后者胜:问的是「磁盘上有没有哪份原文写过
                                 // 这一行」,任何一份写过,它就不是补丁加的。
                                 HashSet<string> before;
-                                var key = PatchedXmlNodes.Key(el.Name, nodeKey);
+                                var key = PatchedXmlNodes.Key(el.Name, nodeKey, keyIsName, isAbstract);
                                 if (!pre.TryGetValue(key, out before))
                                     pre[key] = before = new HashSet<string>(StringComparer.Ordinal);
                                 foreach (var p in written) before.Add(p);
@@ -130,7 +130,8 @@ namespace RimSearcher.DataMod
             foreach (var node in post)
             {
                 HashSet<string> before;
-                pre.TryGetValue(PatchedXmlNodes.Key(node.DefType, node.NodeKey), out before);
+                pre.TryGetValue(PatchedXmlNodes.Key(node.DefType, node.NodeKey, node.KeyIsName, node.IsAbstract),
+                                out before);
                 var patched = PatchedXmlNodes.PatchedFlags(node.Paths, before);
 
                 yield return new JsonLine()

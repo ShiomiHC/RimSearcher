@@ -24,16 +24,24 @@ namespace RimSearcher.DataMod
             public string DefType;
             public string NodeKey;
             public bool KeyIsName;
+            /// <summary>身份的一部分,不出到中间格式 —— 那边的 abstract 长在 xml_nodes 上。</summary>
+            public bool IsAbstract;
             public List<string> Paths;
             public List<string> Texts;
         }
 
         /// <summary>
-        /// 合并文档里同一个 defName 可以有多份(谁覆盖谁是后面 ParseAndProcessXML 的事),
-        /// 而文档是按加载顺序拼的 —— 所以这里**后者胜**,位置仍留在第一次出现的地方。
+        /// 合并文档里同一个 defName 可以出现多次,但**多数不是重复定义**,塌缩前得先认清身份。
         ///
-        /// 逐 mod 遍历那一路做不到这件事:它把多份并成一个并集,于是一个被后来的 mod 整个
-        /// 重定义过的 def,路径表里混着已经不生效的那一份的路径。
+        /// 身份 = 类型 + 键 + 键取自哪(<c>Name=</c> 还是 <c>defName</c>)+ 抽不抽象。后两样
+        /// 不进键就会踩两种官方写法:抽象节点 <c>Name="BabyPlay"</c> 与具体 def
+        /// <c>&lt;defName&gt;BabyPlay&lt;/defName&gt;</c> 同名;抽象节点同时带 <c>Name=</c> 和
+        /// <c>&lt;defName&gt;</c>(<c>Mercenary_Slasher</c>)。这两种情形里父子两份路径**都算数**
+        /// —— 子 def 继承了父节点写的那些行 —— 塌缩掉一份就会让它们变成确定的 no。
+        ///
+        /// 身份真撞上时**前者胜**:<c>DefDatabase.Add</c> 对同名的第二份要么跳过(同 mod 内),
+        /// 要么给它改名(跨 mod),活下来的叫这个名字的始终是第一份。逐 mod 遍历那一路给的是
+        /// 并集,于是路径表里会混进那份根本没生效的。
         /// </summary>
         public static List<Node> Extract(XmlDocument doc, int maxDepth, int maxItems)
         {
@@ -55,16 +63,21 @@ namespace RimSearcher.DataMod
                 if (defName.Length > 0) { nodeKey = defName; keyIsName = false; }
                 else if (name.Length > 0) { nodeKey = name; keyIsName = true; }
                 else continue;
+                var isAbstract = string.Equals(el.GetAttribute("Abstract"), "true",
+                                               StringComparison.OrdinalIgnoreCase);
+
+                var key = Key(el.Name, nodeKey, keyIsName, isAbstract);
+                if (byKey.ContainsKey(key)) continue;   // 前者胜
+                order.Add(key);
 
                 List<string> texts;
                 var paths = XmlFieldPaths.Collect(el, maxDepth, maxItems, out texts);
-                var key = Key(el.Name, nodeKey);
-                if (!byKey.ContainsKey(key)) order.Add(key);
                 byKey[key] = new Node
                 {
                     DefType = el.Name,
                     NodeKey = nodeKey,
                     KeyIsName = keyIsName,
+                    IsAbstract = isAbstract,
                     Paths = paths,
                     Texts = texts,
                 };
@@ -86,8 +99,12 @@ namespace RimSearcher.DataMod
             return flags;
         }
 
-        /// <summary>xml_written 的节点身份:def 类型 + 节点键。两者都不含空格。</summary>
-        public static string Key(string defType, string nodeKey) => defType + " " + nodeKey;
+        /// <summary>
+        /// 节点身份。四样都进键 —— 只用类型+键会把抽象父节点和同名的具体 def 认成一个。
+        /// def 类型与节点键都不含空格,拿空格当分隔安全。
+        /// </summary>
+        public static string Key(string defType, string nodeKey, bool keyIsName, bool isAbstract)
+            => defType + " " + nodeKey + (keyIsName ? " N" : " D") + (isAbstract ? "A" : "C");
 
         private static string ChildText(XmlElement el, string childName)
         {

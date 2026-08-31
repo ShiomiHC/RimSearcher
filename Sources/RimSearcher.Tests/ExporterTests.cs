@@ -262,26 +262,57 @@ public class ExporterTests
     }
 
     /// <summary>
-    /// 合并文档按加载顺序拼,同一个 defName 可以有多份 —— 谁覆盖谁是后面
-    /// ParseAndProcessXML 的事,所以这里必须**后者胜**。
+    /// 身份真撞上(同类型、同键、键来源一样、抽象与否一样)时**前者胜**。
     ///
-    /// 逐 mod 遍历那一路给的是并集,于是一个被后来的 mod 整个重定义过的 def,路径表里
-    /// 混着已经不生效的那一份。那种混入在输出上与「作者两处都写了」逐字同形。
+    /// 依据是 DefDatabase.Add:同名的第二份要么在同 mod 内被跳过,要么跨 mod 时被改名 ——
+    /// 活下来的叫这个名字的始终是第一份。逐 mod 遍历那一路给的是并集,于是路径表里会混进
+    /// 那份根本没生效的,而混入在输出上与「作者两处都写了」逐字同形。
+    ///
+    /// 官方 Data 里 Mercenary_Slasher 就是同一个文件里两份 PawnKindDef。
     /// </summary>
     [Fact]
-    public void 合并文档里同名def后者胜而不是并集()
+    public void 身份撞车时前者胜而不是并集()
     {
         var doc = Merged("""
-            <ThingDef><defName>Gun</defName><damage>10</damage><oldOnly>x</oldOnly></ThingDef>
-            <ThingDef><defName>Gun</defName><damage>99</damage><newOnly>y</newOnly></ThingDef>
+            <ThingDef><defName>Gun</defName><damage>10</damage><liveOnly>x</liveOnly></ThingDef>
+            <ThingDef><defName>Gun</defName><damage>99</damage><deadOnly>y</deadOnly></ThingDef>
             """);
         var nodes = PatchedXmlNodes.Extract(doc, 6, 64);
 
         var gun = Assert.Single(nodes);
-        Assert.Equal("Gun", gun.NodeKey);
-        Assert.Contains("newOnly", gun.Paths);
-        Assert.DoesNotContain("oldOnly", gun.Paths);
-        Assert.Equal("99", gun.Texts[gun.Paths.IndexOf("damage")]);
+        Assert.Contains("liveOnly", gun.Paths);
+        Assert.DoesNotContain("deadOnly", gun.Paths);
+        Assert.Equal("10", gun.Texts[gun.Paths.IndexOf("damage")]);
+    }
+
+    /// <summary>
+    /// 抽象父节点与同名的具体 def 是**两个身份**,一份都不许塌缩掉。
+    ///
+    /// 官方 Data 里三种写法都有:Name= 抽象节点与具体 def 同名(JobDef BabyPlay);
+    /// 抽象节点同时带 Name= 和 defName(PawnKindDef Mercenary_Slasher);
+    /// 抽象节点只有 Name=(SoundDef Designate_DragStandard_Changed)。
+    /// 这里父子两份路径**都算数** —— 子 def 继承了父节点写的那些行,塌缩掉一份就会让
+    /// 它们在 xml 列上变成确定的 no。第一版把这三处全判错了。
+    /// </summary>
+    [Fact]
+    public void 抽象父节点与同名具体def各占一条()
+    {
+        var byName = Merged("""
+            <JobDef Abstract="True" Name="BabyPlay"><driverClass>D</driverClass></JobDef>
+            <JobDef ParentName="BabyPlay"><defName>BabyPlay</defName><reportString>r</reportString></JobDef>
+            """);
+        Assert.Equal(2, PatchedXmlNodes.Extract(byName, 6, 64).Count);
+
+        // 抽象节点同时带 Name= 和 defName:两边都按 defName 立键,只有抽象与否分得开。
+        var bothKeys = Merged("""
+            <PawnKindDef Name="SlasherBase" Abstract="True"><defName>Slasher</defName><apparelMoney>1</apparelMoney></PawnKindDef>
+            <PawnKindDef ParentName="SlasherBase"><defName>Slasher</defName><combatPower>2</combatPower></PawnKindDef>
+            """);
+        var pair = PatchedXmlNodes.Extract(bothKeys, 6, 64);
+        Assert.Equal(2, pair.Count);
+        Assert.All(pair, n => Assert.Equal("Slasher", n.NodeKey));
+        Assert.Contains(pair, n => n.Paths.Contains("apparelMoney"));
+        Assert.Contains(pair, n => n.Paths.Contains("combatPower"));
     }
 
     /// <summary>def 类型不同就是两个节点,哪怕 defName 一样。</summary>
