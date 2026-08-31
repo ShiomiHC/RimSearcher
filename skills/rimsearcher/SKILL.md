@@ -24,7 +24,7 @@ Global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the com
 |---|---|
 | What does this def actually contain? | `rimsearcher get <defName>` |
 | Which C# class does this def actually run? | `rimsearcher get <defName>` — the `*Class` rows |
-| Does the vanilla XML write this line — Replace or Add? | `rimsearcher get <defName> --defaults` — the `xml` column (`here` / `parent` / `no` / `under <container>`). Only on snapshots from exporter 0.5.0; older ones omit the column and say so. `here`/`parent` include list entries named after a def (`costList.Steel`) once a sibling value on that index entry names the tag. `no` is a determined miss (this field was not written), not a path-shape maybe. `under <container>` is the leftover: the entry did not join, or it joined to a tag like `<Steel>75</Steel>` whose text belongs to one of several fields and the index does not record which — neither answer is available for that row. |
+| Does the vanilla XML write this line — Replace or Add? | `rimsearcher get <defName> --defaults` — the `xml` column (`here` / `parent` / `no` / `under <container>`). Only on snapshots from exporter 0.5.0; older ones omit the column and say so. `here`/`parent` include list entries named after a def (`costList.Steel`) once a sibling value on that index entry names the tag. `no` is determined, not a path-shape maybe — but the column reads the XML on disk **before any PatchOperation ran**, so a node another mod's `PatchOperationAdd` put there still reads `no`; `rimsearcher inherit <defName>` counts the patch xpaths that name the def. `under <container>` is the leftover: the entry did not join, or it joined to a tag like `<Steel>75</Steel>` whose text belongs to one of several fields and the index does not record which — neither answer is available for that row. |
 | What is this called? I only know part. | `rimsearcher search <words>` |
 | Which defs use this class / value? | `rimsearcher where <field> <value>` |
 | Which defs pick this class with `Class="…"`? | `rimsearcher where Class <ClassName>` |
@@ -136,8 +136,8 @@ rather than assuming. These four it has no way to state:
   default" is the same error facing the other way**. An XML line whose value happens to
   equal the default is indistinguishable from no line at all, so neither direction is
   available **from this column** — on snapshots from exporter 0.5.0 the `xml` column beside
-  it does tell them apart (`here` = an XML line writing that same value, `no` = this field
-  was not written), which is the one place that question is answerable. Reading the C# constructor shows where the default *could* come from, never
+  it does tell them apart (`here` = an XML line writing that same value, `no` = the pre-patch
+  XML does not write it), which is the one place that question is answerable. Reading the C# constructor shows where the default *could* come from, never
   whether the XML says it too. `unknown` = type not constructible. Exemptions cut both
   ways: rules that *read* the value (thresholds, comparisons) answer fine from a `yes` row
   — the value is real either way; `compClass`/`thingClass`/`workerClass` are usually

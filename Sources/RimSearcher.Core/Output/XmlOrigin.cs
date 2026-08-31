@@ -8,8 +8,11 @@ namespace RimSearcher.Output;
 ///
 /// <c>here</c> = 这个 def 自己的 XML 写了这条路径,Replace 找得到节点;
 /// <c>parent</c> = 只有祖先写了,指向这个 def 的 xpath 上这条节点不在,Add 才找得到;
-/// <c>no</c> = 这一格没写(含:列表项已按 defName 标签归位,但这一格对应的行不在);
-/// <c>under X</c> = XML 在容器 X 下写过东西,值回连之后仍对不到这一项。
+/// <c>no</c> = 这一格没写(含:列表项已按 defName 标签归位,但这一格对应的行不在)。
+/// **读的是磁盘上的 XML 原文,PatchOperation 还没跑** —— 别的 mod 用 PatchOperationAdd
+/// 加进来的节点在这里照样报 no,而 no 的出路是 Add,于是会插出第二份。这份时间差的
+/// 出口是 inherit 的 patch_ops 三个计数(06「patch 溯源」定的口径:0 不说,非 0 报数);
+/// <c>under X</c> = XML 在容器 X 下写过东西,值回连之后仍说不准这一格。
 /// 缺层时这一列根本不出现,由能力位那句通知说,不许印成 <c>no</c>。
 ///
 /// RimWorld 允许拿 defName 当列表元素的标签名(<c>costList.Steel</c>、<c>things.AncientAmmoStack.chance</c>),

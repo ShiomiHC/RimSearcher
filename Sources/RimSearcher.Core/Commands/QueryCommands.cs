@@ -279,8 +279,11 @@ public sealed class GetCommand : Command
             "Index paths such as costList[0].thingDef are joined back to def-name tags such as costList.Steel " +
             "from a sibling value on the same list entry, including two-level tags (things.AncientAmmoStack.chance), " +
             "and using XML lines written by this def or by an ancestor. After that join, here/parent means the " +
-            "line is there, and no means this field was not written — a determined miss, including when the list " +
-            "entry itself is present. A fourth value, 'under <container>', means the XML wrote that container but " +
+            "line is there, and no means the XML read here does not write it — determined, not a path-shape " +
+            "maybe, and it holds even when the list entry itself is present. What that column reads is the XML " +
+            "as written on disk, before any PatchOperation ran, so a node another mod's PatchOperationAdd put " +
+            "there still reads as no: 'rimsearcher inherit <defName>' reports how many patch xpaths name this " +
+            "def. A fourth value, 'under <container>', means the XML wrote that container but " +
             "this row still cannot be pinned to a line in it: the entry did not join, or it joined to a tag such " +
             "as <Steel>75</Steel> whose text belongs to one of several fields and the index does not record " +
             "which. Neither answer is available there. Older snapshots omit the column and say so.",
@@ -325,8 +328,10 @@ public sealed class GetCommand : Command
                      + "carries. They are left out by default because they are the ones most often read as something "
                      + "an author chose. The 'xml' column on those rows says whether this def's own XML wrote the "
                      + "path (here), only an ancestor did (parent), neither (no), or that the row cannot be "
-                     + "pinned to a line inside a container the XML did write (under <container>). no is a "
-                     + "determined miss — this field was not written. A yes with xml=here is an explicit write of "
+                     + "pinned to a line inside a container the XML did write (under <container>). no is "
+                     + "determined, not a path-shape maybe, but it reads the XML from disk before any "
+                     + "PatchOperation ran — a node another mod added by patch still reads as no. "
+                     + "A yes with xml=here is an explicit write of "
                      + "the default. Older snapshots have no xml column, and there a def whose XML "
                      + "writes that same value and a def that never mentions the field look the same. "
                      + "How many were left out is always printed, and --path-contains shows a named field either way.",
@@ -2404,7 +2409,7 @@ internal static class Completeness
         var yesMeans = ctx.Db.Meta.IndexesXmlWritten
             ? $"a yes is not evidence that nothing wrote the value — the '{XmlOrigin.Column}' column on " +
               $"that same row tells the two apart: {XmlOrigin.Here} is an XML line writing that same " +
-              $"value, {XmlOrigin.No} is a determined miss (this field was not written)"
+              $"value, {XmlOrigin.No} is an XML that does not write it (read before patches ran)"
             : "a yes is not evidence that nothing wrote the value — a def whose XML writes " +
               "that same value and a def that never mentions the field both show yes here";
 
