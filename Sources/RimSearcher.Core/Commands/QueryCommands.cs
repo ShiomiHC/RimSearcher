@@ -668,9 +668,9 @@ public sealed class GetCommand : Command
             var xmlMarks = ctx.Db.Meta.IndexesXmlWritten
                 ? ctx.Db.XmlWrittenMarks(def.DefType, def.DefName, out xmlContainers)
                 : null;
-            var valuesByElement = xmlMarks is null
+            var cellsByElement = xmlMarks is null
                 ? null
-                : XmlOrigin.ValuesByElement(ctx.Db.AllFieldCells(def.Id));
+                : XmlOrigin.CellsByElement(ctx.Db.AllFieldCells(def.Id));
 
             var fieldCols = xmlMarks is null
                 ? new[] { "path", "value", FieldDefault.Column }
@@ -689,7 +689,7 @@ public sealed class GetCommand : Command
                     };
                     if (xmlMarks is not null)
                         row[XmlOrigin.Column] = XmlOrigin.Resolve(
-                            f.Path, xmlMarks, xmlContainers, valuesByElement!);
+                            f.Path, xmlMarks, xmlContainers, cellsByElement!);
                     return (IReadOnlyDictionary<string, object?>)row;
                 }).ToList());
 

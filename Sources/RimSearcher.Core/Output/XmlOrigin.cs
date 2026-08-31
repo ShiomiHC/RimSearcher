@@ -14,7 +14,12 @@ namespace RimSearcher.Output;
 ///
 /// RimWorld 允许拿 defName 当列表元素的标签名(<c>costList.Steel</c>、<c>things.AncientAmmoStack.chance</c>),
 /// 索引按 <c>costList[0].thingDef</c>。值回连拿同一元素各格的值 V 去对 XML 的 <c>容器.V</c>
-/// (自己写的和祖先写的都算);对上了就按能否落到具体行分成 here/parent 或确定的 no。
+/// (自己写的和祖先写的都算),那个 V 就是标签名。
+///
+/// 归位之后还得分清标签底下写了什么,否则会给出错的确定答案:短形式只写标签名加一段
+/// 文本,文本落哪一格由该类型的 LoadDataFromXmlCustom 决定,而 xml_written 只记路径不记
+/// 内容 —— 元素里的候选格多于一个时(costList 的 count 与 quality)就是说不准,报 here
+/// 会把 Replace 指向一个从没写过的节点。
 /// </summary>
 public static class XmlOrigin
 {
@@ -25,13 +30,16 @@ public static class XmlOrigin
 
     public static string Under(string container) => $"under {container}";
 
+    /// <summary>元素里的一格。<c>Leaf</c> 是相对该元素前缀的余段,<c>costList[0]</c> 下的 <c>count</c>。</summary>
+    public readonly record struct ElementCell(string Leaf, string Value);
+
     /// <summary>
     /// 按带下标的元素前缀把同一 def 的格分组。一次算完,查询侧按格查表,不按格扫库。
     /// </summary>
-    public static Dictionary<string, List<string>> ValuesByElement(
+    public static Dictionary<string, List<ElementCell>> CellsByElement(
         IEnumerable<FieldRow> cells)
     {
-        var d = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        var d = new Dictionary<string, List<ElementCell>>(StringComparer.Ordinal);
         foreach (var cell in cells)
         {
             if (string.IsNullOrEmpty(cell.Value)) continue;
@@ -39,7 +47,9 @@ public static class XmlOrigin
             {
                 if (!d.TryGetValue(element, out var list))
                     d[element] = list = [];
-                list.Add(cell.Value);
+                list.Add(new ElementCell(
+                    cell.Path.Length > element.Length + 1 ? cell.Path[(element.Length + 1)..] : "",
+                    cell.Value!));
             }
         }
         return d;
@@ -52,29 +62,60 @@ public static class XmlOrigin
         string path,
         IReadOnlyDictionary<string, string> xmlMarks,
         HashSet<string> containers,
-        IReadOnlyDictionary<string, List<string>> valuesByElement)
+        IReadOnlyDictionary<string, List<ElementCell>> cellsByElement)
     {
         if (xmlMarks.TryGetValue(path, out var exact))
             return exact;
 
         if (TryFirstIndex(path, out var container, out var element, out var leaf)
-            && valuesByElement.TryGetValue(element, out var values))
+            && cellsByElement.TryGetValue(element, out var cells))
         {
-            var located = false;
-            string? landed = null;
-            foreach (var v in values)
+            // anchor:元素里某一格的值 V 使 `容器.V` 出现在 XML 里 —— 那个 V 就是标签名。
+            string? anchor = null, anchorValue = null, anchorMark = null;
+            foreach (var c in cells)
             {
-                var cv = container + "." + v;
-                if (xmlMarks.ContainsKey(cv) || containers.Contains(cv))
-                    located = true;
-                if (leaf.Length > 0 && xmlMarks.TryGetValue(cv + "." + leaf, out var mLeaf))
-                    landed = PreferHere(landed, mLeaf);
-                if (xmlMarks.TryGetValue(cv, out var mV))
-                    landed = PreferHere(landed, mV);
-                if (landed == Here) break;
+                if (c.Value.Length == 0) continue;
+                var cv = container + "." + c.Value;
+                if (xmlMarks.TryGetValue(cv, out var m))
+                {
+                    anchor = cv; anchorValue = c.Value; anchorMark = m;
+                    break;
+                }
+                if (anchor is null && containers.Contains(cv))
+                {
+                    anchor = cv; anchorValue = c.Value;
+                }
             }
-            if (landed is not null) return landed;
-            if (located) return No;
+
+            if (anchor is not null)
+            {
+                // XML 把这个字段自己拼了出来
+                if (leaf.Length > 0 && xmlMarks.TryGetValue(anchor + "." + leaf, out var mLeaf))
+                    return mLeaf;
+
+                // 键格:这一格的值就是那个标签名。标签在,它就在。
+                foreach (var c in cells)
+                    if (c.Leaf == leaf && c.Value == anchorValue)
+                        return anchorMark ?? ChildMark(xmlMarks, anchor);
+
+                // 标签底下拼着别的字段(长形式 <Widget><chance>…</chance></Widget>),
+                // 没拼到这一格 —— 确定没写。
+                if (anchorMark is null) return No;
+
+                // 短形式 <Steel>75</Steel> 只写两件事:标签名,和一段文本。文本落哪一格由
+                // 类型的 LoadDataFromXmlCustom 决定,XML 侧只记了路径没记内容,这里读不出来。
+                // 候选只剩一格时没得选(statBases 的 value);剩多格时(costList 的 count 与
+                // quality)哪一格都可能,报 here 就是给了个错的确定答案。
+                var candidates = 0;
+                foreach (var c in cells)
+                {
+                    if (c.Leaf.Length == 0 || c.Value == anchorValue) continue;
+                    if (xmlMarks.ContainsKey(anchor + "." + c.Leaf)) continue;
+                    if (xmlMarks.ContainsKey(element + "." + c.Leaf)) continue;
+                    if (++candidates > 1) break;
+                }
+                return candidates == 1 ? anchorMark : Under(container);
+            }
         }
 
         var bracket = path.IndexOf('[', StringComparison.Ordinal);
@@ -112,4 +153,22 @@ public static class XmlOrigin
 
     private static string PreferHere(string? current, string mark)
         => current == Here || mark == Here ? Here : mark;
+
+    /// <summary>
+    /// 标签自己没占一行(长形式)时,它的 here/parent 只能从底下那些行看出来。
+    /// 只在键格这一条路上走,量小。
+    /// </summary>
+    private static string ChildMark(IReadOnlyDictionary<string, string> xmlMarks, string anchor)
+    {
+        string? mark = null;
+        foreach (var kv in xmlMarks)
+            if (kv.Key.Length > anchor.Length
+                && kv.Key[anchor.Length] == '.'
+                && kv.Key.StartsWith(anchor, StringComparison.Ordinal))
+            {
+                mark = PreferHere(mark, kv.Value);
+                if (mark == Here) break;
+            }
+        return mark ?? Here;
+    }
 }

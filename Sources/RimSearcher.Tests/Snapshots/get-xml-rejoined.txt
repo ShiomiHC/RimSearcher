@@ -1,7 +1,7 @@
 $ rimsearcher get ChildGun --defaults --path-contains costList --path-contains things --path-contains Hyperlinks --fixture-presence
 exit 0
 --- stdout ---
-Matching 'costList' or 'things' or 'Hyperlinks': 5 fields, out of 9 fields on the def. Whole path segment: 4 fields; inside a longer name: 1 field.
+Matching 'costList' or 'things' or 'Hyperlinks': 7 fields, out of 13 fields on the def. Whole path segment: 6 fields; inside a longer name: 1 field.
 
 def_name       ChildGun
 def_type       ThingDef
@@ -13,7 +13,9 @@ inherits_from  BaseGun (see 'rimsearcher inherit ChildGun')
 
 path                          value     code_default  xml
 costList[0].thingDef          Steel     no            here
-things[0].def                 Widget    no            no
+costList[0].count             75        no            under costList
+costList[0].quality           Normal    yes           under costList
+things[0].def                 Widget    no            here
 things[0].chance              0.25      no            here
 things[0].hp                  0         yes           no
 descriptionHyperlinks[0].def  ChildGun  no            under descriptionHyperlinks

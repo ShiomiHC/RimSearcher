@@ -1,7 +1,7 @@
 $ rimsearcher get ChildGun --defaults --fixture-presence
 exit 0
 --- stdout ---
-9 fields.
+13 fields.
 
 def_name       ChildGun
 def_type       ThingDef
@@ -16,7 +16,11 @@ thingClass                    RimWorld.Bullet  no            parent
 damage                        12               no            here
 speed                         70               no            parent
 costList[0].thingDef          Steel            no            here
-things[0].def                 Widget           no            no
+costList[0].count             75               no            under costList
+costList[0].quality           Normal           yes           under costList
+statBases[0].stat             Beauty           no            here
+statBases[0].value            -4               no            here
+things[0].def                 Widget           no            here
 things[0].chance              0.25             no            here
 things[0].hp                  0                yes           no
 descriptionHyperlinks[0].def  ChildGun         no            under descriptionHyperlinks

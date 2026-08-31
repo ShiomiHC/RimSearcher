@@ -102,11 +102,41 @@ public class PresenceTests
             Assert.Fail($"no field {path}");
             return "";
         }
-        // XML 有 things.Widget.chance:chance 落到那一行;def 是标签名本身不占 xml_written
-        // 叶子;hp 这个字段 XML 没写。后两格是确定的 no,不是 under。
+        // XML 有 things.Widget.chance:chance 落到那一行;def 的值就是标签名 Widget,
+        // 标签在它就在;hp 这个字段长形式里没拼出来,是确定的 no,不是 under。
         Assert.Equal(XmlOrigin.Here, XmlOf("things[0].chance"));
-        Assert.Equal(XmlOrigin.No, XmlOf("things[0].def"));
+        Assert.Equal(XmlOrigin.Here, XmlOf("things[0].def"));
         Assert.Equal(XmlOrigin.No, XmlOf("things[0].hp"));
+    }
+
+    /// <summary>
+    /// 短形式 <c>&lt;Steel&gt;75&lt;/Steel&gt;</c> 只写标签名加一段文本。文本落哪一格由类型的
+    /// LoadDataFromXmlCustom 决定,xml_written 只记路径不记内容 —— 候选多于一个时说不准。
+    /// **这里不许印 here。** here 的出路是 PatchOperationReplace,而 costList[0].quality
+    /// 这个节点 XML 里根本没有,Replace 会打空;那比「说不准」糟,因为它是个确定的错答案。
+    /// </summary>
+    [Fact]
+    public void 短形式标签的文本落哪一格_候选唯一才算数()
+    {
+        var (json, _, _) = Fixture.Run("get", "ChildGun", "--defaults", "--json", "--db", Fixture.PresenceDb);
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var fields = doc.RootElement.GetProperty("defs")[0].GetProperty("fields");
+        string XmlOf(string path)
+        {
+            foreach (var row in fields.EnumerateArray())
+                if (row.GetProperty("path").GetString() == path)
+                    return row.GetProperty(XmlOrigin.Column).GetString()!;
+            Assert.Fail($"no field {path}");
+            return "";
+        }
+        // 键格:值就是标签名 Steel。
+        Assert.Equal(XmlOrigin.Here, XmlOf("costList[0].thingDef"));
+        // 非键格有两个,那段文本 75 落在哪一格读不出来。
+        Assert.Equal(XmlOrigin.Under("costList"), XmlOf("costList[0].count"));
+        Assert.Equal(XmlOrigin.Under("costList"), XmlOf("costList[0].quality"));
+        // 同是短形式,statBases 的非键格只有 value 一个,没得选。
+        Assert.Equal(XmlOrigin.Here, XmlOf("statBases[0].stat"));
+        Assert.Equal(XmlOrigin.Here, XmlOf("statBases[0].value"));
     }
 
     [Fact]

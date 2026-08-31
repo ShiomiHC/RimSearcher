@@ -333,6 +333,13 @@ public static class Fixture
             // XML 侧写的是 costList.Steel(拿 defName 当标签名),索引侧是
             // costList[0].thingDef —— 值回连之后这一格是 here。
             new ExportedField("costList[0].thingDef", "Steel", DefaultState.Differs),
+            // 短形式 <Steel>75</Steel> 只写标签名和一段文本。count 与 quality 都可能是
+            // 那段文本,XML 侧没记内容 —— 两个都报 here 就会有一个是错的确定答案。
+            new ExportedField("costList[0].count", "75", DefaultState.Differs),
+            new ExportedField("costList[0].quality", "Normal", DefaultState.Same),
+            // 同是短形式,但非键格只剩 value 一个,文本没得选,它就是 here。
+            new ExportedField("statBases[0].stat", "Beauty", DefaultState.Differs),
+            new ExportedField("statBases[0].value", "-4", DefaultState.Differs),
             // 两层 defName 标签:XML 有 things.Widget.chance,没有 things.Widget 也没有
             // things.Widget.hp。chance 归位成 here;def / hp 是「元素在、这一格没写」的 no。
             new ExportedField("things[0].def", "Widget", DefaultState.Differs),
@@ -349,8 +356,10 @@ public static class Fixture
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindTypeFields)
             .Str(IntermediateFormat.KeyDefType, "ThingDef")
             .Strs(IntermediateFormat.KeyPaths,
-                ["burstCount", "costList[0].thingDef", "damage", "defName",
+                ["burstCount", "costList[0].count", "costList[0].quality",
+                 "costList[0].thingDef", "damage", "defName",
                  "descriptionHyperlinks[0].def", "label", "neverSet", "speed",
+                 "statBases[0].stat", "statBases[0].value",
                  "thingClass", "things[0].chance", "things[0].def", "things[0].hp"])
             .ToString());
         records++;
@@ -402,7 +411,7 @@ public static class Fixture
             .Str(IntermediateFormat.KeyNodeKey, "ChildGun")
             .Bool(IntermediateFormat.KeyKeyIsName, false)
             .Strs(IntermediateFormat.KeyPaths,
-                ["defName", "label", "damage", "costList.Steel",
+                ["defName", "label", "damage", "costList.Steel", "statBases.Beauty",
                  "descriptionHyperlinks.ThingDef", "things.Widget.chance"])
             .ToString());
         records++;
