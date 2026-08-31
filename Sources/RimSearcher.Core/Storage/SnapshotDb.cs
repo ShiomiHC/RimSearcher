@@ -1825,7 +1825,10 @@ public sealed class SnapshotDb : IDisposable
         var p = new Dictionary<string, object?> { ["@id"] = defId };
         var rows = new List<FieldRow>();
         using var rd = Query(
-            "SELECT path, leaf, value, is_default FROM field_values WHERE def_id = @id", p);
+            // anchor 取的是元素里第一个对上标签的格,所以行序参与输出 —— 不排就靠 rowid,
+            // 而那不是承诺。
+            "SELECT path, leaf, value, is_default FROM field_values WHERE def_id = @id "
+            + "ORDER BY path", p);
         while (rd.Read())
             rows.Add(new FieldRow(rd.GetString(0), rd.GetString(1),
                                   rd.IsDBNull(2) ? null : rd.GetString(2), rd.GetInt32(3)));
