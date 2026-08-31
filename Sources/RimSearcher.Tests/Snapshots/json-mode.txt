@@ -11,7 +11,7 @@ exit 0
     },
     {
       "kind": "filter",
-      "text": "Not listed: 1 field whose value matches the declaring type's own default; --defaults lists them. That match is not evidence that nothing wrote them. The snapshot holds 12 field paths for this def; a null-valued field never entered the index and is in neither count. Nothing below shows any field of these list entries, which the def has all the same: comps[0], statBases[0], statBases[1]."
+      "text": "Not listed: 1 field whose value matches the declaring type's own default; --defaults lists them. That match is not evidence that nothing wrote them: this snapshot is the merged in-memory state, where a def whose XML writes the default value and a def that never mentions the field are byte-for-byte identical. Nothing here tells them apart — the def's 'source' file below does. The snapshot holds 12 field paths for this def; a null-valued field never entered the index and is in neither count. Nothing below shows any field of these list entries, which the def has all the same: comps[0], statBases[0], statBases[1]."
     },
     {
       "kind": "advisory",
