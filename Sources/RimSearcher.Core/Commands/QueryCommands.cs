@@ -605,17 +605,18 @@ public sealed class GetCommand : Command
                         $"Not listed: {Tally.Complete(defaulted).Render("field")} whose value matches the " +
                         // 出路紧贴它召回的那个数(见下),否定另起一句 —— 挂在分号后面会被
                         // 连读成同一句的尾巴,而它要挡的正是「只读前半句」。
-                        // 「不构成证据」四个字本身挡不住 —— 盲测:陷阱是一个原版 XML 真写了
+                        // 「不构成证据」四个字本身挡不住。盲测五臂,陷阱是一个原版 XML 真写了
                         // `<rotatable>true</rotatable>`(值正好等于类默认值)的 def,问该用 Add
-                        // 还是 Replace。带这半句 0/10 答对,删掉它也是 0/10,复述率 2/10 对 3/10 ——
-                        // 它连被复述都做不到,复述了的还转头断言「原版没写」。补上「两者在这里
-                        // 逐字节同形」和一个看得见的去处之后是 3/10(对合并对照 p=0.03)。
-                        // 指 source 行:它恒在,代码生成的 def 上那行自己会说「不是来自 XML 文件」。
+                        // 还是 Replace(正解 Replace),各 10 次:
+                        //   原句 0 · 删掉它 0 · 只补「两者逐字节同形」4(p=0.008) ·
+                        //   只补「去看 source 行」0(p=1.0) · 两者都补 3(不比只补同形好)
+                        // 起作用的是**把两个分不开的状态点名**,不是否定,也不是给方向。
+                        // 那条「点名了可跑出路的提示跟随率 27–35%」的规律在这里不适用:那些出路
+                        // 是同一个工具里立刻能敲的命令,而「去看游戏的 XML」是别处的一件事 ——
+                        // 它和原句一样只给了方向,没给判据。所以那 114 个字符是死重,已删。
                         "declaring type's own default; --defaults lists them. That match is not evidence " +
-                        "that nothing wrote them: this snapshot is the merged in-memory state, where a def " +
-                        "whose XML writes the default value and a def that never mentions the field are " +
-                        "byte-for-byte identical. Nothing here tells them apart — the def's 'source' file " +
-                        "below does. The snapshot holds " +
+                        "that nothing wrote them: a def whose XML writes the default value and a def that " +
+                        "never mentions the field are byte-for-byte identical here. The snapshot holds " +
                         $"{Tally.Complete(total).Render("field path")} for this " +
                         "def; a null-valued field never entered the index and is in neither count." +
                         // 方位词指的是这句话下面那张表。此前渲染器无条件把声明全提到最前,
