@@ -705,6 +705,34 @@ public sealed class GetCommand : Command
             // yes 行,以及这条否定是不是已经由上面的 Not listed 那句承住了(见那边的注释)。
             Completeness.NoteWidelySharedValues(ctx, def, fields, withDefaults, defaulted);
 
+            // xml 列读的是磁盘上的 XML 原文,PatchOperation 还没跑(XmlNodeExporter 的产地口径)。
+            // 于是别的 mod 用 PatchOperationAdd 加进来的一行在这里报 no,而 no 的出路是 Add ——
+            // 会插出第二份。06「patch 溯源」给这份时间差定的处置是逐条报数而不是写一句常驻
+            // 免责声明:0 不说,非 0 报出数字。那条口径当初只兑现在 inherit 上,而推出 Add 的
+            // 那条路走的是 get。
+            //
+            // 这个数**只会低估**,两头都漏,所以它非 0 时是硬信号、为 0 时什么都不是:
+            // xpath 按 thingClass 或通配符寻址的不留痕迹;既没有 Name= 也没有 ParentName、
+            // 又不 abstract 的普通 def 根本不进 xml_nodes,连计数都没有。为 0 与查不到都沉默,
+            // 常驻的那半句话在 --help 与 --defaults 的说明里。
+            if (xmlMarks is not null)
+            {
+                var node = ctx.Db.NodesNamed(def.DefName)
+                    .FirstOrDefault(n => string.Equals(n.DefType, def.DefType, StringComparison.Ordinal)
+                                      && string.Equals(n.DefName, def.DefName, StringComparison.Ordinal));
+                var xpaths = node is null
+                    ? 0
+                    : (string.IsNullOrEmpty(node.Name) ? 0 : node.PatchOps)
+                      + node.PatchOpsDefName + node.PatchOpsLabel;
+                if (xpaths > 0)
+                    ctx.Report.Notice(NoticeKind.Boundary,
+                        $"{xpaths} patch xpath{(xpaths == 1 ? "" : "s")} name this def. The " +
+                        $"'{XmlOrigin.Column}' column above reads the XML as written on disk, before any " +
+                        $"PatchOperation ran, so a line one of those patches added reads {XmlOrigin.No} " +
+                        $"there — 'rimsearcher inherit {def.DefName}' breaks the count down by how each " +
+                        "xpath names it.");
+            }
+
             // 经济面的指路。**这句必须长在 get 上,不能只长在 economy 上** —— 第十五轮盲测:
             // 十五个受测样本里,凡是走到 `economy` 的都读对了,而单 def 的价格/造价题上
             // 三档里两档从没走到过,因为 `get` 已经给了看着完整的一屏,没有任何东西提示

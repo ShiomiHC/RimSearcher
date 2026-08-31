@@ -223,6 +223,29 @@ public class PresenceTests
         Assert.Equal(2L, (long)cmd.ExecuteScalar()!);
     }
 
+    /// <summary>
+    /// xml 列读的是打补丁之前的 XML,所以 PatchOperationAdd 加进来的一行在那里报 no,
+    /// 而 no 的出路是 Add —— 会插出第二份。实证:官方 Royalty 给 PowerClaw 加了
+    /// recipeMaker.researchPrerequisite,xml 列报 no。
+    ///
+    /// 报数只在非 0 时印(06「patch 溯源」的口径)。**沉默那一半也要钉**:这个数两头都
+    /// 低估(按 thingClass 或通配符寻址的 xpath 不留痕迹;三样都没有的普通 def 连
+    /// xml_nodes 都不进),要是哪天它变成无条件印,常驻免责声明会把非 0 那次的分量冲掉。
+    /// </summary>
+    [Fact]
+    public void 被patch点过名才报数()
+    {
+        var (chatty, _, _) = Fixture.Run("get", "ChildGun", "--defaults", "--db", Fixture.PresenceDb);
+        Assert.Contains("3 patch xpaths name this def. The 'xml' column above reads the XML as written "
+                        + "on disk, before any PatchOperation ran, so a line one of those patches added "
+                        + "reads no there", chatty);
+
+        // OtherGun 不在 xml_nodes 里(既没有 Name= 也没有 ParentName、又不 abstract),
+        // 于是连计数都没有 —— 这一半沉默,常驻的那句话在 --help 与 --defaults 的说明里。
+        var (quiet, _, _) = Fixture.Run("get", "OtherGun", "--defaults", "--db", Fixture.PresenceDb);
+        Assert.DoesNotContain("patch xpath", quiet);
+    }
+
     [Fact]
     public void 旧导出导入后新表是空的()
     {

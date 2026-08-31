@@ -26,5 +26,6 @@ things[0].hp                  0                yes           no
 descriptionHyperlinks[0].def  ChildGun         no            under descriptionHyperlinks
 burstCount                    1                yes           no
 No value above with 'code_default'=no is one that most of the 2 ThingDefs in this snapshot also carry. Rows marked yes were not compared: a yes is not evidence that nothing wrote the value — the 'xml' column on that same row tells the two apart: here is an XML line writing that same value, no is an XML that does not write it (read before patches ran).
-The game also prices things like this — market value, cost to make, work amount — and those are computed rather than stored, so no field above would hold them either way. This snapshot never measured them, so it cannot say whether this def is one of the priced ones: 'rimsearcher economy ChildGun' says why and what to re-export.
+  - 3 patch xpaths name this def. The 'xml' column above reads the XML as written on disk, before any PatchOperation ran, so a line one of those patches added reads no there — 'rimsearcher inherit ChildGun' breaks the count down by how each xpath names it.
+  - The game also prices things like this — market value, cost to make, work amount — and those are computed rather than stored, so no field above would hold them either way. This snapshot never measured them, so it cannot say whether this def is one of the priced ones: 'rimsearcher economy ChildGun' says why and what to re-export.
 --- stderr ---
