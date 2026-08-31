@@ -280,13 +280,16 @@ public sealed class GetCommand : Command
             "from a sibling value on the same list entry, including two-level tags (things.AncientAmmoStack.chance), " +
             "and using XML lines written by this def or by an ancestor. After that join, here/parent means the " +
             "line is there, and no means the XML read here does not write it — determined, not a path-shape " +
-            "maybe, and it holds even when the list entry itself is present. What that column reads is the XML " +
-            "as written on disk, before any PatchOperation ran, so a node another mod's PatchOperationAdd put " +
-            "there still reads as no: 'rimsearcher inherit <defName>' reports how many patch xpaths name this " +
-            "def. A fourth value, 'under <container>', means the XML wrote that container but " +
-            "this row still cannot be pinned to a line in it: the entry did not join, or it joined to a tag such " +
-            "as <Steel>75</Steel> whose text belongs to one of several fields and the index does not record " +
-            "which. Neither answer is available there. Older snapshots omit the column and say so.",
+            "maybe, and it holds even when the list entry itself is present. From exporter 0.7.0 the paths are " +
+            "read from the merged XML after every PatchOperation ran, and a line another mod's patch put there " +
+            "reads as here+patch or parent+patch: Replace still finds that node, but your patch now depends on " +
+            "that mod staying loaded. Older snapshots read the XML as written on disk before any PatchOperation " +
+            "ran, so there a patched-in node reads as no instead, and 'rimsearcher inherit <defName>' reports " +
+            "how many patch xpaths name this def. A further value, 'under <container>', means the XML wrote that container but " +
+            "this row still cannot be pinned to a line in it: the entry did not join, or it joined to a " +
+            "short-form tag such as <Steel>75</Steel> whose inline text matches none of the remaining fields, " +
+            "or more than one of them — or this snapshot predates recording that text. Neither answer is " +
+            "available there. Older snapshots omit the column and say so.",
         Positionals = [new PositionalSpec { Name = "defName", Help = "The exact def name. 'search' finds it if you only know part of it." }],
         Options =
         [
@@ -671,8 +674,11 @@ public sealed class GetCommand : Command
             // xml 列的取值只从 XmlOrigin 出。值回连要用同一元素的其它格,所以全量取一次
             // 再按元素前缀分组 —— 不按格查库,旧快照根本不走这条路。
             var xmlContainers = new HashSet<string>(StringComparer.Ordinal);
+            Dictionary<string, string>? xmlTexts = null;
+            HashSet<string>? xmlPatched = null;
             var xmlMarks = ctx.Db.Meta.IndexesXmlWritten
-                ? ctx.Db.XmlWrittenMarks(def.DefType, def.DefName, out xmlContainers)
+                ? ctx.Db.XmlWrittenMarks(def.DefType, def.DefName, out xmlContainers, out xmlTexts,
+                                         out xmlPatched)
                 : null;
             var cellsByElement = xmlMarks is null
                 ? null
@@ -695,7 +701,7 @@ public sealed class GetCommand : Command
                     };
                     if (xmlMarks is not null)
                         row[XmlOrigin.Column] = XmlOrigin.Resolve(
-                            f.Path, xmlMarks, xmlContainers, cellsByElement!);
+                            f.Path, xmlMarks, xmlContainers, cellsByElement!, xmlTexts, xmlPatched);
                     return (IReadOnlyDictionary<string, object?>)row;
                 }).ToList());
 
@@ -705,11 +711,11 @@ public sealed class GetCommand : Command
             // yes 行,以及这条否定是不是已经由上面的 Not listed 那句承住了(见那边的注释)。
             Completeness.NoteWidelySharedValues(ctx, def, fields, withDefaults, defaulted);
 
-            // xml 列读的是磁盘上的 XML 原文,PatchOperation 还没跑(XmlNodeExporter 的产地口径)。
-            // 于是别的 mod 用 PatchOperationAdd 加进来的一行在这里报 no,而 no 的出路是 Add ——
+            // 0.6.0 及更早的快照,xml 列读的是磁盘上的 XML 原文、PatchOperation 还没跑,
+            // 于是别的 mod 用 PatchOperationAdd 加进来的一行在那里报 no,而 no 的出路是 Add ——
             // 会插出第二份。06「patch 溯源」给这份时间差定的处置是逐条报数而不是写一句常驻
             // 免责声明:0 不说,非 0 报出数字。那条口径当初只兑现在 inherit 上,而推出 Add 的
-            // 那条路走的是 get。
+            // 那条路走的是 get。0.7.0 起时间差本身没了(见下面那个能力位判据)。
             //
             // 这个数**只会低估**,两头都漏,所以它非 0 时是硬信号、为 0 时什么都不是:
             // xpath 按 thingClass 或通配符寻址的不留痕迹;既没有 Name= 也没有 ParentName、
@@ -724,7 +730,10 @@ public sealed class GetCommand : Command
                     ? 0
                     : (string.IsNullOrEmpty(node.Name) ? 0 : node.PatchOps)
                       + node.PatchOpsDefName + node.PatchOpsLabel;
-                if (xpaths > 0)
+                // 收了打完补丁的 XML 之后这句话的前提就没了 —— 补丁加的行在列里自带
+                // '+patch',逐行说,比整段告诫准。剩下的只有「补丁改了值」那一路,
+                // 而值本来就印在 value 列里。
+                if (xpaths > 0 && !ctx.Db.Meta.IndexesPostPatchXml)
                     ctx.Report.Notice(NoticeKind.Boundary,
                         $"{xpaths} patch xpath{(xpaths == 1 ? "" : "s")} name this def. The " +
                         $"'{XmlOrigin.Column}' column above reads the XML as written on disk, before any " +
@@ -2434,10 +2443,16 @@ internal static class Completeness
         // 0.5.0 起这两者不再同形:xml 列就在同一行上,here 是「写了同样的值」,
         // no 是「从没提过这个字段」。再说「看起来一样」是假话 —— 分档,不是删,
         // 旧快照上没有那一列,原句仍是这条路上唯一说破它的地方。
+        // 那个括注在 0.7.0 上是假的:那些库的路径**读在补丁之后**,而 no 于是也强了一档
+        // (补丁加的行不再落进 no,它们带 +patch)。分档,不是删掉 —— 老快照上那个括注
+        // 正是它们的 no 唯一说得清的边界。
+        var readWhen = ctx.Db.Meta.IndexesPostPatchXml
+            ? "read after every patch ran"
+            : "read before patches ran";
         var yesMeans = ctx.Db.Meta.IndexesXmlWritten
             ? $"a yes is not evidence that nothing wrote the value — the '{XmlOrigin.Column}' column on " +
               $"that same row tells the two apart: {XmlOrigin.Here} is an XML line writing that same " +
-              $"value, {XmlOrigin.No} is an XML that does not write it (read before patches ran)"
+              $"value, {XmlOrigin.No} is an XML that does not write it ({readWhen})"
             : "a yes is not evidence that nothing wrote the value — a def whose XML writes " +
               "that same value and a def that never mentions the field both show yes here";
 

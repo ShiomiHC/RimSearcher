@@ -21,7 +21,8 @@ public sealed record ExportMeta(
     string Language,
     IReadOnlyList<ModRef> Mods,
     string? ModSettingsHash,
-    string RawJson)
+    string RawJson,
+    string? PatchRoute = null)
 {
     public string Fingerprint => ComputeFingerprint(GameVersion, Language, Mods);
 
@@ -58,6 +59,26 @@ public sealed record ExportMeta(
     /// 老快照里「这个类型有这个字段但全是 null」与「类型根本没有这个字段」同形。
     /// </summary>
     public bool IndexesTypeFields => AtLeast(ExporterVersion, 0, 5);
+
+    /// <summary>
+    /// 这份快照记下了每条 xml_written 叶子路径的行内文本吗(导出器 0.6.0 起)。
+    ///
+    /// 老快照上短形式标签底下的候选格多于一个时,「这段文本就是这一格」与
+    /// 「这段文本落在别的格 / 对不上」同形 —— 一律 under,分不开。
+    /// </summary>
+    public bool IndexesXmlWrittenText => AtLeast(ExporterVersion, 0, 6);
+
+    /// <summary>
+    /// 这份快照的 xml_written 是**打完补丁**的路径全集吗(导出器 0.7.0 起,且当次真拿到了
+    /// 那份文档 —— <see cref="PatchRoute"/> 不是 <c>none</c>)。
+    ///
+    /// 老快照收的是磁盘上的原文,于是别的 mod 用 PatchOperationAdd 加进来的一行,在
+    /// <c>xml</c> 列上报 <c>no</c> —— 与「谁都没写过、该 Add」逐字同形,而出路正相反。
+    /// </summary>
+    public bool IndexesPostPatchXml =>
+        AtLeast(ExporterVersion, 0, 7)
+        && !string.IsNullOrEmpty(PatchRoute)
+        && PatchRoute != IntermediateFormat.PatchRouteNone;
 
     private static bool AtLeast(string version, int major, int minor)
     {
@@ -131,7 +152,8 @@ public sealed record ExportMeta(
             Str(IntermediateFormat.KeyLanguage, "unknown"),
             mods,
             root.TryGetProperty(IntermediateFormat.KeyModSettingsHash, out var h) ? h.GetString() : null,
-            jsonLine);
+            jsonLine,
+            root.TryGetProperty(IntermediateFormat.KeyPatchRoute, out var pr) ? pr.GetString() : null);
     }
 }
 

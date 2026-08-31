@@ -105,6 +105,27 @@ namespace RimSearcher.DataMod
             // 而那正是缺前置那类对话框卡住的位置;走过去了才轮到导出本身。
             Progress.Report(IntermediateFormat.StageModClasses);
             _settings = GetSettings<RimSearcherSettings>();
+            TryHookPatches();
+        }
+
+        /// <summary>
+        /// 打完补丁的那份 XML,能抄就抄游戏自己用的那份(见 <see cref="PatchedXml"/>)。
+        ///
+        /// 两道闸都必须过:<b>无人值守导出**才**挂</b> —— 平常玩游戏时这条路径一步都不走;
+        /// <b>Harmony 在场才挂</b> —— 判在这里而不判在 <c>PatchHook</c> 里,是为了让那个类
+        /// 在没有 Harmony 时一次都不被解析。不挂也不缺这一层,导出时会自己重放一遍。
+        /// </summary>
+        private static void TryHookPatches()
+        {
+            string target;
+            if (!GenCommandLine.TryGetCommandLineArg(IntermediateFormat.CommandLineSwitch, out target)) return;
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (asm.GetName().Name != "0Harmony") continue;
+                try { PatchHook.Install(); }
+                catch (Exception ex) { Log.Warning("[RimSearcher] could not hook ApplyPatches: " + ex.Message); }
+                return;
+            }
         }
 
         public override string SettingsCategory() => "RimSearcher";

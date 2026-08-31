@@ -29,11 +29,12 @@ namespace RimSearcher.Contract
         /// 5:加了 kind=economy(经济面)与尾行的 economy_state 三态。
         ///
         /// 0.5.0 起多了 kind=xmlwritten / kind=typefields,以及 xmlnode 上的
-        /// patch_ops_defname / patch_ops_label。不涨这一档:缺的那一层由导出器版本上的
-        /// 能力位说话(与 IndexesNestedClass 同一套),旧文件仍能导入、旧库仍能打开;
+        /// patch_ops_defname / patch_ops_label。0.6.0 起 xmlwritten 另带与 paths
+        /// 同序的 texts。都不涨这一档:缺的那一层由导出器版本上的能力位说话
+        /// (与 IndexesNestedClass 同一套),旧文件仍能导入、旧库仍能打开;
         /// 涨了就会把磁盘上的旧导出整批拒收,而「看不见 ≠ 不存在」要的是宣布缺层,
         /// 不是把整份快照关掉。旧 CLI 读到不认识的 kind 会静默落空,但它本来就没有
-        /// 对应列,不会把空说成「量过了、是零」。
+        /// 对应列,不会把空说成「量过了、是零」。旧 CLI 读到不认识的键同样落空。
         ///
         /// 每一档都必须拒收前一档,而不是降级读:缺的那一层在查询结果里与
         /// 「事实上就没有」逐字同形,库里无从区分。
@@ -70,7 +71,7 @@ namespace RimSearcher.Contract
         public const string KindKeyed = "keyed";
         public const string KindXmlNode = "xmlnode";
         public const string KindEconomy = "economy";
-        /// <summary>一个 XML 节点实际写出来的字段路径(patch 前)。</summary>
+        /// <summary>一个 XML 节点实际写出来的字段路径(patch 前);0.6.0 起另带同序文本。</summary>
         public const string KindXmlWritten = "xmlwritten";
         /// <summary>一个 def 类型能有的字段路径全集,与值无关。</summary>
         public const string KindTypeFields = "typefields";
@@ -140,6 +141,29 @@ namespace RimSearcher.Contract
         /// xml_written / type_fields 共用的路径数组。<c>["defName","projectile.speed",…]</c>。
         /// </summary>
         public const string KeyPaths = "paths";
+        /// <summary>
+        /// xml_written 的行内文本数组,与 <see cref="KeyPaths"/> 同序同长。
+        /// 叶子是 InnerText;<c>path.Class</c> 那一行是 Class= 属性值。
+        /// 导入侧必须校验等长 —— 错位后每一格的文本都指向别的路径,输出仍然像对的。
+        /// </summary>
+        public const string KeyTexts = "texts";
+        /// <summary>
+        /// xml_written 的「这一行是补丁加的」标记,与 <see cref="KeyPaths"/> 同序同长。
+        /// 真 = 打完补丁的文档里有这一行,而磁盘上的原文没有。导入侧同样必须校验等长。
+        /// </summary>
+        public const string KeyPatched = "patched";
+        /// <summary>
+        /// 元数据行:这次的 xml_written 是怎么拿到打完补丁的文档的。
+        /// <see cref="PatchRouteHarmony"/> / <see cref="PatchRouteReplay"/> / <see cref="PatchRouteNone"/>。
+        /// 两条路线的结果若有差异,快照消费方得知道自己手上这份是哪一种。
+        /// </summary>
+        public const string KeyPatchRoute = "patch_route";
+        /// <summary>抄了游戏真正用过的那份文档(Harmony Postfix)。</summary>
+        public const string PatchRouteHarmony = "harmony";
+        /// <summary>自己重放了一遍 LoadModXML / CombineIntoUnifiedXML / ApplyPatches。</summary>
+        public const string PatchRouteReplay = "replay";
+        /// <summary>两条都没走成 —— 路径全集仍是打补丁**之前**的原文。</summary>
+        public const string PatchRouteNone = "none";
         /// <summary>xml_written 的节点键:有 defName 就用 defName,否则用 Name=。</summary>
         public const string KeyNodeKey = "node_key";
         /// <summary>node_key 取自 Name= 而非 defName 时为真。</summary>

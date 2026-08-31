@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using RimSearcher.DataMod;
 
@@ -173,7 +174,8 @@ public class ExporterTests
             </ThingDef>
             """);
 
-        var paths = XmlFieldPaths.Collect(doc.DocumentElement!, 6, 200);
+        var paths = XmlFieldPaths.Collect(doc.DocumentElement!, 6, 200, out var texts);
+        Assert.Equal(paths.Count, texts.Count);
         Assert.Contains("defName", paths);
         Assert.Contains("projectile.damageAmountBase", paths);
         Assert.DoesNotContain("projectile", paths);
@@ -181,6 +183,36 @@ public class ExporterTests
         Assert.Contains("comps[0].energyMax", paths);
         Assert.Contains("thingCategories[0]", paths);
         Assert.Contains("genStep.Class", paths);
+
+        string TextOf(string path)
+        {
+            var i = paths.IndexOf(path);
+            Assert.True(i >= 0, $"no path {path}");
+            return texts[i];
+        }
+        Assert.Equal("Bullet_Revolver", TextOf("defName"));
+        Assert.Equal("12", TextOf("projectile.damageAmountBase"));
+        Assert.Equal("CompProperties_Shield", TextOf("comps[0].Class"));
+        Assert.Equal("0.5", TextOf("comps[0].energyMax"));
+        Assert.Equal("Foods", TextOf("thingCategories[0]"));
+        Assert.Equal("GenStep_Scatter", TextOf("genStep.Class"));
+        Assert.Equal("", TextOf("genStep"));
+    }
+
+    [Fact]
+    public void XML写成的路径去重取第一次的文本()
+    {
+        var doc = new System.Xml.XmlDocument();
+        doc.LoadXml("""
+            <ThingDef>
+              <label>first</label>
+              <label>second</label>
+            </ThingDef>
+            """);
+        var paths = XmlFieldPaths.Collect(doc.DocumentElement!, 6, 200, out var texts);
+        Assert.Single(paths);
+        Assert.Equal("label", paths[0]);
+        Assert.Equal("first", texts[0]);
     }
 
     private class TypeWalkShape
@@ -218,5 +250,102 @@ public class ExporterTests
         Assert.DoesNotContain("comps", paths);
         Assert.DoesNotContain("nested", paths);
         Assert.DoesNotContain("comps[1].compClass", paths);
+    }
+
+    // ---- 打完补丁的合并文档 ----
+
+    private static System.Xml.XmlDocument Merged(string inner)
+    {
+        var doc = new System.Xml.XmlDocument();
+        doc.LoadXml("<Defs>" + inner + "</Defs>");
+        return doc;
+    }
+
+    /// <summary>
+    /// 身份真撞上(同类型、同键、键来源一样、抽象与否一样)时**前者胜**。
+    ///
+    /// 依据是 DefDatabase.Add:同名的第二份要么在同 mod 内被跳过,要么跨 mod 时被改名 ——
+    /// 活下来的叫这个名字的始终是第一份。逐 mod 遍历那一路给的是并集,于是路径表里会混进
+    /// 那份根本没生效的,而混入在输出上与「作者两处都写了」逐字同形。
+    ///
+    /// 官方 Data 里 Mercenary_Slasher 就是同一个文件里两份 PawnKindDef。
+    /// </summary>
+    [Fact]
+    public void 身份撞车时前者胜而不是并集()
+    {
+        var doc = Merged("""
+            <ThingDef><defName>Gun</defName><damage>10</damage><liveOnly>x</liveOnly></ThingDef>
+            <ThingDef><defName>Gun</defName><damage>99</damage><deadOnly>y</deadOnly></ThingDef>
+            """);
+        var nodes = PatchedXmlNodes.Extract(doc, 6, 64);
+
+        var gun = Assert.Single(nodes);
+        Assert.Contains("liveOnly", gun.Paths);
+        Assert.DoesNotContain("deadOnly", gun.Paths);
+        Assert.Equal("10", gun.Texts[gun.Paths.IndexOf("damage")]);
+    }
+
+    /// <summary>
+    /// 抽象父节点与同名的具体 def 是**两个身份**,一份都不许塌缩掉。
+    ///
+    /// 官方 Data 里三种写法都有:Name= 抽象节点与具体 def 同名(JobDef BabyPlay);
+    /// 抽象节点同时带 Name= 和 defName(PawnKindDef Mercenary_Slasher);
+    /// 抽象节点只有 Name=(SoundDef Designate_DragStandard_Changed)。
+    /// 这里父子两份路径**都算数** —— 子 def 继承了父节点写的那些行,塌缩掉一份就会让
+    /// 它们在 xml 列上变成确定的 no。第一版把这三处全判错了。
+    /// </summary>
+    [Fact]
+    public void 抽象父节点与同名具体def各占一条()
+    {
+        var byName = Merged("""
+            <JobDef Abstract="True" Name="BabyPlay"><driverClass>D</driverClass></JobDef>
+            <JobDef ParentName="BabyPlay"><defName>BabyPlay</defName><reportString>r</reportString></JobDef>
+            """);
+        Assert.Equal(2, PatchedXmlNodes.Extract(byName, 6, 64).Count);
+
+        // 抽象节点同时带 Name= 和 defName:两边都按 defName 立键,只有抽象与否分得开。
+        var bothKeys = Merged("""
+            <PawnKindDef Name="SlasherBase" Abstract="True"><defName>Slasher</defName><apparelMoney>1</apparelMoney></PawnKindDef>
+            <PawnKindDef ParentName="SlasherBase"><defName>Slasher</defName><combatPower>2</combatPower></PawnKindDef>
+            """);
+        var pair = PatchedXmlNodes.Extract(bothKeys, 6, 64);
+        Assert.Equal(2, pair.Count);
+        Assert.All(pair, n => Assert.Equal("Slasher", n.NodeKey));
+        Assert.Contains(pair, n => n.Paths.Contains("apparelMoney"));
+        Assert.Contains(pair, n => n.Paths.Contains("combatPower"));
+    }
+
+    /// <summary>def 类型不同就是两个节点,哪怕 defName 一样。</summary>
+    [Fact]
+    public void 同名但类型不同的def各占一条()
+    {
+        var doc = Merged("""
+            <ThingDef><defName>Gun</defName><damage>10</damage></ThingDef>
+            <RecipeDef><defName>Gun</defName><workAmount>5</workAmount></RecipeDef>
+            """);
+        Assert.Equal(2, PatchedXmlNodes.Extract(doc, 6, 64).Count);
+    }
+
+    /// <summary>抽象节点没有 defName,按 Name= 立键 —— 祖先那一路的 parent 全靠它。</summary>
+    [Fact]
+    public void 抽象节点按Name立键()
+    {
+        var doc = Merged("""<ThingDef Name="BaseGun" Abstract="True"><speed>70</speed></ThingDef>""");
+        var node = Assert.Single(PatchedXmlNodes.Extract(doc, 6, 64));
+        Assert.Equal("BaseGun", node.NodeKey);
+        Assert.True(node.KeyIsName);
+    }
+
+    /// <summary>
+    /// 原文里没出现过的路径才算补丁加的。整个节点在原文里都不存在(<c>before</c> 为
+    /// <c>null</c>)时全算 —— 那种节点确实整个是补丁造的。
+    /// </summary>
+    [Fact]
+    public void 补丁标记只认原文里没出现过的路径()
+    {
+        var paths = new List<string> { "defName", "damage", "recipeMaker.researchPrerequisite" };
+        var before = new HashSet<string>(StringComparer.Ordinal) { "defName", "damage" };
+        Assert.Equal([false, false, true], PatchedXmlNodes.PatchedFlags(paths, before));
+        Assert.Equal([true, true, true], PatchedXmlNodes.PatchedFlags(paths, null));
     }
 }

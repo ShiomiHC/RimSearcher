@@ -110,8 +110,8 @@ public class PresenceTests
     }
 
     /// <summary>
-    /// 短形式 <c>&lt;Steel&gt;75&lt;/Steel&gt;</c> 只写标签名加一段文本。文本落哪一格由类型的
-    /// LoadDataFromXmlCustom 决定,xml_written 只记路径不记内容 —— 候选多于一个时说不准。
+    /// 0.5.0 路径:短形式 <c>&lt;Steel&gt;75&lt;/Steel&gt;</c> 只写标签名加一段文本。
+    /// xml_written 只记路径不记内容 —— 候选多于一个时说不准。
     /// **这里不许印 here。** here 的出路是 PatchOperationReplace,而 costList[0].quality
     /// 这个节点 XML 里根本没有,Replace 会打空;那比「说不准」糟,因为它是个确定的错答案。
     /// </summary>
@@ -256,5 +256,145 @@ public class PresenceTests
         Assert.Equal(0L, (long)cmd.ExecuteScalar()!);
         cmd.CommandText = "SELECT COUNT(*) FROM type_fields";
         Assert.Equal(0L, (long)cmd.ExecuteScalar()!);
+    }
+
+    // ---- 0.6.0:记下文本之后,短形式多候选格能分开 ----
+
+    private static string XmlOfJson(string json, string path)
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var fields = doc.RootElement.GetProperty("defs")[0].GetProperty("fields");
+        foreach (var row in fields.EnumerateArray())
+            if (row.GetProperty("path").GetString() == path)
+                return row.GetProperty(XmlOrigin.Column).GetString()!;
+        Assert.Fail($"no field {path}");
+        return "";
+    }
+
+    [Fact]
+    public void 记下文本后短形式恰好一格匹配就是here其余是no()
+    {
+        var (json, _, _) = Fixture.Run("get", "ChildGun", "--defaults", "--json",
+                                       "--db", Fixture.PresenceTextDb);
+        // 键格、显式子路径、长形式没拼到、候选只剩一格:一个字不动。
+        Assert.Equal(XmlOrigin.Here, XmlOfJson(json, "costList[0].thingDef"));
+        Assert.Equal(XmlOrigin.Here, XmlOfJson(json, "statBases[0].stat"));
+        Assert.Equal(XmlOrigin.Here, XmlOfJson(json, "statBases[0].value"));
+        Assert.Equal(XmlOrigin.Here, XmlOfJson(json, "things[0].chance"));
+        Assert.Equal(XmlOrigin.Here, XmlOfJson(json, "things[0].def"));
+        Assert.Equal(XmlOrigin.No, XmlOfJson(json, "things[0].hp"));
+        Assert.Equal(XmlOrigin.Parent, XmlOfJson(json, "speed"));
+        Assert.Equal(XmlOrigin.Under("descriptionHyperlinks"),
+                     XmlOfJson(json, "descriptionHyperlinks[0].def"));
+        // 文本 75 对上 count,quality 确定没写。
+        Assert.Equal(XmlOrigin.Here, XmlOfJson(json, "costList[0].count"));
+        Assert.Equal(XmlOrigin.No, XmlOfJson(json, "costList[0].quality"));
+    }
+
+    [Fact]
+    public void 记下文本后零匹配退回under不许判no()
+    {
+        var (json, _, _) = Fixture.Run("get", "PatchedGun", "--defaults", "--json",
+                                       "--db", Fixture.PresenceTextDb);
+        Assert.Equal(XmlOrigin.Here, XmlOfJson(json, "costList[0].thingDef"));
+        Assert.Equal(XmlOrigin.Under("costList"), XmlOfJson(json, "costList[0].count"));
+        Assert.Equal(XmlOrigin.Under("costList"), XmlOfJson(json, "costList[0].quality"));
+    }
+
+    [Fact]
+    public void 记下文本后多于一格匹配都退回under()
+    {
+        var (json, _, _) = Fixture.Run("get", "TwinGun", "--defaults", "--json",
+                                       "--db", Fixture.PresenceTextDb);
+        Assert.Equal(XmlOrigin.Here, XmlOfJson(json, "costList[0].thingDef"));
+        Assert.Equal(XmlOrigin.Under("costList"), XmlOfJson(json, "costList[0].count"));
+        Assert.Equal(XmlOrigin.Under("costList"), XmlOfJson(json, "costList[0].quality"));
+    }
+
+    /// <summary>
+    /// 空短标签 <c>&lt;Steel /&gt;</c>:文本是空串,一个字符都没写给任何一格。
+    ///
+    /// 空串谁都对不上,于是走零匹配那一档 —— 全部候选退回 under。官方 Data 里这样的
+    /// 标签有 96 处(fixedInventory 一类),它们的候选格恰好都停在代码默认值上,所以
+    /// 「说不准」与「其实都没写」在输出里同形;这里钉的是不许因此改判成确定的 no。
+    /// </summary>
+    [Fact]
+    public void 空短标签没有文本落格全都说不准()
+    {
+        var (json, _, _) = Fixture.Run("get", "BareGun", "--defaults", "--json",
+                                       "--db", Fixture.PresenceTextDb);
+        Assert.Equal(XmlOrigin.Here, XmlOfJson(json, "costList[0].thingDef"));
+        Assert.Equal(XmlOrigin.Under("costList"), XmlOfJson(json, "costList[0].count"));
+        Assert.Equal(XmlOrigin.Under("costList"), XmlOfJson(json, "costList[0].quality"));
+    }
+
+    // ---- 0.7.0:路径取自打完补丁的 XML ----
+
+    /// <summary>
+    /// 补丁加进来的一行,出路是 Replace 而不是 Add —— 这与老快照上它报的 <c>no</c> 正相反。
+    /// 但也不能并进 here:代价不一样,你的 patch 从此依赖那个加它的 mod 在场。
+    /// </summary>
+    [Fact]
+    public void 补丁加的行报here带patch后缀()
+    {
+        var (json, _, _) = Fixture.Run("get", "PatchGun", "--defaults", "--json",
+                                       "--db", Fixture.PresencePatchDb);
+        Assert.Equal(XmlOrigin.Here, XmlOfJson(json, "damage"));
+        Assert.Equal(XmlOrigin.Here + XmlOrigin.PatchSuffix,
+                     XmlOfJson(json, "recipeMaker.researchPrerequisite"));
+        Assert.Equal(XmlOrigin.Parent + XmlOrigin.PatchSuffix, XmlOfJson(json, "speed"));
+        // 这一行没被补丁动过,后缀不许跟着整个 def 走。
+        Assert.Equal(XmlOrigin.Here, XmlOfJson(json, "costList[0].count"));
+        Assert.Equal(XmlOrigin.No, XmlOfJson(json, "costList[0].quality"));
+    }
+
+    /// <summary>整个短形式标签是补丁加的:承接文本那一格带后缀,另一格仍是确定的 no。</summary>
+    [Fact]
+    public void 补丁加的短形式标签后缀落在承接文本那一格()
+    {
+        var (json, _, _) = Fixture.Run("get", "PatchListGun", "--defaults", "--json",
+                                       "--db", Fixture.PresencePatchDb);
+        Assert.Equal(XmlOrigin.Here + XmlOrigin.PatchSuffix, XmlOfJson(json, "costList[0].thingDef"));
+        Assert.Equal(XmlOrigin.Here + XmlOrigin.PatchSuffix, XmlOfJson(json, "costList[0].count"));
+        Assert.Equal(XmlOrigin.No, XmlOfJson(json, "costList[0].quality"));
+    }
+
+    /// <summary>
+    /// 0.6.0 及更早的快照收的是打补丁之前的原文 —— 不许给它们印后缀。
+    /// 「没有后缀」在那些库上的含义是「分不开」,不是「没被补丁加过」;那半句由
+    /// patch xpath 计数那条通知说,它只在这一档出现。
+    /// </summary>
+    [Fact]
+    public void 老快照不印补丁后缀但仍报xpath计数()
+    {
+        var (text, _, _) = Fixture.Run("get", "ChildGun", "--defaults", Fixture.PresenceTextArg);
+        Assert.DoesNotContain(XmlOrigin.PatchSuffix, text);
+        Assert.Contains("3 patch xpaths name this def", text);
+
+        var (patched, _, _) = Fixture.Run("get", "PatchGun", "--defaults", Fixture.PresencePatchArg);
+        Assert.Contains(XmlOrigin.PatchSuffix, patched);
+        Assert.DoesNotContain("patch xpaths name this def", patched);
+    }
+
+    [Fact]
+    public void 零五快照导入后文本列是空的()
+    {
+        using var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Fixture.PresenceDb};Pooling=False");
+        raw.Open();
+        using var cmd = raw.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM xml_written WHERE inner_text IS NOT NULL";
+        Assert.Equal(0L, (long)cmd.ExecuteScalar()!);
+    }
+
+    [Fact]
+    public void 零六快照导入后文本列与路径等长()
+    {
+        using var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Fixture.PresenceTextDb};Pooling=False");
+        raw.Open();
+        using var cmd = raw.CreateCommand();
+        cmd.CommandText = "SELECT path, inner_text FROM xml_written WHERE node_key = 'ChildGun' AND path = 'costList.Steel'";
+        using var rd = cmd.ExecuteReader();
+        Assert.True(rd.Read());
+        Assert.Equal("75", rd.GetString(1));
     }
 }

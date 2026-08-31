@@ -1,5 +1,7 @@
+using Microsoft.Data.Sqlite;
 using RimSearcher.Cli;
 using RimSearcher.Config;
+using RimSearcher.Storage;
 
 namespace RimSearcher.Snapshot;
 
@@ -141,8 +143,8 @@ public static class SnapshotRetention
               "Raise 'snapshot_keep' in the config file, or pass --keep, to keep more of them.";
 
     public static string Unchanged(string name)
-        => $"The incoming snapshot's resolved defs and field values match '{name}', " +
-           "so the existing file was left in place.";
+        => $"The incoming snapshot matches '{name}' on all of the exporter version, the resolved defs and " +
+           "field values, and how many XML lines were indexed, so the existing file was left in place.";
 
     public static string IncomingPath(string destPath) => destPath + ".incoming";
 
@@ -173,7 +175,42 @@ public static class SnapshotRetention
 
     private static bool EmptyDiff(string oldPath, string newPath)
     {
+        if (Stamp(oldPath) != Stamp(newPath)) return false;
         var diff = SnapshotDiff.Compare(oldPath, newPath, limit: 1);
         return diff.AddedTotal == 0 && diff.RemovedTotal == 0 && diff.FieldsTotal == 0;
+    }
+
+    /// <summary>
+    /// def 与字段之外这份库还带着什么:导出器版本、补丁路线、XML 层的规模。
+    ///
+    /// 只比 def 与字段会把「导出器换代了、XML 层整个重算过」判成「什么都没变」而留下旧文件
+    /// —— 下游读到的于是仍是旧口径,且落地提示里一个字都不提。实测撞过:0.5.0 → 0.7.0 的
+    /// 那次重导,def 与字段逐条相同,xml 层多了补丁那一列。
+    ///
+    /// 行数只抓得住规模变化。同版本、同行数而只有某个标记的取值变了,这里仍看不出来。
+    /// </summary>
+    private static string Stamp(string path)
+    {
+        using var db = new SqliteConnection(
+            $"Data Source={Path.GetFullPath(path)};Mode=ReadOnly;Pooling=False");
+        db.Open();
+        var meta = Text(db,
+            "SELECT json_extract(value, '$.exporter_version') || '/' || " +
+            $"COALESCE(json_extract(value, '$.patch_route'), '-') FROM meta WHERE key = '{SnapshotSchema.MetaKeyRaw}'");
+        var rows = Text(db, "SELECT COUNT(*) FROM xml_written");
+        return (meta ?? "?") + " " + (rows ?? "?");
+    }
+
+    /// <summary>表或列在老库里可能根本不存在 —— 那本身就是一种取值,不是失败。</summary>
+    private static string? Text(SqliteConnection db, string sql)
+    {
+        try
+        {
+            using var cmd = db.CreateCommand();
+            cmd.CommandText = sql;
+            var value = cmd.ExecuteScalar();
+            return value is null or DBNull ? null : value.ToString();
+        }
+        catch (SqliteException) { return null; }
     }
 }
