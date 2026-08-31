@@ -331,9 +331,15 @@ public static class Fixture
             new ExportedField("damage", "12", DefaultState.Differs),
             new ExportedField("speed", "70", DefaultState.Differs),
             // XML 侧写的是 costList.Steel(拿 defName 当标签名),索引侧是
-            // costList[0].thingDef —— 两边同一件事,路径对不上。costList / statBases
-            // 这一族在真数据里就是这个形态。
+            // costList[0].thingDef —— 值回连之后这一格是 here。
             new ExportedField("costList[0].thingDef", "Steel", DefaultState.Differs),
+            // 两层 defName 标签:XML 有 things.Widget.chance,没有 things.Widget 也没有
+            // things.Widget.hp。chance 归位成 here;def / hp 是「元素在、这一格没写」的 no。
+            new ExportedField("things[0].def", "Widget", DefaultState.Differs),
+            new ExportedField("things[0].chance", "0.25", DefaultState.Differs),
+            new ExportedField("things[0].hp", "0", DefaultState.Same),
+            // 标签是类型名 ThingDef,值是 defName ChildGun —— 值回连对不上,才是真 under。
+            new ExportedField("descriptionHyperlinks[0].def", "ChildGun", DefaultState.Differs),
             new ExportedField("burstCount", "1", DefaultState.Same));
         Def("OtherGun",
             new ExportedField("thingClass", "RimWorld.Bullet", DefaultState.Differs),
@@ -343,8 +349,9 @@ public static class Fixture
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindTypeFields)
             .Str(IntermediateFormat.KeyDefType, "ThingDef")
             .Strs(IntermediateFormat.KeyPaths,
-                ["burstCount", "costList[0].thingDef", "damage", "defName", "label", "neverSet",
-                 "speed", "thingClass"])
+                ["burstCount", "costList[0].thingDef", "damage", "defName",
+                 "descriptionHyperlinks[0].def", "label", "neverSet", "speed",
+                 "thingClass", "things[0].chance", "things[0].def", "things[0].hp"])
             .ToString());
         records++;
 
@@ -394,7 +401,9 @@ public static class Fixture
             .Str(IntermediateFormat.KeyDefType, "ThingDef")
             .Str(IntermediateFormat.KeyNodeKey, "ChildGun")
             .Bool(IntermediateFormat.KeyKeyIsName, false)
-            .Strs(IntermediateFormat.KeyPaths, ["defName", "label", "damage", "costList.Steel"])
+            .Strs(IntermediateFormat.KeyPaths,
+                ["defName", "label", "damage", "costList.Steel",
+                 "descriptionHyperlinks.ThingDef", "things.Widget.chance"])
             .ToString());
         records++;
 

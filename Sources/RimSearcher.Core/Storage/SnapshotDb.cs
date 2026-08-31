@@ -1817,6 +1817,22 @@ public sealed class SnapshotDb : IDisposable
     }
 
     /// <summary>
+    /// 这个 def 每一格的路径与值。值回连要看同一元素的其它格,必须是全量,
+    /// 不受 --limit / --defaults / --path-contains 影响。
+    /// </summary>
+    public IReadOnlyList<FieldRow> AllFieldCells(long defId)
+    {
+        var p = new Dictionary<string, object?> { ["@id"] = defId };
+        var rows = new List<FieldRow>();
+        using var rd = Query(
+            "SELECT path, leaf, value, is_default FROM field_values WHERE def_id = @id", p);
+        while (rd.Read())
+            rows.Add(new FieldRow(rd.GetString(0), rd.GetString(1),
+                                  rd.IsDBNull(2) ? null : rd.GetString(2), rd.GetInt32(3)));
+        return rows;
+    }
+
+    /// <summary>
     /// 这个 def 类型声明了哪些字段路径。<c>null</c> = 这份快照没量过。
     /// </summary>
     public IReadOnlyList<string>? TypeDeclaredPaths(string defType, IReadOnlyList<string>? pathFilters = null)

@@ -83,12 +83,47 @@ public class PresenceTests
         Assert.Equal(XmlOrigin.Parent, XmlOf("thingClass"));
         Assert.Equal(XmlOrigin.No, XmlOf("burstCount"));
 
-        // **两条路径描述同一件事、写法对不上时,不许印 no。** XML 拿 defName 当标签名
-        // (costList.Steel),索引按列表下标(costList[0].thingDef);join 落空,而 no 的
-        // 出路是 PatchOperationAdd —— 节点其实在,Add 会插出第二份。真数据里这一族不小:
-        // baseline 快照上 ThingDef 的 6086 条路径有 4880 条带下标,仅 statBases 一项
-        // 就是 44 条路径 / 1967 个 def。
-        Assert.Equal(XmlOrigin.Under("costList"), XmlOf("costList[0].thingDef"));
+        // XML 拿 defName 当标签名(costList.Steel),索引按列表下标(costList[0].thingDef)。
+        // 值回连用同一元素上 thingDef=Steel 对到 costList.Steel,这一格是 here,不是 under。
+        Assert.Equal(XmlOrigin.Here, XmlOf("costList[0].thingDef"));
+    }
+
+    [Fact]
+    public void 两层defName标签能归位_没写的那一格是确定的no()
+    {
+        var (json, _, _) = Fixture.Run("get", "ChildGun", "--defaults", "--json", "--db", Fixture.PresenceDb);
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var fields = doc.RootElement.GetProperty("defs")[0].GetProperty("fields");
+        string XmlOf(string path)
+        {
+            foreach (var row in fields.EnumerateArray())
+                if (row.GetProperty("path").GetString() == path)
+                    return row.GetProperty(XmlOrigin.Column).GetString()!;
+            Assert.Fail($"no field {path}");
+            return "";
+        }
+        // XML 有 things.Widget.chance:chance 落到那一行;def 是标签名本身不占 xml_written
+        // 叶子;hp 这个字段 XML 没写。后两格是确定的 no,不是 under。
+        Assert.Equal(XmlOrigin.Here, XmlOf("things[0].chance"));
+        Assert.Equal(XmlOrigin.No, XmlOf("things[0].def"));
+        Assert.Equal(XmlOrigin.No, XmlOf("things[0].hp"));
+    }
+
+    [Fact]
+    public void 值回连对不上的容器才留在under()
+    {
+        // 标签是类型名 ThingDef,值是 defName ChildGun,对不到 descriptionHyperlinks.ChildGun。
+        var (json, _, _) = Fixture.Run("get", "ChildGun", "--defaults", "--json", "--db", Fixture.PresenceDb);
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var fields = doc.RootElement.GetProperty("defs")[0].GetProperty("fields");
+        foreach (var row in fields.EnumerateArray())
+            if (row.GetProperty("path").GetString() == "descriptionHyperlinks[0].def")
+            {
+                Assert.Equal(XmlOrigin.Under("descriptionHyperlinks"),
+                             row.GetProperty(XmlOrigin.Column).GetString());
+                return;
+            }
+        Assert.Fail("no field descriptionHyperlinks[0].def");
     }
 
     /// <summary>

@@ -276,9 +276,13 @@ public sealed class GetCommand : Command
             "still there. Defs the game builds in code carry a placeholder there instead.\n\n" +
             "When present, the 'xml' column says whether this def's own XML wrote the path (here), only an " +
             "ancestor did (parent), or neither (no) — the fact PatchOperationReplace vs Add turns on. " +
-            "A fourth value, 'under <container>', means the XML wrote that container but names its entries " +
-            "after defs (costList.Steel) where the index numbers them (costList[0].thingDef), so this row " +
-            "joins to nothing and neither answer is available. Older snapshots omit the column and say so.",
+            "Index paths such as costList[0].thingDef are joined back to def-name tags such as costList.Steel " +
+            "from a sibling value on the same list entry, including two-level tags (things.AncientAmmoStack.chance), " +
+            "and using XML lines written by this def or by an ancestor. After that join, here/parent means the " +
+            "line is there, and no means this field was not written — a determined miss, including when the list " +
+            "entry itself is present. A fourth value, 'under <container>', is the rarer remainder: the XML wrote " +
+            "that container, but this row still does not join to a line, so neither answer is available. Older " +
+            "snapshots omit the column and say so.",
         Positionals = [new PositionalSpec { Name = "defName", Help = "The exact def name. 'search' finds it if you only know part of it." }],
         Options =
         [
@@ -320,8 +324,9 @@ public sealed class GetCommand : Command
                      + "carries. They are left out by default because they are the ones most often read as something "
                      + "an author chose. The 'xml' column on those rows says whether this def's own XML wrote the "
                      + "path (here), only an ancestor did (parent), neither (no), or that the container was "
-                     + "written under a path shape this index cannot join (under <container>) — a yes with "
-                     + "xml=here is an explicit write of the default. Older snapshots have no xml column, and there a def whose XML "
+                     + "written under a path shape this index still cannot join (under <container>). no is a "
+                     + "determined miss — this field was not written. A yes with xml=here is an explicit write of "
+                     + "the default. Older snapshots have no xml column, and there a def whose XML "
                      + "writes that same value and a def that never mentions the field look the same. "
                      + "How many were left out is always printed, and --path-contains shows a named field either way.",
             },
@@ -622,8 +627,8 @@ public sealed class GetCommand : Command
                     var xmlLayer = ctx.Db.Meta.IndexesXmlWritten
                         ? $"--defaults lists them, and the '{XmlOrigin.Column}' column there says whether this " +
                           $"def's own XML wrote the path ({XmlOrigin.Here}), only an ancestor did " +
-                          $"({XmlOrigin.Parent}), or neither ({XmlOrigin.No}); a container written under " +
-                          "another path shape reads as 'under <container>', not as no."
+                          $"({XmlOrigin.Parent}), or neither ({XmlOrigin.No}); a container this index still " +
+                          "cannot join reads as 'under <container>', not as no."
                         : "--defaults lists them. That match is not evidence that nothing wrote them: a def " +
                           "whose XML writes the default value and a def that never mentions the field are " +
                           "byte-for-byte identical here.";
@@ -657,21 +662,15 @@ public sealed class GetCommand : Command
 
             if (matches.Count == 1) ctx.Report.Detail("def", pairs);
 
-            // join 落空有两个成因,只有一个是「XML 没写」。另一个是两边在描述同一个容器、
-            // 写法对不上:XML 拿 defName 当标签名(costList.Steel),索引按列表下标
-            // (costList[0].thingDef)。混报的代价是具体的 —— no 的出路是 Add,而节点其实在。
-            static string UnwrittenMark(string path, HashSet<string> containers)
-            {
-                var bracket = path.IndexOf('[');
-                return bracket > 0 && containers.Contains(path[..bracket])
-                    ? XmlOrigin.Under(path[..bracket])
-                    : XmlOrigin.No;
-            }
-
+            // xml 列的取值只从 XmlOrigin 出。值回连要用同一元素的其它格,所以全量取一次
+            // 再按元素前缀分组 —— 不按格查库,旧快照根本不走这条路。
             var xmlContainers = new HashSet<string>(StringComparer.Ordinal);
             var xmlMarks = ctx.Db.Meta.IndexesXmlWritten
                 ? ctx.Db.XmlWrittenMarks(def.DefType, def.DefName, out xmlContainers)
                 : null;
+            var valuesByElement = xmlMarks is null
+                ? null
+                : XmlOrigin.ValuesByElement(ctx.Db.AllFieldCells(def.Id));
 
             var fieldCols = xmlMarks is null
                 ? new[] { "path", "value", FieldDefault.Column }
@@ -689,9 +688,8 @@ public sealed class GetCommand : Command
                         [FieldDefault.Column] = FieldDefault.Render(f.Default),
                     };
                     if (xmlMarks is not null)
-                        row[XmlOrigin.Column] = xmlMarks.TryGetValue(f.Path, out var mark)
-                            ? mark
-                            : UnwrittenMark(f.Path, xmlContainers);
+                        row[XmlOrigin.Column] = XmlOrigin.Resolve(
+                            f.Path, xmlMarks, xmlContainers, valuesByElement!);
                     return (IReadOnlyDictionary<string, object?>)row;
                 }).ToList());
 
@@ -2405,7 +2403,7 @@ internal static class Completeness
         var yesMeans = ctx.Db.Meta.IndexesXmlWritten
             ? $"a yes is not evidence that nothing wrote the value — the '{XmlOrigin.Column}' column on " +
               $"that same row tells the two apart: {XmlOrigin.Here} is an XML line writing that same " +
-              $"value, {XmlOrigin.No} is a def that never mentions the field"
+              $"value, {XmlOrigin.No} is a determined miss (this field was not written)"
             : "a yes is not evidence that nothing wrote the value — a def whose XML writes " +
               "that same value and a def that never mentions the field both show yes here";
 

@@ -1,7 +1,7 @@
-$ rimsearcher get ChildGun --defaults --fixture-presence
+$ rimsearcher get ChildGun --defaults --path-contains costList --path-contains things --path-contains Hyperlinks --fixture-presence
 exit 0
 --- stdout ---
-9 fields.
+Matching 'costList' or 'things' or 'Hyperlinks': 5 fields, out of 9 fields on the def. Whole path segment: 4 fields; inside a longer name: 1 field.
 
 def_name       ChildGun
 def_type       ThingDef
@@ -11,16 +11,12 @@ mod            ludeon.rimworld
 source         Guns.xml
 inherits_from  BaseGun (see 'rimsearcher inherit ChildGun')
 
-path                          value            code_default  xml
-thingClass                    RimWorld.Bullet  no            parent
-damage                        12               no            here
-speed                         70               no            parent
-costList[0].thingDef          Steel            no            here
-things[0].def                 Widget           no            no
-things[0].chance              0.25             no            here
-things[0].hp                  0                yes           no
-descriptionHyperlinks[0].def  ChildGun         no            under descriptionHyperlinks
-burstCount                    1                yes           no
+path                          value     code_default  xml
+costList[0].thingDef          Steel     no            here
+things[0].def                 Widget    no            no
+things[0].chance              0.25      no            here
+things[0].hp                  0         yes           no
+descriptionHyperlinks[0].def  ChildGun  no            under descriptionHyperlinks
 No value above with 'code_default'=no is one that most of the 2 ThingDefs in this snapshot also carry. Rows marked yes were not compared: a yes is not evidence that nothing wrote the value — the 'xml' column on that same row tells the two apart: here is an XML line writing that same value, no is a determined miss (this field was not written).
 The game also prices things like this — market value, cost to make, work amount — and those are computed rather than stored, so no field above would hold them either way. This snapshot never measured them, so it cannot say whether this def is one of the priced ones: 'rimsearcher economy ChildGun' says why and what to re-export.
 --- stderr ---

@@ -80,10 +80,14 @@ public class OutputSnapshotTests
         { "get-path-filter-truncated", ["get", "Apparel_ShieldBelt", "--path-contains", "comps", "--limit", "1"] },
         { "get-path-no-match",     ["get", "Apparel_ShieldBelt", "--path-contains", "zzzz"] },
         { "get-truncated-export",  ["get", "Bullet_Revolver"] },
-        // xml 列的四个取值一次摆齐:here / parent / no / under。主 fixture 是 0.2.0,
-        // 那一列在它上面根本不出现,于是这一列的**真实排版**此前没有任何字节基线 ——
-        // 新层的闸全是 JSON 断言,列宽、表头、与 code_default 的相邻关系都没人钉。
+        // xml 列:here / parent / no / under,加上值回连后的 here、两层标签的 here、
+        // 「元素归位但这一格没写」的 no。主 fixture 是 0.2.0,那一列在它上面根本不出现。
         { "get-xml-written",       ["get", "ChildGun", "--defaults", Fixture.PresenceArg] },
+        // 三档新判据收窄到路径上:回连 here、两层 here/确定 no、真 under。全表那份列宽
+        // 跟着最长路径走,这份钉的是取值本身。
+        { "get-xml-rejoined",      ["get", "ChildGun", "--defaults", "--path-contains", "costList",
+                                    "--path-contains", "things", "--path-contains", "Hyperlinks",
+                                    Fixture.PresenceArg] },
         // 代码默认值的三个落点:字段名与提问一字不差、值却是声明默认值 ——
         // 点了名就必须印出来,并且当场说清它是哪一种。
         { "get-code-default-path", ["get", "Bullet_Revolver", "--path-contains", "burstCount"] },
