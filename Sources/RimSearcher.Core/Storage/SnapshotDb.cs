@@ -1754,7 +1754,16 @@ public sealed class SnapshotDb : IDisposable
     /// 字典的值是 <c>here</c> 或 <c>parent</c>;不在字典里的路径就是两边都没写。
     /// </summary>
     public Dictionary<string, string>? XmlWrittenMarks(string defType, string defName)
+        => XmlWrittenMarks(defType, defName, out _);
+
+    /// <param name="containers">
+    /// XML 侧写过的每一条路径的各级前缀。索引路径 join 落空、而它的容器在这里时,
+    /// 说明两边在描述同一个容器、只是写法对不上 —— 那一格不是 no。
+    /// </param>
+    public Dictionary<string, string>? XmlWrittenMarks(string defType, string defName,
+                                                       out HashSet<string> containers)
     {
+        containers = new HashSet<string>(StringComparer.Ordinal);
         if (!Meta.IndexesXmlWritten) return null;
 
         var hereKeys = new HashSet<string>(StringComparer.Ordinal);
@@ -1780,6 +1789,7 @@ public sealed class SnapshotDb : IDisposable
 
         var xmlType = xmlNode?.DefType ?? defType;
         var marks = new Dictionary<string, string>(StringComparer.Ordinal);
+        var containersLocal = containers;   // out 参数进不了局部函数,引用同一个集合
         void Load(IEnumerable<string> keys, string mark)
         {
             foreach (var key in keys)
@@ -1795,6 +1805,8 @@ public sealed class SnapshotDb : IDisposable
                 {
                     var path = rd.GetString(0);
                     if (!marks.ContainsKey(path)) marks[path] = mark;
+                    for (var dot = path.IndexOf('.'); dot > 0; dot = path.IndexOf('.', dot + 1))
+                        containersLocal.Add(path[..dot]);
                 }
             }
         }

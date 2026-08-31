@@ -330,6 +330,10 @@ public static class Fixture
             new ExportedField("thingClass", "RimWorld.Bullet", DefaultState.Differs),
             new ExportedField("damage", "12", DefaultState.Differs),
             new ExportedField("speed", "70", DefaultState.Differs),
+            // XML 侧写的是 costList.Steel(拿 defName 当标签名),索引侧是
+            // costList[0].thingDef —— 两边同一件事,路径对不上。costList / statBases
+            // 这一族在真数据里就是这个形态。
+            new ExportedField("costList[0].thingDef", "Steel", DefaultState.Differs),
             new ExportedField("burstCount", "1", DefaultState.Same));
         Def("OtherGun",
             new ExportedField("thingClass", "RimWorld.Bullet", DefaultState.Differs),
@@ -339,7 +343,8 @@ public static class Fixture
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindTypeFields)
             .Str(IntermediateFormat.KeyDefType, "ThingDef")
             .Strs(IntermediateFormat.KeyPaths,
-                ["burstCount", "damage", "defName", "label", "neverSet", "speed", "thingClass"])
+                ["burstCount", "costList[0].thingDef", "damage", "defName", "label", "neverSet",
+                 "speed", "thingClass"])
             .ToString());
         records++;
 
@@ -389,7 +394,7 @@ public static class Fixture
             .Str(IntermediateFormat.KeyDefType, "ThingDef")
             .Str(IntermediateFormat.KeyNodeKey, "ChildGun")
             .Bool(IntermediateFormat.KeyKeyIsName, false)
-            .Strs(IntermediateFormat.KeyPaths, ["defName", "label", "damage"])
+            .Strs(IntermediateFormat.KeyPaths, ["defName", "label", "damage", "costList.Steel"])
             .ToString());
         records++;
 

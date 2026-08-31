@@ -275,8 +275,10 @@ public sealed class GetCommand : Command
             "which mod); it is not a path, and nothing here reads the file system to confirm the file is " +
             "still there. Defs the game builds in code carry a placeholder there instead.\n\n" +
             "When present, the 'xml' column says whether this def's own XML wrote the path (here), only an " +
-            "ancestor did (parent), or neither (no). That is the fact PatchOperationReplace vs Add needs. " +
-            "Older snapshots omit the column and say so.",
+            "ancestor did (parent), or neither (no) — the fact PatchOperationReplace vs Add turns on. " +
+            "A fourth value, 'under <container>', means the XML wrote that container but names its entries " +
+            "after defs (costList.Steel) where the index numbers them (costList[0].thingDef), so this row " +
+            "joins to nothing and neither answer is available. Older snapshots omit the column and say so.",
         Positionals = [new PositionalSpec { Name = "defName", Help = "The exact def name. 'search' finds it if you only know part of it." }],
         Options =
         [
@@ -317,8 +319,9 @@ public sealed class GetCommand : Command
                 Help = "Also list fields whose value is the one a fresh instance of the declaring type already "
                      + "carries. They are left out by default because they are the ones most often read as something "
                      + "an author chose. The 'xml' column on those rows says whether this def's own XML wrote the "
-                     + "path (here), only an ancestor did (parent), or neither (no) — a yes with xml=here is an "
-                     + "explicit write of the default. Older snapshots have no xml column, and there a def whose XML "
+                     + "path (here), only an ancestor did (parent), neither (no), or that the container was "
+                     + "written under a path shape this index cannot join (under <container>) — a yes with "
+                     + "xml=here is an explicit write of the default. Older snapshots have no xml column, and there a def whose XML "
                      + "writes that same value and a def that never mentions the field look the same. "
                      + "How many were left out is always printed, and --path-contains shows a named field either way.",
             },
@@ -619,7 +622,8 @@ public sealed class GetCommand : Command
                     var xmlLayer = ctx.Db.Meta.IndexesXmlWritten
                         ? $"--defaults lists them, and the '{XmlOrigin.Column}' column there says whether this " +
                           $"def's own XML wrote the path ({XmlOrigin.Here}), only an ancestor did " +
-                          $"({XmlOrigin.Parent}), or neither ({XmlOrigin.No})."
+                          $"({XmlOrigin.Parent}), or neither ({XmlOrigin.No}); a container written under " +
+                          "another path shape reads as 'under <container>', not as no."
                         : "--defaults lists them. That match is not evidence that nothing wrote them: a def " +
                           "whose XML writes the default value and a def that never mentions the field are " +
                           "byte-for-byte identical here.";
@@ -653,8 +657,20 @@ public sealed class GetCommand : Command
 
             if (matches.Count == 1) ctx.Report.Detail("def", pairs);
 
+            // join 落空有两个成因,只有一个是「XML 没写」。另一个是两边在描述同一个容器、
+            // 写法对不上:XML 拿 defName 当标签名(costList.Steel),索引按列表下标
+            // (costList[0].thingDef)。混报的代价是具体的 —— no 的出路是 Add,而节点其实在。
+            static string UnwrittenMark(string path, HashSet<string> containers)
+            {
+                var bracket = path.IndexOf('[');
+                return bracket > 0 && containers.Contains(path[..bracket])
+                    ? XmlOrigin.Under(path[..bracket])
+                    : XmlOrigin.No;
+            }
+
+            var xmlContainers = new HashSet<string>(StringComparer.Ordinal);
             var xmlMarks = ctx.Db.Meta.IndexesXmlWritten
-                ? ctx.Db.XmlWrittenMarks(def.DefType, def.DefName)
+                ? ctx.Db.XmlWrittenMarks(def.DefType, def.DefName, out xmlContainers)
                 : null;
 
             var fieldCols = xmlMarks is null
@@ -673,7 +689,9 @@ public sealed class GetCommand : Command
                         [FieldDefault.Column] = FieldDefault.Render(f.Default),
                     };
                     if (xmlMarks is not null)
-                        row[XmlOrigin.Column] = xmlMarks.TryGetValue(f.Path, out var mark) ? mark : XmlOrigin.No;
+                        row[XmlOrigin.Column] = xmlMarks.TryGetValue(f.Path, out var mark)
+                            ? mark
+                            : UnwrittenMark(f.Path, xmlContainers);
                     return (IReadOnlyDictionary<string, object?>)row;
                 }).ToList());
 

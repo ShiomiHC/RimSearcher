@@ -65,6 +65,28 @@ public class PresenceTests
         Assert.Equal(XmlOrigin.Parent, XmlOf("speed"));
         Assert.Equal(XmlOrigin.Parent, XmlOf("thingClass"));
         Assert.Equal(XmlOrigin.No, XmlOf("burstCount"));
+
+        // **两条路径描述同一件事、写法对不上时,不许印 no。** XML 拿 defName 当标签名
+        // (costList.Steel),索引按列表下标(costList[0].thingDef);join 落空,而 no 的
+        // 出路是 PatchOperationAdd —— 节点其实在,Add 会插出第二份。真数据里这一族不小:
+        // baseline 快照上 ThingDef 的 6086 条路径有 4880 条带下标,仅 statBases 一项
+        // 就是 44 条路径 / 1967 个 def。
+        Assert.Equal(XmlOrigin.Under("costList"), XmlOf("costList[0].thingDef"));
+    }
+
+    /// <summary>
+    /// 容器在 XML 侧一个字都没写时,仍然是 no —— 上面那条不许把所有带下标的路径
+    /// 一律降级成「说不准」,那样等于把这一列作废。
+    /// </summary>
+    [Fact]
+    public void 容器本身没写过时仍然是no()
+    {
+        // OtherGun 在 xml_written 里一条记录都没有,于是没有任何容器前缀可依 ——
+        // 每一格都该是 no,一个 under 都不许冒出来。
+        var (json, _, _) = Fixture.Run("get", "OtherGun", "--defaults", "--json", "--db", Fixture.PresenceDb);
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        foreach (var row in doc.RootElement.GetProperty("defs")[0].GetProperty("fields").EnumerateArray())
+            Assert.Equal(XmlOrigin.No, row.GetProperty(XmlOrigin.Column).GetString());
     }
 
     [Fact]
