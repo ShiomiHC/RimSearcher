@@ -34,8 +34,10 @@ namespace RimSearcher.DataMod
         /// 0.5.0 起三件「在不在」进索引:XML 实际写出来的字段路径、按 defName/label 定位的
         /// patch 计数、每个 def 类型能有的字段路径全集(含值为 null 的)。
         /// 0.6.0 起 xml_written 每条叶子带行内文本,短形式标签底下的候选格才能分开。
+        /// 0.7.0 起 xml_written 的路径全集取自**打完补丁**的合并文档,每条路径带一个
+        /// 「这一行是补丁加的」标记;元数据行记下走的是哪条路线。
         /// </summary>
-        public const string ExporterVersion = "0.6.0";
+        public const string ExporterVersion = "0.7.0";
 
         public static ExportLimits Limits = new ExportLimits();
 
@@ -225,6 +227,10 @@ namespace RimSearcher.DataMod
                 .Raw(IntermediateFormat.KeyMods, mods.ToString())
                 .Raw(IntermediateFormat.KeyLimits, limits)
                 .Str(IntermediateFormat.KeyModSettingsHash, ModSettingsHash())
+                // 读这个属性会先把打完补丁的文档弄到手(没走 Harmony 时就是重放那一遍)。
+                // 元数据行写在文件最前面,而路线要到拿到文档才知道 —— 所以这笔耗时落在这里,
+                // 不是落在后面的 xml_written 那一段。
+                .Str(IntermediateFormat.KeyPatchRoute, PatchedXml.Route)
                 .ToString();
         }
 

@@ -9,9 +9,11 @@ namespace RimSearcher.Output;
 /// <c>here</c> = 这个 def 自己的 XML 写了这条路径,Replace 找得到节点;
 /// <c>parent</c> = 只有祖先写了,指向这个 def 的 xpath 上这条节点不在,Add 才找得到;
 /// <c>no</c> = 这一格没写(含:列表项已按 defName 标签归位,但这一格对应的行不在)。
-/// **读的是磁盘上的 XML 原文,PatchOperation 还没跑** —— 别的 mod 用 PatchOperationAdd
-/// 加进来的节点在这里照样报 no,而 no 的出路是 Add,于是会插出第二份。这份时间差的
-/// 出口是 inherit 的 patch_ops 三个计数(06「patch 溯源」定的口径:0 不说,非 0 报数);
+/// 0.7.0 起路径取自**打完补丁**的合并 XML,别的 mod 的 patch 加进来的一行于是带
+/// <c>+patch</c> 后缀(出路仍是 Replace,但从此依赖那个 mod 在场);0.6.0 及更早读的是
+/// 磁盘上的原文、PatchOperation 还没跑,那种行在那些库上照样报 no,而 no 的出路是 Add,
+/// 于是会插出第二份 —— 那份时间差的出口是 inherit 的 patch_ops 三个计数
+/// (06「patch 溯源」定的口径:0 不说,非 0 报数);
 /// <c>under X</c> = XML 在容器 X 下写过东西,值回连之后仍说不准这一格。
 /// 缺层时这一列根本不出现,由能力位那句通知说,不许印成 <c>no</c>。
 ///
@@ -30,6 +32,17 @@ public static class XmlOrigin
     public const string Here = "here";
     public const string Parent = "parent";
     public const string No = "no";
+    /// <summary>
+    /// 这一行在打完补丁的合并 XML 里,但磁盘上的原文没写它 —— 是别的 mod 的
+    /// PatchOperation 加的。接在 <see cref="Here"/> / <see cref="Parent"/> 后面。
+    ///
+    /// 为什么不并进 here:出路一样(Replace 找得到节点),但代价不一样 —— 你的 patch
+    /// 从此依赖那个加它的 mod 在场。这两件事在 here 里同形。
+    /// </summary>
+    public const string PatchSuffix = "+patch";
+
+    private static string WithPatch(string mark, string source, IReadOnlySet<string>? patched)
+        => patched is not null && patched.Contains(source) ? mark + PatchSuffix : mark;
 
     public static string Under(string container) => $"under {container}";
 
@@ -64,15 +77,20 @@ public static class XmlOrigin
     /// <param name="xmlTexts">
     /// 每条 XML 叶子路径的行内文本。<c>null</c> = 这份快照没量过,走候选数那条旧路。
     /// </param>
+    /// <param name="patchedPaths">
+    /// 补丁加进来的那些路径。<c>null</c> = 这份快照收的是打补丁**之前**的原文,分不开
+    /// 「作者写的」与「别的 mod 加的」—— 那时一律不加后缀,而不是当成没被加过。
+    /// </param>
     public static string Resolve(
         string path,
         IReadOnlyDictionary<string, string> xmlMarks,
         HashSet<string> containers,
         IReadOnlyDictionary<string, List<ElementCell>> cellsByElement,
-        IReadOnlyDictionary<string, string>? xmlTexts = null)
+        IReadOnlyDictionary<string, string>? xmlTexts = null,
+        IReadOnlySet<string>? patchedPaths = null)
     {
         if (xmlMarks.TryGetValue(path, out var exact))
-            return exact;
+            return WithPatch(exact, path, patchedPaths);
 
         if (TryFirstIndex(path, out var container, out var element, out var leaf)
             && cellsByElement.TryGetValue(element, out var cells))
@@ -98,12 +116,14 @@ public static class XmlOrigin
             {
                 // XML 把这个字段自己拼了出来
                 if (leaf.Length > 0 && xmlMarks.TryGetValue(anchor + "." + leaf, out var mLeaf))
-                    return mLeaf;
+                    return WithPatch(mLeaf, anchor + "." + leaf, patchedPaths);
 
                 // 键格:这一格的值就是那个标签名。标签在,它就在。
                 foreach (var c in cells)
                     if (c.Leaf == leaf && c.Value == anchorValue)
-                        return anchorMark ?? ChildMark(xmlMarks, anchor);
+                        return anchorMark is not null
+                            ? WithPatch(anchorMark, anchor, patchedPaths)
+                            : ChildMark(xmlMarks, anchor, patchedPaths);
 
                 // 标签底下拼着别的字段(长形式 <Widget><chance>…</chance></Widget>),
                 // 没拼到这一格 —— 确定没写。
@@ -122,7 +142,9 @@ public static class XmlOrigin
                     if (++candidates > 1) break;
                 }
                 if (xmlTexts is null || candidates <= 1)
-                    return candidates == 1 ? anchorMark : Under(container);
+                    return candidates == 1
+                        ? WithPatch(anchorMark, anchor, patchedPaths)
+                        : Under(container);
 
                 xmlTexts.TryGetValue(anchor, out var t);
                 var matches = 0;
@@ -139,7 +161,8 @@ public static class XmlOrigin
                         if (c.Leaf == leaf) thisMatches = true;
                     }
                 }
-                if (matches == 1) return thisMatches ? anchorMark : No;
+                if (matches == 1)
+                    return thisMatches ? WithPatch(anchorMark, anchor, patchedPaths) : No;
                 if (matches == 0) return Under(container);
                 return thisMatches ? Under(container) : No;
             }
@@ -185,17 +208,21 @@ public static class XmlOrigin
     /// 标签自己没占一行(长形式)时,它的 here/parent 只能从底下那些行看出来。
     /// 只在键格这一条路上走,量小。
     /// </summary>
-    private static string ChildMark(IReadOnlyDictionary<string, string> xmlMarks, string anchor)
+    private static string ChildMark(IReadOnlyDictionary<string, string> xmlMarks, string anchor,
+                                    IReadOnlySet<string>? patchedPaths = null)
     {
+        // anchor 自己没有 mark(它只是别人的前缀),补丁标记就跟着最终选中的那条子路径走。
         string? mark = null;
+        string? source = null;
         foreach (var kv in xmlMarks)
             if (kv.Key.Length > anchor.Length
                 && kv.Key[anchor.Length] == '.'
                 && kv.Key.StartsWith(anchor, StringComparison.Ordinal))
             {
-                mark = PreferHere(mark, kv.Value);
+                var picked = PreferHere(mark, kv.Value);
+                if (source is null || picked != mark) { mark = picked; source = kv.Key; }
                 if (mark == Here) break;
             }
-        return mark ?? Here;
+        return source is null ? Here : WithPatch(mark!, source, patchedPaths);
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using RimSearcher.DataMod;
 
@@ -249,5 +250,71 @@ public class ExporterTests
         Assert.DoesNotContain("comps", paths);
         Assert.DoesNotContain("nested", paths);
         Assert.DoesNotContain("comps[1].compClass", paths);
+    }
+
+    // ---- 打完补丁的合并文档 ----
+
+    private static System.Xml.XmlDocument Merged(string inner)
+    {
+        var doc = new System.Xml.XmlDocument();
+        doc.LoadXml("<Defs>" + inner + "</Defs>");
+        return doc;
+    }
+
+    /// <summary>
+    /// 合并文档按加载顺序拼,同一个 defName 可以有多份 —— 谁覆盖谁是后面
+    /// ParseAndProcessXML 的事,所以这里必须**后者胜**。
+    ///
+    /// 逐 mod 遍历那一路给的是并集,于是一个被后来的 mod 整个重定义过的 def,路径表里
+    /// 混着已经不生效的那一份。那种混入在输出上与「作者两处都写了」逐字同形。
+    /// </summary>
+    [Fact]
+    public void 合并文档里同名def后者胜而不是并集()
+    {
+        var doc = Merged("""
+            <ThingDef><defName>Gun</defName><damage>10</damage><oldOnly>x</oldOnly></ThingDef>
+            <ThingDef><defName>Gun</defName><damage>99</damage><newOnly>y</newOnly></ThingDef>
+            """);
+        var nodes = PatchedXmlNodes.Extract(doc, 6, 64);
+
+        var gun = Assert.Single(nodes);
+        Assert.Equal("Gun", gun.NodeKey);
+        Assert.Contains("newOnly", gun.Paths);
+        Assert.DoesNotContain("oldOnly", gun.Paths);
+        Assert.Equal("99", gun.Texts[gun.Paths.IndexOf("damage")]);
+    }
+
+    /// <summary>def 类型不同就是两个节点,哪怕 defName 一样。</summary>
+    [Fact]
+    public void 同名但类型不同的def各占一条()
+    {
+        var doc = Merged("""
+            <ThingDef><defName>Gun</defName><damage>10</damage></ThingDef>
+            <RecipeDef><defName>Gun</defName><workAmount>5</workAmount></RecipeDef>
+            """);
+        Assert.Equal(2, PatchedXmlNodes.Extract(doc, 6, 64).Count);
+    }
+
+    /// <summary>抽象节点没有 defName,按 Name= 立键 —— 祖先那一路的 parent 全靠它。</summary>
+    [Fact]
+    public void 抽象节点按Name立键()
+    {
+        var doc = Merged("""<ThingDef Name="BaseGun" Abstract="True"><speed>70</speed></ThingDef>""");
+        var node = Assert.Single(PatchedXmlNodes.Extract(doc, 6, 64));
+        Assert.Equal("BaseGun", node.NodeKey);
+        Assert.True(node.KeyIsName);
+    }
+
+    /// <summary>
+    /// 原文里没出现过的路径才算补丁加的。整个节点在原文里都不存在(<c>before</c> 为
+    /// <c>null</c>)时全算 —— 那种节点确实整个是补丁造的。
+    /// </summary>
+    [Fact]
+    public void 补丁标记只认原文里没出现过的路径()
+    {
+        var paths = new List<string> { "defName", "damage", "recipeMaker.researchPrerequisite" };
+        var before = new HashSet<string>(StringComparer.Ordinal) { "defName", "damage" };
+        Assert.Equal([false, false, true], PatchedXmlNodes.PatchedFlags(paths, before));
+        Assert.Equal([true, true, true], PatchedXmlNodes.PatchedFlags(paths, null));
     }
 }

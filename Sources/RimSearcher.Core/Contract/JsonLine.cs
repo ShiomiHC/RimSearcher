@@ -83,6 +83,22 @@ namespace RimSearcher.Contract
             return this;
         }
 
+        /// <summary>布尔数组,如 xml_written 的「这一行是补丁加的」标记。</summary>
+        public JsonLine Bools(string key, IEnumerable<bool> values)
+        {
+            Key(key);
+            _sb.Append('[');
+            var first = true;
+            foreach (var v in values)
+            {
+                if (!first) _sb.Append(',');
+                first = false;
+                _sb.Append(v ? "true" : "false");
+            }
+            _sb.Append(']');
+            return this;
+        }
+
         /// <summary>原样嵌入一段已经是合法 JSON 的文本(数组/对象)。</summary>
         public JsonLine Raw(string key, string json)
         {

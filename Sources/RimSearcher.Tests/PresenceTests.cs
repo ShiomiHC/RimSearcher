@@ -328,6 +328,54 @@ public class PresenceTests
         Assert.Equal(XmlOrigin.Under("costList"), XmlOfJson(json, "costList[0].quality"));
     }
 
+    // ---- 0.7.0:路径取自打完补丁的 XML ----
+
+    /// <summary>
+    /// 补丁加进来的一行,出路是 Replace 而不是 Add —— 这与老快照上它报的 <c>no</c> 正相反。
+    /// 但也不能并进 here:代价不一样,你的 patch 从此依赖那个加它的 mod 在场。
+    /// </summary>
+    [Fact]
+    public void 补丁加的行报here带patch后缀()
+    {
+        var (json, _, _) = Fixture.Run("get", "PatchGun", "--defaults", "--json",
+                                       "--db", Fixture.PresencePatchDb);
+        Assert.Equal(XmlOrigin.Here, XmlOfJson(json, "damage"));
+        Assert.Equal(XmlOrigin.Here + XmlOrigin.PatchSuffix,
+                     XmlOfJson(json, "recipeMaker.researchPrerequisite"));
+        Assert.Equal(XmlOrigin.Parent + XmlOrigin.PatchSuffix, XmlOfJson(json, "speed"));
+        // 这一行没被补丁动过,后缀不许跟着整个 def 走。
+        Assert.Equal(XmlOrigin.Here, XmlOfJson(json, "costList[0].count"));
+        Assert.Equal(XmlOrigin.No, XmlOfJson(json, "costList[0].quality"));
+    }
+
+    /// <summary>整个短形式标签是补丁加的:承接文本那一格带后缀,另一格仍是确定的 no。</summary>
+    [Fact]
+    public void 补丁加的短形式标签后缀落在承接文本那一格()
+    {
+        var (json, _, _) = Fixture.Run("get", "PatchListGun", "--defaults", "--json",
+                                       "--db", Fixture.PresencePatchDb);
+        Assert.Equal(XmlOrigin.Here + XmlOrigin.PatchSuffix, XmlOfJson(json, "costList[0].thingDef"));
+        Assert.Equal(XmlOrigin.Here + XmlOrigin.PatchSuffix, XmlOfJson(json, "costList[0].count"));
+        Assert.Equal(XmlOrigin.No, XmlOfJson(json, "costList[0].quality"));
+    }
+
+    /// <summary>
+    /// 0.6.0 及更早的快照收的是打补丁之前的原文 —— 不许给它们印后缀。
+    /// 「没有后缀」在那些库上的含义是「分不开」,不是「没被补丁加过」;那半句由
+    /// patch xpath 计数那条通知说,它只在这一档出现。
+    /// </summary>
+    [Fact]
+    public void 老快照不印补丁后缀但仍报xpath计数()
+    {
+        var (text, _, _) = Fixture.Run("get", "ChildGun", "--defaults", Fixture.PresenceTextArg);
+        Assert.DoesNotContain(XmlOrigin.PatchSuffix, text);
+        Assert.Contains("3 patch xpaths name this def", text);
+
+        var (patched, _, _) = Fixture.Run("get", "PatchGun", "--defaults", Fixture.PresencePatchArg);
+        Assert.Contains(XmlOrigin.PatchSuffix, patched);
+        Assert.DoesNotContain("patch xpaths name this def", patched);
+    }
+
     [Fact]
     public void 零五快照导入后文本列是空的()
     {

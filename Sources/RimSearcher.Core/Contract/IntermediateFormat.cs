@@ -147,6 +147,23 @@ namespace RimSearcher.Contract
         /// 导入侧必须校验等长 —— 错位后每一格的文本都指向别的路径,输出仍然像对的。
         /// </summary>
         public const string KeyTexts = "texts";
+        /// <summary>
+        /// xml_written 的「这一行是补丁加的」标记,与 <see cref="KeyPaths"/> 同序同长。
+        /// 真 = 打完补丁的文档里有这一行,而磁盘上的原文没有。导入侧同样必须校验等长。
+        /// </summary>
+        public const string KeyPatched = "patched";
+        /// <summary>
+        /// 元数据行:这次的 xml_written 是怎么拿到打完补丁的文档的。
+        /// <see cref="PatchRouteHarmony"/> / <see cref="PatchRouteReplay"/> / <see cref="PatchRouteNone"/>。
+        /// 两条路线的结果若有差异,快照消费方得知道自己手上这份是哪一种。
+        /// </summary>
+        public const string KeyPatchRoute = "patch_route";
+        /// <summary>抄了游戏真正用过的那份文档(Harmony Postfix)。</summary>
+        public const string PatchRouteHarmony = "harmony";
+        /// <summary>自己重放了一遍 LoadModXML / CombineIntoUnifiedXML / ApplyPatches。</summary>
+        public const string PatchRouteReplay = "replay";
+        /// <summary>两条都没走成 —— 路径全集仍是打补丁**之前**的原文。</summary>
+        public const string PatchRouteNone = "none";
         /// <summary>xml_written 的节点键:有 defName 就用 defName,否则用 Name=。</summary>
         public const string KeyNodeKey = "node_key";
         /// <summary>node_key 取自 Name= 而非 defName 时为真。</summary>

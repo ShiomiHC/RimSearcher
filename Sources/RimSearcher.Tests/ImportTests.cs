@@ -183,6 +183,52 @@ public class ImportTests
         Assert.False(File.Exists(db), "A rejected import left a database behind.");
     }
 
+    /// <summary>
+    /// patched 标记同样是平行数组。错位之后作者写的行会被标成补丁加的、补丁加的行被标成
+    /// 作者写的 —— 两个方向都指着一个确定的错答案,而输出仍然像对的。
+    /// </summary>
+    [Fact]
+    public void xmlwritten的路径与补丁标记不等长时导入失败()
+    {
+        var export = Temp("xwpat" + IntermediateFormat.FileExtension);
+        using (var fs = File.Create(export))
+        using (var gz = new System.IO.Compression.GZipStream(fs, System.IO.Compression.CompressionLevel.Optimal))
+        using (var w = new StreamWriter(gz, new System.Text.UTF8Encoding(false)) { NewLine = "\n" })
+        {
+            w.WriteLine(new JsonLine()
+                .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindMeta)
+                .Int(IntermediateFormat.KeyFormatVersion, IntermediateFormat.FormatVersion)
+                .Str(IntermediateFormat.KeyExporterVersion, "0.7.0")
+                .Str(IntermediateFormat.KeyExportedAtUtc, "2026-01-07T00:00:00.0000000Z")
+                .Str(IntermediateFormat.KeyGameVersion, Fixture.GameVersion)
+                .Str(IntermediateFormat.KeyLanguage, Fixture.Language)
+                .Raw(IntermediateFormat.KeyMods, "[]")
+                .Raw(IntermediateFormat.KeyLimits, "{}")
+                .Str(IntermediateFormat.KeyPatchRoute, IntermediateFormat.PatchRouteHarmony)
+                .ToString());
+            w.WriteLine(new JsonLine()
+                .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindXmlWritten)
+                .Str(IntermediateFormat.KeyDefType, "ThingDef")
+                .Str(IntermediateFormat.KeyNodeKey, "Gun")
+                .Bool(IntermediateFormat.KeyKeyIsName, false)
+                .Strs(IntermediateFormat.KeyPaths, ["defName", "costList.Steel"])
+                .Strs(IntermediateFormat.KeyTexts, ["Gun", "75"])
+                .Bools(IntermediateFormat.KeyPatched, [false])
+                .ToString());
+            w.WriteLine(new JsonLine()
+                .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindEnd)
+                .Int(IntermediateFormat.KeyRecords, 3)
+                .ToString());
+        }
+
+        var db = Temp("xwpat.db");
+        var ex = Assert.ThrowsAny<Exception>(() => new SnapshotImporter().Import(export, db));
+        Assert.Contains("2 paths", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("1 patched flags", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("wrong lines as patch-added", ex.Message, StringComparison.Ordinal);
+        Assert.False(File.Exists(db), "A rejected import left a database behind.");
+    }
+
     // ---- 噪声过滤(唯一产地在 import 侧)----
 
     [Fact]

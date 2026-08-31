@@ -97,6 +97,9 @@ public class OutputSnapshotTests
                                     Fixture.PresenceTextArg] },
         { "get-xml-text-bare",     ["get", "BareGun", "--defaults", "--path-contains", "costList",
                                     Fixture.PresenceTextArg] },
+        // 0.7.0:路径取自打完补丁的 XML,补丁加的行带 +patch。
+        { "get-xml-patched",       ["get", "PatchGun", "--defaults", Fixture.PresencePatchArg] },
+        { "get-xml-patched-tag",   ["get", "PatchListGun", "--defaults", Fixture.PresencePatchArg] },
         // 代码默认值的三个落点:字段名与提问一字不差、值却是声明默认值 ——
         // 点了名就必须印出来,并且当场说清它是哪一种。
         { "get-code-default-path", ["get", "Bullet_Revolver", "--path-contains", "burstCount"] },

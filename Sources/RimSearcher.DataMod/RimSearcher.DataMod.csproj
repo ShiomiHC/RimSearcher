@@ -21,9 +21,12 @@
 
   <ItemGroup>
     <!-- CLAUDE.local.md 机器事实:不需要本地游戏 DLL -->
-    <!-- Harmony 不引:主导出路径不打补丁。patch 溯源(03 拦截点)若兑现,它进独立源文件位,
-         不把 Harmony 依赖搅进这条路径 —— 06 层 1 的「patch 溯源拦截」条目记着这个边界。 -->
     <PackageReference Include="Krafs.Rimworld.Ref" Version="1.6.4535" PrivateAssets="all" ExcludeAssets="runtime" />
+    <!-- Harmony **只在编译期**引:ExcludeAssets="runtime" 保证 0Harmony.dll 不落进
+         ModStaging/Assemblies/。落进去就成了自带一份,而自带一份要冒同名程序集版本共存的险 ——
+         PatchHook 的整条设计就是为了不必自带(见那个文件的注释)。
+         用到 Harmony 的代码全部关在 PatchHook.cs 一个文件里,别处一行都不许出现。 -->
+    <PackageReference Include="Lib.Harmony" Version="2.3.3" PrivateAssets="all" ExcludeAssets="runtime" />
   </ItemGroup>
 
   <ItemGroup>

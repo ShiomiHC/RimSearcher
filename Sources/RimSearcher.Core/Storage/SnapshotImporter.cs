@@ -84,8 +84,8 @@ public sealed class SnapshotImporter
                 VALUES ($t,$n,$pn,$a,$dn,$l,$sm,$sf,$po,$pod,$pol)
                 """);
             using var insertXw = Prepare(db, """
-                INSERT INTO xml_written (def_type, node_key, key_is_name, path, inner_text)
-                VALUES ($t,$k,$kn,$p,$x)
+                INSERT INTO xml_written (def_type, node_key, key_is_name, path, inner_text, patched)
+                VALUES ($t,$k,$kn,$p,$x,$pa)
                 """);
             using var insertTf = Prepare(db, """
                 INSERT INTO type_fields (def_type, path)
@@ -248,6 +248,20 @@ public sealed class SnapshotImporter
                                 $"paths and {wtexts.GetArrayLength()} texts. Those arrays are parallel, and a " +
                                 "length mismatch would silently attach every text to the wrong path. Re-run the export.");
                     }
+                    var hasPatchedProp = root.TryGetProperty(IntermediateFormat.KeyPatched, out var wpatched);
+                    if (hasPatchedProp)
+                    {
+                        if (!hasPaths || wpatched.ValueKind != JsonValueKind.Array)
+                            throw new SnapshotFormatError(
+                                $"An xmlwritten record for {defTypeW} '{nodeKey}' has a patched array that is not " +
+                                "parallel to paths. Re-run the export.");
+                        if (wpatched.GetArrayLength() != wpaths.GetArrayLength())
+                            throw new SnapshotFormatError(
+                                $"An xmlwritten record for {defTypeW} '{nodeKey}' has {wpaths.GetArrayLength()} " +
+                                $"paths and {wpatched.GetArrayLength()} patched flags. Those arrays are parallel, " +
+                                "and a length mismatch would silently mark the wrong lines as patch-added. " +
+                                "Re-run the export.");
+                    }
                     if (hasPaths)
                     {
                         var n = wpaths.GetArrayLength();
@@ -261,6 +275,9 @@ public sealed class SnapshotImporter
                             Bind(insertXw, "$p", path);
                             Bind(insertXw, "$x", hasTextsProp
                                 ? (wtexts[i].ValueKind == JsonValueKind.String ? wtexts[i].GetString() ?? "" : "")
+                                : null);
+                            Bind(insertXw, "$pa", hasPatchedProp
+                                ? (object)(wpatched[i].ValueKind == JsonValueKind.True ? 1 : 0)
                                 : null);
                             insertXw.ExecuteNonQuery();
                         }
