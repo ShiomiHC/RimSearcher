@@ -56,7 +56,7 @@ value can be wrong rather than merely partial). Which mods the game happens to h
 is **never** reported — enabling five more mods, or disabling one, leaves every query
 silent. That is an environment choice, not staleness: a snapshot deliberately narrowed to
 Core plus the official DLCs would otherwise carry a warning that is true forever and fixable
-never. Ask `snapshot status` for those numbers, and note that a zero result already names
+never. Ask `snapshot status` for those numbers; a zero result already names
 another snapshot that holds the def you asked for. No selector mutes any of this —
 `--snapshot <name>` says which environment you meant, not that you knew it had moved.
 
