@@ -1,6 +1,10 @@
 $ rimsearcher where --value Bloomstone --type AlloyPartDef
-exit 2
+exit 0
 --- stdout ---
+2 field paths within --type AlloyPartDef.
+
+Same in every row, not repeated below: def_type=AlloyPartDef, example_value=Bloomstone.
+path                  defs
+costList[0].thingDef  4
+costList[1].thingDef  2
 --- stderr ---
-Unknown option '--type'. It is accepted by 'search', 'get', 'values', and 2 more, but not by 'where'.
-Run 'rimsearcher where --help' to see what this command accepts.

@@ -789,6 +789,12 @@ public sealed class FindCommand : Command
             CommonOptions.Limit("matches"),
             CommonOptions.Offset("matches"),
             CommonOptions.Scope,
+            // 全套查询命令里 where 是最后一个拿到类型面的。它此前没有,而 --scope 按 mod 收、
+            // list 按类型列却给不出「值等于 X」—— 于是「哪些 HediffDef 把它设成了这个」
+            // 在这套命令里没有写法,而消费侧照 list 的形状把类型写在第一个位置上,那里
+            // 正好是 <fieldPath>:`HediffDef` 按后缀命中真实存在的 comps[].hediffDef,
+            // 于是拿到的不是报错,是一张答着另一个问题的干净的表。
+            CommonOptions.Type,
             new OptionSpec
             {
                 Name = "exact",
@@ -850,6 +856,7 @@ public sealed class FindCommand : Command
     {
         var limit = ctx.Limit();
         var scope = ctx.Scope();
+        var type = ctx.Args.Value("type");
 
         var offset = ctx.Args.Offset();
 
@@ -888,7 +895,7 @@ public sealed class FindCommand : Command
                 return 2;
             }
             ctx.Report.Promises("paths");
-            return ByValue(ctx, named, scope, limit, ctx.Args.Flag("exact"), offset);
+            return ByValue(ctx, named, scope, limit, ctx.Args.Flag("exact"), offset, type);
         }
         ctx.Report.Promises("matches");
 
@@ -904,7 +911,7 @@ public sealed class FindCommand : Command
         var exact = ctx.Args.Flag("exact");
         var pq = new PathQuery(path, ctx.Args.Flag("exact-path"));
 
-        var (rows, total, defs) = ctx.Db.FindByField(pq, value, exact, scope, limit.Effective, offset);
+        var (rows, total, defs) = ctx.Db.FindByField(pq, value, exact, scope, limit.Effective, offset, type);
 
         // 数的是**行**,不是 def:一行是一个(def, 路径)对,同一个 def 在多条路径上取到
         // 同一个值就有几行(`where capacity Consciousness` 是 155 行 / 80 个 def,首页
@@ -949,9 +956,41 @@ public sealed class FindCommand : Command
                 // 而零那一侧说的是 def。
                 if (NameLookup.Elsewhere(ctx, db => db.FindByField(
                         pq, value, exact,
-                        Snapshot.ScopeFilter.Parse("all", db.PackageIds(), ctx.Config), 0, 0).Defs, "def")
+                        Snapshot.ScopeFilter.Parse("all", db.PackageIds(), ctx.Config), 0, 0, type).Defs, "def")
                     is { } line)
                     ctx.Report.Notice(NoticeKind.NextStep, line);
+            }
+
+            // --type 是第三种**自己施加的**过滤,而它落空时下面那三条成因一句都不成立:
+            // 路径在、值也在,只是不坐在这个类型上。判据与 --scope 那条同源 —— 同一条 SQL,
+            // type 去掉重跑一次,那次重查是白拿的。
+            //
+            // 两件事分开:类型压根不在这份快照里(要核对的是拼写),与类型在、只是这个值
+            // 不落在它上面(要做的是把 --type 去掉)。合成一句的话,写错类型名的人会拿到
+            // 一句「这个类型上没有」,而那句预设了那个类型存在。
+            if (type is { Length: > 0 })
+            {
+                if (UnknownType(ctx, type) is { } unknown)
+                {
+                    ctx.Report.Notice(NoticeKind.Filter, unknown);
+                    return 1;
+                }
+
+                // 取 Defs 不取 Total,理由同 --scope 那处:这句的谓语是「有 N 个 def 把它
+                // 设成了这个」,而 Total 数的是(def, 路径)行。
+                var hiddenByType = ctx.Db.FindByField(pq, value, exact, scope, 0, 0).Defs;
+                if (hiddenByType > 0)
+                {
+                    ctx.Report.Notice(NoticeKind.Filter,
+                        $"--type {type} is what emptied this: " +
+                        $"{Tally.Complete(hiddenByType).Render("def")} in this snapshot " +
+                        $"{(hiddenByType == 1 ? "has" : "have")} '{path}'" +
+                        (value is null ? "" : $" set to {(exact ? "exactly " : "")}'{value}'") +
+                        $", on other def types. Drop --type to see {(hiddenByType == 1 ? "it" : "them")}, " +
+                        "and read the def_type column there.");
+                    NoteElsewhere();
+                    return 1;
+                }
             }
 
             // --exact-path 自己把结果筛空,与「这个字段不存在」是两件事,而下面那套分流
@@ -961,7 +1000,7 @@ public sealed class FindCommand : Command
             {
                 // 列出形状而不是报个数:那批形状本身就是下一条查询,而它们带的 `[]`
                 // 原样粘回 --exact-path 就走得通。
-                var shapes = ctx.Db.FindPathShapes(path, value, exact, scope);
+                var shapes = ctx.Db.FindPathShapes(path, value, exact, scope, type);
                 var shown = shapes.Take(Limits.MaxSuggestions).ToList();
                 ctx.Report.Notice(NoticeKind.NextStep,
                     $"No field path is exactly '{path}'. Matched as a suffix instead: " +
@@ -1047,7 +1086,7 @@ public sealed class FindCommand : Command
 
             // 直接把真实值域里的近似项端出来:一条字段的取值动辄上百(compClass 有 175 个),
             // 指一条「去跑 values」的路照样看不见答案。
-            var space = ctx.Db.DistinctValues(pq, scope, Limits.MaxLimit).Rows.Select(v => v.Value).ToList();
+            var space = ctx.Db.DistinctValues(pq, scope, Limits.MaxLimit, type).Rows.Select(v => v.Value).ToList();
 
             // RimWorld 的约定:XML 里写的是 `Class="CompProperties_X"`,而落到 def 上的
             // comps[N].compClass 存的是被解析出来的 `CompX` —— 照 XML 抄的名字必然查不到。
@@ -1068,7 +1107,7 @@ public sealed class FindCommand : Command
 
             // 值域计数没有产地就是负资产:「out of 207 values」会被读成「值的形态有讲究」。
             // 数字得连着「这些值来自哪些路径 / 哪些 def 类型」一起说。
-            var cov = space.Count > 0 ? ctx.Db.ValueCoverage(pq, scope, 3) : default;
+            var cov = space.Count > 0 ? ctx.Db.ValueCoverage(pq, scope, 3, type) : default;
             var provenance = space.Count == 0 ? "" :
                 $", out of the {Tally.Complete(space.Count).Render("value")} found under " +
                 (cov.Paths.Count > 0
@@ -1097,7 +1136,7 @@ public sealed class FindCommand : Command
                 ? 0
                 : ctx.Db.FindByField(pq, value, exact,
                                      Snapshot.ScopeFilter.Parse("all", ctx.Db.PackageIds(), ctx.Config),
-                                     0, 0).Defs;
+                                     0, 0, type).Defs;
             if (hiddenByScope > 0)
                 ctx.Report.Notice(NoticeKind.Filter,
                     $"--scope {scope.Expression} is what emptied this: " +
@@ -1179,15 +1218,19 @@ public sealed class FindCommand : Command
         // 这里不像 get 那样把默认值行滤掉:调用方点名了一个字段与一个值,「哪些 def 取到过它」
         // 的答案里就该有它们。但**为什么取到**要分得开 —— comps[N].compClass 一整批
         // 等于 CompShield,多半是 CompProperties_Shield 的声明里写死的,不是谁在 XML 里挑的。
-        Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(pq, scope),
-            "every def type that uses this path at all, not just the ones in the rows above");
+        // 跟着 --type 一起收:表已经滤成一个类型了,这句不能还在说别的类型。
+        // 措辞与 values 那处同源 —— 两条命令说的是同一件事。
+        Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(pq, scope, type),
+            type is { Length: > 0 }
+                ? $"all of {type}, the type this table is already filtered to"
+                : "every def type that uses this path at all, not just the ones in the rows above");
 
         // 代码造出来的 def 混在结果里时,那件事必须落在**行上**,不能只落在声明里 ——
         // 这份结果最常见的下游是「--limit all --json 灌进脚本批量生成补丁」,而脚本不读 notes。
         //
         // 句子数整个结果集(与上面两句同口径),列跟着这一页 —— 于是首页一个 ImpliedDef
         // 都没碰上时,句子照样出声,而那句会自己说清楚「不都在这一页上」。
-        var generated = ctx.Db.FindGeneratedDefs(pq, value, exact, scope, Limits.MaxSuggestions);
+        var generated = ctx.Db.FindGeneratedDefs(pq, value, exact, scope, Limits.MaxSuggestions, type);
         Advisory.NoteGeneratedDefs(ctx, generated.Names, generated.Total, defs,
             rows.Count(r => r.Def.Generated));
 
@@ -1196,9 +1239,9 @@ public sealed class FindCommand : Command
         // 排在这一组的最前面:另外三句说的是「你手上这张表不是全集」,而这一句说的是
         // 「这张表里的行未必是你问的那个值」—— 后者改变的是眼前这些行怎么读,得先于
         // 「外面还有什么」。
-        Advisory.NoteSubstringWidened(ctx, pq, value, exact, scope, defs);
+        Advisory.NoteSubstringWidened(ctx, pq, value, exact, scope, defs, type);
 
-        ctx.AnnounceExcluded(scope, rest => ctx.Db.FindByField(pq, value, exact, rest, 0, 0).Defs, "def");
+        ctx.AnnounceExcluded(scope, rest => ctx.Db.FindByField(pq, value, exact, rest, 0, 0, type).Defs, "def");
 
         // 同样在表上方,且排在 scope 补集那句之后:两句都在说「你手上这张表不是全集」,
         // 而 scope 那条是调用方自己划的界,这条是他没意识到自己划了的界。
@@ -1208,7 +1251,7 @@ public sealed class FindCommand : Command
         // 其实不是同一个字段)与值维度的外延(同一个值还坐在别的字段上),本来就该挨着读。
         // 它此前是 footnote,于是**同类的两条外延警告分居数据两侧**,而按位置纪律
         // 下方那条正是会被 head/sed 截掉的那条。
-        Advisory.NoteMixedPathShapes(ctx, ctx.Db.FindPathShapes(pq, value, exact, scope));
+        Advisory.NoteMixedPathShapes(ctx, ctx.Db.FindPathShapes(pq, value, exact, scope, type));
 
         ctx.Report.Table("matches",
             generated.Total > 0
@@ -1230,12 +1273,22 @@ public sealed class FindCommand : Command
         return 0;
     }
 
+    // --type 指的类型不在这份快照里 —— 那时整条查询必然空手,而空手与「查过了、没有」
+    // 逐字同形。两条问法(点名字段 / 只给值)都会撞上它,所以判据只此一处。
+    private static string? UnknownType(CommandContext ctx, string? type) =>
+        type is { Length: > 0 } &&
+        !ctx.Db.Types(ctx.Unscoped()).Any(t => string.Equals(t.Type, type, StringComparison.OrdinalIgnoreCase))
+            ? $"'{type}' is not a def type in this snapshot. --type {type} therefore selects nothing at " +
+              "all, whatever the rest of the query asks. 'rimsearcher list' names every def type this " +
+              "snapshot does have."
+            : null;
+
     /// <summary>--value:不指名字段,直接问「哪个字段装着这段文本」。</summary>
     private static int ByValue(CommandContext ctx, string value, Snapshot.ScopeFilter scope, LimitValue limit,
-                               bool exact, int offset)
+                               bool exact, int offset, string? type = null)
     {
         var (rows, total, exactTotal) = ctx.Db.PathsWithValue(value, scope, limit.Effective,
-            exact ? ValueMatch.Exact : ValueMatch.Substring, offset);
+            exact ? ValueMatch.Exact : ValueMatch.Substring, offset, type);
 
         if (rows.Count == 0 && offset > 0 && total > 0)
         {
@@ -1250,6 +1303,14 @@ public sealed class FindCommand : Command
             // 于是「类真实存在且正在被这个 def 使用」与「这个类根本不存在」在输出上完全一样,
             // 而类名形状的查询词最容易撞这一条,所以这时候必须把索引边界说出来。
             // 判据归一到 ClassNameShape,它把 `True`、`.ogg`、`1.5` 挡在外面。
+            // 类型名写错时,下面那句「这份快照里没有哪个字段装着这个值」是假话 ——
+            // 它成立与否根本没被问过。
+            if (UnknownType(ctx, type) is { } unknown)
+            {
+                ctx.Report.Notice(NoticeKind.Filter, unknown);
+                return 1;
+            }
+
             var looksLikeType = ClassNameShape.Looks(value);
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"No field in this snapshot holds a value {(exact ? "equal to" : "containing")} '{value}'" +
@@ -1267,7 +1328,7 @@ public sealed class FindCommand : Command
             // 叠加不替换:上面那句说的是「这份快照里没有」,而别的快照里有没有算得出来。
             if (NameLookup.Elsewhere(ctx, db => db.PathsWithValue(
                     value, Snapshot.ScopeFilter.Parse("all", db.PackageIds(), ctx.Config), 0,
-                    exact ? ValueMatch.Exact : ValueMatch.Substring).Total, "field path")
+                    exact ? ValueMatch.Exact : ValueMatch.Substring, defType: type).Total, "field path")
                 is { } line)
                 ctx.Report.Notice(NoticeKind.NextStep, line);
             return 1;
@@ -1300,7 +1361,7 @@ public sealed class FindCommand : Command
         // 表上方 —— 理由同 list 那处。名词用 field path 而不是 path:NounRegistry 只认
         // 前者,而这张表一行就是一条字段路径。
         ctx.AnnounceExcluded(scope, rest => ctx.Db.PathsWithValue(
-            value, rest, 0, exact ? ValueMatch.Exact : ValueMatch.Substring).Total, "field path");
+            value, rest, 0, exact ? ValueMatch.Exact : ValueMatch.Substring, defType: type).Total, "field path");
 
         ctx.Report.Table("paths", ["path", "def_type", "defs", "example_value"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
@@ -2488,10 +2549,12 @@ internal static class Advisory
     /// 常见值上这句话会次次出声,而它每次给的数都随查询变,不是同一句免责声明重播。
     /// </summary>
     public static void NoteSubstringWidened(CommandContext ctx, PathQuery own, string? value, bool exact,
-                                            Snapshot.ScopeFilter scope, int here)
+                                            Snapshot.ScopeFilter scope, int here, string? defType = null)
     {
         if (exact || value is not { Length: > 0 } || here == 0) return;
-        var strict = ctx.Db.FindByField(own, value, true, scope, 0, 0).Defs;
+        // defType 跟着传:here 是**表上看得见的那个 def 数**,而 strict 拿来跟它比。
+        // 一侧收窄一侧不收,strict 会大过 here,于是句子里那个减法印出负数。
+        var strict = ctx.Db.FindByField(own, value, true, scope, 0, 0, defType).Defs;
         if (strict == here) return;
         ctx.Report.Notice(NoticeKind.Boundary,
             strict == 0

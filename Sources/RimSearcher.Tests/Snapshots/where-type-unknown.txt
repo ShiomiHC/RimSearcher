@@ -1,6 +1,5 @@
 $ rimsearcher where thingDef Bloomstone --type NoSuchDef
-exit 2
+exit 1
 --- stdout ---
+'NoSuchDef' is not a def type in this snapshot. --type NoSuchDef therefore selects nothing at all, whatever the rest of the query asks. 'rimsearcher list' names every def type this snapshot does have.
 --- stderr ---
-Unknown option '--type'. It is accepted by 'search', 'get', 'values', and 2 more, but not by 'where'.
-Run 'rimsearcher where --help' to see what this command accepts.

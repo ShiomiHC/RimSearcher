@@ -1,6 +1,5 @@
 $ rimsearcher where thingDef Bloomstone --type MoltenRecipeDef
-exit 2
+exit 1
 --- stdout ---
+--type MoltenRecipeDef is what emptied this: 4 defs in this snapshot have 'thingDef' set to 'Bloomstone', on other def types. Drop --type to see them, and read the def_type column there.
 --- stderr ---
-Unknown option '--type'. It is accepted by 'search', 'get', 'values', and 2 more, but not by 'where'.
-Run 'rimsearcher where --help' to see what this command accepts.

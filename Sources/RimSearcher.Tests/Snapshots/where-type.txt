@@ -1,6 +1,16 @@
 $ rimsearcher where thingDef Bloomstone --type AlloyPartDef
-exit 2
+exit 0
 --- stdout ---
+6 matches within --type AlloyPartDef.
+  - Those 6 matches come from 4 defs: a def that matches on more than one path has a row for each, so the def_name column repeats.
+  - 'Bloomstone' also sits on 2 path shapes beyond this one, 2 of them on def types other than AlloyPartDef, all on MoltenRecipeDef: fixedIngredientFilter.thingDefs[] (1), ingredients[].filter.thingDefs[] (1).
+
+Same in every row, not repeated below: def_type=AlloyPartDef, value=Bloomstone, code_default=no, mod=test.mod.
+def_name      path
+PartAnvil     costList[0].thingDef
+PartAnvil     costList[1].thingDef
+PartCrucible  costList[0].thingDef
+PartCrucible  costList[1].thingDef
+PartLadle     costList[0].thingDef
+PartTongs     costList[0].thingDef
 --- stderr ---
-Unknown option '--type'. It is accepted by 'search', 'get', 'values', and 2 more, but not by 'where'.
-Run 'rimsearcher where --help' to see what this command accepts.

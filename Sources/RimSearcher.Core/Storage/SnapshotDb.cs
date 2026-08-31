@@ -536,7 +536,8 @@ public sealed class SnapshotDb : IDisposable
     /// 拿其中一个去回答另一个,差得下来一倍。
     /// </summary>
     public (IReadOnlyList<(DefRow Def, string Path, string? Value, int Default)> Rows, int Total, int Defs)
-        FindByField(PathQuery path, string? value, bool exact, ScopeFilter scope, int limit, int offset = 0)
+        FindByField(PathQuery path, string? value, bool exact, ScopeFilter scope, int limit, int offset = 0,
+                    string? defType = null)
     {
         var p = new Dictionary<string, object?>();
         var conds = new List<string>();
@@ -549,6 +550,9 @@ public sealed class SnapshotDb : IDisposable
             else { p["@v"] = "%" + Escape(value) + "%"; conds.Add("fv.value LIKE @v ESCAPE '\\'"); }
         }
         if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
+        // 条件进 conds 而不是事后滤行:Total 与 Defs 两个计数与行表共用同一个 FROM,
+        // 在这里加一条,三个数一起收窄。滤行的话表变了而两个数没变。
+        if (defType is { Length: > 0 }) { p["@dt"] = defType; conds.Add("d.def_type = @dt COLLATE NOCASE"); }
 
         var where = "WHERE " + string.Join(" AND ", conds);
         var from = $"FROM field_values fv JOIN defs d ON d.id = fv.def_id {where}";
@@ -576,7 +580,7 @@ public sealed class SnapshotDb : IDisposable
     /// 而「两种形状」才是做集合运算的人要判的那件事。
     /// </summary>
     public IReadOnlyList<(string Shape, int Count)> FindPathShapes(
-        PathQuery path, string? value, bool exact, ScopeFilter scope)
+        PathQuery path, string? value, bool exact, ScopeFilter scope, string? defType = null)
     {
         var p = new Dictionary<string, object?>();
         var conds = new List<string>();
@@ -589,6 +593,7 @@ public sealed class SnapshotDb : IDisposable
             else { p["@v"] = "%" + Escape(value) + "%"; conds.Add("fv.value LIKE @v ESCAPE '\\'"); }
         }
         if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
+        if (defType is { Length: > 0 }) { p["@dt"] = defType; conds.Add("d.def_type = @dt COLLATE NOCASE"); }
 
         var shapes = new Dictionary<string, int>(StringComparer.Ordinal);
         var order = new List<string>();
@@ -616,7 +621,7 @@ public sealed class SnapshotDb : IDisposable
     /// 按行数会数大。
     /// </summary>
     public (IReadOnlyList<string> Names, int Total) FindGeneratedDefs(
-        PathQuery path, string? value, bool exact, ScopeFilter scope, int limit)
+        PathQuery path, string? value, bool exact, ScopeFilter scope, int limit, string? defType = null)
     {
         var p = new Dictionary<string, object?>();
         var conds = new List<string> { "d.generated = 1" };
@@ -629,6 +634,7 @@ public sealed class SnapshotDb : IDisposable
             else { p["@v"] = "%" + Escape(value) + "%"; conds.Add("fv.value LIKE @v ESCAPE '\\'"); }
         }
         if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
+        if (defType is { Length: > 0 }) { p["@dt"] = defType; conds.Add("d.def_type = @dt COLLATE NOCASE"); }
 
         var where = "FROM field_values fv JOIN defs d ON d.id = fv.def_id " +
                     $"WHERE {string.Join(" AND ", conds)}";
@@ -722,7 +728,7 @@ public sealed class SnapshotDb : IDisposable
     /// 「取到过这个值」的谓词。抽出来是因为截断尾注要按**同一批 def** 收窄。
     /// </summary>
     private static string ValueWhere(string value, ValueMatch match, ScopeFilter scope,
-                                     Dictionary<string, object?> p)
+                                     Dictionary<string, object?> p, string? defType = null)
     {
         var conds = new List<string>();
         switch (match)
@@ -742,6 +748,7 @@ public sealed class SnapshotDb : IDisposable
                 break;
         }
         if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
+        if (defType is { Length: > 0 }) { p["@dt"] = defType; conds.Add("d.def_type = @dt COLLATE NOCASE"); }
         return "WHERE " + string.Join(" AND ", conds);
     }
 
@@ -994,10 +1001,11 @@ public sealed class SnapshotDb : IDisposable
     /// 逐字同形。
     /// </remarks>
     public (IReadOnlyList<(string Path, string DefType, int Defs, string Sample)> Rows, int Total, int Exact)
-        PathsWithValue(string value, ScopeFilter scope, int limit, ValueMatch match = ValueMatch.Substring, int offset = 0)
+        PathsWithValue(string value, ScopeFilter scope, int limit, ValueMatch match = ValueMatch.Substring, int offset = 0,
+                       string? defType = null)
     {
         var p = new Dictionary<string, object?>();
-        var where = ValueWhere(value, match, scope, p);
+        var where = ValueWhere(value, match, scope, p, defType);
         const string join = "FROM field_values fv JOIN defs d ON d.id = fv.def_id";
 
         var total = Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT fv.path, d.def_type {join} {where})", p);
@@ -1012,7 +1020,7 @@ public sealed class SnapshotDb : IDisposable
         if (match == ValueMatch.Substring && total > 0)
         {
             var ep = new Dictionary<string, object?>();
-            var ew = ValueWhere(value, ValueMatch.Exact, scope, ep);
+            var ew = ValueWhere(value, ValueMatch.Exact, scope, ep, defType);
             exact = Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT fv.path, d.def_type {join} {ew})", ep);
         }
         return (rows, total, exact);
