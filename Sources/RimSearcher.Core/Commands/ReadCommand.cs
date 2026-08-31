@@ -30,8 +30,10 @@ public sealed class ReadCommand : Command
         Remarks =
             "The file is named by its path relative to the decompiled root ('vanilla/Assembly-CSharp/Verse/" +
             "Pawn.cs'), by any tail of that path, by its bare name, or by a namespace-qualified type name " +
-            "('RimWorld.Bullet'). A path or type name that is not there falls back to the bare name and " +
-            "says so; when a bare name matches several files, the answer lists them instead of picking one.\n\n" +
+            "('RimWorld.Bullet'), which is matched on the last segment alone — the namespace itself is " +
+            "never checked, and the path in the answer is what says where the file actually sits. A path " +
+            "that is not there falls back to the bare name and says so; when a bare name matches several " +
+            "files, the answer lists them instead of picking one.\n\n" +
             "--member and --type find the declaration by matching braces, not by parsing C#. That is enough " +
             "for decompiled output, which is machine-formatted, but it means a name this command cannot see " +
             "is not evidence the file lacks it — 'code-search' searches the text and --lines reads it raw.\n\n" +
@@ -174,12 +176,13 @@ public sealed class ReadCommand : Command
         var bare = Path.GetFileName(slashNorm);
         // 命名空间限定名(RimWorld.Bullet)是 get/where 自己印出的形态;按路径解必然落空,
         // 而去掉前缀走裸名就能命中。末段交给下面已经存在的裸名回退,不另写查找。
+        var byTypeName = false;
         if (hits.Count == 0
             && !slashNorm.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
             && ClassNameShape.Looks(slashNorm))
         {
             var tail = ClassNameShape.Tail(slashNorm);
-            if (tail != slashNorm) bare = tail + ".cs";
+            if (tail != slashNorm) { bare = tail + ".cs"; byTypeName = true; }
         }
         var byName = hits.Count == 0 && bare.Length > 0 && bare != wanted
             ? Resolve(root, bare, sourceName)
@@ -196,7 +199,12 @@ public sealed class ReadCommand : Command
         // 说破是硬要求,不是礼貌:下面每一句印的都是解析出来的 rel,不说的话这次输出与
         // 「路径本来就写对了」逐字同形,而调用方会把那条错路径记下来接着用。
         // 真路径不在这句里复述 —— 紧接着的计数句就以它开头。
-        if (hits.Count == 0)
+        //
+        // 类型全名不在此列:它压根不是一条路径,没有「记下来接着用」的东西,而它是
+        // get/where 印出的正当写法,不是写错。它唯一没说的是命名空间没参与查找 ——
+        // 而紧接着的计数句以真路径开头,本机 21617 个有 namespace 声明的文件里,
+        // 目录与命名空间一致的是 21617 个,所以那条路径已经把命名空间摆在眼前了。
+        if (hits.Count == 0 && !byTypeName)
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"'{wanted}' is not a path under the decompiled root, but exactly one file is named " +
                 $"'{bare}', and that is the one read here.");

@@ -969,30 +969,30 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 命名空间限定名落到已经存在的裸名回退上:读到的文件与裸名相同,且必须自报这次回退,
-    /// 否则输出与「树里真有这么个路径」逐字同形。撞车仍只列不选;带 <c>.cs</c> 的点号名
-    /// 是文件名,不当类型全名剥。
+    /// 命名空间限定名落到已经存在的裸名回退上,读到的文件与裸名相同,且**不多说一个字**:
+    /// 它是 get/where 自己印出的正当写法,不是写错的路径,没有「你给的那条不存在」可说。
+    ///
+    /// 它唯一没交代的是命名空间没参与查找,而计数句以真路径开头 —— 本机 21617 个有
+    /// namespace 声明的文件里,目录与命名空间一致的是 21617 个,那条路径已经把命名空间
+    /// 摆在眼前。路径写错那条回退仍然自报,那时确有一条不存在的路径会被记下来接着用。
+    ///
+    /// 撞车仍只列不选;带 <c>.cs</c> 的点号名是文件名,不当类型全名剥。
     /// </summary>
     [Fact]
-    public void 类型全名回退到裸名且自报()
+    public void 类型全名与裸名的输出逐字相同()
     {
         var (typed, _, typedCode) = Fixture.Run("read", "RimWorld.CompShield");
         var (bare, _, bareCode) = Fixture.Run("read", "CompShield");
         Assert.Equal(0, typedCode);
         Assert.Equal(0, bareCode);
-        Assert.Contains(
-            "'RimWorld.CompShield' is not a path under the decompiled root, but exactly one file is named " +
-            "'CompShield.cs', and that is the one read here.",
-            typed, StringComparison.Ordinal);
-        Assert.DoesNotContain("is not a path under the decompiled root", bare, StringComparison.Ordinal);
+        // 逐字相同 —— 比「正文相同」强:两种写法之间不许有任何一句差别话。
+        Assert.Equal(bare, typed);
+        Assert.DoesNotContain("is not a path under the decompiled root", typed, StringComparison.Ordinal);
 
-        static string Body(string text)
-        {
-            var lines = text.Replace("\r\n", "\n").Split('\n');
-            var i = Array.FindIndex(lines, l => l.StartsWith("vanilla/", StringComparison.Ordinal));
-            return string.Join('\n', lines.Skip(i));
-        }
-        Assert.Equal(Body(bare), Body(typed));
+        // 路径写错仍要自报,这条回退的理由与类型全名那条不是同一个。
+        var (wrongPath, _, wrongCode) = Fixture.Run("read", "vanilla/NoSuchDir/CompShield.cs");
+        Assert.Equal(0, wrongCode);
+        Assert.Contains("is not a path under the decompiled root", wrongPath, StringComparison.Ordinal);
 
         var (clash, _, clashCode) = Fixture.Run("read", "RimWorld.Outline");
         Assert.Equal(1, clashCode);

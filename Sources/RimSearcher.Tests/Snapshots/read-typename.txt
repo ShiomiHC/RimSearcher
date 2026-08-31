@@ -1,7 +1,6 @@
 $ rimsearcher read RimWorld.CompShield
 exit 0
 --- stdout ---
-'RimWorld.CompShield' is not a path under the decompiled root, but exactly one file is named 'CompShield.cs', and that is the one read here.
 vanilla/RimWorld/CompShield.cs, all 6 lines.
 
      1  namespace RimWorld
