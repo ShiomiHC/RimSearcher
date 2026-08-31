@@ -969,27 +969,48 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 命名空间限定名落到已经存在的裸名回退上,读到的文件与裸名相同,且**不多说一个字**:
-    /// 它是 get/where 自己印出的正当写法,不是写错的路径,没有「你给的那条不存在」可说。
+    /// 类型全名**就是**一条路径:反编译开着 UseNestedDirectoriesForNamespaces,目录由
+    /// 命名空间生成(IL 里没有源文件路径可用),于是 RimWorld.Bullet 与 RimWorld/Bullet.cs
+    /// 是同一件事的两种写法。点号换斜杠当路径解,命名空间因此**参与**匹配。
     ///
-    /// 它唯一没交代的是命名空间没参与查找,而计数句以真路径开头 —— 本机 21617 个有
-    /// namespace 声明的文件里,目录与命名空间一致的是 21617 个,那条路径已经把命名空间
-    /// 摆在眼前。路径写错那条回退仍然自报,那时确有一条不存在的路径会被记下来接着用。
+    /// 三件事跟着这一条定死:对上时与裸名逐字相同(直接命中,没有回退可交代);命名空间
+    /// 能消歧(裸名撞车的两个文件,给了命名空间就只剩一个);对不上时落到裸名并自报 ——
+    /// 那时那句话说的正是要紧的事,不是客套。
     ///
-    /// 撞车仍只列不选;带 <c>.cs</c> 的点号名是文件名,不当类型全名剥。
+    /// 撞车仍只列不选;带 <c>.cs</c> 的点号名是文件名,不当类型全名解。
     /// </summary>
     [Fact]
-    public void 类型全名与裸名的输出逐字相同()
+    public void 类型全名当路径解而命名空间参与匹配()
     {
+        // 对上:与裸名逐字相同,一句差别话都没有。
         var (typed, _, typedCode) = Fixture.Run("read", "RimWorld.CompShield");
         var (bare, _, bareCode) = Fixture.Run("read", "CompShield");
         Assert.Equal(0, typedCode);
         Assert.Equal(0, bareCode);
-        // 逐字相同 —— 比「正文相同」强:两种写法之间不许有任何一句差别话。
         Assert.Equal(bare, typed);
         Assert.DoesNotContain("is not a path under the decompiled root", typed, StringComparison.Ordinal);
 
-        // 路径写错仍要自报,这条回退的理由与类型全名那条不是同一个。
+        // 消歧:Outline.cs 在 vanilla/Verse 和 zz.othermod 各有一份,裸名必然撞车;
+        // 给了命名空间就只剩一个,而这是剥成裸名做不到的。
+        var (bareClash, _, bareClashCode) = Fixture.Run("read", "Outline.cs");
+        Assert.Equal(1, bareClashCode);
+        Assert.Contains("matches 2 files", bareClash, StringComparison.Ordinal);
+
+        var (scoped, _, scopedCode) = Fixture.Run("read", "Verse.Outline", "--lines", "7");
+        Assert.Equal(0, scopedCode);
+        Assert.Contains("vanilla/Verse/Outline.cs", scoped, StringComparison.Ordinal);
+        Assert.DoesNotContain("zz.othermod", scoped, StringComparison.Ordinal);
+        Assert.DoesNotContain("is not a path under the decompiled root", scoped, StringComparison.Ordinal);
+
+        // 对不上:CompShield 真在 RimWorld 下,给 Verse 要落空,降到裸名并说破。
+        // 这一格是新行为 —— 从前命名空间被整段丢掉,写错也照读不误。
+        var (wrongNs, _, wrongNsCode) = Fixture.Run("read", "Verse.CompShield");
+        Assert.Equal(0, wrongNsCode);
+        Assert.Contains("'Verse.CompShield' is not a path under the decompiled root, but exactly one file " +
+                        "is named 'CompShield.cs', and that is the one read here.",
+                        wrongNs, StringComparison.Ordinal);
+
+        // 路径写错仍要自报,与上面那条同一句话、同一个理由。
         var (wrongPath, _, wrongCode) = Fixture.Run("read", "vanilla/NoSuchDir/CompShield.cs");
         Assert.Equal(0, wrongCode);
         Assert.Contains("is not a path under the decompiled root", wrongPath, StringComparison.Ordinal);
@@ -4459,6 +4480,7 @@ public class GrammarTests
             ("灭火泡沫", "fixture 数据(译文)"),
             ("Outer.Shared", "fixture 数据(类型名)"),
             ("class Outer", "fixture 数据(源码片段)"),
+            ("zz.othermod", "fixture 数据(树名;钉的是命名空间消歧后另一棵树不在结果里)"),
             ("1- namespace RimWorld", "fixture 数据(带行号的源码行)"),
             ("5- \\t}", "fixture 数据(带行号的源码行)"),
             ("invalid argument", "禁笼统报错:写错必须点名接受的形式,产地从不写这四个字"),

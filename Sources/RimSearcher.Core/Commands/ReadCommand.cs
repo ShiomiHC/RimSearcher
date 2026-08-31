@@ -30,10 +30,10 @@ public sealed class ReadCommand : Command
         Remarks =
             "The file is named by its path relative to the decompiled root ('vanilla/Assembly-CSharp/Verse/" +
             "Pawn.cs'), by any tail of that path, by its bare name, or by a namespace-qualified type name " +
-            "('RimWorld.Bullet'), which is matched on the last segment alone — the namespace itself is " +
-            "never checked, and the path in the answer is what says where the file actually sits. A path " +
-            "that is not there falls back to the bare name and says so; when a bare name matches several " +
-            "files, the answer lists them instead of picking one.\n\n" +
+            "('RimWorld.Bullet') — the decompiler lays files out by namespace, so that name is the path " +
+            "'RimWorld/Bullet.cs' written another way, and the namespace has to match. A path that is not " +
+            "there falls back to the bare name and says so; when a bare name matches several files, the " +
+            "answer lists them instead of picking one.\n\n" +
             "--member and --type find the declaration by matching braces, not by parsing C#. That is enough " +
             "for decompiled output, which is machine-formatted, but it means a name this command cannot see " +
             "is not evidence the file lacks it — 'code-search' searches the text and --lines reads it raw.\n\n" +
@@ -173,17 +173,20 @@ public sealed class ReadCommand : Command
         // 定位。不重试的话,答案是一句「没有这个文件」外加一个不能直接粘贴的裸名候选,
         // 调用方得再跑一次 code-search 才拿得到路径:一个文件三次往返,而路径就在手上。
         var slashNorm = wanted.Replace('\\', '/').TrimEnd('/');
-        var bare = Path.GetFileName(slashNorm);
-        // 命名空间限定名(RimWorld.Bullet)是 get/where 自己印出的形态;按路径解必然落空,
-        // 而去掉前缀走裸名就能命中。末段交给下面已经存在的裸名回退,不另写查找。
-        var byTypeName = false;
-        if (hits.Count == 0
-            && !slashNorm.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
-            && ClassNameShape.Looks(slashNorm))
-        {
-            var tail = ClassNameShape.Tail(slashNorm);
-            if (tail != slashNorm) { bare = tail + ".cs"; byTypeName = true; }
-        }
+        // 命名空间限定名(RimWorld.Bullet)是 get/where 自己印出的形态,而它**就是**一条
+        // 路径:反编译开着 UseNestedDirectoriesForNamespaces(见 Decompiler.CreateSettings),
+        // 目录由命名空间生成 —— IL 里没有源文件路径可用,反编译器只有命名空间可依。
+        // 点号换斜杠再解一次,于是命名空间参与匹配:写错的命名空间在这里落空,而不是
+        // 被剥掉后撞上某个同名的顶层类型(嵌套类型名尤其危险,它根本不单独成文件)。
+        var looksLikeTypeName = !slashNorm.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+                             && ClassNameShape.Looks(slashNorm)
+                             && ClassNameShape.Tail(slashNorm) != slashNorm;
+        if (hits.Count == 0 && looksLikeTypeName)
+            hits = Resolve(root, slashNorm.Replace('.', '/') + ".cs", sourceName);
+
+        // 命名空间没对上时才降到裸名 —— 那一步会自报,而那时确实有话要说:
+        // 你给的命名空间下没有这个类型,但另有一处有个同名文件。
+        var bare = looksLikeTypeName ? ClassNameShape.Tail(slashNorm) + ".cs" : Path.GetFileName(slashNorm);
         var byName = hits.Count == 0 && bare.Length > 0 && bare != wanted
             ? Resolve(root, bare, sourceName)
             : [];
@@ -200,11 +203,9 @@ public sealed class ReadCommand : Command
         // 「路径本来就写对了」逐字同形,而调用方会把那条错路径记下来接着用。
         // 真路径不在这句里复述 —— 紧接着的计数句就以它开头。
         //
-        // 类型全名不在此列:它压根不是一条路径,没有「记下来接着用」的东西,而它是
-        // get/where 印出的正当写法,不是写错。它唯一没说的是命名空间没参与查找 ——
-        // 而紧接着的计数句以真路径开头,本机 21617 个有 namespace 声明的文件里,
-        // 目录与命名空间一致的是 21617 个,所以那条路径已经把命名空间摆在眼前了。
-        if (hits.Count == 0 && !byTypeName)
+        // 类型全名走到这里,意味着命名空间没对上(对上就在 hits 里了),此时这句话
+        // 说的正是要紧的那件事,不是客套。
+        if (hits.Count == 0)
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"'{wanted}' is not a path under the decompiled root, but exactly one file is named " +
                 $"'{bare}', and that is the one read here.");
