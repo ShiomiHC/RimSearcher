@@ -2636,7 +2636,7 @@ public class GrammarTests
     /// 自述侧钉的是**盲区在场**,不是某一句措辞:那句话改过两次(盲测显示光说「找不到不等于
     /// 没有」是 0/10,补上一个能去核对的具体类别才到 5/10;运算符修进来之后那个类别换成
     /// 委托类型)。逐字锚会把当初的措辞连同它的无效一起焊死,所以钉两样 —— 扫描方式,
-    /// 和那个能去核对的具体类别。锚点从 Operators 换到 Delegate types:钉的不是那五个
+    /// 和那个能去核对的具体类别。锚点从 Operators 换到「namespace 下的 delegate」:钉的不是那几个
     /// 字母,是「输出里点名了一个读者能去核对、且这套扫描确实认不出的类别」。
     ///
     /// 这条闸比对**两个独立产地**,不复述任何一边的理由 —— 与磁盘层那条同型。
@@ -2649,7 +2649,9 @@ public class GrammarTests
 
         // 自述侧:盲区说破,这是被比对的那个基准。
         Assert.Contains("not by parsing C#", outline, StringComparison.Ordinal);
-        Assert.Contains("Delegate types", outline, StringComparison.Ordinal);
+        Assert.Contains("delegate", outline, StringComparison.Ordinal);
+        // 限定语一起钉:嵌套委托是错标成 method、在场的,不带限定就把两档说成一档。
+        Assert.Contains("directly in a namespace", outline, StringComparison.Ordinal);
 
         // 推荐侧:不许出现全称量词。逐字钉 every 太窄 —— 钉的是「这个能力被说成完整的」。
         foreach (var absolute in new[] { "every declaration", "all declarations", "the complete list" })

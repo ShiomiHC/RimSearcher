@@ -413,15 +413,18 @@ public sealed class ReadCommand : Command
     /// 抽象地点名同形 0/10,点名一个读者能去核对的具体类别 5/10。
     /// 举委托类型是核过的:RegionProcessor / PanCompletionCallback /
     /// DragSliderCallback 源码各是一份 namespace 下的 <c>delegate</c> 声明,轮廓 0 条。
-    /// 嵌套委托(DefInjectionUtility 里那份)会以 method 身份出现、按名字找得到,不当这个例子。
+    /// **限定语「directly in a namespace」是承重的**:嵌套委托(DefInjectionUtility 里那份)
+    /// 会以 method 身份出现、按名字找得到 —— 对它说「认不出」是假话。不带限定的
+    /// 「delegate types」把两档说成一档,与它替换掉的「operators」当年同型
+    /// (转换运算符那时也是错标成 method/constructor,不是缺席)。
     /// event 也不用提,它在(kind 标成 field,按名字找得到);显式接口实现也在,
     /// 只是名字被剥了前缀。
     /// </summary>
     private static void SayBraceMatched(CommandContext ctx)
         => ctx.Report.Notice(NoticeKind.Boundary,
             "Found by matching braces, not by parsing C#: a declaration this scan does not recognise " +
-            "and one that is not in the file look the same here — both are simply absent. Delegate types " +
-            "are one kind it does not recognise.",
+            "and one that is not in the file look the same here — both are simply absent. A delegate " +
+            "declared directly in a namespace is one kind it does not recognise.",
             footnote: true);
 
     private static void SayNoDeclaration(CommandContext ctx, string rel, string[] text,
