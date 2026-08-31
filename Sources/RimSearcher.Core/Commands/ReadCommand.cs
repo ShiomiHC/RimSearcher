@@ -29,9 +29,9 @@ public sealed class ReadCommand : Command
         Summary = "Read source out of the decompiled tree — one member, one type, or a line range.",
         Remarks =
             "The file is named by its path relative to the decompiled root ('vanilla/Assembly-CSharp/Verse/" +
-            "Pawn.cs'), by any tail of that path, or by its bare name. A path that is not there falls back " +
-            "to the bare name and says so; when a bare name matches several files, the answer lists them " +
-            "instead of picking one.\n\n" +
+            "Pawn.cs'), by any tail of that path, by its bare name, or by a namespace-qualified type name " +
+            "('RimWorld.Bullet'). A path or type name that is not there falls back to the bare name and " +
+            "says so; when a bare name matches several files, the answer lists them instead of picking one.\n\n" +
             "--member and --type find the declaration by matching braces, not by parsing C#. That is enough " +
             "for decompiled output, which is machine-formatted, but it means a name this command cannot see " +
             "is not evidence the file lacks it — 'code-search' searches the text and --lines reads it raw.\n\n" +
@@ -49,7 +49,8 @@ public sealed class ReadCommand : Command
             new PositionalSpec
             {
                 Name = "file",
-                Help = "A path under the decompiled root, a tail of one, or a bare file name such as 'Pawn.cs'.",
+                Help = "A path under the decompiled root, a tail of one, a bare file name such as 'Pawn.cs', " +
+                       "or a namespace-qualified type name such as 'RimWorld.Bullet'.",
             },
         ],
         Options =
@@ -112,6 +113,7 @@ public sealed class ReadCommand : Command
         [
             "rimsearcher read Pawn.cs --outline",
             "rimsearcher read CompShield.cs --member CompTick",
+            "rimsearcher read RimWorld.CompShield",
             "rimsearcher read vanilla/Assembly-CSharp/Verse/ThingComp.cs --lines 1-40",
         ],
         JsonKeys =
@@ -168,7 +170,17 @@ public sealed class ReadCommand : Command
         // 路径的中间段写错、文件名对,是最常见的一种落空 —— 而这条命令**已经能**按裸文件名
         // 定位。不重试的话,答案是一句「没有这个文件」外加一个不能直接粘贴的裸名候选,
         // 调用方得再跑一次 code-search 才拿得到路径:一个文件三次往返,而路径就在手上。
-        var bare = Path.GetFileName(wanted.Replace('\\', '/').TrimEnd('/'));
+        var slashNorm = wanted.Replace('\\', '/').TrimEnd('/');
+        var bare = Path.GetFileName(slashNorm);
+        // 命名空间限定名(RimWorld.Bullet)是 get/where 自己印出的形态;按路径解必然落空,
+        // 而去掉前缀走裸名就能命中。末段交给下面已经存在的裸名回退,不另写查找。
+        if (hits.Count == 0
+            && !slashNorm.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+            && ClassNameShape.Looks(slashNorm))
+        {
+            var tail = ClassNameShape.Tail(slashNorm);
+            if (tail != slashNorm) bare = tail + ".cs";
+        }
         var byName = hits.Count == 0 && bare.Length > 0 && bare != wanted
             ? Resolve(root, bare, sourceName)
             : [];

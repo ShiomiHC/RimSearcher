@@ -302,6 +302,12 @@ public class OutputSnapshotTests
         { "code-search-hit",       ["code-search", ": ThingComp"] },
         // 上下文窗口重叠:-C 1 打在连着命中的五行上,窗口要合并。
         { "code-search-context",   ["code-search", "public", "--file-glob", "ThingComp.cs", "-C", "1"] },
+        // 不对称窗口。纯 N 必须与上面那份逐字节相同,所以新形态自己立闸:0-2 是只往下,
+        // 2+0 是只往上,两种分隔符都要钉住,且第一行自报实际窗口。
+        { "code-search-context-after", ["code-search", "public", "--file-glob", "CompShield.cs", "--context", "0-2"] },
+        { "code-search-context-before", ["code-search", "public", "--file-glob", "CompShield.cs", "--context", "2+0"] },
+        // 写错时说清接受什么形式,不是笼统的 invalid argument。
+        { "code-search-context-bad", ["code-search", "public", "--context", "nope"] },
         // --limit 只管印几行,不许缩短扫描:总数必须仍是准数(「N of M」而非「at least N」)。
         { "code-search-limit",     ["code-search", "public", "--limit", "2"] },
         // 单文件上限:同上,过了上限的命中仍要进总数。
@@ -429,6 +435,11 @@ public class OutputSnapshotTests
         // 而调用方会把那条错路径记下来接着用。名字仍撞车时照旧不选。
         { "read-wrong-dir",        ["read", "vanilla/RimWorld/Widgets.cs"] },
         { "read-wrong-dir-ambiguous", ["read", "vanilla/RimWorld/Outline.cs"] },
+        // 命名空间限定名是 get/where 自己印出的形态,按路径解必然落空。末段走裸名回退,
+        // 必须自报;撞车仍只列不选;真没有时仍指向 code-search,不许说成别的意思。
+        { "read-typename",         ["read", "RimWorld.CompShield"] },
+        { "read-typename-ambiguous", ["read", "RimWorld.Outline"] },
+        { "read-typename-missing", ["read", "RimWorld.NoSuchType"] },
         // 两种读法同时传:不排优先级,当场说破这是两件事。
         { "read-two-modes",        ["read", "Outline.cs", "--lines", "1-3", "--member", "Shared"] },
         // 括号配平法认错声明的三种形态(语料见 Fixture.WriteSourceTree)。

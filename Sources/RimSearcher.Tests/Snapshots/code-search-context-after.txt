@@ -1,0 +1,10 @@
+$ rimsearcher code-search public --file-glob CompShield.cs --context 0-2
+exit 0
+--- stdout ---
+--context 0-2 is 0 lines above and 2 lines below. 1 match in 1 file; 1 file read across 1 of 3 source trees on disk — the rest hold no file matching --file-glob 'CompShield.cs', and 'sources list' says which have never been decompiled.
+
+vanilla/RimWorld/CompShield.cs  1 match
+3: 	public class CompShield : ThingComp
+4- 	{
+5- 	}
+--- stderr ---

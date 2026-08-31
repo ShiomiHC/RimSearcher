@@ -629,6 +629,40 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 不对称窗口按两侧各自的行数取,且第一行自报实际窗口;纯 N 仍是前后各 N,一个字都不多。
+    /// 写错时点名接受的形式,不是笼统的 invalid argument。
+    /// </summary>
+    [Fact]
+    public void 不对称上下文窗口按两侧行数取且自报()
+    {
+        var (after, _, afterCode) = Fixture.Run(
+            "code-search", "public", "--file-glob", "CompShield.cs", "--context", "0-2");
+        Assert.Equal(0, afterCode);
+        Assert.StartsWith("--context 0-2 is 0 lines above and 2 lines below.", after, StringComparison.Ordinal);
+        Assert.Contains("3: \tpublic class CompShield : ThingComp", after, StringComparison.Ordinal);
+        Assert.Contains("5- \t}", after, StringComparison.Ordinal);
+        Assert.DoesNotContain("1- namespace RimWorld", after, StringComparison.Ordinal);
+
+        var (before, _, beforeCode) = Fixture.Run(
+            "code-search", "public", "--file-glob", "CompShield.cs", "--context", "2+0");
+        Assert.Equal(0, beforeCode);
+        Assert.StartsWith("--context 2+0 is 2 lines above and 0 lines below.", before, StringComparison.Ordinal);
+        Assert.Contains("1- namespace RimWorld", before, StringComparison.Ordinal);
+        Assert.Contains("3: \tpublic class CompShield : ThingComp", before, StringComparison.Ordinal);
+        Assert.DoesNotContain("5- \t}", before, StringComparison.Ordinal);
+
+        var (sym, _, _) = Fixture.Run(
+            "code-search", "public", "--file-glob", "ThingComp.cs", "-C", "1");
+        Assert.DoesNotContain("lines above and", sym, StringComparison.Ordinal);
+
+        var (bad, stderr, badCode) = Fixture.Run("code-search", "public", "--context", "nope");
+        Assert.Equal(2, badCode);
+        Assert.Empty(bad);
+        Assert.Contains("Write it as '8', '0-20', or '10+4'", stderr, StringComparison.Ordinal);
+        Assert.DoesNotContain("invalid argument", stderr, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// 没读完的零结果不是零结果。「扫完了,代码里没有」该指路去 search / find(问错了
     /// 数据源),「没扫完」则一个字都不许提别的数据源,该做的是把闸抬开。
     /// </summary>
@@ -932,6 +966,45 @@ public class GrammarTests
         var (narrowed, _, ok) = Fixture.Run("read", "Outline.cs", "--source", "vanilla", "--lines", "7");
         Assert.Equal(0, ok);
         Assert.Contains("class Outer", narrowed, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 命名空间限定名落到已经存在的裸名回退上:读到的文件与裸名相同,且必须自报这次回退,
+    /// 否则输出与「树里真有这么个路径」逐字同形。撞车仍只列不选;带 <c>.cs</c> 的点号名
+    /// 是文件名,不当类型全名剥。
+    /// </summary>
+    [Fact]
+    public void 类型全名回退到裸名且自报()
+    {
+        var (typed, _, typedCode) = Fixture.Run("read", "RimWorld.CompShield");
+        var (bare, _, bareCode) = Fixture.Run("read", "CompShield");
+        Assert.Equal(0, typedCode);
+        Assert.Equal(0, bareCode);
+        Assert.Contains(
+            "'RimWorld.CompShield' is not a path under the decompiled root, but exactly one file is named " +
+            "'CompShield.cs', and that is the one read here.",
+            typed, StringComparison.Ordinal);
+        Assert.DoesNotContain("is not a path under the decompiled root", bare, StringComparison.Ordinal);
+
+        static string Body(string text)
+        {
+            var lines = text.Replace("\r\n", "\n").Split('\n');
+            var i = Array.FindIndex(lines, l => l.StartsWith("vanilla/", StringComparison.Ordinal));
+            return string.Join('\n', lines.Skip(i));
+        }
+        Assert.Equal(Body(bare), Body(typed));
+
+        var (clash, _, clashCode) = Fixture.Run("read", "RimWorld.Outline");
+        Assert.Equal(1, clashCode);
+        Assert.Contains("vanilla/Verse/Outline.cs", clash, StringComparison.Ordinal);
+        Assert.Contains("zz.othermod/Outline.cs", clash, StringComparison.Ordinal);
+        Assert.DoesNotContain("class Outer", clash, StringComparison.Ordinal);
+
+        var (asFile, _, asFileCode) = Fixture.Run("read", "RimWorld.CompShield.cs");
+        Assert.Equal(1, asFileCode);
+        Assert.Contains("No file named 'RimWorld.CompShield.cs'", asFile, StringComparison.Ordinal);
+        Assert.Contains("rimsearcher code-search", asFile, StringComparison.Ordinal);
+        Assert.DoesNotContain("exactly one file is named", asFile, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -4386,6 +4459,10 @@ public class GrammarTests
             ("灭火泡沫", "fixture 数据(译文)"),
             ("Outer.Shared", "fixture 数据(类型名)"),
             ("class Outer", "fixture 数据(源码片段)"),
+            ("1- namespace RimWorld", "fixture 数据(带行号的源码行)"),
+            ("5- \\t}", "fixture 数据(带行号的源码行)"),
+            ("invalid argument", "禁笼统报错:写错必须点名接受的形式,产地从不写这四个字"),
+            ("lines above and", "插值:产地是 Render(\"line\") + \" above and\""),
             ("blueprintGraphicData", "fixture 数据(字段路径)"),
             ("projectile.burstCount", "fixture 数据(字段路径)"),
             ("field paths in this snapshot", "化石,已登记在上一条闸里"),

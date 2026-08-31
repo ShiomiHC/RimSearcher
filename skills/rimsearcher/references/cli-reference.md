@@ -89,7 +89,7 @@ Three caps apply, and they divide in two. --limit and --max-per-file decide how 
 | `--max-files` <n|all> | How many files the scan may read before it stops, counted after --file-glob has filtered. Pass 'all' to lift the cap. This is the only cap that can make the answer partial. Default: `50000`. | `--file-limit`, `--scan-limit`, `--max-scan` |
 | `--max-per-file` <n|all> | How many matching lines to print from any one file. Matches past it are still counted, so the total stays exact. Pass 'all' to print every one. Default: `20`. | `--per-file`, `--matches-per-file`, `--max-matches-per-file`, `--file-preview` |
 | `--source` <name> | Which decompiled source tree to search. Omit to search them all. | `--root`, `--tree`, `--scope` |
-| `-C`, `--context` <n> | Show this many lines above and below each match. Windows that overlap or touch are merged, so no line is printed twice. Default: `0`. | `--context-lines`, `--around` |
+| `-C`, `--context` <n|a-b|a+n> | Show lines around each match. A number N is N above and N below; '0-20' is 0 above and 20 below, '10+4' is 10 above and 4 below. Windows that overlap or touch are merged, so no line is printed twice. Default: `0`. | `--context-lines`, `--around` |
 | `-n`, `--limit` <n|all> | How many matching lines to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `25`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `-i`, `--ignore-case` | Match without regard to letter case. | `--case-insensitive` |
 | `--no-resolve-keys` | Do not resolve translation keys found in the printed lines. By default, a printed line containing "SomeKey".Translate() gets its displayed text looked up in the snapshot and listed separately. This only removes that extra table — the matches themselves, and the match count, are the same either way. | `--no-translations`, `--no-lookup-keys`, `--no-translate`, `--no-translation-lookup`, `--code-only` |
@@ -106,6 +106,7 @@ Examples:
 ```
 rimsearcher code-search "class \w+ : ThingComp"
 rimsearcher code-search "Notify_\w+\(" --context 2
+rimsearcher code-search "PostSpawnSetup\(" --context 0+20
 ```
 
 ## `datamod attach`
@@ -595,7 +596,7 @@ Read source out of the decompiled tree — one member, one type, or a line range
 rimsearcher read <file> [options]
 ```
 
-The file is named by its path relative to the decompiled root ('vanilla/Assembly-CSharp/Verse/Pawn.cs'), by any tail of that path, or by its bare name. A path that is not there falls back to the bare name and says so; when a bare name matches several files, the answer lists them instead of picking one.
+The file is named by its path relative to the decompiled root ('vanilla/Assembly-CSharp/Verse/Pawn.cs'), by any tail of that path, by its bare name, or by a namespace-qualified type name ('RimWorld.Bullet'). A path or type name that is not there falls back to the bare name and says so; when a bare name matches several files, the answer lists them instead of picking one.
 
 --member and --type find the declaration by matching braces, not by parsing C#. That is enough for decompiled output, which is machine-formatted, but it means a name this command cannot see is not evidence the file lacks it — 'code-search' searches the text and --lines reads it raw.
 
@@ -605,7 +606,7 @@ Page with --lines, never with a pipe. The first line of the answer says which li
 
 | Argument | Meaning |
 |---|---|
-| `<file>` | A path under the decompiled root, a tail of one, or a bare file name such as 'Pawn.cs'. |
+| `<file>` | A path under the decompiled root, a tail of one, a bare file name such as 'Pawn.cs', or a namespace-qualified type name such as 'RimWorld.Bullet'. |
 
 | Option | Meaning | Also accepted |
 |---|---|---|
@@ -628,6 +629,7 @@ Examples:
 ```
 rimsearcher read Pawn.cs --outline
 rimsearcher read CompShield.cs --member CompTick
+rimsearcher read RimWorld.CompShield
 rimsearcher read vanilla/Assembly-CSharp/Verse/ThingComp.cs --lines 1-40
 ```
 
