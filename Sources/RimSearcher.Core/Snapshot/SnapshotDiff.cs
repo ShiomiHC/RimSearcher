@@ -21,7 +21,10 @@ public static class SnapshotDiff
 {
     public static SnapshotDiffResult Compare(string oldPath, string newPath, int limit)
     {
-        using var db = new SqliteConnection("Data Source=:memory:");
+        // Pooling=False 的成因写在 SnapshotDb.Open 那里。这条连接自己虽是内存库,
+        // ATTACH 进来的两个**是磁盘文件** —— 连接一旦入池,它们就跟着连接留在池里开着,
+        // 而调用方(SnapshotRetention.Install)紧接着就要移动其中一个。
+        using var db = new SqliteConnection("Data Source=:memory:;Pooling=False");
         db.Open();
         Attach(db, Path.GetFullPath(oldPath), "prior");
         Attach(db, Path.GetFullPath(newPath), "newer");

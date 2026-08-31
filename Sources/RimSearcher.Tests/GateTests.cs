@@ -716,6 +716,56 @@ public class GateTests
             "their reads and writes will collide on the same .txt:\n  " + string.Join("\n  ", offenders));
     }
 
+    /// <summary>
+    /// 每条 sqlite 连接都不入池,而清全进程连接池那句话一处都不许有。
+    ///
+    /// Microsoft.Data.Sqlite 的连接池在 <c>Dispose</c> 之后**仍开着那个文件**,而快照文件
+    /// 随后要被轮转(<see cref="RimSearcher.Snapshot.SnapshotRetention.Install"/> 的
+    /// Move/Delete)—— Windows 上开着的文件动不了。曾经的补救是
+    /// <c>SqliteConnection.ClearAllPools()</c>,而它是**进程级**的:它把别的线程正在用的
+    /// 连接一起处置掉,那边随后在自己的连接上收到 <c>ObjectDisposedException</c>。
+    /// 一次实测就落在导入侧 <c>db.Open()</c> 之后的建表上,而发作的类完全看运气 ——
+    /// xUnit 的 collection 之间并行,于是整套测试随机红一条、隔离跑必绿。
+    ///
+    /// 竞态按时序发作,立不出稳定红的闸,所以这里判**结构**:连接自带
+    /// <c>Pooling=false</c>(那样 Close 就是真关文件,谁也不必去动别人的连接),
+    /// 且没有任何一处调用 <c>ClearAllPools</c>。
+    /// </summary>
+    [Fact]
+    public void sqlite连接不入池且没人去清全进程的池()
+    {
+        // 拼出来而不是写成一个字面量:这条闸自己也在被扫的目录里,写全了它第一个违规。
+        const string Banned = "Clear" + "AllPools";
+
+        var offenders = new List<string>();
+        foreach (var file in Directory.EnumerateFiles(
+                     Path.Combine(DeclarationTests.RepoRoot(), "Sources"), "*.cs", SearchOption.AllDirectories))
+        {
+            if (file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal) ||
+                file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+                continue;
+
+            var name = Path.GetFileName(file);
+            // 注释行剔掉:这条规矩的成因**就得写在注释里**(几处 `Pooling=false` 旁边都指着
+            // 它),而把注释一起读进来的话,解释为什么不许调用 ClearAllPools 的那句话
+            // 自己就是一条违规。行号照旧从原文数,所以这里换空行而不是删行。
+            var text = string.Join("\n", File.ReadAllLines(file)
+                .Select(l => l.TrimStart().StartsWith("//", StringComparison.Ordinal) ? "" : l));
+            if (text.Contains(Banned, StringComparison.Ordinal))
+                offenders.Add($"{name}: 调用了 {Banned}() —— 它连别的线程正在用的连接一起处置。");
+
+            foreach (Match m in Regex.Matches(text, @"new (?:Microsoft\.Data\.Sqlite\.)?SqliteConnection\("))
+            {
+                // 连接串与 builder 两种写法都认:";Pooling=False" 与 "Pooling = false,"。
+                var tail = text.Substring(m.Index, Math.Min(400, text.Length - m.Index));
+                if (!Regex.IsMatch(tail, @"Pooling\s*=\s*[Ff]alse"))
+                    offenders.Add($"{name}: 第 {text.Take(m.Index).Count(c => c == '\n') + 1} 行的连接没有 Pooling=false。");
+            }
+        }
+
+        Assert.True(offenders.Count == 0, string.Join("\n  ", offenders.Prepend("")));
+    }
+
     private static IEnumerable<(string File, string Line)> BaselineLines()
     {
         Assert.True(Directory.Exists(OutputSnapshotTests.SnapshotDir),

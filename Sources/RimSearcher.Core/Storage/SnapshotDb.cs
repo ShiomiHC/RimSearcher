@@ -165,10 +165,17 @@ public sealed class SnapshotDb : IDisposable
     {
         if (!File.Exists(path)) throw new SnapshotFormatError(NoDatabaseAt(path));
 
+        // Pooling = false:池化连接 Dispose 之后**文件仍开着**,而快照文件随后会被
+        // 轮转(SnapshotRetention.Install 要 Move/Delete 它),在 Windows 上开着就动不了。
+        // 唯一的补救 SqliteConnection.ClearAllPools() 是**进程级**的:它会把别的线程
+        // 正在用的连接一起处理掉,于是同进程里并发跑的另一次查询在自己的连接上收到
+        // ObjectDisposedException。不入池就没有这两件事 —— 本工具一条命令只开一两个
+        // 连接,池本来也省不下什么。
         var db = new SqliteConnection(new SqliteConnectionStringBuilder
         {
             DataSource = path,
             Mode = SqliteOpenMode.ReadOnly,
+            Pooling = false,
         }.ToString());
         db.Open();
 

@@ -41,7 +41,7 @@ public class ImportTests
     /// <summary>直接读 <c>translations</c>,包括查询侧不返回的 <c>def_id</c>。</summary>
     private static List<(string Path, long? DefId)> RawTranslations(string dbPath, string defName)
     {
-        using var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={dbPath}");
+        using var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={dbPath};Pooling=False");
         raw.Open();
         using var cmd = raw.CreateCommand();
         cmd.CommandText = "SELECT path, def_id FROM translations WHERE def_name = $n ORDER BY path";
@@ -253,7 +253,7 @@ public class ImportTests
     public void 打开陌生schema版本的库时消息可照做()
     {
         var path = Temp("wrongver.db");
-        using (var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={path}"))
+        using (var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={path};Pooling=False"))
         {
             raw.Open();
             using var cmd = raw.CreateCommand();

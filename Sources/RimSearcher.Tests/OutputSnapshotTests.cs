@@ -522,7 +522,9 @@ public class OutputSnapshotTests
         var db = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "keyed-empty.db");
         if (File.Exists(db)) File.Delete(db);
         File.Copy(Fixture.Db, db);
-        using (var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={db}"))
+        // Pooling=False:成因见 SnapshotDb.Open。这里原本靠 ClearAllPools() 把文件放开,
+        // 而那是进程级的 —— 并行跑的别的用例正在用的连接会被它一起处置掉。
+        using (var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={db};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
@@ -530,7 +532,6 @@ public class OutputSnapshotTests
             cmd.CommandText = "INSERT INTO keyed_fts(keyed_fts) VALUES('delete-all'); DELETE FROM keyed;";
             cmd.ExecuteNonQuery();
         }
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
 
         var (empty, _, code) = Fixture.Run("keyed", "CannotUseNoPower", "--db", db);
         Assert.Equal(1, code);
@@ -563,14 +564,14 @@ public class OutputSnapshotTests
         var db = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "keyed-no-placeholders.db");
         if (File.Exists(db)) File.Delete(db);
         File.Copy(Fixture.Db, db);
-        using (var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={db}"))
+        // Pooling=False:同上一条,成因见 SnapshotDb.Open。
+        using (var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={db};Pooling=False"))
         {
             conn.Open();
             using var cmd = conn.CreateCommand();
             cmd.CommandText = "UPDATE keyed SET placeholder = 0;";
             cmd.ExecuteNonQuery();
         }
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
 
         var (text, _, code) = Fixture.Run("keyed", "--empty-translation", "--db", db);
         Assert.Equal(1, code);

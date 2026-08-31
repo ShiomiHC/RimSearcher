@@ -43,10 +43,13 @@ public sealed class SnapshotImporter
         if (File.Exists(tempDb)) File.Delete(tempDb);
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(dbPath))!);
 
+        // Pooling = false 的成因写在 SnapshotDb.Open 那里:池化会让关掉的连接继续占着
+        // 文件,而这个方法最后一步正是把 tempDb 移到 dbPath 上。
         using var db = new SqliteConnection(new SqliteConnectionStringBuilder
         {
             DataSource = tempDb,
             Mode = SqliteOpenMode.ReadWriteCreate,
+            Pooling = false,
         }.ToString());
         db.Open();
         SnapshotSchema.Create(db);
@@ -457,8 +460,9 @@ public sealed class SnapshotImporter
             SnapshotSchema.CreateIndexes(db);
             using (var vac = db.CreateCommand()) { vac.CommandText = "PRAGMA optimize;"; vac.ExecuteNonQuery(); }
 
+            // 连接不入池(见 Pooling = false),所以 Close 就是真关文件 —— 下一行的
+            // Delete/Move 立刻做得成,不必再去清全进程的连接池。
             db.Close();
-            SqliteConnection.ClearAllPools();
 
             if (File.Exists(dbPath)) File.Delete(dbPath);
             File.Move(tempDb, dbPath);
