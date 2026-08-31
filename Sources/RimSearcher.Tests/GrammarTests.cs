@@ -4413,7 +4413,9 @@ public class GrammarTests
 
         // 2026-08-26 的实测基数。锚不唯一的一条都不受本闸保护,所以这个数只许降不许升 ——
         // 升了说明又写了一条没有保护的反向断言,那正是要拦住的那一刻。
-        const int AmbiguousAnchors = 40;
+        // 0.5.0 文案在 Core 里多了一处与既有反向断言字面量同形的出处,
+        // 条目 +1;没有新加 DoesNotContain。
+        const int AmbiguousAnchors = 41;
 
         var unanchored = new List<string>();
         var ambiguous = new List<string>();

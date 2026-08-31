@@ -89,24 +89,26 @@ public class InheritanceTests
     [Fact]
     public void patch计数的口径在输出与help两处同形()
     {
-        foreach (var text in new[] { Text("inherit", "--help"), Text("inherit", "BaseProjectile") })
+        var help = Text("inherit", "--help");
+        var oldSnap = Text("inherit", "BaseProjectile");
+
+        foreach (var text in new[] { help, oldSnap })
         {
             Assert.Contains("@Name=", text, StringComparison.Ordinal);
-            Assert.Contains("any other way", text, StringComparison.Ordinal);
-
-            // 此前这里是 DoesNotContain("by defName") —— 挡的是**单举 defName 当遗漏面的
-            // 代表**,因为抽象节点没有 defName,读者据此就把整个漏检面排除掉了。那次失效是
-            // 真的,判据保留;但「只说 any other way」后来也被实测为无效(同型的话在
-            // read --outline 上 0/10,补出具体类别才 5/10)。于是两头都要:总述必须在,
-            // 而举例不许只有一条 —— defName 在场时,别的定位方式至少还要有两条。
-            if (text.Contains("by defName", StringComparison.Ordinal))
-                Assert.True(new[] { "by label", "by thingClass", "by a wildcard" }
-                                .Count(o => text.Contains(o, StringComparison.Ordinal)) >= 2,
-                            "举了 defName 就不能只举它:抽象节点会据此排除掉整个遗漏面。");
+            Assert.Contains("by thingClass", text, StringComparison.Ordinal);
+            Assert.Contains("by a wildcard", text, StringComparison.Ordinal);
         }
 
-        Assert.DoesNotContain("exactly what the game read", Text("inherit", "--help"),
-                              StringComparison.Ordinal);
+        // help 描述当前导出器:defName / label 已经计入,遗漏面只剩类名和通配符。
+        // 旧快照上那两格没量过,输出仍把它们列进「any other way」—— 对那份快照是实话,
+        // 并另起一句叫人重导。两处同形的是「0 ≠ 没被改过」和 @Name= 那一格的口径,
+        // 不是把旧快照上还没数的两种假装已经数了。
+        Assert.Contains("patch_ops_defname", help, StringComparison.Ordinal);
+        Assert.Contains("any other way", oldSnap, StringComparison.Ordinal);
+        Assert.Contains("by defName", oldSnap, StringComparison.Ordinal);
+        Assert.Contains("by label", oldSnap, StringComparison.Ordinal);
+
+        Assert.DoesNotContain("exactly what the game read", help, StringComparison.Ordinal);
     }
 
     /// <summary>

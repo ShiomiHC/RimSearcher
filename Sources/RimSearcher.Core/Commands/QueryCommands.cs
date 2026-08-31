@@ -273,7 +273,10 @@ public sealed class GetCommand : Command
             "The 'source' line is the bare file name the game reported for that def — no directory, because " +
             "the game does not keep one. It names the file inside that mod's Defs folder ('mod' above says " +
             "which mod); it is not a path, and nothing here reads the file system to confirm the file is " +
-            "still there. Defs the game builds in code carry a placeholder there instead.",
+            "still there. Defs the game builds in code carry a placeholder there instead.\n\n" +
+            "When present, the 'xml' column says whether this def's own XML wrote the path (here), only an " +
+            "ancestor did (parent), or neither (no). That is the fact PatchOperationReplace vs Add needs. " +
+            "Older snapshots omit the column and say so.",
         Positionals = [new PositionalSpec { Name = "defName", Help = "The exact def name. 'search' finds it if you only know part of it." }],
         Options =
         [
@@ -312,9 +315,11 @@ public sealed class GetCommand : Command
                 // 把两个 def 各自点名才 4/10,两次复制合并 8/20 对 0/30、p=0.0002。于是搬进来,
                 // 与输出侧 yesMeans 同形 —— 那正是这两处口径必须一致的那条闸盯着的东西。
                 Help = "Also list fields whose value is the one a fresh instance of the declaring type already "
-                     + "carries. A def whose XML writes that same value and a def that never mentions the field "
-                     + "look the same here, so the snapshot cannot tell whether anything set those at all; they are left out by "
-                     + "default because they are the ones most often read as something an author chose. "
+                     + "carries. They are left out by default because they are the ones most often read as something "
+                     + "an author chose. The 'xml' column on those rows says whether this def's own XML wrote the "
+                     + "path (here), only an ancestor did (parent), or neither (no) — a yes with xml=here is an "
+                     + "explicit write of the default. Older snapshots have no xml column, and there a def whose XML "
+                     + "writes that same value and a def that never mentions the field look the same. "
                      + "How many were left out is always printed, and --path-contains shows a named field either way.",
             },
         ],
@@ -332,7 +337,8 @@ public sealed class GetCommand : Command
                 Key = "defs",
                 Rows = true,
                 What = "one object per def carrying the name — each with 'def' (identity), 'fields' " +
-                       "(path/value rows) and, when there are any, 'translations'. It stays an array even " +
+                       "(path/value/code_default rows, plus 'xml' when the snapshot recorded which XML lines " +
+                       "were written) and, when there are any, 'translations'. It stays an array even " +
                        "for a single def, because a name can belong to several def types at once.",
             },
         ],
@@ -448,6 +454,12 @@ public sealed class GetCommand : Command
                        ?? (named.Count == 1 && allMatches.Count == 1 ? named[0] : null);
             if (xmlNode?.ParentName is { Length: > 0 } parentName)
                 pairs.Add(new("inherits_from", $"{parentName} (see 'rimsearcher inherit {def.DefName}')"));
+
+            // 缺层写在 identity 里,不另起一句 notice —— get 的声明区已经顶着行数上限,
+            // 再加一条会把「有几句」本身读成噪声;也不许写 Re-export,那是过期警告的词。
+            if (!ctx.Db.Meta.IndexesXmlWritten)
+                pairs.Add(new(XmlOrigin.Column,
+                    $"not indexed (exporter {ctx.Db.Meta.ExporterVersion})"));
 
             // 只有一个 def 时,identity 块**不**排在最前:它是一叠名字,而 line 1 是管道下
             // 唯一的幸存者,那个位置得留给「几条、全不全」。名字是调用方自己敲进来的,
@@ -604,30 +616,21 @@ public sealed class GetCommand : Command
                     // 而三处口径(产地注释 / SKILL.md / --defaults Help)当时全是准确的:
                     // 副本都对,只是没有一份落在他走的那条路上。
                     // 不新增查询,只是把另一支已经说清的话搬到这一支。
+                    var xmlLayer = ctx.Db.Meta.IndexesXmlWritten
+                        ? $"--defaults lists them, and the '{XmlOrigin.Column}' column there says whether this " +
+                          $"def's own XML wrote the path ({XmlOrigin.Here}), only an ancestor did " +
+                          $"({XmlOrigin.Parent}), or neither ({XmlOrigin.No})."
+                        : "--defaults lists them. That match is not evidence that nothing wrote them: a def " +
+                          "whose XML writes the default value and a def that never mentions the field are " +
+                          "byte-for-byte identical here.";
                     ctx.Report.Notice(NoticeKind.Filter,
                         $"Not listed: {Tally.Complete(defaulted).Render("field")} whose value matches the " +
-                        // 出路紧贴它召回的那个数(见下),否定另起一句 —— 挂在分号后面会被
-                        // 连读成同一句的尾巴,而它要挡的正是「只读前半句」。
-                        // 「不构成证据」四个字本身挡不住。盲测五臂,陷阱是一个原版 XML 真写了
-                        // `<rotatable>true</rotatable>`(值正好等于类默认值)的 def,问该用 Add
-                        // 还是 Replace(正解 Replace),各 10 次:
-                        //   原句 0 · 删掉它 0 · 只补「两者逐字节同形」4(p=0.008) ·
-                        //   只补「去看 source 行」0(p=1.0) · 两者都补 3(不比只补同形好)
-                        // 起作用的是**把两个分不开的状态点名**,不是否定,也不是给方向。
-                        // 那条「点名了可跑出路的提示跟随率 27–35%」的规律在这里不适用:那些出路
-                        // 是同一个工具里立刻能敲的命令,而「去看游戏的 XML」是别处的一件事 ——
-                        // 它和原句一样只给了方向,没给判据。所以那 114 个字符是死重,已删。
-                        "declaring type's own default; --defaults lists them. That match is not evidence " +
-                        "that nothing wrote them: a def whose XML writes the default value and a def that " +
-                        "never mentions the field are byte-for-byte identical here. The snapshot holds " +
+                        "declaring type's own default; " + xmlLayer + " The snapshot holds " +
                         $"{Tally.Complete(total).Render("field path")} for this " +
                         "def; a null-valued field never entered the index and is in neither count." +
-                        // 方位词指的是这句话下面那张表。此前渲染器无条件把声明全提到最前,
-                        // 于是这两句写着 above 却印在表前,指的是一片不存在的上文。
                         (hiddenIdx.Count > 0
                             ? " Nothing below shows any field of these list entries, which the def has all the " +
                               $"same: {NameList.Render(hiddenIdx, Limits.MaxSuggestions)}."
-                            // 两态都只报事实,不把事实翻译成读法(「所以列表比看着长」)。
                             : " Every list index the def has appears below."));
                 }
             }
@@ -650,15 +653,28 @@ public sealed class GetCommand : Command
 
             if (matches.Count == 1) ctx.Report.Detail("def", pairs);
 
-            ctx.Report.Table("fields", ["path", "value", FieldDefault.Column],
-                fields.Select(f => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+            var xmlMarks = ctx.Db.Meta.IndexesXmlWritten
+                ? ctx.Db.XmlWrittenMarks(def.DefType, def.DefName)
+                : null;
+
+            var fieldCols = xmlMarks is null
+                ? new[] { "path", "value", FieldDefault.Column }
+                : ["path", "value", FieldDefault.Column, XmlOrigin.Column];
+            ctx.Report.Table("fields", fieldCols,
+                fields.Select(f =>
                 {
-                    ["path"] = f.Path,
-                    ["value"] = f.Value,
-                    // 这一列恒在,不随「本次有没有默认值行」出现或消失:表的形状随数据变,
-                    // 照着一次输出写的解析器下一次就取不到键。unknown 也必须能与 no 分开 ——
-                    // 「没比成」不是「有人改过」。
-                    [FieldDefault.Column] = FieldDefault.Render(f.Default),
+                    var row = new Dictionary<string, object?>
+                    {
+                        ["path"] = f.Path,
+                        ["value"] = f.Value,
+                        // 这一列恒在,不随「本次有没有默认值行」出现或消失:表的形状随数据变,
+                        // 照着一次输出写的解析器下一次就取不到键。unknown 也必须能与 no 分开 ——
+                        // 「没比成」不是「有人改过」。
+                        [FieldDefault.Column] = FieldDefault.Render(f.Default),
+                    };
+                    if (xmlMarks is not null)
+                        row[XmlOrigin.Column] = xmlMarks.TryGetValue(f.Path, out var mark) ? mark : XmlOrigin.No;
+                    return (IReadOnlyDictionary<string, object?>)row;
                 }).ToList());
 
             // 表之后:这句讲的是刚读过的那些行(措辞里就是 above)。
@@ -1792,9 +1808,11 @@ public sealed class FieldsCommand : Command
         Remarks =
             "Use this before 'where' when you are not sure what a field is called. The counts tell you whether a " +
             "path is universal for the type or only present on a handful of defs.\n\n" +
-            "What is listed is every path the exporter recorded a value for. A field whose value was null on " +
-            "every def of the type is in none of them, so a path missing here is not evidence that the field does " +
-            "not exist — for the shape of a nested object, read its class with 'code-search' and 'read'.",
+            "What is listed is every path the exporter recorded a value for. When the snapshot has the type's " +
+            "declared field set, a miss that is in that set means the field exists and is null on every def; a " +
+            "miss that is not means the type has no such field. Older snapshots have no declared set, and there a " +
+            "path missing here is not evidence that the field does not exist — for the shape of a nested object, " +
+            "read its class with 'code-search' and 'read'.",
         Positionals = [new PositionalSpec { Name = "defType", Help = "A def type such as ThingDef." }],
         Options =
         [
@@ -1843,6 +1861,22 @@ public sealed class FieldsCommand : Command
 
             if (filters.Count > 0 && ctx.Db.FieldPathsForType(type, 1).Rows.Count > 0)
             {
+                var declared = ctx.Db.TypeDeclaredPaths(type, filters);
+                if (declared is { Count: > 0 })
+                {
+                    ctx.Report.Notice(NoticeKind.Boundary,
+                        $"'{type}' declares {Tally.Complete(declared.Count).Render("field path")} matching " +
+                        $"{PathFilterText.Say(filters)}, but every def of the type has them as null — they never " +
+                        "entered the value index. The type has the field; no def has a value for it.");
+                    return 1;
+                }
+                if (declared is { Count: 0 })
+                {
+                    ctx.Report.Notice(NoticeKind.Boundary,
+                        $"'{type}' has field paths, but none contains {PathFilterText.Say(filters)}, and the " +
+                        "type does not declare such a field either.");
+                    return 1;
+                }
                 ctx.Report.Notice(NoticeKind.Boundary,
                     $"'{type}' has field paths, but none contains {PathFilterText.Say(filters)}. Drop --path-contains to see them all.");
                 Completeness.NoteIndexHoldsValuesOnly(ctx, filters[0]);
@@ -2224,13 +2258,14 @@ internal static class Completeness
             $"This says no indexed value sits at that path — not that no such field exists. {how} " +
             "Two things keep a field out of this index without any sign here: a value that was null " +
             "on every def, and a field the game marks as an unsaved runtime cache. " +
-            // 第三种成因只在**这份快照真有被砍的 def** 时存在。没有的时候那 105 字节讲的是一件
-            // 这里不可能发生的事,而它还带着一条会回空表的指路 —— 与 NoteIndexedPathsOnly
-            // 同一条纪律(圈住的类型里没有被砍的就一个字不发)。
             (ctx.Db.TruncatedDefCount() > 0
                 ? "A third, hitting the per-def field cap, does leave a sign — " +
                   "'rimsearcher snapshot truncated' lists those defs. "
                 : "") +
+            (ctx.Db.Meta.IndexesTypeFields
+                ? ""
+                : $"This snapshot (exporter {ctx.Db.Meta.ExporterVersion}) does not list the fields a type " +
+                  "can have, so it cannot tell a field that is null on every def from one the type does not have. ") +
             NestedClassLine(ctx));
     }
 

@@ -33,12 +33,12 @@ public sealed class InheritCommand : Command
             // 的正则只认 @Name=,漏的是所有其他定位方式(852e863 已在输出侧修掉);
             // ③ 只把 unanswered 给了无 Name= 的节点 —— 那正好暗示有 Name= 的是 answered,
             // 而那是受测者驳回新句时踩的那级台阶。
-            "What is shown is the XML before PatchOperations are applied. Each node that declares Name= reports how " +
-            "many patch operations name it with @Name= in an xpath — that is the whole of what the count covers, " +
-            "and an xpath that reaches a node any other way — by defName, by label, by thingClass, by a " +
-            "wildcard — is counted nowhere in this layer. A 0 is therefore not " +
-            "evidence that the node reached the game unpatched; a node without a Name= reports 'n/a' rather than 0 " +
-            "because there the count was never taken at all. " +
+            "What is shown is the XML before PatchOperations are applied. patch_ops counts xpaths that name the " +
+            "node with @Name=; patch_ops_defname and patch_ops_label count xpaths that name it by defName= and by " +
+            "label=. An xpath that reaches a node by thingClass or by a wildcard is counted nowhere in this layer, " +
+            "so a 0 is not evidence that the node reached the game unpatched. A node without a Name= reports " +
+            "patch_ops as 'n/a' rather than 0 because that count was never taken; the defName and label counts are " +
+            "still taken. " +
             "For the merged, post-patch values, read any concrete child with 'get' — everything a parent " +
             "contributes is already in each of its children.",
         Positionals =
@@ -137,8 +137,9 @@ public sealed class InheritCommand : Command
 
             var named = node.Name is { Length: > 0 };
             var label = named ? node.Name : node.DefName ?? "";
-            ctx.Report.Detail("node",
-            [
+            var countedExtra = ctx.Db.Meta.IndexesPatchOpsByDefNameLabel;
+            var identity = new List<KeyValuePair<string, object?>>
+            {
                 new("name", node.Name),
                 new("def_name", node.DefName),
                 new("def_type", node.DefType),
@@ -149,9 +150,14 @@ public sealed class InheritCommand : Command
                 // 数字每次都在场且可机读,于是 0 = 「量过、没人 patch」,与「这一格没量」分得开:
                 // 导出器对无 Name= 的节点硬写 0(计数正则只认 `@Name=`),所以那种情况印 n/a。
                 // 印 n/a 而不是留空 —— 留空会让整行在文本面消失(Renderers 跳过空值)。
-                // 需要警示的后果由下面那句边界话说,只在非零时出现。
                 new("patch_ops", named ? node.PatchOps : "n/a"),
-            ]);
+            };
+            if (countedExtra)
+            {
+                identity.Add(new("patch_ops_defname", node.PatchOpsDefName));
+                identity.Add(new("patch_ops_label", node.PatchOpsLabel));
+            }
+            ctx.Report.Detail("node", identity);
 
             // 紧跟着 identity 块 —— 这两句解释的就是它上面那一行 patch_ops。此前它们排在
             // 全部块之后,离所解释的那一格隔着两张表。
@@ -165,34 +171,38 @@ public sealed class InheritCommand : Command
             // 说破它省不掉下游那次双快照 diff —— 「这个 def 被 patch 改过没有」在单快照里
             // 本就不可判定(存的是 pre-patch 的节点身份 + post-patch 的字段值,没有 pre-patch
             // 的值可比)。省掉的是另一件事:不必先把 0 当答案用一遍,再从别处撞见反证。
+            var oldLayer = countedExtra
+                ? ""
+                : $" This snapshot (exporter {ctx.Db.Meta.ExporterVersion}) only counted @Name=; " +
+                  "a newer export also counts xpaths by defName= and by label=.";
             if (!named)
                 ctx.Report.Notice(NoticeKind.Boundary,
-                    $"'{label}' declares no Name=, so patch_ops is not measured for it: only xpaths naming a " +
-                    "node with @Name= are counted, and a patch that reaches this def by defName leaves no " +
-                    "trace here.");
+                    countedExtra
+                        ? $"'{label}' declares no Name=, so patch_ops is not measured for it. " +
+                          "patch_ops_defname and patch_ops_label above count xpaths that name it by defName= " +
+                          "and by label=; an xpath that reaches it by thingClass or by a wildcard still " +
+                          "leaves no trace here."
+                        : $"'{label}' declares no Name=, so patch_ops is not measured for it: only xpaths naming a " +
+                          "node with @Name= are counted, and a patch that reaches this def by defName leaves no " +
+                          "trace here." + oldLayer);
             else if (node.PatchOps > 0)
-                // 主语放到句尾,免得动词跟着计数变单复数 —— NounRegistry 管名词,不管动词。
                 ctx.Report.Notice(NoticeKind.Boundary,
                     $"'{label}' is targeted by name by " +
                     $"{Tally.Complete(node.PatchOps).Render("patch operation")} in this snapshot. " +
                     "This layer is the XML before patches, so what the game finally used differs from it " +
-                    "by whatever those operations did.");
+                    "by whatever those operations did." + oldLayer);
+            else if (countedExtra)
+                ctx.Report.Notice(NoticeKind.Boundary,
+                    $"No patch operation's xpath names '{label}' with @Name= in this snapshot — that is " +
+                    "what patch_ops=0 counts. patch_ops_defname and patch_ops_label count xpaths that name " +
+                    "it by defName= and by label=. An xpath that reaches it by thingClass or by a wildcard " +
+                    "leaves no trace here, so a 0 is not evidence that the game read this node unpatched.");
             else
-                // 不能只举「by defName」:这一支的对象可以是**抽象节点**,而抽象节点从不变成
-                // def、根本没有 defName —— 单举那一条,读者顺着推就得出「那条路对它不存在,
-                // 所以这个 0 可靠」,正好反了。而计数的正则(XmlNodeExporter.NameInXPath)
-                // 只认 @Name=,漏掉的是**所有**其他定位方式。
-                //
-                // 但「any other way」这种抽象说法单用也无效:同型的话在 read --outline 上实测
-                // 0/10,补出具体类别才到 5/10(p=0.002)。两头都要 —— **总述在前、例子在后,
-                // 且例子不止一条**:总述保住整个遗漏面(抽象节点排除掉 defName 也还剩三条),
-                // 例子给出叫得出名字、能拿去核对的东西。
-                // 口径写进句子:不点明数的是 @Name=,「that is what the 0 counts」就没有内容。
                 ctx.Report.Notice(NoticeKind.Boundary,
                     $"No patch operation's xpath names '{label}' with @Name= in this snapshot — that is " +
                     "what the 0 counts. An xpath that reaches it any other way — by defName, by label, " +
                     "by thingClass, by a wildcard — leaves no trace here, so the 0 is not evidence that " +
-                    "the game read this node unpatched.");
+                    "the game read this node unpatched." + oldLayer);
 
             // 往上走到根。带环保护是必要的:XML 里写得出环,游戏在这一层之后才检出来,
             // 快照存的正是检出之前的原文。
