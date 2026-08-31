@@ -67,6 +67,10 @@ namespace RimSearcher.DataMod
                 // `if (!hotReload && defs.Count != 0) Log.ErrorOnce(…)` 在导出时点必然成立
                 // (def 早加载完了),走默认的 false 会让每次导出都吐一条 Log.Error。
                 // 那个参数在 LoadDefs 里只用于这个检查。
+                // LoadDefs 只是读盘再 yield,不碰 ModContentPack.defs —— 重放对游戏状态是
+                // 只读的。唯一的副作用:访问 Patches 会把加载末尾清掉的那份缓存重新解析回来,
+                // 于是进程里多留一批 PatchOperation 对象。无人值守导出跑完就退出;设置页那条
+                // 路上它是几 MB 的常驻,不影响正确性。
                 var assets = LoadedModManager.LoadModXML(true);
                 var lookup = new Dictionary<XmlNode, LoadableXmlAsset>();
                 var doc = LoadedModManager.CombineIntoUnifiedXML(assets, lookup);
