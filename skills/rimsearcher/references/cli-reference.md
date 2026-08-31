@@ -348,7 +348,7 @@ The 'source' line is the bare file name the game reported for that def — no di
 | `-n`, `--limit` <n|all> | How many fields to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: `60`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--path-contains` <text> | Only show field paths containing this text. Repeat it to widen the selection. | `--filter`, `--grep`, `--field-contains`, `--path-filter`, `--field`, `--field-path`, `--only` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind`, `--category` |
-| `--defaults` | Also list fields whose value is the one a fresh instance of the declaring type already carries. The snapshot cannot tell whether anything set those at all; they are left out by default because they are the ones most often read as something an author chose. How many were left out is always printed, and --path-contains shows a named field either way. | `--with-defaults`, `--all-fields` |
+| `--defaults` | Also list fields whose value is the one a fresh instance of the declaring type already carries. A def whose XML writes that same value and a def that never mentions the field look the same here, so the snapshot cannot tell whether anything set those at all; they are left out by default because they are the ones most often read as something an author chose. How many were left out is always printed, and --path-contains shows a named field either way. | `--with-defaults`, `--all-fields` |
 
 `--json` keys, besides the global `notes`:
 
@@ -375,7 +375,7 @@ rimsearcher inherit <name> [options]
 
 This is the one part of a snapshot that is read from the mods' XML rather than from the objects the game had in memory, because the game resolves inheritance while loading and then discards it. Abstract parents exist only here: they never become defs, so 'get' will not find them.
 
-What is shown is the XML before PatchOperations are applied. Each node that declares Name= reports how many patch operations name it with @Name= in an xpath — that is the whole of what the count covers, and an xpath that reaches a node any other way is counted nowhere in this layer. A 0 is therefore not evidence that the node reached the game unpatched; a node without a Name= reports 'n/a' rather than 0 because there the count was never taken at all. For the merged, post-patch values, read any concrete child with 'get' — everything a parent contributes is already in each of its children.
+What is shown is the XML before PatchOperations are applied. Each node that declares Name= reports how many patch operations name it with @Name= in an xpath — that is the whole of what the count covers, and an xpath that reaches a node any other way — by defName, by label, by thingClass, by a wildcard — is counted nowhere in this layer. A 0 is therefore not evidence that the node reached the game unpatched; a node without a Name= reports 'n/a' rather than 0 because there the count was never taken at all. For the merged, post-patch values, read any concrete child with 'get' — everything a parent contributes is already in each of its children.
 
 | Argument | Meaning |
 |---|---|

@@ -35,7 +35,8 @@ public sealed class InheritCommand : Command
             // 而那是受测者驳回新句时踩的那级台阶。
             "What is shown is the XML before PatchOperations are applied. Each node that declares Name= reports how " +
             "many patch operations name it with @Name= in an xpath — that is the whole of what the count covers, " +
-            "and an xpath that reaches a node any other way is counted nowhere in this layer. A 0 is therefore not " +
+            "and an xpath that reaches a node any other way — by defName, by label, by thingClass, by a " +
+            "wildcard — is counted nowhere in this layer. A 0 is therefore not " +
             "evidence that the node reached the game unpatched; a node without a Name= reports 'n/a' rather than 0 " +
             "because there the count was never taken at all. " +
             "For the merged, post-patch values, read any concrete child with 'get' — everything a parent " +
@@ -177,16 +178,21 @@ public sealed class InheritCommand : Command
                     "This layer is the XML before patches, so what the game finally used differs from it " +
                     "by whatever those operations did.");
             else
-                // 不写「by defName」:这一支的对象可以是**抽象节点**,而抽象节点从不变成 def、
-                // 根本没有 defName —— 举那一条当遗漏面,读者顺着推就得出「那条路对它不存在,
+                // 不能只举「by defName」:这一支的对象可以是**抽象节点**,而抽象节点从不变成
+                // def、根本没有 defName —— 单举那一条,读者顺着推就得出「那条路对它不存在,
                 // 所以这个 0 可靠」,正好反了。而计数的正则(XmlNodeExporter.NameInXPath)
-                // 只认 @Name=,漏掉的是**所有**其他定位方式:defName、label、thingClass、
-                // 通配……所以遗漏面只能整个说,不能举其中一条。
+                // 只认 @Name=,漏掉的是**所有**其他定位方式。
+                //
+                // 但「any other way」这种抽象说法单用也无效:同型的话在 read --outline 上实测
+                // 0/10,补出具体类别才到 5/10(p=0.002)。两头都要 —— **总述在前、例子在后,
+                // 且例子不止一条**:总述保住整个遗漏面(抽象节点排除掉 defName 也还剩三条),
+                // 例子给出叫得出名字、能拿去核对的东西。
                 // 口径写进句子:不点明数的是 @Name=,「that is what the 0 counts」就没有内容。
                 ctx.Report.Notice(NoticeKind.Boundary,
                     $"No patch operation's xpath names '{label}' with @Name= in this snapshot — that is " +
-                    "what the 0 counts. An xpath that reaches it any other way leaves no trace here, so " +
-                    "the 0 is not evidence that the game read this node unpatched.");
+                    "what the 0 counts. An xpath that reaches it any other way — by defName, by label, " +
+                    "by thingClass, by a wildcard — leaves no trace here, so the 0 is not evidence that " +
+                    "the game read this node unpatched.");
 
             // 往上走到根。带环保护是必要的:XML 里写得出环,游戏在这一层之后才检出来,
             // 快照存的正是检出之前的原文。

@@ -1391,7 +1391,14 @@ public class GrammarTests
         foreach (var text in new[] { onlyYes, hit, help })
         {
             Assert.DoesNotContain(FossilDeclaredDefault, text, StringComparison.Ordinal);
-            Assert.Contains("fresh instance of the declaring type", text, StringComparison.Ordinal);
+
+            // 锚点从「fresh instance of the declaring type」换成那两个被点名的 def。
+            // 前者说的是 yes **是什么意思**,准确,但盲测里 0/10 —— 读者拿它接着推
+            // 「所以没人写」;把两个分不开的 def 各自点名之后是 4/10(两次复制合并
+            // 8/20 对 0/30,p=0.0002)。这条闸盯的是「输出与 help 口径同形」,同形的
+            // 那件事现在是这一对,不是那句定义。
+            Assert.Contains("whose XML writes that same value and a def that never mentions the field",
+                            text, StringComparison.Ordinal);
         }
 
         // **否定排在主句、在「值相等」那个事实之前。** r17 抓到一个受测者复述了限定的
@@ -1400,7 +1407,9 @@ public class GrammarTests
         foreach (var text in new[] { onlyYes, hit })
         {
             var neg = text.IndexOf("is not evidence that nothing wrote", StringComparison.Ordinal);
-            var fact = text.IndexOf("only says the value matches", StringComparison.Ordinal);
+            // 「那个事实」现在是被点名的那一对,不再是「值与新实例的一样」那句定义 ——
+            // 后者已随锚点一起换掉。顺序判据不变:可独立成立的那半句排在否定之后。
+            var fact = text.IndexOf("whose XML writes that same value", StringComparison.Ordinal);
             Assert.True(neg >= 0 && fact > neg,
                         "「值相等不构成没人写的证据」要在主句,排在「值相等」那个事实之前");
         }

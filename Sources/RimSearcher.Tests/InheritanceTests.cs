@@ -62,9 +62,15 @@ public class InheritanceTests
         var unpatched = Text("inherit", "BaseProjectile");
         Assert.Contains("that is what the 0 counts", unpatched, StringComparison.Ordinal);
         Assert.Contains("with @Name= in this snapshot", unpatched, StringComparison.Ordinal);
-        Assert.Contains("any other way leaves no trace", unpatched, StringComparison.Ordinal);
-        // 不许举 defName 当遗漏面:这一支的对象可以是抽象节点,而它没有 defName。
-        Assert.DoesNotContain("by defName", unpatched, StringComparison.Ordinal);
+        // 这两半此前是连着的一句;举例列表(by defName / by label / …)插进了中间,
+        // 于是只能分开钉。钉的仍是同一件事:总述在,「不留痕」也在。
+        Assert.Contains("any other way", unpatched, StringComparison.Ordinal);
+        Assert.Contains("leaves no trace", unpatched, StringComparison.Ordinal);
+        // 举例不许只有 defName 一条:这一支的对象可以是抽象节点,而它没有 defName,
+        // 单举它读者就把整个遗漏面排除掉了。上限由 patch计数的口径… 那条闸一并管。
+        Assert.True(new[] { "by label", "by thingClass", "by a wildcard" }
+                        .Count(o => unpatched.Contains(o, StringComparison.Ordinal)) >= 2,
+                    "举了 defName 就不能只举它:抽象节点会据此排除掉整个遗漏面。");
         // 不许串到 ops>0 那一支的话上:那句说的是「这一层与游戏最终读到的不同」,
         // 而这里没有任何已知的补丁让它不同 —— 只是这个计数看不见另一类。
         Assert.DoesNotContain("before patches", unpatched, StringComparison.Ordinal);
@@ -87,7 +93,16 @@ public class InheritanceTests
         {
             Assert.Contains("@Name=", text, StringComparison.Ordinal);
             Assert.Contains("any other way", text, StringComparison.Ordinal);
-            Assert.DoesNotContain("by defName", text, StringComparison.Ordinal);
+
+            // 此前这里是 DoesNotContain("by defName") —— 挡的是**单举 defName 当遗漏面的
+            // 代表**,因为抽象节点没有 defName,读者据此就把整个漏检面排除掉了。那次失效是
+            // 真的,判据保留;但「只说 any other way」后来也被实测为无效(同型的话在
+            // read --outline 上 0/10,补出具体类别才 5/10)。于是两头都要:总述必须在,
+            // 而举例不许只有一条 —— defName 在场时,别的定位方式至少还要有两条。
+            if (text.Contains("by defName", StringComparison.Ordinal))
+                Assert.True(new[] { "by label", "by thingClass", "by a wildcard" }
+                                .Count(o => text.Contains(o, StringComparison.Ordinal)) >= 2,
+                            "举了 defName 就不能只举它:抽象节点会据此排除掉整个遗漏面。");
         }
 
         Assert.DoesNotContain("exactly what the game read", Text("inherit", "--help"),

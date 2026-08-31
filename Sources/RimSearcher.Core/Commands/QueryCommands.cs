@@ -307,10 +307,13 @@ public sealed class GetCommand : Command
                 // def 没设过它」。SKILL.md 里同一件事是主句(`yes` = the snapshot cannot
                 // tell whether anyone set it),两处产地此前强度不同。
                 //
-                // 不把 SKILL 里那句「照着默认值写一遍与根本没写完全同形」搬进来:那会同时
-                // 改语法位置与信息量,而 legend 的信道复验还没跑,两个变量混在一起就归不了因。
+                // 那句「照着默认值写一遍与根本没写完全同形」此前压着没搬进来 —— 等的是信道
+                // 复验。复验跑完了(见 yesMeans 处):抽象地说「工具区分不了」实测 0/10,
+                // 把两个 def 各自点名才 4/10,两次复制合并 8/20 对 0/30、p=0.0002。于是搬进来,
+                // 与输出侧 yesMeans 同形 —— 那正是这两处口径必须一致的那条闸盯着的东西。
                 Help = "Also list fields whose value is the one a fresh instance of the declaring type already "
-                     + "carries. The snapshot cannot tell whether anything set those at all; they are left out by "
+                     + "carries. A def whose XML writes that same value and a def that never mentions the field "
+                     + "look the same here, so the snapshot cannot tell whether anything set those at all; they are left out by "
                      + "default because they are the ones most often read as something an author chose. "
                      + "How many were left out is always printed, and --path-contains shows a named field either way.",
             },
@@ -2337,8 +2340,14 @@ internal static class Completeness
         // (`A 0 is therefore not evidence that…` 是主句)。
         // 外层已经有一个冒号,这里用破折号。破折号本身不是问题 —— 问题是此前**否定在
         // 破折号后**,于是只读前半句的人读到的是一句可独立成立的陈述。
-        var yesMeans = "a yes is not evidence that nothing wrote the value — it only says the value " +
-                       "matches what a fresh instance of the declaring type carries";
+        //
+        // 后半句此前解释的是「yes 是什么意思」(值与新 new 的一样),那是准确的,但盲测里
+        // 0/10 —— 读者拿它接着推「所以没人写」。换成**把两个分不开的 def 各自点名**之后
+        // 是 4/10;这是 get 那句同一手法的复制(那边 4/10 对 0/20),两次合并 8/20 对 0/30,
+        // p=0.0002。要点是两边都得是读者叫得出、能去核对的东西 —— 抽象地说「工具区分不了」
+        // 在 read --outline 那条上实测仍是 0/10。
+        var yesMeans = "a yes is not evidence that nothing wrote the value — a def whose XML writes " +
+                       "that same value and a def that never mentions the field both show yes here";
 
         // 这半句只在**本次取景里真有 yes 行**时才拼。两条被砍掉的路径各有各的毛病:
         //   不加 --defaults 时,yes 行被整批滤走、表折成 `code_default=no`,而
