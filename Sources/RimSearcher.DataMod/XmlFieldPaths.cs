@@ -16,21 +16,33 @@ namespace RimSearcher.DataMod
     /// 对不齐的形状(statBases 把 defName 当标签名、<c>costList</c> 同形、继承合并后下标
     /// 与补丁后 field_values 下标)不在这里修补,查询侧按字面 join。
     ///
+    /// 0.6.0 起每条叶子还带行内文本:短形式 <c>&lt;Steel&gt;75&lt;/Steel&gt;</c> 的
+    /// 文本落在哪一格,查询侧要拿这段跟索引里的值比。去重取第一次的文本。
+    ///
     /// 这个文件不许引用任何 RimWorld 类型。
     /// </summary>
     internal static class XmlFieldPaths
     {
         public static List<string> Collect(XmlElement def, int maxDepth, int maxItems)
         {
+            List<string> texts;
+            return Collect(def, maxDepth, maxItems, out texts);
+        }
+
+        public static List<string> Collect(XmlElement def, int maxDepth, int maxItems,
+                                           out List<string> texts)
+        {
             var into = new List<string>();
+            texts = new List<string>();
             var seen = new HashSet<string>();
-            WalkChildren(def, "", 0, maxDepth, maxItems, into, seen);
+            WalkChildren(def, "", 0, maxDepth, maxItems, into, texts, seen);
             return into;
         }
 
         private static void WalkChildren(XmlElement el, string prefix, int depth,
                                          int maxDepth, int maxItems,
-                                         List<string> into, HashSet<string> seen)
+                                         List<string> into, List<string> texts,
+                                         HashSet<string> seen)
         {
             var li = 0;
             foreach (XmlNode n in el.ChildNodes)
@@ -49,17 +61,18 @@ namespace RimSearcher.DataMod
                 {
                     path = prefix.Length == 0 ? child.LocalName : prefix + "." + child.LocalName;
                 }
-                WalkElement(child, path, depth, maxDepth, maxItems, into, seen);
+                WalkElement(child, path, depth, maxDepth, maxItems, into, texts, seen);
             }
         }
 
         private static void WalkElement(XmlElement el, string path, int depth,
                                         int maxDepth, int maxItems,
-                                        List<string> into, HashSet<string> seen)
+                                        List<string> into, List<string> texts,
+                                        HashSet<string> seen)
         {
             var classAttr = el.GetAttribute("Class");
             if (classAttr != null && classAttr.Length > 0)
-                Add(into, seen, path + ".Class");
+                Add(into, texts, seen, path + ".Class", classAttr);
 
             var hasChildEls = false;
             foreach (XmlNode n in el.ChildNodes)
@@ -69,17 +82,20 @@ namespace RimSearcher.DataMod
 
             if (!hasChildEls)
             {
-                Add(into, seen, path);
+                Add(into, texts, seen, path, el.InnerText ?? "");
                 return;
             }
 
             if (depth >= maxDepth) return;
-            WalkChildren(el, path, depth + 1, maxDepth, maxItems, into, seen);
+            WalkChildren(el, path, depth + 1, maxDepth, maxItems, into, texts, seen);
         }
 
-        private static void Add(List<string> into, HashSet<string> seen, string path)
+        private static void Add(List<string> into, List<string> texts, HashSet<string> seen,
+                                string path, string text)
         {
-            if (seen.Add(path)) into.Add(path);
+            if (!seen.Add(path)) return;
+            into.Add(path);
+            texts.Add(text ?? "");
         }
     }
 }

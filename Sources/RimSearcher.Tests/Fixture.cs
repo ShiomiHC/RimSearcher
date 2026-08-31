@@ -58,8 +58,15 @@ public static class Fixture
     /// <summary>
     /// 导出器 0.5.0:XML 写成的路径、按 defName/label 的 patch 计数、类型字段全集都在。
     /// 主 fixture 停在 0.2.0,other 停在 0.1.0 —— 新层缺席与在场两条路都要有落点。
+    /// **停在 0.5.0 不动**:它是旧路径(没记下 XML 行内文本)的闸。
     /// </summary>
     public static string PresenceDb { get { _ = Db; return Path.Combine(SnapshotDir, "presence.db"); } }
+
+    /// <summary>
+    /// 导出器 0.6.0:xml_written 带行内文本,短形式标签底下的候选格能分开。
+    /// 0.5.0 那份 <see cref="PresenceDb"/> 故意不带,两条路各有落点。
+    /// </summary>
+    public static string PresenceTextDb { get { _ = Db; return Path.Combine(SnapshotDir, "presence-text.db"); } }
 
     /// <summary>
     /// 「同值还坐在别的路径形状上」那句提示的**展示位边界**语料 —— 单独一份,不进
@@ -126,6 +133,10 @@ public static class Fixture
                 var presenceExport = Path.Combine(dir, "presence" + IntermediateFormat.FileExtension);
                 WritePresenceExport(presenceExport);
                 new SnapshotImporter().Import(presenceExport, Path.Combine(SnapshotDir, "presence.db"));
+
+                var presenceTextExport = Path.Combine(dir, "presence-text" + IntermediateFormat.FileExtension);
+                WritePresenceTextExport(presenceTextExport);
+                new SnapshotImporter().Import(presenceTextExport, Path.Combine(SnapshotDir, "presence-text.db"));
 
                 return _dbPath = db;
             }
@@ -421,6 +432,158 @@ public static class Fixture
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindEnd)
             .Int(IntermediateFormat.KeyRecords, records)
             .Int(IntermediateFormat.KeyDefs, 2)
+            .Int(IntermediateFormat.KeyInjections, 0)
+            .Int(IntermediateFormat.KeyXmlNodes, 2)
+            .ToString());
+        w.Flush();
+    }
+
+    /// <summary>
+    /// 导出器 0.6.0 的语料 —— xml_written 带行内文本。
+    ///
+    /// ChildGun 的 costList.Steel 文本是 75,于是 count 是 here、quality 是 no;
+    /// PatchedGun 的文本对不上任何候选格,退回 under;TwinGun 的 count 与 quality
+    /// 同是 75,对上两格,那两格都 under。
+    /// </summary>
+    private static void WritePresenceTextExport(string path)
+    {
+        using var fs = File.Create(path);
+        using var gz = new GZipStream(fs, CompressionLevel.Optimal);
+        using var w = new StreamWriter(gz, new UTF8Encoding(false)) { NewLine = "\n" };
+
+        long records = 0;
+        w.WriteLine(new JsonLine()
+            .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindMeta)
+            .Int(IntermediateFormat.KeyFormatVersion, IntermediateFormat.FormatVersion)
+            .Str(IntermediateFormat.KeyExporterVersion, "0.6.0")
+            .Str(IntermediateFormat.KeyExportedAtUtc, "2026-01-06T00:00:00.0000000Z")
+            .Str(IntermediateFormat.KeyGameVersion, GameVersion)
+            .Str(IntermediateFormat.KeyLanguage, Language)
+            .Raw(IntermediateFormat.KeyMods,
+                "[" + new JsonLine().Str("package_id", "ludeon.rimworld").Str("name", "Core").Str("version", "1.6") + "]")
+            .Raw(IntermediateFormat.KeyLimits, new JsonLine().Int("max_field_depth", 6).ToString())
+            .Str(IntermediateFormat.KeyModSettingsHash, "")
+            .ToString());
+        records++;
+
+        void Def(string name, string label, params ExportedField[] fields)
+        {
+            w.WriteLine(new JsonLine()
+                .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindDef)
+                .Str(IntermediateFormat.KeyDefType, "ThingDef")
+                .Str(IntermediateFormat.KeyDefName, name)
+                .Str(IntermediateFormat.KeyLabel, label)
+                .Str(IntermediateFormat.KeyDescription, "")
+                .Str(IntermediateFormat.KeySourceMod, "ludeon.rimworld")
+                .Str(IntermediateFormat.KeySourceFile, "Guns.xml")
+                .Bool(IntermediateFormat.KeyGenerated, false)
+                .Str(IntermediateFormat.KeyClass, "Verse.ThingDef")
+                .Fields(IntermediateFormat.KeyFields, [.. fields])
+                .Int(IntermediateFormat.KeyFieldsTruncated, 0)
+                .ToString());
+            records++;
+        }
+
+        Def("ChildGun", "child gun",
+            new ExportedField("thingClass", "RimWorld.Bullet", DefaultState.Differs),
+            new ExportedField("damage", "12", DefaultState.Differs),
+            new ExportedField("speed", "70", DefaultState.Differs),
+            new ExportedField("costList[0].thingDef", "Steel", DefaultState.Differs),
+            new ExportedField("costList[0].count", "75", DefaultState.Differs),
+            new ExportedField("costList[0].quality", "Normal", DefaultState.Same),
+            new ExportedField("statBases[0].stat", "Beauty", DefaultState.Differs),
+            new ExportedField("statBases[0].value", "-4", DefaultState.Differs),
+            new ExportedField("things[0].def", "Widget", DefaultState.Differs),
+            new ExportedField("things[0].chance", "0.25", DefaultState.Differs),
+            new ExportedField("things[0].hp", "0", DefaultState.Same),
+            new ExportedField("descriptionHyperlinks[0].def", "ChildGun", DefaultState.Differs),
+            new ExportedField("burstCount", "1", DefaultState.Same));
+        Def("OtherGun", "other gun",
+            new ExportedField("thingClass", "RimWorld.Bullet", DefaultState.Differs),
+            new ExportedField("damage", "8", DefaultState.Differs));
+        // XML 写的是 75,索引里 count 已被补丁改成 100 —— 零匹配,退回 under。
+        Def("PatchedGun", "patched gun",
+            new ExportedField("thingClass", "RimWorld.Bullet", DefaultState.Differs),
+            new ExportedField("costList[0].thingDef", "Steel", DefaultState.Differs),
+            new ExportedField("costList[0].count", "100", DefaultState.Differs),
+            new ExportedField("costList[0].quality", "Normal", DefaultState.Same));
+        // count 与 quality 同值,文本对上两格。
+        Def("TwinGun", "twin gun",
+            new ExportedField("thingClass", "RimWorld.Bullet", DefaultState.Differs),
+            new ExportedField("costList[0].thingDef", "Steel", DefaultState.Differs),
+            new ExportedField("costList[0].count", "75", DefaultState.Differs),
+            new ExportedField("costList[0].quality", "75", DefaultState.Differs));
+
+        w.WriteLine(new JsonLine()
+            .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindTypeFields)
+            .Str(IntermediateFormat.KeyDefType, "ThingDef")
+            .Strs(IntermediateFormat.KeyPaths,
+                ["burstCount", "costList[0].count", "costList[0].quality",
+                 "costList[0].thingDef", "damage", "defName",
+                 "descriptionHyperlinks[0].def", "label", "neverSet", "speed",
+                 "statBases[0].stat", "statBases[0].value",
+                 "thingClass", "things[0].chance", "things[0].def", "things[0].hp"])
+            .ToString());
+        records++;
+
+        w.WriteLine(new JsonLine()
+            .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindXmlNode)
+            .Str(IntermediateFormat.KeyDefType, "ThingDef")
+            .Str(IntermediateFormat.KeyName, "BaseGun")
+            .Str(IntermediateFormat.KeyParentName, "")
+            .Bool(IntermediateFormat.KeyAbstract, true)
+            .Str(IntermediateFormat.KeyDefName, "")
+            .Str(IntermediateFormat.KeyLabel, "")
+            .Str(IntermediateFormat.KeySourceMod, "ludeon.rimworld")
+            .Str(IntermediateFormat.KeySourceFile, "Guns.xml")
+            .Int(IntermediateFormat.KeyPatchOps, 0)
+            .Int(IntermediateFormat.KeyPatchOpsDefName, 0)
+            .Int(IntermediateFormat.KeyPatchOpsLabel, 0)
+            .ToString());
+        records++;
+
+        w.WriteLine(new JsonLine()
+            .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindXmlNode)
+            .Str(IntermediateFormat.KeyDefType, "ThingDef")
+            .Str(IntermediateFormat.KeyName, "")
+            .Str(IntermediateFormat.KeyParentName, "BaseGun")
+            .Bool(IntermediateFormat.KeyAbstract, false)
+            .Str(IntermediateFormat.KeyDefName, "ChildGun")
+            .Str(IntermediateFormat.KeyLabel, "child gun")
+            .Str(IntermediateFormat.KeySourceMod, "ludeon.rimworld")
+            .Str(IntermediateFormat.KeySourceFile, "Guns.xml")
+            .Int(IntermediateFormat.KeyPatchOps, 0)
+            .Int(IntermediateFormat.KeyPatchOpsDefName, 2)
+            .Int(IntermediateFormat.KeyPatchOpsLabel, 1)
+            .ToString());
+        records++;
+
+        void Written(string nodeKey, bool keyIsName, string[] paths, string[] texts)
+        {
+            w.WriteLine(new JsonLine()
+                .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindXmlWritten)
+                .Str(IntermediateFormat.KeyDefType, "ThingDef")
+                .Str(IntermediateFormat.KeyNodeKey, nodeKey)
+                .Bool(IntermediateFormat.KeyKeyIsName, keyIsName)
+                .Strs(IntermediateFormat.KeyPaths, paths)
+                .Strs(IntermediateFormat.KeyTexts, texts)
+                .ToString());
+            records++;
+        }
+
+        Written("BaseGun", true, ["thingClass", "speed"], ["RimWorld.Bullet", "70"]);
+        Written("ChildGun", false,
+            ["defName", "label", "damage", "costList.Steel", "statBases.Beauty",
+             "descriptionHyperlinks.ThingDef", "things.Widget.chance"],
+            ["ChildGun", "child gun", "12", "75", "-4", "ChildGun", "0.25"]);
+        Written("PatchedGun", false, ["defName", "costList.Steel"], ["PatchedGun", "75"]);
+        Written("TwinGun", false, ["defName", "costList.Steel"], ["TwinGun", "75"]);
+
+        records++;
+        w.WriteLine(new JsonLine()
+            .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindEnd)
+            .Int(IntermediateFormat.KeyRecords, records)
+            .Int(IntermediateFormat.KeyDefs, 4)
             .Int(IntermediateFormat.KeyInjections, 0)
             .Int(IntermediateFormat.KeyXmlNodes, 2)
             .ToString());
@@ -989,6 +1152,7 @@ public static class Fixture
             all.Add(PinnedConfigPath);
         }
         else if (all.Remove(PresenceArg)) { all.Add("--db"); all.Add(PresenceDb); }
+        else if (all.Remove(PresenceTextArg)) { all.Add("--db"); all.Add(PresenceTextDb); }
         else if (!argv.Contains("--db")) { all.Add("--db"); all.Add(Db); }
         if (!all.Contains("--config")) { all.Add("--config"); all.Add(SourcesConfigPath); }
         var code = RimSearcher.Cli.Runner.Run(all, stdout, stderr);
@@ -1003,6 +1167,9 @@ public static class Fixture
     /// 所以走哨兵词 —— 与 <see cref="Pinned"/> 同一手法。
     /// </summary>
     public const string PresenceArg = "--fixture-presence";
+
+    /// <summary>同上,换成 0.6.0 那份(带 XML 行内文本)。</summary>
+    public const string PresenceTextArg = "--fixture-presence-text";
 
     /// <summary>指向一个不存在的配置文件 —— 测试不许读本机 config。</summary>
     public static string NoConfigPath => Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "no-such-config.toml");

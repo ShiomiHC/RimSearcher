@@ -1754,7 +1754,7 @@ public sealed class SnapshotDb : IDisposable
     /// 字典的值是 <c>here</c> 或 <c>parent</c>;不在字典里的路径就是两边都没写。
     /// </summary>
     public Dictionary<string, string>? XmlWrittenMarks(string defType, string defName)
-        => XmlWrittenMarks(defType, defName, out _);
+        => XmlWrittenMarks(defType, defName, out _, out _);
 
     /// <param name="containers">
     /// XML 侧写过的每一条路径的各级前缀。索引路径 join 落空、而它的容器在这里时,
@@ -1762,8 +1762,18 @@ public sealed class SnapshotDb : IDisposable
     /// </param>
     public Dictionary<string, string>? XmlWrittenMarks(string defType, string defName,
                                                        out HashSet<string> containers)
+        => XmlWrittenMarks(defType, defName, out containers, out _);
+
+    /// <param name="texts">
+    /// 每条 XML 叶子路径的行内文本。<c>null</c> = 这份快照没量过(能力位为假),
+    /// 查询侧走候选数那条旧路,不许把缺列当空串去比。
+    /// </param>
+    public Dictionary<string, string>? XmlWrittenMarks(string defType, string defName,
+                                                       out HashSet<string> containers,
+                                                       out Dictionary<string, string>? texts)
     {
         containers = new HashSet<string>(StringComparer.Ordinal);
+        texts = null;
         if (!Meta.IndexesXmlWritten) return null;
 
         var hereKeys = new HashSet<string>(StringComparer.Ordinal);
@@ -1789,6 +1799,9 @@ public sealed class SnapshotDb : IDisposable
 
         var xmlType = xmlNode?.DefType ?? defType;
         var marks = new Dictionary<string, string>(StringComparer.Ordinal);
+        var withText = Meta.IndexesXmlWrittenText;
+        var textsLocal = withText ? new Dictionary<string, string>(StringComparer.Ordinal) : null;
+        texts = textsLocal;
         var containersLocal = containers;   // out 参数进不了局部函数,引用同一个集合
         void Load(IEnumerable<string> keys, string mark)
         {
@@ -1798,13 +1811,19 @@ public sealed class SnapshotDb : IDisposable
                 {
                     ["@k"] = key, ["@t"] = defType, ["@x"] = xmlType,
                 };
+                var cols = withText ? "path, inner_text" : "path";
                 using var rd = Query(
-                    "SELECT path FROM xml_written WHERE node_key = @k " +
+                    $"SELECT {cols} FROM xml_written WHERE node_key = @k " +
                     "AND (def_type = @t COLLATE NOCASE OR def_type = @x COLLATE NOCASE)", p);
                 while (rd.Read())
                 {
                     var path = rd.GetString(0);
-                    if (!marks.ContainsKey(path)) marks[path] = mark;
+                    if (!marks.ContainsKey(path))
+                    {
+                        marks[path] = mark;
+                        if (textsLocal is not null)
+                            textsLocal[path] = rd.IsDBNull(1) ? "" : rd.GetString(1);
+                    }
                     for (var dot = path.IndexOf('.'); dot > 0; dot = path.IndexOf('.', dot + 1))
                         containersLocal.Add(path[..dot]);
                 }

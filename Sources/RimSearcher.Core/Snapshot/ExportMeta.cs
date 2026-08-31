@@ -59,6 +59,14 @@ public sealed record ExportMeta(
     /// </summary>
     public bool IndexesTypeFields => AtLeast(ExporterVersion, 0, 5);
 
+    /// <summary>
+    /// 这份快照记下了每条 xml_written 叶子路径的行内文本吗(导出器 0.6.0 起)。
+    ///
+    /// 老快照上短形式标签底下的候选格多于一个时,「这段文本就是这一格」与
+    /// 「这段文本落在别的格 / 对不上」同形 —— 一律 under,分不开。
+    /// </summary>
+    public bool IndexesXmlWrittenText => AtLeast(ExporterVersion, 0, 6);
+
     private static bool AtLeast(string version, int major, int minor)
     {
         var parts = (version ?? "").Split('.');

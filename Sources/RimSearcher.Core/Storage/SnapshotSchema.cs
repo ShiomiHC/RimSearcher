@@ -18,9 +18,10 @@ public static class SnapshotSchema
     /// 8:加了 economy 三表 + economy_state —— 经济面,以及它**量没量成**,见下。
     ///
     /// 0.5.0 起 xml_nodes 多了 patch_ops_defname / patch_ops_label,并加 xml_written
-    /// 与 type_fields 两张表。不涨这一档:精确相等的 schema 检查会让磁盘上的旧库
-    /// 整份打不开,而缺的那一层由导出器版本上的能力位说话(同 content_fingerprint
-    /// 那条缝)。新导入的库有这些列/表;旧库没有,查询侧能力位为假时不去碰它们。
+    /// 与 type_fields 两张表。0.6.0 起 xml_written 多了 inner_text。都不涨这一档:
+    /// 精确相等的 schema 检查会让磁盘上的旧库整份打不开,而缺的那一层由导出器版本上
+    /// 的能力位说话(同 content_fingerprint 那条缝)。新导入的库有这些列/表;旧库没有,
+    /// 查询侧能力位为假时不去碰它们。
     /// </remarks>
     public const int Version = 8;
 
@@ -153,11 +154,14 @@ public static class SnapshotSchema
 
         -- 每个 XML 节点(含不参与继承的普通 def)实际写出来的字段路径。
         -- patch 之前的原文,用来回答 Replace 还是 Add。
+        -- inner_text:0.6.0 起才有值。叶子的行内文本;Class= 那一行是属性值。
+        -- 旧库没有这一列,查询侧靠能力位决定读不读,不许把缺列当「没写过」。
         CREATE TABLE xml_written (
             def_type    TEXT NOT NULL,
             node_key    TEXT NOT NULL,
             key_is_name INTEGER NOT NULL DEFAULT 0,
-            path        TEXT NOT NULL
+            path        TEXT NOT NULL,
+            inner_text  TEXT
         );
 
         -- 一个 def 类型能有的字段路径全集,与值无关。用来把「全是 null」和「没有这个字段」分开。

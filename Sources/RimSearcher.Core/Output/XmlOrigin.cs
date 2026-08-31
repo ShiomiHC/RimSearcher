@@ -20,9 +20,9 @@ namespace RimSearcher.Output;
 /// (自己写的和祖先写的都算),那个 V 就是标签名。
 ///
 /// 归位之后还得分清标签底下写了什么,否则会给出错的确定答案:短形式只写标签名加一段
-/// 文本,文本落哪一格由该类型的 LoadDataFromXmlCustom 决定,而 xml_written 只记路径不记
-/// 内容 —— 元素里的候选格多于一个时(costList 的 count 与 quality)就是说不准,报 here
-/// 会把 Replace 指向一个从没写过的节点。
+/// 文本,文本落哪一格由该类型的 LoadDataFromXmlCustom 决定。0.5.0 的 xml_written 只记
+/// 路径不记内容,候选多于一个时(costList 的 count 与 quality)就是说不准;0.6.0 起记下
+/// 那段文本,跟候选格的值一比就能分开。报 here 会把 Replace 指向一个从没写过的节点。
 /// </summary>
 public static class XmlOrigin
 {
@@ -61,11 +61,15 @@ public static class XmlOrigin
     /// <summary>
     /// 这一格的 xml 列取值。精确路径优先;否则值回连;再否则看容器前缀是不是还在。
     /// </summary>
+    /// <param name="xmlTexts">
+    /// 每条 XML 叶子路径的行内文本。<c>null</c> = 这份快照没量过,走候选数那条旧路。
+    /// </param>
     public static string Resolve(
         string path,
         IReadOnlyDictionary<string, string> xmlMarks,
         HashSet<string> containers,
-        IReadOnlyDictionary<string, List<ElementCell>> cellsByElement)
+        IReadOnlyDictionary<string, List<ElementCell>> cellsByElement,
+        IReadOnlyDictionary<string, string>? xmlTexts = null)
     {
         if (xmlMarks.TryGetValue(path, out var exact))
             return exact;
@@ -105,10 +109,10 @@ public static class XmlOrigin
                 // 没拼到这一格 —— 确定没写。
                 if (anchorMark is null) return No;
 
-                // 短形式 <Steel>75</Steel> 只写两件事:标签名,和一段文本。文本落哪一格由
-                // 类型的 LoadDataFromXmlCustom 决定,XML 侧只记了路径没记内容,这里读不出来。
-                // 候选只剩一格时没得选(statBases 的 value);剩多格时(costList 的 count 与
-                // quality)哪一格都可能,报 here 就是给了个错的确定答案。
+                // 短形式 <Steel>75</Steel> 只写两件事:标签名,和一段文本。
+                // 候选只剩一格时没得选(statBases 的 value)—— 有没有文本都走这一档。
+                // 剩多格时(costList 的 count 与 quality):0.5.0 没记下文本,报 here 就是
+                // 给了个错的确定答案,退回 under;0.6.0 拿文本跟候选格的值比。
                 var candidates = 0;
                 foreach (var c in cells)
                 {
@@ -117,7 +121,27 @@ public static class XmlOrigin
                     if (xmlMarks.ContainsKey(element + "." + c.Leaf)) continue;
                     if (++candidates > 1) break;
                 }
-                return candidates == 1 ? anchorMark : Under(container);
+                if (xmlTexts is null || candidates <= 1)
+                    return candidates == 1 ? anchorMark : Under(container);
+
+                xmlTexts.TryGetValue(anchor, out var t);
+                var matches = 0;
+                var thisMatches = false;
+                if (t is not null)
+                {
+                    foreach (var c in cells)
+                    {
+                        if (c.Leaf.Length == 0 || c.Value == anchorValue) continue;
+                        if (xmlMarks.ContainsKey(anchor + "." + c.Leaf)) continue;
+                        if (xmlMarks.ContainsKey(element + "." + c.Leaf)) continue;
+                        if (c.Value != t) continue;
+                        matches++;
+                        if (c.Leaf == leaf) thisMatches = true;
+                    }
+                }
+                if (matches == 1) return thisMatches ? anchorMark : No;
+                if (matches == 0) return Under(container);
+                return thisMatches ? Under(container) : No;
             }
         }
 

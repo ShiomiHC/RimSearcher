@@ -33,8 +33,9 @@ namespace RimSearcher.DataMod
         /// 而 <c>find Class X</c> 对 <c>GenStepDef.genStep</c> 回的零与「量过了、没人用」同形。
         /// 0.5.0 起三件「在不在」进索引:XML 实际写出来的字段路径、按 defName/label 定位的
         /// patch 计数、每个 def 类型能有的字段路径全集(含值为 null 的)。
+        /// 0.6.0 起 xml_written 每条叶子带行内文本,短形式标签底下的候选格才能分开。
         /// </summary>
-        public const string ExporterVersion = "0.5.0";
+        public const string ExporterVersion = "0.6.0";
 
         public static ExportLimits Limits = new ExportLimits();
 

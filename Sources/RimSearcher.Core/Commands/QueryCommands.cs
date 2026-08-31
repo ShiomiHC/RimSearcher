@@ -284,9 +284,10 @@ public sealed class GetCommand : Command
             "as written on disk, before any PatchOperation ran, so a node another mod's PatchOperationAdd put " +
             "there still reads as no: 'rimsearcher inherit <defName>' reports how many patch xpaths name this " +
             "def. A fourth value, 'under <container>', means the XML wrote that container but " +
-            "this row still cannot be pinned to a line in it: the entry did not join, or it joined to a tag such " +
-            "as <Steel>75</Steel> whose text belongs to one of several fields and the index does not record " +
-            "which. Neither answer is available there. Older snapshots omit the column and say so.",
+            "this row still cannot be pinned to a line in it: the entry did not join, or it joined to a " +
+            "short-form tag such as <Steel>75</Steel> whose inline text matches none of the remaining fields, " +
+            "or more than one of them — or this snapshot predates recording that text. Neither answer is " +
+            "available there. Older snapshots omit the column and say so.",
         Positionals = [new PositionalSpec { Name = "defName", Help = "The exact def name. 'search' finds it if you only know part of it." }],
         Options =
         [
@@ -671,8 +672,9 @@ public sealed class GetCommand : Command
             // xml 列的取值只从 XmlOrigin 出。值回连要用同一元素的其它格,所以全量取一次
             // 再按元素前缀分组 —— 不按格查库,旧快照根本不走这条路。
             var xmlContainers = new HashSet<string>(StringComparer.Ordinal);
+            Dictionary<string, string>? xmlTexts = null;
             var xmlMarks = ctx.Db.Meta.IndexesXmlWritten
-                ? ctx.Db.XmlWrittenMarks(def.DefType, def.DefName, out xmlContainers)
+                ? ctx.Db.XmlWrittenMarks(def.DefType, def.DefName, out xmlContainers, out xmlTexts)
                 : null;
             var cellsByElement = xmlMarks is null
                 ? null
@@ -695,7 +697,7 @@ public sealed class GetCommand : Command
                     };
                     if (xmlMarks is not null)
                         row[XmlOrigin.Column] = XmlOrigin.Resolve(
-                            f.Path, xmlMarks, xmlContainers, cellsByElement!);
+                            f.Path, xmlMarks, xmlContainers, cellsByElement!, xmlTexts);
                     return (IReadOnlyDictionary<string, object?>)row;
                 }).ToList());
 

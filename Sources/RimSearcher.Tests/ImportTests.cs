@@ -139,6 +139,50 @@ public class ImportTests
         Assert.False(File.Exists(db), "A rejected import left a database behind.");
     }
 
+    /// <summary>
+    /// xmlwritten 的 paths 与 texts 是平行数组。错位之后每一格的文本都指向别的路径,
+    /// 输出仍然像对的 —— 所以不等长必须让这次导入失败,不许静默截断或补空。
+    /// </summary>
+    [Fact]
+    public void xmlwritten的路径与文本不等长时导入失败()
+    {
+        var export = Temp("xwlen" + IntermediateFormat.FileExtension);
+        using (var fs = File.Create(export))
+        using (var gz = new System.IO.Compression.GZipStream(fs, System.IO.Compression.CompressionLevel.Optimal))
+        using (var w = new StreamWriter(gz, new System.Text.UTF8Encoding(false)) { NewLine = "\n" })
+        {
+            w.WriteLine(new JsonLine()
+                .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindMeta)
+                .Int(IntermediateFormat.KeyFormatVersion, IntermediateFormat.FormatVersion)
+                .Str(IntermediateFormat.KeyExporterVersion, "0.6.0")
+                .Str(IntermediateFormat.KeyExportedAtUtc, "2026-01-06T00:00:00.0000000Z")
+                .Str(IntermediateFormat.KeyGameVersion, Fixture.GameVersion)
+                .Str(IntermediateFormat.KeyLanguage, Fixture.Language)
+                .Raw(IntermediateFormat.KeyMods, "[]")
+                .Raw(IntermediateFormat.KeyLimits, "{}")
+                .ToString());
+            w.WriteLine(new JsonLine()
+                .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindXmlWritten)
+                .Str(IntermediateFormat.KeyDefType, "ThingDef")
+                .Str(IntermediateFormat.KeyNodeKey, "Gun")
+                .Bool(IntermediateFormat.KeyKeyIsName, false)
+                .Strs(IntermediateFormat.KeyPaths, ["defName", "costList.Steel"])
+                .Strs(IntermediateFormat.KeyTexts, ["Gun"])
+                .ToString());
+            w.WriteLine(new JsonLine()
+                .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindEnd)
+                .Int(IntermediateFormat.KeyRecords, 3)
+                .ToString());
+        }
+
+        var db = Temp("xwlen.db");
+        var ex = Assert.ThrowsAny<Exception>(() => new SnapshotImporter().Import(export, db));
+        Assert.Contains("2 paths", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("1 texts", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("wrong path", ex.Message, StringComparison.Ordinal);
+        Assert.False(File.Exists(db), "A rejected import left a database behind.");
+    }
+
     // ---- 噪声过滤(唯一产地在 import 侧)----
 
     [Fact]

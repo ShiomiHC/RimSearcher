@@ -173,7 +173,8 @@ public class ExporterTests
             </ThingDef>
             """);
 
-        var paths = XmlFieldPaths.Collect(doc.DocumentElement!, 6, 200);
+        var paths = XmlFieldPaths.Collect(doc.DocumentElement!, 6, 200, out var texts);
+        Assert.Equal(paths.Count, texts.Count);
         Assert.Contains("defName", paths);
         Assert.Contains("projectile.damageAmountBase", paths);
         Assert.DoesNotContain("projectile", paths);
@@ -181,6 +182,36 @@ public class ExporterTests
         Assert.Contains("comps[0].energyMax", paths);
         Assert.Contains("thingCategories[0]", paths);
         Assert.Contains("genStep.Class", paths);
+
+        string TextOf(string path)
+        {
+            var i = paths.IndexOf(path);
+            Assert.True(i >= 0, $"no path {path}");
+            return texts[i];
+        }
+        Assert.Equal("Bullet_Revolver", TextOf("defName"));
+        Assert.Equal("12", TextOf("projectile.damageAmountBase"));
+        Assert.Equal("CompProperties_Shield", TextOf("comps[0].Class"));
+        Assert.Equal("0.5", TextOf("comps[0].energyMax"));
+        Assert.Equal("Foods", TextOf("thingCategories[0]"));
+        Assert.Equal("GenStep_Scatter", TextOf("genStep.Class"));
+        Assert.Equal("", TextOf("genStep"));
+    }
+
+    [Fact]
+    public void XML写成的路径去重取第一次的文本()
+    {
+        var doc = new System.Xml.XmlDocument();
+        doc.LoadXml("""
+            <ThingDef>
+              <label>first</label>
+              <label>second</label>
+            </ThingDef>
+            """);
+        var paths = XmlFieldPaths.Collect(doc.DocumentElement!, 6, 200, out var texts);
+        Assert.Single(paths);
+        Assert.Equal("label", paths[0]);
+        Assert.Equal("first", texts[0]);
     }
 
     private class TypeWalkShape

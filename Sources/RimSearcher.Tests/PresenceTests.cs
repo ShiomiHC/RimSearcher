@@ -110,8 +110,8 @@ public class PresenceTests
     }
 
     /// <summary>
-    /// 短形式 <c>&lt;Steel&gt;75&lt;/Steel&gt;</c> 只写标签名加一段文本。文本落哪一格由类型的
-    /// LoadDataFromXmlCustom 决定,xml_written 只记路径不记内容 —— 候选多于一个时说不准。
+    /// 0.5.0 路径:短形式 <c>&lt;Steel&gt;75&lt;/Steel&gt;</c> 只写标签名加一段文本。
+    /// xml_written 只记路径不记内容 —— 候选多于一个时说不准。
     /// **这里不许印 here。** here 的出路是 PatchOperationReplace,而 costList[0].quality
     /// 这个节点 XML 里根本没有,Replace 会打空;那比「说不准」糟,因为它是个确定的错答案。
     /// </summary>
@@ -256,5 +256,80 @@ public class PresenceTests
         Assert.Equal(0L, (long)cmd.ExecuteScalar()!);
         cmd.CommandText = "SELECT COUNT(*) FROM type_fields";
         Assert.Equal(0L, (long)cmd.ExecuteScalar()!);
+    }
+
+    // ---- 0.6.0:记下文本之后,短形式多候选格能分开 ----
+
+    private static string XmlOfJson(string json, string path)
+    {
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var fields = doc.RootElement.GetProperty("defs")[0].GetProperty("fields");
+        foreach (var row in fields.EnumerateArray())
+            if (row.GetProperty("path").GetString() == path)
+                return row.GetProperty(XmlOrigin.Column).GetString()!;
+        Assert.Fail($"no field {path}");
+        return "";
+    }
+
+    [Fact]
+    public void 记下文本后短形式恰好一格匹配就是here其余是no()
+    {
+        var (json, _, _) = Fixture.Run("get", "ChildGun", "--defaults", "--json",
+                                       "--db", Fixture.PresenceTextDb);
+        // 键格、显式子路径、长形式没拼到、候选只剩一格:一个字不动。
+        Assert.Equal(XmlOrigin.Here, XmlOfJson(json, "costList[0].thingDef"));
+        Assert.Equal(XmlOrigin.Here, XmlOfJson(json, "statBases[0].stat"));
+        Assert.Equal(XmlOrigin.Here, XmlOfJson(json, "statBases[0].value"));
+        Assert.Equal(XmlOrigin.Here, XmlOfJson(json, "things[0].chance"));
+        Assert.Equal(XmlOrigin.Here, XmlOfJson(json, "things[0].def"));
+        Assert.Equal(XmlOrigin.No, XmlOfJson(json, "things[0].hp"));
+        Assert.Equal(XmlOrigin.Parent, XmlOfJson(json, "speed"));
+        Assert.Equal(XmlOrigin.Under("descriptionHyperlinks"),
+                     XmlOfJson(json, "descriptionHyperlinks[0].def"));
+        // 文本 75 对上 count,quality 确定没写。
+        Assert.Equal(XmlOrigin.Here, XmlOfJson(json, "costList[0].count"));
+        Assert.Equal(XmlOrigin.No, XmlOfJson(json, "costList[0].quality"));
+    }
+
+    [Fact]
+    public void 记下文本后零匹配退回under不许判no()
+    {
+        var (json, _, _) = Fixture.Run("get", "PatchedGun", "--defaults", "--json",
+                                       "--db", Fixture.PresenceTextDb);
+        Assert.Equal(XmlOrigin.Here, XmlOfJson(json, "costList[0].thingDef"));
+        Assert.Equal(XmlOrigin.Under("costList"), XmlOfJson(json, "costList[0].count"));
+        Assert.Equal(XmlOrigin.Under("costList"), XmlOfJson(json, "costList[0].quality"));
+    }
+
+    [Fact]
+    public void 记下文本后多于一格匹配都退回under()
+    {
+        var (json, _, _) = Fixture.Run("get", "TwinGun", "--defaults", "--json",
+                                       "--db", Fixture.PresenceTextDb);
+        Assert.Equal(XmlOrigin.Here, XmlOfJson(json, "costList[0].thingDef"));
+        Assert.Equal(XmlOrigin.Under("costList"), XmlOfJson(json, "costList[0].count"));
+        Assert.Equal(XmlOrigin.Under("costList"), XmlOfJson(json, "costList[0].quality"));
+    }
+
+    [Fact]
+    public void 零五快照导入后文本列是空的()
+    {
+        using var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Fixture.PresenceDb};Pooling=False");
+        raw.Open();
+        using var cmd = raw.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM xml_written WHERE inner_text IS NOT NULL";
+        Assert.Equal(0L, (long)cmd.ExecuteScalar()!);
+    }
+
+    [Fact]
+    public void 零六快照导入后文本列与路径等长()
+    {
+        using var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Fixture.PresenceTextDb};Pooling=False");
+        raw.Open();
+        using var cmd = raw.CreateCommand();
+        cmd.CommandText = "SELECT path, inner_text FROM xml_written WHERE node_key = 'ChildGun' AND path = 'costList.Steel'";
+        using var rd = cmd.ExecuteReader();
+        Assert.True(rd.Read());
+        Assert.Equal("75", rd.GetString(1));
     }
 }

@@ -88,6 +88,13 @@ public class OutputSnapshotTests
         { "get-xml-rejoined",      ["get", "ChildGun", "--defaults", "--path-contains", "costList",
                                     "--path-contains", "things", "--path-contains", "Hyperlinks",
                                     Fixture.PresenceArg] },
+        // 0.6.0:记下文本之后,costList 的 count 是 here、quality 是 no。0.5.0 那两份
+        // 基线一个字节都不许动 —— 它们走的是没文本的旧路。
+        { "get-xml-text",          ["get", "ChildGun", "--defaults", Fixture.PresenceTextArg] },
+        { "get-xml-text-zero",     ["get", "PatchedGun", "--defaults", "--path-contains", "costList",
+                                    Fixture.PresenceTextArg] },
+        { "get-xml-text-tie",      ["get", "TwinGun", "--defaults", "--path-contains", "costList",
+                                    Fixture.PresenceTextArg] },
         // 代码默认值的三个落点:字段名与提问一字不差、值却是声明默认值 ——
         // 点了名就必须印出来,并且当场说清它是哪一种。
         { "get-code-default-path", ["get", "Bullet_Revolver", "--path-contains", "burstCount"] },

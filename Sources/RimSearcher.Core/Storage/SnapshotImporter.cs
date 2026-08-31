@@ -84,8 +84,8 @@ public sealed class SnapshotImporter
                 VALUES ($t,$n,$pn,$a,$dn,$l,$sm,$sf,$po,$pod,$pol)
                 """);
             using var insertXw = Prepare(db, """
-                INSERT INTO xml_written (def_type, node_key, key_is_name, path)
-                VALUES ($t,$k,$kn,$p)
+                INSERT INTO xml_written (def_type, node_key, key_is_name, path, inner_text)
+                VALUES ($t,$k,$kn,$p,$x)
                 """);
             using var insertTf = Prepare(db, """
                 INSERT INTO type_fields (def_type, path)
@@ -233,17 +233,35 @@ public sealed class SnapshotImporter
                     var defTypeW = Str(root, IntermediateFormat.KeyDefType) ?? "";
                     var keyIsName = root.TryGetProperty(IntermediateFormat.KeyKeyIsName, out var knEl)
                                     && knEl.GetBoolean() ? 1 : 0;
-                    if (root.TryGetProperty(IntermediateFormat.KeyPaths, out var wpaths)
-                        && wpaths.ValueKind == JsonValueKind.Array)
+                    var hasPaths = root.TryGetProperty(IntermediateFormat.KeyPaths, out var wpaths)
+                                   && wpaths.ValueKind == JsonValueKind.Array;
+                    var hasTextsProp = root.TryGetProperty(IntermediateFormat.KeyTexts, out var wtexts);
+                    if (hasTextsProp)
                     {
-                        foreach (var p in wpaths.EnumerateArray())
+                        if (!hasPaths || wtexts.ValueKind != JsonValueKind.Array)
+                            throw new SnapshotFormatError(
+                                $"An xmlwritten record for {defTypeW} '{nodeKey}' has a texts array that is not " +
+                                "parallel to paths. Re-run the export.");
+                        if (wtexts.GetArrayLength() != wpaths.GetArrayLength())
+                            throw new SnapshotFormatError(
+                                $"An xmlwritten record for {defTypeW} '{nodeKey}' has {wpaths.GetArrayLength()} " +
+                                $"paths and {wtexts.GetArrayLength()} texts. Those arrays are parallel, and a " +
+                                "length mismatch would silently attach every text to the wrong path. Re-run the export.");
+                    }
+                    if (hasPaths)
+                    {
+                        var n = wpaths.GetArrayLength();
+                        for (var i = 0; i < n; i++)
                         {
-                            var path = p.GetString();
+                            var path = wpaths[i].GetString();
                             if (string.IsNullOrEmpty(path)) continue;
                             Bind(insertXw, "$t", defTypeW);
                             Bind(insertXw, "$k", nodeKey);
                             Bind(insertXw, "$kn", keyIsName);
                             Bind(insertXw, "$p", path);
+                            Bind(insertXw, "$x", hasTextsProp
+                                ? (wtexts[i].ValueKind == JsonValueKind.String ? wtexts[i].GetString() ?? "" : "")
+                                : null);
                             insertXw.ExecuteNonQuery();
                         }
                     }

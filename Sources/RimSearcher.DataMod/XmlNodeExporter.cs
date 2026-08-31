@@ -20,7 +20,8 @@ namespace RimSearcher.DataMod
     ///
     /// 这一层是**打补丁之前**的 XML。每个 Name= 节点随行带出有多少条 PatchOperation 的
     /// xpath 点了它的名(<c>patch_ops</c>),以及按 defName / label 定位的两条计数。
-    /// 全部 def 节点(含不参与继承的普通 def)另发 xml_written,收录实际写出来的字段路径。
+    /// 全部 def 节点(含不参与继承的普通 def)另发 xml_written,收录实际写出来的字段路径
+    /// 与叶子行内文本。
     /// </summary>
     public static class XmlNodeExporter
     {
@@ -60,14 +61,17 @@ namespace RimSearcher.DataMod
                         else if (name.Length > 0) { nodeKey = name; keyIsName = true; }
                         if (nodeKey != null)
                         {
+                            List<string> texts;
                             var written = XmlFieldPaths.Collect(el, DefExporter.Limits.MaxFieldDepth,
-                                                                DefExporter.Limits.MaxCollectionItems);
+                                                                DefExporter.Limits.MaxCollectionItems,
+                                                                out texts);
                             yield return new JsonLine()
                                 .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindXmlWritten)
                                 .Str(IntermediateFormat.KeyDefType, el.Name)
                                 .Str(IntermediateFormat.KeyNodeKey, nodeKey)
                                 .Bool(IntermediateFormat.KeyKeyIsName, keyIsName)
                                 .Strs(IntermediateFormat.KeyPaths, written)
+                                .Strs(IntermediateFormat.KeyTexts, texts)
                                 .ToString();
                         }
 
