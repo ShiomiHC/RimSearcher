@@ -24,6 +24,7 @@ Global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the com
 |---|---|
 | What does this def actually contain? | `rimsearcher get <defName>` |
 | Which C# class does this def actually run? | `rimsearcher get <defName>` — the `*Class` rows |
+| Does the vanilla XML write this line — Replace or Add? | `rimsearcher get <defName> --defaults` — the `xml` column (`here` / `parent` / `no` / `under <container>`). Only on snapshots from exporter 0.5.0; older ones omit the column and say so. `under <container>` means the XML wrote that container under a path shape this index cannot join, so neither answer is available for that row. |
 | What is this called? I only know part. | `rimsearcher search <words>` |
 | Which defs use this class / value? | `rimsearcher where <field> <value>` |
 | Which defs pick this class with `Class="…"`? | `rimsearcher where Class <ClassName>` |
