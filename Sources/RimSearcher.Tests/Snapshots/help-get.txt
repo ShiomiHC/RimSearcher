@@ -9,6 +9,8 @@ Field paths are the merged, post-patch shape the game actually had in memory whe
 
 The 'source' line is the bare file name the game reported for that def — no directory, because the game does not keep one. It names the file inside that mod's Defs folder ('mod' above says which mod); it is not a path, and nothing here reads the file system to confirm the file is still there. Defs the game builds in code carry a placeholder there instead.
 
+When present, the 'xml' column says whether this def's own XML wrote the path (here), only an ancestor did (parent), or neither (no). That is the fact PatchOperationReplace vs Add needs. Older snapshots omit the column and say so.
+
 Arguments:
   <defName>  The exact def name. 'search' finds it if you only know part of it.
 
@@ -19,7 +21,7 @@ Options:
                               Also accepted: --filter, --grep, --field-contains, --path-filter, --field, --field-path, --only.
       --type <DefType>        Restrict results to one def type, for example ThingDef or HediffDef.
                               Also accepted: --def-type, --kind, --category.
-      --defaults              Also list fields whose value is the one a fresh instance of the declaring type already carries. A def whose XML writes that same value and a def that never mentions the field look the same here, so the snapshot cannot tell whether anything set those at all; they are left out by default because they are the ones most often read as something an author chose. How many were left out is always printed, and --path-contains shows a named field either way.
+      --defaults              Also list fields whose value is the one a fresh instance of the declaring type already carries. They are left out by default because they are the ones most often read as something an author chose. The 'xml' column on those rows says whether this def's own XML wrote the path (here), only an ancestor did (parent), or neither (no) — a yes with xml=here is an explicit write of the default. Older snapshots have no xml column, and there a def whose XML writes that same value and a def that never mentions the field look the same. How many were left out is always printed, and --path-contains shows a named field either way.
                               Also accepted: --with-defaults, --all-fields.
 
 Global options (every command takes these, written after the command):
@@ -31,7 +33,7 @@ Global options (every command takes these, written after the command):
       --config <path>    Use this config file instead of the default one.
 
 --json keys (besides 'notes'):
-  defs  one object per def carrying the name — each with 'def' (identity), 'fields' (path/value rows) and, when there are any, 'translations'. It stays an array even for a single def, because a name can belong to several def types at once.
+  defs  one object per def carrying the name — each with 'def' (identity), 'fields' (path/value/code_default rows, plus 'xml' when the snapshot recorded which XML lines were written) and, when there are any, 'translations'. It stays an array even for a single def, because a name can belong to several def types at once.
 
 Examples:
   rimsearcher get Apparel_ShieldBelt

@@ -11,6 +11,7 @@ class          Verse.ThingDef
 mod            ludeon.rimworld
 source         Buildings_Special.xml
 inherits_from  BaseProjectile (see 'rimsearcher inherit Firefoam')
+xml            not indexed (exporter 0.2.0)
 8 fields.
 
 Same in every row, not repeated below: code_default=no.
@@ -37,6 +38,7 @@ def_type     StatDef
 class        Verse.StatDef
 mod          ludeon.rimworld
 source       Stats_Basics.xml
+xml          not indexed (exporter 0.2.0)
 0 fields.
 The game also prices this thing. Its market value, cost to make and work amount are computed, not stored, so no field above holds them — 'rimsearcher economy Firefoam' is the only road to those numbers.
 

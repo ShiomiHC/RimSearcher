@@ -11,6 +11,7 @@ label        shield belt
 class        Verse.ThingDef
 mod          ludeon.rimworld
 source       Apparel_Belts.xml
+xml          not indexed (exporter 0.2.0)
 
 Same in every row, not repeated below: code_default=no.
 path                                value

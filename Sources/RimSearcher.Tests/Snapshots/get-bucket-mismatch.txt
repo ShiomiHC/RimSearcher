@@ -10,6 +10,7 @@ class          Verse.TestVariantDef
 mod            test.mod
 source         Variants.xml
 inherits_from  BaseProjectile (see 'rimsearcher inherit VariantOne')
+xml            not indexed (exporter 0.2.0)
 
 path         value             code_default
 workerClass  Verse.TestWorker  no

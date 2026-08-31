@@ -41,7 +41,8 @@ exit 0
         "description": "",
         "class": "Verse.ThingDef",
         "mod": "ludeon.rimworld",
-        "source": "Apparel_Belts.xml"
+        "source": "Apparel_Belts.xml",
+        "xml": "not indexed (exporter 0.2.0)"
       },
       "fields": [
         {

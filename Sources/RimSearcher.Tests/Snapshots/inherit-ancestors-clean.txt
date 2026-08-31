@@ -8,7 +8,7 @@ inherits_from  BaseProjectile
 mod            ludeon.rimworld
 source         Buildings_Special.xml
 patch_ops      n/a
-'Firefoam' declares no Name=, so patch_ops is not measured for it: only xpaths naming a node with @Name= are counted, and a patch that reaches this def by defName leaves no trace here.
+'Firefoam' declares no Name=, so patch_ops is not measured for it: only xpaths naming a node with @Name= are counted, and a patch that reaches this def by defName leaves no trace here. This snapshot (exporter 0.2.0) only counted @Name=; a newer export also counts xpaths by defName= and by label=.
 1 ancestor.
 
 name            def_type  abstract  mod              source

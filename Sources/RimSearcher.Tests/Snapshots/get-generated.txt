@@ -9,6 +9,7 @@ label        muffalo meat
 class        Verse.ThingDef
 mod          ludeon.rimworld
 source       ImpliedDefs (created in code, not from an XML file)
+xml          not indexed (exporter 0.2.0)
 
 Same in every row, not repeated below: code_default=no.
 path                    value

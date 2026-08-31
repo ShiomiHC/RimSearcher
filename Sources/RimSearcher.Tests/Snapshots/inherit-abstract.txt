@@ -8,7 +8,7 @@ inherits_from  BaseProjectile
 mod            ludeon.rimworld
 source         Projectiles_Guns.xml
 patch_ops      2
-'BaseBullet' is targeted by name by 2 patch operations in this snapshot. This layer is the XML before patches, so what the game finally used differs from it by whatever those operations did.
+'BaseBullet' is targeted by name by 2 patch operations in this snapshot. This layer is the XML before patches, so what the game finally used differs from it by whatever those operations did. This snapshot (exporter 0.2.0) only counted @Name=; a newer export also counts xpaths by defName= and by label=.
 1 ancestor.
 
 name            def_type  abstract  mod              source

@@ -9,6 +9,7 @@ label        shield belt
 class        Verse.ThingDef
 mod          ludeon.rimworld
 source       Apparel_Belts.xml
+xml          not indexed (exporter 0.2.0)
 
 path                                value                code_default
 comps[0].compClass                  RimWorld.CompShield  yes

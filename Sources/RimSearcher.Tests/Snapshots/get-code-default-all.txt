@@ -11,6 +11,7 @@ class          Verse.ThingDef
 mod            ludeon.rimworld
 source         Projectiles_Guns.xml
 inherits_from  BaseBullet (see 'rimsearcher inherit Bullet_Revolver')
+xml            not indexed (exporter 0.2.0)
 
 path                         value                code_default
 soundImpactDefault           BulletImpact_Ground  no
