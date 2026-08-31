@@ -80,6 +80,10 @@ public class OutputSnapshotTests
         { "get-path-filter-truncated", ["get", "Apparel_ShieldBelt", "--path-contains", "comps", "--limit", "1"] },
         { "get-path-no-match",     ["get", "Apparel_ShieldBelt", "--path-contains", "zzzz"] },
         { "get-truncated-export",  ["get", "Bullet_Revolver"] },
+        // xml 列的四个取值一次摆齐:here / parent / no / under。主 fixture 是 0.2.0,
+        // 那一列在它上面根本不出现,于是这一列的**真实排版**此前没有任何字节基线 ——
+        // 新层的闸全是 JSON 断言,列宽、表头、与 code_default 的相邻关系都没人钉。
+        { "get-xml-written",       ["get", "ChildGun", "--defaults", Fixture.PresenceArg] },
         // 代码默认值的三个落点:字段名与提问一字不差、值却是声明默认值 ——
         // 点了名就必须印出来,并且当场说清它是哪一种。
         { "get-code-default-path", ["get", "Bullet_Revolver", "--path-contains", "burstCount"] },

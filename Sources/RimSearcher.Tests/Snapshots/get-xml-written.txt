@@ -1,0 +1,22 @@
+$ rimsearcher get ChildGun --defaults --fixture-presence
+exit 0
+--- stdout ---
+5 fields.
+
+def_name       ChildGun
+def_type       ThingDef
+label          child gun
+class          Verse.ThingDef
+mod            ludeon.rimworld
+source         Guns.xml
+inherits_from  BaseGun (see 'rimsearcher inherit ChildGun')
+
+path                  value            code_default  xml
+thingClass            RimWorld.Bullet  no            parent
+damage                12               no            here
+speed                 70               no            parent
+costList[0].thingDef  Steel            no            under costList
+burstCount            1                yes           no
+No value above with 'code_default'=no is one that most of the 2 ThingDefs in this snapshot also carry. Rows marked yes were not compared: a yes is not evidence that nothing wrote the value — a def whose XML writes that same value and a def that never mentions the field both show yes here.
+The game also prices things like this — market value, cost to make, work amount — and those are computed rather than stored, so no field above would hold them either way. This snapshot never measured them, so it cannot say whether this def is one of the priced ones: 'rimsearcher economy ChildGun' says why and what to re-export.
+--- stderr ---

@@ -970,6 +970,7 @@ public static class Fixture
             all.Add("--config");
             all.Add(PinnedConfigPath);
         }
+        else if (all.Remove(PresenceArg)) { all.Add("--db"); all.Add(PresenceDb); }
         else if (!argv.Contains("--db")) { all.Add("--db"); all.Add(Db); }
         if (!all.Contains("--config")) { all.Add("--config"); all.Add(SourcesConfigPath); }
         var code = RimSearcher.Cli.Runner.Run(all, stdout, stderr);
@@ -978,6 +979,12 @@ public static class Fixture
 
     /// <summary>写进 argv 表示「这次走 pinned 那条路」。见 <see cref="Run"/>。</summary>
     public const string Pinned = "--fixture-pinned";
+
+    /// <summary>
+    /// 同上,换成 0.5.0 那份夹具。<c>--db</c> 是绝对路径、含机器名,不能进基线,
+    /// 所以走哨兵词 —— 与 <see cref="Pinned"/> 同一手法。
+    /// </summary>
+    public const string PresenceArg = "--fixture-presence";
 
     /// <summary>指向一个不存在的配置文件 —— 测试不许读本机 config。</summary>
     public static string NoConfigPath => Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "no-such-config.toml");
