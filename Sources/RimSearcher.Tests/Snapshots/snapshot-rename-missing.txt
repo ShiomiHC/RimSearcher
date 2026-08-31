@@ -1,0 +1,5 @@
+$ rimsearcher snapshot rename nosuchname newname
+exit 2
+--- stdout ---
+--- stderr ---
+Nothing named 'nosuchname' is in any of the three places this command moves: no 'nosuchname.db' in the snapshot directory, no 'nosuchname.rml' next to the config file, no 'nosuchname.rsx.jsonl.gz' in the export directory.

@@ -34,14 +34,19 @@ public static class ModListIo
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "..", "LocalLow", "Ludeon Studios", "RimWorld by Ludeon Studios", "ModLists"));
 
-    public static IReadOnlyList<string> Directories(RimConfig config)
-    {
-        var dirs = new List<string> { DefaultDirectory() };
-        var local = System.IO.Path.Combine(
+    /// <summary>
+    /// 配置文件旁边的 <c>modlists/</c> —— <c>~/.rimsearcher/modlists</c> 这一处。
+    /// 游戏自己的 ModLists 目录是另一处,改快照名不碰那边。
+    /// </summary>
+    public static string LocalDirectory(RimConfig config)
+        => System.IO.Path.Combine(
             System.IO.Path.GetDirectoryName(config.Path) is { Length: > 0 } d ? d : ".", "modlists");
-        dirs.Add(local);
-        return dirs;
-    }
+
+    public static string LocalPath(RimConfig config, string name)
+        => System.IO.Path.Combine(LocalDirectory(config), name + Extension);
+
+    public static IReadOnlyList<string> Directories(RimConfig config)
+        => [DefaultDirectory(), LocalDirectory(config)];
 
     public static IReadOnlyList<ModListEntry> Enumerate(RimConfig config)
     {

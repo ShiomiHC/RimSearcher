@@ -1,0 +1,7 @@
+$ rimsearcher snapshot rename
+exit 2
+--- stdout ---
+--- stderr ---
+Missing required argument <old>: The current name. Any of the three files is enough.
+Missing required argument <new>: The name to move those files to. Must not already be in use.
+Run 'rimsearcher snapshot rename --help' to see what this command accepts.

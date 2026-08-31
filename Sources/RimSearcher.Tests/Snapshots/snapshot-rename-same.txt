@@ -1,0 +1,5 @@
+$ rimsearcher snapshot rename fixture fixture
+exit 2
+--- stdout ---
+--- stderr ---
+Those names are the same. A rename needs two different names.

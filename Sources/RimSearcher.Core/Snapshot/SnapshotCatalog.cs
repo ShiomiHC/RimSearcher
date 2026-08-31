@@ -95,6 +95,14 @@ public sealed record EnvironmentReport(EnvironmentMatch Match, IReadOnlyList<str
 /// </summary>
 public static class SnapshotCatalog
 {
+    /// <summary>按名字拼快照库路径 —— 文件名即别名,<c>export</c> / <c>snapshot import</c> 写的也是这一处。</summary>
+    public static string DatabasePath(RimConfig config, string name)
+        => Path.Combine(config.ResolveSnapshotDir(), name + ".db");
+
+    /// <summary>按名字拼导出文件路径 —— 扩展名只有 <see cref="Contract.IntermediateFormat.FileExtension"/> 这一处。</summary>
+    public static string ExportPath(RimConfig config, string name)
+        => Path.GetFullPath(Path.Combine(config.ResolveExportDir(), name + Contract.IntermediateFormat.FileExtension));
+
     public static IReadOnlyList<SnapshotEntry> Enumerate(RimConfig config) => Enumerate(config, out _);
 
     /// <summary>

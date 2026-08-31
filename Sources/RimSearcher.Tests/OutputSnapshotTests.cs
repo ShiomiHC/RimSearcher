@@ -294,6 +294,15 @@ public class OutputSnapshotTests
         { "help-where",            ["where", "--help"] },
         { "help-code-search",      ["code-search", "--help"] },
         { "help-sources-sync",     ["sources", "sync", "--help"] },
+        // snapshot rename 的契约全在 Remarks 与这几条报错上:三处缺席要说「在哪找过」,
+        // 撞名要说清是哪一处,旧名不存在要说「三处都没有」而不是只报库找不到。
+        { "help-snapshot-rename",  ["snapshot", "rename", "--help"] },
+        { "snapshot-rename-missing", ["snapshot", "rename", "nosuchname", "newname"] },
+        { "snapshot-rename-collision-db", ["snapshot", "rename", "fixture", "other"] },
+        { "snapshot-rename-collision-rml", ["snapshot", "rename", "fixture", "fixture-current"] },
+        { "snapshot-rename-same",  ["snapshot", "rename", "fixture", "fixture"] },
+        { "snapshot-rename-no-args", ["snapshot", "rename"] },
+        { "snapshot-rename-one-arg", ["snapshot", "rename", "fixture"] },
         // 没配 decompiled_dir 时说的那句话。反编译树是**唯一**不在快照里的数据源,
         // 这条路必然被走到,输出必须说清该往哪补一行配置。
         // 这一条要的是**没有**配置,所以自带 --config 覆盖掉 Fixture.Run 默认追加的那份。
@@ -522,6 +531,30 @@ public class OutputSnapshotTests
                                .Where(n => n is not null && !claimed.Contains(n))
                                .ToList();
         Assert.True(orphans.Count == 0, $"Baselines with no case: {string.Join(", ", orphans)}.");
+    }
+
+    /// <summary>
+    /// 插值漏了 $ 时 C# 把 {plan.To} 当普通字符原样印出来,编译不报错;而断言常常只钉住
+    /// 句子的前半截,漏的又总在后半截,于是闸绿着把花括号印给了用户。基线是逐字节的,
+    /// 残留一定落在里面 —— 但只覆盖有基线的那些路径,进不了基线的输出这条闸看不见。
+    /// </summary>
+    [Fact]
+    public void 基线里没有没插上值的占位符()
+    {
+        if (!Directory.Exists(SnapshotDir)) return;
+        var files = Directory.GetFiles(SnapshotDir, "*.txt");
+        Assert.True(files.Length > 0, $"一个基线都没读到,这条闸等于没跑:{SnapshotDir}");
+
+        // C# 插值表达式的形状:{标识符.成员}。JSON 的 {} 与 {"key" 不在此列。
+        var leak = new System.Text.RegularExpressions.Regex(
+            @"\{[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+\}");
+        var offenders = new List<string>();
+        foreach (var f in files)
+            foreach (System.Text.RegularExpressions.Match m in leak.Matches(File.ReadAllText(f)))
+                offenders.Add($"{Path.GetFileName(f)} → {m.Value}");
+
+        Assert.True(offenders.Count == 0,
+            "基线里有没插上值的占位符,说明那句话漏了 $:\n  " + string.Join("\n  ", offenders));
     }
 
     /// <summary>

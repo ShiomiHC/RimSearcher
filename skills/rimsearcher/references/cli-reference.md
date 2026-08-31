@@ -29,6 +29,7 @@ Answers questions about RimWorld's defs and C# from a snapshot of what the game 
 | `snapshot diff` | Compare the resolved defs and fields of two named snapshots. |
 | `snapshot import` | Build a queryable snapshot database out of a file the in-game exporter wrote. |
 | `snapshot list` | List the snapshots this machine knows about. |
+| `snapshot rename` | Rename a snapshot by moving the files that share its name. |
 | `snapshot status` | Explain in full which snapshot is in use and how it compares with the game as installed right now. |
 | `snapshot truncated` | List the defs whose fields the exporter stopped short on. |
 | `snapshot use` | Pin a snapshot so later commands use it without being told each time. |
@@ -758,6 +759,37 @@ Examples:
 
 ```
 rimsearcher snapshot list
+```
+
+## `snapshot rename`
+
+Rename a snapshot by moving the files that share its name.
+
+```
+rimsearcher snapshot rename <old> <new>
+```
+
+A snapshot name is three files that share it: the database in the snapshot directory ('{name}.db'), the mod list next to the config file ('{name}.rml'), and the export file in the export directory ('{name}.rsx.jsonl.gz'). This command moves whichever of those exist and says which were absent — an incomplete set is a normal state, not an error. It never overwrites: if the new name is already used at any of the three places, the command refuses and names the file that is in the way. Previous generations of the database ('{name}.prev', '{name}.prev2' and so on) move with it when the database itself is being renamed.
+
+If 'snapshot use' has pinned the old name, the pin follows, and the output says so. --db and --snapshot do not pick which files to rename; the two names do.
+
+A failure after some files have moved is rolled back; if the rollback itself fails, the output names every file that was left in the new place.
+
+| Argument | Meaning |
+|---|---|
+| `<old>` | The current name. Any of the three files is enough. |
+| `<new>` | The name to move those files to. Must not already be in use. |
+
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `renamed` | an object: from, to, snapshot, modlist, export, pin. snapshot / modlist / export each say whether that file was moved or that it was not present in the place this command looks — absence is never a missing key. pin says whether 'snapshot use' followed. |
+
+Examples:
+
+```
+rimsearcher snapshot rename vanilla baseline
 ```
 
 ## `snapshot status`

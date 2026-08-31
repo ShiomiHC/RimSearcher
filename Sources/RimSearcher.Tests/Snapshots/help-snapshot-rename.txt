@@ -1,0 +1,31 @@
+$ rimsearcher snapshot rename --help
+exit 0
+--- stdout ---
+Usage: rimsearcher snapshot rename <old> <new> [options]
+
+Rename a snapshot by moving the files that share its name.
+
+A snapshot name is three files that share it: the database in the snapshot directory ('{name}.db'), the mod list next to the config file ('{name}.rml'), and the export file in the export directory ('{name}.rsx.jsonl.gz'). This command moves whichever of those exist and says which were absent — an incomplete set is a normal state, not an error. It never overwrites: if the new name is already used at any of the three places, the command refuses and names the file that is in the way. Previous generations of the database ('{name}.prev', '{name}.prev2' and so on) move with it when the database itself is being renamed.
+
+If 'snapshot use' has pinned the old name, the pin follows, and the output says so. --db and --snapshot do not pick which files to rename; the two names do.
+
+A failure after some files have moved is rolled back; if the rollback itself fails, the output names every file that was left in the new place.
+
+Arguments:
+  <old>  The current name. Any of the three files is enough.
+  <new>  The name to move those files to. Must not already be in use.
+
+Global options (every command takes these, written after the command):
+      --snapshot <name>  Query this named snapshot instead of the one that would be picked automatically. An explicit choice always wins over auto-detection.
+                         Also accepted: --snap, --env.
+      --db <path>        Query the snapshot database at this path directly, bypassing the registry.
+                         Also accepted: --database, --snapshot-path.
+      --json             Emit machine-readable JSON. Anything the text output would have said in prose moves into a 'notes' array, so nothing is lost. The command's own table key is always present — an empty array when nothing matched, never a missing key. A note that reports a count also carries 'shown' and 'total' as numbers, so the figures never have to be parsed back out of its text; 'total' is null when only a lower bound is known, and both keys are absent on notes that are not counts.
+      --config <path>    Use this config file instead of the default one.
+
+--json keys (besides 'notes'):
+  renamed  an object: from, to, snapshot, modlist, export, pin. snapshot / modlist / export each say whether that file was moved or that it was not present in the place this command looks — absence is never a missing key. pin says whether 'snapshot use' followed.
+
+Examples:
+  rimsearcher snapshot rename vanilla baseline
+--- stderr ---

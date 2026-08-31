@@ -16,6 +16,15 @@ ordinary shape of a Steam workshop update. Ordinary queries name up to three of 
 the enabled list in a `mod_list` table; `--json` exposes both as row arrays, empty when
 nothing differs.
 
+**Renaming a snapshot.** The name is three files that share it: `snapshots/<name>.db`,
+`modlists/<name>.rml` next to the config file, and `exports/<name>.rsx.jsonl.gz`.
+`rimsearcher snapshot rename <old> <new>` moves whichever of those exist and says
+which it looked for and did not find — an incomplete set is a normal state, not an
+error. A name already used at any of the three places is refused and nothing is
+moved. If `snapshot use` has pinned the old name, the pin follows and the output
+says so. Previous database generations (`<name>.prev`, `<name>.prev2` and so on) move
+with the database. This command does not delete.
+
 **What `snapshot diff` compares.** Two already-imported snapshots, by name from
 `snapshot list`. It does not take `--scope`: the `mod` column is the declaring packageId,
 not who changed the value, and filtering it to the mods `snapshot status` named as changed
@@ -96,6 +105,7 @@ data sits under a key that depends on the command. `<command> --help` lists each
 | `read` | `source`, or `declarations` with `--outline` — never both |
 | `snapshot status` | `snapshot` (object), plus `xml` and `mod_list` — one row per packageId; both arrays are present and empty when nothing differs |
 | `snapshot diff` | `defs_added`, `defs_removed`, `fields` — all three present and empty when nothing differs |
+| `snapshot rename` | `renamed` (object): from, to, snapshot, modlist, export, pin. snapshot / modlist / export are present even when that file was not there |
 
 Code output is rows too, so nothing is parsed back out of `path:line:text`:
 `code-search` rows are `{file, line, is_match, group, text}`, `read` rows are
