@@ -1,0 +1,6 @@
+$ rimsearcher where thingDef Bloomstone --type MoltenRecipeDef
+exit 2
+--- stdout ---
+--- stderr ---
+Unknown option '--type'. It is accepted by 'search', 'get', 'values', and 2 more, but not by 'where'.
+Run 'rimsearcher where --help' to see what this command accepts.

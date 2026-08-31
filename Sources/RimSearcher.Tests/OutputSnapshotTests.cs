@@ -228,6 +228,48 @@ public class OutputSnapshotTests
         // 值给了两遍且不一样。位置参数与 --value 说的是同一件事,挑一个跑下去的话
         // 另一个被丢了在输出里看不出来。
         { "usage-value-twice",     ["where", "compClass", "RimWorld.CompShield", "--value", "Other"] },
+        // ── def 类型打头 ──────────────────────────────────────────────────────
+        // `list <defType>` 与 `fields <defType>` 把类型放在位置上,而 get / values /
+        // search / where 把类型放在 --type 上。消费侧会把前者外推到后者,写成
+        // `<命令> <SomethingDef> <真正的参数>` —— 2026-08-31 在 9282 次真实调用里量到
+        // get 122 / values 57 / where 82 次,占各自调用量的 2%–7.6%。
+        //
+        // 三条命令的落点不同,所以基线一档一份:
+        { "deftype-lead-get",      ["get", "ThingDef", "Apparel_ShieldBelt"] },
+        { "deftype-lead-values",   ["values", "ThingDef", "thingClass"] },
+        { "deftype-lead-search",   ["search", "ThingDef", "shield"] },
+        // 首位长得像类型、而快照里没有这个类型。静态判据(以 Def 结尾)认不出这件事,
+        // 于是这一份钉的是「认错之后说的话仍然诚实」—— 真实语料里 Mincho_ThingDef
+        // 这种以 Def 结尾的 def **名**是存在的。
+        { "deftype-lead-get-unknown-type", ["get", "NoSuchThingDef", "Apparel_ShieldBelt"] },
+        // where 的两档差别是这次改动的整个理由,必须摆在一起看。
+        //
+        // 超额那档撞墙,自证:
+        { "deftype-lead-where-over", ["where", "ThingDef", "costList[0].thingDef", "Bloomstone"] },
+        // 不超额那档**不撞墙**。where 只有两个位置参数,`where ThingDef Bloomstone` 正好填满,
+        // 而路径按后缀匹配 —— `ThingDef` 命中了真实存在的 `costList[0].thingDef`。于是问
+        // 「哪些 ThingDef 用了 Bloomstone」的人拿到一张语法正常、路径存在、看着像答案的表,
+        // 答的却是「哪些 def 的某个 thingDef 字段等于 Bloomstone」。54/82 落在这一档。
+        { "deftype-lead-where-silent", ["where", "ThingDef", "Bloomstone"] },
+        // 同一档的空结果面:后缀匹配够不着时给的是一个**可信的零**,而零正是「没有」的判据。
+        { "deftype-lead-where-silent-empty", ["where", "HediffDef", "Anesthetic"] },
+        // 反向:小写同名的合法查询。`thingDef` 是真字段,路径匹配 NOCASE,两者从入参上
+        // 区分不开 —— 所以 where 这一档只许出声,不许重解释。这份基线钉的是「没被抢走」。
+        { "where-path-named-like-type", ["where", "thingDef", "Bloomstone"] },
+        // inherit 走的是 XML 节点层,没有类型这个过滤面。只说破,不新增能力。
+        { "deftype-lead-inherit",  ["inherit", "ThingDef", "Bullet_Revolver"] },
+        // ── where --type ──────────────────────────────────────────────────────
+        // 全套查询命令里只有 where 没有类型面,而它恰好是误形最贵的那一条。
+        { "where-type",            ["where", "thingDef", "Bloomstone", "--type", "AlloyPartDef"] },
+        // 被 --type 筛空。上一份不带 --type 时有结果,这一份只差一个类型 ——
+        // 「过滤掉了」说成「没有」是这套代码最贵的那种错,--scope 那侧早有一条分流接着,
+        // 类型这侧必须有对称的一条。
+        { "where-type-filtered-empty", ["where", "thingDef", "Bloomstone", "--type", "MoltenRecipeDef"] },
+        // 快照里根本没有这个类型 —— 与「有这个类型但没这个值」是两件事。
+        { "where-type-unknown",    ["where", "thingDef", "Bloomstone", "--type", "NoSuchDef"] },
+        // 不给路径那条分支出的是 paths 表,不是 matches。一个标着 Narrows 的选项
+        // 在一半问法上不生效,比它不存在更贵。
+        { "where-type-value-only", ["where", "--value", "Bloomstone", "--type", "AlloyPartDef"] },
         // 夹具恒追加 --db/--config,而总览那条分支要求 argv 恰好一个词。
         { "help-overview",         ["--help"] },
         // `--help <command>` 不接,但那个词不许被默默扔掉 —— 说清这一屏是什么,

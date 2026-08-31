@@ -1,0 +1,6 @@
+$ rimsearcher inherit ThingDef Bullet_Revolver
+exit 2
+--- stdout ---
+--- stderr ---
+Unexpected argument(s) 'Bullet_Revolver'. inherit takes 1 positional argument(s): <name>.
+Run 'rimsearcher inherit --help' to see what this command accepts.

@@ -1,0 +1,6 @@
+$ rimsearcher values ThingDef thingClass
+exit 2
+--- stdout ---
+--- stderr ---
+Unexpected argument(s) 'thingClass'. values takes 1 positional argument(s): <fieldPath>.
+Run 'rimsearcher values --help' to see what this command accepts.

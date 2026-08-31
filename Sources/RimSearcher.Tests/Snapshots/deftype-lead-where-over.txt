@@ -1,0 +1,6 @@
+$ rimsearcher where ThingDef costList[0].thingDef Bloomstone
+exit 2
+--- stdout ---
+--- stderr ---
+Unexpected argument(s) 'Bloomstone'. where takes 2 positional argument(s): <fieldPath> <value>.
+Run 'rimsearcher where --help' to see what this command accepts.

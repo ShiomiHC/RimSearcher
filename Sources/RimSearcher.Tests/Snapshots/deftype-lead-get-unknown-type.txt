@@ -1,0 +1,6 @@
+$ rimsearcher get NoSuchThingDef Apparel_ShieldBelt
+exit 2
+--- stdout ---
+--- stderr ---
+Unexpected argument(s) 'Apparel_ShieldBelt'. get takes 1 positional argument(s): <defName>.
+Run 'rimsearcher get --help' to see what this command accepts.

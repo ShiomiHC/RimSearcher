@@ -1,0 +1,6 @@
+$ rimsearcher search ThingDef shield
+exit 2
+--- stdout ---
+--- stderr ---
+Unexpected argument(s) 'shield'. search takes 1 positional argument(s): <query>.
+Run 'rimsearcher search --help' to see what this command accepts.
