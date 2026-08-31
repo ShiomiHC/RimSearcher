@@ -2630,12 +2630,14 @@ public class GrammarTests
     /// `--outline` 自己的末尾说破盲区,而 `--member` 落空时曾推荐它说「lists **every**
     /// declaration」—— 同一个能力,自述处诚实、被推荐处夸大,而读者是**先**读推荐那句、
     /// 带着更强的预期去看清单的。
-    /// 实证:`CostListCalculator.cs` 的 `operator ==` 两边都列不出来,而 "every" 把那份
-    /// 清单变成了「文件里没有」的证据。
+    /// 实证:`RegionProcessor.cs` 整文件就是一份 `delegate` 声明,轮廓 0 条,而 "every"
+    /// 把那份清单变成了「文件里没有」的证据。
     ///
-    /// 自述侧钉的是**盲区在场**,不是某一句措辞:那句话改过一次(盲测显示光说「找不到不等于
-    /// 没有」是 0/10,补上「运算符就是它认不出的一类」才到 5/10),逐字锚会把当初的措辞连同
-    /// 它的无效一起焊死。所以钉两样 —— 扫描方式,和那个能去核对的具体类别。
+    /// 自述侧钉的是**盲区在场**,不是某一句措辞:那句话改过两次(盲测显示光说「找不到不等于
+    /// 没有」是 0/10,补上一个能去核对的具体类别才到 5/10;运算符修进来之后那个类别换成
+    /// 委托类型)。逐字锚会把当初的措辞连同它的无效一起焊死,所以钉两样 —— 扫描方式,
+    /// 和那个能去核对的具体类别。锚点从 Operators 换到 Delegate types:钉的不是那五个
+    /// 字母,是「输出里点名了一个读者能去核对、且这套扫描确实认不出的类别」。
     ///
     /// 这条闸比对**两个独立产地**,不复述任何一边的理由 —— 与磁盘层那条同型。
     /// </summary>
@@ -2647,7 +2649,7 @@ public class GrammarTests
 
         // 自述侧:盲区说破,这是被比对的那个基准。
         Assert.Contains("not by parsing C#", outline, StringComparison.Ordinal);
-        Assert.Contains("Operators", outline, StringComparison.Ordinal);
+        Assert.Contains("Delegate types", outline, StringComparison.Ordinal);
 
         // 推荐侧:不许出现全称量词。逐字钉 every 太窄 —— 钉的是「这个能力被说成完整的」。
         foreach (var absolute in new[] { "every declaration", "all declarations", "the complete list" })

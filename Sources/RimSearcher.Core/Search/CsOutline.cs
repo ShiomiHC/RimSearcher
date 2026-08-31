@@ -299,6 +299,12 @@ public static class CsOutline
             return new CsDecl("namespace", header["namespace ".Length..].Trim().TrimEnd(';'), ownerName, 0, 0)
                 { OwnerTypeParams = ownerParams };
 
+        // 运算符必须在「找顶层 '('」之前认: `operator <=` 的 '<' 会被那次扫描当成
+        // 泛型尖括号,参数表因此找不到,整条声明就没了。
+        var op = TryOperator(header);
+        if (op is not null)
+            return new CsDecl("operator", op, ownerName, 0, 0) { OwnerTypeParams = ownerParams };
+
         // 方法一族:看第一个顶层 '('。lambda、强制转换与调用都在语句里,而这里只在
         // 「直接住在类型里」的位置被调用,所以不必再防它们。
         var paren = TopLevelParen(header);
@@ -454,7 +460,109 @@ public static class CsOutline
         return -1;
     }
 
-    /// <summary>'(' 往左跳过泛型形参,取那个标识符。<c>operator +</c> 这类连同关键字一起取。</summary>
+    /// <summary>
+    /// 声明头里有独立的 <c>operator</c> 一词,这就是运算符。
+    /// 名字带上 <c>implicit</c>/<c>explicit</c>,两种转换运算符才能分开。
+    /// </summary>
+    private static string? TryOperator(string header)
+    {
+        var at = LastWordBefore(header, "operator", header.Length);
+        if (at < 0) return null;
+
+        var start = at;
+        var left = at - 1;
+        while (left >= 0 && header[left] == ' ') left--;
+        if (left >= 0)
+        {
+            var wordEnd = left + 1;
+            var wordStart = wordEnd;
+            while (wordStart > 0 && IsIdentChar(header[wordStart - 1])) wordStart--;
+            var word = header[wordStart..wordEnd];
+            if (word is "implicit" or "explicit") start = wordStart;
+        }
+
+        var i = at + "operator".Length;
+        while (i < header.Length && header[i] == ' ') i++;
+
+        var isChecked = false;
+        if (header.AsSpan(i).StartsWith("checked") &&
+            (i + 7 >= header.Length || !IsIdentChar(header[i + 7])))
+        {
+            isChecked = true;
+            i += 7;
+            while (i < header.Length && header[i] == ' ') i++;
+        }
+
+        if (i >= header.Length) return null;
+
+        var tokenStart = i;
+        if (header[i] == '(')
+        {
+            var close = MatchParen(header, i);
+            if (close < 0) return null;
+            i = close + 1;
+        }
+        else if (IsOpSymbol(header[i]))
+        {
+            while (i < header.Length && IsOpSymbol(header[i])) i++;
+        }
+        else if (IsIdentChar(header[i]))
+        {
+            while (i < header.Length && IsIdentChar(header[i])) i++;
+            while (i < header.Length && header[i] == ' ') i++;
+            if (i < header.Length && header[i] == '<')
+            {
+                var angle = 0;
+                for (; i < header.Length; i++)
+                {
+                    if (header[i] == '<') angle++;
+                    else if (header[i] == '>' && --angle == 0) { i++; break; }
+                }
+            }
+            while (i < header.Length && header[i] is '?' or '[' or ']') i++;
+        }
+        else return null;
+
+        var token = header[tokenStart..i].Trim();
+        if (token.Length == 0) return null;
+
+        while (i < header.Length && header[i] == ' ') i++;
+        if (i >= header.Length || header[i] != '(') return null;
+
+        var sb = new StringBuilder();
+        if (start < at)
+        {
+            sb.Append(header[start..at].Trim());
+            sb.Append(' ');
+        }
+        sb.Append("operator");
+        if (isChecked) sb.Append(" checked");
+        sb.Append(' ');
+        sb.Append(token);
+        return sb.ToString();
+    }
+
+    private static bool IsOpSymbol(char c)
+        => c is '+' or '-' or '!' or '~' or '*' or '/' or '%' or '&' or '|' or '^' or '<' or '>' or '=';
+
+    private static int LastWordBefore(string header, string word, int end)
+    {
+        var found = -1;
+        var from = 0;
+        while (from < end)
+        {
+            var at = header.IndexOf(word, from, end - from, StringComparison.Ordinal);
+            if (at < 0) break;
+            var after = at + word.Length;
+            var okBefore = at == 0 || !IsIdentChar(header[at - 1]);
+            var okAfter = after >= end || !IsIdentChar(header[after]);
+            if (okBefore && okAfter) found = at;
+            from = at + 1;
+        }
+        return found;
+    }
+
+    /// <summary>'(' 往左跳过泛型形参,取那个标识符。</summary>
     private static string? IdentifierBefore(string header, int paren)
     {
         var i = paren - 1;

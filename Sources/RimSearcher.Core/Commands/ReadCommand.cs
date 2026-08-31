@@ -410,20 +410,17 @@ public sealed class ReadCommand : Command
     /// 压到一行:路径刚在上面印过,不再复述;「去 code-search」这条下一步写在 SKILL.md 里。
     ///
     /// **「找不到不等于没有」这半句单说是无效的,得说出漏的是哪一类。** 盲测三臂各 10 次,
-    /// 陷阱是 ThinkResult.cs —— 它真有 operator == / !=(65/70 行),而轮廓 16 条声明里
-    /// 一个没有;问「这个 struct 能不能直接写 a == b」(正解:能):
-    ///   原句 0/10 · 补「扫描认不出的声明与不存在的声明在这里同形」0/10 ·
-    ///   再加一句「运算符就是它认不出的一类」5/10(p=0.002)
-    /// 抽象地点名那两个同形状态不够 —— 读者得拿到一个**能去核对的具体名字**。
-    ///
-    /// 举运算符是核过的:AnyEnum / ByteRange / IntVec3 源码里 2/2/12 个 operator,轮廓里
-    /// 全是 0。event 不用提,它在(kind 标成 field,按名字找得到);显式接口实现也在,
+    /// 抽象地点名同形 0/10,点名一个读者能去核对的具体类别 5/10。
+    /// 举委托类型是核过的:RegionProcessor / PanCompletionCallback /
+    /// DragSliderCallback 源码各是一份 namespace 下的 <c>delegate</c> 声明,轮廓 0 条。
+    /// 嵌套委托(DefInjectionUtility 里那份)会以 method 身份出现、按名字找得到,不当这个例子。
+    /// event 也不用提,它在(kind 标成 field,按名字找得到);显式接口实现也在,
     /// 只是名字被剥了前缀。
     /// </summary>
     private static void SayBraceMatched(CommandContext ctx)
         => ctx.Report.Notice(NoticeKind.Boundary,
             "Found by matching braces, not by parsing C#: a declaration this scan does not recognise " +
-            "and one that is not in the file look the same here — both are simply absent. Operators " +
+            "and one that is not in the file look the same here — both are simply absent. Delegate types " +
             "are one kind it does not recognise.",
             footnote: true);
 
@@ -459,8 +456,8 @@ public sealed class ReadCommand : Command
             Suggestion.Say(close) +
             // 三件事换措辞时都不许丢:①「不是没有」这个否定无条件在场;②真出路是 code-search,
             // 排在前 —— --outline 与 --member 同一把花括号尺子,对这次落空没有诊断力;
-            // ③ --outline 的能力不许写得比它自己的自述强(曾写 "every",而 CostListCalculator.cs
-            // 的 `operator ==` 两边都列不出来,于是那份清单被当成了「文件里没有」的证据)。
+            // ③ --outline 的能力不许写得比它自己的自述强(曾写 "every",而 RegionProcessor.cs
+            // 整文件一份 `delegate` 声明,轮廓 0 条,于是那份清单被当成了「文件里没有」的证据)。
             // 为什么能压这么短:这三条的完整版常驻 SKILL.md,落空路径不必再讲一遍。
             " The match runs on braces, not C# parsing, so this is not evidence the file lacks it — " +
             "'rimsearcher code-search' searches the text itself; '--outline' lists what the same " +

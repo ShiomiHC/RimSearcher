@@ -194,6 +194,32 @@ public class OutlineAuditTests
             """,
             ["this", "T"]
         },
+        {
+            "比较运算符 —— 左括号左边是 == 不是标识符,原先整条丢掉",
+            """
+            internal struct T
+            {
+            	public static bool operator ==(T a, T b)
+            	{
+            		return true;
+            	}
+            }
+            """,
+            ["operator ==", "T"]
+        },
+        {
+            "转换运算符 —— 左括号左边是目标类型名,原先被收成普通方法",
+            """
+            internal struct T
+            {
+            	public static implicit operator Foo(T a)
+            	{
+            		return default;
+            	}
+            }
+            """,
+            ["implicit operator Foo", "T"]
+        },
     };
 
     [Theory]
@@ -271,6 +297,122 @@ public class OutlineAuditTests
             """);
 
         Assert.Equal("Holder<A, B>", decls.Single(d => d.Kind == "class").Display);
+    }
+
+    /// <summary>
+    /// 运算符是声明,kind 是 operator,名字能让人认出是哪一个。
+    ///
+    /// 比较/算术那种左括号左边不是标识符,原先整条丢掉;转换运算符左边是目标类型名,
+    /// 原先被收成普通方法 —— 若目标类型恰好就是宿主名,还会被判成 constructor。
+    /// 两种都比「少认一个」更坏:一个是沉默的缺席,一个是看起来完全正常、实际不存在的成员。
+    /// </summary>
+    [Fact]
+    public void 运算符声明记成operator且名字能认出是哪一个()
+    {
+        var decls = Scan("""
+            internal struct Host
+            {
+            	public static bool operator ==(Host a, Host b)
+            	{
+            		return true;
+            	}
+
+            	public static bool operator !=(Host a, Host b)
+            	{
+            		return false;
+            	}
+
+            	public static Host operator +(Host a, Host b)
+            	{
+            		return a;
+            	}
+
+            	public static bool operator <=(Host a, Host b)
+            	{
+            		return true;
+            	}
+
+            	public static bool operator true(Host a)
+            	{
+            		return true;
+            	}
+
+            	public static bool operator false(Host a)
+            	{
+            		return false;
+            	}
+
+            	public static Host operator checked +(Host a, Host b)
+            	{
+            		return a;
+            	}
+
+            	public static implicit operator Foo(Host a)
+            	{
+            		return default;
+            	}
+
+            	public static explicit operator Foo(Host a)
+            	{
+            		return default;
+            	}
+
+            	public static implicit operator Host(int n)
+            	{
+            		return default;
+            	}
+
+            	public static bool operator ==(Host a, Host b) => true;
+            }
+            """);
+
+        var ops = decls.Where(d => d.Kind == "operator").Select(d => d.Name).ToArray();
+        Assert.Equal(
+        [
+            "operator ==",
+            "operator !=",
+            "operator +",
+            "operator <=",
+            "operator true",
+            "operator false",
+            "operator checked +",
+            "implicit operator Foo",
+            "explicit operator Foo",
+            "implicit operator Host",
+            "operator ==",
+        ], ops);
+
+        // 转换目标恰好是宿主名时不许落成 constructor;目标是别的名字时不许落成 method。
+        Assert.DoesNotContain(decls, d => d.Kind == "constructor");
+        Assert.DoesNotContain(decls, d => d.Kind == "method");
+    }
+
+    /// <summary>
+    /// 命名空间下的委托类型进不了轮廓。嵌套委托会以 method 身份出现、按名字找得到,
+    /// 所以当「认不出的一类」举的是这一档。
+    ///
+    /// 实证形状对齐真实树:RegionProcessor.cs / PanCompletionCallback.cs 整文件就是一份
+    /// namespace 下的 delegate 声明。
+    /// </summary>
+    [Fact]
+    public void 命名空间下的委托类型进不了轮廓()
+    {
+        var fileLevel = Scan("""
+            namespace Verse
+            {
+            	public delegate bool RegionProcessor(Region reg);
+            }
+            """);
+        Assert.Empty(fileLevel);
+
+        var nested = Scan("""
+            internal class T
+            {
+            	public delegate void Nested(int n);
+            }
+            """);
+        Assert.Contains(nested, d => d.Name == "Nested");
+        Assert.DoesNotContain(nested, d => d.Kind == "delegate");
     }
 
     /// <summary>

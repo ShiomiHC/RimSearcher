@@ -2161,8 +2161,8 @@ internal static class DefTypeMiss
         return $"'{typed}' is a type in the decompiled source all the same — " +
                $"{NameList.Render(hits, Limits.MaxSuggestions)}. Only a def type gets a def database, so this " +
                "command has nothing of its own to read for it, while the source does: " +
-               // 不许写 "every":--outline 匹配的是花括号,CostListCalculator.cs 的
-               // `operator ==` 两边都列不出来。口径与 ReadCommand.SayNoDeclaration 同。
+               // 不许写 "every":--outline 匹配的是花括号,RegionProcessor.cs 整文件一份
+               // `delegate` 声明,轮廓 0 条。口径与 ReadCommand.SayNoDeclaration 同。
                $"'rimsearcher read {(hits.Count > 1 ? hits[0] : typed + ".cs")} --outline' lists what brace " +
                "matching finds there, each with its line range.";
     }

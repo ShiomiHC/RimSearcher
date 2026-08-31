@@ -8,5 +8,5 @@ kind    name         in           lines  at
 method  Both         Constrained  7      7-13
 class   Constrained               10     5-14
 
-Found by matching braces, not by parsing C#: a declaration this scan does not recognise and one that is not in the file look the same here — both are simply absent. Operators are one kind it does not recognise.
+Found by matching braces, not by parsing C#: a declaration this scan does not recognise and one that is not in the file look the same here — both are simply absent. Delegate types are one kind it does not recognise.
 --- stderr ---
