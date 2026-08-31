@@ -220,6 +220,28 @@ public class OutlineAuditTests
             """,
             ["implicit operator Foo", "T"]
         },
+        {
+            "类型内部的委托 —— 左括号左边是委托名,原先被收成普通方法",
+            """
+            internal class T
+            {
+            	public delegate void Nested(string s);
+            }
+            """,
+            ["Nested", "T"]
+        },
+        {
+            "析构函数 —— 名字与宿主同名,原先被收成构造函数",
+            """
+            internal class T
+            {
+            	~T()
+            	{
+            	}
+            }
+            """,
+            ["~T", "T"]
+        },
     };
 
     [Theory]
@@ -388,14 +410,14 @@ public class OutlineAuditTests
     }
 
     /// <summary>
-    /// 命名空间下的委托类型进不了轮廓。嵌套委托会以 method 身份出现、按名字找得到,
-    /// 所以当「认不出的一类」举的是这一档。
+    /// 命名空间下的委托类型进不了轮廓,而类型内部的那一档在场、kind 是 delegate。
+    /// 「认不出的一类」举的是前者,限定语守的就是这里的两档之差。
     ///
     /// 实证形状对齐真实树:RegionProcessor.cs / PanCompletionCallback.cs 整文件就是一份
     /// namespace 下的 delegate 声明。
     /// </summary>
     [Fact]
-    public void 命名空间下的委托类型进不了轮廓()
+    public void 命名空间下的委托类型进不了轮廓而嵌套委托记成delegate()
     {
         var fileLevel = Scan("""
             namespace Verse
@@ -409,10 +431,42 @@ public class OutlineAuditTests
             internal class T
             {
             	public delegate void Nested(int n);
+
+            	internal void Real(int n)
+            	{
+            	}
             }
             """);
-        Assert.Contains(nested, d => d.Name == "Nested");
-        Assert.DoesNotContain(nested, d => d.Kind == "delegate");
+        // 委托与普通方法必须分开:两者都是「名字 + 参数表」,标成同一个 kind 时,
+        // 一份轮廓能让人得出「这个类有个叫 Nested 的方法可以调」。
+        Assert.Equal("delegate", nested.Single(d => d.Name == "Nested").Kind);
+        Assert.Equal("method", nested.Single(d => d.Name == "Real").Kind);
+    }
+
+    /// <summary>
+    /// 析构函数不是构造函数。两者名字同形(都是宿主名),标成 constructor 时轮廓里就多出
+    /// 一个「第二个无参构造」—— 行号是对的,整行是假的。
+    /// 名字带上 <c>~</c>,与运算符同理:按源码形状写,自己就与构造函数分得开。
+    /// </summary>
+    [Fact]
+    public void 析构函数记成destructor且与构造函数分得开()
+    {
+        var decls = Scan("""
+            internal class Holder
+            {
+            	internal Holder()
+            	{
+            	}
+
+            	~Holder()
+            	{
+            	}
+            }
+            """);
+
+        Assert.Equal("constructor", decls.Single(d => d.Name == "Holder" && d.Kind != "class").Kind);
+        Assert.Equal("destructor", decls.Single(d => d.Name == "~Holder").Kind);
+        Assert.Equal("Holder.~Holder", decls.Single(d => d.Name == "~Holder").Qualified);
     }
 
     /// <summary>

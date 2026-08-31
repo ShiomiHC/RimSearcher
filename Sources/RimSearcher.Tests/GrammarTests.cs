@@ -2650,7 +2650,7 @@ public class GrammarTests
         // 自述侧:盲区说破,这是被比对的那个基准。
         Assert.Contains("not by parsing C#", outline, StringComparison.Ordinal);
         Assert.Contains("delegate", outline, StringComparison.Ordinal);
-        // 限定语一起钉:嵌套委托是错标成 method、在场的,不带限定就把两档说成一档。
+        // 限定语一起钉:嵌套委托以 delegate 身份在场,不带限定就把两档说成一档。
         Assert.Contains("directly in a namespace", outline, StringComparison.Ordinal);
 
         // 推荐侧:不许出现全称量词。逐字钉 every 太窄 —— 钉的是「这个能力被说成完整的」。

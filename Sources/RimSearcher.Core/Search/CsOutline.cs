@@ -281,6 +281,30 @@ public static class CsOutline
         // 必须在找 TypeKeywords 之前切。
         header = StripConstraints(header);
 
+        // 析构函数与委托:两者的关键位置都在修饰符右边第一格,而落到下面「找参数表再往左取
+        // 标识符」那条路上都会得到一个**身份错误**的名字 —— `~Holder()` 与构造函数逐字同形,
+        // 嵌套 delegate 与普通方法逐字同形。缺席看得出来,这两种看不出来。
+        var head = SkipModifiers(header);
+
+        if (head.StartsWith('~'))
+        {
+            var dtor = head[1..].TrimStart();
+            var len = 0;
+            while (len < dtor.Length && IsIdentChar(dtor[len])) len++;
+            if (len > 0)
+                return new CsDecl("destructor", "~" + dtor[..len], ownerName, 0, 0)
+                    { OwnerTypeParams = ownerParams };
+        }
+
+        // 只认修饰符右边第一个词。匿名方法 `Func<int> f = delegate(int x)` 的 delegate
+        // 永远在等号右边,这样就不必分辨它。
+        if (head.StartsWith("delegate ", StringComparison.Ordinal))
+        {
+            var dp = TopLevelParen(head);
+            if (dp > 0 && IdentifierBefore(head, dp) is { } dname)
+                return new CsDecl("delegate", dname, ownerName, 0, 0) { OwnerTypeParams = ownerParams };
+        }
+
         // 类型。关键字必须后接一个标识符,于是 `where T : class` 这种约束文本不会命中
         // (它后面是 `,` 或行尾)。取第一处,因为 `class Foo : IEnumerable<Bar>` 里
         // 后面的都不是本体。
@@ -345,6 +369,18 @@ public static class CsOutline
             taken.Add(word);
         }
         return string.Join(' ', taken);
+    }
+
+    /// <summary>跳过开头那串修饰符,余下的第一个词就是这段声明的身份词。</summary>
+    private static string SkipModifiers(string header)
+    {
+        var i = 0;
+        while (true)
+        {
+            var end = header.IndexOf(' ', i);
+            if (end < 0 || !ModifierWords.Contains(header[i..end])) return header[i..];
+            i = end + 1;
+        }
     }
 
     private static readonly HashSet<string> ModifierWords = new(StringComparer.Ordinal)

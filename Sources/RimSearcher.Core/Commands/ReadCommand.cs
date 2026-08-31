@@ -414,7 +414,7 @@ public sealed class ReadCommand : Command
     /// 举委托类型是核过的:RegionProcessor / PanCompletionCallback /
     /// DragSliderCallback 源码各是一份 namespace 下的 <c>delegate</c> 声明,轮廓 0 条。
     /// **限定语「directly in a namespace」是承重的**:嵌套委托(DefInjectionUtility 里那份)
-    /// 会以 method 身份出现、按名字找得到 —— 对它说「认不出」是假话。不带限定的
+    /// 以 delegate 身份在场、按名字找得到 —— 对它说「认不出」是假话。不带限定的
     /// 「delegate types」把两档说成一档,与它替换掉的「operators」当年同型
     /// (转换运算符那时也是错标成 method/constructor,不是缺席)。
     /// event 也不用提,它在(kind 标成 field,按名字找得到);显式接口实现也在,
