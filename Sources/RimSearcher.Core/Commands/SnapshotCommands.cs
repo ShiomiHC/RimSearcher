@@ -480,8 +480,7 @@ public sealed class SnapshotRenameCommand : Command
 
         if (pinUpdated)
             ctx.Report.Notice(NoticeKind.SnapshotChoice,
-                $"The pinned snapshot now follows as '{plan.To}'. Later commands that used '{plan.From}' " +
-                "because of 'snapshot use' will use '{plan.To}'.");
+                $"Commands that used '{plan.From}' because of 'snapshot use' now use '{plan.To}'.");
 
         return 0;
     }

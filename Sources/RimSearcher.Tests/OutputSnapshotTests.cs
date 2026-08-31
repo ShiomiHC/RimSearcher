@@ -523,6 +523,30 @@ public class OutputSnapshotTests
     }
 
     /// <summary>
+    /// 插值漏了 $ 时 C# 把 {plan.To} 当普通字符原样印出来,编译不报错;而断言常常只钉住
+    /// 句子的前半截,漏的又总在后半截,于是闸绿着把花括号印给了用户。基线是逐字节的,
+    /// 残留一定落在里面 —— 但只覆盖有基线的那些路径,进不了基线的输出这条闸看不见。
+    /// </summary>
+    [Fact]
+    public void 基线里没有没插上值的占位符()
+    {
+        if (!Directory.Exists(SnapshotDir)) return;
+        var files = Directory.GetFiles(SnapshotDir, "*.txt");
+        Assert.True(files.Length > 0, $"一个基线都没读到,这条闸等于没跑:{SnapshotDir}");
+
+        // C# 插值表达式的形状:{标识符.成员}。JSON 的 {} 与 {"key" 不在此列。
+        var leak = new System.Text.RegularExpressions.Regex(
+            @"\{[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+\}");
+        var offenders = new List<string>();
+        foreach (var f in files)
+            foreach (System.Text.RegularExpressions.Match m in leak.Matches(File.ReadAllText(f)))
+                offenders.Add($"{Path.GetFileName(f)} → {m.Value}");
+
+        Assert.True(offenders.Count == 0,
+            "基线里有没插上值的占位符,说明那句话漏了 $:\n  " + string.Join("\n  ", offenders));
+    }
+
+    /// <summary>
     /// 「keyed 这一层整个是空的」与「这个 key 不在里面」是两件事。空层只可能来自一份缺了
     /// 这一节的快照,所以这句话必须说**快照**,不许说 key。
     ///

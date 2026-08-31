@@ -90,7 +90,10 @@ public class SnapshotRenameTests
         var (stdout, _, code) = Run(dir, "snapshot", "rename", "vanilla", "baseline");
         Assert.Equal(0, code);
         Assert.Contains("pin       followed", stdout, StringComparison.Ordinal);
-        Assert.Contains("The pinned snapshot now follows as 'baseline'", stdout, StringComparison.Ordinal);
+        // 整句钉死,不是钉前半句 —— 原来只钉到「follows as 'baseline'」为止,
+        // 而漏掉的 $ 在后半句,于是闸绿着把字面量 {plan.To} 印给了用户。
+        Assert.Contains("Commands that used 'vanilla' because of 'snapshot use' now use 'baseline'.",
+                        stdout, StringComparison.Ordinal);
 
         var state = File.ReadAllText(Path.Combine(dir, "state.toml"));
         Assert.Contains("active_snapshot = \"baseline\"", state, StringComparison.Ordinal);
