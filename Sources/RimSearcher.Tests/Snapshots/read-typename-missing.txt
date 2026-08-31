@@ -1,0 +1,5 @@
+$ rimsearcher read RimWorld.NoSuchType
+exit 1
+--- stdout ---
+No file named 'RimWorld.NoSuchType' is under the decompiled root. 'rimsearcher code-search' finds which file a symbol lives in.
+--- stderr ---

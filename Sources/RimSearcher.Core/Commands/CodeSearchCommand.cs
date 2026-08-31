@@ -89,8 +89,9 @@ public sealed class CodeSearchCommand : Command
                 Name = "context",
                 Short = 'C',
                 Aliases = ["context-lines", "around"],
-                Placeholder = "<n>",
-                Help = "Show this many lines above and below each match. Windows that overlap or touch are " +
+                Placeholder = "<n|a-b|a+n>",
+                Help = "Show lines around each match. A number N is N above and N below; '0-20' is 0 above " +
+                       "and 20 below, '10+4' is 10 above and 4 below. Windows that overlap or touch are " +
                        "merged, so no line is printed twice.",
                 Default = "0",
             },
@@ -128,6 +129,7 @@ public sealed class CodeSearchCommand : Command
         [
             "rimsearcher code-search \"class \\w+ : ThingComp\"",
             "rimsearcher code-search \"Notify_\\w+\\(\" --context 2",
+            "rimsearcher code-search \"PostSpawnSetup\\(\" --context 0+20",
         ],
         JsonKeys =
         [
@@ -167,7 +169,8 @@ public sealed class CodeSearchCommand : Command
 
         var sourceName = ctx.Args.Value("source");
         var glob = ctx.Args.Value("file-glob") ?? "*.cs";
-        var contextLines = ctx.Args.Int("context", 0);
+        var contextSpec = ctx.Args.Value("context");
+        var (before, after) = ParseContext(contextSpec, out var contextRewritten);
         var limit = ctx.Limit();
         var maxPerFile = PositiveOrAll(ctx, "max-per-file", Limits.CodeSearchMatchesPerFile);
 
@@ -252,7 +255,7 @@ public sealed class CodeSearchCommand : Command
 
                 if (hitsHere > 0) filesWithMatches++;
                 if (hitsHere > toPrint.Count && toPrint.Count >= maxPerFile) perFileCapped++;
-                if (toPrint.Count > 0) Emit(lines, rows, rel, text, toPrint, contextLines, hitsHere);
+                if (toPrint.Count > 0) Emit(lines, rows, rel, text, toPrint, before, after, hitsHere);
             }
 
             if (readHere == 0) unreached.Add((tree, treeFiles.Count));
@@ -319,6 +322,7 @@ public sealed class CodeSearchCommand : Command
             var treeTally = treesRead < treesTotal
                 ? Tally.Of(treesRead, treesTotal) : Tally.Complete(treesTotal);
             ctx.Report.Notice(found.IsTruncated || printed < totalMatches ? NoticeKind.Truncation : NoticeKind.Count,
+                ContextEcho(contextSpec, before, after, contextRewritten) +
                 $"{found.Render("match")} in {Tally.Complete(filesWithMatches).Render("file")}" +
                 (printed < totalMatches ? $" ({printed} printed)" : "") +
                 $"; {fileTally.Render("file")} read" +
@@ -559,7 +563,7 @@ public sealed class CodeSearchCommand : Command
     /// 结构化侧不受影响:<c>file</c> 本来就在每一行上,JSON 消费方拿到的东西一个字没变。
     /// </summary>
     private static void Emit(List<string> lines, List<IReadOnlyDictionary<string, object?>> rows,
-                             string rel, string[] text, List<int> hits, int context, int hitsHere)
+                             string rel, string[] text, List<int> hits, int before, int after, int hitsHere)
     {
         var isHit = hits.ToHashSet();
         var group = rows.Count == 0 ? 0 : (int)rows[^1]["group"]! + 1;
@@ -571,24 +575,25 @@ public sealed class CodeSearchCommand : Command
 
         // 行号右对齐。宽度按**这次真印出来的**最大行号算,不按文件总行数:后者会让只印了
         // 第 3 行的千行文件补出一串前导空格,与旁边只印了第 3 行的短文件参差着排。
-        // hits 升序,末项加上下文窗口的下沿就是最大的那个。
-        var pad = Math.Min(text.Length, hits[^1] + 1 + context).ToString().Length;
+        // hits 升序,末项加窗口下沿就是最大的那个。
+        var pad = Math.Min(text.Length, hits[^1] + 1 + after).ToString().Length;
+        var hasWindow = before > 0 || after > 0;
 
         var i = 0;
         var firstGroup = true;
         while (i < hits.Count)
         {
-            var start = Math.Max(0, hits[i] - context);
-            var end = Math.Min(text.Length - 1, hits[i] + context);
-            while (i + 1 < hits.Count && hits[i + 1] - context <= end + 1)
+            var start = Math.Max(0, hits[i] - before);
+            var end = Math.Min(text.Length - 1, hits[i] + after);
+            while (i + 1 < hits.Count && hits[i + 1] - before <= end + 1)
             {
                 i++;
-                end = Math.Max(end, Math.Min(text.Length - 1, hits[i] + context));
+                end = Math.Max(end, Math.Min(text.Length - 1, hits[i] + after));
             }
 
             // 分隔符只在**同一文件内**的两组之间:换文件由标题自己隔开,那里再插一条 "--"
             // 会读成标题下面还漏印了什么。
-            if (context > 0 && !firstGroup) lines.Add("--");
+            if (hasWindow && !firstGroup) lines.Add("--");
             firstGroup = false;
             for (var c = start; c <= end; c++)
             {
@@ -707,6 +712,86 @@ public sealed class CodeSearchCommand : Command
 
         // 根目录下直接摆着的文件(没有分树的部署形态)。
         yield return ("", Directory.EnumerateFiles(root, "*", SearchOption.TopDirectoryOnly));
+    }
+
+    /// <summary>
+    /// <c>N</c> / <c>B-A</c> / <c>B+A</c>。单数是前后各 N 行(旧含义,逐字节不变);
+    /// 两数是上面 B 行、下面 A 行。两侧是独立计数,所以允许 B &gt; A —— 这与
+    /// <c>--lines</c> 的 <c>a-b</c> 不同,<c>--lines</c> 的两端是行号,这里是两个半径。
+    /// </summary>
+    internal static (int Before, int After) ParseContext(string? spec)
+        => ParseContext(spec, out _);
+
+    /// <summary>
+    /// <paramref name="rewritten"/>:归一化真的改动了写法时给出改动后的样子,否则 null。
+    /// 空格不算改动,与 <see cref="ReadCommand.ParseRange"/> 同一条规则。
+    /// </summary>
+    internal static (int Before, int After) ParseContext(string? spec, out string? rewritten)
+    {
+        rewritten = null;
+        if (string.IsNullOrEmpty(spec)) return (0, 0);
+
+        var given = spec.Trim();
+        var normalized = NormalizeWindow(given);
+        if (!string.Equals(normalized, given.Replace(" ", ""), StringComparison.Ordinal))
+            rewritten = normalized;
+        spec = normalized;
+
+        int At(string s, string what)
+            => int.TryParse(s.Trim(), out var v) && v >= 0
+                ? v
+                : throw new CliUsageException(
+                    $"--context wants a whole number of lines, zero or more; '{s.Trim()}' is not one ({what}). " +
+                    "Write it as '8', '0-20', or '10+4'.");
+
+        var dash = spec.IndexOf('-');
+        if (dash > 0)
+            return (At(spec[..dash], "above"), At(spec[(dash + 1)..], "below"));
+
+        var plus = spec.IndexOf('+');
+        if (plus > 0)
+            return (At(spec[..plus], "above"), At(spec[(plus + 1)..], "below"));
+
+        var n = At(spec, "the window");
+        return (n, n);
+    }
+
+    /// <summary>
+    /// 与 <c>--lines</c> 同一套分隔符:<c>–</c> <c>—</c> <c>−</c> <c>..</c> <c>:</c> <c>,</c>
+    /// 都当 <c>-</c>,数字前的 <c>L</c> 丢掉。改写过就得回声,因为 <c>1,20</c> 读成 1-20
+    /// 之后,输出逐字看起来完全正常。
+    /// </summary>
+    private static string NormalizeWindow(string spec)
+    {
+        var s = spec.Replace(" ", "").Replace("\t", "");
+        var chars = new List<char>(s.Length);
+        for (var i = 0; i < s.Length; i++)
+        {
+            var c = s[i];
+            if (c is 'L' or 'l' && i + 1 < s.Length && char.IsAsciiDigit(s[i + 1])) continue;
+            if (c is '–' or '—' or '−' or ':' or ',') { chars.Add('-'); continue; }
+            if (c == '.' && i + 1 < s.Length && s[i + 1] == '.') { chars.Add('-'); i++; continue; }
+            chars.Add(c);
+        }
+
+        return new string(chars.ToArray());
+    }
+
+    /// <summary>
+    /// 两数形式才自报窗口:纯 <c>N</c> 必须与现在逐字节相同,多一句就会把回归闸弄红。
+    /// </summary>
+    private static string ContextEcho(string? spec, int before, int after, string? rewritten)
+    {
+        if (string.IsNullOrEmpty(spec)) return "";
+        var given = spec.Trim();
+        var form = rewritten ?? NormalizeWindow(given);
+        if (!form.Contains('-', StringComparison.Ordinal) && !form.Contains('+', StringComparison.Ordinal))
+            return "";
+
+        var window = $"{Tally.Complete(before).Render("line")} above and {Tally.Complete(after).Render("line")} below";
+        return rewritten is not null
+            ? $"--context {given}{ReadCommand.ReadAsPhrase}{rewritten}: {window}. "
+            : $"--context {given} is {window}. ";
     }
 
     /// <summary>

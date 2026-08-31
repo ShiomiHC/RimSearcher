@@ -23,7 +23,7 @@ Options:
                               Also accepted: --per-file, --matches-per-file, --max-matches-per-file, --file-preview.
       --source <name>         Which decompiled source tree to search. Omit to search them all.
                               Also accepted: --root, --tree, --scope.
-  -C, --context <n>           Show this many lines above and below each match. Windows that overlap or touch are merged, so no line is printed twice. Default: 0.
+  -C, --context <n|a-b|a+n>   Show lines around each match. A number N is N above and N below; '0-20' is 0 above and 20 below, '10+4' is 10 above and 4 below. Windows that overlap or touch are merged, so no line is printed twice. Default: 0.
                               Also accepted: --context-lines, --around.
   -n, --limit <n|all>         How many matching lines to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: 25.
                               Also accepted: --max-results, --count, --top, --rows, --num, --head.
@@ -47,4 +47,5 @@ Global options (every command takes these, written after the command):
 Examples:
   rimsearcher code-search "class \w+ : ThingComp"
   rimsearcher code-search "Notify_\w+\(" --context 2
+  rimsearcher code-search "PostSpawnSetup\(" --context 0+20
 --- stderr ---

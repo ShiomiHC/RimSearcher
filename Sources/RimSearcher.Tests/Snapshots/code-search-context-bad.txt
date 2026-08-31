@@ -1,0 +1,5 @@
+$ rimsearcher code-search public --context nope
+exit 2
+--- stdout ---
+--- stderr ---
+--context wants a whole number of lines, zero or more; 'nope' is not one (the window). Write it as '8', '0-20', or '10+4'.
