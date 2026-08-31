@@ -961,14 +961,20 @@ public sealed class FindCommand : Command
         //
         // 有结果时**照说** —— 那正是最贵的一档:零至少还会让人再看一眼,一张六行的表不会。
         // 位置排在计数之后:line 1 是管道下唯一的幸存者,那格归「一共几条」。
+        //
+        // **只留两样:算出来的那个数,和一条能跑的命令。** 三轮盲测(共 44 次派发,两次改了
+        // 设计)都没测出这句话有正面效应:文档在场时,说与不说的被试都是 6/6;把陷阱埋进长
+        // 上下文、只要结论不要审计,是 2/8 对 2/8。点破陷阱的四个被试引的都是那条命令,没有
+        // 一个引「按后缀匹配」那半句 —— 而那半句在两条路上都是重复的:零那档紧接着的分流
+        // 自己会说「没有哪个 def 的字段路径以 X 结尾」,非零那档表里的 path 列直接把
+        // costList[0].thingDef 摆在眼前。既然效应测不出来,就不该再占四行。
         if (type is not { Length: > 0 } &&
             ctx.Db.Types(ctx.Unscoped())
                   .FirstOrDefault(t => string.Equals(t.Type, path, StringComparison.Ordinal))
                 is { Type: not null } asType)
             ctx.Report.Notice(NoticeKind.Boundary,
                 $"'{path}' is also a def type here ({Tally.Complete(asType.Count).Render("def")}), and this query " +
-                $"reads it as a field path: it looks for defs whose field path ends in '{path}', not for defs of " +
-                "that type. Asking about the type is a different query: 'rimsearcher where <fieldPath>" +
+                "reads it as a field path, not as a type. For the type: 'rimsearcher where <fieldPath>" +
                 (value is null ? "" : $" {value}") + $" --type {asType.Type}'.");
 
 
