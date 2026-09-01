@@ -81,7 +81,8 @@ public sealed class ReadCommand : Command
                 Aliases = ["line", "range", "line-range"],
                 Placeholder = "<a-b|a+n|a|all>",
                 Help = "Read raw lines instead: '400-460' is inclusive, '400+60' is sixty lines from 400, " +
-                       "'400' starts there and takes the default window, 'all' is the whole file. " +
+                       "'400' starts there and takes the default window, 'all' is the whole file as far as " +
+                       "--limit allows. " +
                        $"Without it the read starts at line 1 and takes {Limits.ReadWindow}, or as many " +
                        "as --limit asks for.",
             },
@@ -107,9 +108,13 @@ public sealed class ReadCommand : Command
                 Short = 'n',
                 Aliases = ["max-lines", "max-results", "count", "rows", "head"],
                 Placeholder = "<n|all>",
-                Help = $"How many lines to print at most. Values above {Limits.ReadMaxLines} are clamped to " +
-                       "it, because one type can be thousands of lines and this output is read whole. " +
-                       "On a raw read it is also where the read stops, so '--limit all' reads the whole file.",
+                // 「'all' 就是全文」是假话:这条命令的 all 也停在 ReadMaxLines(与那十几条
+                // 列表命令不同 —— 那边的 all 是真无上限)。上界必须跟着 'all' 一起说,
+                // 说「above N are clamped」不够:那句管的是数字,而 all 不是数字。
+                Help = $"How many lines to print at most. Every value stops at {Limits.ReadMaxLines}, " +
+                       "'all' included, because one type can be thousands of lines and this output is read " +
+                       "whole. On a raw read it is also where the read stops, so '--limit all' reads a whole " +
+                       $"file of up to {Limits.ReadMaxLines} lines and says where it stopped on a longer one.",
                 Default = Limits.ReadMaxLines.ToString(),
             },
         ],

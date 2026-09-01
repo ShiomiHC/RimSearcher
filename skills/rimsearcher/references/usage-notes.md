@@ -212,9 +212,9 @@ indexed under `<path>.Class`; on an older one, which of the two steps is missing
 pre-0.4 snapshot, `where Class` and `list --own-class` are both structurally blind to single
 class-picking fields and only `code-search` can answer; re-export to close the gap.
 
-**Anchoring, walked through.** `code-search MapPortal` finds every mention — 81 matches in 39
-files, of which `--limit` prints the first 25, the declaration rendered exactly like every
-other hit. `code-search "class MapPortal\b"` returns exactly one. Once you have the file,
+**Anchoring, walked through.** `code-search MapPortal` finds every mention — dozens of matches
+across dozens of files, of which `--limit` prints the first 25, the declaration rendered
+exactly like every other hit. `code-search "class MapPortal\b"` returns exactly one. Once you have the file,
 `read <file> --outline` lists what is in it without a second scan; that is the right move
 whenever the only hit was the declaration itself, because a single hit means the pattern
 found *where the thing is defined*, not *what it does*.
@@ -262,7 +262,8 @@ snapshot), and which `GenStep` each runs is on `genStep`, indexed as `genStep.Cl
 
 ## Paging and errors, in detail
 
-`--limit all` lifts the row cap. A paged answer states the three things a pipe would have
+`--limit all` lifts the row cap on the list-shaped commands; `read` is the exception, where
+every value including `all` stops at 2000 lines. A paged answer states the three things a pipe would have
 destroyed: how many rows this page holds, how many exist in total, and the exact `--offset`
 for the next page. The last page
 says it is the last one; an `--offset` past the end is reported as an overshoot, not as
