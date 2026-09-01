@@ -13,8 +13,7 @@ needed to answer a question about def data.
 
 The MCP is exact: it reads metadata, not text. The CLI reads text, over whatever
 `sources sync` has written — `rimsearcher sources list` says which trees are `current`,
-`stale` or `never built`, and a query against a tree that was never built is a zero, not
-an error.
+`stale` or `never built`; a query against a tree that was never built returns zero rows.
 
 Only the last row is beyond the CLI outright. The rest it answers approximately, and the
 approximation is better than it sounds: decompiled output is machine-generated and

@@ -20,9 +20,8 @@ nothing differs.
 **Renaming a snapshot.** The name is three files that share it: `snapshots/<name>.db`,
 `modlists/<name>.rml` next to the config file, and `exports/<name>.rsx.jsonl.gz`.
 `rimsearcher snapshot rename <old> <new>` moves whichever of those exist and says
-which it looked for and did not find — an incomplete set is a normal state, not an
-error. A name already used at any of the three places is refused and nothing is
-moved. If `snapshot use` has pinned the old name, the pin follows and the output
+which it looked for and did not find; a missing one does not stop the rename. A name
+already used at any of the three places is refused and nothing is moved. If `snapshot use` has pinned the old name, the pin follows and the output
 says so. Previous database generations (`<name>.prev`, `<name>.prev2` and so on) move
 with the database. This command does not delete.
 
@@ -148,8 +147,8 @@ snapshot — `keyed` says that in those words instead of reporting your key abse
 `rimsearcher keyed --empty-translation --limit all` is "list every untranslated string"; given a
 query it narrows that result set instead. Leaving the query out *without* the switch
 enumerates the layer itself, paged like any other listing. When nothing is a placeholder the
-answer is a coverage statement over the whole layer; the exit code is still `1` because no
-rows were printed, which is not a failed lookup.
+answer is a coverage statement over the whole layer; the exit code is `1` because no rows
+were printed — the same zero-row contract as any other listing.
 
 Going from code to screen text needs no second step: `code-search` resolves the literal keys
 passed to `.Translate()` on the lines it prints and appends a `ui_text` table beside the hits
@@ -198,8 +197,8 @@ classes the bucket holds — while `*.Class` and `*Class` rows — `genStep.Clas
 
 **A `genSteps[N]` position is not the run order.** `MapGenerator` sorts the steps by
 `GenStepDef.order` ascending, then by list index, so the numbering `get <MapGeneratorDef>
---path-contains genSteps` prints is the XML's and lines up with execution only by luck — `Space` looks
-like proof that it does (orders 100/875/1500 in list order), while `Asteroid` puts order 1500
+--path-contains genSteps` prints is the XML's, and it matches execution only where that list is already sorted by
+`order` — `Space` is (100/875/1500 in list order), while `Asteroid` puts order 1500
 directly before order 200. Read each step's own `order` before concluding anything about
 sequence. Nothing in a snapshot pairs the two: the list position and the order value live on
 different defs.
@@ -286,10 +285,9 @@ a query that would come back empty.
 
 ## Export mechanics
 
-`rimsearcher export --modlist <name>` runs the game headless, so it takes minutes on a large
-mod list and prints nothing while it works. If a loading stage sits still it says so on
-stderr and **keeps waiting** — that line is a report, not a verdict, and the only thing that
-stops the game is `--timeout`. (Outside export, stderr stays empty unless the command exits
+`rimsearcher export --modlist <name>` runs the game headless and prints nothing while it
+works. If a loading stage sits still it says so on stderr and **keeps waiting**; the only
+thing that stops the game is `--timeout`. (Outside export, stderr stays empty unless the command exits
 `2` on a usage error: a genuine miss, or an `--offset` past the end, reports on stdout — see
 the exit-code contract in SKILL.md.) Raise `--timeout` rather than treating a stall report as
 failure. The `<name>` is required, and `rimsearcher modlist list` is where it comes from:
@@ -306,7 +304,7 @@ bound and no command can name the missing paths. Asking "was `statBases` itself 
 def?" has no direct answer.
 
 The way through is a second snapshot. Export the same def with fewer mods enabled — fewer
-mods means fewer patched-in fields, so the def often lands under the cap — and diff the path
+mods means fewer patched-in fields, which is what the per-def cap counts — and diff the path
 sets from `get <def> --limit all --json` on each, normalising `[0]`, `[1]`, … to `[]` first.
 A path present in the smaller snapshot and absent in the larger one was cut; an empty
 difference is the confirmation. Reverse the reading if the def is truncated in *both*: then

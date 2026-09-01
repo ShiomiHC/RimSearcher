@@ -1,15 +1,15 @@
 # DecompilerServer MCP
 
 Reads the game's compiled assemblies directly. No pre-processing step: `load_assembly` on the
-game directory takes well under a second and warms its own index.
+game directory warms its own index as it runs.
 
 Tool names below are the bare names; the full prefix is `mcp__decompiler__`.
 
 ## Getting started
 
 If the tools are deferred, load them with this exact line. A keyword search for "decompiler"
-returns 30 of the 44 tools and, in practice, leaves out the four you need first — including
-`status` and `search_members`.
+returns 30 of the 44 tools and leaves out `status` and `search_members`, which you need
+first.
 
 This is the one place the full prefix is written out: `select:` matches tool names exactly, so a
 bare name here returns **"No matching deferred tools found"** — a zero that looks like the server

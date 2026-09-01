@@ -128,9 +128,8 @@ rather than assuming. The ones it has no way to state:
 - **A value most defs of the type also carry is inherited or engine-filled far more often
   than authored** — so a `no` on one of those is still not the def author's decision. The
   line under `get`'s table names them; what it means for authorship is not in it.
-- **Exit codes**: `0` ran, `1` zero rows, `2` usage error, `70` tool defect. **`1` is an
-  answer, not a failure** — chain with `;`, never `&&`, or an informative zero drops what
-  you queued after it. A `;` chain reports only the last code, so read the output.
+- **Exit codes**: `0` ran, `1` zero rows, `2` usage error, `70` tool defect. **Chain with `;`,
+  never `&&`** — an informative zero otherwise drops what you queued after it. A `;` chain reports only the last code, so read the output.
   **Everything lands on stdout except a usage error** — the reasoning behind a zero
   included. `2` is the exception: its message is on stderr with stdout empty, so
   `2>/dev/null` turns a mistyped option into a silent empty result.
