@@ -248,7 +248,9 @@ public class SkillPromiseTests
             "漂移声明点名到mod"),
         new("`snapshot status` lists every one in an `xml` table",
             "漂移在status里列出全部packageId"),
-        new("`snapshot status` names which mods' Defs/Patches XML moved on disk",
+        // 2026-09-01:「is the full comparison with the installed game」与紧跟的这句是
+        // 同一个命令连说两遍,前一句只给抽象说法、后一句给内容,合成一句。承诺没变。
+        new("naming which mods' Defs/Patches XML moved on disk",
             nameof(SnapshotDiffTests.同名单一字段变了加了一个删了一个)),
         new("`snapshot diff <old> <new>` compares two snapshots' resolved defs and fields",
             nameof(SnapshotDiffTests.同名单一字段变了加了一个删了一个)),
@@ -266,9 +268,12 @@ public class SkillPromiseTests
         // 一条没进这张表,于是删掉一整段时闸不红。剩下的三句是真承诺,现在钉住。
         new("a `+patch` suffix when another mod's patch put the line there",
             nameof(PresenceTests.补丁加的行报here带patch后缀)),
-        new("**`no` is determined, not a path-shape maybe.**",
+        // 2026-09-01:同格里「What the column read … depends on the exporter, and the output
+        // says which」压掉 —— 它只说「去看输出」,不给判断输入,而两档的后果 `code_default`
+        // 那条各自带着说了。剩下的两句原样承诺,只是标点与首字母跟着句子改了。
+        new("**`no` is determined, not a path-shape maybe**",
             nameof(PresenceTests.两层defName标签能归位_没写的那一格是确定的no)),
-        new("snapshots older than 0.5.0 have no such column and say so",
+        new("older than 0.5.0 have no such column and say so",
             nameof(PresenceTests.旧快照get不把xml写成印成没写)),
         // 2026-09-01:原文写的是「落空不等于类型没这个字段,去读声明类」—— 那是 type_fields
         // 之前的出路,现在 fields 自己就把两态分开了。免责收窄到 get/where,新出路连同它的

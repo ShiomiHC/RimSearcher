@@ -26,7 +26,7 @@ Global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the com
 |---|---|
 | What does this def actually contain? | `rimsearcher get <defName>` |
 | Which C# class does this def actually run? | `rimsearcher get <defName>` — the `*Class` rows |
-| Does the vanilla XML write this line — Replace or Add? | `rimsearcher get <defName> --defaults` — the `xml` column: `here` / `parent` / `no` / `under <container>`, and a `+patch` suffix when another mod's patch put the line there (Replace still finds it; your patch then depends on that mod staying loaded). **`no` is determined, not a path-shape maybe.** What the column read — the XML on disk, or the merged XML after every PatchOperation — depends on the exporter, and the output says which; snapshots older than 0.5.0 have no such column and say so. `get --help` carries the rest: how list entries join back to def-name tags, and what `under` leaves undecided. |
+| Does the vanilla XML write this line — Replace or Add? | `rimsearcher get <defName> --defaults` — the `xml` column: `here` / `parent` / `no` / `under <container>`, and a `+patch` suffix when another mod's patch put the line there (Replace still finds it; your patch then depends on that mod staying loaded). **`no` is determined, not a path-shape maybe** — what exactly it denies depends on the exporter, and `code_default` below carries that. Snapshots older than 0.5.0 have no such column and say so. `get --help` carries the rest: how list entries join back to def-name tags, and what `under` leaves undecided. |
 | What is this called? I only know part. | `rimsearcher search <words>` |
 | Which defs use this class / value? | `rimsearcher where <field> <value>` |
 | Which defs pick this class with `Class="…"`? | `rimsearcher where Class <ClassName>` |
@@ -124,7 +124,7 @@ a different question. None of them announces itself.
 ## What the output cannot tell you
 
 The CLI explains its own tables, zeros and boundaries as it prints them — read what it says
-rather than assuming. These four it has no way to state:
+rather than assuming. The ones it has no way to state:
 
 - **`code_default` decides what a value is worth**, and the column prints only `yes`/`no`.
   `no` = something set it (differs from a fresh instance). `yes` = the snapshot **cannot
@@ -240,8 +240,8 @@ raises. A stall report is 2 minutes of silence, not a failure — do not interru
 
 One export = one game version, one ordered mod list, one language; several coexist.
 `snapshot list` shows them, `--snapshot <name>` picks per command, `snapshot use <name>`
-sticks; `snapshot status` is the full comparison with the installed game. `snapshot
-status` names which mods' Defs/Patches XML moved on disk; `snapshot diff <old> <new>`
+sticks; `snapshot status` compares it against the installed game, naming which mods'
+Defs/Patches XML moved on disk; `snapshot diff <old> <new>`
 compares two snapshots' resolved defs and fields. Re-exporting the same name rotates the
 old file to `<name>.prev`, the one before it to `<name>.prev2`, and so on; `snapshot_keep`
 in the config file, or `--keep <n>`, says how many generations that name holds, counting
