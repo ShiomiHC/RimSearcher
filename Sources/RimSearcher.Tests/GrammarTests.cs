@@ -1515,6 +1515,44 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// <c>defName</c> 是身份,不是字段:值已经在 def_name 行里,另两格逐 def 恒定
+    /// (五个真实快照里 is_default 全 0)。它不进字段表、不进计数;但 <c>where</c> /
+    /// <c>values</c> 照旧看得见它,点名过滤也能把它召回 —— 调用方点了名的东西不许消失。
+    /// </summary>
+    [Fact]
+    public void GetLeavesDefNameOutOfTheFieldTable()
+    {
+        var (plain, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--limit", "all");
+        Assert.Contains("def_name     Apparel_ShieldBelt", plain, StringComparison.Ordinal);
+        Assert.DoesNotContain("\ndefName ", plain, StringComparison.Ordinal);
+        // 计数与表同口径:表头到表尾的行数,就是首行句子里的数
+        // (不带 --defaults 时 yes 行不在表里,首行数的正是 listable)。
+        // 表后紧跟着一句注解、中间没有空行,所以按列位认行:value 列在表头里的起点,
+        // 每一行都在同一处、前面两格是补的空格;散文句不会恰好在那里有两个空格。
+        var lines = plain.Split('\n');
+        var head = Array.FindIndex(lines, l => l.StartsWith("path ", StringComparison.Ordinal));
+        Assert.True(head >= 0, plain);
+        var col = lines[head].IndexOf("value", StringComparison.Ordinal);
+        var rows = lines.Skip(head + 1)
+                        .TakeWhile(l => l.Length > col && l[col - 1] == ' ' && l[col - 2] == ' ' && l[col] != ' ')
+                        .Count();
+        Assert.StartsWith($"{rows} fields", plain, StringComparison.Ordinal);
+
+        // 有 xml 列的形状同样不列。
+        var (patched, _, _) = Fixture.Run("get", "PatchGun", "--defaults", Fixture.PresencePatchArg);
+        Assert.DoesNotContain("\ndefName ", patched, StringComparison.Ordinal);
+
+        // 点名就召回,走的是「命中了」那一支,不是「没有这条路径」那一支。
+        var (named, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--path-contains", "defName");
+        Assert.Contains("\ndefName ", named, StringComparison.Ordinal);
+        Assert.Contains("Matching 'defName': 1 field", named, StringComparison.Ordinal);
+
+        // 反查那一侧不受影响。
+        var (where, _, _) = Fixture.Run("where", "defName", "Apparel_ShieldBelt", "--exact");
+        Assert.StartsWith("1 def within --exact.", where, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// <c>--scope all,-X</c> 排除掉的那一半非空时要说破 —— **这里的沉默推得出错结论**。
     ///
     /// 实测:<c>where compClass --value Vethara --scope all,-vanilla</c> 返回 92 个 def,
@@ -4646,6 +4684,7 @@ public class GrammarTests
             ("lines above and", "插值:产地是 Render(\"line\") + \" above and\""),
             ("blueprintGraphicData", "fixture 数据(字段路径)"),
             ("projectile.burstCount", "fixture 数据(字段路径)"),
+            ("\\ndefName ", "fixture 数据(字段路径,带换行;钉的是「不在表行里」)"),
             ("field paths in this snapshot", "化石,已登记在上一条闸里"),
         ];
 

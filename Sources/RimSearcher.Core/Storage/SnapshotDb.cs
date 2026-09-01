@@ -398,10 +398,19 @@ public sealed class SnapshotDb : IDisposable
         long defId, int limit, IReadOnlyList<string>? pathFilters = null, bool includeDefaults = true)
     {
         var p = new Dictionary<string, object?> { ["@id"] = defId };
-        var total = Scalar("SELECT COUNT(*) FROM field_values WHERE def_id = @id", p);
+        // defName 不是这个 def 的一个字段,是它的身份 —— 值已经在表上方的 def_name 行里,
+        // 而它那一行的另两格逐 def 恒定(五个快照 9.7 万行 is_default 全 0;xml 那格要么
+        // 与 source 行同一句话,要么与同表每一行同带 +patch)。整列同值的折叠按列走,
+        // 够不着单独一行,于是这一行在这里就不算字段。Total 一律不数它:
+        // 「the def does have N fields」与「Drop --path-contains to see them」看到的
+        // 必须是同一个 N。点名过滤(--path-contains def…)能把它召回来 —— 调用方点了名
+        // 的东西不许消失,与 --defaults 同一条规矩。
+        var total = Scalar("SELECT COUNT(*) FROM field_values WHERE def_id = @id AND path <> 'defName'", p);
 
         var filters = (pathFilters ?? []).Where(f => !string.IsNullOrEmpty(f)).ToList();
-        var where = "WHERE def_id = @id";
+        var where = filters.Count == 0
+            ? "WHERE def_id = @id AND path <> 'defName'"
+            : "WHERE def_id = @id";
         if (filters.Count > 0)
         {
             var ors = new List<string>();

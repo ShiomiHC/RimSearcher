@@ -510,6 +510,9 @@ public static class Fixture
             // 与 presence 那份同形,这里是**补丁后那一档**的落点(这份标 0.7.0)。
             // 两份摆一起,出路那半句改了其中一档另一档不会静默跟着错。
             new ExportedField("comps[0].compClass", "TestMod.CompBoltedOn", DefaultState.Differs),
+            // 同主语料:defName 也是一行,而 Written 里它早就登记着(here)—— 这份带 xml 列,
+            // 于是「身份行不进字段表」在有 xml 列的形状上也有人守。
+            new ExportedField("defName", "PatchGun", DefaultState.Differs),
             new ExportedField("damage", "12", DefaultState.Differs),
             new ExportedField("speed", "70", DefaultState.Differs),
             new ExportedField("recipeMaker.researchPrerequisite", "SpecializedLimbs", DefaultState.Differs),
@@ -897,6 +900,9 @@ public static class Fixture
             // 于是 code_default 印 no 而没有任何人挑过它。语料里九个 ThingDef 都带着它,
             // shared_values 才有落点。
             ("soundImpactDefault", "BulletImpact_Ground", DefaultState.Differs),
+            // 真实导出器把 defName 也当字段行导出(每个 def 一行,is_default 恒 0)。
+            // 语料里得有这一行,get 不把它列成字段那条闸才测得到真形状。
+            ("defName", "Apparel_ShieldBelt", DefaultState.Differs),
             ("soundDrop", "Standard_Drop", DefaultState.Differs),
             ("soundPickup", "Standard_Pickup", DefaultState.Differs),
             ("soundInteract", "Standard_Pickup", DefaultState.Differs),

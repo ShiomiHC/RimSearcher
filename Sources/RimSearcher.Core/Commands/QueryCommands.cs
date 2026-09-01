@@ -289,7 +289,12 @@ public sealed class GetCommand : Command
             "this row still cannot be pinned to a line in it: the entry did not join, or it joined to a " +
             "short-form tag such as <Steel>75</Steel> whose inline text matches none of the remaining fields, " +
             "or more than one of them — or this snapshot predates recording that text. Neither answer is " +
-            "available there. Older snapshots omit the column and say so.",
+            "available there. Older snapshots omit the column and say so.\n\n" +
+            // 身份行不进字段表,理由在 SnapshotDb.Fields。说一句,免得拿字段数对 values/where
+            // 那边的计数时差一行没人解释。
+            "defName is not listed as a field: the def_name line above the table is that value, and the " +
+            "counts here leave it out. --path-contains naming it brings that row back; 'where' and 'values' " +
+            "see it as a path either way.",
         Positionals = [new PositionalSpec { Name = "defName", Help = "The exact def name. 'search' finds it if you only know part of it." }],
         Options =
         [
