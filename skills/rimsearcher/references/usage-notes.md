@@ -7,7 +7,7 @@ behind them. Nothing here overrides SKILL.md — it explains it.
 ## Snapshot management
 
 **What `snapshot status` compares.** Four things: same mods, same order, same game build,
-and — for snapshots exported once this was measured — the size and timestamp of every XML
+and — when the snapshot recorded it — the size and timestamp of every XML
 file under `Defs/` and `Patches/` of each mod it could locate on disk. The `xml_fingerprint`
 row says how many mods that covers — only the ones it could locate on disk, so it falls
 short of the snapshot's own count by however many it could not find. That last
@@ -39,16 +39,14 @@ Re-exporting the same name rotates the old file to `<name>.prev`, the one before
 many generations that name holds, counting the one being written; what falls past that
 count is deleted and the output says which. `--replace-prev` is `--keep 1`. An incoming snapshot
 leaves both files alone only when it matches on all four of the exporter version, the patch
-route, the resolved defs and fields, and how many XML lines were indexed — the last two exist
-because a def-only comparison reads an exporter that gained a whole XML layer as "nothing
-changed" and throws the new file away.
+route, the resolved defs and fields, and how many XML lines were indexed.
 
 **The fingerprint's edges** — the output states most of them, but only beside a verdict that
 everything compared matches: size and timestamp are not file contents, so a re-download of
 identical bytes reads as a change, and an edit that preserves both is the one case it misses.
 `Languages/`, textures and audio are outside it entirely, as is any directory the installed
 game version does not load (a mod's `1.5/` folder while you are on 1.6) — that last exclusion
-the output never mentions. A snapshot exported before the fingerprint existed shows
+the output never mentions. A snapshot without the fingerprint shows
 `xml_fingerprint` as `not recorded (exported before this was measured)`, and — when that
 snapshot matches the game on everything else compared — says in words that the line reading
 "matches" is not evidence about those files. Re-export, or re-run
@@ -66,9 +64,7 @@ moved, the `Defs/`–`Patches/` XML of the mods it describes changed on disk or 
 or those mods sit in a different load order now (load order decides which patch wins, so a
 value can be wrong rather than merely partial). Which mods the game happens to have enabled
 is **never** reported — enabling five more mods, or disabling one, leaves every query
-silent. That is an environment choice, not staleness: a snapshot deliberately narrowed to
-Core plus the official DLCs would otherwise carry a warning that is true forever and fixable
-never. Ask `snapshot status` for those numbers; a zero result already names
+silent. Ask `snapshot status` for those numbers; a zero result already names
 another snapshot that holds the def you asked for. No selector mutes any of this —
 `--snapshot <name>` says which environment you meant, not that you knew it had moved.
 
@@ -203,14 +199,13 @@ directly before order 200. Read each step's own `order` before concluding anythi
 sequence. Nothing in a snapshot pairs the two: the list position and the order value live on
 different defs.
 
-**How the `where Class` dimension arrived.** The runtime type of a nested `Class="…"` object
-is queryable under the field name `Class`. It arrived in two exporter steps — list elements
-(`<li Class="…">`) at 0.2.0, single class-picking fields (`GenStepDef.genStep`,
-`ThinkTreeDef.thinkRoot`) at 0.4.0. A zero result ends with a line stating how far the
-snapshot's exporter got: on a current snapshot, that both list elements and single fields are
-indexed under `<path>.Class`; on an older one, which of the two steps is missing. On a
-pre-0.4 snapshot, `where Class` and `list --own-class` are both structurally blind to single
-class-picking fields and only `code-search` can answer; re-export to close the gap.
+**What the `where Class` dimension covers.** The runtime type of a nested `Class="…"` object
+is queryable under the field name `Class`, in two parts — list elements (`<li Class="…">`)
+and single class-picking fields (`GenStepDef.genStep`, `ThinkTreeDef.thinkRoot`). A zero
+result ends with a line stating how much of that the snapshot has: on a current snapshot, that
+both are indexed under `<path>.Class`; on an older one, which of the two is missing. Where
+single class-picking fields are missing, `where Class` and `list --own-class` are both
+structurally blind to them and only `code-search` can answer; re-export to close the gap.
 
 **Anchoring, walked through.** `code-search MapPortal` finds every mention — dozens of matches
 across dozens of files, of which `--limit` prints the first 25, the declaration rendered
@@ -257,8 +252,7 @@ several unrelated paths, and that header is how you tell which you are looking a
 tells you where to look rather than claiming the type does not exist. Most buckets hold
 exactly one class; there `--own-class` narrows nothing, and such a def type keeps its whole
 behaviour on a nested `Class="…"` field instead — every `GenStepDef` in a snapshot is a
-`Verse.GenStepDef` (the count moves with the mod list: 167 in vanilla, 169 in a modded
-snapshot), and which `GenStep` each runs is on `genStep`, indexed as `genStep.Class`.
+`Verse.GenStepDef`, and which `GenStep` each runs is on `genStep`, indexed as `genStep.Class`.
 
 ## Paging and errors, in detail
 

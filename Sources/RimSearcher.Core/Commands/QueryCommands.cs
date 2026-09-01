@@ -280,16 +280,16 @@ public sealed class GetCommand : Command
             "from a sibling value on the same list entry, including two-level tags (things.AncientAmmoStack.chance), " +
             "and using XML lines written by this def or by an ancestor. After that join, here/parent means the " +
             "line is there, and no means the XML read here does not write it — determined, not a path-shape " +
-            "maybe, and it holds even when the list entry itself is present. From exporter 0.7.0 the paths are " +
-            "read from the merged XML after every PatchOperation ran, and a line another mod's patch put there " +
-            "reads as here+patch or parent+patch: Replace still finds that node, but your patch now depends on " +
-            "that mod staying loaded. Older snapshots read the XML as written on disk before any PatchOperation " +
-            "ran, so there a patched-in node reads as no instead, and 'rimsearcher inherit <defName>' reports " +
-            "how many patch xpaths name this def. A further value, 'under <container>', means the XML wrote that container but " +
+            "maybe, and it holds even when the list entry itself is present. The output says which XML it " +
+            "read. 'read after every patch ran' is the merged XML after every PatchOperation, and a line " +
+            "another mod's patch put there reads as here+patch or parent+patch: Replace still finds that node, " +
+            "but your patch now depends on that mod staying loaded. 'read before patches ran' is the XML as " +
+            "written on disk, so there a patched-in node reads as no instead, and 'rimsearcher inherit " +
+            "<defName>' reports how many patch xpaths name this def. A further value, 'under <container>', means the XML wrote that container but " +
             "this row still cannot be pinned to a line in it: the entry did not join, or it joined to a " +
             "short-form tag such as <Steel>75</Steel> whose inline text matches none of the remaining fields, " +
-            "or more than one of them — or this snapshot predates recording that text. Neither answer is " +
-            "available there. Older snapshots omit the column and say so.\n\n" +
+            "or more than one of them — or the snapshot did not record that text. Neither answer is " +
+            "available there. A snapshot without the column says so.\n\n" +
             // 身份行不进字段表,理由在 SnapshotDb.Fields。说一句,免得拿字段数对 values/where
             // 那边的计数时差一行没人解释。
             "defName is not listed as a field: the def_name line above the table is that value, and the " +
@@ -337,12 +337,12 @@ public sealed class GetCommand : Command
                      + "an author chose. The 'xml' column on those rows says whether this def's own XML wrote the "
                      + "path (here), only an ancestor did (parent), neither (no), or that the row cannot be "
                      + "pinned to a line inside a container the XML did write (under <container>). no is "
-                     + "determined, not a path-shape maybe. Which XML it read depends on the exporter, and the "
-                     + "output says which: from 0.7.0 it is the merged XML after every PatchOperation ran, so a "
-                     + "line another mod's patch added reads as here+patch or parent+patch rather than no; older "
-                     + "snapshots read the XML as written on disk, and there that same line does read as no. "
+                     + "determined, not a path-shape maybe. The output says which XML it read: 'read after every "
+                     + "patch ran' is the merged XML after every PatchOperation ran, so a line another mod's patch "
+                     + "added reads as here+patch or parent+patch rather than no; 'read before patches ran' is the "
+                     + "XML as written on disk, and there that same line does read as no. "
                      + "A yes with xml=here is an explicit write of "
-                     + "the default. Older snapshots have no xml column, and there a def whose XML "
+                     + "the default. Without the xml column, a def whose XML "
                      + "writes that same value and a def that never mentions the field look the same. "
                      + "How many were left out is always printed, and --path-contains shows a named field either way.",
             },
@@ -1890,7 +1890,7 @@ public sealed class FieldsCommand : Command
             "path is universal for the type or only present on a handful of defs.\n\n" +
             "What is listed is every path the exporter recorded a value for. When the snapshot has the type's " +
             "declared field set, a miss that is in that set means the field exists and is null on every def; a " +
-            "miss that is not means the type has no such field. Older snapshots have no declared set, and there a " +
+            "miss that is not means the type has no such field. A snapshot without that set says so, and there a " +
             "path missing here is not evidence that the field does not exist — for the shape of a nested object, " +
             "read its class with 'code-search' and 'read'.",
         Positionals = [new PositionalSpec { Name = "defType", Help = "A def type such as ThingDef." }],
@@ -2346,7 +2346,10 @@ internal static class Completeness
                 ? ""
                 : $"This snapshot (exporter {ctx.Db.Meta.ExporterVersion}) does not list the fields a type " +
                   "can have, so it cannot tell a field that is null on every def from one the type does not have. ") +
-            NestedClassLine(ctx));
+            // 量全了的快照上不发声,与 where Class / --own-class 两处同一条规矩:那一档只说
+            // 「嵌套类型在 .Class 下」,对一个查别的字段落空的读者没有输入。另两档说的是
+            // 这份快照没量到那里,那才是这个零可能是假零的成因。
+            (ctx.Db.Meta.IndexesAllNestedClass ? "" : NestedClassLine(ctx)));
     }
 
     /// <summary>
@@ -2631,7 +2634,7 @@ internal static class Advisory
         var settles =
             !ctx.Db.Meta.IndexesXmlWritten
                 ? "This snapshot has no 'xml' column, so it cannot tell an XML line from C# " +
-                  "putting it there at load; a re-export on 0.5.0 or newer can."
+                  "putting it there at load; a fresh export can."
             : ctx.Db.Meta.IndexesPostPatchXml
                 ? "The 'xml' column of 'rimsearcher get <defName> --defaults' settles whether an " +
                   "XML line wrote it — this snapshot read the XML after every patch ran, so a 'no' " +

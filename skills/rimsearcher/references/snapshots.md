@@ -20,8 +20,7 @@ Re-exporting the same name rotates the old file to `<name>.prev`, the one before
 in the config file, or `--keep <n>`, says how many generations that name holds, counting
 the one being written, and whatever falls past that count is deleted and said so.
 A re-export leaves both files alone only when the exporter version, the patch route, the
-resolved defs and fields **and** how many XML lines were indexed all match — an exporter
-that gained an XML layer replaces the file even though no def moved. Queries raise
+resolved defs and fields **and** how many XML lines were indexed all match. Queries raise
 staleness themselves when they detect it — but the check is size and timestamp, so an edit
 preserving both, or anything under `Languages/`, passes unseen. Re-export before concluding
 the tool is wrong: `rimsearcher export --modlist <name>`, where `<name>` is required and

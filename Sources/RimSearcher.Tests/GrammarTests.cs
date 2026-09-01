@@ -1525,7 +1525,7 @@ public class GrammarTests
         var (plain, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--limit", "all");
         Assert.Contains("def_name     Apparel_ShieldBelt", plain, StringComparison.Ordinal);
         Assert.DoesNotContain("\ndefName ", plain, StringComparison.Ordinal);
-        // 计数与表同口径:表头到表尾的行数,就是首行句子里的数
+        // 计数与表同口径:表头到下一个空行之间的行数,就是首行句子里的数
         // (不带 --defaults 时 yes 行不在表里,首行数的正是 listable)。
         // 表后紧跟着一句注解、中间没有空行,所以按列位认行:value 列在表头里的起点,
         // 每一行都在同一处、前面两格是补的空格;散文句不会恰好在那里有两个空格。
@@ -1643,8 +1643,12 @@ public class GrammarTests
         // 声明层不按快照分档(help 不知道快照),它的同形形态是**两档都在场**。
         {
             Assert.DoesNotContain(FossilPrePatchOnly, help, StringComparison.Ordinal);
-            Assert.Contains("after every PatchOperation ran", help, StringComparison.Ordinal);
-            Assert.Contains("older snapshots read the XML as written on disk", help, StringComparison.Ordinal);
+            // 两档各按输出里真印的那个标签点名,不按导出器版本号 —— 读者手上没有版本号
+            // (只有 snapshot status 印它),而那两个标签就在他看的那张表上。
+            Assert.Contains("'read after every patch ran' is the merged XML after every PatchOperation ran",
+                            help, StringComparison.Ordinal);
+            Assert.Contains("'read before patches ran' is the XML as written on disk", help, StringComparison.Ordinal);
+            Assert.DoesNotContain(FossilFromVersion, help, StringComparison.Ordinal);
         }
 
         // **否定排在主句、在「值相等」那个事实之前。** r17 抓到一个受测者复述了限定的
@@ -4563,6 +4567,9 @@ public class GrammarTests
     // 2026-09-01:0.7.0 让 xml 列改读打完补丁的 XML,而 --defaults 的选项说明没跟上,
     // 无条件写着这句。它与同一份 help 上一段的分档说法直接矛盾。
     private const string FossilPrePatchOnly = "it reads the XML from disk before any PatchOperation ran";
+    // 2026-09-02:help 里按导出器版本号分档(「from 0.7.0 …」「older snapshots …」)是变更史,
+    // 读者手上没有版本号(只有 snapshot status 印它);两档改按输出里真印的标签点名。
+    private const string FossilFromVersion = "from 0.7.0";
 
     /// <summary>
     /// **反向闸钉的句子,要么在产地里活着,要么登记成化石 —— 两种都得对得上。**
@@ -4598,7 +4605,8 @@ public class GrammarTests
             (FossilGiveADef, "一条已经不存在的降级出路"),
             (FossilPathCount, "互指句曾带上「这个值坐在 N 条 field path 上」,N 常为 1,读成「你没事」"),
             (FossilSameTypes, "「the same def types」把读者支去对照表里那几行的类型"),
-            (FossilPrePatchOnly, "0.7.0 前的口径:xml 列曾只读磁盘上补丁前的 XML,现在按导出器分档"),
+            (FossilPrePatchOnly, "0.7.0 前的口径:xml 列曾只读磁盘上补丁前的 XML,现在按输出里印的标签分档"),
+            (FossilFromVersion, "help 曾按导出器版本号讲变更史,而读者手上没有版本号"),
             // 单复数是一对,改一留一就假绿了一半。
             ("field paths in this snapshot", "同上,复数形态"),
         ];

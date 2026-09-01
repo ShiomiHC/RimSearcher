@@ -587,8 +587,7 @@ public sealed class SnapshotImportCommand : Command
         Summary = "Build a queryable snapshot database out of a file the in-game exporter wrote.",
         Remarks =
             "The export file is refused rather than half-imported if it lacks the end marker the game writes last, " +
-            "which is what a crash mid-export looks like. Everything about how the data is filtered and indexed is " +
-            "decided here rather than in the game, so a change of policy only costs a re-import, not another play session. " +
+            "which is what a crash mid-export looks like. " +
             "Re-importing a name rotates its old file to '{name}.prev' and the one before it to '{name}.prev2'; " +
             "'snapshot_keep' in the config file, or --keep here, says how many generations to keep, counting the " +
             "one being written. Whatever falls past that count is deleted, and the output says which.",

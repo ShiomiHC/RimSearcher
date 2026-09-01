@@ -30,9 +30,9 @@ public sealed class ExportCommand : Command
             "against what is installed before the game is started, so a typo costs a second rather than a whole launch.\n\n" +
             "When it finishes, the mods the game reported are compared with the mods that were asked for, and the " +
             "import is rejected if they differ.\n\n" +
-            "Replacing an existing snapshot name keeps the previous file as '{name}.prev' once. A further replace " +
-            "while that file still differs is refused — pass --name <other> to keep both, or --replace-prev to " +
-            "discard that generation. An incoming snapshot is left in place when it matches on all of the exporter " +
+            "Re-exporting an existing snapshot name rotates its previous generations to '{name}.prev', " +
+            "'{name}.prev2' and so on, keeping as many as --keep says; --replace-prev keeps none, and --name <other> " +
+            "leaves the old name alone. An incoming snapshot is left in place when it matches on all of the exporter " +
             "version, the patch route, the resolved defs and fields, and how many XML lines were indexed — a " +
             "re-export that only changes what the XML layer holds still replaces the file.\n\n" +
             "The game runs headless: no window appears and nothing is written to the display settings the game " +

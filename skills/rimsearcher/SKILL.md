@@ -10,9 +10,8 @@ export time — patches applied, inheritance resolved, code-generated defs inclu
 with the `rimsearcher` CLI. **The assemblies**: the game's compiled C#, read either by the
 CLI over a decompiled tree or by the DecompilerServer MCP, a program of its own. One layer
 comes from the mods' XML instead of memory — inheritance, discarded by the game before
-export. `inherit` is the only command
-that walks it as a tree, not the only one that reads it: `get --defaults`'s `xml` column
-climbs the same parent chain to say whether a line is written here or by an ancestor.
+export. `inherit` walks it as a tree; `get --defaults`'s `xml` column climbs the same
+parent chain to say whether a line is written here or by an ancestor.
 
 Every command and option is in `<command> --help` and
 [references/cli-reference.md](references/cli-reference.md); worked examples and edges in
@@ -27,7 +26,7 @@ Global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the com
 |---|---|
 | What does this def actually contain? | `rimsearcher get <defName>` |
 | Which C# class does this def actually run? | `rimsearcher get <defName>` — the `*Class` rows |
-| Does the vanilla XML write this line — Replace or Add? | `rimsearcher get <defName> --defaults` — the `xml` column: `here` / `parent` / `no` / `under <container>`, and a `+patch` suffix when another mod's patch put the line there (Replace still finds it; your patch then depends on that mod staying loaded). **`no` is determined, not a path-shape maybe** — what exactly it denies depends on the exporter, and `code_default` below carries that. Snapshots older than 0.5.0 have no such column and say so. `get --help` carries the rest: how list entries join back to def-name tags, and what `under` leaves undecided. |
+| Does the vanilla XML write this line — Replace or Add? | `rimsearcher get <defName> --defaults` — the `xml` column: `here` / `parent` / `no` / `under <container>`, and a `+patch` suffix when another mod's patch put the line there (Replace still finds it; your patch then depends on that mod staying loaded). **`no` is determined, not a path-shape maybe** — what exactly it denies depends on the exporter, and `code_default` below carries that. A snapshot without that column says so. `get --help` carries the rest: how list entries join back to def-name tags, and what `under` leaves undecided. |
 | What is this called? I only know part. | `rimsearcher search <words>` |
 | Which defs use this class / value? | `rimsearcher where <field> <value>` |
 | Which defs pick this class with `Class="…"`? | `rimsearcher where Class <ClassName>` |
@@ -111,12 +110,12 @@ rather than assuming. The ones it has no way to state:
   confident-wrong answer here — and **"so the def did not set it, it comes from the class
   default" is the same error facing the other way**. An XML line whose value happens to
   equal the default is indistinguishable from no line at all, so neither direction is
-  available **from this column** — from exporter 0.5.0 on, the `xml` column beside it does tell
-  them apart (`here` = an XML line writing that same value, `no` = the XML does not write it),
-  which is the one place that question is answerable. What `no` denies depends on the
-  exporter: on 0.7.0 snapshots it is the merged XML **after every patch ran**, so `no` really
-  means no line reaches this field; on older ones it is only the pre-patch XML on disk, where
-  a line another mod's patch put there also reads `no`. Reading the C# constructor shows where the default *could* come from, never
+  available **from this column** — the `xml` column beside it, when the snapshot has one, does
+  tell them apart (`here` = an XML line writing that same value, `no` = the XML does not write
+  it), which is the one place that question is answerable. What `no` denies is printed next to
+  the table: `read after every patch ran` means the merged XML, so `no` really means no line
+  reaches this field; `read before patches ran` means only the pre-patch XML on disk, where a
+  line another mod's patch put there also reads `no`. Reading the C# constructor shows where the default *could* come from, never
   whether the XML says it too. `unknown` = type not constructible. Exemptions cut both
   ways: rules that *read* the value (thresholds, comparisons) answer fine from a `yes` row
   — the value is real either way; `compClass`/`thingClass`/`workerClass` are usually
@@ -184,7 +183,7 @@ rather than assuming. The ones it has no way to state:
   Class` territory, not `--own-class`**.
 - **`where Class`** reaches that nested runtime type, but only where it **differs from the
   declared type** — a field running exactly what its C# declares is not indexed under
-  `Class` at all, and older snapshots predate parts of this dimension. So a zero is about
+  `Class` at all, and a snapshot may hold only part of this dimension (the zero says which). So a zero is about
   the index, never "no def runs it": confirm with `code-search "class <Name>\b"`. The same
   holds for a class no def drives at all — code `new`s it directly, and the construction
   site is the answer.
@@ -196,8 +195,7 @@ rather than assuming. The ones it has no way to state:
   --path-contains <text>` is the one place that is settled for you rather than left to the
   declaring class: it keeps **the type declares it, no def has a value** apart from **the
   type does not declare such a field either**, off a list of declared paths that does not
-  depend on any def having a value. Snapshots older than exporter 0.5.0 carry no such list
-  and say so, naming their version.
+  depend on any def having a value. A snapshot that carries no such list says so.
 
 ## Snapshots
 
