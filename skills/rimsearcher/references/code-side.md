@@ -1,16 +1,20 @@
 # The code side
 
-The game's C#, reached two ways: the DecompilerServer MCP (its own page:
-[decompiler-mcp.md](decompiler-mcp.md)) and the CLI's `code-search` / `read` over a
-decompiled tree. This page is which of the two answers what, plus the traps in the CLI
-half. None of it is needed to answer a question about def data.
+The game's C#, reached two ways. The DecompilerServer MCP (its own page:
+[decompiler-mcp.md](decompiler-mcp.md)) is a separate program: rimsearcher neither ships
+it nor depends on it, and whether it is installed is a fact about the environment, not
+about either tool. The CLI's `code-search` / `read` need nothing outside rimsearcher —
+they read a decompiled tree that `rimsearcher sources sync` writes.
+
+This page is which of the two answers what, plus the traps in the CLI half. None of it is
+needed to answer a question about def data.
 
 ## Which of the two
 
-The MCP is exact — it reads metadata, not text — and is often not connected, which is a
-normal state rather than an error. The CLI reads a decompiled tree, so its answers are
-textual; `rimsearcher sources list` says which trees are `current`, `stale` or
-`never built`, and a query against a tree that was never built is a zero, not an error.
+The MCP is exact: it reads metadata, not text. The CLI reads text, over whatever
+`sources sync` has written — `rimsearcher sources list` says which trees are `current`,
+`stale` or `never built`, and a query against a tree that was never built is a zero, not
+an error.
 
 Only the last row is beyond the CLI outright. The rest it answers approximately, and the
 approximation is better than it sounds: decompiled output is machine-generated and

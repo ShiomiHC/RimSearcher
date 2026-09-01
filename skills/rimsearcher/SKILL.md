@@ -7,9 +7,10 @@ description: Answer questions about RimWorld's defs and C# — what a def contai
 
 Two sources of truth. **The snapshot**: a database of every def the game had in memory at
 export time — patches applied, inheritance resolved, code-generated defs included. Query it
-with the `rimsearcher` CLI. **The assemblies**: the game's compiled C#, via the
-DecompilerServer MCP (`mcp__decompiler__*`). One layer comes from the mods' XML instead of
-memory — inheritance, discarded by the game before export. `inherit` is the only command
+with the `rimsearcher` CLI. **The assemblies**: the game's compiled C#, read either by the
+CLI over a decompiled tree or by the DecompilerServer MCP, a program of its own. One layer
+comes from the mods' XML instead of memory — inheritance, discarded by the game before
+export. `inherit` is the only command
 that walks it as a tree, not the only one that reads it: `get --defaults`'s `xml` column
 climbs the same parent chain to say whether a line is written here or by an ancestor.
 
@@ -40,7 +41,7 @@ Global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the com
 | What is this worth / what does it cost to make? | `rimsearcher economy <defName>` — not a def field, `get` cannot answer it |
 | UI text ↔ translation key | `rimsearcher keyed <key or phrase>` |
 | Which UI text is untranslated? | `rimsearcher keyed --empty-translation` with no query |
-| The game's C#: bodies, callers, overrides, hierarchy | the DecompilerServer MCP (`mcp__decompiler__*`) — exact, and often not connected. `code-side.md` has the CLI's answer for each, and which one it cannot give |
+| The game's C#: bodies, callers, overrides, hierarchy | the DecompilerServer MCP (`mcp__decompiler__*`), a separate program — exact where it is present. `code-side.md` gives the CLI's own answer to each, and names the one it cannot take |
 | A code *shape* across all files | `rimsearcher code-search <regex>` |
 | The text of one file, member, or line range | `rimsearcher read <file> --member <name>` |
 
