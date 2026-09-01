@@ -283,14 +283,29 @@ public class PresenceTests
         Assert.True((long)cmd.ExecuteScalar()! > 1);
     }
 
+    /// <summary>
+    /// NOCASE 的查找配 BINARY 的索引等于没有索引。这条规则本来只长在 <c>idx_fv_leaf_nc</c>
+    /// 的注释里,而注释挡不住下一张表 —— <c>type_fields</c> 就那么踩了,1373 万行上 12.2s。
+    ///
+    /// 闸查的是 <see cref="SnapshotSchema.NoCaseLookups"/> 那份清单与 schema 对不对得上,
+    /// 外加「不加索引的那些必须写出理由」。**查不出「新表忘了登记」** —— 那一条没有机器兜底,
+    /// 清单自己的注释里说了。
+    /// </summary>
     [Fact]
-    public void 按类型查字段的索引与查询同一种排序()
+    public void 每处NOCASE查找都登记了索引落点()
     {
         var indexes = SnapshotSchema.Indexes;
-        Assert.Contains("ON type_fields(def_type COLLATE NOCASE", indexes, StringComparison.Ordinal);
+        foreach (var l in SnapshotSchema.NoCaseLookups)
+        {
+            if (l.NeedsIndex)
+                Assert.Contains($"ON {l.Table}({l.Column} COLLATE NOCASE", indexes, StringComparison.Ordinal);
+            else
+                // 「不加」也是个决定,得带着理由 —— 沉默会被下一个人读成「还没来得及加」。
+                Assert.False(string.IsNullOrWhiteSpace(l.Why), $"{l.Table}.{l.Column}");
+        }
 
-        // path 上的谓词只有 `LIKE '%x%'`,前缀不定,索引帮不上忙 —— 它唯一的作用是把
-        // 优化器骗去扫自己(1.7G,12.2s 那条计划)。加回来会静默地把这一条又变慢。
+        // type_fields 那条 path 索引:谓词只有 `LIKE '%x%'`,前缀不定,索引帮不上忙 ——
+        // 它唯一的作用是把优化器骗去扫自己(1.7G,12.2s 那条计划)。加回来会静默变慢。
         Assert.DoesNotContain("ON type_fields(path)", indexes, StringComparison.Ordinal);
 
         // 查询侧确实是 NOCASE —— 两边任何一侧改了都要一起改,否则索引又失效。

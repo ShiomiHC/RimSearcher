@@ -298,6 +298,43 @@ public static class SnapshotSchema
         );
         """;
 
+    /// <summary>一处带 <c>COLLATE NOCASE</c> 的查找,以及它当前落在哪。</summary>
+    /// <param name="NeedsIndex">true = schema 里必须有对应的 NOCASE 索引(闸会查)。
+    /// false = 实测不需要,理由写在 <paramref name="Why"/> 里。</param>
+    public sealed record NoCaseLookup(string Table, string Column, bool NeedsIndex, string Why);
+
+    /// <summary>
+    /// 查询侧带 <c>COLLATE NOCASE</c> 的每一列,以及它要不要一条同排序的索引。
+    ///
+    /// 规则本身早写在 <c>idx_fv_leaf_nc</c> 那一对的注释里 —— 但注释长在**已经修好的那一处**,
+    /// 而下一个人是在**别处**建新表,不会先去读它。于是 <c>type_fields</c> 照旧建了 BINARY
+    /// 索引,1373 万行上实测 12.2s 对 0.113s。这份清单把那条规则搬到一个查得到的地方,
+    /// 并且逼着每一处「不加索引」写出自己的理由和实测数,而不是留成沉默。
+    ///
+    /// **限度**:闸只查得了这里登记的项与 schema 是否一致,查不出「新建的表忘了登记」。
+    /// 建表时查询要 NOCASE,请自己往这里加一行 —— 这一条没有机器兜底。
+    /// </summary>
+    public static readonly IReadOnlyList<NoCaseLookup> NoCaseLookups =
+    [
+        new("field_values", "leaf",  true, "150 万行,where/values 的主谓词。"),
+        new("field_values", "value", true, "150 万行,按值反查。"),
+        new("type_fields",  "def_type", true,
+            "1373 万行。失配时 SQLite 转去覆盖扫 path 索引:12.2s,换成 NOCASE 后 0.113s。"),
+
+        new("field_values", "path", false,
+            "只在 --exact-path 那一支等值比。150 万行全扫实测 197ms,而这一列存的是完整路径,"
+            + "一条索引要几百 M —— 换 197ms 不值。"),
+        new("defs", "def_type", false, "1.6 万行。BINARY 索引仍被当覆盖索引扫,实测 39ms。"),
+        new("defs", "def_name", false, "同上,covering scan。"),
+        new("defs", "class",    false, "没有索引,1.6 万行全扫。"),
+        new("xml_written", "def_type", false,
+            "19 万行。实测优化器仍走 idx_xw_key 的双列等值查找(42ms)—— 失配没有兑现成代价。"),
+        new("keyed", "key", false, "1.3 万行,覆盖索引扫。"),
+        new("shared_values", "def_type", false, "314 行。"),
+        new("economy", "category", false, "1038 行。"),
+        new("economy", "calc_state", false, "同上。"),
+    ];
+
     /// <summary>索引在批量插入之后才建 —— 导入是一次性写,先建索引会显著变慢。</summary>
     public const string Indexes = """
         CREATE INDEX idx_defs_name  ON defs(def_name);
