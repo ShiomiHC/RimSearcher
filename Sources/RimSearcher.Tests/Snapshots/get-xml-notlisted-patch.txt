@@ -1,0 +1,24 @@
+$ rimsearcher get PatchGun --fixture-presence-patch
+exit 0
+--- stdout ---
+5 fields.
+Not listed: 1 field whose value matches the declaring type's own default; --defaults lists them; the 'xml' column, on those rows and on the ones below alike, says whether this def's own XML wrote the path (here), only an ancestor did (parent), or neither (no) — the XML read after every patch ran; a row that cannot be pinned to a line inside a container the XML did write reads as 'under <container>', not as no. The snapshot holds 6 field paths for this def; a null-valued field never entered the index and is in neither count. Every list index the def has appears below.
+
+def_name       PatchGun
+def_type       ThingDef
+label          patch gun
+class          Verse.ThingDef
+mod            ludeon.rimworld
+source         Guns.xml
+inherits_from  BasePatchGun (see 'rimsearcher inherit PatchGun')
+
+Same in every row, not repeated below: code_default=no.
+path                              value             xml
+damage                            12                here
+speed                             70                parent+patch
+recipeMaker.researchPrerequisite  SpecializedLimbs  here+patch
+costList[0].thingDef              Steel             here
+costList[0].count                 75                here
+No value above with 'code_default'=no is one that most of the 2 ThingDefs in this snapshot also carry.
+The game also prices things like this — market value, cost to make, work amount — and those are computed rather than stored, so no field above would hold them either way. This snapshot never measured them, so it cannot say whether this def is one of the priced ones: 'rimsearcher economy PatchGun' says why and what to re-export.
+--- stderr ---

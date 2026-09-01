@@ -100,6 +100,13 @@ public class OutputSnapshotTests
         // 0.7.0:路径取自打完补丁的 XML,补丁加的行带 +patch。
         { "get-xml-patched",       ["get", "PatchGun", "--defaults", Fixture.PresencePatchArg] },
         { "get-xml-patched-tag",   ["get", "PatchListGun", "--defaults", Fixture.PresencePatchArg] },
+        // 2026-09-01:上面每一条 presence 用例都带 --defaults,于是**不带它的那条路在新快照上
+        // 一份基线都没有** —— 而 xml 列在那条路上就已经印着,只是解释它的那句「Not listed:」
+        // 走的是另一支代码。改那句时字节闸一声不响。盲测里一个被试正是在这条路上把
+        // xml=no 读成「所以是补丁加的」,而 0.7.0 的 no 意思正相反。
+        // 两档各钉一份:限定语本身是分档的(读补丁前 / 读补丁后),一份基线钉不住两个取值。
+        { "get-xml-notlisted-patch", ["get", "PatchGun", Fixture.PresencePatchArg] },
+        { "get-xml-notlisted-prepatch", ["get", "ChildGun", Fixture.PresenceArg] },
         // 代码默认值的三个落点:字段名与提问一字不差、值却是声明默认值 ——
         // 点了名就必须印出来,并且当场说清它是哪一种。
         { "get-code-default-path", ["get", "Bullet_Revolver", "--path-contains", "burstCount"] },

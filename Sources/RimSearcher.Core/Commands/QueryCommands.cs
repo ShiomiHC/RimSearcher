@@ -635,10 +635,20 @@ public sealed class GetCommand : Command
                     // 而三处口径(产地注释 / SKILL.md / --defaults Help)当时全是准确的:
                     // 副本都对,只是没有一份落在他走的那条路上。
                     // 不新增查询,只是把另一支已经说清的话搬到这一支。
+                    // 2026-09-01 盲测:一个被试在**这条**路上把 xml=no 读成「所以是补丁加的」,
+                    // 而这份快照读的是打完补丁的 XML —— no 在两种口径下含义正相反。那句限定
+                    // 此前只挂在 --defaults 且取景里真有 yes 行的那一支上,而 xml 列在这张表
+                    // 上就已经印着。同一条注释上面写的规矩,这里再犯一次:落点要跟着列走。
+                    // 顺带改掉 there —— 那个词把这一列说成了 --defaults 那边独有的东西。
+                    var readWhen = ctx.Db.Meta.IndexesPostPatchXml
+                        ? "read after every patch ran"
+                        : "read before patches ran";
                     var xmlLayer = ctx.Db.Meta.IndexesXmlWritten
-                        ? $"--defaults lists them, and the '{XmlOrigin.Column}' column there says whether this " +
+                        ? $"--defaults lists them; the '{XmlOrigin.Column}' column, on those rows and on the " +
+                          "ones below alike, says whether this " +
                           $"def's own XML wrote the path ({XmlOrigin.Here}), only an ancestor did " +
-                          $"({XmlOrigin.Parent}), or neither ({XmlOrigin.No}); a row that cannot be pinned to " +
+                          $"({XmlOrigin.Parent}), or neither ({XmlOrigin.No}) — the XML {readWhen}; a row that " +
+                          "cannot be pinned to " +
                           "a line inside a container the XML did write reads as 'under <container>', not as no."
                         : "--defaults lists them. That match is not evidence that nothing wrote them: a def " +
                           "whose XML writes the default value and a def that never mentions the field are " +
