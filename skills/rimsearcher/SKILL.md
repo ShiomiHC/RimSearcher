@@ -40,12 +40,12 @@ Global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the com
 | What is this worth / what does it cost to make? | `rimsearcher economy <defName>` — not a def field, `get` cannot answer it |
 | UI text ↔ translation key | `rimsearcher keyed <key or phrase>` |
 | Which UI text is untranslated? | `rimsearcher keyed --empty-translation` with no query |
-| The game's C#: bodies, callers, overrides, hierarchy | `mcp__decompiler__get_decompiled_source`, `find_callers`, `get_overrides`, `find_derived_types`, `search_types` |
+| The game's C#: bodies, callers, overrides, hierarchy | the DecompilerServer MCP (`mcp__decompiler__*`) — exact, and often not connected. `code-side.md` has the CLI's answer for each, and which one it cannot give |
 | A code *shape* across all files | `rimsearcher code-search <regex>` |
 | The text of one file, member, or line range | `rimsearcher read <file> --member <name>` |
 
-The code side has its own two pages: the CLI half plus what to do when the MCP is absent,
-in [references/code-side.md](references/code-side.md), and the MCP itself in
+The code side has its own two pages: which of the two tools answers what, plus the CLI's
+traps, in [references/code-side.md](references/code-side.md); the MCP itself in
 [references/decompiler-mcp.md](references/decompiler-mcp.md).
 
 ## If your instinct is to grep the XML, stop

@@ -2,21 +2,34 @@
 
 The game's C#, reached two ways: the DecompilerServer MCP (its own page:
 [decompiler-mcp.md](decompiler-mcp.md)) and the CLI's `code-search` / `read` over a
-decompiled tree. This page is the CLI half plus what to do when the MCP is absent —
-none of it is needed to answer a question about def data.
+decompiled tree. This page is which of the two answers what, plus the traps in the CLI
+half. None of it is needed to answer a question about def data.
 
-## Without the MCP
+## Which of the two
 
-The MCP is often not connected — a normal state, not an error. CLI substitutes:
+The MCP is exact — it reads metadata, not text — and is often not connected, which is a
+normal state rather than an error. The CLI reads a decompiled tree, so its answers are
+textual; `rimsearcher sources list` says which trees are `current`, `stale` or
+`never built`, and a query against a tree that was never built is a zero, not an error.
 
-| Instead of | Without the MCP |
-|---|---|
-| `get_decompiled_source` | `rimsearcher read <File>.cs --member <name>` |
-| `search_types` | `rimsearcher code-search "class <Name>\b"`, then `read` that file `--outline` |
-| `find_derived_types` | `rimsearcher code-search "class \w+ : <Base>\b"` |
-| `get_overrides` | `rimsearcher code-search "override [\w<>, \[\]]+ <Member>\("` |
-| `find_callers` | nothing exact — `code-search` matches *text*; same-named members collide. Read the hits; never report the count as a caller count. |
-| `get_il` | **nothing.** Opcode-level questions (`Call` vs `Callvirt`, transpiler targets) are invisible in decompiled C#. Say the question cannot be answered. |
+Only the last row is beyond the CLI outright. The rest it answers approximately, and the
+approximation is better than it sounds: decompiled output is machine-generated and
+regularly formatted, so a declaration never wraps mid-signature the way hand-written code
+does — `code-search "class \w+ : ThingComp\b"` finds 218 direct subclasses in the vanilla
+tree and `"^\s*: ThingComp\b"` finds none left behind.
+
+| The question | With the MCP | With the CLI alone |
+|---|---|---|
+| The body of one member | `get_decompiled_source` | `rimsearcher read <File>.cs --member <name>` |
+| Where is this type declared | `search_types` | `rimsearcher code-search "class <Name>\b"`, then `read` that file `--outline` |
+| What derives from this | `find_derived_types` (`transitive: true` for the whole subtree) | `rimsearcher code-search "class \w+ : <Base>\b"` — direct children only; iterate for the subtree |
+| Who overrides this member | `get_overrides` | `rimsearcher code-search "override [\w<>, \[\]]+ <Member>\("` |
+| Who calls this method | `find_callers` | nothing exact — `code-search` matches *text*; same-named members collide. Read the hits; never report the count as a caller count. |
+| Anything at the opcode level | `get_il` | **nothing.** `Call` vs `Callvirt`, transpiler targets — invisible in decompiled C#. Say the question cannot be answered. |
+
+Going the other way, a shape only text can express — `public\s+(?:virtual\s+)?void\s+Notify_\w+\(`
+across every file — is the CLI's, and the MCP has no equivalent.
+
 
 ## Traps
 
