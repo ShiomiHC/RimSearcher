@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 using RimSearcher.Cli;
 using RimSearcher.Commands;
@@ -1144,6 +1145,93 @@ public class GrammarTests
         var (few, _, _) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--lines", "1+20");
         Assert.DoesNotContain("--outline", few, StringComparison.Ordinal);
         Assert.Contains("--lines 21+20", few, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// `--limit` 是「最多印多少行」,那在没有 `--lines` 时它就该决定印到哪一行 ——
+    /// 缺省的 150 只在调用方一个字都没表态时才该出现。
+    ///
+    /// 立这道闸的理由是量出来的(Vethara 全史 2711 份转写、5767 次 read):**1713 次给了
+    /// `--limit all` 却没给 `--lines`**,其中 186 次真被截在第 150 行(合计 28553 行源码
+    /// 没进过视野,最狠的一条是 ThingDef.cs 的 1-150 of 2449),约一半再没被补读 ——
+    /// 那些会话的结论就建立在文件的前 150 行上。而首行印的 `lines 1-150 of 2449`
+    /// 是**对的**,截断态自己一个字都没说错,所以这不是输出的毛病,是这条缺省的毛病。
+    ///
+    /// 同时给两者的 899 次里,867 次是 `--limit all` 配一个有界区间,返回里真说过
+    /// 「--limit stopped it」的**只有 1 次** —— 调用方手里的 `--limit all` 早就不是
+    /// 截断上限,而是「别截我」那句口令。这道闸让它兑现,而那 867 次一行不动。
+    /// </summary>
+    [Fact]
+    public void 显式的limit同时定下裸行读的窗口()
+    {
+        var (dir, config) = LongFileTree();
+
+        // 一个字没说 —— 缺省窗口不动。这一格是回归面:它变了就是另一个工具。
+        var (silent, _, silentCode) = Fixture.Run("read", "Long.cs", "--config", config);
+        Assert.Equal(0, silentCode);
+        Assert.Contains("lines 1-150 of 400", silent, StringComparison.Ordinal);
+
+        // `--limit all`:文件短于印刷上限,于是全出。与 `--lines all` 逐字同一句。
+        var (all, _, allCode) = Fixture.Run("read", "Long.cs", "--limit", "all", "--config", config);
+        Assert.Equal(0, allCode);
+        Assert.Contains("all 400 lines", all, StringComparison.Ordinal);
+        var (viaLines, _, _) = Fixture.Run("read", "Long.cs", "--lines", "all", "--config", config);
+        Assert.Equal(viaLines, all);
+
+        // 给了数字就照那个数字读。**不许再出现那句 `--limit stopped it ... short of what
+        // --lines asked for`** —— 调用方一个 `--lines` 都没写,那句话在指一个不存在的参数。
+        var (n, _, nCode) = Fixture.Run("read", "Long.cs", "--limit", "40", "--config", config);
+        Assert.Equal(0, nCode);
+        Assert.Contains("lines 1-40 of 400", n, StringComparison.Ordinal);
+        Assert.DoesNotContain("what --lines asked for", n, StringComparison.Ordinal);
+
+        // 印刷上限仍是最终的那道闸:两条路都到不了 2000 行以外,读回来的是同一段。
+        var (huge, _, hugeCode) = Fixture.Run("read", "Huge.cs", "--limit", "all", "--config", config);
+        Assert.Equal(0, hugeCode);
+        Assert.Contains("lines 1-2000 of 2500", huge, StringComparison.Ordinal);
+        var (hugeViaLines, _, _) = Fixture.Run("read", "Huge.cs", "--lines", "all", "--config", config);
+        Assert.Contains("lines 1-2000 of 2500", hugeViaLines, StringComparison.Ordinal);
+
+        // **这里两条路的话不一样,而且应当不一样** —— 这是「--limit all 等价 --lines all」
+        // 唯一残留的出入,写下来免得下一个人当成漏改。`--lines all` 明说了要整个文件,
+        // 上限咬下去就欠了它 500 行,那句话认这笔账;`--limit all` 只说了印多少,
+        // 2000 行是**足额交付**,该给的是下一页的参数。谁欠谁,取决于调用方说过什么。
+        Assert.Contains("--limit stopped it 500 lines short", hugeViaLines, StringComparison.Ordinal);
+        Assert.DoesNotContain("stopped it", huge, StringComparison.Ordinal);
+        Assert.Contains("--lines 2001+2000", huge, StringComparison.Ordinal);
+
+        // 那 867 次组合的回归面:`--lines` 在场时它说了算,`--limit all` 一个字都不改。
+        var (bounded, _, _) = Fixture.Run("read", "Long.cs", "--lines", "7-12", "--config", config);
+        var (boundedWithLimit, _, _) = Fixture.Run(
+            "read", "Long.cs", "--lines", "7-12", "--limit", "all", "--config", config);
+        Assert.Equal(bounded, boundedWithLimit);
+        Assert.Contains("lines 7-12 of 400", bounded, StringComparison.Ordinal);
+
+        Directory.Delete(dir, recursive: true);
+    }
+
+    /// <summary>
+    /// 这条闸要的两个长度在共享语料里没有,而往共享语料里塞会动到 code-search 那批
+    /// 计数基线(文件数、树数)。自建一棵一次性的树,`--config` 走 Fixture.Run 已有的入口。
+    /// </summary>
+    private static (string Dir, string Config) LongFileTree()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests",
+            "readwindow-" + Guid.NewGuid().ToString("N")[..8]);
+        var tree = Path.Combine(dir, "sources", "vanilla", "Verse");
+        Directory.CreateDirectory(tree);
+        // 内容无关紧要,只有行数是承重的 —— 一份在 150 与 2000 之间,一份在 2000 以外。
+        File.WriteAllText(Path.Combine(tree, "Long.cs"),
+            string.Join("\n", Enumerable.Range(1, 400).Select(i => $"// line {i}")) + "\n",
+            new UTF8Encoding(false));
+        File.WriteAllText(Path.Combine(tree, "Huge.cs"),
+            string.Join("\n", Enumerable.Range(1, 2500).Select(i => $"// line {i}")) + "\n",
+            new UTF8Encoding(false));
+        var config = Path.Combine(dir, "config.toml");
+        File.WriteAllText(config,
+            "decompiled_dir = '" + Path.Combine(dir, "sources") + "'\n",
+            new UTF8Encoding(false));
+        return (dir, config);
     }
 
     /// <summary>

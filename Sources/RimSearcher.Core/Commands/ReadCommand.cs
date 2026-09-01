@@ -82,7 +82,8 @@ public sealed class ReadCommand : Command
                 Placeholder = "<a-b|a+n|a|all>",
                 Help = "Read raw lines instead: '400-460' is inclusive, '400+60' is sixty lines from 400, " +
                        "'400' starts there and takes the default window, 'all' is the whole file. " +
-                       $"Without it the read starts at line 1 and takes {Limits.ReadWindow}.",
+                       $"Without it the read starts at line 1 and takes {Limits.ReadWindow} — or however " +
+                       "many --limit asks for, when that is given.",
             },
             new OptionSpec
             {
@@ -107,7 +108,10 @@ public sealed class ReadCommand : Command
                 Aliases = ["max-lines", "max-results", "count", "rows", "head"],
                 Placeholder = "<n|all>",
                 Help = $"How many lines to print at most. Values above {Limits.ReadMaxLines} are clamped to " +
-                       $"it, because one type can be thousands of lines and this output is read whole.",
+                       "it, because one type can be thousands of lines and this output is read whole. " +
+                       "On a raw read with no --lines this also sets where the read stops, so " +
+                       $"'--limit all' reads the whole file the way '--lines all' does (both stop at " +
+                       $"{Limits.ReadMaxLines}); without --limit the read takes {Limits.ReadWindow} lines.",
                 Default = Limits.ReadMaxLines.ToString(),
             },
         ],
@@ -215,10 +219,18 @@ public sealed class ReadCommand : Command
 
         var cap = Cap(ctx);
 
+        // --limit 说的是「最多印多少行」,那调用方一旦说了个数,裸行读就该印到那一行 ——
+        // 缺省的 150 是**没人表态时**的窗口,不是一道压在表态之上的第二道闸。
+        //
+        // 不这样的话两个参数各管半截,而截断态自己一个字都没说错:`--limit all` 拿回
+        // `lines 1-150 of 2449`,那句话是对的,只是它印的不是调用方要的东西。
+        // 全史实证见 GrammarTests 的 显式的limit同时定下裸行读的窗口。
+        var window = ctx.Args.Value("limit") is { Length: > 0 } ? cap : Limits.ReadWindow;
+
         if (outline) return Outline(ctx, rel, text, cap);
         if (member is { Length: > 0 } || type is { Length: > 0 })
             return Declaration(ctx, rel, text, member, type, cap);
-        return Raw(ctx, rel, text, range, cap);
+        return Raw(ctx, rel, text, range, cap, window);
     }
 
     // ---- 三种读法 ----
@@ -357,9 +369,9 @@ public sealed class ReadCommand : Command
     }
 
     /// <summary>裸行。翻页靠它,所以总行数与下一页的参数恒在。</summary>
-    private static int Raw(CommandContext ctx, string rel, string[] text, string? range, int cap)
+    private static int Raw(CommandContext ctx, string rel, string[] text, string? range, int cap, int window)
     {
-        var (from, to) = ParseRange(range, text.Length, out var rewritten);
+        var (from, to) = ParseRange(range, text.Length, window, out var rewritten);
 
         // 归一化改过写法就先说改成了什么。放在句首而不是句尾:后面每个行号的意思都由它决定。
         var echo = rewritten is null ? "" : $"--lines {range!.Trim()}{ReadAsPhrase}{rewritten}. ";
@@ -651,16 +663,19 @@ public sealed class ReadCommand : Command
 
     /// <summary>`a-b` / `a+n` / `a` / `all` / 不给。行号 1 起,两端都含。</summary>
     internal static (int From, int To) ParseRange(string? spec, int total)
-        => ParseRange(spec, total, out _);
+        => ParseRange(spec, total, Limits.ReadWindow, out _);
 
     /// <summary>
     /// <paramref name="rewritten"/>:归一化真的改动了写法时给出改动后的样子,否则 null。
     /// 调用方拿它印回声 —— 空格不算改动,`7 - 12` 与 `7-12` 是同一句话。
+    ///
+    /// <paramref name="window"/>:说不出终点的两种写法(什么都不给、只给一个起点)各取多少行。
+    /// 调用方显式给过 --limit 时传的是那个上限,见 <see cref="Run"/>。
     /// </summary>
-    internal static (int From, int To) ParseRange(string? spec, int total, out string? rewritten)
+    internal static (int From, int To) ParseRange(string? spec, int total, int window, out string? rewritten)
     {
         rewritten = null;
-        if (string.IsNullOrEmpty(spec)) return (1, Math.Min(total, Limits.ReadWindow));
+        if (string.IsNullOrEmpty(spec)) return (1, Math.Min(total, window));
 
         var given = spec.Trim();
         if (given is "all") return (1, Math.Max(total, 1));
@@ -695,7 +710,7 @@ public sealed class ReadCommand : Command
         }
 
         var only = At(spec, "the start");
-        return (only, only + Limits.ReadWindow - 1);
+        return (only, only + window - 1);
     }
 
     /// <summary>
