@@ -256,6 +256,16 @@ public class SkillPromiseTests
             nameof(SnapshotDiffTests.文本零的一侧仍报零而不是整张表消失)),
         new("whatever falls past that count is deleted and said so",
             nameof(SnapshotRetentionTests.超出keep的最老一代被删并说出来)),
+        // 2026-09-01:问法表那一格从 1261 字节压到 676(78% 与 `get --help` 重叠,而本页开头
+        // 自称只放 help 与 reference 说不了的东西)。**压之前那一格一句承诺都没登记过** ——
+        // 0.5.0/0.6.0/0.7.0 三档、`no` 的判定性、`under` 的成因,六个提交连着加进去,
+        // 一条没进这张表,于是删掉一整段时闸不红。剩下的三句是真承诺,现在钉住。
+        new("a `+patch` suffix when another mod's patch put the line there",
+            nameof(PresenceTests.补丁加的行报here带patch后缀)),
+        new("**`no` is determined, not a path-shape maybe.**",
+            nameof(PresenceTests.两层defName标签能归位_没写的那一格是确定的no)),
+        new("snapshots older than 0.5.0 have no such column and say so",
+            nameof(PresenceTests.旧快照get不把xml写成印成没写)),
         // 2026-09-01:原文写的是「落空不等于类型没这个字段,去读声明类」—— 那是 type_fields
         // 之前的出路,现在 fields 自己就把两态分开了。免责收窄到 get/where,新出路连同它的
         // 版本下限一起钉住。
