@@ -23,6 +23,11 @@ public static class SnapshotSchema
     /// 精确相等的 schema 检查会让磁盘上的旧库整份打不开,而缺的那一层由导出器版本上
     /// 的能力位说话(同 content_fingerprint 那条缝)。新导入的库有这些列/表;旧库没有,
     /// 查询侧能力位为假时不去碰它们。
+    ///
+    /// type_fields 后来把 path 抽成 type_field_paths 字典(1373 万行里只有 52 万条不同
+    /// 路径,平均 116 字符)。这一条与上面几条不同 —— 它改的是**既有表的形状**,于是同名
+    /// 表在磁盘上有两种样子。同样不涨版本,同样的理由;区分不靠导出器版本(两种形状能出自
+    /// 同一个导出器),靠 SnapshotDb 探 path_id 列在不在。
     /// </remarks>
     public const int Version = 8;
 
