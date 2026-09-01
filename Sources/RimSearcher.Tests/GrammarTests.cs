@@ -1185,22 +1185,35 @@ public class GrammarTests
         Assert.Contains("lines 1-40 of 400", n, StringComparison.Ordinal);
         Assert.DoesNotContain("what --lines asked for", n, StringComparison.Ordinal);
 
-        // 超过 2000 行也整个出来 —— **没有第二道闸压在 --limit 之上**。这一格钉的是
-        // 撤闸本身:它一旦回来,`--limit all | grep` 在长文件上就重新退化成 0 字节,
-        // 而管道下那个 0 与「这个文件里真的没有」逐字同形,从输出里分不出来。
+        // 超过 2000 行也整个出来 —— **没有一道闸压在表态之上**。这一格钉的是撤闸本身:
+        // 它一旦回来,`--limit all | grep` 在长文件上就重新退化成 0 字节,而管道下那个 0
+        // 与「这个文件里真的没有」逐字同形,从输出里分不出来。
+        //
+        // 三种说法要的是同一件事,就得拿回同一份东西 —— 分开钉,因为「说 all 的那条撤了闸」
+        // 与「三条都撤了」在任何单独一格里同形。
         var (huge, _, hugeCode) = Fixture.Run("read", "Huge.cs", "--limit", "all", "--config", config);
         Assert.Equal(0, hugeCode);
         Assert.Contains("all 2500 lines", huge, StringComparison.Ordinal);
         Assert.DoesNotContain("stopped it", huge, StringComparison.Ordinal);
-        var (hugeBoth, _, _) = Fixture.Run(
-            "read", "Huge.cs", "--lines", "all", "--limit", "all", "--config", config);
-        Assert.Equal(hugeBoth, huge);
+        foreach (var say in new[]
+                 {
+                     new[] { "--lines", "all" },
+                     new[] { "--lines", "all", "--limit", "all" },
+                     new[] { "--lines", "1-2500" },
+                 })
+        {
+            var (same, _, _) = Fixture.Run(
+                ["read", "Huge.cs", .. say, "--config", config]);
+            Assert.Equal(huge, same);
+        }
 
-        // 而缺省仍停在 2000:它是**没人表态时**的取值,不是 --limit 的上界。
-        // 这一格与上一格分开钉 —— 合起来看,「撤了闸」与「连缺省一起撤了」同形。
-        var (hugeDefault, _, _) = Fixture.Run("read", "Huge.cs", "--lines", "all", "--config", config);
-        Assert.Contains("lines 1-2000 of 2500", hugeDefault, StringComparison.Ordinal);
-        Assert.Contains("--limit stopped it 500 lines short", hugeDefault, StringComparison.Ordinal);
+        // 而写了数字就还是按那个数字来,那句欠账也照说 —— 撤的是缺省值的越权,
+        // 不是 --limit 本身。这句话只在真写了 --limit 时出现,它也只有那时才指得着
+        // 一个存在的参数。
+        var (capped, _, _) = Fixture.Run(
+            "read", "Huge.cs", "--lines", "all", "--limit", "2000", "--config", config);
+        Assert.Contains("lines 1-2000 of 2500", capped, StringComparison.Ordinal);
+        Assert.Contains("--limit stopped it 500 lines short", capped, StringComparison.Ordinal);
 
         // 那 867 次组合的回归面:`--lines` 在场时它说了算,`--limit all` 一个字都不改。
         var (bounded, _, _) = Fixture.Run("read", "Long.cs", "--lines", "7-12", "--config", config);

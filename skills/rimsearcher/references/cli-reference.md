@@ -613,10 +613,10 @@ Page with --lines, never with a pipe. The first line of the answer says which li
 |---|---|---|
 | `--member` <name> | Read the declaration of this member. Every member of that name in the file is returned; --type narrows it to one declaring type. | `--method`, `--method-name`, `--member-name`, `--property` |
 | `--type` <name> | Read this whole type. With --member it instead says which type the member must belong to. | `--class-name`, `--type-name`, `--extract-class` |
-| `--lines` <a-b|a+n|a|all> | Read raw lines instead: '400-460' is inclusive, '400+60' is sixty lines from 400, '400' starts there and takes the default window, 'all' is the whole file as far as --limit allows. Without it the read starts at line 1 and takes 150, or as many as --limit asks for. | `--line`, `--range`, `--line-range` |
+| `--lines` <a-b|a+n|a|all> | Read raw lines instead: '400-460' is inclusive, '400+60' is sixty lines from 400, '400' starts there and takes the default window, 'all' is the whole file however long it is. Whatever it asks for is printed in full unless --limit says otherwise. Without it the read starts at line 1 and takes 150, or as many as --limit asks for. | `--line`, `--range`, `--line-range` |
 | `--source` <name> | Only resolve the file name inside this source tree. 'rimsearcher sources list' names them. | `--root`, `--tree` |
 | `--outline` | List the file's types and members with their modifiers and line ranges instead of reading any of them. This is the cheap way to find out what to ask for. | `--members`, `--toc` |
-| `-n`, `--limit` <n|all> | How many lines to print at most, and on a raw read where the read stops. 'all' is the whole file however long it is, so '--limit all' on a decompiled type can be thousands of lines. Without it the print stops at 2000 and a raw read takes the 150-line window. Default: `2000`. | `--max-lines`, `--max-results`, `--count`, `--rows`, `--head` |
+| `-n`, `--limit` <n|all> | How many lines to print at most, and on a raw read where the read stops. 'all' is the whole file however long it is, so '--limit all' on a decompiled type can be thousands of lines. Without it nothing is capped: the read prints whatever --lines, --outline or --member asked for, or 150 lines from the top if none of them was given. Default: `all`. | `--max-lines`, `--max-results`, `--count`, `--rows`, `--head` |
 
 `--json` keys, besides the global `notes`:
 

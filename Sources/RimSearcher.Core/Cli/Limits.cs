@@ -31,19 +31,16 @@ public static class Limits
     /// <summary>code-search 正则单文件匹配超时(毫秒),防灾难性回溯。</summary>
     public const int CodeSearchRegexTimeoutMs = 2000;
 
-    /// <summary>read 不给 --lines 时读多少行。翻页的一页就是它。</summary>
-    public const int ReadWindow = 150;
-
     /// <summary>
-    /// read 没写 --limit 时最多印多少行。**不是上限** —— 写了 --limit 就按写的来,
-    /// 'all' 是真的全文,与 list 那族一致。
+    /// read 不给 --lines 时读多少行。翻页的一页就是它。
     ///
-    /// 这里曾经是一道压在 --limit 之上的闸。撤掉的判据是实测:14719 次真实调用里
-    /// 结果最大的一次 29 KB,而它来自 where / code-search / list —— 那三条本来就没有闸。
-    /// 闸挡的那件事在没有闸的地方也没发生,而它的代价(超长文件静默截断,管道下与
-    /// 「真的没有」同形)照付。
+    /// **这是 read 唯一的缺省** —— 说了 --lines / --outline / --member 就按说的给全,
+    /// --limit 不给等于不限。这里曾另有一道 2000 行的闸压在 --limit 之上,撤掉的判据
+    /// 是实测两头都空:14719 次调用里结果最大的一次 29 KB,而它来自本来就没有闸的
+    /// where / code-search / list;6909 次 read 里那道闸只咬到过 1 次。而它的代价照付
+    /// —— 超长文件静默截断,管道下与「这个文件里真的没有」逐字同形。
     /// </summary>
-    public const int ReadDefaultLimit = 2000;
+    public const int ReadWindow = 150;
 
     /// <summary>同名文件几选一时最多列几条。</summary>
     public const int AmbiguousFiles = 8;

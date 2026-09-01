@@ -81,8 +81,8 @@ public sealed class ReadCommand : Command
                 Aliases = ["line", "range", "line-range"],
                 Placeholder = "<a-b|a+n|a|all>",
                 Help = "Read raw lines instead: '400-460' is inclusive, '400+60' is sixty lines from 400, " +
-                       "'400' starts there and takes the default window, 'all' is the whole file as far as " +
-                       "--limit allows. " +
+                       "'400' starts there and takes the default window, 'all' is the whole file however " +
+                       "long it is. Whatever it asks for is printed in full unless --limit says otherwise. " +
                        $"Without it the read starts at line 1 and takes {Limits.ReadWindow}, or as many " +
                        "as --limit asks for.",
             },
@@ -110,9 +110,10 @@ public sealed class ReadCommand : Command
                 Placeholder = "<n|all>",
                 Help = "How many lines to print at most, and on a raw read where the read stops. " +
                        "'all' is the whole file however long it is, so '--limit all' on a decompiled " +
-                       $"type can be thousands of lines. Without it the print stops at " +
-                       $"{Limits.ReadDefaultLimit} and a raw read takes the {Limits.ReadWindow}-line window.",
-                Default = Limits.ReadDefaultLimit.ToString(),
+                       "type can be thousands of lines. Without it nothing is capped: the read prints " +
+                       $"whatever --lines, --outline or --member asked for, or {Limits.ReadWindow} lines " +
+                       "from the top if none of them was given.",
+                Default = "all",
             },
         ],
         Examples =
@@ -629,10 +630,10 @@ public sealed class ReadCommand : Command
     private static int Cap(CommandContext ctx)
     {
         var raw = ctx.Args.Value("limit");
-        if (string.IsNullOrEmpty(raw)) return Limits.ReadDefaultLimit;
-        // 'all' 无上限。返回 int.MaxValue,于是每个 `cap` 的用处都自然失效 ——
-        // 但凡有加法碰它就得防溢出,见 ParseRange 里那一处。
-        if (raw is "all" or "none" or "0" or "-1") return int.MaxValue;
+        // 不给就是不限,与 'all' 同一支。read 只剩一个缺省 —— 什么都没说时的
+        // ReadWindow 行窗口。返回 int.MaxValue,于是但凡有加法碰它就得防溢出,
+        // 见 ParseRange 里那一处。
+        if (string.IsNullOrEmpty(raw) || raw is "all" or "none" or "0" or "-1") return int.MaxValue;
         if (int.TryParse(raw, out var n) && n > 0) return n;
         throw new CliUsageException($"--limit takes a positive number or 'all'; got '{raw}'.");
     }
