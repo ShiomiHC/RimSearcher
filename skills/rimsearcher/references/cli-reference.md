@@ -616,7 +616,7 @@ Page with --lines, never with a pipe. The first line of the answer says which li
 | `--lines` <a-b|a+n|a|all> | Read raw lines instead: '400-460' is inclusive, '400+60' is sixty lines from 400, '400' starts there and takes the default window, 'all' is the whole file as far as --limit allows. Without it the read starts at line 1 and takes 150, or as many as --limit asks for. | `--line`, `--range`, `--line-range` |
 | `--source` <name> | Only resolve the file name inside this source tree. 'rimsearcher sources list' names them. | `--root`, `--tree` |
 | `--outline` | List the file's types and members with their modifiers and line ranges instead of reading any of them. This is the cheap way to find out what to ask for. | `--members`, `--toc` |
-| `-n`, `--limit` <n|all> | How many lines to print at most. Every value stops at 2000, 'all' included, because one type can be thousands of lines and this output is read whole. On a raw read it is also where the read stops, so '--limit all' reads a whole file of up to 2000 lines and says where it stopped on a longer one. Default: `2000`. | `--max-lines`, `--max-results`, `--count`, `--rows`, `--head` |
+| `-n`, `--limit` <n|all> | How many lines to print at most, and on a raw read where the read stops. 'all' is the whole file however long it is, so '--limit all' on a decompiled type can be thousands of lines. Without it the print stops at 2000 and a raw read takes the 150-line window. Default: `2000`. | `--max-lines`, `--max-results`, `--count`, `--rows`, `--head` |
 
 `--json` keys, besides the global `notes`:
 

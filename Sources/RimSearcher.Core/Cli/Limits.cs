@@ -35,12 +35,15 @@ public static class Limits
     public const int ReadWindow = 150;
 
     /// <summary>
-    /// read 一次最多印多少行(--limit 的默认值,也是它的上限)。
+    /// read 没写 --limit 时最多印多少行。**不是上限** —— 写了 --limit 就按写的来,
+    /// 'all' 是真的全文,与 list 那族一致。
     ///
-    /// 反编译出的大类动辄四五千行,而输出被整个读进上下文 —— 这道闸挡的是
-    /// 「一次调用吃掉整个上下文预算」。
+    /// 这里曾经是一道压在 --limit 之上的闸。撤掉的判据是实测:14719 次真实调用里
+    /// 结果最大的一次 29 KB,而它来自 where / code-search / list —— 那三条本来就没有闸。
+    /// 闸挡的那件事在没有闸的地方也没发生,而它的代价(超长文件静默截断,管道下与
+    /// 「真的没有」同形)照付。
     /// </summary>
-    public const int ReadMaxLines = 2000;
+    public const int ReadDefaultLimit = 2000;
 
     /// <summary>同名文件几选一时最多列几条。</summary>
     public const int AmbiguousFiles = 8;

@@ -262,8 +262,8 @@ snapshot), and which `GenStep` each runs is on `genStep`, indexed as `genStep.Cl
 
 ## Paging and errors, in detail
 
-`--limit all` lifts the row cap on the list-shaped commands; `read` is the exception, where
-every value including `all` stops at 2000 lines. A paged answer states the three things a pipe would have
+`--limit all` lifts the row cap on the list-shaped commands, and on `read` it is the whole file
+however long. A paged answer states the three things a pipe would have
 destroyed: how many rows this page holds, how many exist in total, and the exact `--offset`
 for the next page. The last page
 says it is the last one; an `--offset` past the end is reported as an overshoot, not as

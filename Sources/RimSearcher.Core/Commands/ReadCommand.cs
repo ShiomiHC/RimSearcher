@@ -108,14 +108,11 @@ public sealed class ReadCommand : Command
                 Short = 'n',
                 Aliases = ["max-lines", "max-results", "count", "rows", "head"],
                 Placeholder = "<n|all>",
-                // 「'all' 就是全文」是假话:这条命令的 all 也停在 ReadMaxLines(与那十几条
-                // 列表命令不同 —— 那边的 all 是真无上限)。上界必须跟着 'all' 一起说,
-                // 说「above N are clamped」不够:那句管的是数字,而 all 不是数字。
-                Help = $"How many lines to print at most. Every value stops at {Limits.ReadMaxLines}, " +
-                       "'all' included, because one type can be thousands of lines and this output is read " +
-                       "whole. On a raw read it is also where the read stops, so '--limit all' reads a whole " +
-                       $"file of up to {Limits.ReadMaxLines} lines and says where it stopped on a longer one.",
-                Default = Limits.ReadMaxLines.ToString(),
+                Help = "How many lines to print at most, and on a raw read where the read stops. " +
+                       "'all' is the whole file however long it is, so '--limit all' on a decompiled " +
+                       $"type can be thousands of lines. Without it the print stops at " +
+                       $"{Limits.ReadDefaultLimit} and a raw read takes the {Limits.ReadWindow}-line window.",
+                Default = Limits.ReadDefaultLimit.ToString(),
             },
         ],
         Examples =
@@ -632,9 +629,11 @@ public sealed class ReadCommand : Command
     private static int Cap(CommandContext ctx)
     {
         var raw = ctx.Args.Value("limit");
-        if (string.IsNullOrEmpty(raw)) return Limits.ReadMaxLines;
-        if (raw is "all" or "none" or "0" or "-1") return Limits.ReadMaxLines;
-        if (int.TryParse(raw, out var n) && n > 0) return Math.Min(n, Limits.ReadMaxLines);
+        if (string.IsNullOrEmpty(raw)) return Limits.ReadDefaultLimit;
+        // 'all' 无上限。返回 int.MaxValue,于是每个 `cap` 的用处都自然失效 ——
+        // 但凡有加法碰它就得防溢出,见 ParseRange 里那一处。
+        if (raw is "all" or "none" or "0" or "-1") return int.MaxValue;
+        if (int.TryParse(raw, out var n) && n > 0) return n;
         throw new CliUsageException($"--limit takes a positive number or 'all'; got '{raw}'.");
     }
 
@@ -691,6 +690,11 @@ public sealed class ReadCommand : Command
                     $"--lines wants line numbers from 1 up; '{s.Trim()}' is not one ({what}). " +
                     "Write it as '400-460', '400+60', '400', or 'all'.");
 
+        // 起点加个数,算在 long 上再收回来:window 可能是 int.MaxValue(--limit all),
+        // 而 `--lines 1+2147483647` 的个数由调用方给。溢出会变成负的终点,那时
+        // 「读到文件尾」与「起点在文件外」两条支路都走不到,报错也无从谈起。
+        static int End(long from, long count) => (int)Math.Min(from + count - 1, int.MaxValue);
+
         var dash = spec.IndexOf('-');
         if (dash > 0)
         {
@@ -706,11 +710,11 @@ public sealed class ReadCommand : Command
         {
             var from = At(spec[..plus], "the start");
             var count = At(spec[(plus + 1)..], "the count");
-            return (from, from + count - 1);
+            return (from, End(from, count));
         }
 
         var only = At(spec, "the start");
-        return (only, only + window - 1);
+        return (only, End(only, window));
     }
 
     /// <summary>

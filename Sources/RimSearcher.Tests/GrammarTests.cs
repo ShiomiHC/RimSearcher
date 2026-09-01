@@ -1185,20 +1185,22 @@ public class GrammarTests
         Assert.Contains("lines 1-40 of 400", n, StringComparison.Ordinal);
         Assert.DoesNotContain("what --lines asked for", n, StringComparison.Ordinal);
 
-        // 印刷上限仍是最终的那道闸:两条路都到不了 2000 行以外,读回来的是同一段。
+        // 超过 2000 行也整个出来 —— **没有第二道闸压在 --limit 之上**。这一格钉的是
+        // 撤闸本身:它一旦回来,`--limit all | grep` 在长文件上就重新退化成 0 字节,
+        // 而管道下那个 0 与「这个文件里真的没有」逐字同形,从输出里分不出来。
         var (huge, _, hugeCode) = Fixture.Run("read", "Huge.cs", "--limit", "all", "--config", config);
         Assert.Equal(0, hugeCode);
-        Assert.Contains("lines 1-2000 of 2500", huge, StringComparison.Ordinal);
-        var (hugeViaLines, _, _) = Fixture.Run("read", "Huge.cs", "--lines", "all", "--config", config);
-        Assert.Contains("lines 1-2000 of 2500", hugeViaLines, StringComparison.Ordinal);
-
-        // **这里两条路的话不一样,而且应当不一样** —— 这是「--limit all 等价 --lines all」
-        // 唯一残留的出入,写下来免得下一个人当成漏改。`--lines all` 明说了要整个文件,
-        // 上限咬下去就欠了它 500 行,那句话认这笔账;`--limit all` 只说了印多少,
-        // 2000 行是**足额交付**,该给的是下一页的参数。谁欠谁,取决于调用方说过什么。
-        Assert.Contains("--limit stopped it 500 lines short", hugeViaLines, StringComparison.Ordinal);
+        Assert.Contains("all 2500 lines", huge, StringComparison.Ordinal);
         Assert.DoesNotContain("stopped it", huge, StringComparison.Ordinal);
-        Assert.Contains("--lines 2001+2000", huge, StringComparison.Ordinal);
+        var (hugeBoth, _, _) = Fixture.Run(
+            "read", "Huge.cs", "--lines", "all", "--limit", "all", "--config", config);
+        Assert.Equal(hugeBoth, huge);
+
+        // 而缺省仍停在 2000:它是**没人表态时**的取值,不是 --limit 的上界。
+        // 这一格与上一格分开钉 —— 合起来看,「撤了闸」与「连缺省一起撤了」同形。
+        var (hugeDefault, _, _) = Fixture.Run("read", "Huge.cs", "--lines", "all", "--config", config);
+        Assert.Contains("lines 1-2000 of 2500", hugeDefault, StringComparison.Ordinal);
+        Assert.Contains("--limit stopped it 500 lines short", hugeDefault, StringComparison.Ordinal);
 
         // 那 867 次组合的回归面:`--lines` 在场时它说了算,`--limit all` 一个字都不改。
         var (bounded, _, _) = Fixture.Run("read", "Long.cs", "--lines", "7-12", "--config", config);
