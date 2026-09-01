@@ -183,8 +183,8 @@ public class SkillPromiseTests
             "source列印的是没有目录的裸文件名"),
         new("`0` ran, `1` zero rows, `2` usage error, `70` tool defect",
             "退出码如实传给shell"),
-        new("Unknown options are rejected rather than ignored, with the nearest accepted spelling — or, if another command takes that option, which one",
-            nameof(未知选项的报错点名接受它的那条命令)),
+        new("Unknown options are rejected rather than ignored, with the nearest accepted spelling — or, when nothing is close, everything this command does take",
+            nameof(未知选项的报错给出这条命令自己收什么)),
         // 播报判据是「展开与你输入的字面不同」,不是「多于一个 mod」——
         // `--scope ludeon.rimworld` 展开成一个 mod 时也要播报。
         // 2026-08-04(15 §十二)同批退役。基线 `where-scope-group` 逐字钉着
@@ -643,16 +643,21 @@ public class SkillPromiseTests
     }
 
     /// <summary>
-    /// 猜错一个开关名要一行就能纠正。「另一条命令接受它」比「拼写接近」更有用 ——
-    /// 前者说的是「你走错门了」,后者只说「这个门没有」。
+    /// 猜错一个开关名要一行就能纠正。没有近似名时给的是**这条命令自己收什么** ——
+    /// 「另一条命令接受它」说的是「你走错门了」,而全史 161 次里只有 18 次(11%)真的
+    /// 走去了那扇门,111 次(69%)留在原地换写法:他们本来就没走错门,缺的是门上那张表。
+    /// 表还多答一件事 —— 「这里到底有没有」,那是跨命令线索答不出来的。
     /// </summary>
     [Fact]
-    public void 未知选项的报错点名接受它的那条命令()
+    public void 未知选项的报错给出这条命令自己收什么()
     {
         var (_, stderr, code) = Fixture.Run("list", "ThingDef", "--member", "foo");
         Assert.Equal(2, code);
-        Assert.Contains("read", stderr, StringComparison.Ordinal);
-        Assert.Contains("list", stderr, StringComparison.Ordinal);
+        Assert.Contains("This command accepts:", stderr, StringComparison.Ordinal);
+        // 表要真的是这条命令的:--member 是 read 的活,list 上没有等价物,而读者
+        // 看完这张表就能判定这件事 —— 换命令这一步由他自己走,不靠一句猜他意图的提示。
+        Assert.Contains("--scope", stderr, StringComparison.Ordinal);
+        Assert.DoesNotContain("--member", stderr.Split("accepts:")[^1], StringComparison.Ordinal);
     }
 
     /// <summary>

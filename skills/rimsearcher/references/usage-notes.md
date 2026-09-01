@@ -271,7 +271,8 @@ that names the first few commands which do take it and counts the rest, not a si
 ignored switch.
 
 Unknown options are rejected rather than ignored, with the nearest accepted spelling — or,
-if another command takes that option, which one — so a wrong guess costs one line, not a
+when nothing is close, everything this command does take, which answers both "what is it
+called here" and "is there one here at all". Either way a wrong guess costs one line, not a
 wrong answer.
 
 Two things `read` refuses to guess at, because a wrong guess reads exactly like a right one:

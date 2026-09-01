@@ -255,13 +255,16 @@ public static class ArgParser
                 msg += " The name as typed is accepted by " +
                        NameList.Render(elsewhere, Limits.MaxSuggestions) + $", but not by '{spec.Name}'.";
         }
-        else if (elsewhere.Count > 0)
-            // 截断走 NameList 而非自己 Take:它会带出被省掉的数量,
-            // 否则「只列前三条」与「一共就这三条认」逐字同形。
-            msg += " It is accepted by " +
-                   NameList.Render(elsewhere, Limits.MaxSuggestions) + $", but not by '{spec.Name}'.";
         else
-            // 没有近似候选时直接列出接受的名字,省掉一次 --help 往返。
+            // 没有近似候选时列出这条命令自己收什么,省掉一次 --help 往返。
+            //
+            // 「别的命令收它」在这一支**不说** —— 它与「这里有什么」面对的是同一种局面
+            // (本命令没有近似名),而那件事回答不了读者的问题:`export --check` 会被指去
+            // 'docs'(那条判的是文档文件是否最新),`read --start` 会被指去 search / where /
+            // list(那边它是 --offset 的别名,跳过 N 条结果,而写它的人要的是行号)。
+            // 名字在别处存在,不蕴含那边那个就是这里要的东西。
+            //
+            // 选项表则是自足的:它同时答得出「这里有什么」和「这里没有什么」。
             msg += $" This command accepts: {string.Join(", ", options.Select(o => "--" + o.Name).OrderBy(s => s, StringComparer.Ordinal))}.";
         return msg;
     }

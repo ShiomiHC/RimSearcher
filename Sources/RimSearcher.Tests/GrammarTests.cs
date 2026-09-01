@@ -2348,18 +2348,58 @@ public class GrammarTests
     /// 「别的命令认这个参数」那句话不许只列前三条就收尾:`--limit` 挂在十来条命令上,
     /// 而「It is accepted by 'search' and 'get' and 'find'」与「一共就这三条认」逐字同形。
     /// 被省略的那个数量正是让人改对的那半句(同 <see cref="NameList"/>)。
+    ///
+    /// 只剩**有近似候选**的那一支还说这句话 —— 没有候选时它已经不出现了,见
+    /// <see cref="名字打错时先说清这条命令自己收什么"/>。那里两句共存:本命令的候选
+    /// 排在前面,跨命令那条作为附加,不再取代任何东西。
+    ///
+    /// 截断本身由 <see cref="NameList"/> 自己的单元测试逐字钉住(「a, b, c, and 2 more」);
+    /// 这里守的是这条路径确实走了它,而不是自己 Take 前三条。
     /// </summary>
     [Fact]
     public void 别处认这个参数的名单不许悄悄截断()
     {
-        var (_, err, code) = Fixture.Run("snapshot", "list", "--limit", "5");
+        var (_, err, code) = Fixture.Run("code-search", "x", "--file", "Pawn.cs");
         Assert.Equal(2, code);
-        Assert.Contains("It is accepted by", err, StringComparison.Ordinal);
-        Assert.Matches(@"and \d+ more, but not by 'snapshot list'", err);
+        Assert.Contains("Did you mean --file-glob", err, StringComparison.Ordinal);
+        Assert.Contains("The name as typed is accepted by 'docs', but not by 'code-search'.",
+                        err, StringComparison.Ordinal);
+    }
 
-        // 只有一两条认的时候不许凭空长出尾巴。
-        var (_, one, _) = Fixture.Run("snapshot", "list", "--member", "x");
-        Assert.Contains("It is accepted by 'read', but not by", one, StringComparison.Ordinal);
+    /// <summary>
+    /// 名字打错而这条命令**没有**近似候选时,说的是这条命令自己收什么 —— 不是
+    /// 「别的命令收它」。
+    ///
+    /// 两者面对的是同一种局面(本命令没有近似名),区别只在于这个名字碰巧在别处存在,
+    /// 而那件事与读者在这条命令上想要什么没有必然关系:`export --check` 会被指去
+    /// 'docs',那条命令判的是文档文件是否最新;`read --start` 会被指去 search / where /
+    /// list,那边它是 --offset 的别名(跳过 N 条结果),而写它的人要的是行号。
+    ///
+    /// 全史 161 次走这一支且有后续动作的调用里,顺着那句话去用被点名的命令的有 18 次
+    /// (11%),**留在原命令换个写法的有 111 次(69%)** —— 而这条命令自己收什么,那句话
+    /// 一个字都没说。选项表是自足的:它同时答得出「这里有什么」和「这里没有什么」。
+    /// </summary>
+    [Fact]
+    public void 名字打错时先说清这条命令自己收什么()
+    {
+        // 本命令要的东西就在表里 —— 判定与预演拆开之后,--check 只属于 docs,
+        // 而写 'export --check' 的人要的 --dry-run 就在 export 自己的选项里。
+        var (_, exp, expCode) = Fixture.Run("export", "--modlist", "vanilla", "--check");
+        Assert.Equal(2, expCode);
+        Assert.Contains("This command accepts:", exp, StringComparison.Ordinal);
+        Assert.Contains("--dry-run", exp, StringComparison.Ordinal);
+
+        // 同上,read 上的 --start:表里有 --lines,而 'search'/'where'/'list' 那句
+        // 指向的是另一个概念。
+        var (_, rd, rdCode) = Fixture.Run("read", "Outline.cs", "--start", "196");
+        Assert.Equal(2, rdCode);
+        Assert.Contains("This command accepts:", rd, StringComparison.Ordinal);
+        Assert.Contains("--lines", rd, StringComparison.Ordinal);
+
+        // 本命令确实没有等价物时,同一句话照样答得出来 —— 读者看完整张表就知道这里不截断。
+        var (_, src, srcCode) = Fixture.Run("sources", "list", "--limit", "all");
+        Assert.Equal(2, srcCode);
+        Assert.Contains("This command accepts:", src, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -4135,8 +4175,9 @@ public class GrammarTests
         var (_, err, code) = Fixture.Run("where", "--field", "compClass");
         Assert.Equal(2, code);
         Assert.Contains("rimsearcher where compClass <value>", err, StringComparison.Ordinal);
-        // 这一档取代了「别的命令有」那句 —— 两句一起说,长度翻倍而信息没多。
-        Assert.DoesNotContain("It is accepted by", err, StringComparison.Ordinal);
+        // 这一档取代整张选项表 —— 表答的是「这里有什么」,而这里已经知道他要哪个,
+        // 连值都填好了。两句一起说,长度翻倍而信息没多。
+        Assert.DoesNotContain("This command accepts:", err, StringComparison.Ordinal);
 
         // 没有值可填时就摆出形状,不许凭空捏一个。
         var (_, bare, _) = Fixture.Run("where", "--field");
