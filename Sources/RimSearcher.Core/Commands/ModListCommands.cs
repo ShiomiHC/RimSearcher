@@ -252,7 +252,9 @@ public sealed class ModListShowCommand : Command
                 $"No mod in '{which}' matches '{filter}'. Drop the list name to search every list at once.");
         else if (list.Names.Count == 0)
             ctx.Report.Notice(NoticeKind.Boundary,
-                "This list carries no display names, which is normal for a hand-written file. " +
+                // 「手写的文件没有显示名很正常」换成显示名住在哪:那句在替读者消化一个
+                // 他当场就看得见的状态,而「文件里没有那个元素」是他自己核得了的。
+                "This list has no 'modNames' element, so the rows carry ids only. " +
                 "Load order comes from the ids alone, so nothing is missing.");
         return rows.Count == 0 ? 1 : 0;
     }

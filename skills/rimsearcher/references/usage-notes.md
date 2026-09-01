@@ -9,7 +9,8 @@ behind them. Nothing here overrides SKILL.md — it explains it.
 **What `snapshot status` compares.** Four things: same mods, same order, same game build,
 and — for snapshots exported once this was measured — the size and timestamp of every XML
 file under `Defs/` and `Patches/` of each mod it could locate on disk. The `xml_fingerprint`
-row says how many mods that covers, which is usually fewer than the snapshot holds. That last
+row says how many mods that covers — only the ones it could locate on disk, so it falls
+short of the snapshot's own count by however many it could not find. That last
 one catches a mod whose contents changed without its `About.xml` version moving, which is the
 ordinary shape of a Steam workshop update. Ordinary queries name up to three of those mods.
 `snapshot status` lists every one in an `xml` table, and every packageId only on one side of
@@ -190,8 +191,9 @@ only rebuilds trees whose assemblies have not changed. Commit or restore, then s
 `GenStep_ScatterGroup`. A guess that lands looks exactly like one that does not, and
 `code-search "class GenStep_<defName>"` returning nothing is evidence about the name you
 invented, not about the def. Class names come out of `get`'s `*Class` rows: the `class` line
-in the identity block is the def's **own** type (usually the same for every def of that
-type), while `*.Class` and `*Class` rows — `genStep.Class`, `comps[0].compClass`,
+in the identity block is the def's **own** type — the same for every def of that type
+unless the XML picked a subclass on the def's own tag, and `list <DefType>` says how many
+classes the bucket holds — while `*.Class` and `*Class` rows — `genStep.Class`, `comps[0].compClass`,
 `thingClass` — are what actually runs.
 
 **A `genSteps[N]` position is not the run order.** `MapGenerator` sorts the steps by

@@ -416,7 +416,9 @@ public sealed class SnapshotRenameCommand : Command
             "A snapshot name is three files that share it: the database in the snapshot directory " +
             "('{name}.db'), the mod list next to the config file ('{name}.rml'), and the export file " +
             "in the export directory ('{name}.rsx.jsonl.gz'). This command moves whichever of those " +
-            "exist and says which were absent — an incomplete set is a normal state, not an error. " +
+            // 「不完整的集合是正常状态,不是错误」是安抚:前半句已经说了缺的会被报出来,
+            // 而读者要的是「缺一个会不会中断」这个行为承诺。
+            "exist and says which were absent; a missing one does not stop the rename. " +
             "It never overwrites: if the new name is already used at any of the three places, the " +
             "command refuses and names the file that is in the way. Previous generations of the " +
             "database ('{name}.prev', '{name}.prev2' and so on) move with it when the database itself is " +
