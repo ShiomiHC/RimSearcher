@@ -1,4 +1,5 @@
 using RimSearcher.Output;
+using RimSearcher.Storage;
 
 namespace RimSearcher.Tests;
 
@@ -244,6 +245,29 @@ public class PresenceTests
         // 于是连计数都没有 —— 这一半沉默,常驻的那句话在 --help 与 --defaults 的说明里。
         var (quiet, _, _) = Fixture.Run("get", "OtherGun", "--defaults", "--db", Fixture.PresenceDb);
         Assert.DoesNotContain("patch xpath", quiet);
+    }
+
+    /// <summary>
+    /// 大小写不敏感的查询要用得上索引,索引本身就得是 NOCASE 的 —— schema 里
+    /// <c>idx_fv_leaf_nc</c> 那一对的注释早就写下了这条规则,而 <c>type_fields</c> 漏了。
+    /// 代价在这张表上最大:纯官方 1373 万行,BINARY 索引一次都没被用上,SQLite 转去
+    /// 覆盖扫 path 索引,实测 12.2s;换成 NOCASE 后 0.119s。
+    ///
+    /// 钉的是索引定义而不是查询计划:fixture 那张表只有几行,优化器在小表上本来就不用索引,
+    /// 计划断言在这里恒真,测不出这件事。
+    /// </summary>
+    [Fact]
+    public void 按类型查字段的索引与查询同一种排序()
+    {
+        var indexes = SnapshotSchema.Indexes;
+        Assert.Contains("ON type_fields(def_type COLLATE NOCASE)", indexes, StringComparison.Ordinal);
+
+        // path 上的谓词只有 `LIKE '%x%'`,前缀不定,索引帮不上忙 —— 它唯一的作用是把
+        // 优化器骗去扫自己(1.7G,12.2s 那条计划)。加回来会静默地把这一条又变慢。
+        Assert.DoesNotContain("ON type_fields(path)", indexes, StringComparison.Ordinal);
+
+        // 查询侧确实是 NOCASE —— 两边任何一侧改了都要一起改,否则索引又失效。
+        Assert.Contains("COLLATE NOCASE", SnapshotDb.TypeDeclaredPathsWhere, StringComparison.Ordinal);
     }
 
     [Fact]

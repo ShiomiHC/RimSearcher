@@ -306,8 +306,13 @@ public static class SnapshotSchema
         CREATE INDEX idx_xn_defname ON xml_nodes(def_name);
         CREATE INDEX idx_xw_key     ON xml_written(def_type, node_key);
         CREATE INDEX idx_xw_path    ON xml_written(path);
-        CREATE INDEX idx_tf_type    ON type_fields(def_type);
-        CREATE INDEX idx_tf_path    ON type_fields(path);
+        -- 同上那条 collation 规则,这张表上代价最大:1373 万行(纯官方),而唯一的查询
+        -- (SnapshotDb.TypeDeclaredPaths)是 `def_type = @t COLLATE NOCASE`。BINARY 的索引
+        -- 于是一次都用不上,SQLite 转而在 path 索引上做覆盖全扫 —— 实测 12.2s。
+        -- 换成 NOCASE 后走 def_type 等值查找:**0.119s**。
+        -- path 那条索引一并删掉:唯一的谓词是 `path LIKE '%x%'`,前缀不定,索引本来就
+        -- 帮不上忙,它只是把优化器骗去扫自己。它单独占 1.7G(整表连索引 3.9G)。
+        CREATE INDEX idx_tf_type_nc ON type_fields(def_type COLLATE NOCASE);
         CREATE INDEX idx_sv_type    ON shared_values(def_type);
         CREATE INDEX idx_econ_name  ON economy(def_name);
         CREATE INDEX idx_econ_mod   ON economy(mod);

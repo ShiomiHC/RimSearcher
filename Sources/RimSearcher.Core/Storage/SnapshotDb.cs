@@ -1870,11 +1870,17 @@ public sealed class SnapshotDb : IDisposable
     /// <summary>
     /// 这个 def 类型声明了哪些字段路径。<c>null</c> = 这份快照没量过。
     /// </summary>
+    /// <summary>
+    /// 与 <c>idx_tf_type_nc</c> 必须是同一种排序。BINARY 的索引配 NOCASE 的谓词等于没有索引
+    /// —— 这张表 1373 万行,那一次失配实测 12.2s 对 0.119s。两边改一侧就要改另一侧。
+    /// </summary>
+    public const string TypeDeclaredPathsWhere = "WHERE def_type = @t COLLATE NOCASE";
+
     public IReadOnlyList<string>? TypeDeclaredPaths(string defType, IReadOnlyList<string>? pathFilters = null)
     {
         if (!Meta.IndexesTypeFields) return null;
         var p = new Dictionary<string, object?> { ["@t"] = defType };
-        var where = "WHERE def_type = @t COLLATE NOCASE";
+        var where = TypeDeclaredPathsWhere;
         var filters = (pathFilters ?? []).Where(f => !string.IsNullOrEmpty(f)).ToList();
         if (filters.Count > 0)
         {
