@@ -44,16 +44,9 @@ Global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the com
 | A code *shape* across all files | `rimsearcher code-search <regex>` |
 | The text of one file, member, or line range | `rimsearcher read <file> --member <name>` |
 
-The MCP is often not connected — a normal state, not an error. CLI substitutes:
-
-| Instead of | Without the MCP |
-|---|---|
-| `get_decompiled_source` | `rimsearcher read <File>.cs --member <name>` |
-| `search_types` | `rimsearcher code-search "class <Name>\b"`, then `read` that file `--outline` |
-| `find_derived_types` | `rimsearcher code-search "class \w+ : <Base>\b"` |
-| `get_overrides` | `rimsearcher code-search "override [\w<>, \[\]]+ <Member>\("` |
-| `find_callers` | nothing exact — `code-search` matches *text*; same-named members collide. Read the hits; never report the count as a caller count. |
-| `get_il` | **nothing.** Opcode-level questions (`Call` vs `Callvirt`, transpiler targets) are invisible in decompiled C#. Say the question cannot be answered. |
+The code side has its own two pages: the CLI half plus what to do when the MCP is absent,
+in [references/code-side.md](references/code-side.md), and the MCP itself in
+[references/decompiler-mcp.md](references/decompiler-mcp.md).
 
 ## If your instinct is to grep the XML, stop
 
@@ -105,21 +98,6 @@ a different question. None of them announces itself.
   complete-looking table for the wrong field — the most expensive failure here.
 - **`--scope vanilla`** (also `core`/`base`/`official`) = every module Ludeon ships — **not**
   a snapshot named `vanilla`.
-- **`code-search` is case-sensitive unless you pass `-i`** — `orbitalDebris` and
-  `OrbitalDebris` are two searches, and the wrong one's zero looks like absence.
-- **A `--file-glob` containing `/` is matched against the whole path**, which is
-  `<packageId>/<assembly>/<namespace dirs>/<file>.cs` — **two levels before the namespace**,
-  so `vanilla/Assembly-CSharp/RimWorld/*.cs`, and `vanilla/RimWorld/**` matches nothing.
-  `**` crosses `/` and is the safe way to skip the assembly you did not look up
-  (`vanilla/**/Widgets.cs`); this holds under `--source` too. No `/` matches file names at
-  any depth.
-- **A name `--member`/`--type`/`--outline` misses is not proof of absence** — they match
-  **braces, not C#**; recheck with `code-search` or `--lines`. A member of a *loaded
-  assembly* is still the MCP's job.
-- **PowerShell: single-quote regexes.** Double quotes interpolate `$` — `"…: $name\b"`
-  reaches the tool with `$name` already replaced, and `"(\w+)$"` is fine only because the
-  quote follows. Backslashes survive either way (PowerShell escapes with a backtick), so
-  the damage is silent and confined to `$`: the pattern that ran is not the one you wrote.
 
 ## What the output cannot tell you
 
@@ -213,13 +191,6 @@ rather than assuming. The ones it has no way to state:
 - **`values <field>` already answers "which def types have this field"** — its `def_types`
   row names them with `n of m` coverage. `fields <DefType>` goes the other way and needs
   the type up front.
-- **`code-search` searches decompiled C#, never Defs.** It reports matches and files as two
-  numbers — "how many methods" wants the first. Of its three caps, `--limit` and
-  `--max-per-file` only shape what is printed (the count stays exact); **only `--max-files`
-  shortens the scan**, turning the count into `at least N`. Decompiled text has lost
-  comments and local variable names (parameters and members survive); a member you cannot
-  find is usually inherited — follow the `: Base`. Trees are named by packageId (`vanilla` =
-  the game); `sources list` is the roster.
 - **Null-valued fields never enter the index** — absent even from `--defaults`, so on
   `get`/`where` absence is not evidence the type lacks the field. `fields <DefType>
   --path-contains <text>` is the one place that is settled for you rather than left to the
@@ -230,29 +201,14 @@ rather than assuming. The ones it has no way to state:
 
 ## Snapshots
 
-**How a snapshot is made**: `rimsearcher export --modlist <name>` **runs the game
-headless** — launches RimWorld windowless, loads the modlist, dumps every def in
-memory, exits. Hence "in memory at export time", minutes-long exports on large
-modlists, and stderr stall reports being progress rather than verdicts: one appears
-after 120s without progress in a stage and the game **keeps running**; nothing stops
-it before the 900s default, which only `rimsearcher export --modlist <name> --timeout 1800`
-raises. A stall report is 2 minutes of silence, not a failure — do not interrupt on it.
-
 One export = one game version, one ordered mod list, one language; several coexist.
 `snapshot list` shows them, `--snapshot <name>` picks per command, `snapshot use <name>`
 sticks; `snapshot status` compares it against the installed game, naming which mods'
-Defs/Patches XML moved on disk; `snapshot diff <old> <new>`
-compares two snapshots' resolved defs and fields. Re-exporting the same name rotates the
-old file to `<name>.prev`, the one before it to `<name>.prev2`, and so on; `snapshot_keep`
-in the config file, or `--keep <n>`, says how many generations that name holds, counting
-the one being written, and whatever falls past that count is deleted and said so.
-A re-export leaves both files alone only when the exporter version, the patch route, the
-resolved defs and fields **and** how many XML lines were indexed all match — an exporter
-that gained an XML layer replaces the file even though no def moved. Queries raise
-staleness themselves when they detect it — but the check is size and timestamp, so an edit
-preserving both, or anything under `Languages/`, passes unseen. Re-export before concluding
-the tool is wrong: `rimsearcher export --modlist <name>`, where `<name>` is required and
-comes from `rimsearcher modlist list`.
+Defs/Patches XML moved on disk; `snapshot diff <old> <new>` compares two snapshots'
+resolved defs and fields.
+
+Making one, how generations of a name rotate, and what the staleness check misses:
+[references/snapshots.md](references/snapshots.md).
 
 **A complete count is complete for the snapshot, not the installed game**: on a Core-only
 snapshot, `1 def` means one in Core, and **no line says so** — the one boundary here that
@@ -261,7 +217,5 @@ not enabled at export; `rimsearcher mods` lists coverage.
 
 **Use text search last**: `where`/`values` are exact over resolved data; `code-search`
 matches identically-named things from unrelated types.
-
-For the decompiler MCP itself: [references/decompiler-mcp.md](references/decompiler-mcp.md).
 
 
