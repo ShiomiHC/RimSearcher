@@ -1495,6 +1495,17 @@ public class GrammarTests
                             text, StringComparison.Ordinal);
         }
 
+        // 2026-09-01 补的第二件:**xml 列读的是哪一份 XML**。0.7.0 之后运行时按快照分档印
+        // 「read after every patch ran」/「read before patches ran」,而 --defaults 的选项说明
+        // 里那句还无条件写着「读磁盘上补丁前的 XML」—— 同一份 --help 上下两段自相矛盾,
+        // 而上面那档闸盯的是 code_default 的口径,不是这一件,所以它一路绿着。
+        // 声明层不按快照分档(help 不知道快照),它的同形形态是**两档都在场**。
+        {
+            Assert.DoesNotContain(FossilPrePatchOnly, help, StringComparison.Ordinal);
+            Assert.Contains("after every PatchOperation ran", help, StringComparison.Ordinal);
+            Assert.Contains("older snapshots read the XML as written on disk", help, StringComparison.Ordinal);
+        }
+
         // **否定排在主句、在「值相等」那个事实之前。** r17 抓到一个受测者复述了限定的
         // 前半句、接着自己接上「所以是没写、用类默认」—— 前半句可独立成立时,只读前半句
         // 反而显得更完整,后半句的免责就成了可以不读的尾巴。
@@ -4367,6 +4378,9 @@ public class GrammarTests
     private const string FossilGiveADef = "Give a def rather than an abstract node";
     private const string FossilPathCount = "field path in this snapshot";
     private const string FossilSameTypes = "the same def types";
+    // 2026-09-01:0.7.0 让 xml 列改读打完补丁的 XML,而 --defaults 的选项说明没跟上,
+    // 无条件写着这句。它与同一份 help 上一段的分档说法直接矛盾。
+    private const string FossilPrePatchOnly = "it reads the XML from disk before any PatchOperation ran";
 
     /// <summary>
     /// **反向闸钉的句子,要么在产地里活着,要么登记成化石 —— 两种都得对得上。**
@@ -4402,6 +4416,7 @@ public class GrammarTests
             (FossilGiveADef, "一条已经不存在的降级出路"),
             (FossilPathCount, "互指句曾带上「这个值坐在 N 条 field path 上」,N 常为 1,读成「你没事」"),
             (FossilSameTypes, "「the same def types」把读者支去对照表里那几行的类型"),
+            (FossilPrePatchOnly, "0.7.0 前的口径:xml 列曾只读磁盘上补丁前的 XML,现在按导出器分档"),
             // 单复数是一对,改一留一就假绿了一半。
             ("field paths in this snapshot", "同上,复数形态"),
         ];
