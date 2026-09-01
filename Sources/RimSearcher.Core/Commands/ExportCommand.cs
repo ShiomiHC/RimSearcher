@@ -32,8 +32,9 @@ public sealed class ExportCommand : Command
             "import is rejected if they differ.\n\n" +
             "Replacing an existing snapshot name keeps the previous file as '{name}.prev' once. A further replace " +
             "while that file still differs is refused — pass --name <other> to keep both, or --replace-prev to " +
-            "discard that generation. An incoming snapshot whose resolved defs and fields already match is left " +
-            "in place.\n\n" +
+            "discard that generation. An incoming snapshot is left in place when it matches on all of the exporter " +
+            "version, the patch route, the resolved defs and fields, and how many XML lines were indexed — a " +
+            "re-export that only changes what the XML layer holds still replaces the file.\n\n" +
             "The game runs headless: no window appears and nothing is written to the display settings the game " +
             "keeps outside its save-data folder. Pass --show-window if a mod in the list needs a graphics device " +
             "while it loads.",

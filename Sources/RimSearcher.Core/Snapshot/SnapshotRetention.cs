@@ -143,8 +143,9 @@ public static class SnapshotRetention
               "Raise 'snapshot_keep' in the config file, or pass --keep, to keep more of them.";
 
     public static string Unchanged(string name)
-        => $"The incoming snapshot matches '{name}' on all of the exporter version, the resolved defs and " +
-           "field values, and how many XML lines were indexed, so the existing file was left in place.";
+        => $"The incoming snapshot matches '{name}' on all of the exporter version, the patch route it read the " +
+           "XML through, the resolved defs and field values, and how many XML lines were indexed, so the " +
+           "existing file was left in place.";
 
     public static string IncomingPath(string destPath) => destPath + ".incoming";
 

@@ -26,8 +26,12 @@ public class SkillPromiseTests
     private static readonly Promise[] Promises =
     [
         // ---- 数据边界 ----
-        new("inheritance, discarded by the game before export; `inherit` alone reads it",
+        new("inheritance, discarded by the game before export",
             nameof(继承层的来路与补丁时间差写在inherit自己的说明里)),
+        // 2026-09-01:原文写「`inherit` alone reads it」—— 0.5.0 起 get 的 xml 列也在爬同一条
+        // ParentName 链,`parent` 那个取值就是从继承层来的。「唯一」退成「唯一按树走的」。
+        new("`inherit` is the only command that walks it as a tree, not the only one that reads it: `get --defaults`'s `xml` column climbs the same parent chain",
+            nameof(PresenceTests.新快照get能分开本节点写的和父节点写的)),
         // 2026-08-03:`inherit` 的五条 pin 退役(patch_ops 三条、抽象节点两条)。**契约没退役,
         // 它的住处变了** —— 10 量到 `inherit` 占 0.9% 的调用却占 4.8% 的 SKILL.md 篇幅,而这五句
         // CLI 在出结果那一刻逐条印着,且各自另有行为闸:`inherit的patch计数在干净节点也在场`
@@ -252,8 +256,20 @@ public class SkillPromiseTests
             nameof(SnapshotDiffTests.文本零的一侧仍报零而不是整张表消失)),
         new("whatever falls past that count is deleted and said so",
             nameof(SnapshotRetentionTests.超出keep的最老一代被删并说出来)),
-        new("A re-export whose resolved defs and fields already match leaves both files alone",
-            nameof(SnapshotRetentionTests.相同内容跳过且不挤掉prev)),
+        // 2026-09-01:原文写的是「落空不等于类型没这个字段,去读声明类」—— 那是 type_fields
+        // 之前的出路,现在 fields 自己就把两态分开了。免责收窄到 get/where,新出路连同它的
+        // 版本下限一起钉住。
+        new("it keeps **the type declares it, no def has a value** apart from **the type does not declare such a field either**",
+            nameof(PresenceTests.新快照fields能分开全是null和没有这个字段)),
+        new("Snapshots older than exporter 0.5.0 carry no such list and say so, naming their version",
+            nameof(PresenceTests.旧快照fields落空说清分不开)),
+        // 2026-09-01:原文钉的是「resolved defs and fields 相同就留着旧的」—— 那正是**造成**
+        // 缺陷的口径:导出器换代多出一整个 XML 层,def 一个没动,新库被丢弃。实现改成四项齐比后,
+        // 这句承诺连同它的闸都得跟着走,否则闸绿护着的是已经改掉的那个行为。
+        new("A re-export leaves both files alone only when the exporter version, the patch route, the resolved defs and fields **and** how many XML lines were indexed all match",
+            nameof(SnapshotRetentionTests.导出器换代时不算相同)),
+        new("a def-only comparison reads an exporter that gained a whole XML layer as \"nothing changed\" and throws the new file away",
+            nameof(SnapshotRetentionTests.xml层多写一行时不算相同)),
         new("a re-download of identical bytes reads as a change, and an edit that preserves both is\nthe one case it misses",
             "量过了也要说清比的只是尺寸与时间戳"),
         // 2026-08-01 实测校对:原文钉的是 `xml_fingerprint: not recorded` —— 冒号那个形状

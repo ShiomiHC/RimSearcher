@@ -9,7 +9,9 @@ Two sources of truth. **The snapshot**: a database of every def the game had in 
 export time — patches applied, inheritance resolved, code-generated defs included. Query it
 with the `rimsearcher` CLI. **The assemblies**: the game's compiled C#, via the
 DecompilerServer MCP (`mcp__decompiler__*`). One layer comes from the mods' XML instead of
-memory — inheritance, discarded by the game before export; `inherit` alone reads it.
+memory — inheritance, discarded by the game before export. `inherit` is the only command
+that walks it as a tree, not the only one that reads it: `get --defaults`'s `xml` column
+climbs the same parent chain to say whether a line is written here or by an ancestor.
 
 Every command and option is in `<command> --help` and
 [references/cli-reference.md](references/cli-reference.md); worked examples and edges in
@@ -223,8 +225,13 @@ rather than assuming. These four it has no way to state:
   comments and local variable names (parameters and members survive); a member you cannot
   find is usually inherited — follow the `: Base`. Trees are named by packageId (`vanilla` =
   the game); `sources list` is the roster.
-- **Null-valued fields never enter the index** — absent even from `--defaults`. Absence is
-  not evidence the type lacks the field; read the declaring class.
+- **Null-valued fields never enter the index** — absent even from `--defaults`, so on
+  `get`/`where` absence is not evidence the type lacks the field. `fields <DefType>
+  --path-contains <text>` is the one place that is settled for you rather than left to the
+  declaring class: it keeps **the type declares it, no def has a value** apart from **the
+  type does not declare such a field either**, off a list of declared paths that does not
+  depend on any def having a value. Snapshots older than exporter 0.5.0 carry no such list
+  and say so, naming their version.
 
 ## Snapshots
 
@@ -244,7 +251,9 @@ compares two snapshots' resolved defs and fields. Re-exporting the same name rot
 old file to `<name>.prev`, the one before it to `<name>.prev2`, and so on; `snapshot_keep`
 in the config file, or `--keep <n>`, says how many generations that name holds, counting
 the one being written, and whatever falls past that count is deleted and said so.
-A re-export whose resolved defs and fields already match leaves both files alone. Queries raise
+A re-export leaves both files alone only when the exporter version, the patch route, the
+resolved defs and fields **and** how many XML lines were indexed all match — an exporter
+that gained an XML layer replaces the file even though no def moved. Queries raise
 staleness themselves when they detect it — but the check is size and timestamp, so an edit
 preserving both, or anything under `Languages/`, passes unseen. Re-export before concluding
 the tool is wrong: `rimsearcher export --modlist <name>`, where `<name>` is required and

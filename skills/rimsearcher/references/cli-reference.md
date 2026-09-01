@@ -261,7 +261,7 @@ The game's own configuration is never modified. A copy of it is made in a tempor
 
 When it finishes, the mods the game reported are compared with the mods that were asked for, and the import is rejected if they differ.
 
-Replacing an existing snapshot name keeps the previous file as '{name}.prev' once. A further replace while that file still differs is refused — pass --name <other> to keep both, or --replace-prev to discard that generation. An incoming snapshot whose resolved defs and fields already match is left in place.
+Replacing an existing snapshot name keeps the previous file as '{name}.prev' once. A further replace while that file still differs is refused — pass --name <other> to keep both, or --replace-prev to discard that generation. An incoming snapshot is left in place when it matches on all of the exporter version, the patch route, the resolved defs and fields, and how many XML lines were indexed — a re-export that only changes what the XML layer holds still replaces the file.
 
 The game runs headless: no window appears and nothing is written to the display settings the game keeps outside its save-data folder. Pass --show-window if a mod in the list needs a graphics device while it loads.
 

@@ -38,7 +38,10 @@ Re-exporting the same name rotates the old file to `<name>.prev`, the one before
 <name>.prev2 <name>` works. `snapshot_keep` in the config file, or `--keep <n>`, says how
 many generations that name holds, counting the one being written; what falls past that
 count is deleted and the output says which. `--replace-prev` is `--keep 1`. An incoming snapshot
-whose resolved defs and fields already match leaves both files alone.
+leaves both files alone only when it matches on all four of the exporter version, the patch
+route, the resolved defs and fields, and how many XML lines were indexed — the last two exist
+because a def-only comparison reads an exporter that gained a whole XML layer as "nothing
+changed" and throws the new file away.
 
 **The fingerprint's edges** — the output states most of them, but only beside a verdict that
 everything compared matches: size and timestamp are not file contents, so a re-download of
