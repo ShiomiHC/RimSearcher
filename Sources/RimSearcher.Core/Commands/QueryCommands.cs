@@ -2641,8 +2641,11 @@ internal static class Advisory
             $"'{value}': 'mod' is where each def was declared, not who put this value on it. " +
             $"It sits on defs from {Tally.Complete(mods.Count).Render("mod")}, " +
             $"{onOfficial.Count} of them official " +
-            $"({Tally.Complete(onOfficial.Sum(m => m.Defs)).Render("def")}). Nothing in the " +
-            $"snapshot records who put it there. {settles}");
+            // 「Nothing in the snapshot records who put it there.」2026-09-01 压掉:它与
+            // 开头那半句是同一个命题的两遍(mod 列不是作者 / 快照没记作者),而它自己不给
+            // 下一步。它独挡的是「那我换个命令查作者」,可紧跟着的那句已经把唯一做得到的
+            // 事说了。三轮盲测对这一句零信息量 —— 它们测的是机制判断,而这句不参与。
+            $"({Tally.Complete(onOfficial.Sum(m => m.Defs)).Render("def")}). {settles}");
     }
 
     /// <summary>
