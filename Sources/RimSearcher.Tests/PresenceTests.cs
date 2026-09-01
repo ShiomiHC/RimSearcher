@@ -218,7 +218,8 @@ public class PresenceTests
         using var cmd = raw.CreateCommand();
         cmd.CommandText = "SELECT COUNT(*) FROM xml_written";
         Assert.True((long)cmd.ExecuteScalar()! > 0);
-        cmd.CommandText = "SELECT COUNT(*) FROM type_fields WHERE def_type = 'ThingDef' AND path = 'neverSet'";
+        cmd.CommandText = "SELECT COUNT(*) FROM type_fields t JOIN type_field_paths d ON d.id = t.path_id "
+                        + "WHERE t.def_type = 'ThingDef' AND d.path = 'neverSet'";
         Assert.Equal(1L, (long)cmd.ExecuteScalar()!);
         cmd.CommandText = "SELECT patch_ops_defname FROM xml_nodes WHERE def_name = 'ChildGun'";
         Assert.Equal(2L, (long)cmd.ExecuteScalar()!);
@@ -256,11 +257,37 @@ public class PresenceTests
     /// 钉的是索引定义而不是查询计划:fixture 那张表只有几行,优化器在小表上本来就不用索引,
     /// 计划断言在这里恒真,测不出这件事。
     /// </summary>
+    /// <summary>
+    /// 路径提进字典表之后,同一条路径在多个 def 类型下必须共用一个 id —— 那正是省下来的东西
+    /// (纯官方 1373 万行只有 52 万个不同 path)。字典没去重的话表还是那么大,而这里
+    /// **一样绿**:查询结果与去重与否无关。
+    /// </summary>
+    [Fact]
+    public void 路径字典跨def类型共用一条()
+    {
+        using var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Fixture.PresenceDb};Pooling=False");
+        raw.Open();
+        using var cmd = raw.CreateCommand();
+
+        cmd.CommandText = "SELECT COUNT(*) FROM type_field_paths";
+        var distinctPaths = (long)cmd.ExecuteScalar()!;
+        cmd.CommandText = "SELECT COUNT(DISTINCT path) FROM type_field_paths";
+        Assert.Equal(distinctPaths, (long)cmd.ExecuteScalar()!);
+
+        // fixture 里 ThingDef 与 HediffDef 都声明了 defName,两条引用指向同一个字典行。
+        cmd.CommandText = "SELECT COUNT(DISTINCT t.path_id) FROM type_fields t "
+                        + "JOIN type_field_paths d ON d.id = t.path_id WHERE d.path = 'defName'";
+        Assert.Equal(1L, (long)cmd.ExecuteScalar()!);
+        cmd.CommandText = "SELECT COUNT(DISTINCT t.def_type) FROM type_fields t "
+                        + "JOIN type_field_paths d ON d.id = t.path_id WHERE d.path = 'defName'";
+        Assert.True((long)cmd.ExecuteScalar()! > 1);
+    }
+
     [Fact]
     public void 按类型查字段的索引与查询同一种排序()
     {
         var indexes = SnapshotSchema.Indexes;
-        Assert.Contains("ON type_fields(def_type COLLATE NOCASE)", indexes, StringComparison.Ordinal);
+        Assert.Contains("ON type_fields(def_type COLLATE NOCASE", indexes, StringComparison.Ordinal);
 
         // path 上的谓词只有 `LIKE '%x%'`,前缀不定,索引帮不上忙 —— 它唯一的作用是把
         // 优化器骗去扫自己(1.7G,12.2s 那条计划)。加回来会静默地把这一条又变慢。

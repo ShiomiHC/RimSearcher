@@ -170,9 +170,22 @@ public static class SnapshotSchema
         );
 
         -- 一个 def 类型能有的字段路径全集,与值无关。用来把「全是 null」和「没有这个字段」分开。
+        --
+        -- 路径提进字典表:纯官方 1373 万行里只有 52 万个不同 path,平均 116 字符 ——
+        -- 逐行存字符串是 26 倍冗余,实测占整库一半以上(表 1.9G / 库 4.4G)。
+        -- 冗余这么高是因为所有 Def 子类共享基类那棵字段树,而深度 6 那一层占了 78%。
+        --
+        -- 表名沿用,列换成 path_id。**旧库的这张表是 (def_type, path) **,靠列名分辨
+        -- (SnapshotDb.TypeFieldsAreDictionary)。不涨 schema_version:精确相等的检查会让
+        -- 磁盘上每一份旧库拒读,连同 --keep 留下的那些旧代 —— 而它们唯一的用途正是拿来 diff。
+        CREATE TABLE type_field_paths (
+            id   INTEGER PRIMARY KEY,
+            path TEXT NOT NULL
+        );
+
         CREATE TABLE type_fields (
             def_type TEXT NOT NULL,
-            path     TEXT NOT NULL
+            path_id  INTEGER NOT NULL
         );
 
         -- 一条「与新实例不同」的值,在同类型的 def 里有多普遍。
@@ -312,7 +325,8 @@ public static class SnapshotSchema
         -- 换成 NOCASE 后走 def_type 等值查找:**0.119s**。
         -- path 那条索引一并删掉:唯一的谓词是 `path LIKE '%x%'`,前缀不定,索引本来就
         -- 帮不上忙,它只是把优化器骗去扫自己。它单独占 1.7G(整表连索引 3.9G)。
-        CREATE INDEX idx_tf_type_nc ON type_fields(def_type COLLATE NOCASE);
+        -- 覆盖索引:该类型的 path_id 全在索引里,不用回表。
+        CREATE INDEX idx_tf_type_nc ON type_fields(def_type COLLATE NOCASE, path_id);
         CREATE INDEX idx_sv_type    ON shared_values(def_type);
         CREATE INDEX idx_econ_name  ON economy(def_name);
         CREATE INDEX idx_econ_mod   ON economy(mod);

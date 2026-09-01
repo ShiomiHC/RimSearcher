@@ -88,8 +88,12 @@ public sealed class SnapshotImporter
                 VALUES ($t,$k,$kn,$p,$x,$pa)
                 """);
             using var insertTf = Prepare(db, """
-                INSERT INTO type_fields (def_type, path)
-                VALUES ($t,$p)
+                INSERT INTO type_fields (def_type, path_id)
+                VALUES ($t,$pid)
+                """);
+            using var insertTfPath = Prepare(db, """
+                INSERT INTO type_field_paths (id, path)
+                VALUES ($id,$p)
                 """);
             using var insertKeyed = Prepare(db, """
                 INSERT INTO keyed (id, key, translated, original, language, source_file, source_line,
@@ -127,6 +131,8 @@ public sealed class SnapshotImporter
             // rowid,而两条 INSERT 之间夹着别的语句。
             long nextKeyedId = 1;
             long nextEconomyId = 1;
+            // type_fields 的路径字典,id 就是它进来的次序(Count + 1)。
+            var tfPathIds = new Dictionary<string, long>(StringComparer.Ordinal);
 
             foreach (var line in ReadLines(exportPath))
             {
@@ -296,8 +302,18 @@ public sealed class SnapshotImporter
                         {
                             var path = p.GetString();
                             if (string.IsNullOrEmpty(path)) continue;
+                            // 字典在内存里攒:52 万条(纯官方)约 60M,换掉每行一次 SELECT。
+                            // 跨 def 类型共用 —— 冗余正出在「所有 Def 子类共享基类那棵树」上。
+                            if (!tfPathIds.TryGetValue(path, out var pathId))
+                            {
+                                pathId = tfPathIds.Count + 1;
+                                tfPathIds[path] = pathId;
+                                Bind(insertTfPath, "$id", pathId);
+                                Bind(insertTfPath, "$p", path);
+                                insertTfPath.ExecuteNonQuery();
+                            }
                             Bind(insertTf, "$t", defTypeF);
-                            Bind(insertTf, "$p", path);
+                            Bind(insertTf, "$pid", pathId);
                             insertTf.ExecuteNonQuery();
                         }
                     }

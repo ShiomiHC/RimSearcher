@@ -1,4 +1,4 @@
-﻿using System.IO.Compression;
+using System.IO.Compression;
 using System.Text;
 using RimSearcher.Contract;
 using RimSearcher.Storage;
@@ -382,6 +382,15 @@ public static class Fixture
                  "descriptionHyperlinks[0].def", "label", "neverSet", "speed",
                  "statBases[0].stat", "statBases[0].value",
                  "thingClass", "things[0].chance", "things[0].def", "things[0].hp"])
+            .ToString());
+        records++;
+
+        // 第二个类型,与上面共享 defName / label —— 路径字典的去重靠这两条才测得出来。
+        // 真实数据里冗余正出在这儿:所有 Def 子类共享基类那棵字段树。
+        w.WriteLine(new JsonLine()
+            .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindTypeFields)
+            .Str(IntermediateFormat.KeyDefType, "HediffDef")
+            .Strs(IntermediateFormat.KeyPaths, ["defName", "label", "maxSeverity"])
             .ToString());
         records++;
 

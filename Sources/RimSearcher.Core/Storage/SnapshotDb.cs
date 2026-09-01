@@ -1872,13 +1872,36 @@ public sealed class SnapshotDb : IDisposable
     /// </summary>
     /// <summary>
     /// 与 <c>idx_tf_type_nc</c> 必须是同一种排序。BINARY 的索引配 NOCASE 的谓词等于没有索引
-    /// —— 这张表 1373 万行,那一次失配实测 12.2s 对 0.119s。两边改一侧就要改另一侧。
+    /// —— 这张表 1373 万行,那一次失配实测 12.2s 对 0.113s。两边改一侧就要改另一侧。
     /// </summary>
-    public const string TypeDeclaredPathsWhere = "WHERE def_type = @t COLLATE NOCASE";
+    public const string TypeDeclaredPathsWhere = "WHERE t.def_type = @t COLLATE NOCASE";
+
+    /// <summary>
+    /// 这份库的 <c>type_fields</c> 是不是字典化的那一版。**靠列名认,不靠版本号** ——
+    /// schema_version 相等的检查一旦为此涨档,磁盘上每一份旧库都会拒读,连同 <c>--keep</c>
+    /// 留下的那些旧代,而它们唯一的用途正是拿来 <c>snapshot diff</c>。
+    /// </summary>
+    private bool TypeFieldsAreDictionary => _tfDict ??= HasColumn("type_fields", "path_id");
+    private bool? _tfDict;
+
+    private bool HasColumn(string table, string column)
+    {
+        using var rd = Query($"PRAGMA table_info({table})", new Dictionary<string, object?>());
+        while (rd.Read())
+            if (string.Equals(rd.GetString(1), column, StringComparison.Ordinal)) return true;
+        return false;
+    }
 
     public IReadOnlyList<string>? TypeDeclaredPaths(string defType, IReadOnlyList<string>? pathFilters = null)
     {
         if (!Meta.IndexesTypeFields) return null;
+
+        // 旧库的路径就在这张表上,新库的在字典表里 —— 两条路给的是同一份东西。
+        var dict = TypeFieldsAreDictionary;
+        var pathExpr = dict ? "d.path" : "t.path";
+        var from = dict ? "type_fields t JOIN type_field_paths d ON d.id = t.path_id"
+                        : "type_fields t";
+
         var p = new Dictionary<string, object?> { ["@t"] = defType };
         var where = TypeDeclaredPathsWhere;
         var filters = (pathFilters ?? []).Where(f => !string.IsNullOrEmpty(f)).ToList();
@@ -1888,12 +1911,13 @@ public sealed class SnapshotDb : IDisposable
             for (var i = 0; i < filters.Count; i++)
             {
                 p["@f" + i] = "%" + Escape(filters[i]) + "%";
-                ors.Add($"path LIKE @f{i} ESCAPE '\\'");
+                ors.Add($"{pathExpr} LIKE @f{i} ESCAPE '\\'");
             }
             where += " AND (" + string.Join(" OR ", ors) + ")";
         }
+
         var rows = new List<string>();
-        using var rd = Query($"SELECT path FROM type_fields {where} ORDER BY path", p);
+        using var rd = Query($"SELECT {pathExpr} FROM {from} {where} ORDER BY {pathExpr}", p);
         while (rd.Read()) rows.Add(rd.GetString(0));
         return rows;
     }
