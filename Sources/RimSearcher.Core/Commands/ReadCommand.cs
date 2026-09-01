@@ -82,8 +82,8 @@ public sealed class ReadCommand : Command
                 Placeholder = "<a-b|a+n|a|all>",
                 Help = "Read raw lines instead: '400-460' is inclusive, '400+60' is sixty lines from 400, " +
                        "'400' starts there and takes the default window, 'all' is the whole file. " +
-                       $"Without it the read starts at line 1 and takes {Limits.ReadWindow} — or however " +
-                       "many --limit asks for, when that is given.",
+                       $"Without it the read starts at line 1 and takes {Limits.ReadWindow}, or as many " +
+                       "as --limit asks for.",
             },
             new OptionSpec
             {
@@ -109,9 +109,7 @@ public sealed class ReadCommand : Command
                 Placeholder = "<n|all>",
                 Help = $"How many lines to print at most. Values above {Limits.ReadMaxLines} are clamped to " +
                        "it, because one type can be thousands of lines and this output is read whole. " +
-                       "On a raw read with no --lines this also sets where the read stops, so " +
-                       $"'--limit all' reads the whole file the way '--lines all' does (both stop at " +
-                       $"{Limits.ReadMaxLines}); without --limit the read takes {Limits.ReadWindow} lines.",
+                       "On a raw read it is also where the read stops, so '--limit all' reads the whole file.",
                 Default = Limits.ReadMaxLines.ToString(),
             },
         ],
@@ -219,12 +217,9 @@ public sealed class ReadCommand : Command
 
         var cap = Cap(ctx);
 
-        // --limit 说的是「最多印多少行」,那调用方一旦说了个数,裸行读就该印到那一行 ——
-        // 缺省的 150 是**没人表态时**的窗口,不是一道压在表态之上的第二道闸。
-        //
-        // 不这样的话两个参数各管半截,而截断态自己一个字都没说错:`--limit all` 拿回
-        // `lines 1-150 of 2449`,那句话是对的,只是它印的不是调用方要的东西。
-        // 全史实证见 GrammarTests 的 显式的limit同时定下裸行读的窗口。
+        // 缺省的 150 是**没人表态时**的窗口,不是压在表态之上的第二道闸。这条一旦错了
+        // 从输出里看不出来:`--limit all` 拿回的 `lines 1-150 of 2449` 逐字是对的,
+        // 只是它印的不是调用方要的东西。
         var window = ctx.Args.Value("limit") is { Length: > 0 } ? cap : Limits.ReadWindow;
 
         if (outline) return Outline(ctx, rel, text, cap);
