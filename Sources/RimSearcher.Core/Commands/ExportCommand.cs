@@ -94,7 +94,11 @@ public sealed class ExportCommand : Command
             {
                 Name = "dry-run",
                 Arity = Arity.Flag,
-                Aliases = ["check", "validate"],
+                // 不收 check / validate:那两个词说的是「判定」,而这个开关是「预演」——
+                // 它通过时还要交出一份 would_run 计划。判定那一档是 'docs --check'
+                // (相等就 0,不等就非零,没有第二样产物);两档共用一个词,下一个加命令的
+                // 人就没法从名字上挑。
+                Aliases = ["plan"],
                 Help = "Do everything except start the game: resolve the list, check every mod is installed, " +
                        "and report what would be run.",
             },

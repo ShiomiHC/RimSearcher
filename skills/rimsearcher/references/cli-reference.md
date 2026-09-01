@@ -273,7 +273,7 @@ The game runs headless: no window appears and nothing is written to the display 
 | `--show-window` | Start the game with its window instead of headless. Only needed if a mod in the list requires a graphics device while loading; headless is otherwise identical and faster. | `--window`, `--windowed`, `--graphics` |
 | `--no-economy` | Skip the economy layer — prices, costs, work amounts and cost chains. It walks every recipe in the game once per priced thing, so it is the slowest part of a large export. The snapshot records that it was skipped, so 'rimsearcher economy' says so rather than reporting that the game prices nothing. | `--skip-economy`, `--without-economy` |
 | `--keep-temp` | Keep the temporary save-data folder afterwards, for looking at what the game was given. |  |
-| `--dry-run` | Do everything except start the game: resolve the list, check every mod is installed, and report what would be run. | `--check`, `--validate` |
+| `--dry-run` | Do everything except start the game: resolve the list, check every mod is installed, and report what would be run. | `--plan` |
 | `--harvest-translations` | Passed through to the import step, and on by default there: also index language files of installed mods that the list does not enable. Pass it explicitly only to be sure. | `--harvest` |
 | `--no-harvest-translations` | Passed through to the import step: skip the language-file scan, and record in the snapshot that the disk layer was never measured. | `--no-harvest` |
 | `--keep` <n> | How many generations of this name to keep, counting the one being written. The one it pushes past that count is deleted. 1 overwrites with no comparison left behind. The default is the config file's 'snapshot_keep'. Default: `3`. | `--generations`, `--keep-generations` |
@@ -914,7 +914,7 @@ A tree whose source assemblies have not changed is left alone. Comparing version
 | `--modlist` <name> | Cover the mods in this saved mod list instead of the ones in the snapshot. | `--list`, `--from`, `--profile` |
 | `--only` <name> | Build just this one tree. Takes a tree name as 'sources list' prints it. | `--tree`, `--source`, `--mod` |
 | `--force` | Rebuild even the trees whose assemblies have not changed. Does not overwrite a tree that has uncommitted git changes. | `--rebuild`, `--all` |
-| `--dry-run` | Report what would be decompiled and stop without writing anything. | `--plan`, `--check` |
+| `--dry-run` | Report what would be decompiled and stop without writing anything. | `--plan` |
 
 `--json` keys, besides the global `notes`:
 

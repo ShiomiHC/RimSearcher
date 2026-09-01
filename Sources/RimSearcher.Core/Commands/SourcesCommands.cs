@@ -294,7 +294,8 @@ public sealed class SourcesSyncCommand : Command
             {
                 Name = "dry-run",
                 Arity = Arity.Flag,
-                Aliases = ["plan", "check"],
+                // check 归 'docs --check' 那一档(判定,不等就非零)。见 ExportCommand 同一处。
+                Aliases = ["plan"],
                 Help = "Report what would be decompiled and stop without writing anything.",
             },
         ],

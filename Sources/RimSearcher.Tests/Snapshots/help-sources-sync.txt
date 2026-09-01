@@ -17,7 +17,7 @@ Options:
       --force           Rebuild even the trees whose assemblies have not changed. Does not overwrite a tree that has uncommitted git changes.
                         Also accepted: --rebuild, --all.
       --dry-run         Report what would be decompiled and stop without writing anything.
-                        Also accepted: --plan, --check.
+                        Also accepted: --plan.
 
 Global options (every command takes these, written after the command):
       --snapshot <name>  Query this named snapshot instead of the one that would be picked automatically. An explicit choice always wins over auto-detection.
