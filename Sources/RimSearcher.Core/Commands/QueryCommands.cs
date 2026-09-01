@@ -2620,26 +2620,29 @@ internal static class Advisory
         // 而这句话的整个由头是「看着像一家,其实不是」。
         if (onOfficial.Count == 0) return;
 
+        // 「What is settled is whether…」那个框架句 2026-09-01 压掉了:它只给下半句搭台,
+        // 而下半句自己就带着主语。同批压掉的还有开头那句「X 不是游戏自己的类」——
+        // 那是在解释这条 notice 为什么出现,对读者要做的判断不提供任何输入。
         var settles =
             !ctx.Db.Meta.IndexesXmlWritten
-                ? "This snapshot has no 'xml' column, so it cannot even tell an XML line from C# " +
+                ? "This snapshot has no 'xml' column, so it cannot tell an XML line from C# " +
                   "putting it there at load; a re-export on 0.5.0 or newer can."
             : ctx.Db.Meta.IndexesPostPatchXml
-                ? "What is settled is whether any XML line wrote it: the 'xml' column of " +
-                  "'rimsearcher get <defName> --defaults', on this snapshot read after every patch " +
-                  "ran — so a 'no' there means C# put it on at load, not a PatchOperation."
-                : "What is settled is whether the def's own XML wrote it: the 'xml' column of " +
-                  "'rimsearcher get <defName> --defaults'. That XML was read before patches ran on " +
-                  "this snapshot, so a 'no' there still leaves a patch and C# apart.";
+                ? "The 'xml' column of 'rimsearcher get <defName> --defaults' settles whether an " +
+                  "XML line wrote it — this snapshot read the XML after every patch ran, so a 'no' " +
+                  "there means C# put it on at load, not a PatchOperation."
+                : "The 'xml' column of 'rimsearcher get <defName> --defaults' settles whether the " +
+                  "def's own XML wrote it. That XML was read before patches ran on this snapshot, " +
+                  "so a 'no' there still leaves a patch and C# apart.";
 
         ctx.Report.Notice(NoticeKind.Boundary,
             // 主语固定成 it,计数全在介词短语里 —— 计数放主语位时动词得跟着单复数变,
             // 而 NounRegistry 管名词不管动词(同一条纪律在 AnnounceExcluded 上也写着)。
-            $"'{value}' is not one of the game's own classes, and 'mod' is where each def was " +
-            $"declared, not who put this value on it: it sits on defs from " +
-            $"{Tally.Complete(mods.Count).Render("mod")}, {onOfficial.Count} of them official " +
-            $"({Tally.Complete(onOfficial.Sum(m => m.Defs)).Render("def")}). Nothing in the snapshot " +
-            $"records who put it there. {settles}");
+            $"'{value}': 'mod' is where each def was declared, not who put this value on it. " +
+            $"It sits on defs from {Tally.Complete(mods.Count).Render("mod")}, " +
+            $"{onOfficial.Count} of them official " +
+            $"({Tally.Complete(onOfficial.Sum(m => m.Defs)).Render("def")}). Nothing in the " +
+            $"snapshot records who put it there. {settles}");
     }
 
     /// <summary>
