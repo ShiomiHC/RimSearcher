@@ -262,10 +262,11 @@ snapshot), and which `GenStep` each runs is on `genStep`, indexed as `genStep.Cl
 
 ## Paging and errors, in detail
 
-`--limit all` lifts the row cap on the list-shaped commands, and on `read` it is the whole file
-however long. A paged answer states the three things a pipe would have
-destroyed: how many rows this page holds, how many exist in total, and the exact `--offset`
-for the next page. The last page
+`--limit all` lifts the row cap on the list-shaped commands. `read` has no such cap to lift:
+whatever `--lines`, `--outline` or `--member` asked for is printed in full however long it runs,
+and 150 lines from the top when none of them was given. A paged answer states the three things
+a pipe would have destroyed: how many rows this page holds, how many exist in total, and the
+exact `--offset` for the next page. The last page
 says it is the last one; an `--offset` past the end is reported as an overshoot, not as
 "nothing found". Passing `--offset` to `get`, `inherit` or `code-search` is a usage error
 that names the first few commands which do take it and counts the rest, not a silently
