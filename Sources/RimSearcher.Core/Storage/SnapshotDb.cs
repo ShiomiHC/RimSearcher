@@ -619,6 +619,43 @@ public sealed class SnapshotDb : IDisposable
     }
 
     /// <summary>
+    /// 同一次 <see cref="FindByField"/> 的命中里,这些 def 分别由哪些 mod 声明 —— 每个 mod
+    /// 各带几个 def。
+    ///
+    /// 数在分页之前(理由同 <see cref="FindPathShapes"/>):这句话要判的是整个结果集跨了几家,
+    /// 而首页二十五行按 def 名排序,常常只落在一两家上。
+    ///
+    /// 按 <c>DISTINCT d.id</c> 数:同一个 def 在多条路径上命中时按行数会数大。
+    /// 清单本身不设上限 —— 快照里 mod 总数是几十的量级,取全了也不贵,而调用方要判的
+    /// 「这几家里有没有官方」经不起截断。
+    /// </summary>
+    public IReadOnlyList<(string Mod, int Defs)> FindModsHolding(
+        PathQuery path, string? value, bool exact, ScopeFilter scope, string? defType = null)
+    {
+        var p = new Dictionary<string, object?>();
+        var conds = new List<string>();
+
+        PathCondition(path, p, conds);
+
+        if (value is { Length: > 0 })
+        {
+            if (exact) { p["@v"] = value; conds.Add("fv.value = @v COLLATE NOCASE"); }
+            else { p["@v"] = "%" + Escape(value) + "%"; conds.Add("fv.value LIKE @v ESCAPE '\\'"); }
+        }
+        if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
+        if (defType is { Length: > 0 }) { p["@dt"] = defType; conds.Add("d.def_type = @dt COLLATE NOCASE"); }
+
+        var rows = new List<(string, int)>();
+        using var rd = Query(
+            "SELECT d.source_mod, COUNT(DISTINCT d.id) FROM field_values fv " +
+            $"JOIN defs d ON d.id = fv.def_id WHERE {string.Join(" AND ", conds)} " +
+            "GROUP BY d.source_mod ORDER BY COUNT(DISTINCT d.id) DESC", p);
+        while (rd.Read())
+            rows.Add((rd.IsDBNull(0) ? "" : rd.GetString(0), rd.GetInt32(1)));
+        return rows;
+    }
+
+    /// <summary>
     /// 同一次 <see cref="FindByField"/> 的命中里,有几个 def 是加载期由 C# 造出来的。
     ///
     /// 与 <see cref="FindPathShapes"/> 同理,**数在分页之前** —— 首页二十五行按 def 名

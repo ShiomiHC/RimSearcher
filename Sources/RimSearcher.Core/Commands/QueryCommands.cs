@@ -1373,6 +1373,10 @@ public sealed class FindCommand : Command
         // 「外面还有什么」。
         Advisory.NoteSubstringWidened(ctx, pq, value, exact, scope, defs, type);
 
+        // 紧跟其后,理由同上一条:它改变的也是**眼前这些行怎么读**(mod 列答的是哪个问题),
+        // 而下面几句说的是「这张表不是全集」。两类之间的界不能被穿插。
+        Advisory.NoteValueAuthorship(ctx, pq, value, exact, scope, type);
+
         ctx.AnnounceExcluded(scope, rest => ctx.Db.FindByField(pq, value, exact, rest, 0, 0, type).Defs, "def");
 
         // 同样在表上方,且排在 scope 补集那句之后:两句都在说「你手上这张表不是全集」,
@@ -2577,6 +2581,67 @@ internal static class Completeness
 
 internal static class Advisory
 {
+    /// <summary>
+    /// 一个**外来的类**坐在官方 def 上时,说破 <c>mod</c> 列答的不是「谁把它挂上去的」。
+    ///
+    /// 第三轮盲测(2026-09-01,A/B 各 3 人)的实测:六个人都能正确说出 mod 列是声明处 ——
+    /// 那半句 <c>where --help</c> 里本来就有 —— 然后**六个人全都接着断言了「谁挂的」**,
+    /// 5/6 说成「通过补丁」(真值是 C# 运行时装的),把握一律写 100%,而
+    /// <c>--defaults</c> 零人使用。SKILL.md 里那条同批下架:A 组读过它的
+    /// 「Nothing records which mod authored a value」,照样断言 —— 文档上零采纳。
+    ///
+    /// 所以这句不是重复 <c>--help</c> 的那半句,它补的是后半件事:**谁挂的查不出,
+    /// 但「是不是 XML 写的」查得出**,而那正是那五个人答错的地方。
+    ///
+    /// 判据窄成这样是量过的:「结果跨多个 mod」在 baseline 上 11/12、races 上 12/12 命中,
+    /// 那是纯上下文税;收成「第三方命名空间的类 + 落在官方 def 上」之后,races 的
+    /// compClass 取值里只有 28/1025(2.7%)会触发,且那 28 条正是这一类。
+    ///
+    /// 出路跟着能力位分三档 —— <c>xml</c> 那一列读的是哪份 XML 决定了 <c>no</c> 能排除什么。
+    /// 补丁前读的快照上 <c>no</c> 分不开 patch 与 C#,那时把话说满就是给一个错判据。
+    /// </summary>
+    public static void NoteValueAuthorship(CommandContext ctx, PathQuery own, string? value, bool exact,
+                                           Snapshot.ScopeFilter scope, string? defType)
+    {
+        // 没给值时这条命令答的是「谁有这个字段」,不存在「谁写了这个值」这回事。
+        if (value is not { Length: > 0 }) return;
+        // **不按 --exact 门控。** 一度这么写过,而盲测里那六个人敲的正是不带 --exact 的
+        // 默认形态 —— 那道门会让这句话恰好在唯一测到过它该出声的场合哑火。
+        // 子串匹配也不需要那道门:不带命名空间的片段落在 FromGameCode 的单段那一档上被挡住,
+        // 而带命名空间的片段(`ASEL.` 开头)本身就说明了命中的那批值归谁。
+        if (!ClassNameShape.Looks(value) || ClassNameShape.FromGameCode(value)) return;
+
+        var mods = ctx.Db.FindModsHolding(own, value, exact, scope, defType);
+        if (mods.Count == 0) return;
+
+        var official = ScopeFilter.Parse("vanilla", ctx.Db.PackageIds(), ctx.Config);
+        var onOfficial = mods.Where(m => official.Includes(m.Mod)).ToList();
+        // 全落在第三方 def 上时不出声:那种表里 mod 列与值的来源常常真的是一家,
+        // 而这句话的整个由头是「看着像一家,其实不是」。
+        if (onOfficial.Count == 0) return;
+
+        var settles =
+            !ctx.Db.Meta.IndexesXmlWritten
+                ? "This snapshot has no 'xml' column, so it cannot even tell an XML line from C# " +
+                  "putting it there at load; a re-export on 0.5.0 or newer can."
+            : ctx.Db.Meta.IndexesPostPatchXml
+                ? "What is settled is whether any XML line wrote it: the 'xml' column of " +
+                  "'rimsearcher get <defName> --defaults', on this snapshot read after every patch " +
+                  "ran — so a 'no' there means C# put it on at load, not a PatchOperation."
+                : "What is settled is whether the def's own XML wrote it: the 'xml' column of " +
+                  "'rimsearcher get <defName> --defaults'. That XML was read before patches ran on " +
+                  "this snapshot, so a 'no' there still leaves a patch and C# apart.";
+
+        ctx.Report.Notice(NoticeKind.Boundary,
+            // 主语固定成 it,计数全在介词短语里 —— 计数放主语位时动词得跟着单复数变,
+            // 而 NounRegistry 管名词不管动词(同一条纪律在 AnnounceExcluded 上也写着)。
+            $"'{value}' is not one of the game's own classes, and 'mod' is where each def was " +
+            $"declared, not who put this value on it: it sits on defs from " +
+            $"{Tally.Complete(mods.Count).Render("mod")}, {onOfficial.Count} of them official " +
+            $"({Tally.Complete(onOfficial.Sum(m => m.Defs)).Render("def")}). Nothing in the snapshot " +
+            $"records who put it there. {settles}");
+    }
+
     /// <summary>
     /// 值侧是**单语**的:field_values 存的是游戏加载时的那一份文本(这份快照的语言),
     /// 而另一侧只活在 translations 表里,只有 `search` 看得见。

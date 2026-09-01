@@ -223,8 +223,12 @@ public class SkillPromiseTests
         // 最相关的那几行」这个误解,而 CLI 的首行 `…, lines 1-20 of 2449.` 把它当场拆了 ——
         // 行号区间摆在那里,没有「挑」的余地。这条闸的其余三条钉子照旧指着它。
         new("its `def_types`\n  row names them", nameof(GrammarTests.skill那几条可实测的默认与口径逐条对得上)),
-        new("says where the def was declared, not who wrote the value you asked",
-            nameof(GrammarTests.skill那几条可实测的默认与口径逐条对得上)),
+        // 2026-09-01(第三轮盲测)退役:`mod` 列那条整段从 SKILL.md 下架。**它没写错,是冗余** ——
+        // `where --help` 的 --json 键说明里逐字有同一句,而要用 where 几乎必然读到它。
+        // A/B 各 3 人,题目把「解释这张分组表」做成必经步骤,两组都 3/3 正确区分了
+        // 「mod 是声明处」与「谁挂的组件」,零差异。不加化石断言:将来想写回来没有理由拦。
+        // 同一轮测出的真缺口在别处 —— 六人全在「谁挂的」上断言、5/6 说错、无人碰 --defaults,
+        // 那条补在 `where` 的输出里(见同批的 Advisory.NoteValueAuthorship)。
         // 恒真的东西长得与铁证一模一样,而这一句是唯一说破它的地方。
         // 同上一批退役(2026-08-03):`inherit --path-contains` 的证据读法整段从 SKILL.md 下架。
         // `抽象节点也给得出same_value并摆出恒真那一档的分母` 断言的正是 CLI 印出

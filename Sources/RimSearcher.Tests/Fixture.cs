@@ -349,6 +349,9 @@ public static class Fixture
 
         Def("ChildGun",
             new ExportedField("thingClass", "RimWorld.Bullet", DefaultState.Differs),
+            // 第三方的类坐在官方 def 上,与主 fixture 那对同形 —— 这里是为了让
+            // NoteValueAuthorship 出路那半句的**补丁前那一档**有落点(这份标 0.5.0)。
+            new ExportedField("comps[0].compClass", "TestMod.CompBoltedOn", DefaultState.Differs),
             new ExportedField("damage", "12", DefaultState.Differs),
             new ExportedField("speed", "70", DefaultState.Differs),
             // XML 侧写的是 costList.Steel(拿 defName 当标签名),索引侧是
@@ -504,6 +507,9 @@ public static class Fixture
         }
 
         Def("PatchGun", "patch gun",
+            // 与 presence 那份同形,这里是**补丁后那一档**的落点(这份标 0.7.0)。
+            // 两份摆一起,出路那半句改了其中一档另一档不会静默跟着错。
+            new ExportedField("comps[0].compClass", "TestMod.CompBoltedOn", DefaultState.Differs),
             new ExportedField("damage", "12", DefaultState.Differs),
             new ExportedField("speed", "70", DefaultState.Differs),
             new ExportedField("recipeMaker.researchPrerequisite", "SpecializedLimbs", DefaultState.Differs),
@@ -896,6 +902,12 @@ public static class Fixture
             ("soundInteract", "Standard_Pickup", DefaultState.Differs),
             ("thingClass", "RimWorld.Apparel", DefaultState.Differs),
             ("comps[0].compClass", "RimWorld.CompShield", DefaultState.Same),
+            // 第三方的类**坐在官方 def 上** —— NoteValueAuthorship 的唯一语料。
+            // 这个形态在别处没有:上面那条是游戏自己的类,而 other 快照那条第三方类
+            // 挂的是第三方自己的 def。两者都不会让那句话出声。
+            // 同一个类在下面的 TestModGun(test.mod 声明)上也挂一份,于是它报的是
+            // 「2 个 mod,其中 1 个官方」,而不是只有官方那一种退化情形。
+            ("comps[1].compClass", "TestMod.CompBoltedOn", DefaultState.Differs),
             ("comps[0].props.energyMax", "0.5", DefaultState.Differs),
             // 同块的第二个「有人设过」的字段 —— 兄弟提示的落点。
             ("comps[0].props.energyLossPerDamage", "0.033", DefaultState.Differs),
@@ -964,7 +976,9 @@ public static class Fixture
             // `.Class`,而 other 那份标着 0.1.0 —— 「量过了、没人用」与「这份快照根本
             // 没量」各有一个落点。
             ("comps[0].Class", "RimWorld.CompProperties_Shield", DefaultState.Differs),
-            ("comps[0].compClass", "RimWorld.CompShield", DefaultState.Same));
+            ("comps[0].compClass", "RimWorld.CompShield", DefaultState.Same),
+            // 与 Apparel_ShieldBelt 那条成对,见那边的注释。
+            ("comps[1].compClass", "TestMod.CompBoltedOn", DefaultState.Differs));
 
         // 同名跨 def 类型 —— RimWorld 常态,也是 JSON 撞键静默丢数据那条的唯一语料。
         // 一个有字段一个没有,是为了让「后写的把先写的盖成空」当场暴露。

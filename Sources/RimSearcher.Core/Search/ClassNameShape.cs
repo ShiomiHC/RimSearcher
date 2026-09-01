@@ -41,4 +41,24 @@ public static class ClassNameShape
         var i = value.LastIndexOf('.');
         return i < 0 ? value : value[(i + 1)..];
     }
+
+    /// <summary>
+    /// 这个类名的命名空间根是不是游戏自己的。
+    ///
+    /// **快照里没有「类由哪个程序集提供」这一列**,所以这只能按命名空间根判 ——
+    /// 游戏的公开类型全部落在这三个根下,而 mod 的程序集各用各的根。
+    /// 硬编码的代价是新 DLC 若引入第四个根,它会被当成第三方;那个方向只是多印一句话,
+    /// 反过来漏掉才贵,所以宁可这样错。
+    ///
+    /// 不带命名空间的单段名(<c>Building</c>)一律算游戏自己的:XML 里的裸类名是
+    /// 上游的写法,mod 的类在 XML 里必须写全名。
+    /// </summary>
+    public static bool FromGameCode(string? value)
+    {
+        if (value is not { Length: > 0 }) return true;
+        var i = value.IndexOf('.');
+        if (i < 0) return true;
+        var root = value[..i];
+        return root is "RimWorld" or "Verse" or "LudeonTK";
+    }
 }

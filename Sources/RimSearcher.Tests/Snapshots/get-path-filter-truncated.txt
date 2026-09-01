@@ -1,8 +1,8 @@
 $ rimsearcher get Apparel_ShieldBelt --path-contains comps --limit 1
 exit 0
 --- stdout ---
-Matching 'comps': 3 fields, out of 12 fields on the def.
-3 fields, showing the first 1; raise --limit for the rest.
+Matching 'comps': 4 fields, out of 13 fields on the def.
+4 fields, showing the first 1; raise --limit for the rest.
 
 def_name     Apparel_ShieldBelt
 def_type     ThingDef

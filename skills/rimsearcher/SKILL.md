@@ -103,11 +103,6 @@ a different question. None of them announces itself.
 - **Reverse-look-up field names, never guess.** `where --value <value>` reports which paths
   hold the value. A guessed field name that happens to exist returns a clean,
   complete-looking table for the wrong field — the most expensive failure here.
-- **The `mod` column says where the def was declared, not who wrote the value you asked
-  about**, and `--scope` filters that same thing. A comp a third-party mod bolts onto a
-  vanilla def stays filed under the vanilla mod: `--scope vanilla` keeps it,
-  `--scope all,-vanilla` drops it — backwards from the instinct. Nothing records which mod
-  authored a value.
 - **`--scope vanilla`** (also `core`/`base`/`official`) = every module Ludeon ships — **not**
   a snapshot named `vanilla`.
 - **`code-search` is case-sensitive unless you pass `-i`** — `orbitalDebris` and

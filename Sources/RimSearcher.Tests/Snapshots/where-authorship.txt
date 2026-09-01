@@ -1,0 +1,12 @@
+$ rimsearcher where compClass TestMod.CompBoltedOn
+exit 0
+--- stdout ---
+2 defs.
+  - Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans every def type that uses this path at all, not just the ones in the rows above — ThingDef, holding 1 def cut short between them. 'rimsearcher snapshot truncated --type ThingDef' lists them.
+  - 'TestMod.CompBoltedOn' is not one of the game's own classes, and 'mod' is where each def was declared, not who put this value on it: it sits on defs from 2 mods, 1 of them official (1 def). Nothing in the snapshot records who put it there. This snapshot has no 'xml' column, so it cannot even tell an XML line from C# putting it there at load; a re-export on 0.5.0 or newer can.
+
+Same in every row, not repeated below: def_type=ThingDef, path=comps[1].compClass, value=TestMod.CompBoltedOn, code_default=no.
+def_name            mod
+Apparel_ShieldBelt  ludeon.rimworld
+TestModGun          test.mod
+--- stderr ---

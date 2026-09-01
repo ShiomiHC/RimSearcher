@@ -1,9 +1,9 @@
 $ rimsearcher values compClass
 exit 0
 --- stdout ---
-2 values.
+3 values.
 
-matched_paths    comps[0].compClass (3)
+matched_paths    comps[0].compClass (3), comps[1].compClass (2)
 def_types        ThingDef (2 of 9), HediffDef (1 of 1)
 defs_with_field  3
 Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans every def type that uses this path at all, not just the ones in the rows above — ThingDef, holding 1 def cut short between them. 'rimsearcher snapshot truncated --type ThingDef' lists them.
@@ -11,5 +11,8 @@ This table's axis is the field: it lists the values 'compClass' takes. Which fie
 
 value                        defs
 RimWorld.CompShield          2
+TestMod.CompBoltedOn         2
 Verse.HediffComp_Disappears  1
+
+These values come from 2 field paths pooled together, not from one field. Any path named above goes back in with --exact-path to pool that one alone; '[]' there stands for any index.
 --- stderr ---

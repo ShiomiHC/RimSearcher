@@ -1048,8 +1048,8 @@ public class GrammarTests
 
         foreach (var (argv, want) in new[]
                  {
-                     ((string[])["get", "Apparel_ShieldBelt"], "11 fields."),
-                     (["values", "compClass"], "2 values."),
+                     ((string[])["get", "Apparel_ShieldBelt"], "12 fields."),
+                     (["values", "compClass"], "3 values."),
                  })
         {
             var (text, _, _) = Fixture.Run(argv);

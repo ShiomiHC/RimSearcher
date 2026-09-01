@@ -1,7 +1,7 @@
 $ rimsearcher get PatchGun --defaults --fixture-presence-patch
 exit 0
 --- stdout ---
-6 fields.
+7 fields.
 
 def_name       PatchGun
 def_type       ThingDef
@@ -11,13 +11,14 @@ mod            ludeon.rimworld
 source         Guns.xml
 inherits_from  BasePatchGun (see 'rimsearcher inherit PatchGun')
 
-path                              value             code_default  xml
-damage                            12                no            here
-speed                             70                no            parent+patch
-recipeMaker.researchPrerequisite  SpecializedLimbs  no            here+patch
-costList[0].thingDef              Steel             no            here
-costList[0].count                 75                no            here
-costList[0].quality               Normal            yes           no
+path                              value                 code_default  xml
+comps[0].compClass                TestMod.CompBoltedOn  no            no
+damage                            12                    no            here
+speed                             70                    no            parent+patch
+recipeMaker.researchPrerequisite  SpecializedLimbs      no            here+patch
+costList[0].thingDef              Steel                 no            here
+costList[0].count                 75                    no            here
+costList[0].quality               Normal                yes           no
 No value above with 'code_default'=no is one that most of the 2 ThingDefs in this snapshot also carry. Rows marked yes were not compared: a yes is not evidence that nothing wrote the value — the 'xml' column on that same row tells the two apart: here is an XML line writing that same value, no is an XML that does not write it (read after every patch ran).
 The game also prices things like this — market value, cost to make, work amount — and those are computed rather than stored, so no field above would hold them either way. This snapshot never measured them, so it cannot say whether this def is one of the priced ones: 'rimsearcher economy PatchGun' says why and what to re-export.
 --- stderr ---

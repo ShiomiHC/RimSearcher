@@ -121,6 +121,15 @@ public class OutputSnapshotTests
         // 桶名不一致(XML 根元素 TestVariantDef,def 落在 TestBaseDef 桶)时 inherits_from 仍要在场。
         { "get-bucket-mismatch",   ["get", "VariantOne"] },
         { "where-hit",              ["where", "compClass", "RimWorld.CompShield"] },
+        // 第三方的类坐在官方 def 上 —— mod 列答的不是「谁挂的」。两份摆一起:
+        // 上面那条是游戏自己的类,一个字都不许多;这条才该出声。
+        // 盲测里那六个人敲的是**不带 --exact** 的形态,基线跟着敲同一条 ——
+        // 曾经按 --exact 门控过,而那道门恰好让这句话在唯一测到过的场合哑火。
+        { "where-authorship",       ["where", "compClass", "TestMod.CompBoltedOn"] },
+        // 出路那半句跟着「xml 列读的是哪份 XML」分档:补丁后读的快照上 no 能排除 patch,
+        // 补丁前读的不能。两档各一份,否则改了其中一档另一档静默跟着错。
+        { "where-authorship-prepatch", ["where", "compClass", "TestMod.CompBoltedOn", Fixture.PresenceArg] },
+        { "where-authorship-patch",    ["where", "compClass", "TestMod.CompBoltedOn", Fixture.PresencePatchArg] },
         // 一行是一个(def, 路径)对,而同一个 def 可以在多条路径上命中 —— 于是 line 1 那个
         // 数不是 def 数。此前它印的是「N defs」,真快照上 `where capacity Consciousness`
         // 是 155 行 / 80 个 def(AlcoholHigh 一个占四行)。两份摆一起:两数不等时补一句
