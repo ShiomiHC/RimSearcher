@@ -442,20 +442,18 @@ public sealed class ReadCommand : Command
     ///
     /// **「找不到不等于没有」这半句单说是无效的,得说出漏的是哪一类。** 盲测三臂各 10 次,
     /// 抽象地点名同形 0/10,点名一个读者能去核对的具体类别 5/10。
-    /// 举委托类型是核过的:RegionProcessor / PanCompletionCallback /
-    /// DragSliderCallback 源码各是一份 namespace 下的 <c>delegate</c> 声明,轮廓 0 条。
-    /// **限定语「directly in a namespace」是承重的**:嵌套委托(DefInjectionUtility 里那份)
-    /// 以 delegate 身份在场、按名字找得到 —— 对它说「认不出」是假话。不带限定的
-    /// 「delegate types」把两档说成一档,与它替换掉的「operators」当年同型
-    /// (转换运算符那时也是错标成 method/constructor,不是缺席)。
-    /// event 也不用提,它在(kind 标成 field,按名字找得到);显式接口实现也在,
-    /// 只是名字被剥了前缀。
+    /// 举本地函数是核过的:AttackTargetFinder.cs 第 297 行的 <c>BestTargetOnCell</c> 住在方法体里,
+    /// <c>--member</c> 落空 —— 扫描只在根、namespace、类型三处认声明,方法体内一律当语句。
+    /// 这个例子已经换过三次(operators → namespace 下的 delegate → enum 成员 → 本地函数),
+    /// 每次都是因为前一类修进来了;点名的类别必须是**此刻**真认不出的,否则整句是假话。
+    /// event 不用提,它在(kind 标成 field,按名字找得到);显式接口实现也在,
+    /// 只是名字被剥了前缀;委托两档都在,namespace 下的 Owner 为空;enum 成员 kind 是 enum-member。
     /// </summary>
     private static void SayBraceMatched(CommandContext ctx)
         => ctx.Report.Notice(NoticeKind.Boundary,
             "Found by matching braces, not by parsing C#: a declaration this scan does not recognise " +
-            "and one that is not in the file look the same here — both are simply absent. A delegate " +
-            "declared directly in a namespace is one kind it does not recognise.",
+            "and one that is not in the file look the same here — both are simply absent. A local " +
+            "function declared inside a method body is one kind it does not recognise.",
             footnote: true);
 
     private static void SayNoDeclaration(CommandContext ctx, string rel, string[] text,

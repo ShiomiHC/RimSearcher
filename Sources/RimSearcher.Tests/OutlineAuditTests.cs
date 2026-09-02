@@ -410,14 +410,12 @@ public class OutlineAuditTests
     }
 
     /// <summary>
-    /// 命名空间下的委托类型进不了轮廓,而类型内部的那一档在场、kind 是 delegate。
-    /// 「认不出的一类」举的是前者,限定语守的就是这里的两档之差。
-    ///
-    /// 实证形状对齐真实树:RegionProcessor.cs / PanCompletionCallback.cs 整文件就是一份
-    /// namespace 下的 delegate 声明。
+    /// 委托类型两档都在场、kind 都是 delegate:namespace 下的(RegionProcessor.cs /
+    /// PanCompletionCallback.cs 整文件就是一份)Owner 为空,类型内部的 Owner 是宿主。
+    /// 文件级那档曾被「根与 namespace 下只可能是类型」那道闸挡在外面,整文件轮廓 0 条。
     /// </summary>
     [Fact]
-    public void 命名空间下的委托类型进不了轮廓而嵌套委托记成delegate()
+    public void 命名空间下的委托类型进轮廓且嵌套委托记成delegate()
     {
         var fileLevel = Scan("""
             namespace Verse
@@ -425,7 +423,17 @@ public class OutlineAuditTests
             	public delegate bool RegionProcessor(Region reg);
             }
             """);
-        Assert.Empty(fileLevel);
+        var top = Assert.Single(fileLevel.Where(d => d.Kind != "namespace"));
+        Assert.Equal(("delegate", "RegionProcessor", (string?)null), (top.Kind, top.Name, top.Owner));
+        Assert.Equal((3, 3), (top.StartLine, top.EndLine));
+
+        // 文件级命名空间(`namespace Verse;`)下同样要认:那时栈是空的,委托直接住在根上。
+        var fileScoped = Scan("""
+            namespace Verse;
+
+            public delegate bool RegionProcessor(Region reg);
+            """);
+        Assert.Contains(fileScoped, d => d is { Kind: "delegate", Name: "RegionProcessor", Owner: null });
 
         var nested = Scan("""
             internal class T
@@ -441,6 +449,81 @@ public class OutlineAuditTests
         // 一份轮廓能让人得出「这个类有个叫 Nested 的方法可以调」。
         Assert.Equal("delegate", nested.Single(d => d.Name == "Nested").Kind);
         Assert.Equal("method", nested.Single(d => d.Name == "Real").Kind);
+    }
+
+    /// <summary>
+    /// enum 成员进轮廓,kind 是 enum-member,Owner 是那个 enum:成员之间是逗号而不是分号,
+    /// 逗号只在 enum 帧里当分隔符;最后一个成员没有逗号,由收尾花括号收。
+    /// 形状对齐真实树的 RegionType.cs:带 <c>[Flags]</c>、初值有十进制也有十六进制。
+    /// 特性实参里的逗号不许切成两个成员;尾随逗号不许多出一个空成员。
+    /// </summary>
+    [Fact]
+    public void enum成员进轮廓且逗号只在enum帧里当分隔符()
+    {
+        var decls = Scan("""
+            namespace Verse
+            {
+            	[Flags]
+            	public enum RegionType
+            	{
+            		None = 0,
+            		Portal = 1,
+            		[Obsolete("use Portal", true)]
+            		Set_All = 0xF,
+            		Plain
+            	}
+
+            	public enum Trailing
+            	{
+            		A,
+            		B,
+            	}
+
+            	public class T
+            	{
+            		public void M(int a, int b)
+            		{
+            		}
+            	}
+            }
+            """);
+        var members = decls.Where(d => d is { Kind: "enum-member", Owner: "RegionType" }).ToList();
+        Assert.Equal(["None", "Portal", "Set_All", "Plain"], members.Select(d => d.Name));
+        Assert.Equal((6, 6), (members[0].StartLine, members[0].EndLine));
+        Assert.Equal((8, 9), (members[2].StartLine, members[2].EndLine));
+        // 最后一个成员由 `}` 收,行号仍是它自己那行,不是 `}` 那行。
+        Assert.Equal((10, 10), (members[3].StartLine, members[3].EndLine));
+        // 尾随逗号之后不许多出一个空成员。
+        Assert.Equal(["A", "B"], decls.Where(d => d.Owner == "Trailing").Select(d => d.Name));
+        // 方法参数表里的逗号不是分隔符:M 仍是一个 method,没有叫 a 或 b 的东西。
+        Assert.Single(decls, d => d.Name == "M" && d.Kind == "method");
+        Assert.DoesNotContain(decls, d => d.Name is "a" or "b");
+    }
+
+    /// <summary>
+    /// 方法体里的本地函数进不了轮廓:扫描只在根、namespace、类型三处认声明,方法体内一律
+    /// 当语句(否则 <c>if (x) {</c> 会变成一个叫 if 的方法)。
+    /// 这是免责句此刻点名的「认不出的一类」—— 哪天修进来了,那句话得跟着换例子,
+    /// 这条闸就是提醒它换的。形状对齐真实树 AttackTargetFinder.cs 第 297 行。
+    /// </summary>
+    [Fact]
+    public void 方法体里的本地函数进不了轮廓()
+    {
+        var decls = Scan("""
+            internal class AttackTargetFinder
+            {
+            	public static IAttackTarget BestAttackTarget(IntVec3 c)
+            	{
+            		return BestTargetOnCell(c);
+            		IAttackTarget BestTargetOnCell(IntVec3 x)
+            		{
+            			return null;
+            		}
+            	}
+            }
+            """);
+        Assert.Single(decls, d => d.Name == "BestAttackTarget");
+        Assert.DoesNotContain(decls, d => d.Name == "BestTargetOnCell");
     }
 
     /// <summary>

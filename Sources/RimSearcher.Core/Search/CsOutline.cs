@@ -64,6 +64,7 @@ public static class CsOutline
         var open = new Stack<Frame>();
         var pending = new StringBuilder();
         var pendingStart = 0;
+        var pendingEnd = 0;     // pending 最后一个非空白字符所在行:enum 最后一个成员由 `}` 收,成员本身不在 `}` 那行
 
         var state = Lex.Code;
         var quoteRun = 0;   // 原始字符串字面量("""…""")的引号数
@@ -141,6 +142,9 @@ public static class CsOutline
 
                     case '}':
                     {
+                        // enum 的最后一个成员后面没有逗号,收尾花括号替它收。
+                        if (InEnum(open) && EnumMember(pending.ToString(), open.Peek().Decl!) is { } last)
+                            found.Add(last with { StartLine = pendingStart, EndLine = pendingEnd });
                         if (open.Count > 0)
                         {
                             var frame = open.Pop();
@@ -151,6 +155,20 @@ public static class CsOutline
                         continue;
                     }
 
+                    case ',':
+                    {
+                        // enum 成员之间是逗号,不是分号;别处的逗号(参数表、泛型实参、初值)都在
+                        // 类型帧或语句里,只有 enum 帧直接住着这种成员。特性实参里的逗号
+                        // (`[Obsolete("x", true)] Foo`)靠方括号未配平挡住。
+                        if (InEnum(open) && EnumMember(pending.ToString(), open.Peek().Decl!) is { } m)
+                        {
+                            found.Add(m with { StartLine = pendingStart, EndLine = pendingEnd });
+                            pending.Clear();
+                            continue;
+                        }
+                        break;
+                    }
+
                     case ';':
                     {
                         // 无体成员:字段、常量、abstract/extern 方法、`=> expr;` 的属性,
@@ -158,9 +176,10 @@ public static class CsOutline
                         if (Declarable(open))
                         {
                             var decl = Classify(Normalize(pending.ToString()), OwnerOf(open), bodyless: true);
-                            // 根与 namespace 下只可能是类型;类型里才轮得到成员。
+                            // 根与 namespace 下只住类型与委托(RegionProcessor.cs 整文件就是一份
+                            // `delegate`);类型里才轮得到成员。
                             var inType = open.Count > 0 && open.Peek().Decl is { } p && IsType(p.Kind);
-                            if (decl is not null && (inType || IsType(decl.Kind)))
+                            if (decl is not null && (inType || IsType(decl.Kind) || decl.Kind == "delegate"))
                                 found.Add(decl with { StartLine = Backfill(lines, pendingStart), EndLine = i + 1 });
                         }
                         pending.Clear();
@@ -175,6 +194,7 @@ public static class CsOutline
                     if (char.IsWhiteSpace(ch)) continue;
                     pendingStart = i + 1;
                 }
+                if (!char.IsWhiteSpace(ch)) pendingEnd = i + 1;
                 pending.Append(ch);
             }
 
@@ -202,6 +222,28 @@ public static class CsOutline
 
     internal static bool IsType(string kind)
         => kind is "class" or "struct" or "interface" or "record" or "enum";
+
+    private static bool InEnum(Stack<Frame> open)
+        => open.Count > 0 && open.Peek().Decl is { Kind: "enum" };
+
+    /// <summary>
+    /// enum 帧里一段逗号之间的文本认成一个成员:剥特性、切初值、取最后一个标识符。
+    /// 方括号没配平说明逗号在特性实参里,这段还没完,返回 null 让调用方继续攒。
+    /// 空段(尾随逗号之后的收尾)同样返回 null。
+    /// </summary>
+    private static CsDecl? EnumMember(string raw, CsDecl owner)
+    {
+        var header = Normalize(raw);
+        if (header.Length == 0) return null;
+        if (header.Count(c => c == '[') != header.Count(c => c == ']')) return null;
+        while (header.StartsWith('[') && header.IndexOf(']') > 0)
+            header = header[(header.IndexOf(']') + 1)..].TrimStart();
+        header = StripInitializer(header);
+        var name = LastIdentifier(header);
+        if (name is null || Keywords.Contains(name)) return null;
+        return new CsDecl("enum-member", name, owner.Name, 0, 0)
+            { OwnerTypeParams = owner.TypeParams ?? "" };
+    }
 
     /// <summary>
     /// 声明行往上收编紧挨着的注释与特性行。文档注释与 <c>[Attribute]</c> 是声明的一部分,

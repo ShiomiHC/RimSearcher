@@ -9,5 +9,5 @@ vanilla/Verse/Outline.cs:5-33  class Outer
      7  	public class Outer
      8  	{
 
-Found by matching braces, not by parsing C#: a declaration this scan does not recognise and one that is not in the file look the same here — both are simply absent. A delegate declared directly in a namespace is one kind it does not recognise.
+Found by matching braces, not by parsing C#: a declaration this scan does not recognise and one that is not in the file look the same here — both are simply absent. A local function declared inside a method body is one kind it does not recognise.
 --- stderr ---
