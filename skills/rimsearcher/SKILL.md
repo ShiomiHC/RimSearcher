@@ -84,7 +84,7 @@ a different question. None of them announces itself.
   dotted one is raw text that does not stop at a `.` — `where graphicData.shaderType` also
   collects `swimmingGraphicData.shaderType`. `--exact-path` pins the whole path, with `[]`
   standing for any index. This changes the answer, not the row count.
-- **`get --path-contains`/`--value` match substrings too** — `--path-contains soundImpact`
+- **`get --path-contains` and `where --value` match substrings too** — `--path-contains soundImpact`
   also returns `soundImpactDefault`, opposite meaning.
 - **One defName can belong to several def types, and `get` then prints one block per def** —
   `HospitalBed` is both a ThingDef and a ResearchProjectDef. Under `--json` that is a

@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.RegularExpressions;
 using RimSearcher.Cli;
+using RimSearcher.Commands;
 
 namespace RimSearcher.Tests;
 
@@ -730,5 +731,98 @@ public class SkillPromiseTests
 
         var (stdout, _, _) = Fixture.Run("inherit", "BaseBullet");
         Assert.Contains("patch_ops", stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 文档里写 `get --value`,读者就照抄。SKILL.md:87 那半句从 5b08499 起躺了一个月,而
+    /// `--value` 从来只是 where 的选项;2026-09-04 Vethara 侧的会话据此敲出
+    /// `get ThingDef Chimera --values label`,报错被 `2>/dev/null` 吞掉后当成了「没有这个 def」。
+    /// 判据按逻辑行(续行并回上一行):一行里点名的每个 `--flag`,得是同一行点名的某条命令
+    /// (或全局)真收的;一行没点名任何命令时,退成「至少有一条命令收它」。
+    /// </summary>
+    [Fact]
+    public void 文档里点名的选项都是同一行那条命令真收的()
+    {
+        var registry = new CommandRegistry();
+        var byName = new Dictionary<string, CommandSpec>(StringComparer.Ordinal);
+        foreach (var s in registry.Specs)
+        {
+            byName[s.Name] = s;
+            foreach (var a in s.Aliases) byName[a] = s;
+        }
+        static string Norm(string s) => s.TrimStart('-').Replace("-", "").Replace("_", "").ToLowerInvariant();
+        static IEnumerable<string> Names(OptionSpec o) => new[] { o.Name }.Concat(o.Aliases).Select(Norm);
+        // --help 由解析器自己接,不在任何命令的选项表里。
+        var globals = GlobalOptions.All.SelectMany(Names).Append("help").ToHashSet(StringComparer.Ordinal);
+        var anywhere = registry.Specs.SelectMany(s => s.Options).SelectMany(Names).Concat(globals)
+                               .ToHashSet(StringComparer.Ordinal);
+
+        var offenders = new List<string>();
+        foreach (var (file, line, text) in SkillLogicalLines())
+        {
+            var flags = Regex.Matches(text, @"(?<![\w-])--[a-z][a-z0-9-]*").Select(m => m.Value).Distinct().ToList();
+            if (flags.Count == 0) continue;
+            // 「X does not take --scope」「passing --offset to get is a usage error」「a name --member
+            // misses」—— 说的正是「这条命令不收它」,不是在教人写。这几句话本身另有闸守
+            // (未知选项的报错给出这条命令自己收什么 等),这里只放过,不验。
+            if (Regex.IsMatch(text, @"does not take|usage error|misses")) continue;
+            // 同一行点名的命令:反引号里以命令名开头的片段,`rimsearcher ` 前缀不算。
+            // 命令名后面得像实参(选项、占位符、引号、带大写/数字/点的名字),
+            // 否则 `read after every patch ran` 这种反引号里的散文也会被当成 read。
+            var commands = new List<CommandSpec>();
+            foreach (Match m in Regex.Matches(text, @"`(?:rimsearcher )?([a-z][a-z-]*(?: [a-z]+)?)([^`]*)`"))
+            {
+                var name = m.Groups[1].Value;
+                var rest = m.Groups[2].Value;
+                if (!byName.ContainsKey(name) && name.Contains(' '))
+                {
+                    var cut = name.IndexOf(' ');
+                    rest = name[cut..] + rest;
+                    name = name[..cut];
+                }
+                if (!byName.TryGetValue(name, out var spec)) continue;
+                if (rest.Length > 0 && !Regex.IsMatch(rest, @"^\s+(-|<|""|'|\S*[A-Z0-9._]|[^\x00-\x7F])")) continue;
+                if (!commands.Contains(spec)) commands.Add(spec);
+            }
+            var accepted = commands.Count == 0
+                ? anywhere
+                : commands.SelectMany(c => c.Options).SelectMany(Names).Concat(globals).ToHashSet(StringComparer.Ordinal);
+            foreach (var f in flags.Where(f => !accepted.Contains(Norm(f))))
+                offenders.Add($"{file}:{line}  {f}  (commands named on this line: " +
+                              (commands.Count == 0 ? "none" : string.Join(", ", commands.Select(c => c.Name))) + ")");
+        }
+        Assert.True(offenders.Count == 0,
+            "The skill docs name an option on a line whose command does not take it:\n  " + string.Join("\n  ", offenders));
+    }
+
+    /// <summary>SKILL.md + references 手写页的逻辑行:以空白开头的续行并回上一行,围栏代码块逐行。</summary>
+    private static IEnumerable<(string File, int Line, string Text)> SkillLogicalLines()
+    {
+        var dir = Path.Combine(DeclarationTests.RepoRoot(), "skills", "rimsearcher");
+        var files = new List<string> { Path.Combine(dir, "SKILL.md") };
+        files.AddRange(Directory.EnumerateFiles(Path.Combine(dir, "references"), "*.md")
+                                .Where(f => Path.GetFileName(f) != "cli-reference.md")
+                                .OrderBy(f => f, StringComparer.Ordinal));
+        foreach (var f in files)
+        {
+            var name = Path.GetRelativePath(dir, f);
+            var lines = File.ReadAllLines(f);
+            var inFence = false;
+            var start = -1;
+            var buf = new System.Text.StringBuilder();
+            for (var i = 0; i < lines.Length; i++)
+            {
+                var l = lines[i];
+                if (l.TrimStart().StartsWith("```", StringComparison.Ordinal)) inFence = !inFence;
+                var continues = !inFence && buf.Length > 0 && l.Length > 0 && char.IsWhiteSpace(l[0]);
+                if (continues) { buf.Append(' ').Append(l.Trim()); continue; }
+                if (buf.Length > 0) yield return (name, start + 1, buf.ToString());
+                buf.Clear();
+                if (l.Trim().Length == 0) continue;
+                start = i;
+                buf.Append(l.Trim());
+            }
+            if (buf.Length > 0) yield return (name, start + 1, buf.ToString());
+        }
     }
 }
