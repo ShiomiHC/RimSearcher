@@ -147,6 +147,12 @@ namespace RimSearcher.Contract
             public const string Injections = "injections";
             /// <summary>可注入槽位名册。</summary>
             public const string InjKeys = "inj_keys";
+            /// <summary>
+            /// <see cref="InjKeys"/> 里**导出器自己**那部分(拼行 + 写流)。
+            /// 差额是游戏的 ForEachPossibleDefInjection 在走 def 与字段 —— 那一段动不了,
+            /// 这一段动得了,不分开就不知道该不该动。它是 InjKeys 的子集,不另计入 Total。
+            /// </summary>
+            public const string InjKeysEmit = "inj_keys_emit";
             /// <summary>Keyed 译文。</summary>
             public const string Keyed = "keyed";
             /// <summary>继承层(重读 XML)。</summary>

@@ -150,9 +150,20 @@ public sealed class SnapshotStatusCommand : Command
                      ["layer"] = kv.Key,
                      ["seconds"] = (kv.Value / 1000.0).ToString("0.0"),
                      // total 那一行的份额留空:它与自己比恒是 100%,印出来只占一格。
+                     // 子集行(_emit)的也留空:它长在别的行**里面**,给它一个百分比会让
+                     // 这一列加起来超过 100%,而读者是按「各行互斥」读这一列的。
                      ["share"] = total > 0 && kv.Key != IntermediateFormat.TimingKeys.Total
+                                           && !kv.Key.EndsWith("_emit", StringComparison.Ordinal)
                          ? $"{100.0 * kv.Value / total:0}%" : null,
                  }).ToList());
+
+            // 名字带 _emit 的那一行是上一行的一部分,不是它旁边的一段。这句话只在真有
+            // 这种行时说 —— 没有子集行的表上它是一句空话。
+            if (t.Keys.Any(k => k.EndsWith("_emit", StringComparison.Ordinal)))
+                ctx.Report.Notice(NoticeKind.Boundary,
+                    "A layer whose name ends in '_emit' is the part of the layer above it that this tool " +
+                    "spends on building and writing lines; the rest of that layer is the game's own " +
+                    "traversal. It is counted inside its parent, not beside it, which is why it has no share.");
         }
 
         if (db.ExportTimings is { Count: > 0 } exportTimings) TimingTable("export_timings", exportTimings);

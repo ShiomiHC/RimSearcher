@@ -47,8 +47,10 @@ namespace RimSearcher.DataMod
         /// 记录就当生效,而 baseline 上光键配不上槽位的就有 1348 行,全被印成「in effect」。
         /// 同一行还带 source_file(译文出自哪个语言文件),运行时那一档此前这一格是空的。
         /// 0.11.0 起尾行带 timings_ms:每一层各花了多少毫秒,导出为什么慢从此有产地。
+        /// 0.12.0 把 inj_keys 拆出 inj_keys_emit(导出器自己那半,差额是游戏在走 def),
+        /// 并给字段表加了按类型的缓存 —— 同一个嵌套类型此前每走到一次就重算一次反射。
         /// </summary>
-        public const string ExporterVersion = "0.11.0";
+        public const string ExporterVersion = "0.12.0";
 
         public static ExportLimits Limits = new ExportLimits();
 
@@ -79,6 +81,9 @@ namespace RimSearcher.DataMod
             var swTypeFields = new Stopwatch();
             var swInjections = new Stopwatch();
             var swInjKeys = new Stopwatch();
+            // inj_keys 里我们自己占多少。剩下的那部分是游戏的 ForEachPossibleDefInjection
+            // 在走 def 与字段 —— 两笔账不分开,「49.7 万行慢在哪」就只能猜。
+            var swInjKeysEmit = new Stopwatch();
             var swKeyed = new Stopwatch();
             var swXmlNodes = new Stopwatch();
             var defs = 0;
@@ -175,7 +180,7 @@ namespace RimSearcher.DataMod
                 // 注入键层紧跟在 definj 后面 —— 两者的行得互相对得上,
                 // 而对得上的前提是同一次导出、同一套 def 对象。
                 swInjKeys.Start();
-                ForEachInjectionKeyLine(line =>
+                ForEachInjectionKeyLine(swInjKeysEmit, line =>
                 {
                     writer.WriteLine(line);
                     records++;
@@ -237,6 +242,7 @@ namespace RimSearcher.DataMod
                     .Int(IntermediateFormat.TimingKeys.TypeFields, swTypeFields.ElapsedMilliseconds)
                     .Int(IntermediateFormat.TimingKeys.Injections, swInjections.ElapsedMilliseconds)
                     .Int(IntermediateFormat.TimingKeys.InjKeys, swInjKeys.ElapsedMilliseconds)
+                    .Int(IntermediateFormat.TimingKeys.InjKeysEmit, swInjKeysEmit.ElapsedMilliseconds)
                     .Int(IntermediateFormat.TimingKeys.Keyed, swKeyed.ElapsedMilliseconds)
                     .Int(IntermediateFormat.TimingKeys.XmlNodes, swXmlNodes.ElapsedMilliseconds)
                     // total 在写尾行之前读,所以它差着最后这一行与 gzip 收尾的那点时间。
@@ -679,7 +685,7 @@ namespace RimSearcher.DataMod
         ///
         /// 回调式而不是 <c>yield</c>:vanilla 那个方法是推的,包成迭代器要先整批攒在内存里。
         /// </summary>
-        private static void ForEachInjectionKeyLine(Action<string> emit)
+        private static void ForEachInjectionKeyLine(Stopwatch swEmit, Action<string> emit)
         {
             foreach (var defType in GenDefDatabase.AllDefTypesWithDatabases())
             {
@@ -702,6 +708,7 @@ namespace RimSearcher.DataMod
                             if (suggested != null && suggested.StartsWith(prefix, StringComparison.Ordinal))
                                 suggested = suggested.Substring(prefix.Length);
 
+                            swEmit.Start();
                             emit(new JsonLine()
                                 .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindInjKey)
                                 .Str(IntermediateFormat.KeyDefType, typeName)
@@ -713,6 +720,7 @@ namespace RimSearcher.DataMod
                                 .Bool(IntermediateFormat.KeyFullListTranslationAllowed,
                                       fullListTranslationAllowed)
                                 .ToString());
+                            swEmit.Stop();
                         });
                 }
                 catch (Exception ex)

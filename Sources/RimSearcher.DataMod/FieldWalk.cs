@@ -23,7 +23,23 @@ namespace RimSearcher.DataMod
     /// </summary>
     internal static class FieldWalk
     {
-        public static IEnumerable<FieldInfo> InstanceFields(Type type)
+        /// <summary>
+        /// 类型 → 它的实例字段。一个类型的字段表在进程内不会变,而这个方法被叫的次数是
+        /// 「走到的类型结点数」,不是「类型数」—— 每个 def 一遍、每个类型全集一遍,同一个
+        /// 嵌套类型会被重走成千上万次,每次都重新分配 HashSet、重新 GetFields。
+        /// 缓存不改行为:同样的顺序、同样的过滤,只是不再重算。
+        /// </summary>
+        private static readonly Dictionary<Type, FieldInfo[]> Cache = new Dictionary<Type, FieldInfo[]>();
+
+        public static IReadOnlyList<FieldInfo> InstanceFields(Type type)
+        {
+            if (Cache.TryGetValue(type, out var cached)) return cached;
+            var built = new List<FieldInfo>(Collect(type)).ToArray();
+            Cache[type] = built;
+            return built;
+        }
+
+        private static IEnumerable<FieldInfo> Collect(Type type)
         {
             // 子类用 new 遮住同名字段时,近的那个赢 —— 与「运行时读到的是哪一个」一致。
             var seen = new HashSet<string>(StringComparer.Ordinal);
