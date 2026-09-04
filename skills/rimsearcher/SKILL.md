@@ -130,8 +130,9 @@ rather than assuming. The ones it has no way to state:
 - **Leave `--limit` out and you get every row**; `read` with no `--lines` gives the whole file.
   `--limit` takes a positive number only — `--limit all` is a usage error, not a no-op. Pass a
   number to shorten an answer on purpose; the count line then says how many exist, and
-  `--offset` walks the rest. The one printing cap that remains is `code-search --max-per-file`,
-  20 lines from any one file, and it says so while the match count stays exact.
+  `--offset` walks the rest. `code-search` prints every match too — `--max-per-file` has no
+  default either, and `--max-files` is the one remaining default, on how much is read rather
+  than how much is printed.
 - **Exit codes**: `0` ran, `1` zero rows, `2` usage error, `70` tool defect. **Chain with `;`,
   never `&&`** — an informative zero otherwise drops what you queued after it. A `;` chain reports only the last code, so read the output.
   **Everything lands on stdout except a usage error** — the reasoning behind a zero

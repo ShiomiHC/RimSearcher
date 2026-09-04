@@ -16,6 +16,9 @@ namespace RimSearcher.Commands;
 /// **上限分两种,不许混。** <c>--limit</c> 与 <c>--max-per-file</c> 决定**印几行**,
 /// 都不缩短扫描,所以命中总数仍是准数;<c>--max-files</c> 决定**读多少**,只有它咬下去
 /// 总数才降级成下界。三刀分开声明,合并成一句话调用方就分不清该拧哪个旋钮。
+///
+/// 两把印刷刀现在都没有默认值 —— 不给就是全部。带默认值的只剩 <c>--max-files</c>,
+/// 它防的是一棵畸形大树,不是输出预算。
 /// </summary>
 public sealed class CodeSearchCommand : Command
 {
@@ -34,8 +37,8 @@ public sealed class CodeSearchCommand : Command
             "Three switches cut the answer, and they divide in two. --limit and --max-per-file decide how many " +
             "matching lines are printed; neither shortens the scan, so the match count stays exact whichever of " +
             "them bites. --max-files decides how much is read, so when that one bites the count drops to a lower " +
-            "bound ('at least N') and the answer says which trees it never reached. --max-per-file and " +
-            "--max-files carry defaults; --limit prints every match until you pass it.",
+            "bound ('at least N') and the answer says which trees it never reached. Only --max-files carries a " +
+            "default; --limit and --max-per-file print every match until you pass one of them a number.",
         Positionals = [new PositionalSpec { Name = "pattern", Help = ".NET regular expression." }],
         Options =
         [
@@ -69,13 +72,16 @@ public sealed class CodeSearchCommand : Command
             new OptionSpec
             {
                 // 这道闸**只管印**:过上限的命中照样计数,于是总数保持准数,用不着降级成
-                // 三态文法里的「at least」。
+                // 三态文法里的「at least」。2026-09-05 撤掉它的默认值 20:363 条真实
+                // code-search 全量重放,上限解除后最大输出 13233 字符,不带管道的 60 条里
+                // 最大值也是这一条 —— 它一次也没挡住过会撑爆的输出。
                 Name = "max-per-file",
                 Aliases = ["per-file", "matches-per-file", "max-matches-per-file", "file-preview"],
-                Placeholder = "<n|all>",
-                Help = "How many matching lines to print from any one file. Matches past it are still counted, " +
-                       "so the total stays exact. Pass 'all' to print every one.",
-                Default = Limits.CodeSearchMatchesPerFile.ToString(),
+                Placeholder = "<n>",
+                Help = "How many matching lines to print from any one file, at most. Left out, every one is " +
+                       "printed — there is no cap to lift. Matches past it are still counted, so the total " +
+                       "stays exact.",
+                Default = "every one",
             },
             new OptionSpec
             {
@@ -173,7 +179,7 @@ public sealed class CodeSearchCommand : Command
         var contextSpec = ctx.Args.Value("context");
         var (before, after) = ParseContext(contextSpec, out var contextRewritten);
         var limit = ctx.Limit();
-        var maxPerFile = PositiveOrAll(ctx, "max-per-file", Limits.CodeSearchMatchesPerFile);
+        var maxPerFile = PositiveOrEveryOne(ctx, "max-per-file");
 
         Regex regex;
         try
@@ -796,8 +802,22 @@ public sealed class CodeSearchCommand : Command
     }
 
     /// <summary>
-    /// 「一个正数或 all」这条取值规则的唯一产地。all / none / 0 / -1 四种写法都是真实调用
-    /// 形态,所以一并收下。
+    /// 不给就是全部,给了只收正整数 —— 与 <c>--limit</c> 同一条规则。
+    /// </summary>
+    private static int PositiveOrEveryOne(CommandContext ctx, string name)
+    {
+        var raw = ctx.Args.Value(name);
+        if (string.IsNullOrEmpty(raw)) return int.MaxValue;
+        if (int.TryParse(raw, out var n) && n > 0) return n;
+        throw new CliUsageException(
+            $"--{name} expects a positive whole number (got '{raw}'). " +
+            $"Leave --{name} out to print every match.");
+    }
+
+    /// <summary>
+    /// 「一个正数或 all」这条取值规则的唯一产地,现在只剩 <c>--max-files</c> 在用 ——
+    /// 它的默认值是个有限数,于是 all 仍能表达「解除它」。all / none / 0 / -1 四种写法
+    /// 都是真实调用形态,所以一并收下。
     /// </summary>
     private static int PositiveOrAll(CommandContext ctx, string name, int fallback)
     {

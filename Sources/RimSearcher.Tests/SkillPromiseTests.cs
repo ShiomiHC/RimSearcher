@@ -776,6 +776,18 @@ public class SkillPromiseTests
             Assert.Contains("Leave --limit out", err, StringComparison.Ordinal);
         }
 
+        // code-search 的每文件上限同批退役:不给就是全印,all 也不再是取值。
+        // 判据不看措辞看行数 —— 语料里 Outline.cs 单文件的 `public` 命中多于一条。
+        var perFileBare = Fixture.Run("code-search", "public");
+        var perFileOne = Fixture.Run("code-search", "public", "--max-per-file", "1");
+        Assert.Equal(0, perFileBare.Code);
+        Assert.True(perFileBare.Stdout.Split('\n').Length > perFileOne.Stdout.Split('\n').Length,
+                    "不给 --max-per-file 时印的行数没有多于截到一条时的行数。");
+        Assert.DoesNotContain("--max-per-file allows", perFileBare.Stdout, StringComparison.Ordinal);
+        var perFileAll = Fixture.Run("code-search", "public", "--max-per-file", "all");
+        Assert.Equal(2, perFileAll.Code);
+        Assert.Contains("Leave --max-per-file out", perFileAll.Stderr, StringComparison.Ordinal);
+
         // read 一侧的缺省同批退役:什么都不说就是整个文件。
         var whole = Fixture.Run("read", "vanilla/Verse/Outline.cs");
         Assert.Equal(0, whole.Code);

@@ -1,4 +1,4 @@
-using RimSearcher.Cli;
+﻿using RimSearcher.Cli;
 using RimSearcher.Commands;
 
 namespace RimSearcher.Tests;
@@ -93,9 +93,15 @@ public class DeclarationTests
         Assert.DoesNotContain("clamp", limitHelp, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("every one is returned", limitHelp, StringComparison.Ordinal);
 
+        // code-search 剩下的唯一一个默认值是 --max-files，它防的是一棵畸形大树。
         var codeSearch = new CodeSearchCommand().Spec;
-        Assert.Contains(Limits.CodeSearchMatchesPerFile.ToString(),
-            string.Join(" ", codeSearch.Options.Select(o => o.Help)) + codeSearch.Remarks);
+        var maxFiles = codeSearch.Options.Single(o => o.Name == "max-files");
+        Assert.Equal(Limits.CodeSearchMaxFiles.ToString(), maxFiles.Default);
+
+        // 而 --max-per-file 同批退役了它的 20：声明里不允许再有一个默认行数。
+        var perFile = codeSearch.Options.Single(o => o.Name == "max-per-file");
+        Assert.Equal("every one", perFile.Default);
+        Assert.Contains("there is no cap to lift", perFile.Help, StringComparison.Ordinal);
     }
 
     /// <summary>

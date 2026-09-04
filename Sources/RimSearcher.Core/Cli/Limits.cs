@@ -1,4 +1,4 @@
-namespace RimSearcher.Cli;
+﻿namespace RimSearcher.Cli;
 
 /// <summary>
 /// CLI 侧的数值上限 —— 声明层的数字产地。
@@ -13,12 +13,6 @@ public static class Limits
     /// 不是 --limit —— 用户那一侧不给就是全部,给了就照给的数来,没有任何夹板。
     /// </summary>
     public const int ValueSpaceSample = 2000;
-
-    /// <summary>
-    /// code-search 单文件最多**印出**的匹配行数(--max-per-file 的默认值)。
-    /// 过了它的命中照样计数,所以它不影响总数准不准。
-    /// </summary>
-    public const int CodeSearchMatchesPerFile = 20;
 
     /// <summary>
     /// code-search 最多**读**的文件数;超出即停,计数降级成 at least 形态。
