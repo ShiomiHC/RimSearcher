@@ -11,8 +11,8 @@ public sealed record ImportStats(
     int HarvestedTranslations, int KeyedInEffect, int KeyedHarvested,
     int TruncatedDefs, int XmlNodes, int EconomyRows,
     /// <summary>
-    /// 注入键层的行数。**零不是「一个可注入槽位都没有」** —— 这一层只收带信息的行,
-    /// 而 0.8.0 之前的导出根本没这一层。两种成因靠导出器版本上的能力位分,不靠这个数。
+    /// 槽位名册的行数。**零不是「一个可注入槽位都没有」** —— 0.9.0 之前的导出没有这一层
+    /// (或者有而不全)。两种成因靠导出器版本上的能力位分,不靠这个数。
     /// </summary>
     int InjKeys,
     /// <summary>
@@ -68,6 +68,8 @@ public sealed class SnapshotImporter
         string? economyState = null;
         string? economyError = null;
         var sawEnd = false;
+        // 注入键行边读边落地,靠的是 def 行全在它们前面。见 KindDef 那一支的判据。
+        var sawInjKey = false;
         var records = 0L;
 
         using (var tx = db.BeginTransaction())
@@ -80,8 +82,8 @@ public sealed class SnapshotImporter
             using var insertFv = Prepare(db, "INSERT INTO field_values (def_id, path, leaf, value, is_default) VALUES ($id,$p,$lf,$v,$def)");
             using var insertFts = Prepare(db, "INSERT INTO defs_fts (rowid, def_name, label, description, translated) VALUES ($id,$n,$l,$d,$tr)");
             using var insertTr = Prepare(db, """
-                INSERT INTO translations (def_id, def_type, def_name, path, key, path_form, translated, original, language, source_mod, source_file, source_file_count, origin)
-                VALUES ($id,$t,$n,$p,$key,$form,$tr,$o,$lang,$sm,$sf,$sfc,$origin)
+                INSERT INTO translations (def_id, def_type, def_name, path, key, key_state, translated, original, language, source_mod, source_file, source_file_count, origin)
+                VALUES ($id,$t,$n,$p,$key,$state,$tr,$o,$lang,$sm,$sf,$sfc,$origin)
                 """);
             using var insertIk = Prepare(db, """
                 INSERT INTO injection_keys (def_id, def_type, def_name, path, suggested_path,
@@ -136,9 +138,6 @@ public sealed class SnapshotImporter
             var idsByName = new Dictionary<string, List<(long Id, string? Type)>>(StringComparer.Ordinal);
             var ftsExtra = new Dictionary<long, List<string>>();
             var pendingInjections = new List<(string defName, string defType, string path, string translated, string original)>();
-            // 注入键行同样缓到文件读完再落 —— def_id 要等 idsByName 集齐才定得下来。
-            var pendingInjKeys = new List<(string defName, string defType, string path, string suggested,
-                                           bool collection, bool allowed, bool fullList)>();
             long nextId = 1;
             // keyed 自己的 id 序列。显式维护而不是问 last_insert_rowid():FTS 那一行要用同一个
             // rowid,而两条 INSERT 之间夹着别的语句。
@@ -175,6 +174,13 @@ public sealed class SnapshotImporter
 
                 if (kind == IntermediateFormat.KindDef)
                 {
+                    // 判的是**顺序**而不是「def 行有没有」:后者会把「一个 def 都没有的
+                    // 导出」误判成损坏,而那种文件里 def_id 本来就该是 null。
+                    if (sawInjKey)
+                        throw new SnapshotFormatError(
+                            "The export file has def lines after its injection-key lines, so those keys were " +
+                            "attached to a def table that was still incomplete. Re-run the export.");
+
                     var id = nextId++;
                     var defName = Str(root, IntermediateFormat.KeyDefName) ?? "";
                     var defTypeHere = Str(root, IntermediateFormat.KeyDefType);
@@ -436,16 +442,25 @@ public sealed class SnapshotImporter
                     continue;
                 }
 
+                // 0.9.0 起这一层是**槽位名册**,一个槽位一行,于是它跟 def 一样大到不能缓在
+                // 内存里(0.8.0 那版只发带信息的行,25 万条,缓着无所谓)。边读边落地,靠的是
+                // 导出器把 def 全写完才写 injkey —— 那个顺序是本方法唯一的依赖,所以显式判一次:
+                // 反过来的话 def_id 会静默错挂,而错挂的行与正确的行同形。
                 if (kind == IntermediateFormat.KindInjKey)
                 {
-                    pendingInjKeys.Add((
-                        Str(root, IntermediateFormat.KeyDefName) ?? "",
-                        Str(root, IntermediateFormat.KeyDefType) ?? "",
-                        Str(root, IntermediateFormat.KeyPath) ?? "",
-                        Str(root, IntermediateFormat.KeySuggestedPath) ?? "",
-                        Flag(root, IntermediateFormat.KeyIsCollection) == 1,
-                        Flag(root, IntermediateFormat.KeyTranslationAllowed) == 1,
-                        Flag(root, IntermediateFormat.KeyFullListTranslationAllowed) == 1));
+                    sawInjKey = true;
+                    var ikName = Str(root, IntermediateFormat.KeyDefName) ?? "";
+                    var ikType = Str(root, IntermediateFormat.KeyDefType) ?? "";
+                    Bind(insertIk, "$id", Owner(Candidates(idsByName, ikName), ikType));
+                    Bind(insertIk, "$t", ikType);
+                    Bind(insertIk, "$n", ikName);
+                    Bind(insertIk, "$p", Str(root, IntermediateFormat.KeyPath) ?? "");
+                    Bind(insertIk, "$sp", Str(root, IntermediateFormat.KeySuggestedPath) ?? "");
+                    Bind(insertIk, "$col", Flag(root, IntermediateFormat.KeyIsCollection));
+                    Bind(insertIk, "$ta", Flag(root, IntermediateFormat.KeyTranslationAllowed));
+                    Bind(insertIk, "$fl", Flag(root, IntermediateFormat.KeyFullListTranslationAllowed));
+                    insertIk.ExecuteNonQuery();
+                    injKeys++;
                 }
 
                 if (kind == IntermediateFormat.KindDefInjection)
@@ -472,75 +487,66 @@ public sealed class SnapshotImporter
                 throw new SnapshotFormatError(
                     $"The export file declares {dr} records but {records} were read. The file is damaged; re-run the export.");
 
-            // 把手式 → 下标式。判据是游戏自己在 ForEachPossibleDefInjection 里配的那一对,
-            // 不是本项目猜的 —— 猜出来的对照表会把「这个键注入不上」印成「这个字段不存在」。
-            var handleToIndex = new Dictionary<(string Type, string Name, string Key), string>();
-            foreach (var ik in pendingInjKeys)
-                if (ik.suggested.Length > 0 && ik.suggested != ik.path)
-                    handleToIndex[(ik.defType, ik.defName, ik.suggested)] = ik.path;
+            // 译者写的那一串 → 槽位。名册在库里(上面边读边落的),这里按键串反查:
+            // 下标式与把手式两种拼法都合法,所以两列都问,取先中的那一条。
+            //
+            // 查库而不是在内存里再攒一份对照表:名册是一个槽位一行,大到与 def 同量级。
+            // 译文行只有几万条,而 (def_name, path) / (def_name, suggested_path) 两个索引都在。
+            //
+            // 没有 def 类型的行(从语言文件收割来的,键串里本来就不带类型)按 defName 反查 ——
+            // 名册这一侧带着类型,于是**顺便把类型也认了回来**,同名跨类型时才认不出。
+            using var probeSlot = Prepare(db,
+                "SELECT def_type, path, translation_allowed FROM injection_keys " +
+                "WHERE def_name = $n AND (path = $k OR suggested_path = $k) " +
+                "AND ($t IS NULL OR def_type = $t) LIMIT 2");
 
-            // 「改写后是不是这个类型的字段路径」—— 这一问要等 type_fields 全进库,所以查库
-            // 而不是在内存里再攒一份(那是 1373 万个 (类型,路径) 对)。不同的 (类型,路径)
-            // 只有几千个,记下问过的结果就够。
-            using var probeTf = Prepare(db,
-                "SELECT 1 FROM type_fields t JOIN type_field_paths d ON d.id = t.path_id " +
-                "WHERE t.def_type = $t AND d.path = $p LIMIT 1");
-            var tfSeen = new Dictionary<(string Type, string Path), bool>();
-            bool TypeHasPath(string defType, string canonPath)
+            var rostered = meta.IndexesInjectionKeys;
+            var slotSeen = new Dictionary<(string? Type, string Name, string Key),
+                                          (string? Type, string Path, string State)>();
+
+            (string Path, string? Key, string? Type, string? State) Resolve(
+                string? defType, string defName, string key)
             {
-                if (tfSeen.TryGetValue((defType, canonPath), out var known)) return known;
-                Bind(probeTf, "$t", defType);
-                Bind(probeTf, "$p", canonPath);
-                using var rd = probeTf.ExecuteReader();
-                return tfSeen[(defType, canonPath)] = rd.Read();
-            }
+                // 没有名册就不判:老快照照旧存数据源原样,两列写 null。**0.8.0 也走这条** ——
+                // 那一版的名册答不出「在不在册」(见 ExportMeta.IndexesInjectionKeys)。
+                if (!rostered) return (key, null, defType, null);
 
-            // 归一只在导出带了注入键层时发生。没有那张表还照样改写,得到的是一半下标式、
-            // 一半把手式的混合文法,而输出里没有任何迹象说哪一行是哪种 —— 老库于是照旧
-            // 存数据源原样,两列写 null(见 SnapshotSchema 的 translations 那一段)。
-            var normalizing = meta.IndexesInjectionKeys;
-            (string Path, string? Key, string? Form) Canonical(string? defType, string defName, string key)
-            {
-                if (!normalizing) return (key, null, null);
-                if (defType is { Length: > 0 }
-                    && handleToIndex.TryGetValue((defType, defName, key), out var indexed))
-                    return (InjectionKey.ToFieldPath(indexed), key, InjectionKey.Form.Handle);
-
-                var asField = InjectionKey.ToFieldPath(key);
-                if (defType is not { Length: > 0 })
-                    return (asField, key, InjectionKey.Form.Untested);
-                return (asField, key,
-                        TypeHasPath(defType, InjectionKey.CanonicalIndex(asField))
-                            ? InjectionKey.Form.Index
-                            : InjectionKey.Form.Unmapped);
-            }
-
-            foreach (var ik in pendingInjKeys)
-            {
-                var owner = Owner(Candidates(idsByName, ik.defName), ik.defType);
-                Bind(insertIk, "$id", owner);
-                Bind(insertIk, "$t", ik.defType);
-                Bind(insertIk, "$n", ik.defName);
-                Bind(insertIk, "$p", ik.path);
-                Bind(insertIk, "$sp", ik.suggested);
-                Bind(insertIk, "$col", ik.collection ? 1 : 0);
-                Bind(insertIk, "$ta", ik.allowed ? 1 : 0);
-                Bind(insertIk, "$fl", ik.fullList ? 1 : 0);
-                insertIk.ExecuteNonQuery();
-                injKeys++;
+                var probe = defType is { Length: > 0 } ? defType : null;
+                if (!slotSeen.TryGetValue((probe, defName, key), out var hit))
+                {
+                    Bind(probeSlot, "$n", defName);
+                    Bind(probeSlot, "$k", key);
+                    Bind(probeSlot, "$t", probe);
+                    using var rd = probeSlot.ExecuteReader();
+                    if (!rd.Read())
+                        hit = (probe, InjectionKey.ToFieldPath(key), InjectionKey.State.NoSlot);
+                    else
+                    {
+                        var foundType = rd.IsDBNull(0) ? null : rd.GetString(0);
+                        var indexPath = rd.GetString(1);
+                        var allowed = rd.GetInt64(2) != 0;
+                        // 两条以上时类型认不出来(同名跨 def 类型),但**在不在册是认得出的** ——
+                        // 那一问才是这一列要答的,所以只把类型留空,不退回 unknown。
+                        if (probe is null && rd.Read()) foundType = null;
+                        hit = (probe ?? foundType, InjectionKey.ToFieldPath(indexPath),
+                               allowed ? InjectionKey.State.Resolved : InjectionKey.State.Refused);
+                    }
+                    slotSeen[(probe, defName, key)] = hit;
+                }
+                return (hit.Path, key, hit.Type, hit.State);
             }
 
             foreach (var inj in pendingInjections)
             {
                 var candidates = Candidates(idsByName, inj.defName);
                 var owner = Owner(candidates, inj.defType);
-                var canon = Canonical(inj.defType, inj.defName, inj.path);
+                var slot = Resolve(inj.defType, inj.defName, inj.path);
                 Bind(insertTr, "$id", owner);
-                Bind(insertTr, "$t", inj.defType);
+                Bind(insertTr, "$t", slot.Type);
                 Bind(insertTr, "$n", inj.defName);
-                Bind(insertTr, "$p", canon.Path);
-                Bind(insertTr, "$key", canon.Key);
-                Bind(insertTr, "$form", canon.Form);
+                Bind(insertTr, "$p", slot.Path);
+                Bind(insertTr, "$key", slot.Key);
+                Bind(insertTr, "$state", slot.State);
                 Bind(insertTr, "$tr", inj.translated);
                 Bind(insertTr, "$o", inj.original);
                 Bind(insertTr, "$lang", meta.Language);
@@ -555,7 +561,7 @@ public sealed class SnapshotImporter
 
             var (harvested, keyedHarvested) = HarvestStaticTranslations(
                 insertTr, insertKeyed, insertKeyedFts, ref nextKeyedId, idsByName, meta, ftsExtra,
-                Canonical);
+                Resolve);
 
             // 翻译文本回填进 FTS 的 translated 列(双语索引)
             using (var updFts = Prepare(db, "INSERT INTO defs_fts (defs_fts, rowid, def_name, label, description, translated) VALUES ('delete',$id,$n0,$l0,$d0,$t0)"))
@@ -701,7 +707,7 @@ public sealed class SnapshotImporter
         ref long nextKeyedId,
         Dictionary<string, List<(long Id, string? Type)>> idsByName,
         ExportMeta meta, Dictionary<long, List<string>> ftsExtra,
-        Func<string?, string, string, (string Path, string? Key, string? Form)> canonical)
+        Func<string?, string, string, (string Path, string? Key, string? Type, string? State)> resolve)
     {
         if (ModRoots.Count == 0) return (0, 0);
         var count = 0;
@@ -804,13 +810,13 @@ public sealed class SnapshotImporter
                 {
                     var candidates = Candidates(idsByName, defName);
                     var owner = Owner(candidates, declaredType);
-                    var canon = canonical(declaredType, defName, path);
+                    var slot = resolve(declaredType, defName, path);
                     Bind(insertTr, "$id", owner);
-                    Bind(insertTr, "$t", declaredType);
+                    Bind(insertTr, "$t", slot.Type);
                     Bind(insertTr, "$n", defName);
-                    Bind(insertTr, "$p", canon.Path);
-                    Bind(insertTr, "$key", canon.Key);
-                    Bind(insertTr, "$form", canon.Form);
+                    Bind(insertTr, "$p", slot.Path);
+                    Bind(insertTr, "$key", slot.Key);
+                    Bind(insertTr, "$state", slot.State);
                     Bind(insertTr, "$tr", text);
                     Bind(insertTr, "$o", null);
                     Bind(insertTr, "$lang", meta.Language);

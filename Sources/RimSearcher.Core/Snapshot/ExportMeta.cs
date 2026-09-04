@@ -81,13 +81,19 @@ public sealed record ExportMeta(
         && PatchRoute != IntermediateFormat.PatchRouteNone;
 
     /// <summary>
-    /// 这份快照记下了注入键层吗(导出器 0.8.0 起)。
+    /// 这份快照记下了**完整的**注入键层吗(导出器 0.9.0 起)。
     ///
     /// 老快照的译文表存的是**译者写的那一串**:同一个槽位在把手式与下标式两种键下各存
     /// 一份,而 <c>--path</c> 只能匹配上其中一种 —— 另一种回的零与「这个 def 没这条译文」
     /// 逐字同形。这一档之后两种键归一,且「这个字段不许译」不再与「谁都没译」同形。
+    ///
+    /// **0.8.0 有这张表却在这里算「没测」**,不是保守,是那一版的表**答不出它要答的问题**:
+    /// 它只收「带信息」的槽位,于是「这个键在不在名册上」问不出来,判据退化成拿字段表比对,
+    /// 而整表注入的键(不带元素下标)在字段表里一次也不中 —— 实测 1348 条「配不上槽位」
+    /// 里 956 条是这么来的,配着一句「游戏那边同样注入不上」的假话。一个会印假话的层,
+    /// 报「没测」比报「测过」离真相近。
     /// </summary>
-    public bool IndexesInjectionKeys => AtLeast(ExporterVersion, 0, 8);
+    public bool IndexesInjectionKeys => AtLeast(ExporterVersion, 0, 9);
 
     private static bool AtLeast(string version, int major, int minor)
     {

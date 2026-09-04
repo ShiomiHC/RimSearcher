@@ -39,8 +39,11 @@ namespace RimSearcher.DataMod
         /// 0.8.0 起注入键层进导出(kind=injkey):每个可注入槽位的把手式键串与下标式键串
         /// 同时落下,于是译文表里译者写的那一串归得了一;另带「这个槽位不许译」的判据,
         /// 那一格此前与「谁都没译」同形。
+        /// 0.9.0 起 injkey 是**槽位名册**而不是补充说明:一个可注入槽位一行,一个不漏。
+        /// 0.8.0 那版只发「带信息」的行,于是「这个键在不在名册上」问不出来,导入侧拿字段表
+        /// 当替身判,把 1348 条判成「配不上槽位」而其中 956 条是冤枉的(见 ForEachInjectionKeyLine)。
         /// </summary>
-        public const string ExporterVersion = "0.8.0";
+        public const string ExporterVersion = "0.9.0";
 
         public static ExportLimits Limits = new ExportLimits();
 
@@ -620,9 +623,13 @@ namespace RimSearcher.DataMod
         /// 不抄那套遍历、改自己重走一遍反射,得到的键串就会与游戏实际认的那套分家 ——
         /// 而分家的结果是「这个键注入不上」印成「这个字段不存在」。
         ///
-        /// 只发带信息的行,判据见 <see cref="IntermediateFormat.KeySuggestedPath"/> 那一段。
-        /// 全发的代价是每个 def 的每个字符串字段一行,数十万到数百万条,而其中绝大多数
-        /// 只是把字段表又说了一遍。
+        /// **一个槽位一行,一个不漏。** 0.8.0 只发「带信息」的那批(有把手式、或不许译且有文本),
+        /// 省下的是「绝大多数只是把字段表又说了一遍」的行 —— 而那个省法把这张表从**槽位名册**
+        /// 降成了**补充说明**,于是「这个键在不在名册上」根本问不出来,导入侧只好拿字段表当替身。
+        /// 实测这条替身路 1348 条判「配不上槽位」里 956 条是冤枉的:整表注入的键不带元素下标
+        /// (<c>rulePack.rulesStrings</c>),字段表里那条路径带(<c>…rulesStrings[0]</c>),
+        /// 逐字比一次不中;剩下 392 条多半是深过 <c>MaxFieldDepth</c> 或用类名当段名,同样不是坏译文。
+        /// 而输出那句「游戏那边同样注入不上」对这 1348 条**全是假话**。
         ///
         /// 回调式而不是 <c>yield</c>:vanilla 那个方法是推的,包成迭代器要先整批攒在内存里。
         /// </summary>
@@ -639,9 +646,6 @@ namespace RimSearcher.DataMod
                          fieldInfo, def) =>
                         {
                             if (def == null || normalizedPath == null) return;
-                            if (suggestedPath == normalizedPath
-                                && (translationAllowed || !HasText(currentValue, currentValueCollection)))
-                                return;
 
                             // 前缀用 def.defName 而不是「第一个点之前」:defName 本身带点时
                             // 后者会把键串切在半截上,而切错的路径与一条真路径同形。
@@ -671,20 +675,6 @@ namespace RimSearcher.DataMod
                                 + ": " + ex.Message);
                 }
             }
-        }
-
-        /// <summary>
-        /// 这个槽位当下有没有文本。「不许译」只在有文本时才值得存下来 ——
-        /// 空槽位不会被当成「谁都没译」，那个问题根本不会发生；而不分文本全发的
-        /// 代价是每个 def 的内部缓存字段（Unsaved 那批）各占一行。
-        /// </summary>
-        private static bool HasText(string value, IEnumerable<string> collection)
-        {
-            if (!string.IsNullOrEmpty(value)) return true;
-            if (collection == null) return false;
-            foreach (var item in collection)
-                if (!string.IsNullOrEmpty(item)) return true;
-            return false;
         }
 
         /// <summary>

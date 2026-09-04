@@ -191,7 +191,7 @@ public class TranslationLayerTests
     [Fact]
     public void 注入键层的两个键串各自入库()
     {
-        using var db = ImportLines("injkeys", "0.8.0",
+        using var db = ImportLines("injkeys", "0.9.0",
             InjKeyLine("ObservedLayingCorpse", "stages.0.label", "stages.observed_corpse.label"),
             InjKeyLine("ObservedLayingCorpse", "description", "description", allowed: false));
 
@@ -208,7 +208,7 @@ public class TranslationLayerTests
     }
 
     /// <summary>
-    /// 导出器早于 0.8.0 的快照对这一层回 <c>null</c>,不是空表。
+    /// 导出器早于 0.9.0 的快照对这一层回 <c>null</c>,不是空表。
     ///
     /// 合成一个空列表就等于宣布「量过了、这个 def 没有可注入槽位」,而真相是这份快照
     /// 根本没量过 —— 那两句话的下一步一个是「别费劲了」、一个是「重导一次」。
@@ -221,30 +221,59 @@ public class TranslationLayerTests
     }
 
     /// <summary>
-    /// 归一的三档各自落在自己那一格,而且 <c>key</c> 一字不改。
+    /// **0.8.0 也回 <c>null</c>** —— 那一版有这张表,可它答不出这张表要答的问题。
     ///
-    /// 三档合并任何两个都会让一种「印出来与真相同形」回来:把手式与下标式合并 → 分不出
-    /// 这条 path 的依据是游戏自己配的那一对还是机械改写;把配不上的那条并进下标式 →
-    /// 一条游戏也注入不上的坏译文印成好的。
+    /// 0.8.0 只收「带信息」的槽位(有把手式、或不许译且有文本),于是「这个键在不在册」
+    /// 问不出来;判据退化成拿字段表比对,而整表注入的键不带元素下标,在字段表里一次也不中。
+    /// 实测 1348 条判「配不上槽位」里 956 条是这么冤枉的,还配着一句「游戏那边同样注入
+    /// 不上」的假话。一个会印假话的层,报「没测」比报「测过」离真相近 ——
+    /// 这条闸钉的就是「有表 ≠ 答得出」。
     /// </summary>
     [Fact]
-    public void 归一的三档各自落在自己那一格()
+    public void 名册不全的那一版当没量过()
+    {
+        using var db = ImportLines("injkeyspartial", "0.8.0",
+            InjKeyLine("ObservedLayingCorpse", "stages.0.label", "stages.observed_corpse.label"));
+        Assert.Null(db.InjectionKeys("ObservedLayingCorpse"));
+    }
+
+    /// <summary>
+    /// 三个键态各自落在自己那一格,而且 <c>key</c> 一字不改。
+    ///
+    /// 判据是**槽位名册**(injection_keys),不是字段表。这条闸盯的正是拿字段表当替身的
+    /// 那次错判:整表注入的键不带元素下标(<c>descriptionRules.rulesStrings</c>),字段表里
+    /// 那条路径带(<c>…rulesStrings[0]</c>),逐字比一次不中 —— 实测 1348 条判「配不上」
+    /// 里 956 条是这么来的,而输出还配着一句「游戏那边同样注入不上」的假话。
+    ///
+    /// 三档合并任何两个都会让一种「印出来与真相同形」回来:把 no-slot 并进 resolved →
+    /// 一条游戏也注入不上的坏译文印成好的;把 refused 并进 no-slot → 出路从「改键没用」
+    /// 变成「改键能救」。
+    /// </summary>
+    [Fact]
+    public void 三个键态各自落在自己那一格()
     {
         using var db = SnapshotDb.Open(Fixture.InjKeyDb);
         var rows = db.Translations("ObservedLayingCorpse")
                      .ToDictionary(t => t.Key!, t => t);
 
-        // 把手式:依据是注入键表里游戏自己配的那一对。
+        // 把手式:名册给出的下标式改写成字段表文法。
         var handled = rows["stages.observed_corpse.label"];
         Assert.Equal("stages[0].label", handled.Path);
-        Assert.Equal(InjectionKey.Form.Handle, handled.PathForm);
+        Assert.Equal(InjectionKey.State.Resolved, handled.KeyState);
 
-        // 下标式:本来就是字段路径,机械改写。
+        // 下标式:本来就是字段路径。
         Assert.Equal("label", rows["label"].Path);
-        Assert.Equal(InjectionKey.Form.Index, rows["label"].PathForm);
+        Assert.Equal(InjectionKey.State.Resolved, rows["label"].KeyState);
 
-        // 配不上任何槽位 —— 游戏那边同样注入不上,所以它不许并进上面任何一档。
-        Assert.Equal(InjectionKey.Form.Unmapped, rows["stages.corpse_seen.label"].PathForm);
+        // 整表注入:字段表里没有这条裸路径,名册里有 —— 这一条必须是 resolved。
+        Assert.Equal(InjectionKey.State.Resolved,
+                     rows["descriptionRules.rulesStrings"].KeyState);
+
+        // 名册上没有 —— 游戏那边同样注入不上,所以它不许并进上面任何一档。
+        Assert.Equal(InjectionKey.State.NoSlot, rows["stages.corpse_seen.label"].KeyState);
+
+        // 名册上有、但不许译:键没写错,与「键写错了」出路不同。
+        Assert.Equal(InjectionKey.State.Refused, rows["stages.0.minSeverity"].KeyState);
     }
 
     /// <summary>

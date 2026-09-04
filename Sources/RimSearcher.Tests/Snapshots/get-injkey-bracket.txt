@@ -1,7 +1,7 @@
 $ rimsearcher get ObservedLayingCorpse --path stages[0].label --fixture-injkey
 exit 0
 --- stdout ---
-Matching 'stages[0].label': 1 field, out of 3 fields on the def.
+Matching 'stages[0].label': 1 field, out of 4 fields on the def.
 
 def_name     ObservedLayingCorpse
 def_type     HediffDef

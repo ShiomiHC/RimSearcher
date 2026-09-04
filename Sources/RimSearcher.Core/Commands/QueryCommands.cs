@@ -812,9 +812,14 @@ public sealed class GetCommand : Command
             // 「这批译文归谁」纯属未知,说清比默默端出去强。
             var byNameOnly = allTranslations.Count > 0 && allTranslations.All(t => t.DefType is null);
             var beforePathFilter = allTranslations.Count;
+            // 过滤词落在**两种拼法上都算数**。归一给了 path 一套与字段表可比的坐标,可游戏
+            // 认的那一串仍是另一种写法,而拿着语言文件来查的人手上只有后者。同一个坐标的
+            // 三种写法(stages[0].label / stages.0.label / stages.observed_corpse.label)于是
+            // 都能选中同一行 —— 读者不必先知道自己手上是哪一种。
             if (paths.Count > 0)
                 allTranslations = allTranslations
-                    .Where(t => paths.Any(p => t.Path.Contains(p, StringComparison.OrdinalIgnoreCase)))
+                    .Where(t => paths.Any(p => t.Path.Contains(p, StringComparison.OrdinalIgnoreCase)
+                                            || (t.Key?.Contains(p, StringComparison.OrdinalIgnoreCase) ?? false)))
                     .ToList();
             var translations = limit.IsAll
                 ? allTranslations
@@ -896,13 +901,22 @@ public sealed class GetCommand : Command
 
                 // 配不上任何槽位的译文。**游戏那边同样注入不上** —— 所以这不是查询侧的缺陷,
                 // 是数据里真实存在的一种坏译文,而不说破它就与一条正常译文同形地印在表上。
-                var unmapped = translations.Count(t => t.PathForm == InjectionKey.Form.Unmapped);
-                if (unmapped > 0)
+                var noSlot = translations.Count(t => t.KeyState == InjectionKey.State.NoSlot);
+                if (noSlot > 0)
                     ctx.Report.Notice(NoticeKind.Boundary,
-                        $"{Tally.Complete(unmapped).Render("row")} above has a key that matches no slot on " +
-                        "this def, usually a handle taken from a label that has since been edited: the game " +
-                        "does not apply that translation either. Its 'path' cell is that key rewritten, so " +
-                        "it lines up with nothing in the field table above.");
+                        $"{Tally.Complete(noSlot).Render("row")} above has a key that is on no injectable " +
+                        "slot of this def, usually a handle taken from a label that has since been edited: " +
+                        "the game does not apply that translation either. Its 'path' cell is that key " +
+                        "rewritten, so it lines up with nothing in the field table above.");
+
+                // 「不许译」与「键写错了」出路不同 —— 那一档改键能救,这一档改了也没用。
+                // 合成一条就得让否定那半跟着出路分支,而那正是本项目数过五次的形态。
+                var refused = translations.Count(t => t.KeyState == InjectionKey.State.Refused);
+                if (refused > 0)
+                    ctx.Report.Notice(NoticeKind.Boundary,
+                        $"{Tally.Complete(refused).Render("row")} above names a real slot that the game " +
+                        "marks as not translatable, so the translation sits in the file and never applies. " +
+                        "The key is not the problem; nothing written under it would apply either.");
 
                 if (translations.Any(t => t.Origin == TranslationOrigin.HarvestedOutside))
                     ctx.Report.Notice(NoticeKind.Advisory,

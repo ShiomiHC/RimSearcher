@@ -624,7 +624,7 @@ public static class Fixture
         w.WriteLine(new JsonLine()
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindMeta)
             .Int(IntermediateFormat.KeyFormatVersion, IntermediateFormat.FormatVersion)
-            .Str(IntermediateFormat.KeyExporterVersion, "0.8.0")
+            .Str(IntermediateFormat.KeyExporterVersion, "0.9.0")
             .Str(IntermediateFormat.KeyExportedAtUtc, "2026-09-05T00:00:00.0000000Z")
             .Str(IntermediateFormat.KeyGameVersion, GameVersion)
             .Str(IntermediateFormat.KeyLanguage, Language)
@@ -649,7 +649,8 @@ public static class Fixture
             .Fields(IntermediateFormat.KeyFields, [
                 new ExportedField("stages[0].label", "observed corpse", DefaultState.Differs),
                 new ExportedField("stages[0].minSeverity", "0", DefaultState.Same),
-                new ExportedField("stages[1].label", "observed corpse again", DefaultState.Differs)])
+                new ExportedField("stages[1].label", "observed corpse again", DefaultState.Differs),
+                new ExportedField("descriptionRules.rulesStrings[0]", "a rule", DefaultState.Differs)])
             .Int(IntermediateFormat.KeyFieldsTruncated, 0)
             .ToString());
         records++;
@@ -658,12 +659,15 @@ public static class Fixture
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindTypeFields)
             .Str(IntermediateFormat.KeyDefType, "HediffDef")
             .Strs(IntermediateFormat.KeyPaths,
-                ["defName", "description", "label", "stages[0].label", "stages[0].minSeverity"])
+                ["defName", "description", "label", "stages[0].label", "stages[0].minSeverity",
+                 "descriptionRules.rulesStrings[0]"])
             .ToString());
         records++;
 
-        // 把手 ↔ 下标的对照。第二条把手带 -2 后缀 —— 同名元素在同一个列表里出现两次时
-        // 游戏自己就这么区分(GetBestHandleWithIndexForListElement)。
+        // 槽位名册。0.9.0 起一个槽位一行、一个不漏,所以 `label` 这种没把手的也在册 ——
+        // 在不在册是这张表要答的唯一问题,漏发就答不出。第二条把手带 -2 后缀 ——
+        // 同名元素在同一个列表里出现两次时游戏自己就这么区分
+        // (GetBestHandleWithIndexForListElement)。
         void InjKey(string p, string suggested, bool allowed = true)
         {
             w.WriteLine(new JsonLine()
@@ -679,9 +683,14 @@ public static class Fixture
             records++;
         }
 
+        InjKey("label", "label");
         InjKey("stages.0.label", "stages.observed_corpse.label");
         InjKey("stages.1.label", "stages.observed_corpse-2.label");
         InjKey("stages.0.minSeverity", "stages.0.minSeverity", allowed: false);
+        // 整表注入:键不带元素下标,而字段表里那条路径带(descriptionRules.rulesStrings[0])。
+        // 拿字段表当替身判在不在册的话,这一条会被判成坏译文 —— 实测那条路上 1348 条里
+        // 956 条是这么冤枉的。
+        InjKey("descriptionRules.rulesStrings", "descriptionRules.rulesStrings");
 
         void Inj(string key, string translated, string original)
         {
@@ -696,10 +705,15 @@ public static class Fixture
             records++;
         }
 
-        // 三档各一条:把手式、下标式(label 本来就是字段路径)、把手已过期配不上的。
+        // 名册上有、允许译:把手式与下标式各一条。
         Inj("stages.observed_corpse.label", "看到了尸体", "observed corpse");
         Inj("label", "看到尸体", "observed laying corpse");
+        // 名册上有、整表注入 —— 字段表里没有这条裸路径,所以它是那 956 条的守门人。
+        Inj("descriptionRules.rulesStrings", "一条规则", "a rule");
+        // 名册上没有:把手过期,游戏那边同样注入不上。
         Inj("stages.corpse_seen.label", "旧把手写的译文", "");
+        // 名册上有、但标着不许译:键没写错,改键也没用。
+        Inj("stages.0.minSeverity", "不许译的那一格", "0");
 
         w.WriteLine(new JsonLine()
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindEnd)

@@ -68,7 +68,7 @@ public readonly record struct PathQuery(string Text, bool Exact = false)
 public sealed record TranslationRow(string DefName, string? DefType, string Path, string? Translated,
                                    string? Original, string? Language, string? SourceMod, string Origin,
                                    string? SourceFile = null, int? SourceFileCount = null,
-                                   string? Key = null, string? PathForm = null);
+                                   string? Key = null, string? KeyState = null);
 
 /// <summary>
 /// 一个「可以被注入译文」的槽位。<paramref name="Path"/> 是下标式键串(<c>stages.0.label</c>),
@@ -1342,7 +1342,7 @@ public sealed class SnapshotDb : IDisposable
         using var rd = Query(
             "SELECT def_name, def_type, path, translated, original, language, source_mod, origin" +
             (extra ? ", source_file, source_file_count" : "") +
-            (keyed ? ", key, path_form" : "") + " FROM translations " +
+            (keyed ? ", key, key_state" : "") + " FROM translations " +
             "WHERE def_name = @n COLLATE NOCASE ORDER BY origin, path", p);
         while (rd.Read())
             rows.Add(new TranslationRow(rd.GetString(0),
@@ -1358,12 +1358,12 @@ public sealed class SnapshotDb : IDisposable
     }
 
     /// <summary>
-    /// 这个 def 的注入键槽位。<c>null</c> = 这份快照根本没量过这一层(导出器早于 0.8.0),
-    /// 空表 = 量过了、这个 def 没有带信息的槽位。同 <see cref="TypeDeclaredPaths"/> 那条缝:
-    /// 两者合成一个空列表,调用方就会把「没导」说成「没有」。
+    /// 这个 def 的槽位名册。<c>null</c> = 这份快照没量过这一层(导出器早于 0.9.0,**0.8.0
+    /// 也算在内** —— 那一版的表不全,见 <see cref="ExportMeta.IndexesInjectionKeys"/>),
+    /// 空表 = 量过了、这个 def 一个可注入槽位都没有。同 <see cref="TypeDeclaredPaths"/>
+    /// 那条缝:两者合成一个空列表,调用方就会把「没导」说成「没有」。
     ///
-    /// 注意这一层**只收带信息的行**(两键不同的、或不许译且有文本的),所以空表不代表
-    /// 这个 def 没有可注入字段 —— 拿它回答「这个 def 能译什么」会静默少掉一大截。
+    /// 0.9.0 起这是**全集**,所以「这个 def 能译什么」拿它回答是准的。
     /// </summary>
     public IReadOnlyList<InjectionKeyRow>? InjectionKeys(string defName)
     {
@@ -2013,7 +2013,7 @@ public sealed class SnapshotDb : IDisposable
     /// 这份库的 translations 带不带「译者写的那一串」与归一的四态。
     /// 同 <see cref="TranslationsHaveSourceFile"/>,**靠列名认**。
     /// </summary>
-    private bool TranslationsHaveKey => _trKey ??= HasColumn("translations", "path_form");
+    private bool TranslationsHaveKey => _trKey ??= HasColumn("translations", "key_state");
     private bool? _trKey;
 
     private bool HasInjectionKeys => _ik ??= HasColumn("injection_keys", "suggested_path");

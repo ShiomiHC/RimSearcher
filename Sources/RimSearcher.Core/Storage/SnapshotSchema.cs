@@ -116,10 +116,12 @@ public static class SnapshotSchema
         -- path 归一到**字段表那一侧的文法**(stages[0].label),key 留数据源给的那一串
         -- (stages.0.label 或 stages.observed_corpse.label,要写语言文件的人需要它)。
         -- 不归一的话 `--path-contains stages[0]` 对译文那栏恒回零,与「这个 def 没这条译文」同形。
-        -- path_form 说清这一行是怎么归的,四态见 Snapshot.InjectionKey.Form。
+        -- key_state 说的是另一件事:这个键在不在**槽位名册**上(injection_keys)。
+        -- 三态见 Snapshot.InjectionKey.State。**它不记「键是哪种拼法」** ——
+        -- 拼法读者看 key 那一格就是,而两件事挤在一列里正是 0.8.0 那版的错法。
         --
-        -- **两列同时为 NULL = 这次导入没做归一**(导出器早于 0.8.0,没有注入键表可查),
-        -- 那种库里 path 仍是数据源原样。不许把 NULL 当成 index —— 那等于宣布归一过了。
+        -- **两列同时为 NULL = 这次导入没查名册**(导出器早于 0.9.0),
+        -- 那种库里 path 仍是数据源原样。不许把 NULL 当成 resolved —— 那等于宣布查过了。
         --
         -- 上面四列都是后加的,**没有涨 schema_version**:旧库照旧能读,只是少几条判据
         -- (同 type_fields 的 path_id,靠列名认)。
@@ -129,7 +131,7 @@ public static class SnapshotSchema
             def_name   TEXT NOT NULL,
             path       TEXT NOT NULL,
             key        TEXT,
-            path_form  TEXT,
+            key_state  TEXT,
             translated TEXT,
             original   TEXT,
             language   TEXT,
@@ -144,13 +146,15 @@ public static class SnapshotSchema
         -- 语言文件里两种都合法、都真注入得上,所以译者写的那一串得先归一到一种,
         -- 否则 --path 就要求调用方先猜对是哪一种。
         --
-        -- **这张表只有带信息的行**(判据在 IntermediateFormat 的注入键层那一段):两个键串
-        -- 不同的,或不许译且当下有文本的。于是「这里没有这个 def 的行」不等于「这个 def
-        -- 没有可注入槽位」—— 它的绝大多数槽位是两键同形且可译的那种,在字段表里就有。
-        -- 拿这张表回答「这个 def 能译什么」会静默少掉一大截。
+        -- **这是槽位名册:一个可注入槽位一行,一个不漏**(导出器 0.9.0 起)。全在册才使得
+        -- 「这个键在不在册」问得出口,而那一问是译文表 key_state 的唯一依据。0.8.0 那版
+        -- 只发「带信息」的行(两键不同的、或不许译且有文本的),于是问不出口,判据退化成
+        -- 拿字段表比对 —— 整表注入的键不带元素下标(rulePack.rulesStrings),字段表里那条
+        -- 路径带(…rulesStrings[0]),逐字比一次不中。实测 1348 条判「配不上槽位」里 956 条
+        -- 是这么冤枉的。所以 0.8.0 的库在能力位上算「没量过」,见 ExportMeta。
         --
-        -- 0.8.0 起才有这张表。旧库里它不在,查询侧靠能力位(IndexesInjectionKeys)决定读不读;
-        -- 空表与「这一档没导」在 SQL 上同形,不许当成「量过了、没有」。
+        -- 空表与「这一档没导」在 SQL 上同形,不许当成「量过了、没有」;查询侧靠能力位
+        -- (IndexesInjectionKeys)决定读不读。
         CREATE TABLE injection_keys (
             def_id         INTEGER,
             def_type       TEXT,

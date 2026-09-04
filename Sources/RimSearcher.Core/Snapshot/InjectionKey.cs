@@ -34,39 +34,36 @@ public static class InjectionKey
     public static string CanonicalIndex(string fieldPath) => AnyIndex.Replace(fieldPath, "[0]");
 
     /// <summary>
-    /// <c>path</c> 是怎么从 <c>key</c> 来的。四个取值各自单义,合并任何两个都会让一种
-    /// 「印出来与真相同形」重新出现。
+    /// 这条译文的键在**槽位名册**上找得到吗。名册是导出器 0.9.0 起一个槽位一行的
+    /// <c>injection_keys</c>,产地是游戏自己的 <c>ForEachPossibleDefInjection</c>。
+    ///
+    /// 三个取值各自单义,合并任何两个都会让一种「印出来与真相同形」重新出现。
+    /// 缺这一列(<c>null</c>)是第四态:这份快照没有名册,问不出口。
+    ///
+    /// **这一列不再记「键是哪种拼法」。** 0.8.0 那版记的是 handle / index / unmapped /
+    /// untested —— 拼法与在不在册两件事挤在一列里,而判在不在册用的是字段表当替身:
+    /// 整表注入的键不带元素下标,字段表里那条路径带,逐字比一次不中,于是 1348 条里
+    /// 956 条被判成坏译文。拼法这件事读者本来也不需要:<c>key</c> 那一格就是原样。
     /// </summary>
-    public static class Form
+    public static class State
     {
-        /// <summary>
-        /// key 里有把手,快照自己的注入键表给出了对应的下标式,<c>path</c> 由它改写而来。
-        /// 这一档的依据是游戏自己在 <c>ForEachPossibleDefInjection</c> 里配的那一对,
-        /// 不是本项目猜的。
-        /// </summary>
-        public const string Handle = "handle";
+        /// <summary>名册上有这个键,而且这个槽位允许注入译文。</summary>
+        public const string Resolved = "resolved";
 
         /// <summary>
-        /// key 本来就是下标式(改写后落在这个 def 类型的字段路径全集里),<c>path</c> 是它的
-        /// 机械改写。
-        /// </summary>
-        public const string Index = "index";
-
-        /// <summary>
-        /// 两条都不成立:注入键表里没有它,改写后也不是这个类型的字段路径。<c>path</c> 是
-        /// key 的机械改写,**它不是与字段表可比的坐标**。
+        /// 名册上没有这个键。**游戏那边同样注入不上** —— 所以这不是查询侧的缺陷,是数据里
+        /// 真实存在的一种坏译文。主要成因是把手过期:把手取自 label,作者改了 label 之后
+        /// 旧译文的键就再也配不上任何槽位。
         ///
-        /// 主要成因是把手过期 —— 把手取自 label,作者改了 label 之后旧译文的键就再也配不上
-        /// 任何槽位(游戏那边这条译文同样注入不上)。所以这一档不是查询侧的缺陷,它是
-        /// 数据里真实存在的一种坏译文,而合并进 <see cref="Index"/> 会把它印成好的。
+        /// 这一档的 <c>path</c> 是 key 的机械改写,**不是与字段表可比的坐标**。
         /// </summary>
-        public const string Unmapped = "unmapped";
+        public const string NoSlot = "no-slot";
 
         /// <summary>
-        /// 没判 —— 这条译文的 def 类型判不出来(注入 key 不带类型这一维),于是
-        /// 「是不是这个类型的字段路径」这个问题问不出口。<c>path</c> 是 key 的机械改写。
-        /// 与 <see cref="Unmapped"/> 分开:那一档是问过了、没配上,这一档是没得问。
+        /// 名册上有这个键,但这个槽位标着不许译(<c>NoTranslate</c> / <c>Unsaved</c>,
+        /// 或者上游某一层这么标了)。键没写错,游戏照样不认这条译文。
+        /// 与 <see cref="NoSlot"/> 分开:出路不同 —— 那一档要改键,这一档改了也没用。
         /// </summary>
-        public const string Untested = "untested";
+        public const string Refused = "refused";
     }
 }

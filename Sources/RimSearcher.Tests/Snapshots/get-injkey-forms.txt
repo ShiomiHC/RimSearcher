@@ -1,8 +1,8 @@
 $ rimsearcher get ObservedLayingCorpse --fixture-injkey
 exit 0
 --- stdout ---
-2 fields.
-Not listed: 1 field whose value matches the declaring type's own default; --defaults lists them; the 'xml' column, on those rows and on the ones below alike, says whether this def's own XML wrote the path (here), only an ancestor did (parent), or neither (no) — the XML read after every patch ran; a row that cannot be pinned to a line inside a container the XML did write reads as 'under <container>', not as no. The snapshot holds 3 field paths for this def; a null-valued field never entered the index and is in neither count. Every list index the def has appears below.
+3 fields.
+Not listed: 1 field whose value matches the declaring type's own default; --defaults lists them; the 'xml' column, on those rows and on the ones below alike, says whether this def's own XML wrote the path (here), only an ancestor did (parent), or neither (no) — the XML read after every patch ran; a row that cannot be pinned to a line inside a container the XML did write reads as 'under <container>', not as no. The snapshot holds 4 field paths for this def; a null-valued field never entered the index and is in neither count. Every list index the def has appears below.
 
 def_name     ObservedLayingCorpse
 def_type     HediffDef
@@ -12,18 +12,22 @@ mod          ludeon.rimworld
 source       Thoughts_Memory.xml
 
 Same in every row, not repeated below: code_default=no, xml=no.
-path             value
-stages[0].label  observed corpse
-stages[1].label  observed corpse again
+path                              value
+stages[0].label                   observed corpse
+stages[1].label                   observed corpse again
+descriptionRules.rulesStrings[0]  a rule
 No value above with 'code_default'=no is one that most of the 1 HediffDefs in this snapshot also carry.
-3 translations.
+5 translations.
 
 Same in every row, not repeated below: language=ChineseSimplified, origin=in effect.
-path                      key                           translated      original
-label                                                   看到尸体        observed laying corpse
-stages.corpse_seen.label                                旧把手写的译文
-stages[0].label           stages.observed_corpse.label  看到了尸体      observed corpse
-1 row above has a key that matches no slot on this def, usually a handle taken from a label that has since been edited: the game does not apply that translation either. Its 'path' cell is that key rewritten, so it lines up with nothing in the field table above.
+path                           key                           translated      original
+descriptionRules.rulesStrings                                一条规则        a rule
+label                                                        看到尸体        observed laying corpse
+stages.corpse_seen.label                                     旧把手写的译文
+stages[0].label                stages.observed_corpse.label  看到了尸体      observed corpse
+stages[0].minSeverity          stages.0.minSeverity          不许译的那一格  0
+1 row above has a key that is on no injectable slot of this def, usually a handle taken from a label that has since been edited: the game does not apply that translation either. Its 'path' cell is that key rewritten, so it lines up with nothing in the field table above.
+1 row above names a real slot that the game marks as not translatable, so the translation sits in the file and never applies. The key is not the problem; nothing written under it would apply either.
 
 This snapshot never scanned the language files on disk, so every row here is one the game actually had: the absence of an 'on disk' row is not evidence that no installed mod translates it. No 'mod_roots' is configured on this machine, so there is nowhere to scan: set it in the config file and import again to measure that layer.
 --- stderr ---
