@@ -167,12 +167,10 @@ rather than assuming. The ones it has no way to state:
   `Languages/*/Keyed` (→ `keyed <phrase>`); a zero result names which one you hit — the
   layer the name actually sits on, query already filled in, instead of reciting that list
   back at you.
-- **A def's translations answer to the same field paths as its fields.** The game's own
-  injection key for a list element is `stages.0.label` or `stages.observed_corpse.label` —
-  neither the shape the field table prints. On a snapshot exported by 0.8.0 or later the
-  translation rows carry the field-table shape (`stages[0].label`) so one
-  `get <defName> --path <path>` selects the same place in both tables, and the game's key
-  sits in the row's `key` cell for when you need to write a language file.
+- **A def's translations answer to the same field paths as its fields**, so one
+  `get <defName> --path <path>` selects the same place in both tables. The game's own
+  injection key is a different string for a list element, and it is the one to write into a
+  language file: it appears in the row's `key` cell **only when it differs** from the path.
 - **`keyed` is the only road to screen text** — captions, alerts, tooltips are keyed
   translations belonging to no def, unreachable by `search`/`get`/`where`. Both directions:
   key → displayed text, phrase in either language → keys. Only `in effect` rows are what

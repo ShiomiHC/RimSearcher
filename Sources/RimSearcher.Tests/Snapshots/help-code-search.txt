@@ -9,7 +9,7 @@ This is for shapes that only text can express, such as a method signature patter
 
 It does not search Defs: the game's XML is not on disk in the form the game ended up with. Data questions ('which defs use this class', 'what values does this field take') belong to 'where', 'values', and 'search', which answer them from the snapshot exactly.
 
-Three switches cut the answer, and they divide in two. --limit and --max-per-file decide how many matching lines are printed; neither shortens the scan, so the match count stays exact whichever of them bites. --max-files decides how much is read, so when that one bites the count drops to a lower bound ('at least N') and the answer says which trees it never reached. None of the three carries a default: left alone, every file the glob selects is read and every match is printed.
+Three switches cut the answer, and they divide in two. --limit and --max-per-file decide how many matching lines are printed; neither shortens the scan, so the match count stays exact whichever of them bites. --max-files decides how much is read, so when that one bites the count drops to a lower bound ('at least N') and the answer says which trees it never reached. None of the three carries a default; each option below says what happens when it is left out.
 
 Arguments:
   <pattern>  .NET regular expression.

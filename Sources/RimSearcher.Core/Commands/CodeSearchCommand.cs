@@ -38,7 +38,7 @@ public sealed class CodeSearchCommand : Command
             "matching lines are printed; neither shortens the scan, so the match count stays exact whichever of " +
             "them bites. --max-files decides how much is read, so when that one bites the count drops to a lower " +
             "bound ('at least N') and the answer says which trees it never reached. None of the three carries " +
-            "a default: left alone, every file the glob selects is read and every match is printed.",
+            "a default; each option below says what happens when it is left out.",
         Positionals = [new PositionalSpec { Name = "pattern", Help = ".NET regular expression." }],
         Options =
         [

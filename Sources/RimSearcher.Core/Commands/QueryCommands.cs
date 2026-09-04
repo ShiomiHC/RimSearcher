@@ -840,10 +840,11 @@ public sealed class GetCommand : Command
                                "so the same word selects in both tables: nothing here is hidden behind a " +
                                "second spelling."
                     : denial + " Their paths are the game's injection keys as written, and this snapshot " +
-                               "predates the pass that brings them onto the field paths' grammar: one list " +
-                               "element reads as 'stages.0.label' or 'stages.observed_corpse.label', never " +
-                               "'stages[0].label'. Ask without the bracketed subscript to select both at " +
-                               "once, or re-export to get one grammar.");
+                               "predates the pass that brings them onto the field paths' grammar: where a " +
+                               "field path has '[0]', a key has either the number or a name taken from that " +
+                               "element's own label, and neither spelling contains the other. Ask for the " +
+                               "field name on its own — the part before the subscript — to reach both " +
+                               "tables, or re-export to get one grammar.");
             }
 
             // 表恒在场,空着也在场。--json 的自述契约是「表键恒在,没命中就是空数组」,而
@@ -877,20 +878,21 @@ public sealed class GetCommand : Command
             {
                 DiskLayer.NoteIfUnmeasured(ctx);
 
-                // 归一之前那一档:上面的 path 与字段表的 path 不是同一套文法,而两张表挨着印。
-                // 不说破的话,`--path-contains stages[0].label` 在字段表上中、在这张表上不中,
-                // 而后者与「这个字段没有译文」逐字同形 —— 正是这条链子最初的落点。
+                // 缺层要宣布:老快照上 `key` 那一列压根不摆,而不说破就与「这些译文没有
+                // 另一个键」同形。**只宣布缺层,不预言选不中** —— 这条脚注此前还带一句
+                // 「同一个词在两张表里选不到同一处」,而它发在「给了过滤器**且选中了**」的
+                // 调用上:那次调用里那个词恰恰两张表都中了,一句现在时的「选不中」对它是假的。
+                // 真会踩的人(过滤词带 `[]`)筛出来是空的,走上面那条 Filter,到不了这里。
                 //
-                // 只在**给了过滤器**时发。两套文法并排印着,伤害是「同一个词在两张表里
-                // 选不到同一处」,而不选的人碰不上;裸调用照发就是拿声明区的行数预算
-                // (每条命令 6 条)去换一句他这次用不上的话。
+                // 仍旧只在**给了过滤器**时发。无条件发过一版,`StalenessTests` 立刻红:
+                // 干净的一次普通查询要求声明区零字节,而两套文法这件事只在按坐标找东西的人
+                // 身上兑现 —— 不按坐标找的人拿到的是「每条命令 6 行」里少掉的一行。
                 if (!normalized && paths.Count > 0)
                     ctx.Report.Notice(NoticeKind.Boundary,
-                        $"The paths above are the game's injection keys as written, and this snapshot " +
-                        $"(exporter {ctx.Db.Meta.ExporterVersion}) predates the pass that brings them onto " +
-                        "the grammar the field paths use: one list element reads as 'stages.0.label' or " +
-                        "'stages.observed_corpse.label' here, but as 'stages[0].label' above. The same word " +
-                        "does not select in both tables until this snapshot is re-exported.", footnote: true);
+                        $"This snapshot (exporter {ctx.Db.Meta.ExporterVersion}) stores translation paths as " +
+                        "the game's injection keys, unconverted, so there is no 'key' column here and these " +
+                        "paths are not written in the grammar the field paths use. Re-export to put both " +
+                        "tables on one grammar.", footnote: true);
 
                 // 配不上任何槽位的译文。**游戏那边同样注入不上** —— 所以这不是查询侧的缺陷,
                 // 是数据里真实存在的一种坏译文,而不说破它就与一条正常译文同形地印在表上。
