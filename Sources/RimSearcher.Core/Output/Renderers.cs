@@ -235,6 +235,9 @@ public static class TextRenderer
             if (c != cells.Length - 1)
                 sb.Append(' ', widths[c] - OutputText.Width(cells[c]));
         }
+        // 末列**为空**时上面那个不补还不够 —— 它前面的两格分隔符已经落下了,于是行尾
+        // 仍是空白。整套基线里此前没有一行末列为空,所以这条路一直没人走到。
+        while (sb.Length > 0 && sb[^1] == ' ') sb.Length--;
         sb.Append(OutputText.Newline);
     }
 }

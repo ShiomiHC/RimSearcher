@@ -1,12 +1,13 @@
 using RimSearcher.Contract;
+using RimSearcher.Snapshot;
 using RimSearcher.Storage;
 
 namespace RimSearcher.Tests;
 
 /// <summary>
-/// 译文那一层的五道闸:同一句话不许因磁盘布局重复、归属不许靠 defName 猜、
+/// 译文那一层的六道闸:同一句话不许因磁盘布局重复、归属不许靠 defName 猜、
 /// 过滤到零不许让整张表从输出里消失、两个注入键串各自入库、没量过注入键层的快照回空
-/// 而不是空表。
+/// 而不是空表、归一的三档各自落在自己那一格。
 ///
 /// 条条各自钉住一种「印出来与真相同形」的错法,成因都在注入键的形状里:
 /// mod 常同时铺 <c>1.5/</c> 与 <c>1.6/</c> 两套 Languages(同一句话两行,逐列全同),
@@ -190,6 +191,33 @@ public class TranslationLayerTests
     {
         using var db = ImportLines("injkeysold", "0.7.0");
         Assert.Null(db.InjectionKeys("ObservedLayingCorpse"));
+    }
+
+    /// <summary>
+    /// 归一的三档各自落在自己那一格,而且 <c>key</c> 一字不改。
+    ///
+    /// 三档合并任何两个都会让一种「印出来与真相同形」回来:把手式与下标式合并 → 分不出
+    /// 这条 path 的依据是游戏自己配的那一对还是机械改写;把配不上的那条并进下标式 →
+    /// 一条游戏也注入不上的坏译文印成好的。
+    /// </summary>
+    [Fact]
+    public void 归一的三档各自落在自己那一格()
+    {
+        using var db = SnapshotDb.Open(Fixture.InjKeyDb);
+        var rows = db.Translations("ObservedLayingCorpse")
+                     .ToDictionary(t => t.Key!, t => t);
+
+        // 把手式:依据是注入键表里游戏自己配的那一对。
+        var handled = rows["stages.observed_corpse.label"];
+        Assert.Equal("stages[0].label", handled.Path);
+        Assert.Equal(InjectionKey.Form.Handle, handled.PathForm);
+
+        // 下标式:本来就是字段路径,机械改写。
+        Assert.Equal("label", rows["label"].Path);
+        Assert.Equal(InjectionKey.Form.Index, rows["label"].PathForm);
+
+        // 配不上任何槽位 —— 游戏那边同样注入不上,所以它不许并进上面任何一档。
+        Assert.Equal(InjectionKey.Form.Unmapped, rows["stages.corpse_seen.label"].PathForm);
     }
 
     /// <summary>

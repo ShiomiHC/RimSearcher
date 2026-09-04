@@ -825,35 +825,82 @@ public sealed class GetCommand : Command
                     "translation",
                     matches.Count == 1 ? "" : $"this is {def.DefName} ({def.DefType}).");
 
-            // 筛空的那一次尤其要说破:字段表的路径写 `stages[0].label`,而译文这一栏是**注入键**,
-            // 写 `stages.0.label`(下标式)或 `stages.observed_corpse.label`(把手式)。
-            // 拿字段表的路径贴回来筛译文,一条都不会中 —— 而那与「这个字段没有译文」同形。
+            // 筛空的那一次要说破。否定那半两档一个字不差 —— 变的只是出路:
+            // 归一过的快照里两张表同坐标,所以「没匹配上」就是真没有;没归一的老快照里
+            // 译文那栏是**注入键**原样(`stages.0.label` 或 `stages.observed_corpse.label`),
+            // 拿字段表的 `stages[0].label` 贴回来一条都不会中,而那与「没有译文」同形。
             if (paths.Count > 0 && translations.Count == 0 && beforePathFilter > 0)
-                ctx.Report.Notice(NoticeKind.Filter,
-                    $"Filtered away: {Tally.Complete(beforePathFilter).Render("translation")} this def does " +
-                    $"have, none of whose paths contain {string.Join(" or ", paths.Select(p => $"'{p}'"))}. " +
-                    "Their paths are the game's injection keys, which do not share the grammar of the " +
-                    "field paths above: one list element reads as 'stages.0.label' or " +
-                    "'stages.observed_corpse.label', never 'stages[0].label'. Ask without the bracketed " +
-                    "subscript to select both at once.");
+            {
+                var denial = $"Filtered away: {Tally.Complete(beforePathFilter).Render("translation")} " +
+                             "this def does have, none of whose paths contain " +
+                             $"{string.Join(" or ", paths.Select(p => $"'{p}'"))}.";
+                ctx.Report.Notice(NoticeKind.Filter, ctx.Db.Meta.IndexesInjectionKeys
+                    ? denial + " Their paths are written in the same grammar as the field paths above, " +
+                               "so the same word selects in both tables; the game's own injection key for " +
+                               "each row is in the 'key' column when it differs."
+                    : denial + " Their paths are the game's injection keys as written, and this snapshot " +
+                               "predates the pass that brings them onto the field paths' grammar: one list " +
+                               "element reads as 'stages.0.label' or 'stages.observed_corpse.label', never " +
+                               "'stages[0].label'. Ask without the bracketed subscript to select both at " +
+                               "once, or re-export to get one grammar.");
+            }
 
             // 表恒在场,空着也在场。--json 的自述契约是「表键恒在,没命中就是空数组」,而
             // 此前它被 translations.Count > 0 挡在外面,于是「筛空了」与「这个 def 一条译文
             // 都没有」在 JSON 面逐字同形(键都不见)。文本面不变 —— 零行的表渲染出来是零字节。
+            // key 列只在归一过的快照上摆。老快照那一列每格都空,而空格会被读成
+            // 「游戏认的键就是 path 这一串」—— 那正好是假的。缺层另起一句宣布
+            // (同 xml 列在 0.5.0 之前那一档的办法:不摆空列,把缺席说出来)。
+            var normalized = ctx.Db.Meta.IndexesInjectionKeys;
             ctx.Report.Table("translations",
-                ["path", "translated", "original", "language", "origin"],
-                translations.Select(t => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+                normalized
+                    ? ["path", "key", "translated", "original", "language", "origin"]
+                    : ["path", "translated", "original", "language", "origin"],
+                translations.Select(t =>
                 {
-                    ["path"] = t.Path,
-                    ["translated"] = t.Translated,
-                    ["original"] = t.Original,
-                    ["language"] = t.Language,
-                    ["origin"] = OriginCell(t),
+                    var row = new Dictionary<string, object?>
+                    {
+                        ["path"] = t.Path,
+                        ["translated"] = t.Translated,
+                        ["original"] = t.Original,
+                        ["language"] = t.Language,
+                        ["origin"] = OriginCell(t),
+                    };
+                    // 归一之后 path 与游戏认的那一串不再逐字相同,而写语言文件的人要的是后者。
+                    // 相同时留空:两栏一模一样只会让读者以为它们是两件事。
+                    if (normalized) row["key"] = t.Key is { } k && k != t.Path ? k : null;
+                    return (IReadOnlyDictionary<string, object?>)row;
                 }).ToList());
 
             if (translations.Count > 0)
             {
                 DiskLayer.NoteIfUnmeasured(ctx);
+
+                // 归一之前那一档:上面的 path 与字段表的 path 不是同一套文法,而两张表挨着印。
+                // 不说破的话,`--path-contains stages[0].label` 在字段表上中、在这张表上不中,
+                // 而后者与「这个字段没有译文」逐字同形 —— 正是这条链子最初的落点。
+                //
+                // 只在**给了过滤器**时发。两套文法并排印着,伤害是「同一个词在两张表里
+                // 选不到同一处」,而不选的人碰不上;裸调用照发就是拿声明区的行数预算
+                // (每条命令 6 条)去换一句他这次用不上的话。
+                if (!normalized && paths.Count > 0)
+                    ctx.Report.Notice(NoticeKind.Boundary,
+                        $"The paths above are the game's injection keys as written, and this snapshot " +
+                        $"(exporter {ctx.Db.Meta.ExporterVersion}) predates the pass that brings them onto " +
+                        "the grammar the field paths use: one list element reads as 'stages.0.label' or " +
+                        "'stages.observed_corpse.label' here, but as 'stages[0].label' above. The same word " +
+                        "does not select in both tables until this snapshot is re-exported.", footnote: true);
+
+                // 配不上任何槽位的译文。**游戏那边同样注入不上** —— 所以这不是查询侧的缺陷,
+                // 是数据里真实存在的一种坏译文,而不说破它就与一条正常译文同形地印在表上。
+                var unmapped = translations.Count(t => t.PathForm == InjectionKey.Form.Unmapped);
+                if (unmapped > 0)
+                    ctx.Report.Notice(NoticeKind.Boundary,
+                        $"{Tally.Complete(unmapped).Render("row")} above has a key that matches no slot on " +
+                        "this def: not a field path, and not one of the handle spellings the game would " +
+                        "suggest. The usual cause is a handle taken from a label that has since been edited, " +
+                        "which means the game does not apply that translation either. Its 'path' cell is the " +
+                        "key rewritten mechanically, so it will not line up with the field paths above.");
 
                 if (translations.Any(t => t.Origin == TranslationOrigin.HarvestedOutside))
                     ctx.Report.Notice(NoticeKind.Advisory,

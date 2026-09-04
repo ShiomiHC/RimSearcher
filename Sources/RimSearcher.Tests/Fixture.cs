@@ -75,6 +75,13 @@ public static class Fixture
     public static string PresencePatchDb { get { _ = Db; return Path.Combine(SnapshotDir, "presence-patch.db"); } }
 
     /// <summary>
+    /// 导出器 0.8.0:带注入键层,于是译文的 path 归一到字段表那一侧的文法、译者写的那一串
+    /// 留在 key 列。别的几份夹具都早于这一档,那边钉的是**没归一**时的输出 ——
+    /// 两种输出说的话必须不一样,而不另立一份就只有一种在场。
+    /// </summary>
+    public static string InjKeyDb { get { _ = Db; return Path.Combine(SnapshotDir, "injkey.db"); } }
+
+    /// <summary>
     /// 「同值还坐在别的路径形状上」那句提示的**展示位边界**语料 —— 单独一份,不进
     /// <see cref="SnapshotDir"/>。
     ///
@@ -147,6 +154,10 @@ public static class Fixture
                 var presencePatchExport = Path.Combine(dir, "presence-patch" + IntermediateFormat.FileExtension);
                 WritePresencePatchExport(presencePatchExport);
                 new SnapshotImporter().Import(presencePatchExport, Path.Combine(SnapshotDir, "presence-patch.db"));
+
+                var injKeyExport = Path.Combine(dir, "injkey" + IntermediateFormat.FileExtension);
+                WriteInjKeyExport(injKeyExport);
+                new SnapshotImporter().Import(injKeyExport, Path.Combine(SnapshotDir, "injkey.db"));
 
                 return _dbPath = db;
             }
@@ -596,6 +607,106 @@ public static class Fixture
     /// PatchedGun 的文本对不上任何候选格,退回 under;TwinGun 的 count 与 quality
     /// 同是 75,对上两格,那两格都 under;BareGun 的标签是空的,没有文本可落格。
     /// </summary>
+    /// <summary>
+    /// 导出器 0.8.0 的语料 —— 注入键层在场,于是三档归一各有一个落点:
+    /// 把手式(注入键表配得上)、下标式(本来就是字段路径)、配不上任何槽位的那一条。
+    ///
+    /// 单独一份而不是塞进主 fixture:主 fixture 钉在 0.2.0,那一档说的是「没量过」,
+    /// 而每一份 get / list 基线都靠着它。
+    /// </summary>
+    private static void WriteInjKeyExport(string path)
+    {
+        using var fs = File.Create(path);
+        using var gz = new GZipStream(fs, CompressionLevel.Optimal);
+        using var w = new StreamWriter(gz, new UTF8Encoding(false)) { NewLine = "\n" };
+
+        long records = 0;
+        w.WriteLine(new JsonLine()
+            .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindMeta)
+            .Int(IntermediateFormat.KeyFormatVersion, IntermediateFormat.FormatVersion)
+            .Str(IntermediateFormat.KeyExporterVersion, "0.8.0")
+            .Str(IntermediateFormat.KeyExportedAtUtc, "2026-09-05T00:00:00.0000000Z")
+            .Str(IntermediateFormat.KeyGameVersion, GameVersion)
+            .Str(IntermediateFormat.KeyLanguage, Language)
+            .Raw(IntermediateFormat.KeyMods,
+                "[" + new JsonLine().Str("package_id", "ludeon.rimworld").Str("name", "Core").Str("version", "1.6") + "]")
+            .Raw(IntermediateFormat.KeyLimits, new JsonLine().Int("max_field_depth", 6).ToString())
+            .Str(IntermediateFormat.KeyModSettingsHash, "")
+            .Str(IntermediateFormat.KeyPatchRoute, IntermediateFormat.PatchRouteHarmony)
+            .ToString());
+        records++;
+
+        w.WriteLine(new JsonLine()
+            .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindDef)
+            .Str(IntermediateFormat.KeyDefType, "HediffDef")
+            .Str(IntermediateFormat.KeyDefName, "ObservedLayingCorpse")
+            .Str(IntermediateFormat.KeyLabel, "observed laying corpse")
+            .Str(IntermediateFormat.KeyDescription, "")
+            .Str(IntermediateFormat.KeySourceMod, "ludeon.rimworld")
+            .Str(IntermediateFormat.KeySourceFile, "Thoughts_Memory.xml")
+            .Bool(IntermediateFormat.KeyGenerated, false)
+            .Str(IntermediateFormat.KeyClass, "Verse.HediffDef")
+            .Fields(IntermediateFormat.KeyFields, [
+                new ExportedField("stages[0].label", "observed corpse", DefaultState.Differs),
+                new ExportedField("stages[0].minSeverity", "0", DefaultState.Same),
+                new ExportedField("stages[1].label", "observed corpse again", DefaultState.Differs)])
+            .Int(IntermediateFormat.KeyFieldsTruncated, 0)
+            .ToString());
+        records++;
+
+        w.WriteLine(new JsonLine()
+            .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindTypeFields)
+            .Str(IntermediateFormat.KeyDefType, "HediffDef")
+            .Strs(IntermediateFormat.KeyPaths,
+                ["defName", "description", "label", "stages[0].label", "stages[0].minSeverity"])
+            .ToString());
+        records++;
+
+        // 把手 ↔ 下标的对照。第二条把手带 -2 后缀 —— 同名元素在同一个列表里出现两次时
+        // 游戏自己就这么区分(GetBestHandleWithIndexForListElement)。
+        void InjKey(string p, string suggested, bool allowed = true)
+        {
+            w.WriteLine(new JsonLine()
+                .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindInjKey)
+                .Str(IntermediateFormat.KeyDefType, "HediffDef")
+                .Str(IntermediateFormat.KeyDefName, "ObservedLayingCorpse")
+                .Str(IntermediateFormat.KeyPath, p)
+                .Str(IntermediateFormat.KeySuggestedPath, suggested)
+                .Bool(IntermediateFormat.KeyIsCollection, false)
+                .Bool(IntermediateFormat.KeyTranslationAllowed, allowed)
+                .Bool(IntermediateFormat.KeyFullListTranslationAllowed, false)
+                .ToString());
+            records++;
+        }
+
+        InjKey("stages.0.label", "stages.observed_corpse.label");
+        InjKey("stages.1.label", "stages.observed_corpse-2.label");
+        InjKey("stages.0.minSeverity", "stages.0.minSeverity", allowed: false);
+
+        void Inj(string key, string translated, string original)
+        {
+            w.WriteLine(new JsonLine()
+                .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindDefInjection)
+                .Str(IntermediateFormat.KeyDefType, "HediffDef")
+                .Str(IntermediateFormat.KeyDefName, "ObservedLayingCorpse")
+                .Str(IntermediateFormat.KeyPath, key)
+                .Str(IntermediateFormat.KeyTranslated, translated)
+                .Str(IntermediateFormat.KeyOriginal, original)
+                .ToString());
+            records++;
+        }
+
+        // 三档各一条:把手式、下标式(label 本来就是字段路径)、把手已过期配不上的。
+        Inj("stages.observed_corpse.label", "看到了尸体", "observed corpse");
+        Inj("label", "看到尸体", "observed laying corpse");
+        Inj("stages.corpse_seen.label", "旧把手写的译文", "");
+
+        w.WriteLine(new JsonLine()
+            .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindEnd)
+            .Int(IntermediateFormat.KeyRecords, records + 1)
+            .ToString());
+    }
+
     private static void WritePresenceTextExport(string path)
     {
         using var fs = File.Create(path);
@@ -1323,6 +1434,7 @@ public static class Fixture
         else if (all.Remove(PresenceArg)) { all.Add("--db"); all.Add(PresenceDb); }
         else if (all.Remove(PresenceTextArg)) { all.Add("--db"); all.Add(PresenceTextDb); }
         else if (all.Remove(PresencePatchArg)) { all.Add("--db"); all.Add(PresencePatchDb); }
+        else if (all.Remove(InjKeyArg)) { all.Add("--db"); all.Add(InjKeyDb); }
         else if (!argv.Contains("--db")) { all.Add("--db"); all.Add(Db); }
         if (!all.Contains("--config")) { all.Add("--config"); all.Add(SourcesConfigPath); }
         var code = RimSearcher.Cli.Runner.Run(all, stdout, stderr);
@@ -1340,6 +1452,9 @@ public static class Fixture
 
     /// <summary>同上,换成 0.6.0 那份(带 XML 行内文本)。</summary>
     public const string PresenceTextArg = "--fixture-presence-text";
+
+    /// <summary>同上,换成 0.8.0 那份(带注入键层,译文的键归一过)。</summary>
+    public const string InjKeyArg = "--fixture-injkey";
 
     /// <summary>同上,换成 0.7.0 那份(路径取自打完补丁的 XML)。</summary>
     public const string PresencePatchArg = "--fixture-presence-patch";

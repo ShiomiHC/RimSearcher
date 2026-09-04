@@ -67,7 +67,8 @@ public readonly record struct PathQuery(string Text, bool Exact = false)
 /// </summary>
 public sealed record TranslationRow(string DefName, string? DefType, string Path, string? Translated,
                                    string? Original, string? Language, string? SourceMod, string Origin,
-                                   string? SourceFile = null, int? SourceFileCount = null);
+                                   string? SourceFile = null, int? SourceFileCount = null,
+                                   string? Key = null, string? PathForm = null);
 
 /// <summary>
 /// 一个「可以被注入译文」的槽位。<paramref name="Path"/> 是下标式键串(<c>stages.0.label</c>),
@@ -1337,9 +1338,11 @@ public sealed class SnapshotDb : IDisposable
         // 后加的两列靠列名认,不靠 schema_version —— 涨了版本每一份旧库连同 --keep
         // 留下的那些旧代都会拒读,而它们唯一的用途正是 snapshot diff(同 type_fields)。
         var extra = TranslationsHaveSourceFile;
+        var keyed = TranslationsHaveKey;
         using var rd = Query(
             "SELECT def_name, def_type, path, translated, original, language, source_mod, origin" +
-            (extra ? ", source_file, source_file_count" : "") + " FROM translations " +
+            (extra ? ", source_file, source_file_count" : "") +
+            (keyed ? ", key, path_form" : "") + " FROM translations " +
             "WHERE def_name = @n COLLATE NOCASE ORDER BY origin, path", p);
         while (rd.Read())
             rows.Add(new TranslationRow(rd.GetString(0),
@@ -1348,7 +1351,9 @@ public sealed class SnapshotDb : IDisposable
                 rd.IsDBNull(5) ? null : rd.GetString(5), rd.IsDBNull(6) ? null : rd.GetString(6),
                 rd.GetString(7),
                 extra && !rd.IsDBNull(8) ? rd.GetString(8) : null,
-                extra && !rd.IsDBNull(9) ? rd.GetInt32(9) : null));
+                extra && !rd.IsDBNull(9) ? rd.GetInt32(9) : null,
+                keyed && !rd.IsDBNull(extra ? 10 : 8) ? rd.GetString(extra ? 10 : 8) : null,
+                keyed && !rd.IsDBNull(extra ? 11 : 9) ? rd.GetString(extra ? 11 : 9) : null));
         return rows;
     }
 
@@ -1991,6 +1996,13 @@ public sealed class SnapshotDb : IDisposable
     /// 于是探一列就够 —— 能力位说的是「导出带没带这一层」,这个探的是「库里建没建」,
     /// 两者都得真才敢读。
     /// </summary>
+    /// <summary>
+    /// 这份库的 translations 带不带「译者写的那一串」与归一的四态。
+    /// 同 <see cref="TranslationsHaveSourceFile"/>,**靠列名认**。
+    /// </summary>
+    private bool TranslationsHaveKey => _trKey ??= HasColumn("translations", "path_form");
+    private bool? _trKey;
+
     private bool HasInjectionKeys => _ik ??= HasColumn("injection_keys", "suggested_path");
     private bool? _ik;
 

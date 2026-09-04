@@ -387,6 +387,13 @@ public class OutputSnapshotTests
         // **不是把这一格删了** —— 删了就只剩一句 "Did you mean" 的常见形状在钉,
         // 而两句话的排序纪律再没人管。
         { "get-retired-path",      ["get", "Apparel_ShieldBelt", "--all", "comps"] },
+        // 0.8.0 那一档:译文的 path 归一到字段表文法,游戏自己认的那一串落在
+        // key 列。三档各一行:把手式、下标式、把手已过期配不上任何槽位的。
+        // 最后那一档必须自证 —— 游戏那边同样注入不上,而它在表上与一条正常译文同形。
+        { "get-injkey-forms",      ["get", "ObservedLayingCorpse", Fixture.InjKeyArg] },
+        // 归一过之后字段表的路径贴回来真能筛到译文 —— 这正是归一要买的东西。
+        { "get-injkey-bracket",    ["get", "ObservedLayingCorpse", "--path", "stages[0].label",
+                                    Fixture.InjKeyArg] },
         // --source 已经给出时,补救措施里不许再列 --source。
         { "code-search-source-cap", ["code-search", "public", "--source", "vanilla", "--max-files", "1"] },
         { "code-search-no-tree",   ["code-search", "public", "--source", "HAR"] },

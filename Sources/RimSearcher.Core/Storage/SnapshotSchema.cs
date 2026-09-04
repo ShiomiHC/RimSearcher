@@ -115,11 +115,20 @@ public static class SnapshotSchema
         --
         -- 这两列是后加的,**没有涨 schema_version**:旧库照旧能读,只是少一条判据
         -- (同 type_fields 的 path_id,靠列名认)。
+        -- path 归一到**字段表那一侧的文法**(stages[0].label),key 留数据源给的那一串
+        -- (stages.0.label 或 stages.observed_corpse.label,要写语言文件的人需要它)。
+        -- 不归一的话 `--path-contains stages[0]` 对译文那栏恒回零,与「这个 def 没这条译文」同形。
+        -- path_form 说清这一行是怎么归的,四态见 Snapshot.InjectionKey.Form。
+        --
+        -- **两列同时为 NULL = 这次导入没做归一**(导出器早于 0.8.0,没有注入键表可查),
+        -- 那种库里 path 仍是数据源原样。不许把 NULL 当成 index —— 那等于宣布归一过了。
         CREATE TABLE translations (
             def_id     INTEGER,
             def_type   TEXT,
             def_name   TEXT NOT NULL,
             path       TEXT NOT NULL,
+            key        TEXT,
+            path_form  TEXT,
             translated TEXT,
             original   TEXT,
             language   TEXT,

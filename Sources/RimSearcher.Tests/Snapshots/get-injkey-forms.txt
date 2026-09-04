@@ -1,0 +1,29 @@
+$ rimsearcher get ObservedLayingCorpse --fixture-injkey
+exit 0
+--- stdout ---
+2 fields.
+Not listed: 1 field whose value matches the declaring type's own default; --defaults lists them; the 'xml' column, on those rows and on the ones below alike, says whether this def's own XML wrote the path (here), only an ancestor did (parent), or neither (no) — the XML read after every patch ran; a row that cannot be pinned to a line inside a container the XML did write reads as 'under <container>', not as no. The snapshot holds 3 field paths for this def; a null-valued field never entered the index and is in neither count. Every list index the def has appears below.
+
+def_name     ObservedLayingCorpse
+def_type     HediffDef
+label        observed laying corpse
+class        Verse.HediffDef
+mod          ludeon.rimworld
+source       Thoughts_Memory.xml
+
+Same in every row, not repeated below: code_default=no, xml=no.
+path             value
+stages[0].label  observed corpse
+stages[1].label  observed corpse again
+No value above with 'code_default'=no is one that most of the 1 HediffDefs in this snapshot also carry.
+3 translations.
+
+Same in every row, not repeated below: language=ChineseSimplified, origin=in effect.
+path                      key                           translated      original
+label                                                   看到尸体        observed laying corpse
+stages.corpse_seen.label                                旧把手写的译文
+stages[0].label           stages.observed_corpse.label  看到了尸体      observed corpse
+1 row above has a key that matches no slot on this def: not a field path, and not one of the handle spellings the game would suggest. The usual cause is a handle taken from a label that has since been edited, which means the game does not apply that translation either. Its 'path' cell is the key rewritten mechanically, so it will not line up with the field paths above.
+
+This snapshot never scanned the language files on disk, so every row here is one the game actually had: the absence of an 'on disk' row is not evidence that no installed mod translates it. No 'mod_roots' is configured on this machine, so there is nowhere to scan: set it in the config file and import again to measure that layer.
+--- stderr ---
