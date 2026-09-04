@@ -197,6 +197,25 @@ public class GateTests
         Path.Combine(DeclarationTests.RepoRoot(), "skills", "rimsearcher", "SKILL.md");
 
     /// <summary>
+    /// skill 目录下的 md 不能带 BOM。
+    ///
+    /// SKILL.md 头上那三个字节落在 `---` 前面，前置区的开界符于是不在行首 ——
+    /// 能不能认看加载方的实现，而那不在本仓里。它不是人敲出来的，是改文的脚本面默认
+    /// 写 utf-8-sig 带进来的，而带进来之后源码面一字不差。
+    /// </summary>
+    [Fact]
+    public void skill文档不带BOM()
+    {
+        var dir = Path.GetDirectoryName(SkillPath)!;
+        foreach (var file in Directory.EnumerateFiles(dir, "*.md", SearchOption.AllDirectories))
+        {
+            var head = File.ReadAllBytes(file).Take(3).ToArray();
+            Assert.False(head.SequenceEqual(new byte[] { 0xEF, 0xBB, 0xBF }),
+                $"{Path.GetFileName(file)} starts with a UTF-8 BOM; write it without one.");
+        }
+    }
+
+    /// <summary>
     /// skill 文档里写出来的每一条命令行都得真能跑。
     ///
     /// SKILL.md 与 references 下的手写页都是手写的:模型照它们拼命令行,写错一个开关,

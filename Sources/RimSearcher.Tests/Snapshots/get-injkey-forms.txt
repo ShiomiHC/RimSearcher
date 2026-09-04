@@ -23,7 +23,7 @@ path                      key                           translated      original
 label                                                   看到尸体        observed laying corpse
 stages.corpse_seen.label                                旧把手写的译文
 stages[0].label           stages.observed_corpse.label  看到了尸体      observed corpse
-1 row above has a key that matches no slot on this def: not a field path, and not one of the handle spellings the game would suggest. The usual cause is a handle taken from a label that has since been edited, which means the game does not apply that translation either. Its 'path' cell is the key rewritten mechanically, so it will not line up with the field paths above.
+1 row above has a key that matches no slot on this def, usually a handle taken from a label that has since been edited: the game does not apply that translation either. Its 'path' cell is that key rewritten, so it lines up with nothing in the field table above.
 
 This snapshot never scanned the language files on disk, so every row here is one the game actually had: the absence of an 'on disk' row is not evidence that no installed mod translates it. No 'mod_roots' is configured on this machine, so there is nowhere to scan: set it in the config file and import again to measure that layer.
 --- stderr ---

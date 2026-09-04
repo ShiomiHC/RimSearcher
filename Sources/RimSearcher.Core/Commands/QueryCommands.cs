@@ -370,8 +370,9 @@ public sealed class GetCommand : Command
                 Rows = true,
                 What = "one object per def carrying the name — each with 'def' (identity), 'fields' " +
                        "(path/value/code_default rows, plus 'xml' when the snapshot recorded which XML lines " +
-                       "were written) and, when there are any, 'translations'. It stays an array even " +
-                       "for a single def, because a name can belong to several def types at once.",
+                       "were written) and 'translations'. Both inner tables are always there, empty array " +
+                       "and all. 'defs' stays an array even for a single def, because a name can belong to " +
+                       "several def types at once.",
             },
         ],
     };
@@ -836,8 +837,8 @@ public sealed class GetCommand : Command
                              $"{string.Join(" or ", paths.Select(p => $"'{p}'"))}.";
                 ctx.Report.Notice(NoticeKind.Filter, ctx.Db.Meta.IndexesInjectionKeys
                     ? denial + " Their paths are written in the same grammar as the field paths above, " +
-                               "so the same word selects in both tables; the game's own injection key for " +
-                               "each row is in the 'key' column when it differs."
+                               "so the same word selects in both tables: nothing here is hidden behind a " +
+                               "second spelling."
                     : denial + " Their paths are the game's injection keys as written, and this snapshot " +
                                "predates the pass that brings them onto the field paths' grammar: one list " +
                                "element reads as 'stages.0.label' or 'stages.observed_corpse.label', never " +
@@ -897,10 +898,9 @@ public sealed class GetCommand : Command
                 if (unmapped > 0)
                     ctx.Report.Notice(NoticeKind.Boundary,
                         $"{Tally.Complete(unmapped).Render("row")} above has a key that matches no slot on " +
-                        "this def: not a field path, and not one of the handle spellings the game would " +
-                        "suggest. The usual cause is a handle taken from a label that has since been edited, " +
-                        "which means the game does not apply that translation either. Its 'path' cell is the " +
-                        "key rewritten mechanically, so it will not line up with the field paths above.");
+                        "this def, usually a handle taken from a label that has since been edited: the game " +
+                        "does not apply that translation either. Its 'path' cell is that key rewritten, so " +
+                        "it lines up with nothing in the field table above.");
 
                 if (translations.Any(t => t.Origin == TranslationOrigin.HarvestedOutside))
                     ctx.Report.Notice(NoticeKind.Advisory,

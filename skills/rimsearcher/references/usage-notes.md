@@ -91,7 +91,7 @@ data sits under a key that depends on the command. `<command> --help` lists each
 | Command | Data key(s) |
 |---|---|
 | `search` | `defs` — one flat row per def |
-| `get` | `defs` — **not rows**: one nested object per def, each `{def, fields, translations?}`. A def's field table is `defs[i].fields`; there is no `fields` key at the root. It stays an array for a single def because a name can belong to several def types. |
+| `get` | `defs` — **not rows**: one nested object per def, each `{def, fields, translations}`. A def's field table is `defs[i].fields`; there is no `fields` key at the root. It stays an array for a single def because a name can belong to several def types. |
 | `list` | `defs` (with a def type) or `types` (without) — never both; flat rows either way |
 | `where` with a field path | `matches` |
 | `where --value` | `paths` |

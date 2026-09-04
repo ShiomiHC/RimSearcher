@@ -1,4 +1,4 @@
-﻿# The code side
+# The code side
 
 The game's C#, reached two ways. The DecompilerServer MCP (its own page:
 [decompiler-mcp.md](decompiler-mcp.md)) is a separate program: rimsearcher neither ships

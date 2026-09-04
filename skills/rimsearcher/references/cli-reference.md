@@ -360,7 +360,7 @@ defName is not listed as a field: the def_name line above the table is that valu
 
 | Key | Holds |
 |---|---|
-| `defs` | one object per def carrying the name — each with 'def' (identity), 'fields' (path/value/code_default rows, plus 'xml' when the snapshot recorded which XML lines were written) and, when there are any, 'translations'. It stays an array even for a single def, because a name can belong to several def types at once. |
+| `defs` | one object per def carrying the name — each with 'def' (identity), 'fields' (path/value/code_default rows, plus 'xml' when the snapshot recorded which XML lines were written) and 'translations'. Both inner tables are always there, empty array and all. 'defs' stays an array even for a single def, because a name can belong to several def types at once. |
 
 Examples:
 

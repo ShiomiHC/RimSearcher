@@ -1,4 +1,4 @@
-﻿---
+---
 name: rimsearcher
 description: Answer questions about RimWorld's defs and C# — what a def contains after patches and inheritance, which defs use a class or a value, what a field can be set to, and where a symbol lives in the game's code. Use whenever a task involves RimWorld modding, Def XML, or the game's assemblies.
 ---
@@ -172,9 +172,7 @@ rather than assuming. The ones it has no way to state:
   neither the shape the field table prints. On a snapshot exported by 0.8.0 or later the
   translation rows carry the field-table shape (`stages[0].label`) so one
   `get <defName> --path <path>` selects the same place in both tables, and the game's key
-  sits in the row's `key` cell for when you need to write a language file. Older snapshots
-  store the key as written and say so; there that same `get` matches the field but no
-  translation, which reads exactly like *this field has no translation*.
+  sits in the row's `key` cell for when you need to write a language file.
 - **`keyed` is the only road to screen text** — captions, alerts, tooltips are keyed
   translations belonging to no def, unreachable by `search`/`get`/`where`. Both directions:
   key → displayed text, phrase in either language → keys. Only `in effect` rows are what

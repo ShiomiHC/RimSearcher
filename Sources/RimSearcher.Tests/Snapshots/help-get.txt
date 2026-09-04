@@ -35,7 +35,7 @@ Global options (every command takes these, written after the command):
       --config <path>    Use this config file instead of the default one.
 
 --json keys (besides 'notes'):
-  defs  one object per def carrying the name — each with 'def' (identity), 'fields' (path/value/code_default rows, plus 'xml' when the snapshot recorded which XML lines were written) and, when there are any, 'translations'. It stays an array even for a single def, because a name can belong to several def types at once.
+  defs  one object per def carrying the name — each with 'def' (identity), 'fields' (path/value/code_default rows, plus 'xml' when the snapshot recorded which XML lines were written) and 'translations'. Both inner tables are always there, empty array and all. 'defs' stays an array even for a single def, because a name can belong to several def types at once.
 
 Examples:
   rimsearcher get Apparel_ShieldBelt
