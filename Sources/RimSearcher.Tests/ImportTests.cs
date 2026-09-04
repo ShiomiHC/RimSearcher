@@ -53,7 +53,20 @@ public class ImportTests
     }
 
     /// <summary>造一个只有语言文件的 mod 目录,给静态收割那条路当输入。</summary>
+    /// <remarks>
+    /// <paramref name="typeDir"/> 是 <c>DefInjected/</c> 底下那一级目录名。**这一级不能省**:
+    /// 游戏只枚举 DefInjected 下的目录(<c>LoadedLanguage.LoadData</c> 里
+    /// <c>GetDirectories("*", TopDirectoryOnly)</c>),直接躺在 DefInjected/ 里的文件
+    /// 它一个都不读。实扫本机三个 mod 根,放错位置的只有 3 个文件对 14153 个。
+    ///
+    /// 默认值取一个**这份语料里不存在的类型名** —— 于是归属判不出来,那条「判不出就写 null」
+    /// 的口径有落点。要测判得出来的那一侧就显式传真类型名。
+    /// </remarks>
     private static string ModRootWith(string tag, params (string Key, string Text)[] entries)
+        => ModRootWith(tag, "SomeAbsentMod.WeirdDef", entries);
+
+    private static string ModRootWith(string tag, string typeDir,
+                                      params (string Key, string Text)[] entries)
     {
         var root = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "import", tag + "-mods");
         if (Directory.Exists(root)) Directory.Delete(root, true);
@@ -61,7 +74,7 @@ public class ImportTests
         Directory.CreateDirectory(Path.Combine(mod, "About"));
         File.WriteAllText(Path.Combine(mod, "About", "About.xml"),
             "<ModMetaData><packageId>test.mod</packageId></ModMetaData>");
-        var inj = Path.Combine(mod, "Languages", Fixture.Language, "DefInjected");
+        var inj = Path.Combine(mod, "Languages", Fixture.Language, "DefInjected", typeDir);
         Directory.CreateDirectory(inj);
         File.WriteAllText(Path.Combine(inj, "Injected.xml"),
             "<LanguageData>" + string.Concat(entries.Select(e => $"<{e.Key}>{e.Text}</{e.Key}>")) + "</LanguageData>");
@@ -413,6 +426,10 @@ public class ImportTests
     /// 静态收割来的 key 是 `DefName.field`,一个字的类型信息都没有。同名歧义下**写 null**,
     /// 不挑一个 —— 挑错的那一行与挑对的长得一模一样,而 null 至少是一句真话。
     /// 同一份收割里名字唯一的那条照常绑上,免得「判不出来」被写成「一律不绑」。
+    ///
+    /// 触发点是**目录名认不出来**(2026-09-05 起类型取自 <c>DefInjected/&lt;类型&gt;/</c>):
+    /// 这份快照里没有那个类型,于是与从前一样一个字的类型信息都没有。目录名认得出的那一侧
+    /// 由 <see cref="收割行的类型取自DefInjected下那一级目录名"/> 那一族守。
     /// </summary>
     [Fact]
     public void 收割译文判不出归属时写空而不是挑一个()

@@ -802,6 +802,7 @@ public sealed class GetCommand : Command
             // 一个 def_type 对得上的都没有、却有一批不带类型的,且名字还有歧义 —— 此时
             // 「这批译文归谁」纯属未知,说清比默默端出去强。
             var byNameOnly = allTranslations.Count > 0 && allTranslations.All(t => t.DefType is null);
+            var beforePathFilter = allTranslations.Count;
             if (paths.Count > 0)
                 allTranslations = allTranslations
                     .Where(t => paths.Any(p => t.Path.Contains(p, StringComparison.OrdinalIgnoreCase)))
@@ -809,28 +810,41 @@ public sealed class GetCommand : Command
             var translations = limit.IsAll
                 ? allTranslations
                 : allTranslations.Take(limit.Effective).ToList();
+
+            // 数量在表之前,同字段表那条分界。
             if (translations.Count > 0)
-            {
-                // 数量在表之前,同字段表那条分界。
                 ctx.Report.CountNotice(Tally.Of(translations.Count, allTranslations.Count),
                     "translation",
                     matches.Count == 1 ? "" : $"this is {def.DefName} ({def.DefType}).");
 
-                // original 是被替换掉的原文:导出时刻 def 上留的是译文,原文只在注入记录里 ——
-                // 两者同时在场是运行时导出独有的便宜。
-                ctx.Report.Table("translations",
-                    ["path", "translated", "original", "language", "origin"],
-                    translations.Select(t => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
-                    {
-                        ["path"] = t.Path,
-                        ["translated"] = t.Translated,
-                        ["original"] = t.Original,
-                        ["language"] = t.Language,
-                        ["origin"] = t.Origin == TranslationOrigin.Runtime ? "in effect"
-                                   : t.Origin == TranslationOrigin.Harvested ? $"file ({t.SourceMod})"
-                                   : $"file ({t.SourceMod}, outside this snapshot)",
-                    }).ToList());
+            // 筛空的那一次尤其要说破:字段表的路径写 `stages[0].label`,而译文这一栏是**注入键**,
+            // 写 `stages.0.label`(下标式)或 `stages.observed_corpse.label`(把手式)。
+            // 拿字段表的路径贴回来筛译文,一条都不会中 —— 而那与「这个字段没有译文」同形。
+            if (paths.Count > 0 && translations.Count == 0 && beforePathFilter > 0)
+                ctx.Report.Notice(NoticeKind.Filter,
+                    $"Filtered away: {Tally.Complete(beforePathFilter).Render("translation")} this def does " +
+                    $"have, none of whose paths contain {string.Join(" or ", paths.Select(p => $"'{p}'"))}. " +
+                    "Their paths are the game's injection keys, which do not share the grammar of the " +
+                    "field paths above: one list element reads as 'stages.0.label' or " +
+                    "'stages.observed_corpse.label', never 'stages[0].label'. Ask without the bracketed " +
+                    "subscript to select both at once.");
 
+            // 表恒在场,空着也在场。--json 的自述契约是「表键恒在,没命中就是空数组」,而
+            // 此前它被 translations.Count > 0 挡在外面,于是「筛空了」与「这个 def 一条译文
+            // 都没有」在 JSON 面逐字同形(键都不见)。文本面不变 —— 零行的表渲染出来是零字节。
+            ctx.Report.Table("translations",
+                ["path", "translated", "original", "language", "origin"],
+                translations.Select(t => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+                {
+                    ["path"] = t.Path,
+                    ["translated"] = t.Translated,
+                    ["original"] = t.Original,
+                    ["language"] = t.Language,
+                    ["origin"] = OriginCell(t),
+                }).ToList());
+
+            if (translations.Count > 0)
+            {
                 DiskLayer.NoteIfUnmeasured(ctx);
 
                 if (translations.Any(t => t.Origin == TranslationOrigin.HarvestedOutside))
@@ -854,6 +868,24 @@ public sealed class GetCommand : Command
         return 0;
     }
 
+
+    /// <summary>
+    /// 译文那张表的 origin 格。
+    ///
+    /// original 是被替换掉的原文:导出时刻 def 上留的是译文,原文只在注入记录里 ——
+    /// 两者同时在场是运行时导出独有的便宜,所以只有 in effect 那些行有它。
+    ///
+    /// 收割行带上「几个文件」:一个 mod 常同时铺 1.4/ 1.5/ 1.6/ 三套 Languages,同一句话
+    /// 逐列全同地存三份。入库时折成一行,而**不说破就等于把「三份同文」印成「一份」**;
+    /// 说破了,读者也不会再把它当成三种不同的说法。
+    /// </summary>
+    private static string OriginCell(TranslationRow t)
+    {
+        if (t.Origin == TranslationOrigin.Runtime) return "in effect";
+        var outside = t.Origin != TranslationOrigin.Harvested ? ", outside this snapshot" : "";
+        var files = t.SourceFileCount is > 1 ? $", {t.SourceFileCount} files" : "";
+        return $"file ({t.SourceMod}{outside}{files})";
+    }
 
     /// <summary>--path-contains 在场时把 description 压成一行:它不是被要的东西,却最占地方。</summary>
     private static string? Clip(string? text)

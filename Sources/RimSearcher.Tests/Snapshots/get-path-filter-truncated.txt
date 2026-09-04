@@ -15,5 +15,6 @@ xml          not indexed (exporter 0.2.0)
 path                value                code_default
 comps[0].compClass  RimWorld.CompShield  yes
 No value above with 'code_default'=no is one that most of the 9 ThingDefs in this snapshot also carry. Rows marked yes were not compared: a yes is not evidence that nothing wrote the value — a def whose XML writes that same value and a def that never mentions the field both show yes here.
-The game also prices this thing. Its market value, cost to make and work amount are computed, not stored, so no field above holds them — 'rimsearcher economy Apparel_ShieldBelt' is the only road to those numbers.
+  - The game also prices this thing. Its market value, cost to make and work amount are computed, not stored, so no field above holds them — 'rimsearcher economy Apparel_ShieldBelt' is the only road to those numbers.
+  - Filtered away: 1 translation this def does have, none of whose paths contain 'comps'. Their paths are the game's injection keys, which do not share the grammar of the field paths above: one list element reads as 'stages.0.label' or 'stages.observed_corpse.label', never 'stages[0].label'. Ask without the bracketed subscript to select both at once.
 --- stderr ---

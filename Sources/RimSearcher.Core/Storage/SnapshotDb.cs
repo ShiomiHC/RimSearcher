@@ -57,11 +57,17 @@ public readonly record struct PathQuery(string Text, bool Exact = false)
 }
 
 /// <summary>
-/// 一条译文。<paramref name="DefType"/> 为 null 表示这条是从语言文件收割的,注入 key
-/// 只有 <c>DefName.field</c> —— 同名跨 def 类型时它归谁在数据源里就是不确定的。
+/// 一条译文。<paramref name="DefType"/> 为 null 表示**归属判不出来**:注入 key 只有
+/// <c>DefName.field</c>,而这条又没有能认出类型的目录名(<c>DefInjected/&lt;类型&gt;/</c>),
+/// 于是同名跨 def 类型时它归谁在数据源里就是不确定的。
+///
+/// <paramref name="SourceFileCount"/> 是这个 mod 里有几个语言文件写着这条同样的译文 ——
+/// 版本目录(<c>1.4/</c>~<c>1.6/</c>)各铺一份是常态,入库时折成一行,只有这个数留着痕。
+/// 两者对**运行时那一层恒为 null**(数据源是游戏内存,不是文件),对旧库也为 null。
 /// </summary>
 public sealed record TranslationRow(string DefName, string? DefType, string Path, string? Translated,
-                                   string? Original, string? Language, string? SourceMod, string Origin);
+                                   string? Original, string? Language, string? SourceMod, string Origin,
+                                   string? SourceFile = null, int? SourceFileCount = null);
 
 /// <summary>
 /// 一条界面文案译文。<paramref name="Key"/> 是 <c>"X".Translate()</c> 里那个 X ——
@@ -1315,15 +1321,21 @@ public sealed class SnapshotDb : IDisposable
     {
         var p = new Dictionary<string, object?> { ["@n"] = defName };
         var rows = new List<TranslationRow>();
+        // 后加的两列靠列名认,不靠 schema_version —— 涨了版本每一份旧库连同 --keep
+        // 留下的那些旧代都会拒读,而它们唯一的用途正是 snapshot diff(同 type_fields)。
+        var extra = TranslationsHaveSourceFile;
         using var rd = Query(
-            "SELECT def_name, def_type, path, translated, original, language, source_mod, origin FROM translations " +
+            "SELECT def_name, def_type, path, translated, original, language, source_mod, origin" +
+            (extra ? ", source_file, source_file_count" : "") + " FROM translations " +
             "WHERE def_name = @n COLLATE NOCASE ORDER BY origin, path", p);
         while (rd.Read())
             rows.Add(new TranslationRow(rd.GetString(0),
                 rd.IsDBNull(1) ? null : rd.GetString(1), rd.GetString(2),
                 rd.IsDBNull(3) ? null : rd.GetString(3), rd.IsDBNull(4) ? null : rd.GetString(4),
                 rd.IsDBNull(5) ? null : rd.GetString(5), rd.IsDBNull(6) ? null : rd.GetString(6),
-                rd.GetString(7)));
+                rd.GetString(7),
+                extra && !rd.IsDBNull(8) ? rd.GetString(8) : null,
+                extra && !rd.IsDBNull(9) ? rd.GetInt32(9) : null));
         return rows;
     }
 
@@ -1929,6 +1941,13 @@ public sealed class SnapshotDb : IDisposable
     /// </summary>
     private bool TypeFieldsAreDictionary => _tfDict ??= HasColumn("type_fields", "path_id");
     private bool? _tfDict;
+
+    /// <summary>
+    /// 这份库的 translations 记不记得译文出自哪个语言文件、同一句在这个 mod 里出现过几次。
+    /// 同 <see cref="TypeFieldsAreDictionary"/>,**靠列名认**。
+    /// </summary>
+    private bool TranslationsHaveSourceFile => _trSf ??= HasColumn("translations", "source_file");
+    private bool? _trSf;
 
     private bool HasColumn(string table, string column)
     {

@@ -75,8 +75,8 @@ public sealed class SnapshotImporter
             using var insertFv = Prepare(db, "INSERT INTO field_values (def_id, path, leaf, value, is_default) VALUES ($id,$p,$lf,$v,$def)");
             using var insertFts = Prepare(db, "INSERT INTO defs_fts (rowid, def_name, label, description, translated) VALUES ($id,$n,$l,$d,$tr)");
             using var insertTr = Prepare(db, """
-                INSERT INTO translations (def_id, def_type, def_name, path, translated, original, language, source_mod, origin)
-                VALUES ($id,$t,$n,$p,$tr,$o,$lang,$sm,$origin)
+                INSERT INTO translations (def_id, def_type, def_name, path, translated, original, language, source_mod, source_file, source_file_count, origin)
+                VALUES ($id,$t,$n,$p,$tr,$o,$lang,$sm,$sf,$sfc,$origin)
                 """);
             using var insertXn = Prepare(db, """
                 INSERT INTO xml_nodes (def_type, name, parent_name, abstract, def_name, label,
@@ -458,6 +458,8 @@ public sealed class SnapshotImporter
                 Bind(insertTr, "$o", inj.original);
                 Bind(insertTr, "$lang", meta.Language);
                 Bind(insertTr, "$sm", null);
+                Bind(insertTr, "$sf", null);
+                Bind(insertTr, "$sfc", null);
                 Bind(insertTr, "$origin", TranslationOrigin.Runtime);
                 insertTr.ExecuteNonQuery();
                 runtimeTr++;
@@ -616,6 +618,10 @@ public sealed class SnapshotImporter
         var count = 0;
         var keyedCount = 0;
         var runtimeMods = meta.Mods.Select(m => m.PackageId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        // 这份快照里到底有哪些 def 类型 —— `DefInjected/<这一级>/` 的目录名要拿它来认。
+        var defTypes = idsByName.Values.SelectMany(v => v).Select(v => v.Type)
+                                .Where(t => !string.IsNullOrEmpty(t)).Select(t => t!)
+                                .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         foreach (var root in ModRoots)
         {
@@ -627,7 +633,7 @@ public sealed class SnapshotImporter
                 // Keyed 那一半。同 key 多来源时**不去重、不挑一个**:这一层的语义是
                 // 「磁盘上存在这些译文」,不是「哪一句会生效」—— 后者由运行时那一层回答
                 // (keyedReplacements 本身已经是合并后的最终值)。
-                foreach (var keyedDir in FindLanguageSubdirs(modDir, meta.Language, "Keyed"))
+                foreach (var (keyedDir, _) in FindLanguageSubdirs(modDir, meta.Language, "Keyed"))
                 {
                     foreach (var xml in SafeFiles(keyedDir, "*.xml"))
                     {
@@ -658,38 +664,62 @@ public sealed class SnapshotImporter
                     }
                 }
 
-                foreach (var injDir in FindLanguageSubdirs(modDir, meta.Language, "DefInjected"))
+                // 一个 mod 的收割结果先在内存里归并再落库。**折叠的单元是 mod,不是文件**:
+                // 版本目录(1.4/ 1.5/ 1.6/)是同一份译文的几个副本,而跨 mod 的同名 key
+                // 是真有几种说法,那个照旧各留一行。
+                var folded = new Dictionary<(string DefName, string? DefType, string Path, string Text),
+                                            (string FirstFile, int Files)>();
+                foreach (var (injDir, injRel) in FindLanguageSubdirs(modDir, meta.Language, "DefInjected"))
                 {
-                    foreach (var xml in SafeFiles(injDir, "*.xml"))
+                    // DefInjected 底下那一级恒是类型名 —— 注入 key 里没有类型这一维,
+                    // 目录名是它唯一的产地。带命名空间的写法(CombatExtended.AmmoSetDef)
+                    // 是常见形态,取最后一段。
+                    foreach (var typeDir in SafeDirs(injDir))
                     {
-                        foreach (var (key, text) in ReadLanguageFile(xml))
+                        var declaredType = ResolveInjectedType(Path.GetFileName(typeDir), defTypes);
+                        foreach (var xml in SafeFiles(typeDir, "*.xml"))
                         {
-                            var dot = key.IndexOf('.');
-                            if (dot <= 0) continue;
-                            var defName = key[..dot];
-                            var path = key[(dot + 1)..];
-                            var candidates = Candidates(idsByName, defName);
-                            if (candidates.Count == 0) continue;
+                            // SafeFiles 递归,所以文件可能还在 <Type>/ 底下更深处 ——
+                            // 取相对 typeDir 的那一段,别只留文件名。
+                            var rel = (injRel + "/" + Path.GetFileName(typeDir) + "/"
+                                       + Path.GetRelativePath(typeDir, xml)).Replace('\\', '/');
+                            foreach (var (key, text) in ReadLanguageFile(xml))
+                            {
+                                var dot = key.IndexOf('.');
+                                if (dot <= 0) continue;
+                                var defName = key[..dot];
+                                var path = key[(dot + 1)..];
+                                if (Candidates(idsByName, defName).Count == 0) continue;
 
-                            // 收割来的 key 是 `DefName.field`,没有类型信息,所以能判出归属的
-                            // 只有「这个名字下只有一个 def」那一种。
-                            var owner = Owner(candidates, null);
-                            Bind(insertTr, "$id", owner);
-                            Bind(insertTr, "$t", null);
-                            Bind(insertTr, "$n", defName);
-                            Bind(insertTr, "$p", path);
-                            Bind(insertTr, "$tr", text);
-                            Bind(insertTr, "$o", null);
-                            Bind(insertTr, "$lang", meta.Language);
-                            Bind(insertTr, "$sm", packageId);
-                            Bind(insertTr, "$origin", runtimeMods.Contains(packageId)
-                                ? TranslationOrigin.Harvested
-                                : TranslationOrigin.HarvestedOutside);
-                            insertTr.ExecuteNonQuery();
-                            count++;
-                            Recall(ftsExtra, owner, candidates, text);
+                                var slot = (defName, declaredType, path, text);
+                                folded[slot] = folded.TryGetValue(slot, out var seen)
+                                    ? (seen.FirstFile, seen.Files + 1)
+                                    : (rel, 1);
+                            }
                         }
                     }
+                }
+
+                foreach (var ((defName, declaredType, path, text), (firstFile, files)) in folded)
+                {
+                    var candidates = Candidates(idsByName, defName);
+                    var owner = Owner(candidates, declaredType);
+                    Bind(insertTr, "$id", owner);
+                    Bind(insertTr, "$t", declaredType);
+                    Bind(insertTr, "$n", defName);
+                    Bind(insertTr, "$p", path);
+                    Bind(insertTr, "$tr", text);
+                    Bind(insertTr, "$o", null);
+                    Bind(insertTr, "$lang", meta.Language);
+                    Bind(insertTr, "$sm", packageId);
+                    Bind(insertTr, "$sf", firstFile);
+                    Bind(insertTr, "$sfc", files);
+                    Bind(insertTr, "$origin", runtimeMods.Contains(packageId)
+                        ? TranslationOrigin.Harvested
+                        : TranslationOrigin.HarvestedOutside);
+                    insertTr.ExecuteNonQuery();
+                    count++;
+                    Recall(ftsExtra, owner, candidates, text);
                 }
             }
         }
@@ -703,7 +733,13 @@ public sealed class SnapshotImporter
     /// **官方 Data 目录不在射程内**:那边的非英文语言包是 .tar 打包的,游戏走 VirtualDirectory
     /// 读它,而这里只认磁盘上的普通目录。官方那一份由运行时导出覆盖。
     /// </summary>
-    private static IEnumerable<string> FindLanguageSubdirs(string modDir, string language, string subdir)
+    /// <remarks>
+    /// 第二项是该目录**相对 mod 目录**的路径。带版本目录的那条(<c>1.6/Languages/…</c>)
+    /// 与不带的那条在这里都要能分辨出来 —— 只留文件名的话,同一句话铺在几套版本目录里
+    /// 就无从说明它为什么出现了几次。
+    /// </remarks>
+    private static IEnumerable<(string Dir, string Rel)> FindLanguageSubdirs(
+        string modDir, string language, string subdir)
     {
         foreach (var pattern in new[] { "Languages", "*/Languages" })
         {
@@ -719,8 +755,48 @@ public sealed class SnapshotImporter
             foreach (var lr in langRoots)
             {
                 var dir = Path.Combine(lr, language, subdir);
-                if (Directory.Exists(dir)) yield return dir;
+                if (Directory.Exists(dir))
+                    yield return (dir, Path.GetRelativePath(modDir, dir).Replace('\\', '/'));
             }
+        }
+    }
+
+    /// <summary>
+    /// <c>DefInjected/&lt;这一级&gt;/</c> 的目录名对应哪个 def 类型。**认不出来就返回 null**,
+    /// 不猜:归属判不出来时留空,后面那条「按 defName 匹配」的免责句才有落点。
+    ///
+    /// 认得出的三种写法,前两种照抄游戏(<c>LoadedLanguage.LoadData</c>):裸类型名
+    /// (<c>ThingDef</c>);**去掉末尾一个字符**再试一次(<c>ThingDefs</c> 这类复数目录名,
+    /// 游戏的原话是 <c>name.Substring(0, name.Length - 1)</c>,只在长度大于 3 时试);
+    /// 以及带命名空间的(<c>CombatExtended.AmmoSetDef</c>),取最后一段再比 —— 游戏那边
+    /// 靠 <c>GenTypes.GetTypeInAnyAssembly</c> 直接解析全限定名,而这里手上只有短名。
+    ///
+    /// 实扫本机三个 mod 根 14153 个文件,裸名直接对上的占 89.3%,余下绝大多数是带命名空间的。
+    ///
+    /// **认不出来时不跳过这条,只留空类型**,与游戏有意不同:游戏认得所有已加载的类型,
+    /// 认不出就是真的不存在;而这里的名单只有**这份快照里**的类型,一个没启用的 mod
+    /// 自造的类型在这里注定认不出来,可它的译文正是 harvested_outside 那一层要召回的东西。
+    /// 留空之后由「按 defName 匹配」那条免责句接手。
+    /// </summary>
+    private static string? ResolveInjectedType(string dirName, IReadOnlyCollection<string> defTypes)
+    {
+        if (string.IsNullOrEmpty(dirName)) return null;
+        foreach (var name in Variants(dirName))
+        {
+            var hit = defTypes.FirstOrDefault(t => DefTypes.Same(t, name));
+            if (hit != null) return hit;
+        }
+        return null;
+
+        static IEnumerable<string> Variants(string dirName)
+        {
+            yield return dirName;
+            if (dirName.Length > 3) yield return dirName[..^1];
+            var dot = dirName.LastIndexOf('.');
+            if (dot <= 0 || dot == dirName.Length - 1) yield break;
+            var shortName = dirName[(dot + 1)..];
+            yield return shortName;
+            if (shortName.Length > 3) yield return shortName[..^1];
         }
     }
 

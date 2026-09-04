@@ -107,6 +107,13 @@ public static class SnapshotSchema
             is_default INTEGER NOT NULL DEFAULT 0
         );
 
+        -- source_file / source_file_count 只对收割行有值(运行时那一层的数据源是游戏内存,
+        -- 不是某个文件)。**计数不是冗余**:一个 mod 常同时铺 1.4/ 1.5/ 1.6/ 三套 Languages,
+        -- 同一句话逐列全同地入库三次;折成一行之后,「这句话在这个 mod 里出现过几次」
+        -- 就只剩这一列说得出。缺了它,折叠会把「三份同文」印成「一份」而不留痕。
+        --
+        -- 这两列是后加的,**没有涨 schema_version**:旧库照旧能读,只是少一条判据
+        -- (同 type_fields 的 path_id,靠列名认)。
         CREATE TABLE translations (
             def_id     INTEGER,
             def_type   TEXT,
@@ -116,6 +123,8 @@ public static class SnapshotSchema
             original   TEXT,
             language   TEXT,
             source_mod TEXT,
+            source_file TEXT,
+            source_file_count INTEGER,
             origin     TEXT NOT NULL
         );
 
