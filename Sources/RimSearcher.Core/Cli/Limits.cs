@@ -17,19 +17,6 @@ public static class Limits
     /// <summary>code-search 正则单文件匹配超时(毫秒),防灾难性回溯。</summary>
     public const int CodeSearchRegexTimeoutMs = 2000;
 
-    /// <summary>
-    /// <c>--lines 400</c> 这种只给起点的写法,从那里往下取多少行 —— **只剩这一处用它**。
-    /// 续读提示里的一页不是它:那个数取自本次实际拿到的窗口(<c>to - from + 1</c>),
-    /// 于是「下一页」与「这一页」总是一样长,而这条在默认窗口是 150 时看不出区别。
-    ///
-    /// **它不再是任何一处的缺省。** 2026-09-05 之前,read 什么都不说时取的就是这么多行,
-    /// 撤掉的判据是重放 Vethara 侧 346 条裸 read:其中 236 条自己写着 `--limit all`,
-    /// 窗口早就被掀开;剩下 110 条全量后只有 6 条超过 harness 的 30000 字符,
-    /// 其中 5 条接了管道。中位数 3980 → 3985,反编译树里 84% 的文件本来就不到 150 行。
-    /// 更早还有一道 2000 行的闸压在 --limit 之上,那道撤于同一族判据。
-    /// </summary>
-    public const int PageSize = 150;
-
     /// <summary>同名文件几选一时最多列几条。</summary>
     public const int AmbiguousFiles = 8;
 

@@ -1,4 +1,4 @@
-using RimSearcher.Cli;
+﻿using RimSearcher.Cli;
 using RimSearcher.Output;
 using RimSearcher.Search;
 
@@ -80,10 +80,11 @@ public sealed class ReadCommand : Command
                 Name = "lines",
                 Aliases = ["line", "range", "line-range"],
                 Placeholder = "<a-b|a+n|a|all>",
-                Help = "Read raw lines instead: '400-460' is inclusive, '400+60' is sixty lines from 400, " +
-                       $"'400' starts there and takes {Limits.PageSize} lines, 'all' is the whole file " +
-                       "however long it is. Whatever it asks for is printed in full unless --limit says " +
-                       "otherwise. Without it the whole file is read.",
+                Help = "Read raw lines instead: '400-460' is inclusive (',' and ':' work in place of the " +
+                       "'-'), '400+60' is sixty lines from 400, '400' starts there and runs to the end of " +
+                       "the file, 'all' is the whole file however long it is. Whatever it asks for is " +
+                       "printed in full unless --limit says otherwise — that is also what shortens a " +
+                       "start-only '400'. Without it the whole file is read.",
             },
             new OptionSpec
             {
@@ -656,10 +657,6 @@ public sealed class ReadCommand : Command
 
         return new string(chars.ToArray());
     }
-
-    /// <summary>`a-b` / `a+n` / `a` / `all` / 不给。行号 1 起,两端都含。</summary>
-    internal static (int From, int To) ParseRange(string? spec, int total)
-        => ParseRange(spec, total, Limits.PageSize, out _);
 
     /// <summary>
     /// <paramref name="rewritten"/>:归一化真的改动了写法时给出改动后的样子,否则 null。

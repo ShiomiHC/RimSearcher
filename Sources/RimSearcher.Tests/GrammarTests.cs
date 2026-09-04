@@ -1199,6 +1199,22 @@ public class GrammarTests
         var (bounded, _, _) = Fixture.Run("read", "Long.cs", "--lines", "7-12", "--config", config);
         Assert.Contains("lines 7-12 of 400", bounded, StringComparison.Ordinal);
 
+        // 只给起点的写法同批跟着走:读到文件末尾,不再是那个 150 行的窗口。终点由 --limit 定,
+        // 而它不填就是不封顶 —— 说明里此前逐字写着「takes 150 lines」,而行为早已不是那样。
+        var (fromHere, _, _) = Fixture.Run("read", "Huge.cs", "--lines", "2000", "--config", config);
+        Assert.Contains("lines 2000-2500 of 2500", fromHere, StringComparison.Ordinal);
+        var (fromHereCut, _, _) = Fixture.Run(
+            "read", "Huge.cs", "--lines", "2000", "--limit", "30", "--config", config);
+        Assert.Contains("lines 2000-2029 of 2500", fromHereCut, StringComparison.Ordinal);
+
+        // 逗号与冒号是真实调用里写了 214 次的两种区间写法,收下并说破改写成了什么。
+        foreach (var spec in new[] { "7,12", "7:12" })
+        {
+            var (alt, _, _) = Fixture.Run("read", "Long.cs", "--lines", spec, "--config", config);
+            Assert.Contains($"--lines {spec} read as 7-12", alt, StringComparison.Ordinal);
+            Assert.Contains("lines 7-12 of 400", alt, StringComparison.Ordinal);
+        }
+
         Directory.Delete(dir, recursive: true);
     }
 
