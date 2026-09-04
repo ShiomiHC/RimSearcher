@@ -1,0 +1,22 @@
+$ rimsearcher get ObservedLayingCorpse --path stages.0.label --fixture-injkey
+exit 0
+--- stdout ---
+Matching 'stages.0.label': 1 field, out of 4 fields on the def.
+
+def_name     ObservedLayingCorpse
+def_type     HediffDef
+label        observed laying corpse
+class        Verse.HediffDef
+mod          ludeon.rimworld
+source       Thoughts_Memory.xml
+
+path             value            code_default  xml
+stages[0].label  observed corpse  no            no
+No value above with 'code_default'=no is one that most of the 1 HediffDefs in this snapshot also carry.
+1 translation within --path-contains stages.0.label.
+
+path             key                           translated  original         language           origin
+stages[0].label  stages.observed_corpse.label  看到了尸体  observed corpse  ChineseSimplified  in effect
+
+This snapshot never scanned the language files on disk, so every row here is one the game actually had: the absence of an 'on disk' row is not evidence that no installed mod translates it. No 'mod_roots' is configured on this machine, so there is nowhere to scan: set it in the config file and import again to measure that layer.
+--- stderr ---

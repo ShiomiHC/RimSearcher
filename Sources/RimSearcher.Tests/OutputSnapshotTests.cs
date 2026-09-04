@@ -394,6 +394,13 @@ public class OutputSnapshotTests
         // 归一过之后字段表的路径贴回来真能筛到译文 —— 这正是归一要买的东西。
         { "get-injkey-bracket",    ["get", "ObservedLayingCorpse", "--path", "stages[0].label",
                                     Fixture.InjKeyArg] },
+        // 第三种写法:语言文件里的点下标式。两列都不存着这一串(path 是方括号、key 是把手),
+        // 它只能靠过滤前那道归一活着 —— 没有这道闸,它筛空,而筛空与「没有译文」同形。
+        { "get-injkey-dotindex",   ["get", "ObservedLayingCorpse", "--path", "stages.0.label",
+                                    Fixture.InjKeyArg] },
+        // 把手式:译文表中,字段表零 —— 口径承诺的正是这个不对称。
+        { "get-injkey-handle",     ["get", "ObservedLayingCorpse", "--path",
+                                    "stages.observed_corpse.label", Fixture.InjKeyArg] },
         // --source 已经给出时,补救措施里不许再列 --source。
         { "code-search-source-cap", ["code-search", "public", "--source", "vanilla", "--max-files", "1"] },
         { "code-search-no-tree",   ["code-search", "public", "--source", "HAR"] },

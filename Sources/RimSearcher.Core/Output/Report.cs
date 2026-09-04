@@ -144,7 +144,9 @@ public sealed class Report
 
     public Report Notice(NoticeKind kind, string text, bool footnote = false, Tally? count = null)
     {
-        _entries.Add(new Notice(kind, text, footnote) { Count = count });
+        // 声明多半是「一句 + 若干条件句」拼出来的,末尾那个分隔空格在所有条件句都空掉时
+        // 留在行尾。一处一处 TrimEnd 修不干净 —— 组合是随快照能力变的,不是随代码变的。
+        _entries.Add(new Notice(kind, text.TrimEnd(), footnote) { Count = count });
         return this;
     }
 

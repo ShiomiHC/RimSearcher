@@ -426,6 +426,10 @@ public sealed class GetCommand : Command
 
         var limit = ctx.Limit();
         var paths = ctx.Args.Values("path-contains");
+        // 字段索引存的是方括号式(stages[0].label),而拿语言文件来查的人手上是点下标式
+        // (stages.0.label)—— 后者在字段表里一条都不中,且那与「这个字段不存在」同形。
+        // 只把**查询**归一;所有报错句仍引读者自己敲的那一串。
+        var fieldPaths = paths.Select(InjectionKey.ToFieldPath).ToList();
 
         // 撞名这件事排在**全部段落之前**。此前它在最后:六个同名 def 各带一张完整字段表,
         // 两百行之后才说「这里其实有六个」,而第一段开口可以是一句否定
@@ -508,7 +512,7 @@ public sealed class GetCommand : Command
             // 是明说要全量。于是过滤只发生在什么都没点名的那一次。
             var withDefaults = ctx.Args.Flag("defaults") || paths.Count > 0;
             var (fields, matched, total, defaulted, matchedPaths) =
-                ctx.Db.Fields(def.Id, limit.Effective, paths, includeDefaults: withDefaults);
+                ctx.Db.Fields(def.Id, limit.Effective, fieldPaths, includeDefaults: withDefaults);
 
             // 表在这一段的**末尾**才挂上去(渲染顺序 = Add 顺序)。分界与折叠行那条同理:
             // 数得清多少、全不全,读到行的时候得已经知道 —— 所以计数、过滤、截断在表之前。
@@ -532,7 +536,7 @@ public sealed class GetCommand : Command
                     // 没有」在输出上同形,而这个数当场查得出来 —— 不报,前者就会被当后者用。
                     var (kin, kinPaths) = asValue.Count > 0
                         ? (0, 0)
-                        : ctx.Db.TypeDefsWithPath(def.DefType, paths);
+                        : ctx.Db.TypeDefsWithPath(def.DefType, fieldPaths);
 
                     ctx.Report.Notice(NoticeKind.Boundary,
                         $"No field path{whose} contains {PathFilterText.Say(paths)}; the def does have " +
@@ -564,7 +568,7 @@ public sealed class GetCommand : Command
                     // 子串匹配不留痕:`--path-contains soundImpact` 只回 `soundImpactDefault` 这个语义
                     // 相反的字段,所以要说破「整段一次都没命中」。整段命中的数在**截断之前**
                     // 数(matchedPaths 不受 --limit 影响),否则换个 --limit 就换一句结论。
-                    var whole = matchedPaths.Count(x => PathSegments.IsWholeSegment(x, paths));
+                    var whole = matchedPaths.Count(x => PathSegments.IsWholeSegment(x, fieldPaths));
 
                     // 第三种可能,而那两句只穷举了两种:名值对结构(statBases[N].stat = MarketValue)
                     // 把**字段的名字搬进了值那一列**,--path-contains 结构上够不着它。于是「命中了几条、
@@ -815,12 +819,21 @@ public sealed class GetCommand : Command
             // 过滤词落在**两种拼法上都算数**。归一给了 path 一套与字段表可比的坐标,可游戏
             // 认的那一串仍是另一种写法,而拿着语言文件来查的人手上只有后者。同一个坐标的
             // 三种写法(stages[0].label / stages.0.label / stages.observed_corpse.label)于是
-            // 都能选中同一行 —— 读者不必先知道自己手上是哪一种。
+            // 都能在**这张表**里选中同一行 —— 读者不必先知道自己手上是哪一种。字段表那侧
+            // 只认第一种,所以口径不能写成「一个词两表同中」。
             if (paths.Count > 0)
-                allTranslations = allTranslations
-                    .Where(t => paths.Any(p => t.Path.Contains(p, StringComparison.OrdinalIgnoreCase)
-                                            || (t.Key?.Contains(p, StringComparison.OrdinalIgnoreCase) ?? false)))
+            {
+                // 点下标式两列都不存(path 是方括号,key 是译者写的那串),所以它得先过一道
+                // 归一才有得比 —— 只比原样的话,「stages.0.label」筛空,而筛空与「没有译文」同形。
+                var needles = paths
+                    .SelectMany(p => new[] { p, InjectionKey.ToFieldPath(p) })
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
+                allTranslations = allTranslations
+                    .Where(t => needles.Any(p => t.Path.Contains(p, StringComparison.OrdinalIgnoreCase)
+                                              || (t.Key?.Contains(p, StringComparison.OrdinalIgnoreCase) ?? false)))
+                    .ToList();
+            }
             var translations = limit.IsAll
                 ? allTranslations
                 : allTranslations.Take(limit.Effective).ToList();
@@ -841,9 +854,10 @@ public sealed class GetCommand : Command
                              "this def does have, none of whose paths contain " +
                              $"{string.Join(" or ", paths.Select(p => $"'{p}'"))}.";
                 ctx.Report.Notice(NoticeKind.Filter, ctx.Db.Meta.IndexesInjectionKeys
-                    ? denial + " Their paths are written in the same grammar as the field paths above, " +
-                               "so the same word selects in both tables: nothing here is hidden behind a " +
-                               "second spelling."
+                    ? denial + " Their paths are written in the same grammar as the field paths above, and " +
+                               "this filter also tried both spellings a language file uses — the number as " +
+                               "'.0.' and the element's own handle — against the path and the key alike. " +
+                               "Nothing here is hidden behind a second spelling."
                     : denial + " Their paths are the game's injection keys as written, and this snapshot " +
                                "predates the pass that brings them onto the field paths' grammar: where a " +
                                "field path has '[0]', a key has either the number or a name taken from that " +

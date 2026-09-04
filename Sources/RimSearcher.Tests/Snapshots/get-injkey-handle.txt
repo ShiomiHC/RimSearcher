@@ -1,0 +1,19 @@
+$ rimsearcher get ObservedLayingCorpse --path stages.observed_corpse.label --fixture-injkey
+exit 0
+--- stdout ---
+No field path contains 'stages.observed_corpse.label'; the def does have 4 fields. Drop --path-contains to see them.
+This says no indexed value sits at that path — not that no such field exists. 'rimsearcher code-search "[\w<>,\[\] ]+ label;"' finds the declaration, which does say. Two things keep a field out of this index without any sign here: a value that was null on every def, and a field the game marks as an unsaved runtime cache.
+
+def_name     ObservedLayingCorpse
+def_type     HediffDef
+label        observed laying corpse
+class        Verse.HediffDef
+mod          ludeon.rimworld
+source       Thoughts_Memory.xml
+1 translation within --path-contains stages.observed_corpse.label.
+
+path             key                           translated  original         language           origin
+stages[0].label  stages.observed_corpse.label  看到了尸体  observed corpse  ChineseSimplified  in effect
+
+This snapshot never scanned the language files on disk, so every row here is one the game actually had: the absence of an 'on disk' row is not evidence that no installed mod translates it. No 'mod_roots' is configured on this machine, so there is nowhere to scan: set it in the config file and import again to measure that layer.
+--- stderr ---
