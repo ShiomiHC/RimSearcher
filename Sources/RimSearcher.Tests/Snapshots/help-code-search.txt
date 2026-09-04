@@ -25,7 +25,7 @@ Options:
                               Also accepted: --root, --tree, --scope.
   -C, --context <n|a-b|a+n>   Show lines around each match. A number N is N above and N below; '0-20' is 0 above and 20 below, '10+4' is 10 above and 4 below. Windows that overlap or touch are merged, so no line is printed twice. Default: 0.
                               Also accepted: --context-lines, --around.
-  -n, --limit <n|all>         How many matching lines to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: 25.
+  -n, --limit <n|all>         How many matching lines to return. Left out, every one is returned. Values above 2000 are clamped to 2000. Default: all.
                               Also accepted: --max-results, --count, --top, --rows, --num, --head.
   -i, --ignore-case           Match without regard to letter case.
                               Also accepted: --case-insensitive.

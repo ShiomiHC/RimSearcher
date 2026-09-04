@@ -298,7 +298,7 @@ public sealed class GetCommand : Command
         Positionals = [new PositionalSpec { Name = "defName", Help = "The exact def name. 'search' finds it if you only know part of it." }],
         Options =
         [
-            CommonOptions.Limit("fields") with { Default = Limits.DefaultFieldsPerDef.ToString() },
+            CommonOptions.Limit("fields"),
             new OptionSpec
             {
                 // 没有它,在几百字段的 def 里找一条路径只能 --limit all 再 grep 输出。
@@ -415,7 +415,7 @@ public sealed class GetCommand : Command
             return 1;
         }
 
-        var limit = ctx.Limit(fallback: Limits.DefaultFieldsPerDef);
+        var limit = ctx.Limit();
         var paths = ctx.Args.Values("path-contains");
 
         // 撞名这件事排在**全部段落之前**。此前它在最后:六个同名 def 各带一张完整字段表,

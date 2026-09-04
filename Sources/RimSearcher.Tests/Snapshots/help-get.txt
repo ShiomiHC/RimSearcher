@@ -17,7 +17,7 @@ Arguments:
   <defName>  The exact def name. 'search' finds it if you only know part of it.
 
 Options:
-  -n, --limit <n|all>         How many fields to return. Use 'all' for no cap. Values above 2000 are clamped to 2000. Default: 60.
+  -n, --limit <n|all>         How many fields to return. Left out, every one is returned. Values above 2000 are clamped to 2000. Default: all.
                               Also accepted: --max-results, --count, --top, --rows, --num, --head.
       --path-contains <text>  Only show field paths containing this text. Repeat it to widen the selection.
                               Also accepted: --filter, --grep, --field-contains, --path-filter, --field, --field-path, --only.

@@ -1,4 +1,4 @@
-$ rimsearcher keyed
+$ rimsearcher keyed --limit 25
 exit 0
 --- stdout ---
 2107 keyed translations, showing the first 25.

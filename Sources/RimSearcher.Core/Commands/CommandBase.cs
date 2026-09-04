@@ -66,9 +66,9 @@ public static class CommonOptions
         Short = 'n',
         Aliases = ["max-results", "count", "top", "rows", "num", "head"],
         Placeholder = "<n|all>",
-        Help = $"How many {what} to return. Use 'all' for no cap. " +
+        Help = $"How many {what} to return. Left out, every one is returned. " +
                $"Values above {Limits.MaxLimit} are clamped to {Limits.MaxLimit}.",
-        Default = Limits.DefaultLimit.ToString(),
+        Default = "all",
     };
 
     /// <summary>翻页。措辞产地在 <see cref="Report.PageNotice"/>;每条列表命令都认它。</summary>
@@ -157,9 +157,9 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
     /// <c>--limit</c> 的取值,**并且把夹紧说出来** —— 参数被静默改写而输出里没有迹象时,
     /// 裸计数会被读成「一共就这么多」。
     /// </summary>
-    public LimitValue Limit(string name = "limit", int? fallback = null)
+    public LimitValue Limit(string name = "limit")
     {
-        var limit = Args.Limit(name, fallback);
+        var limit = Args.Limit(name);
         if (limit.Clamped)
             Report.Notice(NoticeKind.Clamp,
                 $"--{name} {Args.Value(name)} is above the ceiling of {Limits.MaxLimit}, so at most " +

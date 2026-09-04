@@ -53,8 +53,9 @@ public class OutputSnapshotTests
         // 空串是同一族里最贵的一档,而它一直在闸外:上面那两份靠「归一化后与原串不等」
         // 触发说破,空串两边相等,于是唯一那句解释正好在最该说的输入上不发。
         // keyed 的裸调用列整层,`keyed ""` 却报零 —— 两者必须摆在一起看。
+        // 2026-09-05 起不给 --limit 就是全量,基线不必装下两千行:显式压一页,对照意图不变。
         { "empty-arg-keyed",       ["keyed", ""] },
-        { "empty-arg-keyed-bare",  ["keyed"] },
+        { "empty-arg-keyed-bare",  ["keyed", "--limit", "25"] },
         // search 一侧更贵:FTS 无词返回零 → 触发译文原文兜底 → 兜底拿原串跑 LIKE '%%'
         // 匹配全体,而兜底那句 Boundary 的措辞假定了「主搜真的没命中」。
         { "empty-arg-search",      ["search", ""] },
@@ -410,8 +411,8 @@ public class OutputSnapshotTests
         // 过滤器筛空 ≠ 没有这个 key。
         { "keyed-placeholder-none", ["keyed", "CannotUseNoPower", "--empty-translation"] },
         // 第三条路:不给查询词的整层枚举 —— 「把还没译的全列出来」这条意图要有一种
-        // 可表达的形式。两份基线:整层第一页,以及这条意图本身。
-        { "keyed-all",             ["keyed"] },
+        // 可表达的形式。两份基线:整层第一页(2026-09-05 起要显式 --limit 才分页),以及这条意图本身。
+        { "keyed-all",             ["keyed", "--limit", "25"] },
         { "keyed-all-placeholders", ["keyed", "--empty-translation", "--limit", "all"] },
         // 枚举走的是分页文法而不是精确 key 那一路,所以翻过头这条分支也得有。
         { "keyed-all-past-end",    ["keyed", "--empty-translation", "--offset", "9"] },

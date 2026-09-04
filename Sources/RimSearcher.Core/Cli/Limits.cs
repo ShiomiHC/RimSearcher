@@ -8,10 +8,10 @@ namespace RimSearcher.Cli;
 /// </summary>
 public static class Limits
 {
-    /// <summary>列表类命令未指定 --limit 时的默认条数。</summary>
-    public const int DefaultLimit = 25;
-
-    /// <summary>--limit 允许的最大值;超出会被夹紧。</summary>
+    /// <summary>
+    /// --limit 允许的最大值;超出会被夹紧。不给 --limit 就是全量,没有默认条数 ——
+    /// 判据在 <see cref="ParseResult.Limit"/> 的注释里。
+    /// </summary>
     public const int MaxLimit = 2000;
 
     /// <summary>
@@ -45,8 +45,6 @@ public static class Limits
     /// <summary>同名文件几选一时最多列几条。</summary>
     public const int AmbiguousFiles = 8;
 
-    /// <summary>get 命令默认展开的字段条数;超出以三态文法声明。</summary>
-    public const int DefaultFieldsPerDef = 60;
 
     /// <summary>声明区(散文)最多行数。超出即聚合成尾注,防止声明挤占上下文。</summary>
     public const int MaxNoticeLines = 6;

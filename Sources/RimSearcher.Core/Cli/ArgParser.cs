@@ -420,11 +420,16 @@ public sealed class ParseResult(
     /// <summary>
     /// --limit 的取值。<c>all</c> 是正式取值,不是错误;
     /// 超过 <see cref="Limits.MaxLimit"/> 的数被夹紧,夹紧事实由调用方在输出里声明。
+    ///
+    /// 不给就是全量(2026-09-05 起)。此前列表类默认 25、get 默认 60,重放 Vethara 侧 2059 次
+    /// 实际调用量过:没写 --limit 的 547 次里全量后最大 15 KB,没有一次会撞到 harness 的
+    /// 30000 字符截断;而 `--limit all` 在接管道的调用里出现率 85% 以上 —— 默认上限省不下
+    /// 输出,只让 grep 之后静默丢行。会撑到 1 MB 的 `list ThingDef` 裸跑在全史里零次。
     /// </summary>
-    public LimitValue Limit(string name = "limit", int? fallback = null)
+    public LimitValue Limit(string name = "limit")
     {
         var raw = Value(name);
-        if (raw is null) return LimitValue.Of(fallback ?? Limits.DefaultLimit);
+        if (raw is null) return LimitValue.All;
         if (string.Equals(raw, "all", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(raw, "none", StringComparison.OrdinalIgnoreCase) ||
             raw == "0" || raw == "-1")

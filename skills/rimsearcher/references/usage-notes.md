@@ -208,7 +208,7 @@ single class-picking fields are missing, `where Class` and `list --own-class` ar
 structurally blind to them and only `code-search` can answer; re-export to close the gap.
 
 **Anchoring, walked through.** `code-search MapPortal` finds every mention — dozens of matches
-across dozens of files, of which `--limit` prints the first 25, the declaration rendered
+across dozens of files, all of them printed, the declaration rendered
 exactly like every other hit. `code-search "class MapPortal\b"` returns exactly one. Once you have the file,
 `read <file> --outline` lists what is in it without a second scan; that is the right move
 whenever the only hit was the declaration itself, because a single hit means the pattern
