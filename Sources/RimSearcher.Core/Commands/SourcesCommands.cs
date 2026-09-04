@@ -272,14 +272,16 @@ public sealed class SourcesSyncCommand : Command
             new OptionSpec
             {
                 Name = "modlist",
-                Aliases = ["list", "from", "profile"],
+                // "from" 不在这里:modlist save 有一个真的 --from。
+                Aliases = ["list", "profile"],
                 Placeholder = "<name>",
                 Help = "Cover the mods in this saved mod list instead of the ones in the snapshot.",
             },
             new OptionSpec
             {
                 Name = "only",
-                Aliases = ["tree", "source", "mod"],
+                // "source" 不在这里:code-search / read 有一个真的 --source(源码树名)。
+                Aliases = ["tree", "mod"],
                 Placeholder = "<name>",
                 Help = "Build just this one tree. Takes a tree name as 'sources list' prints it.",
             },

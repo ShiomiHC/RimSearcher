@@ -11,9 +11,9 @@ A tree whose source assemblies have not changed is left alone. Comparing version
 
 Options:
       --modlist <name>  Cover the mods in this saved mod list instead of the ones in the snapshot.
-                        Also accepted: --list, --from, --profile.
+                        Also accepted: --list, --profile.
       --only <name>     Build just this one tree. Takes a tree name as 'sources list' prints it.
-                        Also accepted: --tree, --source, --mod.
+                        Also accepted: --tree, --mod.
       --force           Rebuild even the trees whose assemblies have not changed. Does not overwrite a tree that has uncommitted git changes.
                         Also accepted: --rebuild, --all.
       --dry-run         Report what would be decompiled and stop without writing anything.

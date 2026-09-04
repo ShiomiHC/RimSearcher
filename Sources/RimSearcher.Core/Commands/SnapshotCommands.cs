@@ -559,7 +559,9 @@ public sealed class SnapshotTruncatedCommand : Command
             new OptionSpec
             {
                 Name = "def",
-                Aliases = ["def-name", "defname", "name"],
+                // "name" 不在这里:snapshot import / export 的 --name 是**快照**的名字,
+                // 这里问的是 def 的名字 —— 两件事撞在同一个词上,而且都不会报错。
+                Aliases = ["def-name", "defname"],
                 Placeholder = "<defName>",
                 Help = "Only this def. Answers 'was this particular def cut short' without reading the whole list.",
                 Narrows = true,

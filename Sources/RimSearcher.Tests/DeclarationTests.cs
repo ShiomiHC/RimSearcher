@@ -59,6 +59,50 @@ public class DeclarationTests
         }
     }
 
+    /// <summary>
+    /// **一个名字在别处是正名时,不许在这里当另一个东西的别名。**
+    ///
+    /// 上一条闸只查一条命令**之内**,而这个洞是跨命令的:`--source` 在 code-search / read
+    /// 上是正名(反编译源码树的名字),同时又是 where 那族 `--scope` 的别名(快照里的哪些
+    /// mod)。两件不同的事互收对方的名字,而且**不报错** —— `code-search X --scope vanilla`
+    /// 恰好撞上一棵叫 vanilla 的树,于是它体面地回答了另一个问题。
+    ///
+    /// 判据只针对这一种形状:名字在某处是正名。别名撞别名不算(两边都是转写,读者不会
+    /// 拿其中一个当定义),正名撞正名也不算(同名同义,比如各命令自己的 --limit)。
+    /// </summary>
+    [Fact]
+    public void 别处的正名不许在这里当别的东西的别名()
+    {
+        var canonical = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var spec in Registry.Specs)
+            foreach (var o in spec.Options)
+            {
+                var norm = ArgParser.Normalize(o.Name);
+                if (!canonical.TryGetValue(norm, out var owners)) canonical[norm] = owners = [];
+                if (!owners.Contains(spec.Name)) owners.Add(spec.Name);
+            }
+
+        // 全部收齐再报。一次只报一条时,修掉第一条才看得见第二条 —— 而这类撞车是成串的
+        // (同一个词往往有三个主人)。
+        var clashes = new List<string>();
+        foreach (var spec in Registry.Specs)
+            foreach (var o in spec.Options)
+                foreach (var alias in o.Aliases)
+                {
+                    var norm = ArgParser.Normalize(alias);
+                    if (!canonical.TryGetValue(norm, out var owners)) continue;
+                    if (ArgParser.Normalize(o.Name) == norm) continue;
+                    clashes.Add($"'{spec.Name} --{alias}' is an alias of --{o.Name}, but '{alias}' is the " +
+                                $"real name of a different option on " +
+                                $"{string.Join(", ", owners.Select(x => $"'{x}'"))}.");
+                }
+
+        Assert.True(clashes.Count == 0,
+            string.Join("\n", clashes) +
+            "\nTwo different things must not answer to each other's names: the reader who learns it in " +
+            "one place carries the wrong meaning to the other, and the call does not fail.");
+    }
+
     [Fact]
     public void 每条声明都有非空说明且是完整句子()
     {

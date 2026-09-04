@@ -334,7 +334,8 @@ public sealed class ModListSaveCommand : Command
             new OptionSpec
             {
                 Name = "from",
-                Aliases = ["source", "input"],
+                // "source" 不在这里:code-search / read 有一个真的 --source。
+                Aliases = ["input"],
                 Placeholder = "<name|path>",
                 Help = "Read the ids from this list instead of from the game's current configuration.",
             },

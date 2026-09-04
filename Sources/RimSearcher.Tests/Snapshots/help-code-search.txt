@@ -22,7 +22,7 @@ Options:
       --max-per-file <n>     How many matching lines to print from any one file, at most. Left out, every one is printed — there is no cap to lift. Matches past it are still counted, so the total stays exact. Default: every one.
                              Also accepted: --per-file, --matches-per-file, --max-matches-per-file, --file-preview.
       --source <name>        Which decompiled source tree to search. Omit to search them all.
-                             Also accepted: --root, --tree, --scope.
+                             Also accepted: --root, --tree.
   -C, --context <n|a-b|a+n>  Show lines around each match. A number N is N above and N below; '0-20' is 0 above and 20 below, '10+4' is 10 above and 4 below. Windows that overlap or touch are merged, so no line is printed twice. Default: 0.
                              Also accepted: --context-lines, --around.
   -n, --limit <n>            How many matching lines to return, at most. Left out, every one is returned — there is no cap to lift. Default: every one.

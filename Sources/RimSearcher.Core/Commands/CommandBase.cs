@@ -85,7 +85,17 @@ public static class CommonOptions
     public static readonly OptionSpec Scope = new()
     {
         Name = "scope",
-        Aliases = ["mod", "mods", "source", "from"],
+        // **"source" 不许在这里。** code-search / read 上有一个真的 --source,它收的是
+        // 反编译源码树的名字,与这里的「快照里的哪些 mod」是两回事。两边互收对方的名字时,
+        // `code-search X --scope vanilla` 不报错 —— 恰好有一棵叫 vanilla 的树,于是它体面地
+        // 回答了另一个问题。
+        //
+        // 删哪一半按用量定:Vethara 的 603 个会话、8040 次真调用里,`--source` 落在这一族上
+        // **零次**,落在 code-search / read 上 256 次;`--scope` 落在这一族上 104 次,
+        // 落在 code-search 上 2 次(其中一次写的是组名 races,那边没有同名树,报错了)。
+        // 于是两边各删掉自己不被用的那个别名,一次真实用法都没牺牲。
+        // "from" 同理:modlist save 有一个真的 --from(从哪份名单读 id)。两个别名都是零用量。
+        Aliases = ["mod", "mods"],
         Placeholder = "<expr>",
         // 一词两义:这里的 'vanilla' = Ludeon 出的每一个模块(Core 加全部已装 DLC),
         // 而一份**叫** vanilla 的快照可能只有 Core。
@@ -116,7 +126,8 @@ public static class CommonOptions
     public static readonly OptionSpec Type = new()
     {
         Name = "type",
-        Aliases = ["def-type", "kind", "category"],
+        // "category" 不在这里:economy 有一个真的 --category(经济分类),两件事不许互收名字。
+        Aliases = ["def-type", "kind"],
         Placeholder = "<DefType>",
         Help = "Restrict results to one def type, for example ThingDef or HediffDef.",
         Narrows = true,

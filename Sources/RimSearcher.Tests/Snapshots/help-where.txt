@@ -17,9 +17,9 @@ Options:
       --offset <n>      Skip this many matches before listing. The total is always reported, so you can tell when you have reached the end. Default: 0.
                         Also accepted: --skip, --start, --page-from.
       --scope <expr>    Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: all.
-                        Also accepted: --mod, --mods, --source, --from.
+                        Also accepted: --mod, --mods.
       --type <DefType>  Restrict results to one def type, for example ThingDef or HediffDef.
-                        Also accepted: --def-type, --kind, --category.
+                        Also accepted: --def-type, --kind.
       --exact           Require the whole value to match, with either a field path or --value. Without it, the value is matched as a substring.
                         Also accepted: --exact-match, --whole.
       --exact-path      Match the field path as a whole instead of as a suffix. Write '[]' for any index, so a path shape such as 'lifeStages[].bodyGraphicData.shaderType' can be pasted straight back in.

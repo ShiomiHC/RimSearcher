@@ -315,8 +315,9 @@ public sealed class GetCommand : Command
                 // 主名恰好长得像它的一个前缀,伸手去抓 path 是很自然的第一下。
                 // 撞词那半仍然成立,所以它只是别名:`docs --path` 是 --out 的别名,而
                 // get / inherit 这边一个文件路径选项都没有,同一条命令里不产生歧义。
+                // "only" 不在这里:sources sync 有一个真的 --only。
                 Aliases = ["filter", "grep", "field-contains", "path-filter", "field", "field-path",
-                           "only", "path"],
+                           "path"],
                 Placeholder = "<text>",
                 Help = "Only show field paths containing this text. Repeat it to widen the selection.",
                 Narrows = true,
@@ -2031,7 +2032,8 @@ public sealed class FieldsCommand : Command
                 // 于是「被截了」变成「没有」—— 筛选必须在工具里做。
                 Name = "path-contains",
                 Arity = Arity.Multi,
-                Aliases = ["filter", "grep", "field-contains", "path-filter", "contains", "match", "only"],
+                // "only" 不在这里:sources sync 有一个真的 --only(只同步这几棵树)。
+                Aliases = ["filter", "grep", "field-contains", "path-filter", "contains", "match"],
                 Placeholder = "<text>",
                 Help = "Only list paths containing this text. Repeat it to widen the selection.",
                 Narrows = true,

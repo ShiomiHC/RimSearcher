@@ -89,7 +89,8 @@ public sealed class CodeSearchCommand : Command
             new OptionSpec
             {
                 Name = "source",
-                Aliases = ["root", "tree", "scope"],
+                // "scope" 不在这里 —— 见 CommandBase.Scope 的别名注释。
+                Aliases = ["root", "tree"],
                 Placeholder = "<name>",
                 Help = "Which decompiled source tree to search. Omit to search them all.",
                 Narrows = true,
