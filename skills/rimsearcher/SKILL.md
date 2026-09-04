@@ -142,8 +142,14 @@ rather than assuming. The ones it has no way to state:
   depends on the command but is always present when produced, empty array and all. **A
   missing key means you asked the wrong key, never an empty result.** Key map:
   usage-notes; `<command> --help` is authoritative.
+- **Anything read by a program takes `--json`.** The text tables are laid out for a human
+  reader: columns are padded to width, and a column whose value repeats in every row is
+  lifted out into a `Same in every row, not repeated below:` line and then **missing from
+  the rows**. Splitting those rows on whitespace yields a different number of fields
+  depending on the data, and the lifted column reads as absent rather than constant — both
+  failures produce plausible values rather than an error.
 - **The same key name is not the same row shape.** Every command's key holds flat rows
-  except two: `get`'s `defs` is one nested object per def (`{def, fields, translations?}`)
+  except two: `get`'s `defs` is one nested object per def (`{def, fields, translations}`)
   and `inherit`'s `nodes` is one per XML node (`{node, ancestors, children?, witnesses?}`).
   So `search` and `get` both answer under `defs` while nesting differently, and a def's
   field table is `defs[i].fields`, never a `fields` key at the root. Take the shape from the
@@ -161,6 +167,14 @@ rather than assuming. The ones it has no way to state:
   `Languages/*/Keyed` (→ `keyed <phrase>`); a zero result names which one you hit — the
   layer the name actually sits on, query already filled in, instead of reciting that list
   back at you.
+- **A def's translations answer to the same field paths as its fields.** The game's own
+  injection key for a list element is `stages.0.label` or `stages.observed_corpse.label` —
+  neither the shape the field table prints. On a snapshot exported by 0.8.0 or later the
+  translation rows carry the field-table shape (`stages[0].label`) so one
+  `get <defName> --path <path>` selects the same place in both tables, and the game's key
+  sits in the row's `key` cell for when you need to write a language file. Older snapshots
+  store the key as written and say so; there that same `get` matches the field but no
+  translation, which reads exactly like *this field has no translation*.
 - **`keyed` is the only road to screen text** — captions, alerts, tooltips are keyed
   translations belonging to no def, unreachable by `search`/`get`/`where`. Both directions:
   key → displayed text, phrase in either language → keys. Only `in effect` rows are what
