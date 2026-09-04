@@ -624,7 +624,7 @@ public static class Fixture
         w.WriteLine(new JsonLine()
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindMeta)
             .Int(IntermediateFormat.KeyFormatVersion, IntermediateFormat.FormatVersion)
-            .Str(IntermediateFormat.KeyExporterVersion, "0.9.0")
+            .Str(IntermediateFormat.KeyExporterVersion, "0.10.0")
             .Str(IntermediateFormat.KeyExportedAtUtc, "2026-09-05T00:00:00.0000000Z")
             .Str(IntermediateFormat.KeyGameVersion, GameVersion)
             .Str(IntermediateFormat.KeyLanguage, Language)
@@ -692,7 +692,9 @@ public static class Fixture
         // 956 条是这么冤枉的。
         InjKey("descriptionRules.rulesStrings", "descriptionRules.rulesStrings");
 
-        void Inj(string key, string translated, string original)
+        // injected 是**游戏自己的判决**,与名册那条推算路各走各的 —— 所以这里也各给各的值,
+        // 让「两条路吵起来」这件事在 fixture 里造得出来。
+        void Inj(string key, string translated, string original, bool injected)
         {
             w.WriteLine(new JsonLine()
                 .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindDefInjection)
@@ -701,19 +703,21 @@ public static class Fixture
                 .Str(IntermediateFormat.KeyPath, key)
                 .Str(IntermediateFormat.KeyTranslated, translated)
                 .Str(IntermediateFormat.KeyOriginal, original)
+                .Bool(IntermediateFormat.KeyInjected, injected)
+                .Str(IntermediateFormat.KeySourceFile, "DefInjected/HediffDef/Hediffs.xml")
                 .ToString());
             records++;
         }
 
         // 名册上有、允许译:把手式与下标式各一条。
-        Inj("stages.observed_corpse.label", "看到了尸体", "observed corpse");
-        Inj("label", "看到尸体", "observed laying corpse");
+        Inj("stages.observed_corpse.label", "看到了尸体", "observed corpse", injected: true);
+        Inj("label", "看到尸体", "observed laying corpse", injected: true);
         // 名册上有、整表注入 —— 字段表里没有这条裸路径,所以它是那 956 条的守门人。
-        Inj("descriptionRules.rulesStrings", "一条规则", "a rule");
+        Inj("descriptionRules.rulesStrings", "一条规则", "a rule", injected: true);
         // 名册上没有:把手过期,游戏那边同样注入不上。
-        Inj("stages.corpse_seen.label", "旧把手写的译文", "");
+        Inj("stages.corpse_seen.label", "旧把手写的译文", "", injected: false);
         // 名册上有、但标着不许译:键没写错,改键也没用。
-        Inj("stages.0.minSeverity", "不许译的那一格", "0");
+        Inj("stages.0.minSeverity", "不许译的那一格", "0", injected: false);
 
         w.WriteLine(new JsonLine()
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindEnd)

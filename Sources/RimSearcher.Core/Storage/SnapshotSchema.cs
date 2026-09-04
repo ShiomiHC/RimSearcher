@@ -70,6 +70,14 @@ public static class SnapshotSchema
     public const string MetaKeyEconomyState = "economy_state";
 
     /// <summary>
+    /// 导出时每一层各花了多少毫秒,原样存尾行给的那个 JSON 对象(导出器 0.11.0 起)。
+    ///
+    /// **缺席是一态**:这份快照建于计时之前,不是「零毫秒」。存进库里而不只是印一次,
+    /// 是因为「上一代慢在哪」要能事后翻得出来 —— 重导之后那次运行的输出就没了。
+    /// </summary>
+    public const string MetaKeyExportTimings = "export_timings_ms";
+
+    /// <summary>
     /// <c>unavailable</c> 时点名缺了什么(vanilla 的哪个签名)。原样端给用户 ——
     /// 这一层不回退到自写实现,所以这句话是唯一的下一步。
     /// </summary>
@@ -132,6 +140,10 @@ public static class SnapshotSchema
             path       TEXT NOT NULL,
             key        TEXT,
             key_state  TEXT,
+            -- 游戏自己的判决:这条 defInjection 真注进去了吗。NULL = 没这一位
+            -- (导出器早于 0.10.0,或这一行是从磁盘语言文件收割来的 —— 那些行
+            -- 游戏根本没读过)。与 key_state 两条独立的路:这一列是实测,那一列是推算。
+            applied    INTEGER,
             translated TEXT,
             original   TEXT,
             language   TEXT,

@@ -180,6 +180,17 @@ public class TranslationLayerTests
             .Bool(IntermediateFormat.KeyFullListTranslationAllowed, false)
             .ToString();
 
+    /// <summary>运行时 defInjection 一行。**故意不带 injected** —— 0.10.0 之前那一档就是这样。</summary>
+    private static string DefInjLine(string defName, string path, string translated) =>
+        new JsonLine()
+            .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindDefInjection)
+            .Str(IntermediateFormat.KeyDefType, "HediffDef")
+            .Str(IntermediateFormat.KeyDefName, defName)
+            .Str(IntermediateFormat.KeyPath, path)
+            .Str(IntermediateFormat.KeyTranslated, translated)
+            .Str(IntermediateFormat.KeyOriginal, "")
+            .ToString();
+
     /// <summary>
     /// 注入键层进得了库,两个键串各占一列。
     ///
@@ -274,6 +285,43 @@ public class TranslationLayerTests
 
         // 名册上有、但不许译:键没写错,与「键写错了」出路不同。
         Assert.Equal(InjectionKey.State.Refused, rows["stages.0.minSeverity"].KeyState);
+    }
+
+    /// <summary>
+    /// 「在语言包里」与「生效了」是两件事,origin 那一格分得开。
+    ///
+    /// 此前导出侧把包里每一条 defInjection 都当生效,一律印 <c>in effect</c> —— 而键配不上
+    /// 槽位、或槽位不许译的那些,游戏照旧把记录留在包里、只是不注。baseline 上光前一种
+    /// 就有 1348 行。判据是游戏自己的 <c>DefInjection.injected</c>,不是本项目推的:
+    /// 名册那条推算路只对得起收割来的行(那些行游戏根本没读过)。
+    /// </summary>
+    [Fact]
+    public void 在包里与生效了在origin那格分得开()
+    {
+        using var db = SnapshotDb.Open(Fixture.InjKeyDb);
+        var rows = db.Translations("ObservedLayingCorpse").ToDictionary(t => t.Key!, t => t);
+
+        Assert.True(rows["label"].Applied);
+        Assert.False(rows["stages.corpse_seen.label"].Applied);
+        Assert.False(rows["stages.0.minSeverity"].Applied);
+
+        // 运行时那一档此前 source_file 恒空 —— 游戏其实一直知道译文出自哪个文件。
+        Assert.Equal("DefInjected/HediffDef/Hediffs.xml", rows["label"].SourceFile);
+    }
+
+    /// <summary>
+    /// 导出器早于 0.10.0 时这一位是 <c>null</c>,不是 <c>false</c>,也不是 <c>true</c>。
+    ///
+    /// 补成 true 等于替游戏担保一件没测过的事;补成 false 等于宣布这条译文没生效。
+    /// 两个方向都会让一句没量过的话长得像量过。
+    /// </summary>
+    [Fact]
+    public void 没带判决的老快照那一位是空()
+    {
+        using var db = ImportLines("noverdict", "0.9.0",
+            InjKeyLine("ObservedLayingCorpse", "label", "label"),
+            DefInjLine("ObservedLayingCorpse", "label", "看到尸体"));
+        Assert.Null(db.Translations("ObservedLayingCorpse").Single().Applied);
     }
 
     /// <summary>

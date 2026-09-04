@@ -133,6 +133,35 @@ public sealed class SnapshotStatusCommand : Command
                 : "not recorded (exported before this was measured)"),
         ]);
 
+        // 导出为什么慢 —— 分层耗时。此前导出器只上报两个阶段(给卡死检测用的),不记耗时,
+        // 于是「哪一层慢」只能按行数猜。缺这一格就整张表不摆:补一张全零的表等于宣布
+        // 「每一层都不花时间」,而真相是那次导出根本没量。
+        if (db.ExportTimings is { Count: > 0 } timings)
+        {
+            var total = timings.TryGetValue(IntermediateFormat.TimingKeys.Total, out var tt) && tt > 0 ? tt : 0;
+            ctx.Report.Table("export_timings", ["layer", "seconds", "share"],
+                timings.Where(kv => kv.Key != IntermediateFormat.TimingKeys.Total)
+                       .OrderByDescending(kv => kv.Value)
+                       .Concat(total > 0
+                           ? [new KeyValuePair<string, long>(IntermediateFormat.TimingKeys.Total, total)]
+                           : [])
+                       .Select(kv => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+                       {
+                           ["layer"] = kv.Key,
+                           ["seconds"] = (kv.Value / 1000.0).ToString("0.0"),
+                           // total 那一行的份额留空:它与自己比恒是 100%,印出来只占一格。
+                           ["share"] = total > 0 && kv.Key != IntermediateFormat.TimingKeys.Total
+                               ? $"{100.0 * kv.Value / total:0}%" : null,
+                       }).ToList());
+
+            // 这张表只盖导出器自己写盘那一段。游戏从启动到把控制权交给导出器(读 XML、
+            // 解析 def、跑 patch)不在里面,而那一段常常比它长。
+            ctx.Report.Notice(NoticeKind.Boundary,
+                "These are the exporter's own layers only. The game's startup before it runs — reading XML, " +
+                "resolving defs, applying patches — is not in this table and is often the larger half; " +
+                "compare 'total' with how long 'rimsearcher export' actually took.");
+        }
+
         var truncated = db.TruncatedDefCount();
         if (truncated > 0)
             ctx.Report.Notice(NoticeKind.Boundary,

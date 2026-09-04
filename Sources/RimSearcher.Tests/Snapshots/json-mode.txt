@@ -62,7 +62,7 @@ exit 0
           "translated": "护盾腰带",
           "original": "shield belt",
           "language": "ChineseSimplified",
-          "origin": "in effect"
+          "origin": "in pack"
         }
       ]
     }

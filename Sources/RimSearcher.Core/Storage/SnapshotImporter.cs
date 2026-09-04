@@ -67,6 +67,8 @@ public sealed class SnapshotImporter
         // 进中间格式之前。四态在 meta 表里必须分得开,见 SnapshotSchema.MetaKeyEconomyState。
         string? economyState = null;
         string? economyError = null;
+        // 尾行的分层耗时。null = 那次导出早于 0.11.0,不是「零毫秒」。
+        string? exportTimings = null;
         var sawEnd = false;
         // 注入键行边读边落地,靠的是 def 行全在它们前面。见 KindDef 那一支的判据。
         var sawInjKey = false;
@@ -82,8 +84,8 @@ public sealed class SnapshotImporter
             using var insertFv = Prepare(db, "INSERT INTO field_values (def_id, path, leaf, value, is_default) VALUES ($id,$p,$lf,$v,$def)");
             using var insertFts = Prepare(db, "INSERT INTO defs_fts (rowid, def_name, label, description, translated) VALUES ($id,$n,$l,$d,$tr)");
             using var insertTr = Prepare(db, """
-                INSERT INTO translations (def_id, def_type, def_name, path, key, key_state, translated, original, language, source_mod, source_file, source_file_count, origin)
-                VALUES ($id,$t,$n,$p,$key,$state,$tr,$o,$lang,$sm,$sf,$sfc,$origin)
+                INSERT INTO translations (def_id, def_type, def_name, path, key, key_state, applied, translated, original, language, source_mod, source_file, source_file_count, origin)
+                VALUES ($id,$t,$n,$p,$key,$state,$applied,$tr,$o,$lang,$sm,$sf,$sfc,$origin)
                 """);
             using var insertIk = Prepare(db, """
                 INSERT INTO injection_keys (def_id, def_type, def_name, path, suggested_path,
@@ -137,7 +139,8 @@ public sealed class SnapshotImporter
             // 所以是 name → 列表:取单个 id 会让归属取决于导出顺序。
             var idsByName = new Dictionary<string, List<(long Id, string? Type)>>(StringComparer.Ordinal);
             var ftsExtra = new Dictionary<long, List<string>>();
-            var pendingInjections = new List<(string defName, string defType, string path, string translated, string original)>();
+            var pendingInjections = new List<(string defName, string defType, string path, string translated,
+                                             string original, bool? applied, string? sourceFile)>();
             long nextId = 1;
             // keyed 自己的 id 序列。显式维护而不是问 last_insert_rowid():FTS 那一行要用同一个
             // rowid,而两条 INSERT 之间夹着别的语句。
@@ -165,6 +168,8 @@ public sealed class SnapshotImporter
                     declaredRecords = root.TryGetProperty(IntermediateFormat.KeyRecords, out var r) ? r.GetInt64() : null;
                     economyState = Str(root, IntermediateFormat.KeyEconomyState);
                     economyError = Str(root, IntermediateFormat.KeyEconomyError);
+                    exportTimings = root.TryGetProperty(IntermediateFormat.KeyTimingsMs, out var tm)
+                        ? tm.GetRawText() : null;
                     continue;
                 }
 
@@ -470,7 +475,10 @@ public sealed class SnapshotImporter
                         Str(root, IntermediateFormat.KeyDefType) ?? "",
                         Str(root, IntermediateFormat.KeyPath) ?? "",
                         Str(root, IntermediateFormat.KeyTranslated) ?? "",
-                        Str(root, IntermediateFormat.KeyOriginal) ?? ""));
+                        Str(root, IntermediateFormat.KeyOriginal) ?? "",
+                        root.TryGetProperty(IntermediateFormat.KeyInjected, out var injEl)
+                            ? injEl.GetBoolean() : (bool?)null,
+                        Str(root, IntermediateFormat.KeySourceFile)));
                 }
             }
 
@@ -547,11 +555,14 @@ public sealed class SnapshotImporter
                 Bind(insertTr, "$p", slot.Path);
                 Bind(insertTr, "$key", slot.Key);
                 Bind(insertTr, "$state", slot.State);
+                // 游戏自己的判决,原样落下。没这一位的老导出写 null —— 不许补成 1,
+                // 那等于替游戏担保一件没测过的事。
+                Bind(insertTr, "$applied", inj.applied is { } ap ? (ap ? 1 : 0) : null);
                 Bind(insertTr, "$tr", inj.translated);
                 Bind(insertTr, "$o", inj.original);
                 Bind(insertTr, "$lang", meta.Language);
                 Bind(insertTr, "$sm", null);
-                Bind(insertTr, "$sf", null);
+                Bind(insertTr, "$sf", inj.sourceFile is { Length: > 0 } sfv ? sfv : null);
                 Bind(insertTr, "$sfc", null);
                 Bind(insertTr, "$origin", TranslationOrigin.Runtime);
                 insertTr.ExecuteNonQuery();
@@ -626,6 +637,9 @@ public sealed class SnapshotImporter
                     Put(SnapshotSchema.MetaKeyEconomyState, economyState);
                     if (economyError is not null) Put(SnapshotSchema.MetaKeyEconomyError, economyError);
                 }
+
+                // 同一道缝:没这个字段就一个字也不写。
+                if (exportTimings is not null) Put(SnapshotSchema.MetaKeyExportTimings, exportTimings);
 
                 // 扫盘发生在游戏已经退出之后,所以这一份指纹严格说是「导出结束那一刻」的磁盘,
                 // 不是「游戏读 XML 那一刻」的。中间这几十秒里有人改了文件的话,这一层会把它
@@ -817,6 +831,8 @@ public sealed class SnapshotImporter
                     Bind(insertTr, "$p", slot.Path);
                     Bind(insertTr, "$key", slot.Key);
                     Bind(insertTr, "$state", slot.State);
+                    // 收割来的行游戏根本没读过,所以「注没注进去」这一问对它们不存在。
+                    Bind(insertTr, "$applied", null);
                     Bind(insertTr, "$tr", text);
                     Bind(insertTr, "$o", null);
                     Bind(insertTr, "$lang", meta.Language);

@@ -68,7 +68,7 @@ public readonly record struct PathQuery(string Text, bool Exact = false)
 public sealed record TranslationRow(string DefName, string? DefType, string Path, string? Translated,
                                    string? Original, string? Language, string? SourceMod, string Origin,
                                    string? SourceFile = null, int? SourceFileCount = null,
-                                   string? Key = null, string? KeyState = null);
+                                   string? Key = null, string? KeyState = null, bool? Applied = null);
 
 /// <summary>
 /// 一个「可以被注入译文」的槽位。<paramref name="Path"/> 是下标式键串(<c>stages.0.label</c>),
@@ -168,11 +168,18 @@ public sealed class SnapshotDb : IDisposable
     /// <summary><see cref="EconomyState"/> 为 unavailable 时点名缺了什么,原样端出。</summary>
     public string? EconomyError { get; }
 
+    /// <summary>
+    /// 导出时每一层各花了多少毫秒,层名 → 毫秒。<c>null</c> = 那次导出早于计时
+    /// (0.11.0),**不是「零毫秒」**。层名见 <see cref="IntermediateFormat.TimingKeys"/>。
+    /// </summary>
+    public IReadOnlyDictionary<string, long>? ExportTimings { get; }
+
     private SnapshotDb(SqliteConnection db, string path, ExportMeta meta, IReadOnlyList<ModRef> mods,
-                       bool harvested, ContentScan? content, string? economyState, string? economyError)
+                       bool harvested, ContentScan? content, string? economyState, string? economyError,
+                       IReadOnlyDictionary<string, long>? exportTimings)
     {
         _db = db; Path = path; Meta = meta; Mods = mods; Harvested = harvested; Content = content;
-        EconomyState = economyState; EconomyError = economyError;
+        EconomyState = economyState; EconomyError = economyError; ExportTimings = exportTimings;
     }
 
     /// <summary>
@@ -251,7 +258,20 @@ public sealed class SnapshotDb : IDisposable
         meta.TryGetValue(SnapshotSchema.MetaKeyEconomyState, out var econState);
         meta.TryGetValue(SnapshotSchema.MetaKeyEconomyError, out var econError);
 
-        return new SnapshotDb(db, path, exportMeta, mods, harvested, content, econState, econError);
+        // 同一道缝:没这一格就传 null,不合成一张全零的表。
+        IReadOnlyDictionary<string, long>? timings = null;
+        if (meta.TryGetValue(SnapshotSchema.MetaKeyExportTimings, out var tj))
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(tj);
+                var d = new Dictionary<string, long>(StringComparer.Ordinal);
+                foreach (var prop in doc.RootElement.EnumerateObject())
+                    if (prop.Value.TryGetInt64(out var ms)) d[prop.Name] = ms;
+                timings = d;
+            }
+            catch (System.Text.Json.JsonException) { }
+
+        return new SnapshotDb(db, path, exportMeta, mods, harvested, content, econState, econError, timings);
     }
 
     public void Dispose() => _db.Dispose();
@@ -1342,7 +1362,7 @@ public sealed class SnapshotDb : IDisposable
         using var rd = Query(
             "SELECT def_name, def_type, path, translated, original, language, source_mod, origin" +
             (extra ? ", source_file, source_file_count" : "") +
-            (keyed ? ", key, key_state" : "") + " FROM translations " +
+            (keyed ? ", key, key_state, applied" : "") + " FROM translations " +
             "WHERE def_name = @n COLLATE NOCASE ORDER BY origin, path", p);
         while (rd.Read())
             rows.Add(new TranslationRow(rd.GetString(0),
@@ -1353,7 +1373,8 @@ public sealed class SnapshotDb : IDisposable
                 extra && !rd.IsDBNull(8) ? rd.GetString(8) : null,
                 extra && !rd.IsDBNull(9) ? rd.GetInt32(9) : null,
                 keyed && !rd.IsDBNull(extra ? 10 : 8) ? rd.GetString(extra ? 10 : 8) : null,
-                keyed && !rd.IsDBNull(extra ? 11 : 9) ? rd.GetString(extra ? 11 : 9) : null));
+                keyed && !rd.IsDBNull(extra ? 11 : 9) ? rd.GetString(extra ? 11 : 9) : null,
+                keyed && !rd.IsDBNull(extra ? 12 : 10) ? rd.GetInt32(extra ? 12 : 10) != 0 : null));
         return rows;
     }
 

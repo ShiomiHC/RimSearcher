@@ -28,7 +28,7 @@ Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_
   - The game also prices this thing. Its market value, cost to make and work amount are computed, not stored, so no field above holds them — 'rimsearcher economy Firefoam' is the only road to those numbers.
   - 2 translations.
 
-Same in every row, not repeated below: language=ChineseSimplified, origin=in effect.
+Same in every row, not repeated below: language=ChineseSimplified, origin=in pack.
 path         translated      original
 description  一团灭火泡沫。  A blob of firefoam.
 label        灭火泡沫        firefoam

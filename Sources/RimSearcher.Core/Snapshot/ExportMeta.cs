@@ -95,6 +95,14 @@ public sealed record ExportMeta(
     /// </summary>
     public bool IndexesInjectionKeys => AtLeast(ExporterVersion, 0, 9);
 
+    /// <summary>
+    /// 运行时译文行带着**游戏自己的判决**吗(导出器 0.10.0 起)。
+    ///
+    /// 语言包里有这条记录 ≠ 它生效了。没这一位时导出侧把包里每一条都当生效,
+    /// 而 baseline 上光键配不上槽位的就有 1348 行 —— 它们一律印成 origin=「in effect」。
+    /// </summary>
+    public bool RecordsInjectionApplied => AtLeast(ExporterVersion, 0, 10);
+
     private static bool AtLeast(string version, int major, int minor)
     {
         var parts = (version ?? "").Split('.');

@@ -952,7 +952,12 @@ public sealed class GetCommand : Command
     /// </summary>
     private static string OriginCell(TranslationRow t)
     {
-        if (t.Origin == TranslationOrigin.Runtime) return "in effect";
+        // 运行时那一档三个取值,不是两个。**「语言包里有这条记录」不等于「它生效了」** ——
+        // 键配不上槽位、或槽位不许译时,游戏照旧把记录留在包里,只是不注。游戏自己的判决
+        // 从 0.10.0 起随行带出;没带的老库落到 in pack,那一格说的是**我们只知道它在包里**,
+        // 不许写成 in effect(那是替游戏担保一件没测过的事)。
+        if (t.Origin == TranslationOrigin.Runtime)
+            return t.Applied switch { true => "in effect", false => "in pack, not applied", _ => "in pack" };
         var outside = t.Origin != TranslationOrigin.Harvested ? ", outside this snapshot" : "";
         var files = t.SourceFileCount is > 1 ? $", {t.SourceFileCount} files" : "";
         return $"file ({t.SourceMod}{outside}{files})";

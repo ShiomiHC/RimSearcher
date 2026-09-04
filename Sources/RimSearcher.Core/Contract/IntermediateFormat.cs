@@ -110,6 +110,51 @@ namespace RimSearcher.Contract
         public const string KeyTranslated = "translated";
         public const string KeyOriginal = "original";
 
+        /// <summary>
+        /// 这条 defInjection **真的注进去了吗**(<c>DefInjection.injected</c>,0.10.0 起)。
+        ///
+        /// 语言包里有这条记录 ≠ 它生效了:键配不上任何槽位、或槽位标着不许译时,游戏照旧
+        /// 把记录留在包里,只是不注。此前导出侧不看这一位,于是这些行与真生效的行一起
+        /// 印成 origin=「in effect」—— 而 baseline 上光「配不上槽位」就有 1348 行。
+        ///
+        /// 它是**游戏自己的判决**,与本项目按槽位名册算出来的 key_state 是两条独立的路:
+        /// 收割来的行没有这一位(那些行游戏根本没读),所以两者都要,不能相互顶替。
+        /// </summary>
+        public const string KeyInjected = "injected";
+
+        /// <summary>
+        /// 尾行:每一层各花了多少毫秒(<c>{"defs":12345,"type_fields":…}</c>,0.11.0 起)。
+        ///
+        /// 加它的成因是一次问不出口:`Docs/06` 那次实测是 23 个 mod、无头 26 秒,而现在
+        /// 7 个 mod 要十几分钟。慢了四十倍,可**哪一层慢在盘上没有产地** —— 导出器只上报
+        /// 两个阶段(mod-classes / exporting),那是给卡死检测用的,不记耗时。于是「按行数
+        /// 排量级」是当时能给的最好答案,而那是猜。
+        ///
+        /// 键名见 <see cref="TimingKeys"/>。缺这个字段 = 那次导出早于 0.11.0,不是「零毫秒」。
+        /// </summary>
+        public const string KeyTimingsMs = "timings_ms";
+
+        /// <summary>尾行 timings_ms 里的层名。写侧读侧共用,防手写漂移。</summary>
+        public static class TimingKeys
+        {
+            /// <summary>经济面抽取。它在开流**之前**整批攒好,所以是唯一不与写盘重叠的一段。</summary>
+            public const string Economy = "economy";
+            /// <summary>每个 def 一行的字段倾倒。</summary>
+            public const string Defs = "defs";
+            /// <summary>每个 def 类型一份的字段路径全集 —— 纯反射,与这个类型有几个 def 无关。</summary>
+            public const string TypeFields = "type_fields";
+            /// <summary>运行时 defInjection。</summary>
+            public const string Injections = "injections";
+            /// <summary>可注入槽位名册。</summary>
+            public const string InjKeys = "inj_keys";
+            /// <summary>Keyed 译文。</summary>
+            public const string Keyed = "keyed";
+            /// <summary>继承层(重读 XML)。</summary>
+            public const string XmlNodes = "xml_nodes";
+            /// <summary>整个 Export() —— 含上面全部,也含 gzip 与落盘。</summary>
+            public const string Total = "total";
+        }
+
         // Keyed 层(kind=keyed)。translated / original / source_mod 与上面那批共用。
         //
         // 与 definj 的形状差只有一处:**KeyedReplacement 不带 replacedString**,

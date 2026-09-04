@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
@@ -42,8 +43,12 @@ namespace RimSearcher.DataMod
         /// 0.9.0 起 injkey 是**槽位名册**而不是补充说明:一个可注入槽位一行,一个不漏。
         /// 0.8.0 那版只发「带信息」的行,于是「这个键在不在名册上」问不出来,导入侧拿字段表
         /// 当替身判,把 1348 条判成「配不上槽位」而其中 956 条是冤枉的(见 ForEachInjectionKeyLine)。
+        /// 0.10.0 起每条 defInjection 带 injected —— **游戏自己判它注没注进去**。此前包里有
+        /// 记录就当生效,而 baseline 上光键配不上槽位的就有 1348 行,全被印成「in effect」。
+        /// 同一行还带 source_file(译文出自哪个语言文件),运行时那一档此前这一格是空的。
+        /// 0.11.0 起尾行带 timings_ms:每一层各花了多少毫秒,导出为什么慢从此有产地。
         /// </summary>
-        public const string ExporterVersion = "0.9.0";
+        public const string ExporterVersion = "0.11.0";
 
         public static ExportLimits Limits = new ExportLimits();
 
@@ -63,6 +68,19 @@ namespace RimSearcher.DataMod
             if (File.Exists(temp)) File.Delete(temp);
 
             long records = 0;
+            // 每一层各自计时。加它的成因见 IntermediateFormat.KeyTimingsMs:哪一层慢在盘上
+            // 一直没有产地,于是「按行数排量级」是当时能给的最好答案 —— 而那是猜。
+            //
+            // 一个 Stopwatch 一层,分段 Start/Stop 累加:defs 与 type_fields 交错在同一个循环里
+            // (每个类型倾完自己的 def 再写一行字段全集),分不开两个循环就分不开两笔账。
+            var swTotal = Stopwatch.StartNew();
+            var swEconomy = new Stopwatch();
+            var swDefs = new Stopwatch();
+            var swTypeFields = new Stopwatch();
+            var swInjections = new Stopwatch();
+            var swInjKeys = new Stopwatch();
+            var swKeyed = new Stopwatch();
+            var swXmlNodes = new Stopwatch();
             var defs = 0;
             var injections = 0;
             var keyed = 0;
@@ -81,6 +99,7 @@ namespace RimSearcher.DataMod
 
             if (!skipEconomy)
             {
+                swEconomy.Start();
                 try
                 {
                     economyError = EconomyExporter.ResolveReflection();
@@ -103,6 +122,7 @@ namespace RimSearcher.DataMod
                                  + ". The rest of this snapshot is complete and usable.";
                 }
 
+                swEconomy.Stop();
                 if (economyState == IntermediateFormat.EconomyStateUnavailable)
                     Log.Warning("[RimSearcher] economy layer unavailable: " + economyError);
             }
@@ -126,6 +146,7 @@ namespace RimSearcher.DataMod
                         continue;
                     }
 
+                    swDefs.Start();
                     foreach (var def in all)
                     {
                         if (def == null) continue;
@@ -133,43 +154,54 @@ namespace RimSearcher.DataMod
                         records++;
                         defs++;
                     }
+                    swDefs.Stop();
 
                     // 每个 def 类型一份字段全集,与值无关 —— 不要每个 def 存一遍。
+                    swTypeFields.Start();
                     writer.WriteLine(BuildTypeFieldsLine(defType));
                     records++;
+                    swTypeFields.Stop();
                 }
 
+                swInjections.Start();
                 foreach (var line in BuildInjectionLines())
                 {
                     writer.WriteLine(line);
                     records++;
                     injections++;
                 }
+                swInjections.Stop();
 
                 // 注入键层紧跟在 definj 后面 —— 两者的行得互相对得上,
                 // 而对得上的前提是同一次导出、同一套 def 对象。
+                swInjKeys.Start();
                 ForEachInjectionKeyLine(line =>
                 {
                     writer.WriteLine(line);
                     records++;
                     injKeys++;
                 });
+                swInjKeys.Stop();
 
+                swKeyed.Start();
                 foreach (var line in BuildKeyedLines())
                 {
                     writer.WriteLine(line);
                     records++;
                     keyed++;
                 }
+                swKeyed.Stop();
 
                 // 继承层从 XML 原文再读一遍:到这个时点「谁继承谁」在内存里已经被
                 // XmlInheritance.Clear() 抹掉了(详见 XmlNodeExporter)。
+                swXmlNodes.Start();
                 foreach (var line in XmlNodeExporter.BuildLines())
                 {
                     writer.WriteLine(line);
                     records++;
                     xmlNodes++;
                 }
+                swXmlNodes.Stop();
 
                 var economy = 0;
                 if (economyLines != null)
@@ -199,6 +231,17 @@ namespace RimSearcher.DataMod
                     .Int(IntermediateFormat.KeyEconomyRows, economy)
                     .Str(IntermediateFormat.KeyEconomyState, economyState);
                 if (economyError != null) end.Str(IntermediateFormat.KeyEconomyError, economyError);
+                end.Raw(IntermediateFormat.KeyTimingsMs, new JsonLine()
+                    .Int(IntermediateFormat.TimingKeys.Economy, swEconomy.ElapsedMilliseconds)
+                    .Int(IntermediateFormat.TimingKeys.Defs, swDefs.ElapsedMilliseconds)
+                    .Int(IntermediateFormat.TimingKeys.TypeFields, swTypeFields.ElapsedMilliseconds)
+                    .Int(IntermediateFormat.TimingKeys.Injections, swInjections.ElapsedMilliseconds)
+                    .Int(IntermediateFormat.TimingKeys.InjKeys, swInjKeys.ElapsedMilliseconds)
+                    .Int(IntermediateFormat.TimingKeys.Keyed, swKeyed.ElapsedMilliseconds)
+                    .Int(IntermediateFormat.TimingKeys.XmlNodes, swXmlNodes.ElapsedMilliseconds)
+                    // total 在写尾行之前读,所以它差着最后这一行与 gzip 收尾的那点时间。
+                    .Int(IntermediateFormat.TimingKeys.Total, swTotal.ElapsedMilliseconds)
+                    .ToString());
                 writer.WriteLine(end.ToString());
 
                 writer.Flush();
@@ -610,6 +653,9 @@ namespace RimSearcher.DataMod
                         .Str(IntermediateFormat.KeyPath, path.Substring(dot + 1))
                         .Str(IntermediateFormat.KeyTranslated, translated)
                         .Str(IntermediateFormat.KeyOriginal, original ?? "")
+                        // 游戏自己的判决。包里有这条记录 ≠ 它生效了 —— 见 KeyInjected。
+                        .Bool(IntermediateFormat.KeyInjected, inj.injected)
+                        .Str(IntermediateFormat.KeySourceFile, inj.fileSource ?? "")
                         .ToString();
                 }
             }

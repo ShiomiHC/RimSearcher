@@ -19,13 +19,13 @@ descriptionRules.rulesStrings[0]  a rule
 No value above with 'code_default'=no is one that most of the 1 HediffDefs in this snapshot also carry.
 5 translations.
 
-Same in every row, not repeated below: language=ChineseSimplified, origin=in effect.
-path                           key                           translated      original
-descriptionRules.rulesStrings                                一条规则        a rule
-label                                                        看到尸体        observed laying corpse
-stages.corpse_seen.label                                     旧把手写的译文
-stages[0].label                stages.observed_corpse.label  看到了尸体      observed corpse
-stages[0].minSeverity          stages.0.minSeverity          不许译的那一格  0
+Same in every row, not repeated below: language=ChineseSimplified.
+path                           key                           translated      original                origin
+descriptionRules.rulesStrings                                一条规则        a rule                  in effect
+label                                                        看到尸体        observed laying corpse  in effect
+stages.corpse_seen.label                                     旧把手写的译文                          in pack, not applied
+stages[0].label                stages.observed_corpse.label  看到了尸体      observed corpse         in effect
+stages[0].minSeverity          stages.0.minSeverity          不许译的那一格  0                       in pack, not applied
 1 row above has a key that is on no injectable slot of this def, usually a handle taken from a label that has since been edited: the game does not apply that translation either. Its 'path' cell is that key rewritten, so it lines up with nothing in the field table above.
 1 row above names a real slot that the game marks as not translatable, so the translation sits in the file and never applies. The key is not the problem; nothing written under it would apply either.
 
