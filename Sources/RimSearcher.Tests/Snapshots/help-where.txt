@@ -12,7 +12,7 @@ Arguments:
   <value>      The value to look for. '--value' spells out this same argument, so give it one way or the other. Omit it to list every def that has the field at all. (optional)
 
 Options:
-  -n, --limit <n>       How many matches to return, at most. Left out, every one is returned — there is no cap to lift. Default: every one.
+  -n, --limit <n>       How many matches to return, at most. Left out, every one is returned. Default: every one.
                         Also accepted: --max-results, --count, --top, --rows, --num, --head.
       --offset <n>      Skip this many matches before listing. The total is always reported, so you can tell when you have reached the end. Default: 0.
                         Also accepted: --skip, --start, --page-from.

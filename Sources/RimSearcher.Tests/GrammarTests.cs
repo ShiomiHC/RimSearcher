@@ -1638,6 +1638,10 @@ public class GrammarTests
         // 里那句还无条件写着「读磁盘上补丁前的 XML」—— 同一份 --help 上下两段自相矛盾,
         // 而上面那档闸盯的是 code_default 的口径,不是这一件,所以它一路绿着。
         // 声明层不按快照分档(help 不知道快照),它的同形形态是**两档都在场**。
+        //
+        // 2026-09-05:两档此前在同一份 --help 上讲了两遍(Remarks 一遍、--defaults 一遍)。
+        // 解释收进 Remarks 一处,--defaults 只点这两个标签的名。闸盯的仍是整份 --help ——
+        // 「两档都在场且没有 pre-patch 的化石断言」不变,变的只是它由哪一段兑现。
         {
             Assert.DoesNotContain(FossilPrePatchOnly, help, StringComparison.Ordinal);
             // 两档各按输出里真印的那个标签点名,不按导出器版本号 —— 读者手上没有版本号
@@ -3692,7 +3696,10 @@ public class GrammarTests
     public void 证人表要说破全都带着并不等于这一层写的()
     {
         var (text, _, _) = Fixture.Run("inherit", "Bullet_Revolver", "--path-contains", "thingClass");
-        Assert.Contains("The converse does not hold", text, StringComparison.Ordinal);
+        // 逆命题那半句 2026-09-05 从自己的一条 Boundary 并进了上一条(外部回读:与前一句
+        // 说的是同一件事,分两条只是把同一个否定说两遍)。守的事没变 —— 表里必须自己
+        // 说破「追平不能反推」和「各写各的一份数上同形」,只是句子换了承载者。
+        Assert.Contains("reaching other_defs does not point back at it", text, StringComparison.Ordinal);
         Assert.Contains("every descendant writing the field separately", text, StringComparison.Ordinal);
     }
 

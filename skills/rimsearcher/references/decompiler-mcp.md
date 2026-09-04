@@ -58,7 +58,7 @@ That covers most of what you would otherwise reach for a text search to do.
 - `plan_chunking` + `get_source_slice` — for something too large to read whole.
 - `get_member_signature`, `get_overloads`, `get_xml_doc`, `get_ast_outline`.
 
-Two things the outline drops, both measured on v1.3.7:
+Two things the outline drops:
 
 - **`list_members` signatures erase generic arguments.** `IEnumerable<IGrouping<BodyPartRecord,
   Hediff>>` shows as `IEnumerable`. When the type arguments are the answer, read the member.

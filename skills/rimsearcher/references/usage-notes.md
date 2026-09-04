@@ -45,7 +45,7 @@ route, the resolved defs and fields, and how many XML lines were indexed.
 everything compared matches: size and timestamp are not file contents, so a re-download of
 identical bytes reads as a change, and an edit that preserves both is the one case it misses.
 `Languages/`, textures and audio are outside it entirely, as is any directory the installed
-game version does not load (a mod's `1.5/` folder while you are on 1.6) — that last exclusion
+game version does not load — that last exclusion
 the output never mentions. A snapshot without the fingerprint shows
 `xml_fingerprint` as `not recorded (exported before this was measured)`, and — when that
 snapshot matches the game on everything else compared — says in words that the line reading
@@ -142,7 +142,7 @@ snapshot — `keyed` says that in those words instead of reporting your key abse
 `--empty-translation` needs no query — on its own it filters the whole layer, so
 `rimsearcher keyed --empty-translation` is "list every untranslated string"; given a
 query it narrows that result set instead. Leaving the query out *without* the switch
-enumerates the layer itself, which on a full snapshot is thousands of rows. When nothing is a placeholder the
+enumerates the layer itself. When nothing is a placeholder the
 answer is a coverage statement over the whole layer; the exit code is `1` because no rows
 were printed — the same zero-row contract as any other listing.
 
@@ -201,8 +201,7 @@ different defs.
 **What the `where Class` dimension covers.** The runtime type of a nested `Class="…"` object
 is queryable under the field name `Class`, in two parts — list elements (`<li Class="…">`)
 and single class-picking fields (`GenStepDef.genStep`, `ThinkTreeDef.thinkRoot`). A zero
-result ends with a line stating how much of that the snapshot has: on a current snapshot, that
-both are indexed under `<path>.Class`; on an older one, which of the two is missing. Where
+result ends with a line stating how much of that the snapshot has. Where
 single class-picking fields are missing, `where Class` and `list --own-class` are both
 structurally blind to them and only `code-search` can answer; re-export to close the gap.
 
@@ -258,7 +257,7 @@ behaviour on a nested `Class="…"` field instead — every `GenStepDef` in a sn
 No command holds back rows on its own: leave `--limit` out and the answer is the whole result
 set, `read` included, where `--lines`, `--outline` or `--member` print in full however long they
 run and a bare read gives the entire file. `--limit` takes a positive number and nothing else —
-`all`, `none` and `0` were once spellings of "no cap" and are now usage errors, because leaving
+`all`, `none` and `0` are usage errors, because leaving
 the switch out already says that. Paging starts when you pass
 `--limit <n>`, and a paged answer states the three things a pipe would have destroyed: how
 many rows this page holds, how many exist in total, and the

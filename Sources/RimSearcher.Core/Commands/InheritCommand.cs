@@ -34,8 +34,9 @@ public sealed class InheritCommand : Command
             // ③ 只把 unanswered 给了无 Name= 的节点 —— 那正好暗示有 Name= 的是 answered,
             // 而那是受测者驳回新句时踩的那级台阶。
             "What is shown is the XML before PatchOperations are applied. patch_ops counts xpaths that name the " +
-            "node with @Name=; patch_ops_defname and patch_ops_label count xpaths that name it by defName= and by " +
-            "label=. An xpath that reaches a node by thingClass or by a wildcard is counted nowhere in this layer, " +
+            "node with @Name=; patch_ops_defname and patch_ops_label count xpaths that name it by defName= and " +
+            "by label=, and a snapshot exported before those were measured has neither column. " +
+            "An xpath that reaches a node by thingClass or by a wildcard is counted nowhere in this layer, " +
             "so a 0 is not evidence that the node reached the game unpatched. A node without a Name= reports " +
             "patch_ops as 'n/a' rather than 0 because that count was never taken; the defName and label counts are " +
             "still taken. " +
@@ -178,7 +179,7 @@ public sealed class InheritCommand : Command
             var oldLayer = countedExtra
                 ? ""
                 : $" This snapshot (exporter {ctx.Db.Meta.ExporterVersion}) only counted @Name=; " +
-                  "a newer export also counts xpaths by defName= and by label=.";
+                  "re-export to also count xpaths by defName= and by label=.";
             if (!named)
                 ctx.Report.Notice(NoticeKind.Boundary,
                     countedExtra
@@ -452,19 +453,18 @@ public sealed class InheritCommand : Command
             $"Each row counts the other defs descending from that layer: how many carry a field path containing " +
             $"'{pathFilter}'" + (reference is null ? "" : ", and how many of those read the same value") +
             ". A layer that declares a field passes it to every descendant, so a layer whose with_path falls " +
-            "short of other_defs is not the one declaring this field. The snapshot stores no 'declared here' " +
+            "short of other_defs is not the one declaring this field; reaching other_defs does not point back " +
+            "at it, because every descendant writing the field separately counts the same. " +
+            "The snapshot stores no 'declared here' " +
             "fact — the game resolves inheritance while loading and then discards it — so these counts are what " +
             "the answer has to be read off.");
 
-        // 逆命题不成立,而这张表长得很像在给逆命题作证:「61 of 61」与「每个后代各写各的一份」
-        // 在数上无法分辨。
+        // 逆命题那半句已经并进上一条(「追平不能反推」),这里只剩「靠哪一列分」。
         ctx.Report.Notice(NoticeKind.Boundary,
-            "The converse does not hold: with_path reaching other_defs is equally consistent with every " +
-            "descendant writing the field separately" +
             (reference is null
-                ? ", which no count here tells apart. No single value could be fixed to compare against, so " +
-                  "the same_value column — the one that does tell them apart — is not in this table."
-                : ". The same_value column is what tells the two apart — one shared value points at the layer, " +
+                ? "No single value could be fixed to compare against, so " +
+                  "the same_value column — the one that does tell those two apart — is not in this table."
+                : "The same_value column is what tells the two apart — one shared value points at the layer, " +
                   "a spread of values points at each def writing its own." +
                   (byMode
                       ? " It is the most common value under this node, not one the node declares: the node " +

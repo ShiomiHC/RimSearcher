@@ -85,8 +85,7 @@ public sealed class EconomyCommand : Command
             "that same row — and when it does print, it is the counterfactual price, not the one in effect. " +
             "Read any other empty cell as 'the game cannot work this out', not as zero: a profit needs a " +
             "recipeMaker, and a profit rate needs a positive work amount.\n\n" +
-            "A snapshot need not hold this layer at all: it can predate the layer, have been exported with " +
-            "'--no-economy', or have failed to measure it. This command says which of those happened rather " +
+            "A snapshot need not hold this layer at all. This command then says why, rather " +
             "than reporting that the game prices nothing, and the answer is never a number. There is no " +
             "second road to these numbers on such a snapshot — a field called marketValue is still indexed, " +
             "but that is the base value written in XML, not the price the game computes from it, and " +

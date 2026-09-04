@@ -280,8 +280,8 @@ public sealed class GetCommand : Command
             "from a sibling value on the same list entry, including two-level tags (things.AncientAmmoStack.chance), " +
             "and using XML lines written by this def or by an ancestor. After that join, here/parent means the " +
             "line is there, and no means the XML read here does not write it — determined, not a path-shape " +
-            "maybe, and it holds even when the list entry itself is present. The output says which XML it " +
-            "read. 'read after every patch ran' is the merged XML after every PatchOperation, and a line " +
+            "maybe. The output says which XML it " +
+            "read. 'read after every patch ran' is the merged XML after every PatchOperation ran, and a line " +
             "another mod's patch put there reads as here+patch or parent+patch: Replace still finds that node, " +
             "but your patch now depends on that mod staying loaded. 'read before patches ran' is the XML as " +
             "written on disk, so there a patched-in node reads as no instead, and 'rimsearcher inherit " +
@@ -345,11 +345,9 @@ public sealed class GetCommand : Command
                      + "carries. They are left out by default because they are the ones most often read as something "
                      + "an author chose. The 'xml' column on those rows says whether this def's own XML wrote the "
                      + "path (here), only an ancestor did (parent), neither (no), or that the row cannot be "
-                     + "pinned to a line inside a container the XML did write (under <container>). no is "
-                     + "determined, not a path-shape maybe. The output says which XML it read: 'read after every "
-                     + "patch ran' is the merged XML after every PatchOperation ran, so a line another mod's patch "
-                     + "added reads as here+patch or parent+patch rather than no; 'read before patches ran' is the "
-                     + "XML as written on disk, and there that same line does read as no. "
+                     + "pinned to a line inside a container the XML did write (under <container>). The table "
+                     + "says beside it which XML that was: 'read after every patch ran' or "
+                     + "'read before patches ran'. "
                      + "A yes with xml=here is an explicit write of "
                      + "the default. Without the xml column, a def whose XML "
                      + "writes that same value and a def that never mentions the field look the same. "
@@ -664,11 +662,9 @@ public sealed class GetCommand : Command
                         : "read before patches ran";
                     var xmlLayer = ctx.Db.Meta.IndexesXmlWritten
                         ? $"--defaults lists them; the '{XmlOrigin.Column}' column, on those rows and on the " +
-                          "ones below alike, says whether this " +
-                          $"def's own XML wrote the path ({XmlOrigin.Here}), only an ancestor did " +
-                          $"({XmlOrigin.Parent}), or neither ({XmlOrigin.No}) — the XML {readWhen}; a row that " +
-                          "cannot be pinned to " +
-                          "a line inside a container the XML did write reads as 'under <container>', not as no."
+                          $"ones below alike, is the XML {readWhen}. A row that cannot be pinned to " +
+                          $"a line inside a container the XML did write reads as 'under <container>', not as " +
+                          $"{XmlOrigin.No}."
                         : "--defaults lists them. That match is not evidence that nothing wrote them: a def " +
                           "whose XML writes the default value and a def that never mentions the field are " +
                           "byte-for-byte identical here.";
@@ -677,6 +673,9 @@ public sealed class GetCommand : Command
                         "declaring type's own default; " + xmlLayer + " The snapshot holds " +
                         $"{Tally.Complete(total).Render("field path")} for this " +
                         "def; a null-valued field never entered the index and is in neither count." +
+                        // 外部回读把「没藏时那句正面的话」判成显然事,建议只在真藏了时说。
+                        // 不采纳:沉默与「没算过下标这一维」同形,而这一维本来就不归
+                        // --defaults 管(见闸的说明)。否定不许跟着分支。
                         (hiddenIdx.Count > 0
                             ? " Nothing below shows any field of these list entries, which the def has all the " +
                               $"same: {NameList.Render(hiddenIdx, Limits.MaxSuggestions)}."
@@ -2614,9 +2613,11 @@ internal static class Completeness
         var readWhen = ctx.Db.Meta.IndexesPostPatchXml
             ? "read after every patch ran"
             : "read before patches ran";
+        // 有 xml 列的那一支不再带否定:「yes 不等于没人写」在那张表上是**列义**,
+        // 而列就在同一行印着。否定留给读不出来的那一支。
         var yesMeans = ctx.Db.Meta.IndexesXmlWritten
-            ? $"a yes is not evidence that nothing wrote the value — the '{XmlOrigin.Column}' column on " +
-              $"that same row tells the two apart: {XmlOrigin.Here} is an XML line writing that same " +
+            ? $"what a yes leaves open is settled by the '{XmlOrigin.Column}' column on that same row: " +
+              $"{XmlOrigin.Here} is an XML line writing that same " +
               $"value, {XmlOrigin.No} is an XML that does not write it ({readWhen})"
             : "a yes is not evidence that nothing wrote the value — a def whose XML writes " +
               "that same value and a def that never mentions the field both show yes here";

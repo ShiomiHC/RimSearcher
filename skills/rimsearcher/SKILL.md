@@ -26,7 +26,7 @@ Global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the com
 |---|---|
 | What does this def actually contain? | `rimsearcher get <defName>` |
 | Which C# class does this def actually run? | `rimsearcher get <defName>` — the `*Class` rows |
-| Does the vanilla XML write this line — Replace or Add? | `rimsearcher get <defName> --defaults` — the `xml` column: `here` / `parent` / `no` / `under <container>`, and a `+patch` suffix when another mod's patch put the line there (Replace still finds it; your patch then depends on that mod staying loaded). **`no` is determined, not a path-shape maybe** — what exactly it denies depends on the exporter, and `code_default` below carries that. A snapshot without that column says so. `get --help` carries the rest: how list entries join back to def-name tags, and what `under` leaves undecided. |
+| Does the vanilla XML write this line — Replace or Add? | `rimsearcher get <defName> --defaults` — the `xml` column: `here` / `parent` / `no` / `under <container>`, and a `+patch` suffix when another mod's patch put the line there (Replace still finds it; your patch then depends on that mod staying loaded). What exactly it denies depends on the exporter, and `code_default` below carries that. A snapshot without that column says so. `get --help` carries the rest: how list entries join back to def-name tags, and what `under` leaves undecided. |
 | What is this called? I only know part. | `rimsearcher search <words>` |
 | Which defs use this class / value? | `rimsearcher where <field> <value>` |
 | Which defs pick this class with `Class="…"`? | `rimsearcher where Class <ClassName>` |
@@ -107,21 +107,18 @@ a different question. None of them announces itself.
 
 ## What the output cannot tell you
 
-The CLI explains its own tables, zeros and boundaries as it prints them — read what it says
-rather than assuming. The ones it has no way to state:
+The CLI explains its own tables, zeros and boundaries as it prints them. The ones it has no
+way to state:
 
 - **`code_default` decides what a value is worth**, and the column prints only `yes`/`no`.
   `no` = something set it (differs from a fresh instance). `yes` = the snapshot **cannot
-  tell** whether anyone set it — quoting a `yes` row as "this def sets X" is the top
-  confident-wrong answer here — and **"so the def did not set it, it comes from the class
-  default" is the same error facing the other way**. An XML line whose value happens to
+  tell** whether anyone set it: an XML line whose value happens to
   equal the default is indistinguishable from no line at all, so neither direction is
   available **from this column** — the `xml` column beside it, when the snapshot has one, does
   tell them apart (`here` = an XML line writing that same value, `no` = the XML does not write
   it), which is the one place that question is answerable. What `no` denies is printed next to
-  the table: `read after every patch ran` means the merged XML, so `no` really means no line
-  reaches this field; `read before patches ran` means only the pre-patch XML on disk, where a
-  line another mod's patch put there also reads `no`. Reading the C# constructor shows where the default *could* come from, never
+  the table itself — which XML this snapshot read, before or after the patches ran.
+  Reading the C# constructor shows where the default *could* come from, never
   whether the XML says it too. `unknown` = type not constructible. Exemptions cut both
   ways: rules that *read* the value (thresholds, comparisons) answer fine from a `yes` row
   — the value is real either way; `compClass`/`thingClass`/`workerClass` are usually

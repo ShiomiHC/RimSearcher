@@ -91,7 +91,7 @@ Three switches cut the answer, and they divide in two. --limit and --max-per-fil
 | `--max-per-file` <n> | How many matching lines to print from any one file, at most. Left out, every one is printed — there is no cap to lift. Matches past it are still counted, so the total stays exact. Default: `every one`. | `--per-file`, `--matches-per-file`, `--max-matches-per-file`, `--file-preview` |
 | `--source` <name> | Which decompiled source tree to search. Omit to search them all. | `--root`, `--tree` |
 | `-C`, `--context` <n|a-b|a+n> | Show lines around each match. A number N is N above and N below; '0-20' is 0 above and 20 below, '10+4' is 10 above and 4 below. Windows that overlap or touch are merged, so no line is printed twice. Default: `0`. | `--context-lines`, `--around` |
-| `-n`, `--limit` <n> | How many matching lines to return, at most. Left out, every one is returned — there is no cap to lift. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+| `-n`, `--limit` <n> | How many matching lines to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `-i`, `--ignore-case` | Match without regard to letter case. | `--case-insensitive` |
 | `--no-resolve-keys` | Do not resolve translation keys found in the printed lines. By default, a printed line containing "SomeKey".Translate() gets its displayed text looked up in the snapshot and listed separately. This only removes that extra table — the matches themselves, and the match count, are the same either way. | `--no-translations`, `--no-lookup-keys`, `--no-translate`, `--no-translation-lookup`, `--code-only` |
 
@@ -214,7 +214,7 @@ The rows are the same set the game's own table covers: items with a market value
 
 marketValue is the price the game actually uses. fallbackMarketValue is the ingredient-and-work figure it falls back to only when no MarketValue is declared, so that column is empty for two opposite reasons — nothing produces the thing, or the fallback is already the marketValue in that same row — and when it does print, it is the counterfactual price, not the one in effect. Read any other empty cell as 'the game cannot work this out', not as zero: a profit needs a recipeMaker, and a profit rate needs a positive work amount.
 
-A snapshot need not hold this layer at all: it can predate the layer, have been exported with '--no-economy', or have failed to measure it. This command says which of those happened rather than reporting that the game prices nothing, and the answer is never a number. There is no second road to these numbers on such a snapshot — a field called marketValue is still indexed, but that is the base value written in XML, not the price the game computes from it, and nothing anywhere holds cost or profit.
+A snapshot need not hold this layer at all. This command then says why, rather than reporting that the game prices nothing, and the answer is never a number. There is no second road to these numbers on such a snapshot — a field called marketValue is still indexed, but that is the base value written in XML, not the price the game computes from it, and nothing anywhere holds cost or profit.
 
 A number printed as '635 (holds when classicMortars=on)' depends on a difficulty setting that an export cannot read: the setting lives on the storyteller, and no storyteller exists while the game is loading. The tag names the setting and the position the printed number holds under.
 
@@ -224,7 +224,7 @@ A number printed as '635 (holds when classicMortars=on)' depends on a difficulty
 
 | Option | Meaning | Also accepted |
 |---|---|---|
-| `-n`, `--limit` <n> | How many things to return, at most. Left out, every one is returned — there is no cap to lift. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+| `-n`, `--limit` <n> | How many things to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--offset` <n> | Skip this many things before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods` |
 | `--category` <Item|Building> | Keep only items or only buildings. The two are not comparable: a building's market value is what you get back for deconstructing it, not what it sells for. | `--cat` |
@@ -274,7 +274,7 @@ The game runs headless: no window appears and nothing is written to the display 
 | `--no-economy` | Skip the economy layer — prices, costs, work amounts and cost chains. It walks every recipe in the game once per priced thing, so it is the slowest part of a large export. The snapshot records that it was skipped, so 'rimsearcher economy' says so rather than reporting that the game prices nothing. | `--skip-economy`, `--without-economy` |
 | `--keep-temp` | Keep the temporary save-data folder afterwards, for looking at what the game was given. |  |
 | `--dry-run` | Do everything except start the game: resolve the list, check every mod is installed, and report what would be run. | `--plan` |
-| `--harvest-translations` | Passed through to the import step, and on by default there: also index language files of installed mods that the list does not enable. Pass it explicitly only to be sure. | `--harvest` |
+| `--harvest-translations` | Passed through to the import step, and on by default there: also index language files of installed mods that the list does not enable. | `--harvest` |
 | `--no-harvest-translations` | Passed through to the import step: skip the language-file scan, and record in the snapshot that the disk layer was never measured. | `--no-harvest` |
 | `--keep` <n> | How many generations of this name to keep, counting the one being written. The one it pushes past that count is deleted. 1 overwrites with no comparison left behind. The default is the config file's 'snapshot_keep'. Default: `3`. | `--generations`, `--keep-generations` |
 | `--replace-prev` | Keep no previous generation of this name at all: the same as --keep 1. Every '{name}.prev' already on disk is deleted along with it. | `--replace-previous`, `--discard-prev` |
@@ -311,7 +311,7 @@ What is listed is every path the exporter recorded a value for. When the snapsho
 
 | Option | Meaning | Also accepted |
 |---|---|---|
-| `-n`, `--limit` <n> | How many field paths to return, at most. Left out, every one is returned — there is no cap to lift. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+| `-n`, `--limit` <n> | How many field paths to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--path-contains` <text> | Only list paths containing this text. Repeat it to widen the selection. | `--filter`, `--grep`, `--field-contains`, `--path-filter`, `--contains`, `--match` |
 | `--offset` <n> | Skip this many field paths before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
 
@@ -341,7 +341,7 @@ Field paths are the merged, post-patch shape the game actually had in memory whe
 
 The 'source' line is the bare file name the game reported for that def — no directory, because the game does not keep one. It names the file inside that mod's Defs folder ('mod' above says which mod); it is not a path, and nothing here reads the file system to confirm the file is still there. Defs the game builds in code carry a placeholder there instead.
 
-When present, the 'xml' column says whether this def's own XML wrote the path (here), only an ancestor did (parent), or neither (no) — the fact PatchOperationReplace vs Add turns on. Index paths such as costList[0].thingDef are joined back to def-name tags such as costList.Steel from a sibling value on the same list entry, including two-level tags (things.AncientAmmoStack.chance), and using XML lines written by this def or by an ancestor. After that join, here/parent means the line is there, and no means the XML read here does not write it — determined, not a path-shape maybe, and it holds even when the list entry itself is present. The output says which XML it read. 'read after every patch ran' is the merged XML after every PatchOperation, and a line another mod's patch put there reads as here+patch or parent+patch: Replace still finds that node, but your patch now depends on that mod staying loaded. 'read before patches ran' is the XML as written on disk, so there a patched-in node reads as no instead, and 'rimsearcher inherit <defName>' reports how many patch xpaths name this def. A further value, 'under <container>', means the XML wrote that container but this row still cannot be pinned to a line in it: the entry did not join, or it joined to a short-form tag such as <Steel>75</Steel> whose inline text matches none of the remaining fields, or more than one of them — or the snapshot did not record that text. Neither answer is available there. A snapshot without the column says so.
+When present, the 'xml' column says whether this def's own XML wrote the path (here), only an ancestor did (parent), or neither (no) — the fact PatchOperationReplace vs Add turns on. Index paths such as costList[0].thingDef are joined back to def-name tags such as costList.Steel from a sibling value on the same list entry, including two-level tags (things.AncientAmmoStack.chance), and using XML lines written by this def or by an ancestor. After that join, here/parent means the line is there, and no means the XML read here does not write it — determined, not a path-shape maybe. The output says which XML it read. 'read after every patch ran' is the merged XML after every PatchOperation ran, and a line another mod's patch put there reads as here+patch or parent+patch: Replace still finds that node, but your patch now depends on that mod staying loaded. 'read before patches ran' is the XML as written on disk, so there a patched-in node reads as no instead, and 'rimsearcher inherit <defName>' reports how many patch xpaths name this def. A further value, 'under <container>', means the XML wrote that container but this row still cannot be pinned to a line in it: the entry did not join, or it joined to a short-form tag such as <Steel>75</Steel> whose inline text matches none of the remaining fields, or more than one of them — or the snapshot did not record that text. Neither answer is available there. A snapshot without the column says so.
 
 defName is not listed as a field: the def_name line above the table is that value, and the counts here leave it out. --path-contains naming it brings that row back; 'where' and 'values' see it as a path either way.
 
@@ -351,10 +351,10 @@ defName is not listed as a field: the def_name line above the table is that valu
 
 | Option | Meaning | Also accepted |
 |---|---|---|
-| `-n`, `--limit` <n> | How many fields to return, at most. Left out, every one is returned — there is no cap to lift. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+| `-n`, `--limit` <n> | How many fields to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--path-contains` <text> | Only show field paths containing this text. Repeat it to widen the selection. | `--filter`, `--grep`, `--field-contains`, `--path-filter`, `--field`, `--field-path`, `--path` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind` |
-| `--defaults` | Also list fields whose value is the one a fresh instance of the declaring type already carries. They are left out by default because they are the ones most often read as something an author chose. The 'xml' column on those rows says whether this def's own XML wrote the path (here), only an ancestor did (parent), neither (no), or that the row cannot be pinned to a line inside a container the XML did write (under <container>). no is determined, not a path-shape maybe. The output says which XML it read: 'read after every patch ran' is the merged XML after every PatchOperation ran, so a line another mod's patch added reads as here+patch or parent+patch rather than no; 'read before patches ran' is the XML as written on disk, and there that same line does read as no. A yes with xml=here is an explicit write of the default. Without the xml column, a def whose XML writes that same value and a def that never mentions the field look the same. How many were left out is always printed, and --path-contains shows a named field either way. | `--with-defaults`, `--all-fields` |
+| `--defaults` | Also list fields whose value is the one a fresh instance of the declaring type already carries. They are left out by default because they are the ones most often read as something an author chose. The 'xml' column on those rows says whether this def's own XML wrote the path (here), only an ancestor did (parent), neither (no), or that the row cannot be pinned to a line inside a container the XML did write (under <container>). The table says beside it which XML that was: 'read after every patch ran' or 'read before patches ran'. A yes with xml=here is an explicit write of the default. Without the xml column, a def whose XML writes that same value and a def that never mentions the field look the same. How many were left out is always printed, and --path-contains shows a named field either way. | `--with-defaults`, `--all-fields` |
 
 `--json` keys, besides the global `notes`:
 
@@ -381,7 +381,7 @@ rimsearcher inherit <name> [options]
 
 This is the one part of a snapshot that is read from the mods' XML rather than from the objects the game had in memory, because the game resolves inheritance while loading and then discards it. Abstract parents exist only here: they never become defs, so 'get' will not find them.
 
-What is shown is the XML before PatchOperations are applied. patch_ops counts xpaths that name the node with @Name=; patch_ops_defname and patch_ops_label count xpaths that name it by defName= and by label=. An xpath that reaches a node by thingClass or by a wildcard is counted nowhere in this layer, so a 0 is not evidence that the node reached the game unpatched. A node without a Name= reports patch_ops as 'n/a' rather than 0 because that count was never taken; the defName and label counts are still taken. For the merged, post-patch values, read any concrete child with 'get' — everything a parent contributes is already in each of its children.
+What is shown is the XML before PatchOperations are applied. patch_ops counts xpaths that name the node with @Name=; patch_ops_defname and patch_ops_label count xpaths that name it by defName= and by label=, and a snapshot exported before those were measured has neither column. An xpath that reaches a node by thingClass or by a wildcard is counted nowhere in this layer, so a 0 is not evidence that the node reached the game unpatched. A node without a Name= reports patch_ops as 'n/a' rather than 0 because that count was never taken; the defName and label counts are still taken. For the merged, post-patch values, read any concrete child with 'get' — everything a parent contributes is already in each of its children.
 
 | Argument | Meaning |
 |---|---|
@@ -389,7 +389,7 @@ What is shown is the XML before PatchOperations are applied. patch_ops counts xp
 
 | Option | Meaning | Also accepted |
 |---|---|---|
-| `-n`, `--limit` <n> | How many children to return, at most. Left out, every one is returned — there is no cap to lift. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+| `-n`, `--limit` <n> | How many children to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--path-contains` <text> | Count, for every layer in the chain, the other defs descending from it that carry a field path containing this text, and how many of those carry the same value. This is a witness count, not a record of where the field was declared — the snapshot holds no such record, and the output below the table says what the count does and does not settle. Matching is the substring match 'get --path-contains' uses, so the same word selects the same fields in both commands. | `--filter`, `--grep`, `--field-contains`, `--path-filter`, `--field`, `--fieldPath`, `--path` |
 
 `--json` keys, besides the global `notes`:
@@ -427,7 +427,7 @@ Rows are marked 'in effect' or 'on disk'. Only 'in effect' is what the game disp
 
 | Option | Meaning | Also accepted |
 |---|---|---|
-| `-n`, `--limit` <n> | How many keys to return, at most. Left out, every one is returned — there is no cap to lift. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+| `-n`, `--limit` <n> | How many keys to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--offset` <n> | Skip this many keys before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
 | `--empty-translation` | List only keys the language file leaves untranslated — the key is there but carries no translation, so the game falls back to English. This is what a translation-coverage question wants, and it needs no query: on its own it filters the whole layer. | `--empty-translations`, `--untranslated`, `--todo` |
 
@@ -460,7 +460,7 @@ rimsearcher list [defType] [options]
 
 | Option | Meaning | Also accepted |
 |---|---|---|
-| `-n`, `--limit` <n> | How many defs to return, at most. Left out, every one is returned — there is no cap to lift. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+| `-n`, `--limit` <n> | How many defs to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods` |
 | `--offset` <n> | Skip this many defs before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
 | `--own-class` <ClassName> | Only defs whose own class is this. Def types that hold several classes list them below the count. Many def types hold just one class and pick their behaviour in a nested field instead — GenStepDef is all Verse.GenStepDef, with the GenStep subclass on 'genStep' — and this option cannot see that. 'rimsearcher where Class <ClassName>' can. | `--def-class`, `--class`, `--runtime-class` |
@@ -577,7 +577,7 @@ Load order matters: it is the order in which PatchOperations were applied, so it
 
 | Option | Meaning | Also accepted |
 |---|---|---|
-| `-n`, `--limit` <n> | How many mods to return, at most. Left out, every one is returned — there is no cap to lift. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+| `-n`, `--limit` <n> | How many mods to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 
 `--json` keys, besides the global `notes`:
 
@@ -652,7 +652,7 @@ Matching runs in stages and stops at the first one that finds anything: full-tex
 
 | Option | Meaning | Also accepted |
 |---|---|---|
-| `-n`, `--limit` <n> | How many defs to return, at most. Left out, every one is returned — there is no cap to lift. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+| `-n`, `--limit` <n> | How many defs to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--offset` <n> | Skip this many defs before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind` |
@@ -692,7 +692,7 @@ This command has no mod filter. The 'mod' column is the packageId that declared 
 
 | Option | Meaning | Also accepted |
 |---|---|---|
-| `-n`, `--limit` <n> | How many field changes to return, at most. Left out, every one is returned — there is no cap to lift. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+| `-n`, `--limit` <n> | How many field changes to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 
 `--json` keys, besides the global `notes`:
 
@@ -705,7 +705,7 @@ This command has no mod filter. The 'mod' column is the packageId that declared 
 Examples:
 
 ```
-rimsearcher snapshot diff current-0816 current
+rimsearcher snapshot diff current.prev current
 ```
 
 ## `snapshot import`
@@ -725,7 +725,7 @@ The export file is refused rather than half-imported if it lacks the end marker 
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `--name` <name> | Name to register the snapshot under. Defaults to the export file's name. | `--as`, `--alias` |
-| `--harvest-translations` | On by default whenever 'mod_roots' is configured: also scan the language files of every installed mod, including ones not enabled in the snapshot, so that a translated name still finds the def. Harvested rows are marked 'on disk' and never replace the values the game actually had. Pass it explicitly only to be sure; pass --no-harvest-translations to skip it. | `--harvest`, `--scan-languages` |
+| `--harvest-translations` | On by default whenever 'mod_roots' is configured: also scan the language files of every installed mod, including ones not enabled in the snapshot, so that a translated name still finds the def. Harvested rows are marked 'on disk' and never replace the values the game actually had. Pass --no-harvest-translations to skip it. | `--harvest`, `--scan-languages` |
 | `--no-harvest-translations` | Index only the translations the game actually had, and record in the snapshot that the disk layer was never measured, so a later 'nothing on disk' is not read as an answer. | `--no-harvest`, `--skip-languages` |
 | `--keep` <n> | How many generations of this name to keep, counting the one being written. The one it pushes past that count is deleted. 1 overwrites with no comparison left behind. The default is the config file's 'snapshot_keep'. Default: `3`. | `--generations`, `--keep-generations` |
 | `--replace-prev` | Keep no previous generation of this name at all: the same as --keep 1. Every '{name}.prev' already on disk is deleted along with it. | `--replace-previous`, `--discard-prev` |
@@ -830,7 +830,7 @@ Every count this tool reports over field paths — 'where', 'values', 'fields' �
 
 | Option | Meaning | Also accepted |
 |---|---|---|
-| `-n`, `--limit` <n> | How many defs to return, at most. Left out, every one is returned — there is no cap to lift. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+| `-n`, `--limit` <n> | How many defs to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods` |
 | `--type` <DefType> | Only defs of this type. Repeat it for several — the completeness footnotes elsewhere name the types they mean, and this is the switch that carries them over. | `--def-type`, `--deftype`, `--kind` |
 | `--def` <defName> | Only this def. Answers 'was this particular def cut short' without reading the whole list. | `--def-name`, `--defname` |
@@ -949,7 +949,7 @@ Answers 'what am I allowed to put here' and 'which classes are actually in use' 
 
 | Option | Meaning | Also accepted |
 |---|---|---|
-| `-n`, `--limit` <n> | How many values to return, at most. Left out, every one is returned — there is no cap to lift. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+| `-n`, `--limit` <n> | How many values to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--offset` <n> | Skip this many values before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind` |
@@ -987,7 +987,7 @@ The field path is matched from the end, so 'compClass' finds 'comps[3].compClass
 
 | Option | Meaning | Also accepted |
 |---|---|---|
-| `-n`, `--limit` <n> | How many matches to return, at most. Left out, every one is returned — there is no cap to lift. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+| `-n`, `--limit` <n> | How many matches to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--offset` <n> | Skip this many matches before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind` |

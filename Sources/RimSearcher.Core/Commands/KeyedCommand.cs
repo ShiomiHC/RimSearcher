@@ -362,20 +362,11 @@ public sealed class KeyedCommand : Command
 
         // 占位译文实际显示的是英文 —— 表里它与真译文同形,所以点名说破。
         //
-        // 主语固定单数(the language file),计数进宾语:NounRegistry 管名词复数,
-        // **不管主谓一致**,「1 keyed translation … are」这种错只能靠句子结构避开。
-        var placeholders = shown.Count(r => r.Placeholder);
-        if (placeholders > 0)
-            ctx.Report.Notice(NoticeKind.Boundary, placeholdersOnly
-                // --empty-translation 在场时表里每一行都是占位,计数上面已报过 ——
-                // 这句要说的只剩「占位是什么意思」。
-                ? "Placeholder means the language file declares the key without a translation, so the game " +
-                  "displays the English text instead of what the translated column shows."
-                : "Placeholder means the language file declares the key without a translation, so the game " +
-                  "displays the English text instead of what the translated column shows: that is the case for " +
-                  // 这里数的是**表里的行**,所以名词固定是 keyed translation,不跟着上面那句
-                  // 「按 key 还是按文案命中」变 —— 一个 key 可以有好几行,其中几行是占位。
-                  // 顺带:名词闸扫的是源码里的字面量,交给变量它就看不见了。
-                  $"{Tally.Complete(placeholders).Render("keyed translation")} above.");
+        // 这一句只剩列义 —— 「哪几行是占位」表上的 placeholder 列自己就印着,
+        // 再数一遍是复述。于是两支同文,--empty-translation 也不再分支。
+        if (shown.Any(r => r.Placeholder))
+            ctx.Report.Notice(NoticeKind.Boundary,
+                "Placeholder means the language file declares the key without a translation, so the game " +
+                "displays the English text instead of what the translated column shows.");
     }
 }

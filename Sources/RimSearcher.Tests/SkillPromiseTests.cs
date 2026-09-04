@@ -276,8 +276,10 @@ public class SkillPromiseTests
         // 2026-09-01:同格里「What the column read … depends on the exporter, and the output
         // says which」压掉 —— 它只说「去看输出」,不给判断输入,而两档的后果 `code_default`
         // 那条各自带着说了。剩下的两句原样承诺,只是标点与首字母跟着句子改了。
-        new("**`no` is determined, not a path-shape maybe**",
-            nameof(PresenceTests.两层defName标签能归位_没写的那一格是确定的no)),
+        // 2026-09-05:这一句在 SKILL、`get --help`、`--defaults` 三处说了三遍(外部回读点的
+        // 就是这条同一否定四处复述)。留在 `get --help` —— 那里 xml 列的取值一次定义完,
+        // 是读者真会去核对的那一处。SKILL 不再承诺它,于是这条也从承诺表里撤下;
+        // 底下那条闸自己照跑,它盯的是**输出**,不是文档。
         // 2026-09-02:版本下限从 SKILL.md 与 help 里一并拿掉 —— 「from 0.5.0 on」是导出器的
         // 变更史,读者手上没有版本号(只有 snapshot status 印它),两档各按输出里真印的
         // 标签点名。承诺剩下的是「缺那一列时会说」,闸不变。

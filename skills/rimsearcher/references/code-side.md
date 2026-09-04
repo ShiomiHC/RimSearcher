@@ -15,10 +15,9 @@ The MCP is exact: it reads metadata, not text. The CLI reads text, over whatever
 `sources sync` has written — `rimsearcher sources list` says which trees are `current`,
 `stale` or `never built`; a query against a tree that was never built returns zero rows.
 
-Only the last row is beyond the CLI outright. The rest it answers approximately, and the
-approximation is better than it sounds: decompiled output is machine-generated and
-regularly formatted, so a declaration never wraps mid-signature the way hand-written code
-does — one `code-search "class \w+ : ThingComp\b"` catches the direct subclasses. To confirm that
+Only the last row is beyond the CLI outright. The rest it answers approximately: decompiled
+output is machine-generated and regularly formatted, so one
+`code-search "class \w+ : ThingComp\b"` catches the direct subclasses. To confirm that
 on a tree you have not used before, run `"^\s*: ThingComp\b"` after it: that is the shape a
 wrapped declaration would leave behind, and rows there mean the first pass missed some.
 

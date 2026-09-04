@@ -2,7 +2,7 @@ $ rimsearcher get ChildGun --fixture-presence
 exit 0
 --- stdout ---
 11 fields.
-Not listed: 3 fields whose value matches the declaring type's own default; --defaults lists them; the 'xml' column, on those rows and on the ones below alike, says whether this def's own XML wrote the path (here), only an ancestor did (parent), or neither (no) — the XML read before patches ran; a row that cannot be pinned to a line inside a container the XML did write reads as 'under <container>', not as no. The snapshot holds 14 field paths for this def; a null-valued field never entered the index and is in neither count. Every list index the def has appears below.
+Not listed: 3 fields whose value matches the declaring type's own default; --defaults lists them; the 'xml' column, on those rows and on the ones below alike, is the XML read before patches ran. A row that cannot be pinned to a line inside a container the XML did write reads as 'under <container>', not as no. The snapshot holds 14 field paths for this def; a null-valued field never entered the index and is in neither count. Every list index the def has appears below.
 
 def_name       ChildGun
 def_type       ThingDef

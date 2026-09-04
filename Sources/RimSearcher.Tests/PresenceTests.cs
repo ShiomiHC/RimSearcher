@@ -55,7 +55,9 @@ public class PresenceTests
     {
         var (text, _, _) = Fixture.Run("inherit", "BaseProjectile");
         Assert.Contains("only counted @Name=", text, StringComparison.Ordinal);
-        Assert.Contains("a newer export also counts xpaths by defName=", text, StringComparison.Ordinal);
+        // 措辞从「a newer export also counts…」压成祈使句(外部回读:情景假设,读者要的是
+        // 「重导会补上」这条出路,不是两代对照表)。守的事没变:老库上这句必须在。
+        Assert.Contains("re-export to also count xpaths by defName=", text, StringComparison.Ordinal);
         var (json, _, _) = Fixture.Run("inherit", "BaseProjectile", "--json");
         using var doc = System.Text.Json.JsonDocument.Parse(json);
         var node = doc.RootElement.GetProperty("nodes")[0].GetProperty("node");

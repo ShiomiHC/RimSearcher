@@ -108,7 +108,7 @@ public sealed class ExportCommand : Command
                 Arity = Arity.Flag,
                 Aliases = ["harvest"],
                 Help = "Passed through to the import step, and on by default there: also index language files of " +
-                       "installed mods that the list does not enable. Pass it explicitly only to be sure.",
+                       "installed mods that the list does not enable.",
             },
             new OptionSpec
             {

@@ -7,13 +7,13 @@ Show what an XML node inherits from and what inherits from it, including abstrac
 
 This is the one part of a snapshot that is read from the mods' XML rather than from the objects the game had in memory, because the game resolves inheritance while loading and then discards it. Abstract parents exist only here: they never become defs, so 'get' will not find them.
 
-What is shown is the XML before PatchOperations are applied. patch_ops counts xpaths that name the node with @Name=; patch_ops_defname and patch_ops_label count xpaths that name it by defName= and by label=. An xpath that reaches a node by thingClass or by a wildcard is counted nowhere in this layer, so a 0 is not evidence that the node reached the game unpatched. A node without a Name= reports patch_ops as 'n/a' rather than 0 because that count was never taken; the defName and label counts are still taken. For the merged, post-patch values, read any concrete child with 'get' — everything a parent contributes is already in each of its children.
+What is shown is the XML before PatchOperations are applied. patch_ops counts xpaths that name the node with @Name=; patch_ops_defname and patch_ops_label count xpaths that name it by defName= and by label=, and a snapshot exported before those were measured has neither column. An xpath that reaches a node by thingClass or by a wildcard is counted nowhere in this layer, so a 0 is not evidence that the node reached the game unpatched. A node without a Name= reports patch_ops as 'n/a' rather than 0 because that count was never taken; the defName and label counts are still taken. For the merged, post-patch values, read any concrete child with 'get' — everything a parent contributes is already in each of its children.
 
 Arguments:
   <name>  A Name= of an XML node, or the defName of a def. Both are looked up.
 
 Options:
-  -n, --limit <n>             How many children to return, at most. Left out, every one is returned — there is no cap to lift. Default: every one.
+  -n, --limit <n>             How many children to return, at most. Left out, every one is returned. Default: every one.
                               Also accepted: --max-results, --count, --top, --rows, --num, --head.
       --path-contains <text>  Count, for every layer in the chain, the other defs descending from it that carry a field path containing this text, and how many of those carry the same value. This is a witness count, not a record of where the field was declared — the snapshot holds no such record, and the output below the table says what the count does and does not settle. Matching is the substring match 'get --path-contains' uses, so the same word selects the same fields in both commands.
                               Also accepted: --filter, --grep, --field-contains, --path-filter, --field, --fieldPath, --path.

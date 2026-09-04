@@ -307,7 +307,7 @@ public sealed class SnapshotDiffCommand : Command
             new PositionalSpec { Name = "new", Help = "The later snapshot. A name from 'snapshot list'." },
         ],
         Options = [CommonOptions.Limit("field changes")],
-        Examples = ["rimsearcher snapshot diff current-0816 current"],
+        Examples = ["rimsearcher snapshot diff current.prev current"],
         JsonKeys =
         [
             new()
@@ -664,7 +664,7 @@ public sealed class SnapshotImportCommand : Command
                 Help = "On by default whenever 'mod_roots' is configured: also scan the language files of every " +
                        "installed mod, including ones not enabled in the snapshot, so that a translated name still " +
                        "finds the def. Harvested rows are marked 'on disk' and never replace the values the game " +
-                       "actually had. Pass it explicitly only to be sure; pass --no-harvest-translations to skip it.",
+                       "actually had. Pass --no-harvest-translations to skip it.",
             },
             new OptionSpec
             {

@@ -66,8 +66,7 @@ public static class CommonOptions
         Short = 'n',
         Aliases = ["max-results", "count", "top", "rows", "num", "head"],
         Placeholder = "<n>",
-        Help = $"How many {what} to return, at most. Left out, every one is returned — " +
-               "there is no cap to lift.",
+        Help = $"How many {what} to return, at most. Left out, every one is returned.",
         Default = "every one",
     };
 
