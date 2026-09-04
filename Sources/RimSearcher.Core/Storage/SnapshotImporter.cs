@@ -685,14 +685,20 @@ public sealed class SnapshotImporter
             swShared.Start();
             using (var fill = db.CreateCommand())
             {
+                // 每类型的 def 数先算成一张临时表。写成相关子查询的话它**每组算一次**,
+                // 而这时 defs 上还没有 def_type 的索引(索引在下一步才建)—— 于是每组一次
+                // 1.6 万行全扫。同一份导出实测这一段 26.5s → 0.5s,两侧产出的 314 行逐行相同。
+                // 与名册索引那一处同一种形状:导入自己要查的东西,不能等最后建索引。
                 fill.CommandText =
+                    "CREATE TEMP TABLE type_defs AS SELECT def_type, COUNT(*) n FROM defs GROUP BY def_type; " +
                     "INSERT INTO shared_values (def_type, path, value, defs) " +
                     "SELECT d.def_type, fv.path, fv.value, COUNT(DISTINCT fv.def_id) n " +
                     "  FROM field_values fv JOIN defs d ON d.id = fv.def_id " +
                     $" WHERE fv.is_default <> {Contract.DefaultState.Same} " +
                     " GROUP BY d.def_type, fv.path, fv.value " +
                     "HAVING n >= 8 " +
-                    "   AND n * 2 > (SELECT COUNT(*) FROM defs d2 WHERE d2.def_type = d.def_type)";
+                    "   AND n * 2 > (SELECT n FROM type_defs t WHERE t.def_type = d.def_type); " +
+                    "DROP TABLE type_defs;";
                 fill.ExecuteNonQuery();
             }
 
