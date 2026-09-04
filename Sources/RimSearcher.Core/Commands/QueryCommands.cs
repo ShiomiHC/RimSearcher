@@ -2179,6 +2179,10 @@ public sealed class ValuesCommand : Command
             if (offset > 0 && total > 0)
             {
                 ctx.Report.PastEnd(offset, $"'{path}' takes {Tally.Complete(total).Render("value")} in all.");
+                // 翻过头**不是**「没有这个字段」—— 这个字段存在,它的产地也是量得出来的。
+                // 这一格照旧摆真数(不是零),两个面都摆:它与正常列表是同一件事,
+                // 只是这一页恰好没有行。下面那一支才是空的那种,那边三格才为空。
+                EmitFieldCoverage(ctx, pq, scope, type);
                 return 1;
             }
 
@@ -2229,30 +2233,12 @@ public sealed class ValuesCommand : Command
             return 1;
         }
 
-        var cov = ctx.Db.ValueCoverage(pq, scope, Limits.MaxSuggestions, type);
-
-        // 这里的省略不是 NameList 那种「我取了前几条」—— cov.Paths 已经在 SQL 侧截过,
-        // 手上根本没有第 4 条起的名字。分母只有 cov.PathTotal 知道,所以照实拼。
-        var pathList = string.Join(", ", cov.Paths.Select(x => $"{x.Path} ({x.Count})"));
-        if (cov.PathTotal > cov.Paths.Count) pathList += $", and {cov.PathTotal - cov.Paths.Count} more";
-
-        // 「N of M」是覆盖率的分母:少了它,一条 `Verse.Thing (7)` 分不清是「只有 7 个 def
-        // 这么写」还是「导出漏了一千多个」。
-        var typeList = string.Join(", ", cov.DefTypes.Select(x =>
-            $"{x.DefType} ({x.Count} of {ctx.Db.CountDefsOfType(x.DefType, scope)})"));
-
         // 计数行走在产地块前面,而不是跟着它下面那张表。line 1 是管道下唯一的幸存者,
         // 那个位置得留给「一共几个、看到了几个」;产地三行是口径,少看一眼不会把
         // 截断读成完整。
         ctx.Report.PageNotice("value", rows.Count, offset, total);
 
-        // 值的产地:后缀匹配天然会把语义不同的路径并进一张表,不说清就会被读成
-        // 「这个字段到处都是这个值」。
-        ctx.Report.Detail("field", [
-            new("matched_paths", pathList),
-            new("def_types", typeList),
-            new("defs_with_field", (object)cov.DefsCovered),
-        ]);
+        var cov = EmitFieldCoverage(ctx, pq, scope, type);
 
         // 这张表把几条路径的值**并成了一池**,而 matched_paths 只列得下前几条。不指出
         // 收窄的办法,读的人手上就只有一个没法拆开的池子。
@@ -2305,6 +2291,38 @@ public sealed class ValuesCommand : Command
                 ["defs"] = r.Count,
             }).ToList());
         return 0;
+    }
+
+    /// <summary>
+    /// 值的产地:后缀匹配天然会把语义不同的路径并进一张表,不说清就会被读成
+    /// 「这个字段到处都是这个值」。
+    ///
+    /// 拆成方法是因为它有**两个**调用点:正常列表,和翻过头的那一页。后者此前直接
+    /// return,于是 `--json` 上少一个 `field` 键 —— 而那个键的声明写着 Always present,
+    /// skill 又教读者「缺键 = 你把键名问错了」。翻页越界与问错键名于是同形。
+    /// </summary>
+    private static (IReadOnlyList<(string Path, int Count)> Paths, int PathTotal,
+                    IReadOnlyList<(string DefType, int Count)> DefTypes, int DefsCovered)
+        EmitFieldCoverage(CommandContext ctx, PathQuery pq, ScopeFilter scope, string? type)
+    {
+        var cov = ctx.Db.ValueCoverage(pq, scope, Limits.MaxSuggestions, type);
+
+        // 这里的省略不是 NameList 那种「我取了前几条」—— cov.Paths 已经在 SQL 侧截过,
+        // 手上根本没有第 4 条起的名字。分母只有 cov.PathTotal 知道,所以照实拼。
+        var pathList = string.Join(", ", cov.Paths.Select(x => $"{x.Path} ({x.Count})"));
+        if (cov.PathTotal > cov.Paths.Count) pathList += $", and {cov.PathTotal - cov.Paths.Count} more";
+
+        // 「N of M」是覆盖率的分母:少了它,一条 `Verse.Thing (7)` 分不清是「只有 7 个 def
+        // 这么写」还是「导出漏了一千多个」。
+        var typeList = string.Join(", ", cov.DefTypes.Select(x =>
+            $"{x.DefType} ({x.Count} of {ctx.Db.CountDefsOfType(x.DefType, scope)})"));
+
+        ctx.Report.Detail("field", [
+            new("matched_paths", pathList),
+            new("def_types", typeList),
+            new("defs_with_field", (object)cov.DefsCovered),
+        ]);
+        return cov;
     }
 }
 

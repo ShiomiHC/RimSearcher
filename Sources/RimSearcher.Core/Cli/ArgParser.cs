@@ -326,8 +326,14 @@ public static class ArgParser
         var scored = new List<(int Score, string Name)>();
         foreach (var o in options)
         {
-            // 别名只认前缀/包含关系,不参与编辑距离打分:距离是给「打错规范名」用的,
-            // 别名吃距离会把毫不相干的参数拉成近似候选(`--type` 经别名 `top` 命中 `--limit`)。
+            // 别名只认前缀关系,不参与编辑距离打分也不认中段包含:距离是给「打错规范名」
+            // 用的,别名吃距离会把毫不相干的参数拉成近似候选(`--type` 经别名 `top`
+            // 命中 `--limit`)。
+            //
+            // 中段包含是同一个坑往下一格:`--from` 落在 `--offset` 的别名 `page-from`
+            // 尾巴上,于是删掉 `--scope` 的 `from` 别名之后,旧写法被指去 `--offset` ——
+            // 一个体面的、方向完全错的答案。别名本来就是「另一种叫法」,不是「另一个词根」,
+            // 判前缀够了。规范名照旧认包含(它是这条选项的正身,子串关系有意义)。
             var best = int.MaxValue;
             foreach (var (key, isAlias) in new[] { (o.Name, false) }.Concat(o.Aliases.Select(a => (a, true))))
             {
@@ -335,10 +341,10 @@ public static class ArgParser
                 int score;
                 if (k.StartsWith(n, StringComparison.Ordinal) || n.StartsWith(k, StringComparison.Ordinal))
                     score = 0;
-                else if (k.Contains(n, StringComparison.Ordinal) || n.Contains(k, StringComparison.Ordinal))
-                    score = 1;
                 else if (isAlias)
                     continue;
+                else if (k.Contains(n, StringComparison.Ordinal) || n.Contains(k, StringComparison.Ordinal))
+                    score = 1;
                 else
                     score = Distance(n, k);
                 best = Math.Min(best, score);

@@ -2668,6 +2668,40 @@ public class GrammarTests
         using var v = System.Text.Json.JsonDocument.Parse(byValue);
         Assert.False(v.RootElement.TryGetProperty("matches", out _));
 
+        // values 的 field 这一格不在主表里,上面那张用例表只走主表键,所以它落在这道闸外 ——
+        // 35a30a8 把它补进空结果时,删掉那四行代码这里照样绿。而它的 What 写着 Always present,
+        // 声明层说满、行为层没人守,正是「缺键 = 你问错了键」那条承诺会被证伪的形状。
+        // 三个成员的取值也要同型:非空时是两串加一个数,空时不许改成 null 或整个不摆。
+        var (noField, _, _) = Fixture.Run("values", "zzznotafield", "--json");
+        using var nf = System.Text.Json.JsonDocument.Parse(noField);
+        Assert.True(nf.RootElement.TryGetProperty("field", out var fieldObj),
+                    "'values zzznotafield --json' 的空结果上没有 'field' 键");
+        Assert.Equal(System.Text.Json.JsonValueKind.String, fieldObj.GetProperty("matched_paths").ValueKind);
+        Assert.Equal(System.Text.Json.JsonValueKind.String, fieldObj.GetProperty("def_types").ValueKind);
+        Assert.Equal(0, fieldObj.GetProperty("defs_with_field").GetInt32());
+
+        // **翻页越界是第二条空结果路径**,而它此前从这道闸底下整个漏过去了:上面那一支
+        // 补进去之后,把越界那一支的 field 删掉,全套 791 条照样绿(实测)。
+        // 空结果不止一种,而「缺键 = 你问错了键」对每一种都得成立。
+        //
+        // 这一格在越界页上摆的是**真数**,不是零 —— 字段存在,产地量得出来,只是这一页
+        // 恰好没有行。印零会把「翻过头了」说成「没有 def 有这个字段」。
+        var (past, _, _) = Fixture.Run("values", "thingClass", "--offset", "9000", "--json");
+        using var pd = System.Text.Json.JsonDocument.Parse(past);
+        Assert.Equal(0, pd.RootElement.GetProperty("values").GetArrayLength());
+        Assert.True(pd.RootElement.TryGetProperty("field", out var pastField),
+                    "'values thingClass --offset 9000 --json' 翻过头的那一页上没有 'field' 键");
+        Assert.True(pastField.GetProperty("defs_with_field").GetInt32() > 0,
+                    "越界页把真实覆盖数印成了 0 —— 那与「没有 def 有这个字段」同形");
+
+        // 文本面不许跟着摆 —— 那边上面那句话已经把话说完了,再来一行是噪声。
+        // 判行首而不判子串:`defs_with_field` 在产地里到处都是(声明层的 What、
+        // usage-notes、Detail 调用),拿它当反向锚点等于没锚 —— 产地那一句改了,
+        // 闸会在另一处找到它照绿。摆没摆这一格,看的是有没有这么一行。
+        var (noFieldText, _, _) = Fixture.Run("values", "zzznotafield");
+        Assert.DoesNotContain(noFieldText.Split('\n'),
+                              l => l.StartsWith("defs_with_field", StringComparison.Ordinal));
+
         // read 的两张表同理互斥。
         var (outline, _, _) = Fixture.Run("read", "zzznosuchfile.cs", "--outline", "--json");
         using var o = System.Text.Json.JsonDocument.Parse(outline);
@@ -4253,6 +4287,16 @@ public class GrammarTests
         var (_, typo, _) = Fixture.Run("where", "compClass", "--values", "x");
         Assert.Contains("Did you mean --value?", typo, StringComparison.Ordinal);
         Assert.DoesNotContain("is an argument rather than an option", typo, StringComparison.Ordinal);
+
+        // b02c3dc 删掉 `--scope` 的 `from` 别名之后,旧写法一度被指去 `--offset` ——
+        // 只因为 `from` 落在 `--offset` 的别名 `page-from` 的尾巴上。一个体面的、
+        // 方向完全错的答案:读者会去补一个翻页参数,而他要的是筛 mod。
+        // 别名只认前缀,中段包含不算数(ArgParser.Scored)。这里钉的是**不许指错**,
+        // 不是「必须指对」—— 指不出来时摆整张选项表才是那条路的正解。
+        // 正向就够,不配一条 DoesNotContain:近似候选那一档**取代**整张选项表(上面几行
+        // 钉的就是这件事),于是「表在」与「没瞎指」是同一件事,而且它的锚是唯一的。
+        var (_, dropped, _) = Fixture.Run("where", "thingClass", "--from", "vanilla");
+        Assert.Contains("This command accepts:", dropped, StringComparison.Ordinal);
     }
 
     /// <summary>
