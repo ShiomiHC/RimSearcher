@@ -18,8 +18,8 @@ The MCP is exact: it reads metadata, not text. The CLI reads text, over whatever
 Only the last row is beyond the CLI outright. The rest it answers approximately, and the
 approximation is better than it sounds: decompiled output is machine-generated and
 regularly formatted, so a declaration never wraps mid-signature the way hand-written code
-does — `code-search "class \w+ : ThingComp\b"` finds 218 direct subclasses in the vanilla
-tree and `"^\s*: ThingComp\b"` finds none left behind.
+does — one `code-search "class \w+ : ThingComp\b"` catches the direct subclasses, and the
+follow-up `"^\s*: ThingComp\b"` that would catch a wrapped declaration comes back empty.
 
 | The question | With the MCP | With the CLI alone |
 |---|---|---|

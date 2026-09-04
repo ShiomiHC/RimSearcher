@@ -183,8 +183,6 @@ public class SkillPromiseTests
             "json的数据键零行时是空数组而不是整个消失"),
         new("`get`'s `source` line is a bare, unverified file name",
             "source列印的是没有目录的裸文件名"),
-        new("`--limit` takes a positive number only — `--limit all` is a usage error, not a no-op",
-            nameof(不给limit时给的是全部而limit_all是用法错误)),
         new("`0` ran, `1` zero rows, `2` usage error, `70` tool defect",
             "退出码如实传给shell"),
         new("Unknown options are rejected rather than ignored, with the nearest accepted spelling — or, when nothing is close, everything this command does take",

@@ -8,11 +8,10 @@ check. None of it is needed to query data that is already exported.
 
 `rimsearcher export --modlist <name>` **runs the game
 headless** — launches RimWorld windowless, loads the modlist, dumps every def in
-memory, exits — hence "in memory at export time". A stall report on stderr means 120s
-without progress in a stage; the game **keeps running** after it, and nothing stops it
-before the 900s default, which only
-`rimsearcher export --modlist <name> --timeout 1800` raises. Interrupting is the one thing
-that ends the run early.
+memory, exits — hence "in memory at export time". A stall report on stderr means a stage
+made no progress for a while and says how long; the game **keeps running** after it, and
+nothing stops it before the timeout, whose length the export command's own help states and
+`rimsearcher export --modlist <name> --timeout <seconds>` raises. Interrupting is the one thing that ends the run early.
 
 ## Generations, and when a re-export replaces the file
 

@@ -179,11 +179,11 @@ only rebuilds trees whose assemblies have not changed. Commit or restore, then s
 
 ## Worked examples and derivations
 
-**Why you never guess a class from a defName.** Across everything Ludeon ships, 98 of the 167
-`GenStepDef`s have a class whose name is not the defName, and in Core alone it is 12 of 42:
-`RocksFromGrid` (Core) does run `GenStep_RocksFromGrid`, but `AncientExostriderRemains`
-(Biotech) runs `GenStep_ScatterLayout` and `AncientJunkClusters` (Ideology) runs
-`GenStep_ScatterGroup`. A guess that lands looks exactly like one that does not, and
+**Why you never guess a class from a defName.** Most `GenStepDef`s run a class whose name is
+not `GenStep_<defName>` — `rimsearcher where genStep.Class --type GenStepDef --scope vanilla`
+lists every one of them beside its defName, and counting the pairs that disagree takes one
+read of that table. Some do agree, which is the trap: a guess that lands looks exactly like
+one that does not, and
 `code-search "class GenStep_<defName>"` returning nothing is evidence about the name you
 invented, not about the def. Class names come out of `get`'s `*Class` rows: the `class` line
 in the identity block is the def's **own** type — the same for every def of that type
@@ -194,9 +194,8 @@ classes the bucket holds — while `*.Class` and `*Class` rows — `genStep.Clas
 **A `genSteps[N]` position is not the run order.** `MapGenerator` sorts the steps by
 `GenStepDef.order` ascending, then by list index, so the numbering `get <MapGeneratorDef>
 --path-contains genSteps` prints is the XML's, and it matches execution only where that list is already sorted by
-`order` — `Space` is (100/875/1500 in list order), while `Asteroid` puts order 1500
-directly before order 200. Read each step's own `order` before concluding anything about
-sequence. Nothing in a snapshot pairs the two: the list position and the order value live on
+`order`, which some vanilla map generators are and others are not. Read each step's own
+`order` before concluding anything about sequence. Nothing in a snapshot pairs the two: the list position and the order value live on
 different defs.
 
 **What the `where Class` dimension covers.** The runtime type of a nested `Class="…"` object

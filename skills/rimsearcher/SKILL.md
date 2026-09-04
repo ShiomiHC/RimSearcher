@@ -128,9 +128,9 @@ rather than assuming. The ones it has no way to state:
   than authored** — so a `no` on one of those is still not the def author's decision. The
   line under `get`'s table names them; what it means for authorship is not in it.
 - **Leave `--limit` out and you get every row**; `read` with no `--lines` gives the whole file.
-  `--limit` takes a positive number only — `--limit all` is a usage error, not a no-op. Pass a
-  number to shorten an answer on purpose; the count line then says how many exist, and
-  `--offset` walks the rest. `code-search` reads and prints everything too: none of `--limit`,
+  Pass a number to shorten an answer on purpose; the count line then says how many exist, and
+  on `list`, `search`, `where`, `values`, `fields` and `keyed` an `--offset` walks the rest.
+  `code-search` reads and prints everything too: none of `--limit`,
   `--max-per-file` and `--max-files` carries a default, and only `--max-files` can make an
   answer partial — passing it a number turns the count into `at least N`.
 - **Exit codes**: `0` ran, `1` zero rows, `2` usage error, `70` tool defect. **Chain with `;`,

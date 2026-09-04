@@ -7,9 +7,9 @@ Tool names below are the bare names; the full prefix is `mcp__decompiler__`.
 
 ## Getting started
 
-If the tools are deferred, load them with this exact line. A keyword search for "decompiler"
-returns 30 of the 44 tools and leaves out `status` and `search_members`, which you need
-first.
+If the tools are deferred, load them with this exact line rather than a keyword search. A
+keyword search ranks by relevance and returns only part of the toolkit — `status` and
+`search_members`, which you need first, are among the ones it has left out.
 
 This is the one place the full prefix is written out: `select:` matches tool names exactly, so a
 bare name here returns **"No matching deferred tools found"** — a zero that looks like the server
@@ -66,8 +66,8 @@ Two things the outline drops, both measured on v1.3.7:
   then look identical. The default discovery mode keeps that column — use it, or filter by
   `declaringTypeFilter` yourself.
 
-`batch_get_decompiled_source` can return the first 50 lines of a 203-line method while reporting
-`truncated: false` at the top level. Check `endLine` against `totalLines` per slice.
+`batch_get_decompiled_source` reports `truncated: false` at the top level even when a slice
+inside it stopped short of its method. Check `endLine` against `totalLines` per slice.
 
 ## Relationships
 
