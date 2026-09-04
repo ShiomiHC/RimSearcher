@@ -4457,6 +4457,41 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 撞名时那条指路只许长在 ThingDef 那一块底下。
+    ///
+    /// 判据原本只有名字:<c>EconomyByName(defName).Count > 0</c>。经济面只收 ThingDef,
+    /// 而 <c>get</c> 撞名时一次输出里有好几块 —— 于是 StatDef / ResearchProjectDef 那一块
+    /// 底下也印这句,而它推荐的 <c>economy &lt;name&gt;</c> 回来的是**另一个 def** 的数。
+    /// 真库实测:<c>get HospitalBed</c> 在科研项目那一块下推荐 <c>economy HospitalBed</c>,
+    /// 而那条命令给的是建筑医疗床的市价与钢材。
+    ///
+    /// 这一条此前有基线钉着,钉的却是错的那一版 —— 基线只保证「没变」,不保证「对」。
+    /// </summary>
+    [Fact]
+    public void 定价那条指路不落在非ThingDef的块下()
+    {
+        const string priced = "The game also prices this thing";
+
+        // fixture 里 Firefoam 同时是 ThingDef 与 StatDef,两块一次印出。
+        var (both, _, _) = Fixture.Run("get", "Firefoam");
+        Assert.Contains(priced, both, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(both, priced));
+
+        // 单独问 StatDef 那一个:一次都不许有。
+        var (statOnly, _, _) = Fixture.Run("get", "Firefoam", "--type", "StatDef");
+        Assert.DoesNotContain(priced, statOnly, StringComparison.Ordinal);
+        Assert.DoesNotContain("rimsearcher economy", statOnly, StringComparison.Ordinal);
+    }
+
+    private static int CountOccurrences(string haystack, string needle)
+    {
+        var n = 0;
+        for (var i = haystack.IndexOf(needle, StringComparison.Ordinal); i >= 0;
+             i = haystack.IndexOf(needle, i + needle.Length, StringComparison.Ordinal)) n++;
+        return n;
+    }
+
+    /// <summary>
     /// **输出里不许写「某个读者当年读错的反面」。**
     ///
     /// 一条 notice 的骨架是**事实 + 机制 + 出路**。超出这三段的成分,判据只有一句:

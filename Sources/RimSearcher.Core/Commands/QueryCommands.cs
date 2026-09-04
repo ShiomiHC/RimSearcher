@@ -792,7 +792,12 @@ public sealed class GetCommand : Command
             // 也不能在被定价的那个上沉默。噪声只落在明确降级过的快照上,那是划算的。
             if (ctx.Db.EconomyState == Contract.IntermediateFormat.EconomyStateOk)
             {
-                if (ctx.Db.EconomyByName(def.DefName).Count > 0)
+                // 判据是**名字加类型**,不能只有名字。经济面只收 ThingDef,而 get 撞名时
+                // 一次输出里有好几个块 —— 只按名字问的话,ResearchProjectDef 那一块底下也会
+                // 印这句,而它指的 economy 行是另一个 def(实测 HospitalBed:科研项目那块下
+                // 推荐 'economy HospitalBed',回来的是建筑医疗床的市价与钢材)。
+                // 与下面没量过那一档同一个判据,那一档从一开始就带着它。
+                if (DefTypes.Same(def.DefType, "ThingDef") && ctx.Db.EconomyByName(def.DefName).Count > 0)
                     ctx.Report.Notice(NoticeKind.NextStep,
                         $"The game also prices this thing. Its market value, cost to make and work amount are " +
                         $"computed, not stored, so no field above holds them — " +
