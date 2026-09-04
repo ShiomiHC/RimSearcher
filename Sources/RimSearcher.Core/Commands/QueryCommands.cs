@@ -351,7 +351,7 @@ public sealed class GetCommand : Command
         [
             "rimsearcher get Apparel_ShieldBelt",
             "rimsearcher get Apparel_ShieldBelt --path-contains statBases",
-            "rimsearcher get Bullet_Revolver --limit all",
+            "rimsearcher get Bullet_Revolver",
             "rimsearcher get Bullet_Revolver --defaults",
         ],
         JsonKeys =
@@ -1293,7 +1293,7 @@ public sealed class FindCommand : Command
                           ? " The XML writes Class=\"CompProperties_X\"; this field holds the resolved CompX — " +
                             $"'rimsearcher where {path} {resolved}' is the query you meant."
                           // 「给了个名字」不等于「说了下一步」:那几条只是最近的,真值域没看过。
-                          : $" 'rimsearcher values {path} --limit all' lists the whole value domain.")
+                          : $" 'rimsearcher values {path}' lists the whole value domain.")
                     // 曾经这里只写「X 大概是个抽象基类」—— 一句**未经验证的猜测摆在输出
                     // 位置**,读的人会当结论用。`GenStep_ScatterLumpsMineable` 是个被 C# 直接
                     // new 出来的**具体类**,而那句话把人推去查一批不存在的子类,第九轮盲测 S1
@@ -1302,7 +1302,7 @@ public sealed class FindCommand : Command
                     // 现在这句是修完的样子,不是那句猜测:主语是**这个零**(两种情况长得一样),
                     // 不是那个类;两种成因并列,各配一条参数填好、能当场证实或证伪它的
                     // code-search。判据也从严(ClassNameShape 把 `True`、`.ogg`、`1.5` 挡在外面)。
-                    : $" 'rimsearcher values {path} --limit all' lists them." +
+                    : $" 'rimsearcher values {path}' lists them." +
                       (ClassNameShape.Looks(value) && !indexGap && hiddenByScope == 0
                           ? $" Two things look like this zero when '{value}' is a class: it is an abstract base " +
                             "and defs name its subclasses instead " +
@@ -1577,7 +1577,7 @@ public sealed class ListCommand : Command
             "rimsearcher list HediffDef",
             "rimsearcher list GenStepDef --find scatter",
             "rimsearcher list CreepJoinerBaseDef --own-class CreepJoinerAggressiveDef",
-            "rimsearcher list ThingDef --scope all,-vanilla --limit all",
+            "rimsearcher list ThingDef --scope all,-vanilla",
         ],
         JsonKeys =
         [
@@ -1915,7 +1915,7 @@ public sealed class FieldsCommand : Command
         [
             "rimsearcher fields ThingDef",
             "rimsearcher fields ThingDef --path-contains comps",
-            "rimsearcher fields HediffDef --limit all",
+            "rimsearcher fields HediffDef",
         ],
         JsonKeys =
         [

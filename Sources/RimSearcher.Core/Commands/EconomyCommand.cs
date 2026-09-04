@@ -156,7 +156,7 @@ public sealed class EconomyCommand : Command
         [
             "rimsearcher economy Gun_Autopistol",
             "rimsearcher economy --sort profit-rate --limit 20",
-            "rimsearcher economy --scope vethara --category Item --limit all",
+            "rimsearcher economy --scope vethara --category Item",
             "rimsearcher economy --calc-state recipe --sort chain-end-share",
         ],
         JsonKeys =

@@ -40,6 +40,6 @@ Global options (every command takes these, written after the command):
 Examples:
   rimsearcher get Apparel_ShieldBelt
   rimsearcher get Apparel_ShieldBelt --path-contains statBases
-  rimsearcher get Bullet_Revolver --limit all
+  rimsearcher get Bullet_Revolver
   rimsearcher get Bullet_Revolver --defaults
 --- stderr ---

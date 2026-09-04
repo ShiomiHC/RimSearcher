@@ -140,9 +140,9 @@ exporting game had no language data loaded at all, there are no keyed translatio
 snapshot — `keyed` says that in those words instead of reporting your key absent.
 
 `--empty-translation` needs no query — on its own it filters the whole layer, so
-`rimsearcher keyed --empty-translation --limit all` is "list every untranslated string"; given a
+`rimsearcher keyed --empty-translation` is "list every untranslated string"; given a
 query it narrows that result set instead. Leaving the query out *without* the switch
-enumerates the layer itself, paged like any other listing. When nothing is a placeholder the
+enumerates the layer itself, which on a full snapshot is thousands of rows. When nothing is a placeholder the
 answer is a coverage statement over the whole layer; the exit code is `1` because no rows
 were printed — the same zero-row contract as any other listing.
 
@@ -256,10 +256,11 @@ behaviour on a nested `Class="…"` field instead — every `GenStepDef` in a sn
 
 ## Paging and errors, in detail
 
-`--limit all` lifts the row cap on the list-shaped commands. `read` has no such cap to lift:
-whatever `--lines`, `--outline` or `--member` asked for is printed in full however long it runs,
-and 150 lines from the top when none of them was given. A paged answer states the three things
-a pipe would have destroyed: how many rows this page holds, how many exist in total, and the
+No command holds back rows on its own: leave `--limit` out and the answer is the whole result
+set, `read` included, where `--lines`, `--outline` or `--member` print in full however long they
+run and 150 lines from the top is what a bare read gives. Paging starts when you pass
+`--limit <n>`, and a paged answer states the three things a pipe would have destroyed: how
+many rows this page holds, how many exist in total, and the
 exact `--offset` for the next page. The last page
 says it is the last one; an `--offset` past the end is reported as an overshoot, not as
 "nothing found". Passing `--offset` to `get`, `inherit` or `code-search` is a usage error
@@ -302,7 +303,7 @@ def?" has no direct answer.
 
 The way through is a second snapshot. Export the same def with fewer mods enabled — fewer
 mods means fewer patched-in fields, which is what the per-def cap counts — and diff the path
-sets from `get <def> --limit all --json` on each, normalising `[0]`, `[1]`, … to `[]` first.
+sets from `get <def> --json` on each, normalising `[0]`, `[1]`, … to `[]` first.
 A path present in the smaller snapshot and absent in the larger one was cut; an empty
 difference is the confirmation. Reverse the reading if the def is truncated in *both*: then
 the diff bounds nothing and only a re-export with a smaller list settles it.

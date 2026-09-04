@@ -72,8 +72,8 @@ public sealed class KeyedCommand : Command
         [
             "rimsearcher keyed CannotUseNoPower",
             "rimsearcher keyed 没有电力",
-            "rimsearcher keyed Command --limit all",
-            "rimsearcher keyed --empty-translation --limit all",
+            "rimsearcher keyed Command",
+            "rimsearcher keyed --empty-translation",
         ],
         JsonKeys =
         [

@@ -71,7 +71,7 @@ public sealed class InheritCommand : Command
         [
             "rimsearcher inherit BaseBullet",
             "rimsearcher inherit Bullet_Revolver",
-            "rimsearcher inherit BaseHumanlike --limit all",
+            "rimsearcher inherit BaseHumanlike",
             "rimsearcher inherit Bullet_Revolver --path-contains damageAmountBase",
         ],
         JsonKeys =

@@ -183,6 +183,8 @@ public class SkillPromiseTests
             "json的数据键零行时是空数组而不是整个消失"),
         new("`get`'s `source` line is a bare, unverified file name",
             "source列印的是没有目录的裸文件名"),
+        new("no command caps its rows on its\nown, so `--limit all` adds nothing",
+            nameof(不给limit时给的是全部)),
         new("`0` ran, `1` zero rows, `2` usage error, `70` tool defect",
             "退出码如实传给shell"),
         new("Unknown options are rejected rather than ignored, with the nearest accepted spelling — or, when nothing is close, everything this command does take",
@@ -731,6 +733,35 @@ public class SkillPromiseTests
 
         var (stdout, _, _) = Fixture.Run("inherit", "BaseBullet");
         Assert.Contains("patch_ops", stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 不给 --limit 就是全部。判据两面:与 <c>--limit all</c> 逐字节相同,且计数落在完整式
+    /// (三态文法里没有 "showing the first" 那一态)。
+    /// 2026-09-05 起的口径,改动前列表类默认 25、get 默认 60。
+    /// </summary>
+    [Fact]
+    public void 不给limit时给的是全部()
+    {
+        string[][] probes =
+        [
+            ["list", "ThingDef"],
+            ["search", "VoidNode"],
+            ["where", "thingClass"],
+            ["fields", "ThingDef"],
+            ["values", "thingClass"],
+            ["keyed"],
+            ["get", "Apparel_ShieldBelt"],
+            ["code-search", "public"],
+        ];
+
+        foreach (var probe in probes)
+        {
+            var bare = Fixture.Run(probe);
+            var all = Fixture.Run([.. probe, "--limit", "all"]);
+            Assert.Equal(all.Stdout, bare.Stdout);
+            Assert.DoesNotContain("showing the first", bare.Stdout, StringComparison.Ordinal);
+        }
     }
 
     /// <summary>

@@ -109,10 +109,9 @@ public sealed class ReadCommand : Command
                 Aliases = ["max-lines", "max-results", "count", "rows", "head"],
                 Placeholder = "<n|all>",
                 Help = "How many lines to print at most, and on a raw read where the read stops. " +
-                       "'all' is the whole file however long it is, so '--limit all' on a decompiled " +
-                       "type can be thousands of lines. Without it nothing is capped: the read prints " +
-                       $"whatever --lines, --outline or --member asked for, or {Limits.ReadWindow} lines " +
-                       "from the top if none of them was given.",
+                       "Without it nothing is capped: the read prints whatever --lines, --outline or " +
+                       $"--member asked for, or {Limits.ReadWindow} lines from the top if none of them " +
+                       "was given. On a decompiled type that runs to thousands of lines.",
                 Default = "all",
             },
         ],

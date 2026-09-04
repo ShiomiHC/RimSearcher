@@ -32,6 +32,6 @@ Global options (every command takes these, written after the command):
 Examples:
   rimsearcher inherit BaseBullet
   rimsearcher inherit Bullet_Revolver
-  rimsearcher inherit BaseHumanlike --limit all
+  rimsearcher inherit BaseHumanlike
   rimsearcher inherit Bullet_Revolver --path-contains damageAmountBase
 --- stderr ---

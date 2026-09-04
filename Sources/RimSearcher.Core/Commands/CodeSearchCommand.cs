@@ -31,10 +31,11 @@ public sealed class CodeSearchCommand : Command
             "It does not search Defs: the game's XML is not on disk in the form the game ended up with. " +
             "Data questions ('which defs use this class', 'what values does this field take') belong to " +
             "'where', 'values', and 'search', which answer them from the snapshot exactly.\n\n" +
-            "Three caps apply, and they divide in two. --limit and --max-per-file decide how many matching " +
-            "lines are printed; neither shortens the scan, so the match count stays exact whichever of them " +
-            "bites. --max-files decides how much is read, so when that one bites the count drops to a lower " +
-            "bound ('at least N') and the answer says which trees it never reached.",
+            "Three switches cut the answer, and they divide in two. --limit and --max-per-file decide how many " +
+            "matching lines are printed; neither shortens the scan, so the match count stays exact whichever of " +
+            "them bites. --max-files decides how much is read, so when that one bites the count drops to a lower " +
+            "bound ('at least N') and the answer says which trees it never reached. --max-per-file and " +
+            "--max-files carry defaults; --limit prints every match until you pass it.",
         Positionals = [new PositionalSpec { Name = "pattern", Help = ".NET regular expression." }],
         Options =
         [

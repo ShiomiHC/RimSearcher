@@ -78,7 +78,7 @@ This is for shapes that only text can express, such as a method signature patter
 
 It does not search Defs: the game's XML is not on disk in the form the game ended up with. Data questions ('which defs use this class', 'what values does this field take') belong to 'where', 'values', and 'search', which answer them from the snapshot exactly.
 
-Three caps apply, and they divide in two. --limit and --max-per-file decide how many matching lines are printed; neither shortens the scan, so the match count stays exact whichever of them bites. --max-files decides how much is read, so when that one bites the count drops to a lower bound ('at least N') and the answer says which trees it never reached.
+Three switches cut the answer, and they divide in two. --limit and --max-per-file decide how many matching lines are printed; neither shortens the scan, so the match count stays exact whichever of them bites. --max-files decides how much is read, so when that one bites the count drops to a lower bound ('at least N') and the answer says which trees it never reached. --max-per-file and --max-files carry defaults; --limit prints every match until you pass it.
 
 | Argument | Meaning |
 |---|---|
@@ -245,7 +245,7 @@ Examples:
 ```
 rimsearcher economy Gun_Autopistol
 rimsearcher economy --sort profit-rate --limit 20
-rimsearcher economy --scope vethara --category Item --limit all
+rimsearcher economy --scope vethara --category Item
 rimsearcher economy --calc-state recipe --sort chain-end-share
 ```
 
@@ -326,7 +326,7 @@ Examples:
 ```
 rimsearcher fields ThingDef
 rimsearcher fields ThingDef --path-contains comps
-rimsearcher fields HediffDef --limit all
+rimsearcher fields HediffDef
 ```
 
 ## `get`
@@ -367,7 +367,7 @@ Examples:
 ```
 rimsearcher get Apparel_ShieldBelt
 rimsearcher get Apparel_ShieldBelt --path-contains statBases
-rimsearcher get Bullet_Revolver --limit all
+rimsearcher get Bullet_Revolver
 rimsearcher get Bullet_Revolver --defaults
 ```
 
@@ -403,7 +403,7 @@ Examples:
 ```
 rimsearcher inherit BaseBullet
 rimsearcher inherit Bullet_Revolver
-rimsearcher inherit BaseHumanlike --limit all
+rimsearcher inherit BaseHumanlike
 rimsearcher inherit Bullet_Revolver --path-contains damageAmountBase
 ```
 
@@ -442,8 +442,8 @@ Examples:
 ```
 rimsearcher keyed CannotUseNoPower
 rimsearcher keyed 没有电力
-rimsearcher keyed Command --limit all
-rimsearcher keyed --empty-translation --limit all
+rimsearcher keyed Command
+rimsearcher keyed --empty-translation
 ```
 
 ## `list`
@@ -480,7 +480,7 @@ rimsearcher list
 rimsearcher list HediffDef
 rimsearcher list GenStepDef --find scatter
 rimsearcher list CreepJoinerBaseDef --own-class CreepJoinerAggressiveDef
-rimsearcher list ThingDef --scope all,-vanilla --limit all
+rimsearcher list ThingDef --scope all,-vanilla
 ```
 
 ## `modlist list`
@@ -618,7 +618,7 @@ Page with --lines, never with a pipe. The first line of the answer says which li
 | `--lines` <a-b|a+n|a|all> | Read raw lines instead: '400-460' is inclusive, '400+60' is sixty lines from 400, '400' starts there and takes the default window, 'all' is the whole file however long it is. Whatever it asks for is printed in full unless --limit says otherwise. Without it the read starts at line 1 and takes 150, or as many as --limit asks for. | `--line`, `--range`, `--line-range` |
 | `--source` <name> | Only resolve the file name inside this source tree. 'rimsearcher sources list' names them. | `--root`, `--tree` |
 | `--outline` | List the file's types and members with their modifiers and line ranges instead of reading any of them. This is the cheap way to find out what to ask for. | `--members`, `--toc` |
-| `-n`, `--limit` <n|all> | How many lines to print at most, and on a raw read where the read stops. 'all' is the whole file however long it is, so '--limit all' on a decompiled type can be thousands of lines. Without it nothing is capped: the read prints whatever --lines, --outline or --member asked for, or 150 lines from the top if none of them was given. Default: `all`. | `--max-lines`, `--max-results`, `--count`, `--rows`, `--head` |
+| `-n`, `--limit` <n|all> | How many lines to print at most, and on a raw read where the read stops. Without it nothing is capped: the read prints whatever --lines, --outline or --member asked for, or 150 lines from the top if none of them was given. On a decompiled type that runs to thousands of lines. Default: `all`. | `--max-lines`, `--max-results`, `--count`, `--rows`, `--head` |
 
 `--json` keys, besides the global `notes`:
 
