@@ -81,10 +81,9 @@ public sealed class ReadCommand : Command
                 Aliases = ["line", "range", "line-range"],
                 Placeholder = "<a-b|a+n|a|all>",
                 Help = "Read raw lines instead: '400-460' is inclusive, '400+60' is sixty lines from 400, " +
-                       "'400' starts there and takes the default window, 'all' is the whole file however " +
-                       "long it is. Whatever it asks for is printed in full unless --limit says otherwise. " +
-                       $"Without it the read starts at line 1 and takes {Limits.ReadWindow}, or as many " +
-                       "as --limit asks for.",
+                       $"'400' starts there and takes {Limits.PageSize} lines, 'all' is the whole file " +
+                       "however long it is. Whatever it asks for is printed in full unless --limit says " +
+                       "otherwise. Without it the whole file is read.",
             },
             new OptionSpec
             {
@@ -107,12 +106,12 @@ public sealed class ReadCommand : Command
                 Name = "limit",
                 Short = 'n',
                 Aliases = ["max-lines", "max-results", "count", "rows", "head"],
-                Placeholder = "<n|all>",
+                Placeholder = "<n>",
                 Help = "How many lines to print at most, and on a raw read where the read stops. " +
-                       "Without it nothing is capped: the read prints whatever --lines, --outline or " +
-                       $"--member asked for, or {Limits.ReadWindow} lines from the top if none of them " +
-                       "was given. On a decompiled type that runs to thousands of lines.",
-                Default = "all",
+                       "Left out, nothing is capped: the read prints whatever --lines, --outline or " +
+                       "--member asked for, and the whole file if none of them was given. On a " +
+                       "decompiled type that runs to thousands of lines.",
+                Default = "every line",
             },
         ],
         Examples =
@@ -219,10 +218,10 @@ public sealed class ReadCommand : Command
 
         var cap = Cap(ctx);
 
-        // 缺省的 150 是**没人表态时**的窗口,不是压在表态之上的第二道闸。这条一旦错了
-        // 从输出里看不出来:`--limit all` 拿回的 `lines 1-150 of 2449` 逐字是对的,
-        // 只是它印的不是调用方要的东西。
-        var window = ctx.Args.Value("limit") is { Length: > 0 } ? cap : Limits.ReadWindow;
+        // 什么都没说 = 整个文件。2026-09-05 撤掉了这里的 150 行窗口:346 条裸 read 里
+        // 236 条自己写着 `--limit all`,窗口本来就被routinely 掀开;剩下 110 条里
+        // 全量后只有 6 条超过 harness 的 30000 字符,其中 5 条接了管道。
+        var window = cap;
 
         if (outline) return Outline(ctx, rel, text, cap);
         if (member is { Length: > 0 } || type is { Length: > 0 })
@@ -627,12 +626,12 @@ public sealed class ReadCommand : Command
     private static int Cap(CommandContext ctx)
     {
         var raw = ctx.Args.Value("limit");
-        // 不给就是不限,与 'all' 同一支。read 只剩一个缺省 —— 什么都没说时的
-        // ReadWindow 行窗口。返回 int.MaxValue,于是但凡有加法碰它就得防溢出,
-        // 见 ParseRange 里那一处。
-        if (string.IsNullOrEmpty(raw) || raw is "all" or "none" or "0" or "-1") return int.MaxValue;
+        // 不给就是不限,read 这一侧现在一个缺省都不剩。返回 int.MaxValue,
+        // 于是但凡有加法碰它就得防溢出,见 ParseRange 里那一处。
+        if (string.IsNullOrEmpty(raw)) return int.MaxValue;
         if (int.TryParse(raw, out var n) && n > 0) return n;
-        throw new CliUsageException($"--limit takes a positive number or 'all'; got '{raw}'.");
+        throw new CliUsageException(
+            $"--limit takes a positive whole number (got '{raw}'). Leave it out to read the whole file.");
     }
 
     /// <summary>
@@ -660,7 +659,7 @@ public sealed class ReadCommand : Command
 
     /// <summary>`a-b` / `a+n` / `a` / `all` / 不给。行号 1 起,两端都含。</summary>
     internal static (int From, int To) ParseRange(string? spec, int total)
-        => ParseRange(spec, total, Limits.ReadWindow, out _);
+        => ParseRange(spec, total, Limits.PageSize, out _);
 
     /// <summary>
     /// <paramref name="rewritten"/>:归一化真的改动了写法时给出改动后的样子,否则 null。

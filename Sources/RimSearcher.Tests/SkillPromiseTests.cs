@@ -183,8 +183,8 @@ public class SkillPromiseTests
             "json的数据键零行时是空数组而不是整个消失"),
         new("`get`'s `source` line is a bare, unverified file name",
             "source列印的是没有目录的裸文件名"),
-        new("no command caps its rows on its\nown, so `--limit all` adds nothing",
-            nameof(不给limit时给的是全部)),
+        new("`--limit` takes a positive number only — `--limit all` is a usage error, not a no-op",
+            nameof(不给limit时给的是全部而limit_all是用法错误)),
         new("`0` ran, `1` zero rows, `2` usage error, `70` tool defect",
             "退出码如实传给shell"),
         new("Unknown options are rejected rather than ignored, with the nearest accepted spelling — or, when nothing is close, everything this command does take",
@@ -466,7 +466,7 @@ public class SkillPromiseTests
     [Fact]
     public void class字段上的yes与no同时是常态()
     {
-        var (json, _, _) = Fixture.Run("where", "compClass", "--limit", "all", "--json");
+        var (json, _, _) = Fixture.Run("where", "compClass", "--json");
         using var doc = System.Text.Json.JsonDocument.Parse(json);
         var defaults = doc.RootElement.GetProperty("matches").EnumerateArray()
             .Select(r => r.GetProperty("code_default").GetString())
@@ -736,12 +736,18 @@ public class SkillPromiseTests
     }
 
     /// <summary>
-    /// 不给 --limit 就是全部。判据两面:与 <c>--limit all</c> 逐字节相同,且计数落在完整式
-    /// (三态文法里没有 "showing the first" 那一态)。
-    /// 2026-09-05 起的口径,改动前列表类默认 25、get 默认 60。
+    /// 不给 --limit 就是全部,而 <c>--limit all</c> 是用法错误。两件事一道闸,因为它们
+    /// 分开钉时各自都拦不住对面那半:只钉「裸调用是完整式」的话,`all` 悄悄变回同义词
+    /// 也不会红;只钉「all 报错」的话,缺省重新长出上限也不会红。
+    ///
+    /// 完整式那一格不许只断言「没有 showing the first」—— 那在计数整个消失时同样成立。
+    /// 反面拿 <c>--limit 1</c> 现敲一次:截断态必须真的出现过,完整式才说明得了问题。
+    ///
+    /// 2026-09-05 起的口径。改动前:列表类默认 25、get 默认 60、read 默认 150 行,
+    /// 且 <c>all</c>/<c>none</c>/<c>0</c>/<c>-1</c> 都读作「解除上限」。
     /// </summary>
     [Fact]
-    public void 不给limit时给的是全部()
+    public void 不给limit时给的是全部而limit_all是用法错误()
     {
         string[][] probes =
         [
@@ -752,16 +758,29 @@ public class SkillPromiseTests
             ["values", "thingClass"],
             ["keyed"],
             ["get", "Apparel_ShieldBelt"],
-            ["code-search", "public"],
         ];
 
         foreach (var probe in probes)
         {
             var bare = Fixture.Run(probe);
-            var all = Fixture.Run([.. probe, "--limit", "all"]);
-            Assert.Equal(all.Stdout, bare.Stdout);
+            Assert.Equal(0, bare.Code);
             Assert.DoesNotContain("showing the first", bare.Stdout, StringComparison.Ordinal);
+
+            // 同一条命令截一刀就该说破 —— 这一格证明上面那句「没有截断态」不是空话。
+            var cut = Fixture.Run([.. probe, "--limit", "1"]);
+            Assert.Contains("showing the first", cut.Stdout, StringComparison.Ordinal);
+
+            // all 不再是取值。错误里要给出出路,否则读的人只会换一个词再猜一次。
+            var (_, err, code) = Fixture.Run([.. probe, "--limit", "all"]);
+            Assert.Equal(2, code);
+            Assert.Contains("Leave --limit out", err, StringComparison.Ordinal);
         }
+
+        // read 一侧的缺省同批退役:什么都不说就是整个文件。
+        var whole = Fixture.Run("read", "vanilla/Verse/Outline.cs");
+        Assert.Equal(0, whole.Code);
+        Assert.DoesNotContain("of 2449", whole.Stdout, StringComparison.Ordinal);
+        Assert.Contains("all ", whole.Stdout, StringComparison.Ordinal);
     }
 
     /// <summary>

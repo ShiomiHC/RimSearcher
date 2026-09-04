@@ -110,9 +110,9 @@ public class GrammarTests
     [Fact]
     public void 总数不随limit变()
     {
-        static int Total(string limit)
+        static int Total(params string[] limit)
         {
-            var (json, _, _) = Fixture.Run("search", "VoidNode", "--limit", limit, "--json");
+            var (json, _, _) = Fixture.Run(["search", "VoidNode", .. limit, "--json"]);
             using var doc = System.Text.Json.JsonDocument.Parse(json);
             var text = doc.RootElement.GetProperty("notes")[0].GetProperty("text").GetString()!;
             var m = Regex.Match(text, @"\b(?:\d+ of )?(\d+) defs\b");
@@ -121,10 +121,10 @@ public class GrammarTests
         }
 
         // 三条 VoidNode:两条 FTS 命中,GleamingVoidNode 只有子串扫描找得到。
-        var whole = Total("all");
+        var whole = Total();
         Assert.Equal(3, whole);
         foreach (var limit in new[] { "1", "2", "3" })
-            Assert.Equal(whole, Total(limit));
+            Assert.Equal(whole, Total("--limit", limit));
     }
 
     /// <summary>
@@ -486,7 +486,7 @@ public class GrammarTests
     [Fact]
     public void 截断尾注的计数不许超过全库被砍的总数()
     {
-        var (all, _, _) = Fixture.Run("snapshot", "truncated", "--limit", "all", "--json");
+        var (all, _, _) = Fixture.Run("snapshot", "truncated", "--json");
         using var doc = System.Text.Json.JsonDocument.Parse(all);
         var total = doc.RootElement.GetProperty("truncated").GetArrayLength();
         Assert.True(total > 0, "The fixture has no truncated def, so this gate cannot go red.");
@@ -590,7 +590,7 @@ public class GrammarTests
             return int.Parse(m.Groups[1].Value);
         }
 
-        var all = Total("code-search", "public", "--limit", "all");
+        var all = Total("code-search", "public");
         Assert.Equal(all, Total("code-search", "public", "--limit", "1"));
         Assert.Equal(all, Total("code-search", "public", "--max-per-file", "1"));
         Assert.Equal(all, Total("code-search", "public", "--limit", "1", "--max-per-file", "1"));
@@ -1148,78 +1148,55 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// `--limit` 是「最多印多少行」,那在没有 `--lines` 时它就该决定印到哪一行 ——
-    /// 缺省的 150 只在调用方一个字都没表态时才该出现。
+    /// read 一个缺省都不剩:什么都不说就是整个文件,给了数字才截。
     ///
-    /// 立这道闸的理由是量出来的(Vethara 全史 2711 份转写、5767 次 read):**1713 次给了
-    /// `--limit all` 却没给 `--lines`**,其中 186 次真被截在第 150 行(合计 28553 行源码
-    /// 没进过视野,最狠的一条是 ThingDef.cs 的 1-150 of 2449),约一半再没被补读 ——
-    /// 那些会话的结论就建立在文件的前 150 行上。而首行印的 `lines 1-150 of 2449`
-    /// 是**对的**,截断态自己一个字都没说错,所以这不是输出的毛病,是这条缺省的毛病。
+    /// 撤掉那道 150 行窗口的判据(2026-09-05,重放 Vethara 侧 346 条裸 read):236 条
+    /// 自己写着 `--limit all`,窗口早就被掀开;剩下 110 条全量后中位数 3980 → 3985,
+    /// 只有 6 条超过 harness 的 30000 字符,其中 5 条接了管道。更早的量也指着同一处 ——
+    /// 1713 次给了 `--limit all` 却没给 `--lines`,其中 186 次被截在第 150 行,
+    /// 合计 28553 行源码没进过视野,约一半再没被补读。
     ///
-    /// 同时给两者的 899 次里,867 次是 `--limit all` 配一个有界区间,返回里真说过
-    /// 「--limit stopped it」的**只有 1 次** —— 调用方手里的 `--limit all` 早就不是
-    /// 截断上限,而是「别截我」那句口令。这道闸让它兑现,而那 867 次一行不动。
+    /// 这道闸钉的是撤闸本身:窗口一旦回来,长文件上的 `read | grep` 会重新退化成 0 字节,
+    /// 而管道下那个 0 与「这个文件里真的没有」逐字同形。
     /// </summary>
     [Fact]
-    public void 显式的limit同时定下裸行读的窗口()
+    public void 不给行数时read给整个文件()
     {
         var (dir, config) = LongFileTree();
 
-        // 一个字没说 —— 缺省窗口不动。这一格是回归面:它变了就是另一个工具。
+        // 一个字没说 = 整个文件。400 行与 2500 行各钉一格 —— 「短文件恰好没触到窗口」
+        // 与「窗口真的没了」在 400 行那一格里同形。
         var (silent, _, silentCode) = Fixture.Run("read", "Long.cs", "--config", config);
         Assert.Equal(0, silentCode);
-        Assert.Contains("lines 1-150 of 400", silent, StringComparison.Ordinal);
+        Assert.Contains("all 400 lines", silent, StringComparison.Ordinal);
 
-        // `--limit all`:文件短于印刷上限,于是全出。与 `--lines all` 逐字同一句。
-        var (all, _, allCode) = Fixture.Run("read", "Long.cs", "--limit", "all", "--config", config);
-        Assert.Equal(0, allCode);
-        Assert.Contains("all 400 lines", all, StringComparison.Ordinal);
-        var (viaLines, _, _) = Fixture.Run("read", "Long.cs", "--lines", "all", "--config", config);
-        Assert.Equal(viaLines, all);
+        var (huge, _, hugeCode) = Fixture.Run("read", "Huge.cs", "--config", config);
+        Assert.Equal(0, hugeCode);
+        Assert.Contains("all 2500 lines", huge, StringComparison.Ordinal);
+        Assert.DoesNotContain("stopped it", huge, StringComparison.Ordinal);
 
-        // 给了数字就照那个数字读。**不许再出现那句 `--limit stopped it ... short of what
+        // 说「全都要」的另外两种写法拿回同一份东西。
+        foreach (var say in new[] { new[] { "--lines", "all" }, new[] { "--lines", "1-2500" } })
+        {
+            var (same, _, _) = Fixture.Run(["read", "Huge.cs", .. say, "--config", config]);
+            Assert.Equal(huge, same);
+        }
+
+        // 给了数字就照那个数字读。**不许出现那句 `--limit stopped it ... short of what
         // --lines asked for`** —— 调用方一个 `--lines` 都没写,那句话在指一个不存在的参数。
         var (n, _, nCode) = Fixture.Run("read", "Long.cs", "--limit", "40", "--config", config);
         Assert.Equal(0, nCode);
         Assert.Contains("lines 1-40 of 400", n, StringComparison.Ordinal);
         Assert.DoesNotContain("what --lines asked for", n, StringComparison.Ordinal);
 
-        // 超过 2000 行也整个出来 —— **没有一道闸压在表态之上**。这一格钉的是撤闸本身:
-        // 它一旦回来,`--limit all | grep` 在长文件上就重新退化成 0 字节,而管道下那个 0
-        // 与「这个文件里真的没有」逐字同形,从输出里分不出来。
-        //
-        // 三种说法要的是同一件事,就得拿回同一份东西 —— 分开钉,因为「说 all 的那条撤了闸」
-        // 与「三条都撤了」在任何单独一格里同形。
-        var (huge, _, hugeCode) = Fixture.Run("read", "Huge.cs", "--limit", "all", "--config", config);
-        Assert.Equal(0, hugeCode);
-        Assert.Contains("all 2500 lines", huge, StringComparison.Ordinal);
-        Assert.DoesNotContain("stopped it", huge, StringComparison.Ordinal);
-        foreach (var say in new[]
-                 {
-                     new[] { "--lines", "all" },
-                     new[] { "--lines", "all", "--limit", "all" },
-                     new[] { "--lines", "1-2500" },
-                 })
-        {
-            var (same, _, _) = Fixture.Run(
-                ["read", "Huge.cs", .. say, "--config", config]);
-            Assert.Equal(huge, same);
-        }
-
-        // 而写了数字就还是按那个数字来,那句欠账也照说 —— 撤的是缺省值的越权,
-        // 不是 --limit 本身。这句话只在真写了 --limit 时出现,它也只有那时才指得着
-        // 一个存在的参数。
+        // 写了数字就照那个数字来,欠账也照说 —— 撤的是缺省值,不是 --limit 本身。
         var (capped, _, _) = Fixture.Run(
             "read", "Huge.cs", "--lines", "all", "--limit", "2000", "--config", config);
         Assert.Contains("lines 1-2000 of 2500", capped, StringComparison.Ordinal);
         Assert.Contains("--limit stopped it 500 lines short", capped, StringComparison.Ordinal);
 
-        // 那 867 次组合的回归面:`--lines` 在场时它说了算,`--limit all` 一个字都不改。
+        // --lines 在场时它说了算。
         var (bounded, _, _) = Fixture.Run("read", "Long.cs", "--lines", "7-12", "--config", config);
-        var (boundedWithLimit, _, _) = Fixture.Run(
-            "read", "Long.cs", "--lines", "7-12", "--limit", "all", "--config", config);
-        Assert.Equal(bounded, boundedWithLimit);
         Assert.Contains("lines 7-12 of 400", bounded, StringComparison.Ordinal);
 
         Directory.Delete(dir, recursive: true);
@@ -1368,22 +1345,26 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 参数被改写就要说破:<c>LimitValue.Clamped</c> 记下了「这个数被我改了」,得有一条路
-    /// 把它印出来,否则 <c>--limit 5000</c> 与 <c>--limit 2000</c> 的输出逐字相同。
+    /// 夹板撤掉之后要真的一处不剩。这道闸守的是**没有静默改写**:给多大的数就按多大算,
+    /// 输出里不许再出现夹紧那套词,也不许再有 clamp 这个 kind。
+    ///
+    /// 撤它的判据是「要得多反而拿得少」—— 不给 --limit 已经是全部,而 `--limit 5000`
+    /// 曾拿到 2000 行,比不给还少。旧闸守的是「夹紧要说破」,那是夹板还在时的正确要求。
     /// </summary>
     [Fact]
-    public void 超过上限的limit不被悄悄夹紧()
+    public void 大数字的limit不再被夹紧也不再有夹紧提示()
     {
-        var (stdout, _, _) = Fixture.Run("list", "ThingDef", "--limit", (Limits.MaxLimit + 1).ToString());
-        Assert.Contains(Limits.MaxLimit.ToString(), stdout, StringComparison.Ordinal);
-        Assert.Contains((Limits.MaxLimit + 1).ToString(), stdout, StringComparison.Ordinal);
+        // 判据是**逐字节相等**,不是「输出里没有 ceiling 这个词」—— 后者在夹板已经删掉的
+        // 今天恒真,写了也拦不住任何东西。夹板一旦回来,这两份输出立刻分叉。
+        var (stdout, _, code) = Fixture.Run("list", "ThingDef", "--limit", "5000");
+        Assert.Equal(0, code);
+        var (bare, _, bareCode) = Fixture.Run("list", "ThingDef");
+        Assert.Equal(0, bareCode);
+        Assert.Equal(bare, stdout);
 
-        var (plain, _, _) = Fixture.Run("list", "ThingDef", "--limit", Limits.MaxLimit.ToString());
-        Assert.DoesNotContain("ceiling", plain, StringComparison.Ordinal);
-
-        // 机器侧靠 kind 分类,不靠措辞。
-        var (json, _, _) = Fixture.Run("list", "ThingDef", "--limit", (Limits.MaxLimit + 1).ToString(), "--json");
-        Assert.Contains("\"kind\": \"clamp\"", json, StringComparison.Ordinal);
+        var (json, _, _) = Fixture.Run("list", "ThingDef", "--limit", "5000", "--json");
+        var (bareJson, _, _) = Fixture.Run("list", "ThingDef", "--json");
+        Assert.Equal(bareJson, json);
     }
 
     /// <summary>
@@ -1522,7 +1503,7 @@ public class GrammarTests
     [Fact]
     public void GetLeavesDefNameOutOfTheFieldTable()
     {
-        var (plain, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--limit", "all");
+        var (plain, _, _) = Fixture.Run("get", "Apparel_ShieldBelt");
         Assert.Contains("def_name     Apparel_ShieldBelt", plain, StringComparison.Ordinal);
         Assert.DoesNotContain("\ndefName ", plain, StringComparison.Ordinal);
         // 计数与表同口径:表头到下一个空行之间的行数,就是首行句子里的数
@@ -1789,7 +1770,7 @@ public class GrammarTests
 
         // read 的 --limit 数的是印出来的行,方向与别处相反:all 是放开,不是收窄。
         var (capped, _, _) = Fixture.Run("read", "vanilla/Verse/Widgets.cs", "--limit", "3");
-        var (whole, _, _) = Fixture.Run("read", "vanilla/Verse/Widgets.cs", "--limit", "all");
+        var (whole, _, _) = Fixture.Run("read", "vanilla/Verse/Widgets.cs");
         Assert.True(whole.Split('\n').Length > capped.Split('\n').Length);
 
         // 「哪些 def 类型有这个字段」values 自己就答得出,不必按类型一个个扫。
@@ -1850,7 +1831,7 @@ public class GrammarTests
     public void where把代码造出来的def逐行标出来而句子数的是整个结果集()
     {
         // 混合:Meat_Muffalo 是 ImpliedDefs,同 soundDrop 值的其余几个是 XML 写的。
-        var (mixed, _, code) = Fixture.Run("where", "soundDrop", "Standard_Drop", "--limit", "all");
+        var (mixed, _, code) = Fixture.Run("where", "soundDrop", "Standard_Drop");
         Assert.Equal(0, code);
         Assert.Contains("declared_in", mixed, StringComparison.Ordinal);
         Assert.Contains("created by the game in code at load time", mixed, StringComparison.Ordinal);
@@ -1858,7 +1839,7 @@ public class GrammarTests
         Assert.Contains("PatchOperation addressed by defName cannot reach them", mixed, StringComparison.Ordinal);
 
         // 逐行:JSON 的每一行都带着判据,不必回头读 notes。
-        var (json, _, _) = Fixture.Run("where", "soundDrop", "Standard_Drop", "--limit", "all", "--json");
+        var (json, _, _) = Fixture.Run("where", "soundDrop", "Standard_Drop", "--json");
         using var doc = System.Text.Json.JsonDocument.Parse(json);
         var rows = doc.RootElement.GetProperty("matches").EnumerateArray().ToList();
         Assert.Contains(rows, r => r.GetProperty("def_name").GetString() == "Meat_Muffalo"
@@ -1873,7 +1854,7 @@ public class GrammarTests
         Assert.Contains("None of them are on this page", paged, StringComparison.Ordinal);
 
         // 一个都没有时,这一列与这句话一起消失。
-        var (none, _, _) = Fixture.Run("where", "thingClass", "--scope", "test.mod", "--limit", "all");
+        var (none, _, _) = Fixture.Run("where", "thingClass", "--scope", "test.mod");
         Assert.DoesNotContain("declared_in", none, StringComparison.Ordinal);
         Assert.DoesNotContain("created by the game in code at load time", none, StringComparison.Ordinal);
     }
@@ -2284,7 +2265,7 @@ public class GrammarTests
         var argv = m.Groups[2].Value.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         Assert.NotEmpty(argv);   // 裸命令走到的是全库,不是刚说的那批
 
-        var (listed, _, _) = Fixture.Run(["snapshot", "truncated", .. argv, "--limit", "all"]);
+        var (listed, _, _) = Fixture.Run(["snapshot", "truncated", .. argv]);
         // 计数句会把用户自己划的那道线念回去(`1 def within --type ThingDef.`),
         // 取数的正则跟着放宽,不是把那半句当噪音滤掉。
         var got = Regex.Match(listed, @"^(\d+) defs?( within [^.]*)?\.", RegexOptions.Multiline);
@@ -2454,7 +2435,7 @@ public class GrammarTests
         Assert.Contains("--lines", rd, StringComparison.Ordinal);
 
         // 本命令确实没有等价物时,同一句话照样答得出来 —— 读者看完整张表就知道这里不截断。
-        var (_, src, srcCode) = Fixture.Run("sources", "list", "--limit", "all");
+        var (_, src, srcCode) = Fixture.Run("sources", "list", "--limit", "5");
         Assert.Equal(2, srcCode);
         Assert.Contains("This command accepts:", src, StringComparison.Ordinal);
     }
@@ -2711,23 +2692,21 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// <c>--limit all</c> 解除**行上限**,这是全系统一句话的总纲(SKILL.md),不分命令。
-    /// 把 <c>all</c> 翻译成 <see cref="Limits.MaxLimit"/> 是错的:MaxLimit 管的是「--limit 收
-    /// 多大的数字」,而截断句给的补救「pass --limit all for the rest」会指着调用方刚用过的
-    /// 那个参数。
+    /// 不给 <c>--limit</c> 就是全部,而「全部」得真的越过任何历史上存在过的行上限 ——
+    /// 语料有 2100 条 filler,一次拿全。这一档此前靠 <c>--limit all</c> 表达,
+    /// 2026-09-05 起那个取值退役,判据落到裸调用上。
     /// </summary>
     [Fact]
-    public void limit_all在keyed上也解除行上限()
+    public void 不给limit时keyed一次给全整层()
     {
-        var (json, _, code) = Fixture.Run("keyed", "filler", "--limit", "all", "--json");
+        var (json, _, code) = Fixture.Run("keyed", "filler", "--json");
         Assert.Equal(0, code);
         using var doc = System.Text.Json.JsonDocument.Parse(json);
 
         var rows = doc.RootElement.GetProperty("keys").GetArrayLength();
-        Assert.True(rows > Limits.MaxLimit,
-                    $"'--limit all' 只回了 {rows} 行,而语料有 2100 条 —— 它被夹到上限了。");
+        Assert.True(rows > 2000, $"裸调用只回了 {rows} 行,而语料有 2100 条 —— 有东西还在截它。");
 
-        // 全给了就没有截断可申报。留着那句「pass --limit all」等于叫人再传一次同一个参数。
+        // 全给了就没有截断可申报。
         var kinds = doc.RootElement.GetProperty("notes")
                        .EnumerateArray().Select(n => n.GetProperty("kind").GetString()).ToList();
         Assert.DoesNotContain("truncation", kinds);
@@ -3050,7 +3029,7 @@ public class GrammarTests
         foreach (var argv in new[]
                  {
                      new[] { "list", "ThingDef", "--limit", "2", "--json" },    // 截断
-                     new[] { "list", "ThingDef", "--limit", "all", "--json" },  // 完整
+                     new[] { "list", "ThingDef", "--json" },  // 完整
                      new[] { "where", "compClass", "--json" },
                      new[] { "get", "Anesthetic", "--json" },
                      // 复合那句一定要在名单里:它一句话里有四个数,最容易岔的就是这条。
@@ -3132,7 +3111,7 @@ public class GrammarTests
         // 名单里的点不能当句号:packageId 自己就带点(ludeon.rimworld),所以吃到那句结尾为止。
         var named = Regex.Match(bad, @"This snapshot contains: (.+?)\. 'rimsearcher mods' lists them all");
         Assert.True(named.Success, bad);
-        var (mods, _, _) = Fixture.Run("mods", "--limit", "all");
+        var (mods, _, _) = Fixture.Run("mods");
         var ids = named.Groups[1].Value.Split(',').Select(s => s.Trim())
             .Where(s => s.Length > 0 && !s.StartsWith("and ", StringComparison.Ordinal)).ToList();
         Assert.NotEmpty(ids);   // 名单空掉时这个循环会零次通过,和「全找到了」同形
@@ -4093,7 +4072,7 @@ public class GrammarTests
     [Fact]
     public void list的find筛在截断之前且报得出分母()
     {
-        var (all, _, _) = Fixture.Run("list", "ThingDef", "--limit", "all");
+        var (all, _, _) = Fixture.Run("list", "ThingDef");
         var total = System.Text.RegularExpressions.Regex.Match(all, @"(\d+) defs?\b").Groups[1].Value;
 
         // 只留一行的过滤 + 一个小得离谱的 limit:grep 那条路在这里必然落空。

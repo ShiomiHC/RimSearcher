@@ -1,4 +1,4 @@
-$ rimsearcher keyed --empty-translation --limit all
+$ rimsearcher keyed --empty-translation
 exit 0
 --- stdout ---
 2 keyed translations within --empty-translation.

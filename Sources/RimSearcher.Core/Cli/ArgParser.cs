@@ -418,26 +418,24 @@ public sealed class ParseResult(
     }
 
     /// <summary>
-    /// --limit 的取值。<c>all</c> 是正式取值,不是错误;
-    /// 超过 <see cref="Limits.MaxLimit"/> 的数被夹紧,夹紧事实由调用方在输出里声明。
+    /// --limit 的取值:正整数,要多少给多少。**不给就是全部**,没有第二道闸压在它之上。
     ///
-    /// 不给就是全量(2026-09-05 起)。此前列表类默认 25、get 默认 60,重放 Vethara 侧 2059 次
-    /// 实际调用量过:没写 --limit 的 547 次里全量后最大 15 KB,没有一次会撞到 harness 的
-    /// 30000 字符截断;而 `--limit all` 在接管道的调用里出现率 85% 以上 —— 默认上限省不下
-    /// 输出,只让 grep 之后静默丢行。会撑到 1 MB 的 `list ThingDef` 裸跑在全史里零次。
+    /// 2026-09-05 一次改到位,三件旧设施同时退役,判据都是重放 Vethara 侧的真实调用:
+    /// - 列表类默认 25 / get 默认 60:没写 --limit 的 547 次里全量后最大 15 KB,
+    ///   没有一次撞到 harness 的 30000 字符截断;
+    /// - 2000 夹板:330 次数字调用无一超过它,写过的最大数字是 80。留着只会让
+    ///   `--limit 5000` 拿到比不填更少的行;
+    /// - <c>all</c> / <c>none</c> / <c>0</c> / <c>-1</c> 这几个「解除上限」的取值:
+    ///   不给已经就是全部,它们没有一个还能表达别的意思。
     /// </summary>
     public LimitValue Limit(string name = "limit")
     {
         var raw = Value(name);
         if (raw is null) return LimitValue.All;
-        if (string.Equals(raw, "all", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(raw, "none", StringComparison.OrdinalIgnoreCase) ||
-            raw == "0" || raw == "-1")
-            return LimitValue.All;
-        if (int.TryParse(raw, out var n) && n > 0)
-            return LimitValue.Of(Math.Min(n, Limits.MaxLimit), clamped: n > Limits.MaxLimit);
+        if (int.TryParse(raw, out var n) && n > 0) return LimitValue.Of(n);
         throw new CliUsageException(
-            $"--{name} expects a positive whole number or 'all' (got '{raw}').");
+            $"--{name} expects a positive whole number (got '{raw}'). " +
+            $"Leave --{name} out to get every row.");
     }
 
     /// <summary>
@@ -462,10 +460,10 @@ public sealed class ParseResult(
 }
 
 /// <summary>limit 的三态取值:具体数 / 全部 / 被夹紧的具体数。</summary>
-public readonly record struct LimitValue(int? Count, bool Clamped)
+public readonly record struct LimitValue(int? Count)
 {
-    public static LimitValue All => new(null, false);
-    public static LimitValue Of(int n, bool clamped = false) => new(n, clamped);
+    public static LimitValue All => new(null);
+    public static LimitValue Of(int n) => new(n);
     public bool IsAll => Count is null;
     /// <summary>拿去做 SQL LIMIT 用的数;全部时返回 int.MaxValue。</summary>
     public int Effective => Count ?? int.MaxValue;

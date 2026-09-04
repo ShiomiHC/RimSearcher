@@ -127,9 +127,11 @@ rather than assuming. The ones it has no way to state:
 - **A value most defs of the type also carry is inherited or engine-filled far more often
   than authored** — so a `no` on one of those is still not the def author's decision. The
   line under `get`'s table names them; what it means for authorship is not in it.
-- **Every answer is complete unless you asked for less** — no command caps its rows on its
-  own, so `--limit all` adds nothing. Pass `--limit <n>` to shorten an answer on purpose; the
-  count line then says how many exist, and `--offset` walks the rest.
+- **Leave `--limit` out and you get every row**; `read` with no `--lines` gives the whole file.
+  `--limit` takes a positive number only — `--limit all` is a usage error, not a no-op. Pass a
+  number to shorten an answer on purpose; the count line then says how many exist, and
+  `--offset` walks the rest. The one printing cap that remains is `code-search --max-per-file`,
+  20 lines from any one file, and it says so while the match count stays exact.
 - **Exit codes**: `0` ran, `1` zero rows, `2` usage error, `70` tool defect. **Chain with `;`,
   never `&&`** — an informative zero otherwise drops what you queued after it. A `;` chain reports only the last code, so read the output.
   **Everything lands on stdout except a usage error** — the reasoning behind a zero

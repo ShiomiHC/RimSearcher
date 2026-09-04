@@ -62,29 +62,42 @@ public class ArgParserTests
     // ---- limit 的取值 ----
 
     [Fact]
-    public void limit接受all为正式取值()
+    public void 不给limit就是全部()
     {
-        var r = Parse("shield", "--limit", "all");
+        var r = Parse("shield");
         Assert.False(r.HasErrors);
         Assert.True(r.Limit().IsAll);
     }
 
+    /// <summary>
+    /// 给了数字就照给的数,没有第二道闸在它之上。夹板撤于 2026-09-05:330 次真实的
+    /// 数字调用无一超过 2000,而留着它会让 `--limit 5000` 拿到比不给还少的行。
+    /// </summary>
     [Fact]
-    public void limit超上限时夹紧并留下夹紧标记()
+    public void 大数字的limit照数给不再夹紧()
     {
-        var r = Parse("shield", "--limit", (Limits.MaxLimit + 1).ToString());
-        var limit = r.Limit();
-        Assert.Equal(Limits.MaxLimit, limit.Count);
-        Assert.True(limit.Clamped);
+        var limit = Parse("shield", "--limit", "5000").Limit();
+        Assert.Equal(5000, limit.Count);
+        Assert.False(limit.IsAll);
     }
 
-    [Fact]
-    public void limit给了非数字时错误消息说清接受什么()
+    /// <summary>
+    /// <c>all</c> / <c>none</c> / <c>0</c> / <c>-1</c> 曾经都读成「解除上限」。不给已经就是
+    /// 全部,它们再没有第二种意思可表达,于是一律退回用法错误 —— 而错误消息必须把
+    /// 「不给就是全部」这条出路写出来,否则读的人只会换一个词再猜一次。
+    /// </summary>
+    [Theory]
+    [InlineData("all")]
+    [InlineData("none")]
+    [InlineData("0")]
+    [InlineData("-1")]
+    [InlineData("lots")]
+    public void limit只收正整数且落空时指出不给就是全部(string raw)
     {
-        var r = Parse("shield", "--limit", "lots");
+        var r = Parse("shield", "--limit", raw);
         var ex = Assert.Throws<CliUsageException>(() => r.Limit());
-        Assert.Contains("'all'", ex.Message);
-        Assert.Contains("lots", ex.Message);
+        Assert.Contains(raw, ex.Message, StringComparison.Ordinal);
+        Assert.Contains("Leave --limit out", ex.Message, StringComparison.Ordinal);
     }
 
     // ---- 位置参数 ----

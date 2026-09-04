@@ -9,10 +9,10 @@ namespace RimSearcher.Cli;
 public static class Limits
 {
     /// <summary>
-    /// --limit 允许的最大值;超出会被夹紧。不给 --limit 就是全量,没有默认条数 ——
-    /// 判据在 <see cref="ParseResult.Limit"/> 的注释里。
+    /// 猜错字段值时,拿来当近似候选的那份值域最多取几条。这是**内部取样界**,
+    /// 不是 --limit —— 用户那一侧不给就是全部,给了就照给的数来,没有任何夹板。
     /// </summary>
-    public const int MaxLimit = 2000;
+    public const int ValueSpaceSample = 2000;
 
     /// <summary>
     /// code-search 单文件最多**印出**的匹配行数(--max-per-file 的默认值)。
@@ -32,15 +32,15 @@ public static class Limits
     public const int CodeSearchRegexTimeoutMs = 2000;
 
     /// <summary>
-    /// read 不给 --lines 时读多少行。翻页的一页就是它。
+    /// <c>--lines 400</c> 这种只给起点的写法,从那里往下取多少行;续读提示里的一页也是它。
     ///
-    /// **这是 read 唯一的缺省** —— 说了 --lines / --outline / --member 就按说的给全,
-    /// --limit 不给等于不限。这里曾另有一道 2000 行的闸压在 --limit 之上,撤掉的判据
-    /// 是实测两头都空:14719 次调用里结果最大的一次 29 KB,而它来自本来就没有闸的
-    /// where / code-search / list;6909 次 read 里那道闸只咬到过 1 次。而它的代价照付
-    /// —— 超长文件静默截断,管道下与「这个文件里真的没有」逐字同形。
+    /// **它不再是任何一处的缺省。** 2026-09-05 之前,read 什么都不说时取的就是这么多行,
+    /// 撤掉的判据是重放 Vethara 侧 346 条裸 read:其中 236 条自己写着 `--limit all`,
+    /// 窗口早就被掀开;剩下 110 条全量后只有 6 条超过 harness 的 30000 字符,
+    /// 其中 5 条接了管道。中位数 3980 → 3985,反编译树里 84% 的文件本来就不到 150 行。
+    /// 更早还有一道 2000 行的闸压在 --limit 之上,那道撤于同一族判据。
     /// </summary>
-    public const int ReadWindow = 150;
+    public const int PageSize = 150;
 
     /// <summary>同名文件几选一时最多列几条。</summary>
     public const int AmbiguousFiles = 8;

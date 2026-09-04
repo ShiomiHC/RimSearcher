@@ -65,10 +65,10 @@ public static class CommonOptions
         Name = "limit",
         Short = 'n',
         Aliases = ["max-results", "count", "top", "rows", "num", "head"],
-        Placeholder = "<n|all>",
-        Help = $"How many {what} to return. Left out, every one is returned. " +
-               $"Values above {Limits.MaxLimit} are clamped to {Limits.MaxLimit}.",
-        Default = "all",
+        Placeholder = "<n>",
+        Help = $"How many {what} to return, at most. Left out, every one is returned — " +
+               "there is no cap to lift.",
+        Default = "every one",
     };
 
     /// <summary>翻页。措辞产地在 <see cref="Report.PageNotice"/>;每条列表命令都认它。</summary>
@@ -153,27 +153,8 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
         }
     }
 
-    /// <summary>
-    /// <c>--limit</c> 的取值,**并且把夹紧说出来** —— 参数被静默改写而输出里没有迹象时,
-    /// 裸计数会被读成「一共就这么多」。
-    /// </summary>
-    public LimitValue Limit(string name = "limit")
-    {
-        var limit = Args.Limit(name);
-        if (limit.Clamped)
-            Report.Notice(NoticeKind.Clamp,
-                $"--{name} {Args.Value(name)} is above the ceiling of {Limits.MaxLimit}, so at most " +
-                $"{Limits.MaxLimit} were taken. Pass --{name} all to lift the cap, or page with --offset.");
-        return limit;
-    }
-
-    /// <summary>
-    /// 「不给 <c>--limit</c> 就是全量」的那几条命令(<c>mods</c>、以及 <c>list</c> 不带
-    /// def 类型的那一半)用的取法:与 <see cref="Limit"/> 只差缺省值 —— 那边 25 条,
-    /// 这边全给,因为「一共有哪些」截一刀就答不完整(实测一份带 mod 的快照有 232 个 def 类型)。
-    /// </summary>
-    public LimitValue LimitOrAll()
-        => Args.Value("limit") is null ? LimitValue.All : Limit();
+    /// <summary><c>--limit</c> 的取值。不给就是全部,给了就照给的数来,中间没有夹板。</summary>
+    public LimitValue Limit(string name = "limit") => Args.Limit(name);
 
     public ScopeFilter Scope()
     {

@@ -258,7 +258,9 @@ behaviour on a nested `Class="…"` field instead — every `GenStepDef` in a sn
 
 No command holds back rows on its own: leave `--limit` out and the answer is the whole result
 set, `read` included, where `--lines`, `--outline` or `--member` print in full however long they
-run and 150 lines from the top is what a bare read gives. Paging starts when you pass
+run and a bare read gives the entire file. `--limit` takes a positive number and nothing else —
+`all`, `none` and `0` were once spellings of "no cap" and are now usage errors, because leaving
+the switch out already says that. Paging starts when you pass
 `--limit <n>`, and a paged answer states the three things a pipe would have destroyed: how
 many rows this page holds, how many exist in total, and the
 exact `--offset` for the next page. The last page

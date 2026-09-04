@@ -13,7 +13,7 @@ Arguments:
   <name>  A Name= of an XML node, or the defName of a def. Both are looked up.
 
 Options:
-  -n, --limit <n|all>         How many children to return. Left out, every one is returned. Values above 2000 are clamped to 2000. Default: all.
+  -n, --limit <n>             How many children to return, at most. Left out, every one is returned — there is no cap to lift. Default: every one.
                               Also accepted: --max-results, --count, --top, --rows, --num, --head.
       --path-contains <text>  Ask which layer a field comes from. For every layer in the chain, count the other defs descending from it that carry a field path containing this text, and how many of those carry the same value. Matching is the substring match 'get --path-contains' uses, so the same word selects the same fields in both commands.
                               Also accepted: --filter, --grep, --field-contains, --path-filter, --field, --fieldPath.

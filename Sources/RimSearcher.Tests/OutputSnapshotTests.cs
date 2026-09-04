@@ -140,7 +140,7 @@ public class OutputSnapshotTests
         // 而句子数的是整个结果集 —— 两份摆一起:整页那份带着 code 与 xml 两种行,
         // 一行那份把唯一的 code 行挤了出去而句子照样在。位置也一起钉住:句子在表**上方**,
         // 它改的是每一行怎么读,沉到表下就是批 B 那个盲区。
-        { "where-generated-mixed",  ["where", "soundDrop", "Standard_Drop", "--limit", "all"] },
+        { "where-generated-mixed",  ["where", "soundDrop", "Standard_Drop"] },
         { "where-generated-offpage", ["where", "soundDrop", "Standard_Drop", "--limit", "1"] },
         // 点名字段时同一个值还坐在别的路径形状上(Standard_Pickup 同时在 soundPickup 与
         // soundInteract 上)。补这一份的**理由本身值得记**:`where <字段> --value` 这个
@@ -413,7 +413,7 @@ public class OutputSnapshotTests
         // 第三条路:不给查询词的整层枚举 —— 「把还没译的全列出来」这条意图要有一种
         // 可表达的形式。两份基线:整层第一页(2026-09-05 起要显式 --limit 才分页),以及这条意图本身。
         { "keyed-all",             ["keyed", "--limit", "25"] },
-        { "keyed-all-placeholders", ["keyed", "--empty-translation", "--limit", "all"] },
+        { "keyed-all-placeholders", ["keyed", "--empty-translation"] },
         // 枚举走的是分页文法而不是精确 key 那一路,所以翻过头这条分支也得有。
         { "keyed-all-past-end",    ["keyed", "--empty-translation", "--offset", "9"] },
         // --empty-translation 是收窄参数,计数要念回它划的那道线 —— 不念的话「1 key.」会被
@@ -512,8 +512,6 @@ public class OutputSnapshotTests
         { "page-values",           ["values", "thingClass", "--limit", "1", "--offset", "1"] },
         // 负偏移在 SQLite 里等同于 0 —— 不拦下来,「少给了一个负号」与「这就是第一页」同形。
         { "page-negative",         ["list", "ThingDef", "--offset", "-2"] },
-        // 参数被夹紧就要当场说破。
-        { "limit-clamped",         ["list", "ThingDef", "--limit", "5000"] },
     };
 
     [Theory]

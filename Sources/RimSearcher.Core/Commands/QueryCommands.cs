@@ -1223,7 +1223,7 @@ public sealed class FindCommand : Command
 
             // 直接把真实值域里的近似项端出来:一条字段的取值动辄上百(compClass 有 175 个),
             // 指一条「去跑 values」的路照样看不见答案。
-            var space = ctx.Db.DistinctValues(pq, scope, Limits.MaxLimit, type).Rows.Select(v => v.Value).ToList();
+            var space = ctx.Db.DistinctValues(pq, scope, Limits.ValueSpaceSample, type).Rows.Select(v => v.Value).ToList();
 
             // RimWorld 的约定:XML 里写的是 `Class="CompProperties_X"`,而落到 def 上的
             // comps[N].compClass 存的是被解析出来的 `CompX` —— 照 XML 抄的名字必然查不到。
@@ -1669,7 +1669,7 @@ public sealed class ListCommand : Command
         }
 
         // 缺省全给:问的是「一共有哪些」,截一刀就答不完整。
-        var limit = ctx.LimitOrAll();
+        var limit = ctx.Limit();
         var rows = limit.IsAll ? all : all.Take(limit.Effective).ToList();
 
         // 筛过就把分母也说出来:一个不带出处的「12 def types」读起来是整份快照的全部。
@@ -2178,7 +2178,7 @@ public sealed class ModsCommand : Command
         // 默认全出:装了什么 mod 是快照身份的一部分,截一半没有意义。但 --limit 还是收 ——
         // 对一条列举命令拒绝它,读起来像「这里不能限量」,而实际只是「这里不需要」。
         // 严格模式该拦的是拼错的名字,不是合理的期待。
-        Options = [CommonOptions.Limit("mods") with { Default = "all" }],
+        Options = [CommonOptions.Limit("mods")],
         Examples = ["rimsearcher mods"],
         JsonKeys = [new() { Key = "mods", Rows = true, What = "one row per mod, in load order: order, package_id, name, version." }],
     };
@@ -2186,7 +2186,7 @@ public sealed class ModsCommand : Command
     public override int Run(CommandContext ctx)
     {
         var all = ctx.Db.Mods;
-        var limit = ctx.LimitOrAll();
+        var limit = ctx.Limit();
         var mods = limit.IsAll ? all : all.Take(limit.Effective).ToList();
 
         ctx.Report.CountNotice(Tally.Of(mods.Count, all.Count), "mod");

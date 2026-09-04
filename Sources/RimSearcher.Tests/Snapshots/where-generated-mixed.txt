@@ -1,4 +1,4 @@
-$ rimsearcher where soundDrop Standard_Drop --limit all
+$ rimsearcher where soundDrop Standard_Drop
 exit 0
 --- stdout ---
 9 defs.

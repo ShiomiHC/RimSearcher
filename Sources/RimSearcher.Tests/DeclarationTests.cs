@@ -87,8 +87,11 @@ public class DeclarationTests
     [Fact]
     public void 散文里的上限数字与常量同步()
     {
+        // --limit 的散文里不再有任何上限数字可对 —— 它一个闸都不剩了,于是反过来钉:
+        // 说明里不许再出现「夹紧 / 上限」这类词,那会把一个不存在的闸讲回来。
         var limitHelp = CommonOptions.Limit("defs").Help;
-        Assert.Contains(Limits.MaxLimit.ToString(), limitHelp);
+        Assert.DoesNotContain("clamp", limitHelp, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("every one is returned", limitHelp, StringComparison.Ordinal);
 
         var codeSearch = new CodeSearchCommand().Spec;
         Assert.Contains(Limits.CodeSearchMatchesPerFile.ToString(),
