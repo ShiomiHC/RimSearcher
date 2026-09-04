@@ -17,8 +17,8 @@ namespace RimSearcher.Commands;
 /// 都不缩短扫描,所以命中总数仍是准数;<c>--max-files</c> 决定**读多少**,只有它咬下去
 /// 总数才降级成下界。三刀分开声明,合并成一句话调用方就分不清该拧哪个旋钮。
 ///
-/// 两把印刷刀现在都没有默认值 —— 不给就是全部。带默认值的只剩 <c>--max-files</c>,
-/// 它防的是一棵畸形大树,不是输出预算。
+/// 三把刀都没有默认值 —— 不给就是全读全印。<c>--max-files</c> 曾有个 50000,而语料
+/// 只有两万五千个文件,那道闸够不着;它留下来的价值是**能造出部分答案**,不是拦住谁。
 /// </summary>
 public sealed class CodeSearchCommand : Command
 {
@@ -37,8 +37,8 @@ public sealed class CodeSearchCommand : Command
             "Three switches cut the answer, and they divide in two. --limit and --max-per-file decide how many " +
             "matching lines are printed; neither shortens the scan, so the match count stays exact whichever of " +
             "them bites. --max-files decides how much is read, so when that one bites the count drops to a lower " +
-            "bound ('at least N') and the answer says which trees it never reached. Only --max-files carries a " +
-            "default; --limit and --max-per-file print every match until you pass one of them a number.",
+            "bound ('at least N') and the answer says which trees it never reached. None of the three carries " +
+            "a default: left alone, every file the glob selects is read and every match is printed.",
         Positionals = [new PositionalSpec { Name = "pattern", Help = ".NET regular expression." }],
         Options =
         [
@@ -61,13 +61,16 @@ public sealed class CodeSearchCommand : Command
             },
             new OptionSpec
             {
-                // 上限防一条正则扫穿整棵树;必须可调,否则单棵树本身超限时无路可走。
+                // 2026-09-05 撤掉默认值 50000:反编译语料是 25065 个 .cs(任意后缀 25197),
+                // 全量扫一遍 3.0 秒,那个数够不着;历史上 136 次咬下去全是手写的 N,没有一次
+                // 是它。留着选项本身,因为只有它能把答案变成部分答案,而部分答案要能造得出来。
                 Name = "max-files",
                 Aliases = ["file-limit", "scan-limit", "max-scan"],
-                Placeholder = "<n|all>",
+                Placeholder = "<n>",
                 Help = "How many files the scan may read before it stops, counted after --file-glob has filtered. " +
-                       "Pass 'all' to lift the cap. This is the only cap that can make the answer partial.",
-                Default = Limits.CodeSearchMaxFiles.ToString(),
+                       "Left out, every file the glob selects is read. This is the only switch that can make " +
+                       "the answer partial: pass it a number and the match count drops to a lower bound.",
+                Default = "every file",
             },
             new OptionSpec
             {
@@ -179,7 +182,7 @@ public sealed class CodeSearchCommand : Command
         var contextSpec = ctx.Args.Value("context");
         var (before, after) = ParseContext(contextSpec, out var contextRewritten);
         var limit = ctx.Limit();
-        var maxPerFile = PositiveOrEveryOne(ctx, "max-per-file");
+        var maxPerFile = PositiveOrEveryOne(ctx, "max-per-file", "print every match");
 
         Regex regex;
         try
@@ -197,7 +200,7 @@ public sealed class CodeSearchCommand : Command
             throw new CliUsageException(NoSuchTree(sourceName, SourcesShared.TreeNames(root)));
 
         var matcher = GlobToRegex(glob);
-        var maxFiles = PositiveOrAll(ctx, "max-files", Limits.CodeSearchMaxFiles);
+        var maxFiles = PositiveOrEveryOne(ctx, "max-files", "read every file");
 
         var lines = new List<string>();
         var rows = new List<IReadOnlyDictionary<string, object?>>();
@@ -515,7 +518,7 @@ public sealed class CodeSearchCommand : Command
         var narrow = new List<string>();
         if (string.IsNullOrEmpty(sourceName)) narrow.Add("--source <tree>");
         if (!ctx.Args.Has("file-glob")) narrow.Add("--file-glob <glob>");
-        parts.Add("Raise the cap with --max-files all" +
+        parts.Add("Leave --max-files out to read every file" +
                   (narrow.Count > 0 ? $", or narrow with {string.Join(" or ", narrow)}." : "."));
 
         ctx.Report.Notice(NoticeKind.Truncation, string.Join(" ", parts));
@@ -803,29 +806,16 @@ public sealed class CodeSearchCommand : Command
 
     /// <summary>
     /// 不给就是全部,给了只收正整数 —— 与 <c>--limit</c> 同一条规则。
+    /// <paramref name="remedy"/> 是错误里那句出路,按选项管的是印还是读各说各的。
     /// </summary>
-    private static int PositiveOrEveryOne(CommandContext ctx, string name)
+    private static int PositiveOrEveryOne(CommandContext ctx, string name, string remedy)
     {
         var raw = ctx.Args.Value(name);
         if (string.IsNullOrEmpty(raw)) return int.MaxValue;
         if (int.TryParse(raw, out var n) && n > 0) return n;
         throw new CliUsageException(
             $"--{name} expects a positive whole number (got '{raw}'). " +
-            $"Leave --{name} out to print every match.");
-    }
-
-    /// <summary>
-    /// 「一个正数或 all」这条取值规则的唯一产地,现在只剩 <c>--max-files</c> 在用 ——
-    /// 它的默认值是个有限数,于是 all 仍能表达「解除它」。all / none / 0 / -1 四种写法
-    /// 都是真实调用形态,所以一并收下。
-    /// </summary>
-    private static int PositiveOrAll(CommandContext ctx, string name, int fallback)
-    {
-        var raw = ctx.Args.Value(name);
-        if (string.IsNullOrEmpty(raw)) return fallback;
-        if (raw is "all" or "none" or "0" or "-1") return int.MaxValue;
-        if (int.TryParse(raw, out var n) && n > 0) return n;
-        throw new CliUsageException($"--{name} takes a positive number or 'all'; got '{raw}'.");
+            $"Leave --{name} out to {remedy}.");
     }
 
     /// <summary>

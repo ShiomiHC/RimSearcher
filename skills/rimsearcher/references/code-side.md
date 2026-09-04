@@ -1,4 +1,4 @@
-# The code side
+﻿# The code side
 
 The game's C#, reached two ways. The DecompilerServer MCP (its own page:
 [decompiler-mcp.md](decompiler-mcp.md)) is a separate program: rimsearcher neither ships
@@ -58,9 +58,9 @@ across every file — is the CLI's, and the MCP has no equivalent.
 - **`code-search` searches decompiled C#, never Defs.** It reports matches and files as two
   numbers — "how many methods" wants the first. Of the three switches that cut the answer,
   `--limit` and `--max-per-file` only shape what is printed (the count stays exact); **only
-  `--max-files` shortens the scan**, turning the count into `at least N`. Only `--max-files`
-  carries a default; `--limit` and `--max-per-file` print every match until you pass one of
-  them a positive number, and neither takes `all`. Decompiled text has lost
+  `--max-files` shortens the scan**, turning the count into `at least N`. None of the three
+  carries a default — every file the glob selects is read and every match is printed until you
+  pass one of them a positive number, and none of them takes `all`. Decompiled text has lost
   comments and local variable names (parameters and members survive); a member you cannot
   find is usually inherited — follow the `: Base`. Trees are named by packageId (`vanilla` =
   the game); `sources list` is the roster.

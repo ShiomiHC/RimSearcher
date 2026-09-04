@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Text.RegularExpressions;
 using RimSearcher.Cli;
 using RimSearcher.Commands;
@@ -787,6 +787,14 @@ public class SkillPromiseTests
         var perFileAll = Fixture.Run("code-search", "public", "--max-per-file", "all");
         Assert.Equal(2, perFileAll.Code);
         Assert.Contains("Leave --max-per-file out", perFileAll.Stderr, StringComparison.Ordinal);
+
+        // 读多少的那道闸同批退役了它的 50000：不给就是把 glob 选中的文件全读完，
+        // 于是完整答案不再需要任何一句「这次没被截」的辩解，而 all 也不再是取值。
+        var scanBare = Fixture.Run("code-search", "public");
+        Assert.DoesNotContain("The scan stopped after reading", scanBare.Stdout, StringComparison.Ordinal);
+        var scanAll = Fixture.Run("code-search", "public", "--max-files", "all");
+        Assert.Equal(2, scanAll.Code);
+        Assert.Contains("Leave --max-files out", scanAll.Stderr, StringComparison.Ordinal);
 
         // read 一侧的缺省同批退役:什么都不说就是整个文件。
         var whole = Fixture.Run("read", "vanilla/Verse/Outline.cs");

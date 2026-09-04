@@ -14,14 +14,6 @@ public static class Limits
     /// </summary>
     public const int ValueSpaceSample = 2000;
 
-    /// <summary>
-    /// code-search 最多**读**的文件数;超出即停,计数降级成 at least 形态。
-    ///
-    /// 取值远高于真实规模(全部源码树合计约两万个 .cs,全量扫 120 MB 只需 1.6 秒):
-    /// 这是失控兜底(一棵畸形大树),不是预算闸。
-    /// </summary>
-    public const int CodeSearchMaxFiles = 50000;
-
     /// <summary>code-search 正则单文件匹配超时(毫秒),防灾难性回溯。</summary>
     public const int CodeSearchRegexTimeoutMs = 2000;
 

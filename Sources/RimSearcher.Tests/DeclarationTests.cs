@@ -93,15 +93,15 @@ public class DeclarationTests
         Assert.DoesNotContain("clamp", limitHelp, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("every one is returned", limitHelp, StringComparison.Ordinal);
 
-        // code-search 剩下的唯一一个默认值是 --max-files，它防的是一棵畸形大树。
+        // code-search 的三把刀一个默认值都不剩，于是这里钉的是「没有数字」而不是「数字对得上」：
+        // 声明里再出现一个默认行数或文件数，就是把一道撤掉的闸讲了回来。
         var codeSearch = new CodeSearchCommand().Spec;
-        var maxFiles = codeSearch.Options.Single(o => o.Name == "max-files");
-        Assert.Equal(Limits.CodeSearchMaxFiles.ToString(), maxFiles.Default);
-
-        // 而 --max-per-file 同批退役了它的 20：声明里不允许再有一个默认行数。
-        var perFile = codeSearch.Options.Single(o => o.Name == "max-per-file");
-        Assert.Equal("every one", perFile.Default);
-        Assert.Contains("there is no cap to lift", perFile.Help, StringComparison.Ordinal);
+        foreach (var name in new[] { "limit", "max-per-file", "max-files" })
+        {
+            var opt = codeSearch.Options.Single(o => o.Name == name);
+            Assert.False(opt.Default is { Length: > 0 } d && d.Any(char.IsDigit),
+                         $"--{name} 的默认值又变回了一个数：'{opt.Default}'。");
+        }
     }
 
     /// <summary>
