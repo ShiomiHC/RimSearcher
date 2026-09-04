@@ -538,6 +538,22 @@ public sealed class ExportCommand : Command
         return 0;
     }
 
+    /// <summary>
+    /// 写进 <c>activeMods</c> 的那一列字面量。**唯一产地**,恒小写。
+    ///
+    /// 游戏读这份名单的两条路口径不同:加载走 <c>ModLister</c> 的 ignore-case 字典,而
+    /// <c>ModsConfig.IsActive</c> 是拿 <c>id.ToLower()</c> 去查一个大小写敏感的 HashSet,
+    /// 那个集合**原样**收本列的字面量。带大写的一行于是让 mod 照常加载、照常进
+    /// <c>RunningMods</c>,而所有 <c>MayRequire</c> / <c>IfModActive</c> 门控的内容整批缺席。
+    ///
+    /// 落在写入侧而不是读 <c>.rml</c> 的那一侧:大写的 packageId 对手写名单是合法输入
+    /// (游戏自己的载入对话框也认),不合法的只是把它原样写进 <c>activeMods</c>。
+    ///
+    /// 顺序即加载顺序,不动。
+    /// </summary>
+    public static IReadOnlyList<string> ActiveModIds(IEnumerable<string> ids)
+        => ids.Select(i => i.ToLowerInvariant()).ToList();
+
     private static void PrepareSaveDataFolder(CommandContext ctx, string temp, IReadOnlyList<string> ids)
     {
         var realConfig = Path.GetDirectoryName(Path.GetFullPath(ctx.Config.ModsConfigPath()));
@@ -559,7 +575,7 @@ public sealed class ExportCommand : Command
         {
             doc = new XDocument(new XElement("ModsConfigData", new XElement("version", "1.6")));
         }
-        doc.Root!.Add(new XElement("activeMods", ids.Select(i => new XElement("li", i))));
+        doc.Root!.Add(new XElement("activeMods", ActiveModIds(ids).Select(i => new XElement("li", i))));
         doc.Save(modsConfig);
     }
 }

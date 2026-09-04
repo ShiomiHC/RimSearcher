@@ -204,6 +204,36 @@ public class ExportTests
         => mods.ToDictionary(m => m.Id, m => new InstalledMod(m.Id, m.Id, "/nowhere") { Dependencies = m.Deps },
                              StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// 写进 <c>activeMods</c> 的字面量恒小写。
+    ///
+    /// 游戏的两套口径在这里分叉:加载走 <c>ModLister</c> 的 ignore-case 字典,而
+    /// <c>ModsConfig.IsActive</c> 拿 <c>id.ToLower()</c> 去查一个**大小写敏感**的
+    /// HashSet —— 那个集合原样收 <c>activeMods</c> 的字面量。于是带大写的那一行
+    /// 让 mod 照常加载、照常进 <c>RunningMods</c>,而所有 <c>MayRequire</c> /
+    /// <c>IfModActive</c> 门控的内容整批静默缺席:不报错、不缺 dll,只是 Def 少了一截。
+    ///
+    /// 游戏自己写 <c>ModsConfig</c> 恒走 <c>SetActive</c> 的 <c>ToLower()</c>,所以这条
+    /// 只有脚本生成的名单踩得到 —— 而 <c>.rml</c> 允许手写,大写就是从那里进来的。
+    ///
+    /// **本仓已有的三道闸都照不到它**:指纹自校两侧都 <c>ToLowerInvariant</c> 后再比,
+    /// 依赖解析用 <c>OrdinalIgnoreCase</c>,缺 mod 检查查的是安装表。全绿,数据缺一截。
+    /// </summary>
+    [Fact]
+    public void 写进activeMods的id恒小写()
+    {
+        var ids = ExportCommand.ActiveModIds(["CETeam.CombatExtended", "ludeon.rimworld", "Solaris.RatkinRaceMod"]);
+        Assert.Equal(["ceteam.combatextended", "ludeon.rimworld", "solaris.ratkinracemod"], ids);
+    }
+
+    /// <summary>顺序是加载顺序,小写化不许动它。</summary>
+    [Fact]
+    public void 小写化不改变加载顺序()
+    {
+        string[] input = ["Harmony.Mod", "b.second", "A.third"];
+        Assert.Equal(input.Select(i => i.ToLowerInvariant()), ExportCommand.ActiveModIds(input));
+    }
+
     /// <summary>两件事在任何模式下都必须在:数据往哪写,以及真配置别碰。</summary>
     [Theory]
     [InlineData(true)]
