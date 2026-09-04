@@ -180,7 +180,9 @@ internal static class NameLookup
                 // (不必先点名一条路径),完整性交给那条命令自己按当次数据讲。
                 // 不在这里把那个数算出来印上:推荐侧要另跑一次截断查询,而被推荐命令自己
                 // 就印同一个数 —— 两处各算各的,口径迟早会岔。
-                $". 'rimsearcher where {tail} {name}' lists the defs that use it, and " +
+                // 「use it」对子串匹配是假的:`keyed .` 会推荐 `where description .`,而那一条
+                // 回来的是几百条描述里带句号的行。说「值里含有它」才是那条命令真做的事。
+                $". 'rimsearcher where {tail} {name}' lists the defs whose value contains it, and " +
                 $"'rimsearcher where --value {name}' asks the same without naming a path.");
         }
 

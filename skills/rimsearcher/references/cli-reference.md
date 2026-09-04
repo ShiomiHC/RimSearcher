@@ -390,7 +390,7 @@ What is shown is the XML before PatchOperations are applied. patch_ops counts xp
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n> | How many children to return, at most. Left out, every one is returned — there is no cap to lift. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
-| `--path-contains` <text> | Ask which layer a field comes from. For every layer in the chain, count the other defs descending from it that carry a field path containing this text, and how many of those carry the same value. Matching is the substring match 'get --path-contains' uses, so the same word selects the same fields in both commands. | `--filter`, `--grep`, `--field-contains`, `--path-filter`, `--field`, `--fieldPath`, `--path` |
+| `--path-contains` <text> | Count, for every layer in the chain, the other defs descending from it that carry a field path containing this text, and how many of those carry the same value. This is a witness count, not a record of where the field was declared — the snapshot holds no such record, and the output below the table says what the count does and does not settle. Matching is the substring match 'get --path-contains' uses, so the same word selects the same fields in both commands. | `--filter`, `--grep`, `--field-contains`, `--path-filter`, `--field`, `--fieldPath`, `--path` |
 
 `--json` keys, besides the global `notes`:
 
@@ -960,7 +960,7 @@ Answers 'what am I allowed to put here' and 'which classes are actually in use' 
 | Key | Holds |
 |---|---|
 | `values` | one row per distinct value: value, defs. |
-| `field` | an object, not an array: which full paths and def types the values came from (matched_paths, def_types, defs_with_field). A bare name matches by suffix, so this says what was actually pooled. |
+| `field` | an object, not an array: which full paths and def types the values came from (matched_paths, def_types, defs_with_field). A bare name matches by suffix, so this says what was actually pooled. Always present: on an empty result its three members are empty and defs_with_field is 0, so a missing key never has to be told apart from nothing matching. |
 
 Examples:
 

@@ -179,7 +179,10 @@ public class SkillPromiseTests
         new("`<command> --help` lists each command's keys",
             nameof(skill列出的json键与声明一致)),
         // 越界 offset 时那个键不许整个消失 —— 消费方会拿到 KeyError 而不是空数组。
-        new("always present when produced, empty array and all",
+        // 措辞 2026-09-05 收窄:旧句是「a missing key means you asked the wrong key,
+        // never an empty result」,那对**主表键之外**的键是假的(values 的 field 此前
+        // 空结果上就整个不见)。现在主表那半仍是全称,条件键那半交给各命令的 --help。
+        new("always present, empty array and all — an empty result never",
             "json的数据键零行时是空数组而不是整个消失"),
         new("`get`'s `source` line is a bare, unverified file name",
             "source列印的是没有目录的裸文件名"),

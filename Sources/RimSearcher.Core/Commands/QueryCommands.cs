@@ -2158,7 +2158,9 @@ public sealed class ValuesCommand : Command
                 Key = "field",
                 What = "an object, not an array: which full paths and def types the values came from " +
                        "(matched_paths, def_types, defs_with_field). A bare name matches by suffix, so this " +
-                       "says what was actually pooled.",
+                       "says what was actually pooled. Always present: on an empty result its three members " +
+                       "are empty and defs_with_field is 0, so a missing key never has to be told apart from " +
+                       "nothing matching.",
             },
         ],
     };
@@ -2215,6 +2217,16 @@ public sealed class ValuesCommand : Command
                                     "'rimsearcher where --value <text>' finds which path holds a value you already know."));
             if (deeper is not null) ctx.Report.Notice(NoticeKind.NextStep, deeper);
             else if (!withoutType && !outsideScope && !loosely) Completeness.NoteIndexHoldsValuesOnly(ctx, path);
+
+            // 空结果上这一格照样摆,**但只在 --json 面**。此前它只在有值时才出现,于是
+            // 机器侧「这次一个值都没有」与「你把键名问错了」逐字节同形 —— 而 skill 正教读者
+            // 「缺键 = 问错了键」,照着走会去改键名,方向就反了。
+            // 文本面不摆:那边上面那句话已经把话说完了,再来一行 `defs_with_field 0` 是噪声。
+            if (ctx.Json) ctx.Report.Detail("field", [
+                new("matched_paths", ""),
+                new("def_types", ""),
+                new("defs_with_field", (object)0),
+            ]);
             return 1;
         }
 

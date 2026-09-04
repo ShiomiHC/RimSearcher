@@ -93,9 +93,9 @@ data sits under a key that depends on the command. `<command> --help` lists each
 | `search` | `defs` — one flat row per def |
 | `get` | `defs` — **not rows**: one nested object per def, each `{def, fields, translations}`. A def's field table is `defs[i].fields`; there is no `fields` key at the root. It stays an array for a single def because a name can belong to several def types. |
 | `list` | `defs` (with a def type) or `types` (without) — never both; flat rows either way |
-| `where` with a field path | `matches` |
-| `where --value` | `paths` |
-| `values` | `values`, plus `field` (which full paths and def types the value space was drawn from) whenever the path matched something — absent when nothing did |
+| `where` with a field path | `matches` — including when `--value` is given as well |
+| `where --value` with no field path | `paths` |
+| `values` | `values`, plus `field` (which full paths and def types the value space was drawn from). Both are always present; on an empty result the members of `field` are empty or zero rather than the key being gone |
 | `fields` | `fields` |
 | `mods` | `mods` |
 | `inherit` | `nodes` — **not rows**: one nested object per XML node, each `{node, ancestors, children?, witnesses?}` |
@@ -265,8 +265,7 @@ many rows this page holds, how many exist in total, and the
 exact `--offset` for the next page. The last page
 says it is the last one; an `--offset` past the end is reported as an overshoot, not as
 "nothing found". Passing `--offset` to `get`, `inherit` or `code-search` is a usage error
-that names the first few commands which do take it and counts the rest, not a silently
-ignored switch.
+that lists the options that command does take, not a silently ignored switch.
 
 Unknown options are rejected rather than ignored, with the nearest accepted spelling — or,
 when nothing is close, everything this command does take, which answers both "what is it

@@ -80,10 +80,11 @@ a different question. None of them announces itself.
 
 - **`where`'s path is matched from the end; every `--path-contains` filter is a substring.**
   A bare name matches the last segment whole (`where genSteps` never sees
-  `extraGenSteps[N]`, while `fields BiomeDef --path-contains enStep` finds both), but a
-  dotted one is raw text that does not stop at a `.` — `where graphicData.shaderType` also
-  collects `swimmingGraphicData.shaderType`. `--exact-path` pins the whole path, with `[]`
-  standing for any index. This changes the answer, not the row count.
+  `extraGenSteps[N]`; `fields MapGeneratorDef --path-contains enStep` reaches both because
+  it is a substring), but a dotted one is raw text that does not stop at a `.` —
+  `where graphicData.shaderType` also collects `swimmingGraphicData.shaderType`.
+  `--exact-path` pins the whole path, with `[]` standing for any index, and it drops the
+  rows those extra shapes contributed: measured, 2953 defs down to 2890.
 - **`get --path-contains` and `where --value` match substrings too** — `--path-contains soundImpact`
   also returns `soundImpactDefault`, opposite meaning.
 - **One defName can belong to several def types, and `get` then prints one block per def** —
@@ -97,7 +98,12 @@ a different question. None of them announces itself.
   hold the value. A guessed field name that happens to exist returns a clean,
   complete-looking table for the wrong field — the most expensive failure here.
 - **`--scope vanilla`** (also `core`/`base`/`official`) = every module Ludeon ships — **not**
-  a snapshot named `vanilla`.
+  a snapshot named `vanilla`. It selects mods in the snapshot, so only the snapshot
+  commands take it.
+- **The code side narrows by source tree, not by scope** —
+  `rimsearcher code-search <regex> --source <tree>`, and `rimsearcher sources list` names
+  the trees. The two narrowing options mean different things and neither accepts the
+  other's name, so a spelling carried over from the other side is rejected, not reused.
 
 ## What the output cannot tell you
 
@@ -139,9 +145,9 @@ rather than assuming. The ones it has no way to state:
   included. `2` is the exception: its message is on stderr with stdout empty, so
   `2>/dev/null` turns a mistyped option into a silent empty result.
 - **`--json`**: root object; prose moves into `notes` as `{kind, text}`; the data key
-  depends on the command but is always present when produced, empty array and all. **A
-  missing key means you asked the wrong key, never an empty result.** Key map:
-  usage-notes; `<command> --help` is authoritative.
+  depends on the command but is always present, empty array and all — an empty result never
+  shows up as a missing key. Keys **beside** that one can be conditional; each command's
+  `--help` says when. Key map: usage-notes.
 - **Anything read by a program takes `--json`.** The text tables are laid out for a human
   reader: columns are padded to width, and a column whose value repeats in every row is
   lifted out into a `Same in every row, not repeated below:` line and then **missing from
@@ -193,9 +199,11 @@ rather than assuming. The ones it has no way to state:
   or profit, so ranking by it answers a different question with nothing to say so.
 - **Abstract parents are not defs**: `get` cannot reach them — it names `inherit` instead.
   `inherit` answers four things off the XML layer: who inherits from whom, which nodes are
-  abstract, which layer declares a field (`--path-contains`), and how many patches target a
-  node by `Name=`. Its field **values** are still the snapshot's, already post-patch —
-  nothing here sees a def before a PatchOperation.
+  abstract, which layers carry a field (`--path-contains`), and how many patches target a
+  node by `Name=`. The tree and those patch counts are the XML **before** PatchOperations ran;
+  the field values shown beside them are the snapshot's, already post-patch. Counting
+  witnesses is not the same as finding where a field is declared — the footnote on that
+  output says what the count does and does not settle.
 - **A `list` def type is a storage bucket, not a runtime class.** Multi-class buckets get a
   `class` column and `--own-class`. Most buckets hold one class — there `--own-class`
   narrows nothing and the behaviour lives on a nested `Class="…"` field instead: **`where

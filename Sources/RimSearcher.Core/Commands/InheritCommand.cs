@@ -63,9 +63,11 @@ public sealed class InheritCommand : Command
                 Aliases = ["filter", "grep", "field-contains", "path-filter", "field", "fieldPath",
                            "path"],
                 Placeholder = "<text>",
-                Help = "Ask which layer a field comes from. For every layer in the chain, count the other defs " +
-                       "descending from it that carry a field path containing this text, and how many of those " +
-                       "carry the same value. Matching is the substring match 'get --path-contains' uses, so the same " +
+                Help = "Count, for every layer in the chain, the other defs descending from it that carry a " +
+                       "field path containing this text, and how many of those carry the same value. This is a " +
+                       "witness count, not a record of where the field was declared — the snapshot holds no such " +
+                       "record, and the output below the table says what the count does and does not settle. " +
+                       "Matching is the substring match 'get --path-contains' uses, so the same " +
                        "word selects the same fields in both commands.",
             },
         ],
