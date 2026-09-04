@@ -377,10 +377,16 @@ public class OutputSnapshotTests
         { "get-path-is-value",     ["get", "Apparel_ShieldBelt", "--path-contains", "MarketValue"] },
         // 第三种:字段在同类型别的 def 上有(Meat_Muffalo 的 ingestible.*),这个 def 上是 null。
         { "get-path-on-kin",       ["get", "Apparel_ShieldBelt", "--path-contains", "ingestible"] },
-        // 退役的旧名 --path:它在 docs 上仍是 --out 的别名,于是拒绝消息有两句话可说。
-        // 先说的必须是**这条命令**叫它什么 —— 只说「docs 认它」的话,一次改名就把
-        // 用得最多的那个词指向了最不相干的命令,而两种消息都以 exit 2 收场,同形。
-        { "get-retired-path",      ["get", "Apparel_ShieldBelt", "--path", "comps"] },
+        // 打空的名字在另一条命令上真有意义时,拒绝消息有两句话可说。先说的必须是
+        // **这条命令**叫它什么 —— 只说「别处认它」的话,一次改名就把用得最多的那个词
+        // 指向了最不相干的命令,而两种消息都以 exit 2 收场,同形。
+        //
+        // 这一格原本钉的是 `get --path`。那个名字后来收进了 --path-contains 的别名
+        // (真实调用里打了 112 次全打空),于是改指到 --all:它在 get 上的近似候选是
+        // --defaults、在 `sources sync` 上是真选项,形状与当年的 --path 一模一样。
+        // **不是把这一格删了** —— 删了就只剩一句 "Did you mean" 的常见形状在钉,
+        // 而两句话的排序纪律再没人管。
+        { "get-retired-path",      ["get", "Apparel_ShieldBelt", "--all", "comps"] },
         // --source 已经给出时,补救措施里不许再列 --source。
         { "code-search-source-cap", ["code-search", "public", "--source", "vanilla", "--max-files", "1"] },
         { "code-search-no-tree",   ["code-search", "public", "--source", "HAR"] },

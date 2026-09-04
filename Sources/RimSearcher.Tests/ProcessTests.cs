@@ -148,4 +148,23 @@ public class ProcessTests
         // 有字段的那一份不许被没字段的那一份盖掉。
         Assert.Contains(defs.EnumerateArray(), d => d.GetProperty("fields").GetArrayLength() > 0);
     }
+
+    /// <summary>
+    /// <c>--path</c> 与 <c>--path-contains</c> 逐字节同输出。
+    ///
+    /// 钉等价而不是钉「exit 0」:别名接上了但接到别的选项上,同样是 0 退出、同样有输出,
+    /// 而印出来的是另一个筛子的结果。真实调用里这个名字打了 112 次全打空,所以它接的是
+    /// 哪一个必须有据可查。get 与 inherit 两条都钉 —— 加别名时漏一条不会有任何迹象。
+    /// </summary>
+    [Theory]
+    [InlineData("get", "Apparel_ShieldBelt")]
+    [InlineData("inherit", "Bullet_Revolver")]
+    public void path是path_contains的别名(string command, string defName)
+    {
+        var (viaAlias, aliasErr, aliasCode) = Run(command, defName, "--path", "comps");
+        var (viaName, nameErr, nameCode) = Run(command, defName, "--path-contains", "comps");
+        Assert.Equal(nameCode, aliasCode);
+        Assert.Equal(nameErr, aliasErr);
+        Assert.Equal(viaName, viaAlias);
+    }
 }

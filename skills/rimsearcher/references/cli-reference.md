@@ -352,7 +352,7 @@ defName is not listed as a field: the def_name line above the table is that valu
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n> | How many fields to return, at most. Left out, every one is returned — there is no cap to lift. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
-| `--path-contains` <text> | Only show field paths containing this text. Repeat it to widen the selection. | `--filter`, `--grep`, `--field-contains`, `--path-filter`, `--field`, `--field-path`, `--only` |
+| `--path-contains` <text> | Only show field paths containing this text. Repeat it to widen the selection. | `--filter`, `--grep`, `--field-contains`, `--path-filter`, `--field`, `--field-path`, `--only`, `--path` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind`, `--category` |
 | `--defaults` | Also list fields whose value is the one a fresh instance of the declaring type already carries. They are left out by default because they are the ones most often read as something an author chose. The 'xml' column on those rows says whether this def's own XML wrote the path (here), only an ancestor did (parent), neither (no), or that the row cannot be pinned to a line inside a container the XML did write (under <container>). no is determined, not a path-shape maybe. The output says which XML it read: 'read after every patch ran' is the merged XML after every PatchOperation ran, so a line another mod's patch added reads as here+patch or parent+patch rather than no; 'read before patches ran' is the XML as written on disk, and there that same line does read as no. A yes with xml=here is an explicit write of the default. Without the xml column, a def whose XML writes that same value and a def that never mentions the field look the same. How many were left out is always printed, and --path-contains shows a named field either way. | `--with-defaults`, `--all-fields` |
 
@@ -390,7 +390,7 @@ What is shown is the XML before PatchOperations are applied. patch_ops counts xp
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n> | How many children to return, at most. Left out, every one is returned — there is no cap to lift. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
-| `--path-contains` <text> | Ask which layer a field comes from. For every layer in the chain, count the other defs descending from it that carry a field path containing this text, and how many of those carry the same value. Matching is the substring match 'get --path-contains' uses, so the same word selects the same fields in both commands. | `--filter`, `--grep`, `--field-contains`, `--path-filter`, `--field`, `--fieldPath` |
+| `--path-contains` <text> | Ask which layer a field comes from. For every layer in the chain, count the other defs descending from it that carry a field path containing this text, and how many of those carry the same value. Matching is the substring match 'get --path-contains' uses, so the same word selects the same fields in both commands. | `--filter`, `--grep`, `--field-contains`, `--path-filter`, `--field`, `--fieldPath`, `--path` |
 
 `--json` keys, besides the global `notes`:
 

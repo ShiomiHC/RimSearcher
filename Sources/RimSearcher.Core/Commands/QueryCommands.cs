@@ -308,7 +308,15 @@ public sealed class GetCommand : Command
                 // ——读成文件系统路径、读成按值匹配——各零例),而产出式里没人写得出它,
                 // 24/24 伸手去抓的是 filter。所以 filter 留作别名接住伸手。
                 // 光叫 path 两头都不占:产出式 0/24,而它与文件路径撞词。
-                Aliases = ["filter", "grep", "field-contains", "path-filter", "field", "field-path", "only"],
+                //
+                // path 后来还是收进别名了,而那条实测没被推翻 —— 换的是证据来源:
+                // 真实调用里(Vethara 那批会话)`get … --path` 打了 112 次,一次都没成。
+                // 产出式盲测问「你会怎么写」,真实调用记的是「先写了什么」,而这个选项的
+                // 主名恰好长得像它的一个前缀,伸手去抓 path 是很自然的第一下。
+                // 撞词那半仍然成立,所以它只是别名:`docs --path` 是 --out 的别名,而
+                // get / inherit 这边一个文件路径选项都没有,同一条命令里不产生歧义。
+                Aliases = ["filter", "grep", "field-contains", "path-filter", "field", "field-path",
+                           "only", "path"],
                 Placeholder = "<text>",
                 Help = "Only show field paths containing this text. Repeat it to widen the selection.",
                 Narrows = true,
