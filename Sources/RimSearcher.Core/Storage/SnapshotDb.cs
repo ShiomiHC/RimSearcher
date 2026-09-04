@@ -70,6 +70,19 @@ public sealed record TranslationRow(string DefName, string? DefType, string Path
                                    string? SourceFile = null, int? SourceFileCount = null);
 
 /// <summary>
+/// 一个「可以被注入译文」的槽位。<paramref name="Path"/> 是下标式键串(<c>stages.0.label</c>),
+/// <paramref name="SuggestedPath"/> 是把手式(<c>stages.observed_corpse.label</c>)——
+/// 语言文件里两种都合法、都真注入得上,所以译者写的那一串得先归一到一种。
+///
+/// <paramref name="TranslationAllowed"/> 为假 = 这个字段不许注入译文
+/// (<c>NoTranslate</c> / <c>Unsaved</c>,或它的某一级祖先带)。这一格是「谁都没译」与
+/// 「白译也没用」的分界,而两者在译文表里同形 —— 都是没有行。
+/// </summary>
+public sealed record InjectionKeyRow(string DefName, string? DefType, string Path, string SuggestedPath,
+                                     bool IsCollection, bool TranslationAllowed,
+                                     bool FullListTranslationAllowed);
+
+/// <summary>
 /// 一条界面文案译文。<paramref name="Key"/> 是 <c>"X".Translate()</c> 里那个 X ——
 /// 与任何 def 无关,所以这张表没有 def_id、也没有 def_type。
 ///
@@ -1339,6 +1352,30 @@ public sealed class SnapshotDb : IDisposable
         return rows;
     }
 
+    /// <summary>
+    /// 这个 def 的注入键槽位。<c>null</c> = 这份快照根本没量过这一层(导出器早于 0.8.0),
+    /// 空表 = 量过了、这个 def 没有带信息的槽位。同 <see cref="TypeDeclaredPaths"/> 那条缝:
+    /// 两者合成一个空列表,调用方就会把「没导」说成「没有」。
+    ///
+    /// 注意这一层**只收带信息的行**(两键不同的、或不许译且有文本的),所以空表不代表
+    /// 这个 def 没有可注入字段 —— 拿它回答「这个 def 能译什么」会静默少掉一大截。
+    /// </summary>
+    public IReadOnlyList<InjectionKeyRow>? InjectionKeys(string defName)
+    {
+        if (!Meta.IndexesInjectionKeys || !HasInjectionKeys) return null;
+        var p = new Dictionary<string, object?> { ["@n"] = defName };
+        var rows = new List<InjectionKeyRow>();
+        using var rd = Query(
+            "SELECT def_name, def_type, path, suggested_path, is_collection, translation_allowed, " +
+            "full_list_translation_allowed FROM injection_keys " +
+            "WHERE def_name = @n COLLATE NOCASE ORDER BY path", p);
+        while (rd.Read())
+            rows.Add(new InjectionKeyRow(rd.GetString(0), rd.IsDBNull(1) ? null : rd.GetString(1),
+                rd.GetString(2), rd.GetString(3),
+                rd.GetInt32(4) != 0, rd.GetInt32(5) != 0, rd.GetInt32(6) != 0));
+        return rows;
+    }
+
     public int CountTranslationsOutside(IEnumerable<string> defNames)
     {
         var names = defNames.ToList();
@@ -1948,6 +1985,14 @@ public sealed class SnapshotDb : IDisposable
     /// </summary>
     private bool TranslationsHaveSourceFile => _trSf ??= HasColumn("translations", "source_file");
     private bool? _trSf;
+
+    /// <summary>
+    /// 这份库有 injection_keys 这张表吗。<c>PRAGMA table_info</c> 对不存在的表回零行,
+    /// 于是探一列就够 —— 能力位说的是「导出带没带这一层」,这个探的是「库里建没建」,
+    /// 两者都得真才敢读。
+    /// </summary>
+    private bool HasInjectionKeys => _ik ??= HasColumn("injection_keys", "suggested_path");
+    private bool? _ik;
 
     private bool HasColumn(string table, string column)
     {

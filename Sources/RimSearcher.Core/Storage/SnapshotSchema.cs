@@ -19,6 +19,7 @@ public static class SnapshotSchema
     ///
     /// 0.5.0 起 xml_nodes 多了 patch_ops_defname / patch_ops_label,并加 xml_written
     /// 与 type_fields 两张表。0.6.0 起 xml_written 多了 inner_text,0.7.0 多了 patched。
+    /// 0.8.0 起加 injection_keys 表,translations 多了 source_file / source_file_count。
     /// 都不涨这一档:
     /// 精确相等的 schema 检查会让磁盘上的旧库整份打不开,而缺的那一层由导出器版本上
     /// 的能力位说话(同 content_fingerprint 那条缝)。新导入的库有这些列/表;旧库没有,
@@ -126,6 +127,29 @@ public static class SnapshotSchema
             source_file TEXT,
             source_file_count INTEGER,
             origin     TEXT NOT NULL
+        );
+
+        -- 注入键层。一个「可以被注入译文」的槽位一行,与译文在不在无关。
+        -- path 是下标式(stages.0.label),suggested_path 是把手式(stages.observed_corpse.label)。
+        -- 语言文件里两种都合法、都真注入得上,所以译者写的那一串得先归一到一种,
+        -- 否则 --path 就要求调用方先猜对是哪一种。
+        --
+        -- **这张表只有带信息的行**(判据在 IntermediateFormat 的注入键层那一段):两个键串
+        -- 不同的,或不许译且当下有文本的。于是「这里没有这个 def 的行」不等于「这个 def
+        -- 没有可注入槽位」—— 它的绝大多数槽位是两键同形且可译的那种,在字段表里就有。
+        -- 拿这张表回答「这个 def 能译什么」会静默少掉一大截。
+        --
+        -- 0.8.0 起才有这张表。旧库里它不在,查询侧靠能力位(IndexesInjectionKeys)决定读不读;
+        -- 空表与「这一档没导」在 SQL 上同形,不许当成「量过了、没有」。
+        CREATE TABLE injection_keys (
+            def_id         INTEGER,
+            def_type       TEXT,
+            def_name       TEXT NOT NULL,
+            path           TEXT NOT NULL,
+            suggested_path TEXT NOT NULL,
+            is_collection  INTEGER NOT NULL DEFAULT 0,
+            translation_allowed INTEGER NOT NULL DEFAULT 1,
+            full_list_translation_allowed INTEGER NOT NULL DEFAULT 0
         );
 
         -- Keyed 译文 —— 界面文案。**这张表里一行都不属于任何 def**:key 是
@@ -364,6 +388,8 @@ public static class SnapshotSchema
         CREATE INDEX idx_fv_leaf_nc  ON field_values(leaf COLLATE NOCASE);
         CREATE INDEX idx_fv_value_nc ON field_values(value COLLATE NOCASE);
         CREATE INDEX idx_tr_defname ON translations(def_name);
+        CREATE INDEX idx_ik_defname ON injection_keys(def_name);
+        CREATE INDEX idx_ik_suggested ON injection_keys(def_type, def_name, suggested_path);
         CREATE INDEX idx_keyed_key   ON keyed(key);
         CREATE INDEX idx_xn_name    ON xml_nodes(name);
         CREATE INDEX idx_xn_parent  ON xml_nodes(parent_name);

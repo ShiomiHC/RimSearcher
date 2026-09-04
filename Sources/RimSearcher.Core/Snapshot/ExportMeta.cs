@@ -80,6 +80,15 @@ public sealed record ExportMeta(
         && !string.IsNullOrEmpty(PatchRoute)
         && PatchRoute != IntermediateFormat.PatchRouteNone;
 
+    /// <summary>
+    /// 这份快照记下了注入键层吗(导出器 0.8.0 起)。
+    ///
+    /// 老快照的译文表存的是**译者写的那一串**:同一个槽位在把手式与下标式两种键下各存
+    /// 一份,而 <c>--path</c> 只能匹配上其中一种 —— 另一种回的零与「这个 def 没这条译文」
+    /// 逐字同形。这一档之后两种键归一,且「这个字段不许译」不再与「谁都没译」同形。
+    /// </summary>
+    public bool IndexesInjectionKeys => AtLeast(ExporterVersion, 0, 8);
+
     private static bool AtLeast(string version, int major, int minor)
     {
         var parts = (version ?? "").Split('.');

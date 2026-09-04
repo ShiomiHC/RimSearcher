@@ -36,8 +36,11 @@ namespace RimSearcher.DataMod
         /// 0.6.0 起 xml_written 每条叶子带行内文本,短形式标签底下的候选格才能分开。
         /// 0.7.0 起 xml_written 的路径全集取自**打完补丁**的合并文档,每条路径带一个
         /// 「这一行是补丁加的」标记;元数据行记下走的是哪条路线。
+        /// 0.8.0 起注入键层进导出(kind=injkey):每个可注入槽位的把手式键串与下标式键串
+        /// 同时落下,于是译文表里译者写的那一串归得了一;另带「这个槽位不许译」的判据,
+        /// 那一格此前与「谁都没译」同形。
         /// </summary>
-        public const string ExporterVersion = "0.7.0";
+        public const string ExporterVersion = "0.8.0";
 
         public static ExportLimits Limits = new ExportLimits();
 
@@ -61,6 +64,7 @@ namespace RimSearcher.DataMod
             var injections = 0;
             var keyed = 0;
             var xmlNodes = 0;
+            var injKeys = 0;
 
             // 经济面在**开流之前**整批攒好 —— 这一段是唯一会因 RimWorld 版本更新而失败的
             // emitter(它调 vanilla 的 private 方法),而它失败时 def 导出必须照常完成、
@@ -139,6 +143,15 @@ namespace RimSearcher.DataMod
                     injections++;
                 }
 
+                // 注入键层紧跟在 definj 后面 —— 两者的行得互相对得上,
+                // 而对得上的前提是同一次导出、同一套 def 对象。
+                ForEachInjectionKeyLine(line =>
+                {
+                    writer.WriteLine(line);
+                    records++;
+                    injKeys++;
+                });
+
                 foreach (var line in BuildKeyedLines())
                 {
                     writer.WriteLine(line);
@@ -177,6 +190,7 @@ namespace RimSearcher.DataMod
                     .Int(IntermediateFormat.KeyRecords, records)
                     .Int(IntermediateFormat.KeyDefs, defs)
                     .Int(IntermediateFormat.KeyInjections, injections)
+                    .Int(IntermediateFormat.KeyInjKeys, injKeys)
                     .Int(IntermediateFormat.KeyKeyedCount, keyed)
                     .Int(IntermediateFormat.KeyXmlNodes, xmlNodes)
                     .Int(IntermediateFormat.KeyEconomyRows, economy)
@@ -596,6 +610,81 @@ namespace RimSearcher.DataMod
                         .ToString();
                 }
             }
+        }
+
+        /// <summary>
+        /// 注入键层倾倒 —— 每个「可以被注入译文」的槽位一行,与译文在不在无关。
+        ///
+        /// 产地是 vanilla 自己的 <c>DefInjectionUtility.ForEachPossibleDefInjection</c>:
+        /// 它对同一个槽位同时给出下标式与把手式两个键串,而语言文件里两种都合法。
+        /// 不抄那套遍历、改自己重走一遍反射,得到的键串就会与游戏实际认的那套分家 ——
+        /// 而分家的结果是「这个键注入不上」印成「这个字段不存在」。
+        ///
+        /// 只发带信息的行,判据见 <see cref="IntermediateFormat.KeySuggestedPath"/> 那一段。
+        /// 全发的代价是每个 def 的每个字符串字段一行,数十万到数百万条,而其中绝大多数
+        /// 只是把字段表又说了一遍。
+        ///
+        /// 回调式而不是 <c>yield</c>:vanilla 那个方法是推的,包成迭代器要先整批攒在内存里。
+        /// </summary>
+        private static void ForEachInjectionKeyLine(Action<string> emit)
+        {
+            foreach (var defType in GenDefDatabase.AllDefTypesWithDatabases())
+            {
+                var typeName = defType.Name;
+                try
+                {
+                    DefInjectionUtility.ForEachPossibleDefInjection(defType,
+                        (suggestedPath, normalizedPath, isCollection, currentValue,
+                         currentValueCollection, translationAllowed, fullListTranslationAllowed,
+                         fieldInfo, def) =>
+                        {
+                            if (def == null || normalizedPath == null) return;
+                            if (suggestedPath == normalizedPath
+                                && (translationAllowed || !HasText(currentValue, currentValueCollection)))
+                                return;
+
+                            // 前缀用 def.defName 而不是「第一个点之前」:defName 本身带点时
+                            // 后者会把键串切在半截上,而切错的路径与一条真路径同形。
+                            var prefix = def.defName + ".";
+                            if (!normalizedPath.StartsWith(prefix, StringComparison.Ordinal)) return;
+
+                            var suggested = suggestedPath;
+                            if (suggested != null && suggested.StartsWith(prefix, StringComparison.Ordinal))
+                                suggested = suggested.Substring(prefix.Length);
+
+                            emit(new JsonLine()
+                                .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindInjKey)
+                                .Str(IntermediateFormat.KeyDefType, typeName)
+                                .Str(IntermediateFormat.KeyDefName, def.defName)
+                                .Str(IntermediateFormat.KeyPath, normalizedPath.Substring(prefix.Length))
+                                .Str(IntermediateFormat.KeySuggestedPath, suggested ?? "")
+                                .Bool(IntermediateFormat.KeyIsCollection, isCollection)
+                                .Bool(IntermediateFormat.KeyTranslationAllowed, translationAllowed)
+                                .Bool(IntermediateFormat.KeyFullListTranslationAllowed,
+                                      fullListTranslationAllowed)
+                                .ToString());
+                        });
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning("[RimSearcher] skipping injection keys for def type " + typeName
+                                + ": " + ex.Message);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 这个槽位当下有没有文本。「不许译」只在有文本时才值得存下来 ——
+        /// 空槽位不会被当成「谁都没译」，那个问题根本不会发生；而不分文本全发的
+        /// 代价是每个 def 的内部缓存字段（Unsaved 那批）各占一行。
+        /// </summary>
+        private static bool HasText(string value, IEnumerable<string> collection)
+        {
+            if (!string.IsNullOrEmpty(value)) return true;
+            if (collection == null) return false;
+            foreach (var item in collection)
+                if (!string.IsNullOrEmpty(item)) return true;
+            return false;
         }
 
         /// <summary>

@@ -11,6 +11,11 @@ public sealed record ImportStats(
     int HarvestedTranslations, int KeyedInEffect, int KeyedHarvested,
     int TruncatedDefs, int XmlNodes, int EconomyRows,
     /// <summary>
+    /// 注入键层的行数。**零不是「一个可注入槽位都没有」** —— 这一层只收带信息的行,
+    /// 而 0.8.0 之前的导出根本没这一层。两种成因靠导出器版本上的能力位分,不靠这个数。
+    /// </summary>
+    int InjKeys,
+    /// <summary>
     /// 经济面的三态,<c>null</c> 是第四态(这份导出建于经济面之前)。
     /// <see cref="EconomyRows"/> 单独看不出这四种成因的分别。
     /// </summary>
@@ -56,7 +61,7 @@ public sealed class SnapshotImporter
 
         ExportMeta? meta = null;
         var defs = 0; var fieldValues = 0; var noise = 0; var runtimeTr = 0; var truncatedDefs = 0;
-        var xmlNodes = 0; var keyedInEffect = 0; var economyRows = 0;
+        var xmlNodes = 0; var keyedInEffect = 0; var economyRows = 0; var injKeys = 0;
         long? declaredRecords = null;
         // 经济面的三态从尾行来。**null 是第四态** —— 尾行没这个字段 = 这份导出建于经济面
         // 进中间格式之前。四态在 meta 表里必须分得开,见 SnapshotSchema.MetaKeyEconomyState。
@@ -77,6 +82,11 @@ public sealed class SnapshotImporter
             using var insertTr = Prepare(db, """
                 INSERT INTO translations (def_id, def_type, def_name, path, translated, original, language, source_mod, source_file, source_file_count, origin)
                 VALUES ($id,$t,$n,$p,$tr,$o,$lang,$sm,$sf,$sfc,$origin)
+                """);
+            using var insertIk = Prepare(db, """
+                INSERT INTO injection_keys (def_id, def_type, def_name, path, suggested_path,
+                                            is_collection, translation_allowed, full_list_translation_allowed)
+                VALUES ($id,$t,$n,$p,$sp,$col,$ta,$fl)
                 """);
             using var insertXn = Prepare(db, """
                 INSERT INTO xml_nodes (def_type, name, parent_name, abstract, def_name, label,
@@ -126,6 +136,9 @@ public sealed class SnapshotImporter
             var idsByName = new Dictionary<string, List<(long Id, string? Type)>>(StringComparer.Ordinal);
             var ftsExtra = new Dictionary<long, List<string>>();
             var pendingInjections = new List<(string defName, string defType, string path, string translated, string original)>();
+            // 注入键行同样缓到文件读完再落 —— def_id 要等 idsByName 集齐才定得下来。
+            var pendingInjKeys = new List<(string defName, string defType, string path, string suggested,
+                                           bool collection, bool allowed, bool fullList)>();
             long nextId = 1;
             // keyed 自己的 id 序列。显式维护而不是问 last_insert_rowid():FTS 那一行要用同一个
             // rowid,而两条 INSERT 之间夹着别的语句。
@@ -422,6 +435,18 @@ public sealed class SnapshotImporter
                     continue;
                 }
 
+                if (kind == IntermediateFormat.KindInjKey)
+                {
+                    pendingInjKeys.Add((
+                        Str(root, IntermediateFormat.KeyDefName) ?? "",
+                        Str(root, IntermediateFormat.KeyDefType) ?? "",
+                        Str(root, IntermediateFormat.KeyPath) ?? "",
+                        Str(root, IntermediateFormat.KeySuggestedPath) ?? "",
+                        Flag(root, IntermediateFormat.KeyIsCollection) == 1,
+                        Flag(root, IntermediateFormat.KeyTranslationAllowed) == 1,
+                        Flag(root, IntermediateFormat.KeyFullListTranslationAllowed) == 1));
+                }
+
                 if (kind == IntermediateFormat.KindDefInjection)
                 {
                     pendingInjections.Add((
@@ -445,6 +470,21 @@ public sealed class SnapshotImporter
             if (declaredRecords is { } dr && dr != records)
                 throw new SnapshotFormatError(
                     $"The export file declares {dr} records but {records} were read. The file is damaged; re-run the export.");
+
+            foreach (var ik in pendingInjKeys)
+            {
+                var owner = Owner(Candidates(idsByName, ik.defName), ik.defType);
+                Bind(insertIk, "$id", owner);
+                Bind(insertIk, "$t", ik.defType);
+                Bind(insertIk, "$n", ik.defName);
+                Bind(insertIk, "$p", ik.path);
+                Bind(insertIk, "$sp", ik.suggested);
+                Bind(insertIk, "$col", ik.collection ? 1 : 0);
+                Bind(insertIk, "$ta", ik.allowed ? 1 : 0);
+                Bind(insertIk, "$fl", ik.fullList ? 1 : 0);
+                insertIk.ExecuteNonQuery();
+                injKeys++;
+            }
 
             foreach (var inj in pendingInjections)
             {
@@ -575,7 +615,7 @@ public sealed class SnapshotImporter
 
             return new ImportStats(defs, fieldValues, noise, runtimeTr, harvested,
                                    keyedInEffect, keyedHarvested, truncatedDefs, xmlNodes,
-                                   economyRows, economyState, meta, dbPath);
+                                   economyRows, injKeys, economyState, meta, dbPath);
         }
     }
 

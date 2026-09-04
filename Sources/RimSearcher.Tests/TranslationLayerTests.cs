@@ -1,3 +1,4 @@
+using RimSearcher.Contract;
 using RimSearcher.Storage;
 
 namespace RimSearcher.Tests;
@@ -96,6 +97,97 @@ public class TranslationLayerTests
                                                 "--db", db.Path);
         Assert.Equal(0, thingCode);
         Assert.DoesNotContain("只属于 StatDef 那一个", thing, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 造一份只有 meta + 给定行 + 尾行的合成导出并导入。<paramref name="exporterVersion"/> 上
+    /// 场是因为注入键层归它的能力位管 —— 「这一档没导」与「导了、没有行」得分得开。
+    /// </summary>
+    private static SnapshotDb ImportLines(string caseName, string exporterVersion,
+                                          params string[] lines)
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "translayer", caseName);
+        if (Directory.Exists(dir)) Directory.Delete(dir, true);
+        Directory.CreateDirectory(dir);
+        var export = Path.Combine(dir, caseName + IntermediateFormat.FileExtension);
+
+        using (var fs = File.Create(export))
+        using (var gz = new System.IO.Compression.GZipStream(fs, System.IO.Compression.CompressionLevel.Optimal))
+        using (var w = new StreamWriter(gz, new System.Text.UTF8Encoding(false)) { NewLine = "\n" })
+        {
+            w.WriteLine(new JsonLine()
+                .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindMeta)
+                .Int(IntermediateFormat.KeyFormatVersion, IntermediateFormat.FormatVersion)
+                .Str(IntermediateFormat.KeyExporterVersion, exporterVersion)
+                .Str(IntermediateFormat.KeyExportedAtUtc, "2026-09-05T00:00:00.0000000Z")
+                .Str(IntermediateFormat.KeyGameVersion, Fixture.GameVersion)
+                .Str(IntermediateFormat.KeyLanguage, Fixture.Language)
+                .Raw(IntermediateFormat.KeyMods, "[]")
+                .Raw(IntermediateFormat.KeyLimits, "{}")
+                .ToString());
+            foreach (var line in lines) w.WriteLine(line);
+            w.WriteLine(new JsonLine()
+                .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindEnd)
+                .Int(IntermediateFormat.KeyRecords, lines.Length + 2)
+                .ToString());
+        }
+
+        var db = Path.Combine(dir, caseName + ".db");
+        new SnapshotImporter().Import(export, db);
+        return SnapshotDb.Open(db);
+    }
+
+    private static string InjKeyLine(string defName, string path, string suggested,
+                                     bool allowed = true) =>
+        new JsonLine()
+            .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindInjKey)
+            .Str(IntermediateFormat.KeyDefType, "HediffDef")
+            .Str(IntermediateFormat.KeyDefName, defName)
+            .Str(IntermediateFormat.KeyPath, path)
+            .Str(IntermediateFormat.KeySuggestedPath, suggested)
+            .Bool(IntermediateFormat.KeyIsCollection, false)
+            .Bool(IntermediateFormat.KeyTranslationAllowed, allowed)
+            .Bool(IntermediateFormat.KeyFullListTranslationAllowed, false)
+            .ToString();
+
+    /// <summary>
+    /// 注入键层进得了库,两个键串各占一列。
+    ///
+    /// 这一层的用途就是拿把手式换下标式:游戏对同一个槽位同时认
+    /// <c>stages.0.label</c> 与 <c>stages.observed_corpse.label</c>,而译文表里存的是译者
+    /// 写的那一串 —— 少了这张对照表,<c>--path</c> 只匹配得上其中一种,另一种回的零与
+    /// 「这个 def 没这条译文」逐字同形。
+    /// </summary>
+    [Fact]
+    public void 注入键层的两个键串各自入库()
+    {
+        using var db = ImportLines("injkeys", "0.8.0",
+            InjKeyLine("ObservedLayingCorpse", "stages.0.label", "stages.observed_corpse.label"),
+            InjKeyLine("ObservedLayingCorpse", "description", "description", allowed: false));
+
+        var rows = db.InjectionKeys("ObservedLayingCorpse");
+        Assert.NotNull(rows);
+        Assert.Equal(2, rows!.Count);
+
+        var handled = rows.Single(r => r.Path == "stages.0.label");
+        Assert.Equal("stages.observed_corpse.label", handled.SuggestedPath);
+        Assert.True(handled.TranslationAllowed);
+
+        // 「不许译」那一格必须活着进库 —— 它是「谁都没译」与「白译也没用」的唯一分界。
+        Assert.False(rows.Single(r => r.Path == "description").TranslationAllowed);
+    }
+
+    /// <summary>
+    /// 导出器早于 0.8.0 的快照对这一层回 <c>null</c>,不是空表。
+    ///
+    /// 合成一个空列表就等于宣布「量过了、这个 def 没有可注入槽位」,而真相是这份快照
+    /// 根本没量过 —— 那两句话的下一步一个是「别费劲了」、一个是「重导一次」。
+    /// </summary>
+    [Fact]
+    public void 没量过注入键层的快照回空而不是空表()
+    {
+        using var db = ImportLines("injkeysold", "0.7.0");
+        Assert.Null(db.InjectionKeys("ObservedLayingCorpse"));
     }
 
     /// <summary>

@@ -30,7 +30,7 @@ namespace RimSearcher.Contract
         ///
         /// 0.5.0 起多了 kind=xmlwritten / kind=typefields,以及 xmlnode 上的
         /// patch_ops_defname / patch_ops_label。0.6.0 起 xmlwritten 另带与 paths
-        /// 同序的 texts。都不涨这一档:缺的那一层由导出器版本上的能力位说话
+        /// 同序的 texts。0.8.0 起多了 kind=injkey(注入键层)。都不涨这一档:缺的那一层由导出器版本上的能力位说话
         /// (与 IndexesNestedClass 同一套),旧文件仍能导入、旧库仍能打开;
         /// 涨了就会把磁盘上的旧导出整批拒收,而「看不见 ≠ 不存在」要的是宣布缺层,
         /// 不是把整份快照关掉。旧 CLI 读到不认识的 kind 会静默落空,但它本来就没有
@@ -75,6 +75,8 @@ namespace RimSearcher.Contract
         public const string KindXmlWritten = "xmlwritten";
         /// <summary>一个 def 类型能有的字段路径全集,与值无关。</summary>
         public const string KindTypeFields = "typefields";
+        /// <summary>一个 def 上「可以被注入译文」的槽位一行,与译文在不在无关。</summary>
+        public const string KindInjKey = "injkey";
         public const string KindEnd = "end";
 
         // 字段名(两侧共用,防手写漂移)
@@ -121,6 +123,45 @@ namespace RimSearcher.Contract
         /// 必须随行带出:占位与真译文在表里同形,而它实际显示的是英文。
         /// </summary>
         public const string KeyPlaceholder = "placeholder";
+
+        // ---- 注入键层(kind=injkey)。def_type / def_name / path 共用上面那批 ----
+        //
+        // 产地是 vanilla 的 `DefInjectionUtility.ForEachPossibleDefInjection`,它对每个槽位
+        // **同时**给出两个键串:normalizedPath 用下标(`stages.0.label`),suggestedPath 用
+        // 把手(`stages.observed_corpse.label`,把手为空时退回下标)。语言文件里两种都合法、
+        // 都真的注入得上,于是同一个槽位在不同 mod 的译文里长成两个不同的键 —— 库里若只存
+        // 译者写的那一串,`--path` 就得让调用方先猜对是哪一种。
+        //
+        // **只发带信息的行**,判据两条:
+        //   1. 两个键串不同 —— 这一条是把手 ↔ 下标的对照表本身,少一条就是一个键归一不了。
+        //   2. translation_allowed 为假**且这个槽位当下有文本** —— 「谁都没译」与「这个字段
+        //      不许译」在译文表里同形(都是没有行),而出路一个是去译、一个是别白费劲。
+        //      有文本这个附加条件不是省事:空槽位不会被当成「谁都没译」,那个问题根本不会
+        //      发生;而不加它,每个 def 的内部缓存字段(Unsaved 那批)都要各占一行。
+        // 两条都不满足的槽位(可译、键串同形)不发:它在字段表里已经在场,重复一遍就是几十万行。
+        //
+        // 限度:把手取自导出时刻的 label(`GetBestHandleWithIndexForListElement`),而译者
+        // 手上那份语言文件可能是作者改 label **之前**写的。那种键在这张表里查不到,导入侧
+        // 必须把它单独标出来,不许挑一个近似的当成对上了。
+
+        /// <summary>把手式键串(去掉 defName. 前缀)。TKey 替换掉整串时不带前缀,原样落下。</summary>
+        public const string KeySuggestedPath = "suggested_path";
+
+        /// <summary>
+        /// 这个槽位允许注入译文吗。假 = 字段带 <c>NoTranslate</c> 或 <c>Unsaved</c>,或它的
+        /// 某一级祖先带 —— 该标记沿递归下传,所以假不一定长在这个字段自己身上。
+        /// </summary>
+        public const string KeyTranslationAllowed = "translation_allowed";
+
+        /// <summary>
+        /// 字符串集合字段允许**换条数**吗(<c>TranslationCanChangeCount</c>)。
+        /// 与 <see cref="KeyTranslationAllowed"/> 分开带:后者管「能不能译」,这个管
+        /// 「译文的条数必须与原文一样吗」,而条数不符是译文整条静默失效的常见成因。
+        /// </summary>
+        public const string KeyFullListTranslationAllowed = "full_list_translation_allowed";
+
+        /// <summary>这个槽位是字符串集合而不是单个字符串。</summary>
+        public const string KeyIsCollection = "is_collection";
 
         // 继承层(kind=xmlnode)。def_type / def_name / source_mod / source_file / name 共用上面那批。
         /// <summary>ParentName= 的值。空 = 这个节点不继承任何东西。</summary>
@@ -303,6 +344,8 @@ namespace RimSearcher.Contract
         public const string KeyRecords = "records";
         public const string KeyDefs = "defs";
         public const string KeyInjections = "injections";
+        /// <summary>kind=injkey 的行数。零 = 这次没发注入键层,不是「一个槽位都没有」。</summary>
+        public const string KeyInjKeys = "inj_keys";
         public const string KeyKeyedCount = "keyed";
         public const string KeyXmlNodes = "xml_nodes";
         public const string KeyEconomyRows = "economy";
