@@ -501,13 +501,13 @@ public sealed class CodeSearchCommand : Command
         };
 
         if (partialTree is not null)
-            parts.Add($"'{Label(partialTree)}' was read only in part: " +
+            parts.Add($"'{partialTree}' was read only in part: " +
                       $"{Tally.Of(partialRead, partialTotal).Render("file")}.");
 
         if (unreached.Count > 0)
         {
             // 名单要有上限:树可以有几十棵,全点名会占满一屏。
-            var names = unreached.Take(NamedTrees).Select(u => Label(u.Tree)).ToList();
+            var names = unreached.Take(NamedTrees).Select(u => u.Tree).ToList();
             var more = unreached.Count - names.Count;
             parts.Add("Never read at all: " + string.Join(", ", names) +
                       (more > 0 ? $" and {more} more" : "") +
@@ -558,8 +558,6 @@ public sealed class CodeSearchCommand : Command
     private const int NamedTrees = 5;
 
     /// <summary>根目录下直接摆着的文件那棵伪树没有名字,得有个说法。</summary>
-    private static string Label(string tree)
-        => tree.Length > 0 ? tree : "the files directly under the decompiled root";
 
     /// <summary>
     /// 上下文窗口。**重叠或相邻的窗口合并**:每条命中各印一窗的话,<c>-C 2</c> 打在连着的
@@ -720,8 +718,12 @@ public sealed class CodeSearchCommand : Command
         foreach (var t in trees)
             yield return (t, Directory.EnumerateFiles(Path.Combine(root, t), "*", SearchOption.AllDirectories));
 
-        // 根目录下直接摆着的文件(没有分树的部署形态)。
-        yield return ("", Directory.EnumerateFiles(root, "*", SearchOption.TopDirectoryOnly));
+        // 根目录顶层的文件**不算一棵树**。这里曾多走一趟顶层,为的是「源码直接铺在根下、
+        // 不分子目录」那种摆法 —— 而这棵树是 sources sync 自己写的,SourcePlanner 给每个
+        // 可跟随源都开一个以 packageId 命名的子目录,那种摆法产生不出来。它实际收进来的
+        // 是仓库家什(本机是 README.md 与 .gitattributes),而它们让计数句自相矛盾:
+        // --file-glob '*' 报 36 棵而 sources list 报 35,--file-glob 'README.md' 报
+        // 「1 of 35 source trees on disk」而命中的那一个不在那 35 里。
     }
 
     /// <summary>

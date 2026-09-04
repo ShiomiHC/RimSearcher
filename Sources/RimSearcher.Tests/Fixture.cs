@@ -1,4 +1,4 @@
-using System.IO.Compression;
+﻿using System.IO.Compression;
 using System.Text;
 using RimSearcher.Contract;
 using RimSearcher.Storage;
@@ -1624,5 +1624,10 @@ public static class Fixture
             "}");
 
         Directory.CreateDirectory(Path.Combine(root, "zz.emptytree"));
+
+        // 根目录顶层的仓库家什。**一棵树都不算**,也一个字都不该被搜到 —— 真实盘上
+        // sources sync 在这里留下 README.md 与 .gitattributes,而它们曾让 --file-glob '*'
+        // 数出比 sources list 多一棵树。正文含 public,所以真被搜到时计数句当场就变。
+        File_("README.md", "public inventory of the decompiled trees");
     }
 }

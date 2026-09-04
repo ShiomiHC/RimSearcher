@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.RegularExpressions;
 using RimSearcher.Cli;
 using RimSearcher.Commands;
@@ -3486,6 +3486,15 @@ public class GrammarTests
         // 窄化到一棵树时走另一支(「in the 'X' tree alone」),不许两句话叠着说。
         var (one, _, _) = Fixture.Run("code-search", "ThingComp", "--source", "vanilla");
         Assert.DoesNotContain("on disk — the rest", one, StringComparison.Ordinal);
+
+        // glob 放到最宽也不许多出一棵。2026-09-05 之前多得出来:扫描在三棵树之外还会走
+        // 一趟根目录顶层,而顶层躺着 sources sync 留下的 README.md —— 于是 `*` 报四棵、
+        // `sources list` 报三棵,中间没有一句话解释那个 1。分子分母来自两个集合,
+        // 「N of M」这个写法当初正是为了不请人做减法才选的。
+        var (wide, _, wcode) = Fixture.Run("code-search", "public", "--file-glob", "*");
+        Assert.Equal(0, wcode);
+        Assert.Contains("2 of 3 source trees on disk", wide, StringComparison.Ordinal);
+        Assert.DoesNotContain("README.md", wide, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -4658,6 +4667,7 @@ public class GrammarTests
             ("EnergyShieldRechargeRate", "fixture 数据"),
             ("Meat_Muffalo\\n", "fixture 数据(带换行,钉的是「不在表行里」)"),
             ("Sneaky.cs", "fixture 数据"),
+            ("README.md", "fixture 数据(根目录顶层的文件;钉的是它不该被当成一棵树扫进来)"),
             ("test.notinsnapshot", "fixture 数据"),
             ("灭火泡沫", "fixture 数据(译文)"),
             ("Outer.Shared", "fixture 数据(类型名)"),
