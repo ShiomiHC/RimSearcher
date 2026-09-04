@@ -5,9 +5,10 @@ using RimSearcher.Storage;
 namespace RimSearcher.Tests;
 
 /// <summary>
-/// 译文那一层的六道闸:同一句话不许因磁盘布局重复、归属不许靠 defName 猜、
+/// 译文那一层的七道闸:同一句话不许因磁盘布局重复、归属不许靠 defName 猜、
 /// 过滤到零不许让整张表从输出里消失、两个注入键串各自入库、没量过注入键层的快照回空
-/// 而不是空表、归一的三档各自落在自己那一格。
+/// 而不是空表、归一的三档各自落在自己那一格、
+/// 界面文案那一层的重复同样折起来且份数出声。
 ///
 /// 条条各自钉住一种「印出来与真相同形」的错法,成因都在注入键的形状里:
 /// mod 常同时铺 <c>1.5/</c> 与 <c>1.6/</c> 两套 Languages(同一句话两行,逐列全同),
@@ -72,6 +73,32 @@ public class TranslationLayerTests
                      .Where(t => t.Path == "description" && t.Origin != TranslationOrigin.Runtime)
                      .ToList();
         Assert.Single(rows);
+    }
+
+    /// <summary>
+    /// 界面文案那一层同样折,而且折掉的份数要在输出里出声。
+    ///
+    /// 「同 key 多来源不挑一个」照旧成立 —— 跨 mod 的同名 key 真有几种说法。折的只是
+    /// **同一个 mod 里逐列全同**的那几行,它们是版本目录的副本。不说破份数就等于把
+    /// 「三份同文」印成「一份」,而读的人会据此去数这句话有几种说法。
+    /// </summary>
+    [Fact]
+    public void 界面文案铺在几套版本目录里折成一条并报出份数()
+    {
+        const string body = "<LanguageData><TestKeyedLine>三份同文</TestKeyedLine></LanguageData>";
+        using var db = ImportWithModTree("dupkeyed",
+            ($"1.4/Languages/{Fixture.Language}/Keyed/Ui.xml", body),
+            ($"1.5/Languages/{Fixture.Language}/Keyed/Ui.xml", body),
+            ($"1.6/Languages/{Fixture.Language}/Keyed/Ui.xml", body));
+
+        var rows = db.KeyedByKey("TestKeyedLine")
+                     .Where(r => r.Origin != TranslationOrigin.Runtime).ToList();
+        Assert.Single(rows);
+        Assert.Equal(3, rows[0].SourceFileCount);
+
+        var (text, _, code) = Fixture.Run("keyed", "TestKeyedLine", "--db", db.Path);
+        Assert.Equal(0, code);
+        Assert.Contains("(+2 same)", text, StringComparison.Ordinal);
     }
 
     /// <summary>

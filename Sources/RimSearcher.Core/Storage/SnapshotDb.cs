@@ -93,7 +93,7 @@ public sealed record InjectionKeyRow(string DefName, string? DefType, string Pat
 /// </summary>
 public sealed record KeyedRow(string Key, string? Translated, string? Original, string? Language,
                               string? SourceFile, int SourceLine, string? SourceMod,
-                              bool Placeholder, string Origin);
+                              bool Placeholder, string Origin, int? SourceFileCount = null);
 
 /// <summary>
 /// 继承层的一行:XML 里一个带 <c>Name=</c> / <c>ParentName=</c> / <c>Abstract=</c> 的节点。
@@ -1400,17 +1400,29 @@ public sealed class SnapshotDb : IDisposable
     /// </summary>
     public int KeyedCount() => Scalar("SELECT COUNT(*) FROM keyed");
 
-    private const string KeyedColumns =
-        "key, translated, original, language, source_file, source_line, source_mod, placeholder, origin";
+    /// <summary>
+    /// 这份库的 keyed 记不记得同一句话在这个 mod 里钺了几份。同
+    /// <see cref="TranslationsHaveSourceFile"/>,**靠列名认**。
+    /// </summary>
+    private bool KeyedHasSourceFileCount => _kSfc ??= HasColumn("keyed", "source_file_count");
+    private bool? _kSfc;
+
+    /// <summary>
+    /// 新列**接在末尾**：前面八个序号于是不动,读取侧只靠 FieldCount 判它在不在。
+    /// 插在中间的话每一个 rd.GetXxx(n) 都得跟着改,而改错一个不报错。
+    /// </summary>
+    private string KeyedColumns =>
+        "key, translated, original, language, source_file, source_line, source_mod, placeholder, origin"
+        + (KeyedHasSourceFileCount ? ", source_file_count" : "");
 
     /// <summary>
     /// 同一份列,带表别名。JOIN 到 <c>keyed_fts</c> 时 <c>key</c> / <c>translated</c> /
     /// <c>original</c> 三个名字**两张表都有**,不加前缀是 SQL 歧义;而拿
     /// <c>Replace("key", "k.key")</c> 从上面那份拼会顺手改掉 <c>keyed</c> 里的 key。
     /// </summary>
-    private const string KeyedColumnsPrefixed =
+    private string KeyedColumnsPrefixed =>
         "k.key, k.translated, k.original, k.language, k.source_file, k.source_line, k.source_mod, " +
-        "k.placeholder, k.origin";
+        "k.placeholder, k.origin" + (KeyedHasSourceFileCount ? ", k.source_file_count" : "");
 
     private IReadOnlyList<KeyedRow> ReadKeyed(string sql, Dictionary<string, object?>? p = null)
     {
@@ -1426,7 +1438,8 @@ public sealed class SnapshotDb : IDisposable
                 rd.IsDBNull(5) ? 0 : rd.GetInt32(5),
                 rd.IsDBNull(6) ? null : rd.GetString(6),
                 !rd.IsDBNull(7) && rd.GetInt32(7) != 0,
-                rd.GetString(8)));
+                rd.GetString(8),
+                rd.FieldCount > 9 && !rd.IsDBNull(9) ? rd.GetInt32(9) : null));
         return rows;
     }
 

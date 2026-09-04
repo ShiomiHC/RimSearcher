@@ -349,7 +349,11 @@ public sealed class KeyedCommand : Command
                 // 「这一格根本没量」印出来一模一样。
                 ["placeholder"] = r.Placeholder,
                 ["mod"] = r.SourceMod,
-                ["source"] = r.SourceLine > 0 ? $"{r.SourceFile}:{r.SourceLine}" : r.SourceFile,
+                // 一个 mod 常同时铺 1.4/ 1.5/ 1.6/ 三套 Languages,逐列全同的几行入库时折成
+                // 一行。**不说破就等于把「三份同文」印成「一份」** —— 说破了,读的人也不会
+                // 再去数「这句话有几种说法」。
+                ["source"] = (r.SourceLine > 0 ? $"{r.SourceFile}:{r.SourceLine}" : r.SourceFile)
+                             + (r.SourceFileCount is > 1 ? $" (+{r.SourceFileCount - 1} same)" : ""),
             }).ToList());
 
         // origin 那一列印着「in effect」,读的人自然读出「另有 on disk 的没印出来」。

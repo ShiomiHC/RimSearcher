@@ -106,9 +106,9 @@ public sealed class SnapshotImporter
                 VALUES ($id,$p)
                 """);
             using var insertKeyed = Prepare(db, """
-                INSERT INTO keyed (id, key, translated, original, language, source_file, source_line,
-                                   source_mod, placeholder, origin)
-                VALUES ($id,$k,$tr,$o,$lang,$sf,$sl,$sm,$ph,$origin)
+                INSERT INTO keyed (id, key, translated, original, language, source_file,
+                                   source_file_count, source_line, source_mod, placeholder, origin)
+                VALUES ($id,$k,$tr,$o,$lang,$sf,$sfc,$sl,$sm,$ph,$origin)
                 """);
             using var insertKeyedFts = Prepare(db,
                 "INSERT INTO keyed_fts (rowid, key, translated, original) VALUES ($id,$k,$tr,$o)");
@@ -348,6 +348,7 @@ public sealed class SnapshotImporter
                     Bind(insertKeyed, "$o", string.IsNullOrEmpty(original) ? null : original);
                     Bind(insertKeyed, "$lang", meta.Language);
                     Bind(insertKeyed, "$sf", Str(root, IntermediateFormat.KeySourceFile));
+                    Bind(insertKeyed, "$sfc", null);
                     Bind(insertKeyed, "$sl", root.TryGetProperty(IntermediateFormat.KeySourceLine, out var slEl)
                         ? slEl.GetInt32() : 0);
                     Bind(insertKeyed, "$sm", null);
@@ -718,38 +719,49 @@ public sealed class SnapshotImporter
             {
                 var packageId = ReadPackageId(modDir) ?? Path.GetFileName(modDir);
 
-                // Keyed 那一半。同 key 多来源时**不去重、不挑一个**:这一层的语义是
+                // Keyed 那一半。同 key 多来源时**不挑一个**:这一层的语义是
                 // 「磁盘上存在这些译文」,不是「哪一句会生效」—— 后者由运行时那一层回答
                 // (keyedReplacements 本身已经是合并后的最终值)。
-                foreach (var (keyedDir, _) in FindLanguageSubdirs(modDir, meta.Language, "Keyed"))
+                //
+                // 但同一个 mod 里**逐列全同**的几行不是几种说法,是磁盘布局:
+                // 版本目录（1.4/ 1.5/ 1.6/）各钺一份。往下折成一行，折掉的份数留在
+                // source_file_count 里 —— 同 DefInjected 那一半的判据。跳 mod 的同名 key 照旧各留一行。
+                var foldedKeyed = new Dictionary<(string Key, string Text), (string FirstFile, int Files)>();
+                foreach (var (keyedDir, keyedRel) in FindLanguageSubdirs(modDir, meta.Language, "Keyed"))
                 {
                     foreach (var xml in SafeFiles(keyedDir, "*.xml"))
                     {
+                        var rel = keyedRel + "/" + Path.GetFileName(xml);
                         foreach (var (key, text) in ReadLanguageFile(xml))
-                        {
-                            var kid = nextKeyedId++;
-                            Bind(insertKeyed, "$id", kid);
-                            Bind(insertKeyed, "$k", key);
-                            Bind(insertKeyed, "$tr", text);
-                            Bind(insertKeyed, "$o", null);
-                            Bind(insertKeyed, "$lang", meta.Language);
-                            Bind(insertKeyed, "$sf", Path.GetFileName(xml));
-                            Bind(insertKeyed, "$sl", 0);
-                            Bind(insertKeyed, "$sm", packageId);
-                            Bind(insertKeyed, "$ph", 0);
-                            Bind(insertKeyed, "$origin", runtimeMods.Contains(packageId)
-                                ? TranslationOrigin.Harvested
-                                : TranslationOrigin.HarvestedOutside);
-                            insertKeyed.ExecuteNonQuery();
-
-                            Bind(insertKeyedFts, "$id", kid);
-                            Bind(insertKeyedFts, "$k", FtsText.ForIndex(key, identifier: true));
-                            Bind(insertKeyedFts, "$tr", FtsText.ForIndex(text));
-                            Bind(insertKeyedFts, "$o", "");
-                            insertKeyedFts.ExecuteNonQuery();
-                            keyedCount++;
-                        }
+                            foldedKeyed[(key, text)] = foldedKeyed.TryGetValue((key, text), out var seen)
+                                ? (seen.FirstFile, seen.Files + 1) : (rel, 1);
                     }
+                }
+
+                foreach (var ((key, text), (firstKeyedFile, keyedFiles)) in foldedKeyed)
+                {
+                    var kid = nextKeyedId++;
+                    Bind(insertKeyed, "$id", kid);
+                    Bind(insertKeyed, "$k", key);
+                    Bind(insertKeyed, "$tr", text);
+                    Bind(insertKeyed, "$o", null);
+                    Bind(insertKeyed, "$lang", meta.Language);
+                    Bind(insertKeyed, "$sf", firstKeyedFile);
+                    Bind(insertKeyed, "$sfc", keyedFiles);
+                    Bind(insertKeyed, "$sl", 0);
+                    Bind(insertKeyed, "$sm", packageId);
+                    Bind(insertKeyed, "$ph", 0);
+                    Bind(insertKeyed, "$origin", runtimeMods.Contains(packageId)
+                        ? TranslationOrigin.Harvested
+                        : TranslationOrigin.HarvestedOutside);
+                    insertKeyed.ExecuteNonQuery();
+
+                    Bind(insertKeyedFts, "$id", kid);
+                    Bind(insertKeyedFts, "$k", FtsText.ForIndex(key, identifier: true));
+                    Bind(insertKeyedFts, "$tr", FtsText.ForIndex(text));
+                    Bind(insertKeyedFts, "$o", "");
+                    insertKeyedFts.ExecuteNonQuery();
+                    keyedCount++;
                 }
 
                 // 一个 mod 的收割结果先在内存里归并再落库。**折叠的单元是 mod,不是文件**:
