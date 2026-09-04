@@ -78,6 +78,13 @@ public static class SnapshotSchema
     public const string MetaKeyExportTimings = "export_timings_ms";
 
     /// <summary>
+    /// 导入时每一段各花了多少毫秒。与 <see cref="MetaKeyExportTimings"/> 同一个用途,
+    /// 分开存是因为**两侧不是一回事** —— 实测游戏那侧两分钟出文件,这侧十几分钟建库,
+    /// 只印导出那张表会把「慢」归错地方。缺席同样是「那一版没量」,不是零毫秒。
+    /// </summary>
+    public const string MetaKeyImportTimings = "import_timings_ms";
+
+    /// <summary>
     /// <c>unavailable</c> 时点名缺了什么(vanilla 的哪个签名)。原样端给用户 ——
     /// 这一层不回退到自写实现,所以这句话是唯一的下一步。
     /// </summary>
@@ -402,7 +409,30 @@ public static class SnapshotSchema
         new("economy", "calc_state", false, "同上。"),
     ];
 
-    /// <summary>索引在批量插入之后才建 —— 导入是一次性写,先建索引会显著变慢。</summary>
+    /// <summary>
+    /// 名册的两条索引,**导入中途就得建**,不能等到最后跟别的一起来 —— 它是唯一一处
+    /// 导入自己要回头查这张表的地方:每条运行时译文都拿键串反查槽位。没有索引时那是
+    /// 每条一次 49.7 万行全扫,2.68 万条译文实测把导入撑到 1475 秒(占全程 96%);
+    /// 建完索引再走同一段,代价回到建这两条索引本身。
+    ///
+    /// 「索引最后建」那条通则对别的表都成立,对这张不成立,分界是**导入期间读不读它**。
+    /// </summary>
+    public const string InjectionKeyIndexes = """
+        CREATE INDEX idx_ik_defname ON injection_keys(def_name);
+        CREATE INDEX idx_ik_suggested ON injection_keys(def_type, def_name, suggested_path);
+        """;
+
+    public static void CreateInjectionKeyIndexes(SqliteConnection db)
+    {
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = InjectionKeyIndexes;
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// 索引在批量插入之后才建 —— 导入是一次性写,先建索引会显著变慢。
+    /// **例外见 <see cref="InjectionKeyIndexes"/>**:导入期间自己要查的那张表不在此列。
+    /// </summary>
     public const string Indexes = """
         CREATE INDEX idx_defs_name  ON defs(def_name);
         CREATE INDEX idx_defs_type  ON defs(def_type);
@@ -417,8 +447,6 @@ public static class SnapshotSchema
         CREATE INDEX idx_fv_leaf_nc  ON field_values(leaf COLLATE NOCASE);
         CREATE INDEX idx_fv_value_nc ON field_values(value COLLATE NOCASE);
         CREATE INDEX idx_tr_defname ON translations(def_name);
-        CREATE INDEX idx_ik_defname ON injection_keys(def_name);
-        CREATE INDEX idx_ik_suggested ON injection_keys(def_type, def_name, suggested_path);
         CREATE INDEX idx_keyed_key   ON keyed(key);
         CREATE INDEX idx_xn_name    ON xml_nodes(name);
         CREATE INDEX idx_xn_parent  ON xml_nodes(parent_name);

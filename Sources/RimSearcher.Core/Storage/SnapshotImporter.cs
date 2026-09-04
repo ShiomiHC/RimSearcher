@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO.Compression;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
@@ -74,6 +75,14 @@ public sealed class SnapshotImporter
         var sawInjKey = false;
         var records = 0L;
 
+        // 导入这一侧的分层耗时。加它的由头是一次实测:游戏那边 2 分 22 秒就写完了导出文件,
+        // 这边建库花了十几分钟 —— 只量导出那侧会把「慢」整个归错地方。
+        var swTotal = Stopwatch.StartNew();
+        var swRead = new Stopwatch(); var swInjections = new Stopwatch();
+        var swHarvest = new Stopwatch(); var swFts = new Stopwatch();
+        var swCommit = new Stopwatch(); var swShared = new Stopwatch();
+        var swIndexes = new Stopwatch(); var swOptimize = new Stopwatch();
+
         using (var tx = db.BeginTransaction())
         {
             using var insertDef = Prepare(db, """
@@ -149,6 +158,7 @@ public sealed class SnapshotImporter
             // type_fields 的路径字典,id 就是它进来的次序(Count + 1)。
             var tfPathIds = new Dictionary<string, long>(StringComparer.Ordinal);
 
+            swRead.Start();
             foreach (var line in ReadLines(exportPath))
             {
                 records++;
@@ -482,6 +492,8 @@ public sealed class SnapshotImporter
                 }
             }
 
+            swRead.Stop();
+
             if (meta is null)
                 throw new SnapshotFormatError("The export file has no meta line; it cannot be identified. Re-run the export.");
 
@@ -544,6 +556,10 @@ public sealed class SnapshotImporter
                 return (hit.Path, key, hit.Type, hit.State);
             }
 
+            swInjections.Start();
+            // 名册这时才建索引:下面每条译文都要按键串回头查它,而它有五十万行。
+            // 计入 injections 这一段,因为它是为这一段建的。
+            SnapshotSchema.CreateInjectionKeyIndexes(db);
             foreach (var inj in pendingInjections)
             {
                 var candidates = Candidates(idsByName, inj.defName);
@@ -570,11 +586,16 @@ public sealed class SnapshotImporter
                 Recall(ftsExtra, owner, candidates, inj.translated);
             }
 
+            swInjections.Stop();
+
+            swHarvest.Start();
             var (harvested, keyedHarvested) = HarvestStaticTranslations(
                 insertTr, insertKeyed, insertKeyedFts, ref nextKeyedId, idsByName, meta, ftsExtra,
                 Resolve);
+            swHarvest.Stop();
 
             // 翻译文本回填进 FTS 的 translated 列(双语索引)
+            swFts.Start();
             using (var updFts = Prepare(db, "INSERT INTO defs_fts (defs_fts, rowid, def_name, label, description, translated) VALUES ('delete',$id,$n0,$l0,$d0,$t0)"))
             using (var read = Prepare(db, "SELECT def_name, label, description FROM defs WHERE id = $id"))
             using (var reIns = Prepare(db, "INSERT INTO defs_fts (rowid, def_name, label, description, translated) VALUES ($id,$n,$l,$d,$tr)"))
@@ -604,6 +625,7 @@ public sealed class SnapshotImporter
                     reIns.ExecuteNonQuery();
                 }
             }
+            swFts.Stop();
 
             using (var insertMod = Prepare(db, "INSERT INTO mods (ordinal, package_id, name, version) VALUES ($o,$p,$n,$v)"))
             {
@@ -651,13 +673,16 @@ public sealed class SnapshotImporter
                 }
             }
 
+            swCommit.Start();
             tx.Commit();
+            swCommit.Stop();
 
             // shared_values 的一次扫。放在 commit 之后、建索引之前:GROUP BY 全表在事务里做
             // 会把 journal 撑大一圈。
             //
             // 「不少于 8 个」是「大多数」这个词成不成话的下限 —— 类型只有三五个 def 时,
             // 「其中两个也是这个值」不构成任何提示。过半是同一个词的另一半。
+            swShared.Start();
             using (var fill = db.CreateCommand())
             {
                 fill.CommandText =
@@ -671,8 +696,39 @@ public sealed class SnapshotImporter
                 fill.ExecuteNonQuery();
             }
 
+            swShared.Stop();
+
+            swIndexes.Start();
             SnapshotSchema.CreateIndexes(db);
+            swIndexes.Stop();
+
+            swOptimize.Start();
             using (var vac = db.CreateCommand()) { vac.CommandText = "PRAGMA optimize;"; vac.ExecuteNonQuery(); }
+            swOptimize.Stop();
+
+            // 这一条只能在**建完索引之后**写:commit / shared_values / indexes / optimize
+            // 四段都发生在上面那个 meta 表填完之后,写早了那四格永远是零。
+            using (var t2 = db.CreateCommand())
+            {
+                var phases = new (string Name, long Ms)[]
+                {
+                    ("read", swRead.ElapsedMilliseconds),
+                    ("injections", swInjections.ElapsedMilliseconds),
+                    ("harvest", swHarvest.ElapsedMilliseconds),
+                    ("fts", swFts.ElapsedMilliseconds),
+                    ("commit", swCommit.ElapsedMilliseconds),
+                    ("shared_values", swShared.ElapsedMilliseconds),
+                    ("indexes", swIndexes.ElapsedMilliseconds),
+                    ("optimize", swOptimize.ElapsedMilliseconds),
+                    // total 在这一行写之前读,所以它差着这条 INSERT 与最后那次改名的时间。
+                    ("total", swTotal.ElapsedMilliseconds),
+                };
+                t2.CommandText = "INSERT INTO meta (key, value) VALUES ($k,$v)";
+                Bind(t2, "$k", SnapshotSchema.MetaKeyImportTimings);
+                Bind(t2, "$v", "{" + string.Join(",",
+                    phases.Select(x => JsonSerializer.Serialize(x.Name) + ":" + x.Ms)) + "}");
+                t2.ExecuteNonQuery();
+            }
 
             // 连接不入池(见 Pooling = false),所以 Close 就是真关文件 —— 下一行的
             // Delete/Move 立刻做得成,不必再去清全进程的连接池。

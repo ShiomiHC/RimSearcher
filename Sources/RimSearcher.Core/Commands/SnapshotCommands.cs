@@ -133,34 +133,39 @@ public sealed class SnapshotStatusCommand : Command
                 : "not recorded (exported before this was measured)"),
         ]);
 
-        // 导出为什么慢 —— 分层耗时。此前导出器只上报两个阶段(给卡死检测用的),不记耗时,
-        // 于是「哪一层慢」只能按行数猜。缺这一格就整张表不摆:补一张全零的表等于宣布
-        // 「每一层都不花时间」,而真相是那次导出根本没量。
-        if (db.ExportTimings is { Count: > 0 } timings)
+        // 一次导出到底慢在哪 —— 两侧各一张分层耗时表。此前两侧都不记耗时,于是「哪一层慢」
+        // 只能按行数猜;实测游戏那侧两分多钟出文件、建库这侧十几分钟,猜错的正是这一刀。
+        // 缺这一格就整张表不摆:补一张全零的表等于宣布「每一段都不花时间」,而真相是没量。
+        void TimingTable(string name, IReadOnlyDictionary<string, long> t)
         {
-            var total = timings.TryGetValue(IntermediateFormat.TimingKeys.Total, out var tt) && tt > 0 ? tt : 0;
-            ctx.Report.Table("export_timings", ["layer", "seconds", "share"],
-                timings.Where(kv => kv.Key != IntermediateFormat.TimingKeys.Total)
-                       .OrderByDescending(kv => kv.Value)
-                       .Concat(total > 0
-                           ? [new KeyValuePair<string, long>(IntermediateFormat.TimingKeys.Total, total)]
-                           : [])
-                       .Select(kv => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
-                       {
-                           ["layer"] = kv.Key,
-                           ["seconds"] = (kv.Value / 1000.0).ToString("0.0"),
-                           // total 那一行的份额留空:它与自己比恒是 100%,印出来只占一格。
-                           ["share"] = total > 0 && kv.Key != IntermediateFormat.TimingKeys.Total
-                               ? $"{100.0 * kv.Value / total:0}%" : null,
-                       }).ToList());
-
-            // 这张表只盖导出器自己写盘那一段。游戏从启动到把控制权交给导出器(读 XML、
-            // 解析 def、跑 patch)不在里面,而那一段常常比它长。
-            ctx.Report.Notice(NoticeKind.Boundary,
-                "These are the exporter's own layers only. The game's startup before it runs — reading XML, " +
-                "resolving defs, applying patches — is not in this table and is often the larger half; " +
-                "compare 'total' with how long 'rimsearcher export' actually took.");
+            var total = t.TryGetValue(IntermediateFormat.TimingKeys.Total, out var tt) && tt > 0 ? tt : 0;
+            ctx.Report.Table(name, ["layer", "seconds", "share"],
+                t.Where(kv => kv.Key != IntermediateFormat.TimingKeys.Total)
+                 .OrderByDescending(kv => kv.Value)
+                 .Concat(total > 0
+                     ? [new KeyValuePair<string, long>(IntermediateFormat.TimingKeys.Total, total)]
+                     : [])
+                 .Select(kv => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+                 {
+                     ["layer"] = kv.Key,
+                     ["seconds"] = (kv.Value / 1000.0).ToString("0.0"),
+                     // total 那一行的份额留空:它与自己比恒是 100%,印出来只占一格。
+                     ["share"] = total > 0 && kv.Key != IntermediateFormat.TimingKeys.Total
+                         ? $"{100.0 * kv.Value / total:0}%" : null,
+                 }).ToList());
         }
+
+        if (db.ExportTimings is { Count: > 0 } exportTimings) TimingTable("export_timings", exportTimings);
+        if (db.ImportTimings is { Count: > 0 } importTimings) TimingTable("import_timings", importTimings);
+
+        // 两张表各自盖住哪一段,以及**哪一段谁也没盖**。这句话的用处全在最后半句:
+        // 游戏从启动到把控制权交给导出器(读 XML、解析 def、跑 patch)两张表都不含。
+        if (db.ExportTimings is { Count: > 0 } || db.ImportTimings is { Count: > 0 })
+            ctx.Report.Notice(NoticeKind.Boundary,
+                "'export_timings' is the exporter's own layers inside the game; 'import_timings' is building " +
+                "this database from the file it wrote. The game's startup before the exporter runs — reading " +
+                "XML, resolving defs, applying patches — is in neither table: it is the gap between the two " +
+                "totals and how long 'rimsearcher export' actually took.");
 
         var truncated = db.TruncatedDefCount();
         if (truncated > 0)

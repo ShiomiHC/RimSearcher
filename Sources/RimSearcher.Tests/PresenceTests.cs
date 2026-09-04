@@ -310,6 +310,13 @@ public class PresenceTests
 
         // 查询侧确实是 NOCASE —— 两边任何一侧改了都要一起改,否则索引又失效。
         Assert.Contains("COLLATE NOCASE", SnapshotDb.TypeDeclaredPathsWhere, StringComparison.Ordinal);
+
+        // 名册的索引必须留在**导入中途**那一批里。挪回下面这批 schema 一样对、查询一样快,
+        // 只有导入慢 —— 实测 1475 秒对建两条索引的代价,而慢不报错,没有闸就读不出来。
+        Assert.DoesNotContain("ON injection_keys(", indexes, StringComparison.Ordinal);
+        Assert.Contains("ON injection_keys(def_name)", SnapshotSchema.InjectionKeyIndexes, StringComparison.Ordinal);
+        Assert.Contains("ON injection_keys(def_type, def_name, suggested_path)",
+                        SnapshotSchema.InjectionKeyIndexes, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -174,12 +174,20 @@ public sealed class SnapshotDb : IDisposable
     /// </summary>
     public IReadOnlyDictionary<string, long>? ExportTimings { get; }
 
+    /// <summary>
+    /// 建库时每一段各花了多少毫秒,段名 -> 毫秒。<c>null</c> = 那次导入早于计时,不是零。
+    /// 与 <see cref="ExportTimings"/> 分开摆,因为两侧的量级实测差一个数量级。
+    /// </summary>
+    public IReadOnlyDictionary<string, long>? ImportTimings { get; }
+
     private SnapshotDb(SqliteConnection db, string path, ExportMeta meta, IReadOnlyList<ModRef> mods,
                        bool harvested, ContentScan? content, string? economyState, string? economyError,
-                       IReadOnlyDictionary<string, long>? exportTimings)
+                       IReadOnlyDictionary<string, long>? exportTimings,
+                       IReadOnlyDictionary<string, long>? importTimings)
     {
         _db = db; Path = path; Meta = meta; Mods = mods; Harvested = harvested; Content = content;
         EconomyState = economyState; EconomyError = economyError; ExportTimings = exportTimings;
+        ImportTimings = importTimings;
     }
 
     /// <summary>
@@ -259,19 +267,23 @@ public sealed class SnapshotDb : IDisposable
         meta.TryGetValue(SnapshotSchema.MetaKeyEconomyError, out var econError);
 
         // 同一道缝:没这一格就传 null,不合成一张全零的表。
-        IReadOnlyDictionary<string, long>? timings = null;
-        if (meta.TryGetValue(SnapshotSchema.MetaKeyExportTimings, out var tj))
+        IReadOnlyDictionary<string, long>? ReadTimings(string key)
+        {
+            if (!meta.TryGetValue(key, out var tj)) return null;
             try
             {
                 using var doc = System.Text.Json.JsonDocument.Parse(tj);
                 var d = new Dictionary<string, long>(StringComparer.Ordinal);
                 foreach (var prop in doc.RootElement.EnumerateObject())
                     if (prop.Value.TryGetInt64(out var ms)) d[prop.Name] = ms;
-                timings = d;
+                return d;
             }
-            catch (System.Text.Json.JsonException) { }
+            catch (System.Text.Json.JsonException) { return null; }
+        }
 
-        return new SnapshotDb(db, path, exportMeta, mods, harvested, content, econState, econError, timings);
+        return new SnapshotDb(db, path, exportMeta, mods, harvested, content, econState, econError,
+                              ReadTimings(SnapshotSchema.MetaKeyExportTimings),
+                              ReadTimings(SnapshotSchema.MetaKeyImportTimings));
     }
 
     public void Dispose() => _db.Dispose();
