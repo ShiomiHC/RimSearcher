@@ -1,4 +1,4 @@
-﻿using System.IO.Compression;
+using System.IO.Compression;
 using System.Text;
 using RimSearcher.Contract;
 using RimSearcher.Storage;
@@ -1154,6 +1154,12 @@ public static class Fixture
             ("soundInteract", "Standard_Pickup", DefaultState.Differs),
             ("thingClass", "RimWorld.Building", DefaultState.Differs),
             ("statFactors[0].stat", "MarketValue", DefaultState.Differs),
+            // ③ 下标落在**末尾**的那一形:标量列表(真数据里 stuffProps.categories、
+            //    apparel.layers 就长这样)。别处的列表下标都在中间(comps[0].compClass),
+            //    而「少写下标」那条救援两处得分别放行 —— 只放中间那处的话,
+            //    `where stuffProps.categories` 照旧空,且空得和真没有一模一样。
+            ("stuffProps.categories[0]", "Metallic", DefaultState.Differs),
+            ("stuffProps.categories[1]", "Woody", DefaultState.Differs),
             // 第二个整段命中,于是「精确」那一路数得出 2 而不是 1。
             ("graphicData.texPath", "Things/Building/Cannon", DefaultState.Differs));
 

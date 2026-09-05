@@ -211,6 +211,9 @@ public class OutputSnapshotTests
         // 每条到达输出的路径成立,而这条正是最容易漏的那条(它连表都没有)。
         { "where-dotted-missing-index-past-end", ["where", "statBases.stat", "--offset", "9"] },
         { "values-dotted-missing-index-past-end", ["values", "statBases.stat", "--offset", "9"] },
+        // 下标落在末尾的那一形(标量列表)。语料里最常失败的那条路径
+        // stuffProps.categories 正是它 —— 中间那处放行救不了它。
+        { "where-dotted-trailing-index", ["where", "stuffProps.categories"] },
         // 另一半问法。行的形状不同,--json 的顶层键也就不同(matches / paths)。
         { "where-by-value",         ["where", "--value", "CompShield"] },
         // 继承层的四条路各钉一份:抽象节点(有子、被 patch 点名)、具体 def(往上走)、

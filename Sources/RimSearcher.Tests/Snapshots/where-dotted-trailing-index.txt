@@ -1,0 +1,13 @@
+$ rimsearcher where stuffProps.categories
+exit 0
+--- stdout ---
+2 matches.
+  - Those 2 matches come from 1 def: a def that matches on more than one path has a row for each, so the def_name column repeats.
+  - Nothing sits at 'stuffProps.categories' as written — indexed paths carry the list index, so this ran as stuffProps.categories[] (2). That shape goes back in with --exact-path to pin it.
+  - Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans every def type that uses this path at all, not just the ones in the rows above — ThingDef, holding 1 def cut short between them. 'rimsearcher snapshot truncated --type ThingDef' lists them.
+
+Same in every row, not repeated below: def_type=ThingDef, code_default=no, mod=ludeon.rimworld.
+def_name    path                      value
+FoamPopper  stuffProps.categories[0]  Metallic
+FoamPopper  stuffProps.categories[1]  Woody
+--- stderr ---
