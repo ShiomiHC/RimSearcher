@@ -188,6 +188,21 @@ public class OutputSnapshotTests
         // 「没有谁按名字引用它」本身就是答案。顺带钉住同名跨类型不让这句话变形。
         { "where-miss-name-unreferenced", ["where", "Firefoam"] },
         { "where-miss-bare",        ["where", "noSuchField"] },
+        // 点分路径落空的三档。三者此前印的是同一句话(只有那个名字不同),而它们要的
+        // 下一步互不相同 —— 会话语料里 166 次「路径不存在」有 64 次是前两档。
+        //   statBases.stat        路径对、只是少写了下标(索引里是 statBases[0].stat)
+        //   statBases.MarketValue 末段不是字段而是取值,它坐在 statBases[].stat 上
+        //   statBases.zzznope     两条都不成立 —— 这一档的措辞必须保持不动,
+        //                         否则前两档的新话就没有可对照的「真没有」
+        { "where-dotted-missing-index", ["where", "statBases.stat"] },
+        { "where-dotted-tail-is-value", ["where", "statBases.MarketValue"] },
+        { "where-dotted-really-absent", ["where", "statBases.zzznope"] },
+        // 少写下标那一档带上值:救回来的是一张真表,不是一句提示 —— 表在场时那句改写
+        // 必须照说(有结果那档最贵:零还会让人再看一眼,一张表不会)。
+        { "where-dotted-missing-index-value", ["where", "statBases.stat", "MarketValue"] },
+        // --exact-path 不进这条救援:调用方点名了「整条路径就长这样」,替他改写等于
+        // 把一个明确的否定答案换成另一个问题的肯定答案。
+        { "where-dotted-missing-index-exact", ["where", "statBases.stat", "--exact-path"] },
         // 另一半问法。行的形状不同,--json 的顶层键也就不同(matches / paths)。
         { "where-by-value",         ["where", "--value", "CompShield"] },
         // 继承层的四条路各钉一份:抽象节点(有子、被 patch 点名)、具体 def(往上走)、
