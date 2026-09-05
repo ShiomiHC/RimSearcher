@@ -1,0 +1,6 @@
+$ rimsearcher where statBases.stat --offset 9
+exit 1
+--- stdout ---
+--offset 9 is past the end: 3 matches in all.
+Nothing sits at 'statBases.stat' as written — indexed paths carry the list index, so this ran as statBases[].stat (3). That shape goes back in with --exact-path to pin it.
+--- stderr ---

@@ -50,10 +50,27 @@ public enum ValueMatch
 ///
 /// 精确态里 <c>[]</c> 是任意下标的通配 —— 「这批命中横跨几种路径形状」那句印出来的
 /// 就是带 <c>[]</c> 的形状,而它是读的人手上唯一一条现成的收窄依据,得能原样粘回来。
+///
+/// <paramref name="IndexTolerant"/> 让每个 <c>.</c> 前面可以有下标,于是
+/// <c>statBases.stat</c> 也够得着 <c>statBases[0].stat</c>。这一档**只在查空之后**开
+/// (见 <c>where</c> 的救援分支):无条件放开等于把后缀匹配再放宽一级,而放宽会把
+/// 原本各自成立的两条路径悄悄并成一张表。
 /// </summary>
-public readonly record struct PathQuery(string Text, bool Exact = false)
+public readonly record struct PathQuery(string Text, bool Exact = false, bool IndexTolerant = false)
 {
     public static implicit operator PathQuery(string text) => new(text);
+
+    /// <summary>
+    /// 这条路径值不值得试「少写了下标」。
+    ///
+    /// 自己写了下标(<c>[0]</c> 或 <c>[]</c>)的不试 —— 那是明确表态。段数上限是四:
+    /// 每个点两种写法,组合数是 2^N,而 N 再大下去这次救援自己就比它救的查询贵了。
+    /// 语料里点分路径最长三段。
+    /// </summary>
+    public bool CanTolerateIndex =>
+        !Exact && !IndexTolerant &&
+        !Text.Contains('[', StringComparison.Ordinal) &&
+        Text.Count(c => c == '.') is > 0 and <= 4;
 }
 
 /// <summary>
@@ -886,6 +903,31 @@ public sealed class SnapshotDb : IDisposable
                 p["@path"] = path.Text;
                 conds.Add("fv.path = @path COLLATE NOCASE");
             }
+        }
+        else if (path.IndexTolerant)
+        {
+            // 每个点前面「有下标」与「没下标」各是一条 LIKE,取并集。LIKE 里没有可选段,
+            // 单条模式表达不出「这里可以有下标」,所以只能把组合摊开 —— 段数上限在
+            // CanTolerateIndex 那边卡着(2^4 = 16 条)。
+            var any = new List<string>();
+            var dots = path.Text.Count(c => c == '.');
+            for (var mask = 0; mask < 1 << dots; mask++)
+            {
+                var sb = new System.Text.StringBuilder("%");
+                var at = 0;
+                foreach (var ch in path.Text)
+                {
+                    if (ch == '.')
+                    {
+                        if ((mask & (1 << at)) != 0) sb.Append("[%]");
+                        at++;
+                    }
+                    sb.Append(Escape(ch.ToString()));
+                }
+                p[$"@ip{mask}"] = sb.ToString();
+                any.Add($"fv.path LIKE @ip{mask} ESCAPE '\\'");
+            }
+            conds.Add($"({string.Join(" OR ", any)})");
         }
         else if (path.Text.Contains('.') || path.Text.Contains('['))
         {

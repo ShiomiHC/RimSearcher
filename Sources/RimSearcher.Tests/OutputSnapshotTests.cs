@@ -203,6 +203,14 @@ public class OutputSnapshotTests
         // --exact-path 不进这条救援:调用方点名了「整条路径就长这样」,替他改写等于
         // 把一个明确的否定答案换成另一个问题的肯定答案。
         { "where-dotted-missing-index-exact", ["where", "statBases.stat", "--exact-path"] },
+        // 同一个缺陷在 values 上逐字同形 —— 它也按后缀匹配、也拿点分路径当参数。
+        // 一条承诺得对每条到达空的路径成立,只修 where 那条等于把另一半留在原地。
+        { "values-dotted-missing-index", ["values", "statBases.stat"] },
+        { "values-dotted-really-absent", ["values", "statBases.zzznope"] },
+        // 翻过头那条路径 return 得早,而改写这件事对它一样成立 —— 一条承诺得对
+        // 每条到达输出的路径成立,而这条正是最容易漏的那条(它连表都没有)。
+        { "where-dotted-missing-index-past-end", ["where", "statBases.stat", "--offset", "9"] },
+        { "values-dotted-missing-index-past-end", ["values", "statBases.stat", "--offset", "9"] },
         // 另一半问法。行的形状不同,--json 的顶层键也就不同(matches / paths)。
         { "where-by-value",         ["where", "--value", "CompShield"] },
         // 继承层的四条路各钉一份:抽象节点(有子、被 patch 点名)、具体 def(往上走)、

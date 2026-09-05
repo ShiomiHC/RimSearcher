@@ -1,0 +1,18 @@
+$ rimsearcher values statBases.stat
+exit 0
+--- stdout ---
+2 values.
+Nothing sits at 'statBases.stat' as written — indexed paths carry the list index, so this ran with that index left open. The 'field' block below names the paths actually pooled, and any one of them goes back in with --exact-path.
+
+matched_paths    statBases[0].stat (2), statBases[1].stat (1)
+def_types        ThingDef (2 of 9)
+defs_with_field  2
+Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans every def type that uses this path at all, not just the ones in the rows above — ThingDef, holding 1 def cut short between them. 'rimsearcher snapshot truncated --type ThingDef' lists them.
+This table's axis is the field: it lists the values 'statBases.stat' takes. Which fields hold a value you already have is the inverse question and a different command — 'rimsearcher where --value MarketValue --exact' asks it for 'MarketValue', the first row here. A value domain read here does not bound where those values occur.
+
+value                     defs
+MarketValue               2
+EnergyShieldRechargeRate  1
+
+These values come from 2 field paths pooled together, not from one field. Any path named above goes back in with --exact-path to pool that one alone; '[]' there stands for any index.
+--- stderr ---

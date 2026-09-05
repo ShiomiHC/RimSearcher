@@ -1,4 +1,4 @@
-﻿using RimSearcher.Cli;
+using RimSearcher.Cli;
 using RimSearcher.Output;
 using RimSearcher.Search;
 using RimSearcher.Snapshot;
@@ -1145,6 +1145,44 @@ public sealed class FindCommand : Command
 
         var (rows, total, defs) = ctx.Db.FindByField(pq, value, exact, scope, limit.Effective, offset, type);
 
+        // 少写下标那一档。索引里存的是 `statBases[0].stat`,而后缀匹配是纯文本、不认段边界,
+        // 于是 `statBases.stat` —— C# 字段名连起来最自然的写法 —— 恒为空,且空得与
+        // 「这个字段不存在」逐字同形。会话语料里 166 次「路径不存在」有 33 次就是这个。
+        //
+        // 只在**查空之后**试,不改默认语义:无条件放开等于把后缀匹配再宽一级,而那会把
+        // 原本各自成立的两条路径悄悄并进一张表。判据取 total 不取 rows.Count ——
+        // 后者在翻过头时也是 0,而那一档路径是存在的,救援进去会把「翻过头」说成「改写了」。
+        //
+        // 句子攒着不发 —— 它得排在计数之后(line 1 归「一共几条」,那是管道下唯一的
+        // 幸存者),而计数要等这里改写完才算得准。
+        string? rewritten = null;
+        if (total == 0 && pq.CanTolerateIndex)
+        {
+            var tolerant = pq with { IndexTolerant = true };
+            var retry = ctx.Db.FindByField(tolerant, value, exact, scope, limit.Effective, offset, type);
+            if (retry.Total > 0)
+            {
+                // 改写必须说,而且在有结果时最要说:零至少还会让人再看一眼,一张表不会。
+                // 说的是**实际命中的形状**而不是「补了下标」—— 形状原样粘回 --exact-path
+                // 就是收窄后的查询,而「补了下标」还得读者自己再推一次补在哪儿。
+                var shapes = ctx.Db.FindPathShapes(tolerant, value, exact, scope, type);
+                var shown = shapes.Take(Limits.MaxSuggestions).ToList();
+                rewritten =
+                    $"Nothing sits at '{path}' as written — indexed paths carry the list index, so this ran as " +
+                    string.Join(" / ", shown.Select(x => $"{x.Shape} ({x.Count})")) +
+                    (shapes.Count > shown.Count
+                        ? $", plus {Tally.Complete(shapes.Count - shown.Count).Render("path shape")} not shown"
+                        : "") +
+                    // 一条形状与多条形状要的下一步不同:多条时得先挑一条,一条时那句
+                    // 「挑一条」是空话,而 --exact-path 照样是把它钉死的那条命令。
+                    (shapes.Count > 1
+                        ? ". Any one of those goes back in with --exact-path to pool that one alone."
+                        : ". That shape goes back in with --exact-path to pin it.");
+                pq = tolerant;
+                (rows, total, defs) = retry;
+            }
+        }
+
         // 数的是**行**,不是 def:一行是一个(def, 路径)对,同一个 def 在多条路径上取到
         // 同一个值就有几行(`where capacity Consciousness` 是 155 行 / 80 个 def,首页
         // 二十五行里 `AlcoholHigh` 一个就占四行)。此前这里印的是「155 defs」,而翻页、
@@ -1157,6 +1195,16 @@ public sealed class FindCommand : Command
         // 而问的是「多少个 def」—— 恒定叫 match 时,读者还得自己把 match 折算成 def,
         // 那一步是白加的。
         var noun = defs == total ? "def" : "match";
+
+        // 一个发射口,两条到达路径都从这儿过 —— 「有表」与「翻过头」各写一遍的话,
+        // 后者迟早会被漏掉:那条路径 return 得早,而它恰恰是最难想起来的那条。
+        // 排在计数之后(line 1 归计数),置空让重复调用无害。
+        void NoteRewrite()
+        {
+            if (rewritten is null) return;
+            ctx.Report.Notice(NoticeKind.NextStep, rewritten);
+            rewritten = null;
+        }
 
         if (rows.Count > 0)
         {
@@ -1175,6 +1223,7 @@ public sealed class FindCommand : Command
         else if (offset > 0 && total > 0)
         {
             ctx.Report.PastEnd(offset, $"{Tally.Complete(total).Render(noun)} in all.");
+            NoteRewrite();
             return 1;
         }
 
@@ -1200,6 +1249,8 @@ public sealed class FindCommand : Command
         // 一个引「按后缀匹配」那半句 —— 而那半句在两条路上都是重复的:零那档紧接着的分流
         // 自己会说「没有哪个 def 的字段路径以 X 结尾」,非零那档表里的 path 列直接把
         // costList[0].thingDef 摆在眼前。既然效应测不出来,就不该再占四行。
+        NoteRewrite();
+
         if (type is not { Length: > 0 } &&
             ctx.Db.Types(ctx.Unscoped())
                   .FirstOrDefault(t => string.Equals(t.Type, path, StringComparison.Ordinal))
@@ -1303,6 +1354,10 @@ public sealed class FindCommand : Command
                 // 「从一个类名或一个值反查 def」。落点当场算得出来,就说算出来的那一条。
                 // 值也给了的那一支不进来:下面那句已经拿着那个值点名了 --value。
                 var placed = value is null && !identity.ContainsKey(path) ? Placed(ctx, path, scope) : null;
+                // 点分路径专属的一档,与 placed 互斥:placed 认的是**整串**是个名字,
+                // 而带点的串在 def 名表与落点表里都查不到,于是那一支恒空。
+                var tailValue = value is null && placed is null && !identity.ContainsKey(path)
+                    ? TailIsValue(ctx, path, scope, type) : null;
                 // 与 values 那一支同一条:算出来「值在更深一层」就不再发带占位符的通用指路。
                 var deeper = identity.ContainsKey(path) ? null : Completeness.ValuesLiveDeeper(ctx, path, scope);
 
@@ -1318,7 +1373,8 @@ public sealed class FindCommand : Command
                               (value is not null
                                   ? $", and 'rimsearcher where --value {value}' finds which field holds that value."
                                   // 落点算出来了就不给这半句:下一句里同一条命令的参数是**填好的**。
-                                  : placed is not null
+                                  // 末段是取值那一档同理 —— 它那句里的 --value 也是填好的。
+                                  : placed is not null || tailValue is not null
                                       ? "."
                                       : ", and 'rimsearcher where --value <text>' finds which path holds a value " +
                                         "you already know.")));
@@ -1326,6 +1382,10 @@ public sealed class FindCommand : Command
                 // 算得出来的结论排在索引边界那句之前;边界那句照旧挂 —— 「它是个值」并不
                 // 证明「它不同时是一个没进索引的字段」,两件事正交,叠加不替换。
                 if (placed is not null) ctx.Report.Notice(NoticeKind.NextStep, placed);
+                // 同一格上的另一档:整串不是名字,但**末段**是个取值。理由与 placed 同源 ——
+                // 算得出来的结论排在索引边界那句之前,而边界那句照旧挂:「末段是取值」并不
+                // 证明「它不同时是一个没进索引的字段」。
+                if (tailValue is not null) ctx.Report.Notice(NoticeKind.NextStep, tailValue);
                 // 「值住在更深一层」把边界那句**顶掉**,不是叠加:后者列的两条成因
                 // (每个 def 都是 null / 不存盘的运行时缓存)在这种局面下一条都不成立。
                 if (deeper is not null) ctx.Report.Notice(NoticeKind.NextStep, deeper);
@@ -1462,6 +1522,56 @@ public sealed class FindCommand : Command
         // 落点分流借 search 那一份产地(NameLookup),**除了 def 名这一档**:那九档的措辞
         // 是给「这个名字不是 def」写的,而 `where Bullet_Revolver` 里它就是 def 名 ——
         // 照借会把一句假话摆在输出位置。def 名自己说,剩下八档原样复用。
+        /// <summary>
+        /// 点分路径的末段其实是一个**取值**:<c>skillRequirements.Crafting</c> 里
+        /// <c>Crafting</c> 不是 <c>skillRequirements</c> 下的一个键,它是
+        /// <c>skillRequirements[].skill</c> 取到的值 —— 字典式的问法套在列表上。
+        ///
+        /// 这一档得与「末段哪儿都不是」分开。两者都是「没有这条路径」,而前者的答案就在
+        /// 同一个库里、连命令带参数都填得满;合成一句的话,能答的那次和真答不出的那次
+        /// 印出来一模一样。
+        ///
+        /// 只在没给值时算:给了值的人把末段当字段用,而那时推荐命令里的 --value 该填哪个
+        /// 是两可的 —— 两可的指路比不指路贵。
+        /// </summary>
+        static string? TailIsValue(CommandContext ctx, string path, Snapshot.ScopeFilter scope, string? type)
+        {
+            var cut = path.LastIndexOf('.');
+            if (cut <= 0 || cut == path.Length - 1) return null;
+            var head = path[..cut];
+            var tail = path[(cut + 1)..];
+
+            // Identifier 而不是子串:这里问的是「末段**就是**那个值」。子串会让
+            // `foo.Bullet` 认领 `Bullet_Revolver`,而那是另一个答案。也不用 Exact ——
+            // 类名在索引里存的是限定形态(`RimWorld.CompShield`),而人敲的是末段。
+            var rows = ctx.Db.PathsWithValue(tail, scope, 64, Storage.ValueMatch.Identifier, 0, type).Rows;
+            if (rows.Count == 0) return null;
+
+            // 前半截仍是**归属判据**,不是装饰:`statBases.MarketValue` 问的是 statBases
+            // 底下那个,而 MarketValue 同时坐在别的路径上。对得上的排前面,一条都对不上
+            // 时照样报 —— 那时说的是「它是个值,只是不在你说的那一层」。
+            var shapes = rows.Select(r => Search.PathSegments.Shape(r.Path))
+                             .Distinct(StringComparer.Ordinal)
+                             .OrderByDescending(s => Search.PathSegments.IsWholeSegment(s, head))
+                             .ToList();
+            var under = shapes.Where(s => Search.PathSegments.IsWholeSegment(s, head)).ToList();
+            var pick = under.Count > 0 ? under : shapes;
+            var shown = pick.Take(Limits.MaxSuggestions).ToList();
+
+            return $"'{tail}' is a value in this snapshot, not a field under '{head}': it sits on " +
+                   string.Join(" / ", shown) +
+                   (pick.Count > shown.Count
+                       ? $", plus {Tally.Complete(pick.Count - shown.Count).Render("path shape")} more"
+                       : "") +
+                   (under.Count > 0
+                       ? ""
+                       // 一条都不在那一层底下是**另一个结论**,不能沉默地混进上一句 ——
+                       // 读的人问的是「statBases 底下的 MarketValue」,而答案是
+                       // 「它是个值,但不在 statBases 底下」。
+                       : $" — none of those is under '{head}'") +
+                   $". The query that asks it is 'rimsearcher where {shown[0]} --value {tail}'.";
+        }
+
         static string? Placed(CommandContext ctx, string name, Snapshot.ScopeFilter scope)
         {
             if (ctx.Db.GetDefsNamed(name).Count == 0) return NameLookup.Locate(ctx, name, scope)?.Sentence;
@@ -2174,11 +2284,44 @@ public sealed class ValuesCommand : Command
         var pq = new PathQuery(path, ctx.Args.Flag("exact-path"));
         var (rows, total) = ctx.Db.DistinctValues(pq, scope, limit.Effective, type, offset);
 
+        // 少写下标那一档,判据与 `where` 那处同源(见那边的长注释):索引里存的是
+        // `statBases[0].stat`,而 `statBases.stat` 恒空、且空得与「没有这个字段」同形。
+        // 同样只在查空之后试,同样取 total 不取 rows.Count —— 翻过头那一档路径是存在的。
+        string? rewritten = null;
+        if (total == 0 && pq.CanTolerateIndex)
+        {
+            var tolerant = pq with { IndexTolerant = true };
+            var retry = ctx.Db.DistinctValues(tolerant, scope, limit.Effective, type, offset);
+            if (retry.Total > 0)
+            {
+                // 这条命令的表下方本来就有一句「这些值来自几条路径」(EmitFieldCoverage),
+                // 那句会把实际路径摆出来 —— 所以这里只说改写这件事本身,不重复列形状。
+                rewritten = $"Nothing sits at '{path}' as written — indexed paths carry the list index, " +
+                            "so this ran with that index left open. The 'field' block below names the paths " +
+                            "actually pooled, and any one of them goes back in with --exact-path.";
+                pq = tolerant;
+                (rows, total) = retry;
+            }
+        }
+
+        // 一个发射口,每条到达输出的路径都从这儿过 —— 理由与 `where` 那处逐字相同:
+        // 分开写的话,return 得早的那条路径迟早被漏掉。置空让重复调用无害。
+        void NoteRewrite()
+        {
+            if (rewritten is null) return;
+            ctx.Report.Notice(NoticeKind.NextStep, rewritten);
+            rewritten = null;
+        }
+
         if (rows.Count == 0)
         {
             if (offset > 0 && total > 0)
             {
                 ctx.Report.PastEnd(offset, $"'{path}' takes {Tally.Complete(total).Render("value")} in all.");
+                // 翻过头这条路径 return 得早,而改写这件事对它一样成立 —— 说
+                // 「一共 N 个」而不说这 N 个从哪条路径来,那个 N 就挂在一条调用方
+                // 没写过的路径上。
+                NoteRewrite();
                 // 翻过头**不是**「没有这个字段」—— 这个字段存在,它的产地也是量得出来的。
                 // 这一格照旧摆真数(不是零),两个面都摆:它与正常列表是同一件事,
                 // 只是这一页恰好没有行。下面那一支才是空的那种,那边三格才为空。
@@ -2238,6 +2381,9 @@ public sealed class ValuesCommand : Command
         // 截断读成完整。
         ctx.Report.PageNotice("value", rows.Count, offset, total);
 
+        // 排在计数之后,理由同 `where` 那处:line 1 归「一共几条」。
+        NoteRewrite();
+
         var cov = EmitFieldCoverage(ctx, pq, scope, type);
 
         // 这张表把几条路径的值**并成了一池**,而 matched_paths 只列得下前几条。不指出
@@ -2279,7 +2425,13 @@ public sealed class ValuesCommand : Command
         // 数交给那条命令自己去报 —— 它报得对,而且带着它自己那一套边界说明。
         if (rows.Count > 0 && rows[0].Value is { Length: > 0 and <= 40 } top)
             ctx.Report.Notice(NoticeKind.Boundary,
-                $"This table's axis is the field: it lists the values '{path}' takes. Which fields hold a " +
+                // 改写发生过时主语要跟着改:同一页上既说「'statBases.stat' 什么都没有」
+                // 又说「'statBases.stat' 取这些值」,两句对着干。
+                "This table's axis is the field: " +
+                (rewritten is null
+                    ? $"it lists the values '{path}' takes"
+                    : $"it lists the values pooled under '{path}', with the list index left open") +
+                ". Which fields hold a " +
                 "value you already have is the inverse question and a different command — " +
                 $"'rimsearcher where --value {Advisory.Quote(top)} --exact' asks it for '{top}', the first " +
                 "row here. A value domain read here does not bound where those values occur.");
