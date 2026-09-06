@@ -7,8 +7,8 @@ description: Answer questions about RimWorld's defs and C# — what a def contai
 
 Two sources of truth. **The snapshot**: a database of every def the game had in memory at
 export time — patches applied, inheritance resolved, code-generated defs included. Query it
-with the `rimsearcher` CLI. **The assemblies**: the game's compiled C#, read either by the
-CLI over a decompiled tree or by the DecompilerServer MCP, a program of its own. One layer
+with the `rimsearcher` CLI. **The assemblies**: the game's compiled C#, read by the same CLI
+over a decompiled tree — its source text, its IL and its call graph all from one build. One layer
 comes from the mods' XML instead of memory — inheritance, discarded by the game before
 export. `inherit` walks it as a tree; `get --defaults`'s `xml` column climbs the same
 parent chain to say whether a line is written here or by an ancestor.
@@ -40,13 +40,19 @@ Global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the com
 | What is this worth / what does it cost to make? | `rimsearcher economy <defName>` — not a def field, `get` cannot answer it |
 | UI text ↔ translation key | `rimsearcher keyed <key or phrase>` |
 | Which UI text is untranslated? | `rimsearcher keyed --empty-translation` with no query |
-| The game's C#: bodies, callers, overrides, hierarchy | the DecompilerServer MCP (`mcp__decompiler__*`), a separate program — exact where it is present. `code-side.md` gives the CLI's own answer to each, and names the one it cannot take |
+| Where a C# type lives, and what it derives from | `rimsearcher types <Name>` — `--derived`, `--bases`, `--transitive` |
+| What is in a type, and which members are virtual or overridden | `rimsearcher members <Type>` — the filters are metadata bits, not keywords in the text |
+| Which subclasses override this member | `rimsearcher types <Base> --derived --transitive --declares <Member>` |
+| Who calls this method | `rimsearcher callers <Type>.<Member>` — `--callees` for the other direction |
+| The instructions of one method (transpilers) | `rimsearcher il <Type>.<Member>` — `--state-machine` for an iterator or async method |
 | A code *shape* across all files | `rimsearcher code-search <regex>` |
 | The text of one file, member, or line range | `rimsearcher read <file> --member <name>` |
 
-The code side has its own two pages: which of the two tools answers what, plus the CLI's
-traps, in [references/code-side.md](references/code-side.md); the MCP itself in
-[references/decompiler-mcp.md](references/decompiler-mcp.md).
+The code side has its own page — which command answers what, plus the traps — in
+[references/code-side.md](references/code-side.md). Three questions still need the
+DecompilerServer MCP, a separate program: usages of a *field or type* rather than calls to a
+method, reading many members in one call, and comparing two builds. Those are in
+[references/decompiler-mcp.md](references/decompiler-mcp.md); nothing else is.
 
 ## If your instinct is to grep the XML, stop
 
@@ -237,7 +243,9 @@ snapshot, `1 def` means one in Core, and **no line says so** — the one boundar
 never announces itself. A def that is in the game but not in the snapshot means the mod was
 not enabled at export; `rimsearcher mods` lists coverage.
 
-**Use text search last**: `where`/`values` are exact over resolved data; `code-search`
-matches identically-named things from unrelated types.
+**Use text search last**, on both sides. For def data `where`/`values` are exact over
+resolved data. For code, `types`/`members`/`callers` read metadata — a name they match is
+the symbol, while `code-search` matches identically-named things from unrelated types and
+counts them all.
 
 

@@ -60,6 +60,16 @@ public sealed class TypesCommand : Command
             },
             new OptionSpec
             {
+                Name = "declares",
+                Aliases = ["declaring", "with-member"],
+                Placeholder = "<member>",
+                Help = "Only types that declare a member by this name. With --derived this is the set of " +
+                       "types that override it — a derived type that declares nothing by that name inherits " +
+                       "the base implementation.",
+                Narrows = true,
+            },
+            new OptionSpec
+            {
                 Name = "namespace",
                 Aliases = ["ns", "in-namespace"],
                 Placeholder = "<prefix>",
@@ -74,6 +84,7 @@ public sealed class TypesCommand : Command
             "rimsearcher types Verse.ThingComp --derived --transitive",
             "rimsearcher types CompProperties --namespace RimWorld",
             "rimsearcher types Verse.Pawn --bases",
+            "rimsearcher types Verse.ThingComp --derived --transitive --declares CompTick",
         ],
         JsonKeys =
         [
@@ -144,6 +155,22 @@ public sealed class TypesCommand : Command
                 ctx.Report.Notice(NoticeKind.Filter,
                     "One level down only. --transitive follows the chain all the way to the leaves.");
 
+            var before = kids.Count;
+            kids = Declaring(ctx, lookup, kids);
+            if (kids.Count != before)
+                ctx.Report.Notice(NoticeKind.Filter,
+                    $"Of {Tally.Complete(before).Render("derived type")}, the ones declaring " +
+                    $"'{ctx.Args.Value("declares")}' themselves. The rest inherit it rather than lacking it.");
+
+            if (kids.Count == 0)
+            {
+                ctx.Report.Notice(NoticeKind.Boundary,
+                    $"None of them declares '{ctx.Args.Value("declares")}', so every one runs the " +
+                    "implementation it inherits. Dropping --declares lists them all.");
+                ctx.Report.Table("types", Columns, []);
+                return 1;
+            }
+
             found = kids.Select(k => Row(k, hierarchy)).ToList();
         }
         else if (wantBases)
@@ -194,7 +221,7 @@ public sealed class TypesCommand : Command
         }
         else
         {
-            found = matches.Select(t => Row(t, hierarchy)).ToList();
+            found = Declaring(ctx, lookup, matches).Select(t => Row(t, hierarchy)).ToList();
         }
 
         rows.AddRange(found.Take(limit.Effective));
@@ -225,6 +252,19 @@ public sealed class TypesCommand : Command
 
         ctx.Report.Table("types", Columns, rows);
         return 0;
+    }
+
+    /// <summary>
+    /// <c>--declares</c> 的筛子。判据是「这个类型自己的成员表里有这个名字」——
+    /// 继承来的成员不在派生类型的成员表里,而那正好是这个开关要区分的东西。
+    /// </summary>
+    private static List<TypeHit> Declaring(CommandContext ctx, MetadataLookup lookup, IReadOnlyList<TypeHit> types)
+    {
+        var member = ctx.Args.Value("declares");
+        if (member is not { Length: > 0 }) return [.. types];
+        return [.. types.Where(t => lookup.FindMethods(t, member).Count > 0
+                                 || lookup.Members(t).Any(m => string.Equals(m.Name, member,
+                                                                             StringComparison.OrdinalIgnoreCase)))];
     }
 
     private static readonly string[] Columns =

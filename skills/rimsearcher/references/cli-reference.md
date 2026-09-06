@@ -1088,6 +1088,7 @@ The name can be a full one ('Verse.ThingComp'), a bare one ('ThingComp'), or a f
 | `--derived` | List the types that derive from it, or implement it when it is an interface. Direct ones only unless --transitive. | `--subclasses`, `--implementors`, `--children` |
 | `--transitive` | With --derived, follow the chain all the way down instead of one level. | `--deep`, `--recursive` |
 | `--bases` | List the chain of base types upward instead. | `--base-types`, `--parents`, `--ancestors` |
+| `--declares` <member> | Only types that declare a member by this name. With --derived this is the set of types that override it — a derived type that declares nothing by that name inherits the base implementation. | `--declaring`, `--with-member` |
 | `--namespace` <prefix> | Only types whose namespace starts with this. | `--ns`, `--in-namespace` |
 | `-n`, `--limit` <n> | How many types to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 
@@ -1103,6 +1104,7 @@ Examples:
 rimsearcher types Verse.ThingComp --derived --transitive
 rimsearcher types CompProperties --namespace RimWorld
 rimsearcher types Verse.Pawn --bases
+rimsearcher types Verse.ThingComp --derived --transitive --declares CompTick
 ```
 
 ## `values`

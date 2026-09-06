@@ -1,38 +1,51 @@
 # The code side
 
-The game's C#, reached two ways. The DecompilerServer MCP (its own page:
-[decompiler-mcp.md](decompiler-mcp.md)) is a separate program: rimsearcher neither ships
-it nor depends on it, and whether it is installed is a fact about the environment, not
-about either tool. The CLI's `code-search` / `read` need nothing outside rimsearcher —
-they read a decompiled tree that `rimsearcher sources sync` writes.
+The game's C#. `rimsearcher sources sync` writes one tree per mod and, alongside the C#, a
+copy of the assemblies it came from and a table of the call sites in them. Every command
+below reads that one build, so the C#, the IL and the call graph never disagree with each
+other.
 
-This page is which of the two answers what, plus the traps in the CLI half. None of it is
-needed to answer a question about def data.
+`rimsearcher sources list` says which trees are `current`, `stale` or `never built`, and
+which have the assembly copies and the call table. A query against a tree that was never
+built returns zero rows.
 
-## Which of the two
+None of this is needed to answer a question about def data.
 
-The MCP is exact: it reads metadata, not text. The CLI reads text, over whatever
-`sources sync` has written — `rimsearcher sources list` says which trees are `current`,
-`stale` or `never built`; a query against a tree that was never built returns zero rows.
+## Which command answers what
 
-Only the last row is beyond the CLI outright. The rest it answers approximately: decompiled
-output is machine-generated and regularly formatted, so one
-`code-search "class \w+ : ThingComp\b"` catches the direct subclasses. To confirm that
-on a tree you have not used before, run `"^\s*: ThingComp\b"` after it: that is the shape a
-wrapped declaration would leave behind, and rows there mean the first pass missed some.
+| The question | Command |
+|---|---|
+| Where is this type, and what is it | `rimsearcher types <Name>` |
+| What derives from this / implements this interface | `rimsearcher types <Name> --derived` (`--transitive` for the whole subtree) |
+| What does it derive from | `rimsearcher types <Name> --bases` |
+| Which subclasses override this member | `rimsearcher types <Base> --derived --transitive --declares <Member>` |
+| What is in this type | `rimsearcher members <Type>` — `--member-kind`, `--static`, `--virtual`, `--abstract`, `--overrides`, `--access` |
+| Where does an inherited member come from | `rimsearcher members <Type> --inherited` — rows say which type declares each |
+| The body of one member | `rimsearcher read <File>.cs --member <name>` |
+| The instructions of one method | `rimsearcher il <Type>.<Member>` — `--state-machine` for an iterator or async method |
+| Who calls this method | `rimsearcher callers <Type>.<Member>` |
+| What does this method call | `rimsearcher callers <Type>.<Member> --callees` |
+| A code *shape* across all files | `rimsearcher code-search <regex>` |
 
-| The question | With the MCP | With the CLI alone |
-|---|---|---|
-| The body of one member | `get_decompiled_source` | `rimsearcher read <File>.cs --member <name>` |
-| Where is this type declared | `search_types` | `rimsearcher code-search "class <Name>\b"`, then `read` that file `--outline` |
-| What derives from this | `find_derived_types` (`transitive: true` for the whole subtree) | `rimsearcher code-search "class \w+ : <Base>\b"` — direct children only; iterate for the subtree |
-| Who overrides this member | `get_overrides` | `rimsearcher code-search "override [\w<>, \[\]]+ <Member>\("` |
-| Who calls this method | `find_callers` | nothing exact — `code-search` matches *text*; same-named members collide. Read the hits; never report the count as a caller count. |
-| Anything at the opcode level | `get_il` | **nothing.** `Call` vs `Callvirt`, transpiler targets — invisible in decompiled C#. Say the question cannot be answered. |
+`types` / `members` / `il` / `callers` read the assembly's metadata, so they are exact —
+`members --virtual` is the metadata bit, not a guess at the word `virtual` in the text.
 
-Going the other way, a shape only text can express — `public\s+(?:virtual\s+)?void\s+Notify_\w+\(`
-across every file — is the CLI's, and the MCP has no equivalent.
+`read` and `code-search` read the decompiled text instead, which is where a shape like
+`public\s+(?:virtual\s+)?void\s+Notify_\w+\(` across every file is answerable and nothing
+else is.
 
+## What still needs the DecompilerServer MCP
+
+Three things, and only these. The MCP is a separate program
+([decompiler-mcp.md](decompiler-mcp.md)); whether it is installed is a fact about the
+environment.
+
+- **Usages of a field or a type**, as opposed to calls to a method. The call table records
+  method calls only, so `where is this field read` has no exact answer here —
+  `code-search` matches the name as text.
+- **Reading many members in one call.** `batch_get_decompiled_source` returns several at
+  once; `read` is one file per run.
+- **Comparing two versions of an assembly.** Nothing on this side loads two builds at once.
 
 ## Traps
 
@@ -45,13 +58,17 @@ across every file — is the CLI's, and the MCP has no equivalent.
   (`vanilla/**/Widgets.cs`); this holds under `--source` too. No `/` matches file names at
   any depth.
 - **A name `--member`/`--type`/`--outline` misses is not proof of absence** — they match
-  **braces, not C#**; recheck with `code-search` or `--lines`. A member of a *loaded
-  assembly* is still the MCP's job.
+  **braces, not C#**; recheck with `members`, which reads the metadata instead.
+- **A compiler-generated type has no file in the tree.** Iterator state machines and
+  closure holders are turned back into `yield` and lambdas by the decompiler, so `read`
+  cannot reach them and `il` is the only way in.
+- **`callers` on an override is usually zero, and that is not an absence.** A `callvirt`
+  records the method named at the call site, so a call written against the base type counts
+  against the base. The zero says so and names the base to ask instead.
 - **PowerShell: single-quote regexes.** Double quotes interpolate `$` — `"…: $name\b"`
   reaches the tool with `$name` already replaced, and `"(\w+)$"` is fine only because the
   quote follows. Backslashes survive either way (PowerShell escapes with a backtick), so
   the damage is silent and confined to `$`: the pattern that ran is not the one you wrote.
-
 
 ## What `code-search` counts
 
@@ -62,5 +79,5 @@ across every file — is the CLI's, and the MCP has no equivalent.
   carries a default — every file the glob selects is read and every match is printed until you
   pass one of them a positive number, and none of them takes `all`. Decompiled text has lost
   comments and local variable names (parameters and members survive); a member you cannot
-  find is usually inherited — follow the `: Base`. Trees are named by packageId (`vanilla` =
-  the game); `sources list` is the roster.
+  find is usually inherited — `members <Type> --inherited` says where it is declared. Trees
+  are named by packageId (`vanilla` = the game); `sources list` is the roster.

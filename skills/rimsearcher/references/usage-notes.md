@@ -102,6 +102,10 @@ data sits under a key that depends on the command. `<command> --help` lists each
 | `keyed` | `keys` |
 | `code-search` | `matches`, plus `ui_text` when a printed matching line calls `.Translate()` on a literal key the snapshot can resolve |
 | `read` | `source`, or `declarations` with `--outline` — never both |
+| `types` | `types` — one row per type, whichever of the three questions was asked |
+| `members` | `members` |
+| `il` | `il` — one row per disassembled method; the instructions themselves are a text block, not a column |
+| `callers` | `calls` — one key for both directions, with `from_*` and `to_*` naming the two ends |
 | `snapshot status` | `snapshot` (object), plus `xml` and `mod_list` — one row per packageId; both arrays are present and empty when nothing differs |
 | `snapshot diff` | `defs_added`, `defs_removed`, `fields` — all three present and empty when nothing differs |
 | `snapshot rename` | `renamed` (object): from, to, snapshot, modlist, export, pin. snapshot / modlist / export are present even when that file was not there |
@@ -111,9 +115,10 @@ Code output is rows too, so nothing is parsed back out of `path:line:text`:
 `{file, line, text}` — `{file, line, kind, declaration, text}` when the lines came from
 `--member` or `--type`. Under `--outline` the rows are `{kind, modifiers, name, in, lines, at}`
 instead, and the last of those is a string like `"817-951"` to hand straight back to `--lines`,
-not a pair of integers. Read the modifiers before concluding that a type overrides something:
-an override member and a virtual one the type introduces itself are otherwise identical rows,
-and they point at opposite next steps. `--json` never folds columns: every row carries every column.
+not a pair of integers. Do not settle "does this type override it" off those modifiers: an
+override member and a virtual one the type introduces itself read the same in the text, and
+they point at opposite next steps. `members <Type> --overrides` settles it off the metadata
+bit instead. `--json` never folds columns: every row carries every column.
 Truncation notes carry `kind: "truncation"`, but only for the cut this query made. Fields the
 exporter dropped are `kind: "boundary"` instead, so a sweep written as
 `notes | where kind == "truncation"` catches the paging cut you already asked for and misses
@@ -207,10 +212,13 @@ structurally blind to them and only `code-search` can answer; re-export to close
 
 **Anchoring, walked through.** `code-search MapPortal` finds every mention — dozens of matches
 across dozens of files, all of them printed, the declaration rendered
-exactly like every other hit. `code-search "class MapPortal\b"` returns exactly one. Once you have the file,
-`read <file> --outline` lists what is in it without a second scan; that is the right move
-whenever the only hit was the declaration itself, because a single hit means the pattern
-found *where the thing is defined*, not *what it does*.
+exactly like every other hit. Anchoring the pattern
+(`code-search "class MapPortal\b"`) narrows it to one, and `types MapPortal` skips the
+guesswork: it reads the metadata, so it names the assembly and the base type without a
+pattern that could be written wrong. Either way, once you have the type,
+`members MapPortal` lists what is in it and `read <file> --outline` shows the same from the
+text side. A single `code-search` hit means the pattern found *where the thing is defined*,
+not *what it does*.
 
 **What `search` tolerates.** Words, partial names, translated text, matches inside compound
 names — `search shield` finds `Apparel_ShieldBelt`. Both sides of a translation are
