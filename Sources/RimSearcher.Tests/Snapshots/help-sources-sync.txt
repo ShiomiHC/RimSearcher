@@ -9,6 +9,8 @@ Which mods to cover comes from the snapshot, not from a hand-written list: the s
 
 A tree whose source assemblies have not changed is left alone. Comparing versions is not this command's job: keep the tree in git and 'git diff' answers it, with rename detection and history that a bespoke comparison cannot offer. A tree with uncommitted git changes is also left alone — overwriting it would discard the working diff, which is the only record of the last sync until you commit. Commit or restore that tree, then run this again. --force does not override this: that flag only rebuilds trees whose assemblies have not changed.
 
+Each tree also gets a copy of the assemblies it was built from and a table of the call sites in them, so that 'read', 'il' and 'callers' all answer from one build rather than from whatever is installed at the moment each is asked. Both are derived data and are added to the tree's .gitignore. A tree that is already current but was built before those were kept gets both without being decompiled again.
+
 Options:
       --modlist <name>  Cover the mods in this saved mod list instead of the ones in the snapshot.
                         Also accepted: --list, --profile.
@@ -28,7 +30,7 @@ Global options (every command takes these, written after the command):
       --config <path>    Use this config file instead of the default one.
 
 --json keys (besides 'notes'):
-  rebuilt  without --dry-run: one row per tree that was rewritten — tree, assemblies, files. 'plan' is absent then.
+  rebuilt  without --dry-run: one row per tree that was rewritten — tree, assemblies, files, edges. 'edges' is null for a tree whose call-graph table could not be built. 'plan' is absent then.
   plan     with --dry-run: one row per tree that would be rebuilt — tree, assemblies, reason, root. Nothing is written, and 'rebuilt' is absent.
 
 Examples:

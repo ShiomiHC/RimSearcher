@@ -1779,5 +1779,10 @@ public static class Fixture
         // sources sync 在这里留下 README.md 与 .gitattributes,而它们曾让 --file-glob '*'
         // 数出比 sources list 多一棵树。正文含 public,所以真被搜到时计数句当场就变。
         File_("README.md", "public inventory of the decompiled trees");
+
+        // 元数据侧读的是 dll,不是上面那些 .cs。真发一份出来,连副本、清单与边表一起 ——
+        // 三种投影凑齐了,那四条命令才是在答问题而不是在报「什么都没有」。
+        FixtureAssembly.BuildInto(Path.Combine(root, "vanilla"),
+                                  Path.Combine(Path.GetDirectoryName(root)!, "installed"));
     }
 }

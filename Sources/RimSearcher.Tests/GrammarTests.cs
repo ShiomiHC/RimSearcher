@@ -3823,7 +3823,8 @@ public class GrammarTests
         var (stdout, _, _) = Fixture.Run("sources", "list");
 
         // zz.emptytree 在计划外,而它是空的 —— 空压得住计划内外。
-        Assert.Matches(new Regex(@"zz\.emptytree\s+0\s+empty", RegexOptions.Multiline), stdout);
+        // 中间那两格是 assemblies(空)与 copies(0)/edges(none):三种投影一样都没有。
+        Assert.Matches(new Regex(@"zz\.emptytree\s+0\s+0\s+none\s+empty", RegexOptions.Multiline), stdout);
 
         // 汇总行单列一档。
         Assert.Contains("holding no .cs file", stdout, StringComparison.Ordinal);
@@ -4206,7 +4207,11 @@ public class GrammarTests
         Assert.Contains("def_type", bare, StringComparison.Ordinal);
 
         // 老名字还认(别名),且与裸 list 逐字同形。
-        var (aliased, _, acode) = Fixture.Run("types");
+        //
+        // 认的是 def-types,不是 types:后者已经归 C# 侧那条命令(类型本身),两义并存
+        // 会让 `types ThingComp` 体面地回答另一个问题。让出去一次真实用法都没牺牲 ——
+        // Vethara 的会话里 `rimsearcher list` 敲过 3646 次,`rimsearcher types` 零次。
+        var (aliased, _, acode) = Fixture.Run("def-types");
         Assert.Equal(0, acode);
         Assert.Equal(bare, aliased);
     }

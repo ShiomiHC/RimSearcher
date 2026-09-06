@@ -128,6 +128,16 @@ public static class NounRegistry
         ["ancestor"] = "ancestors",
         ["patch operation"] = "patch operations",
         ["assembly"] = "assemblies",
+        // C# 侧的类型。与 "def type"(快照里那一层的桶名)分开登记 —— 一个 def type
+        // 背后可能有好几个 C# 类型,数它们的地方不是同一个地方。
+        ["type"] = "types",
+        // 往下那一层的宽度,与 "type"(名字命中了几个)不是一回事:同一句里两个数都会出现。
+        ["derived type"] = "derived types",
+        ["member"] = "members",
+        // 调用图的两端各自登记:一次查询只会是其中一端,而两个词在句子里占同一个位置。
+        ["caller"] = "callers",
+        ["callee"] = "callees",
+        ["call edge"] = "call edges",
         ["directory"] = "directories",
         ["line"] = "lines",
         ["declaration"] = "declarations",

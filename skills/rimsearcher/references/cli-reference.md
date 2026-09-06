@@ -8,6 +8,7 @@ Answers questions about RimWorld's defs and C# from a snapshot of what the game 
 
 | Command | What it answers |
 |---|---|
+| `callers` | Find the methods that call a given method, or the ones it calls. |
 | `code-search` | Search the decompiled C# with a regular expression. |
 | `datamod attach` | Make the exporter mod visible to the game until it is detached again. |
 | `datamod detach` | Hide the exporter mod from the game again. |
@@ -17,9 +18,11 @@ Answers questions about RimWorld's defs and C# from a snapshot of what the game 
 | `export` | Run the game unattended with a chosen mod list and import what it exports. |
 | `fields` | List the field paths that a def type actually uses, with how often each occurs. |
 | `get` | Show one def in full: its identity, its fields, and any translations of it. |
+| `il` | Disassemble a method to IL. |
 | `inherit` | Show what an XML node inherits from and what inherits from it, including abstract parents. |
 | `keyed` | Look up the UI text behind a translation key, or find the key behind a piece of UI text. |
 | `list` | List every def of one type — or, with no type given, every def type in the snapshot. |
+| `members` | List the members of a C# type, filtered by kind and by the modifiers on them. |
 | `modlist list` | List the mod lists available on this machine. |
 | `modlist save` | Capture the mods currently enabled in the game as a named list. |
 | `modlist show` | Show the mods in one list, in load order. |
@@ -35,6 +38,7 @@ Answers questions about RimWorld's defs and C# from a snapshot of what the game 
 | `snapshot use` | Pin a snapshot so later commands use it without being told each time. |
 | `sources list` | List the decompiled source trees and say which ones no longer match the installed assemblies. |
 | `sources sync` | Decompile the assemblies the game actually loads into the configured source tree. |
+| `types` | Find C# types and show what they derive from and what derives from them. |
 | `values` | List the distinct values a field takes, most common first. |
 | `where` | Find defs by the value of a field. This is the reverse lookup: from a C# class or a value back to the defs that use it. |
 
@@ -65,6 +69,44 @@ Every command takes these, and they are written **after** the command name: `rim
 | `--db` <path> | Query the snapshot database at this path directly, bypassing the registry. | `--database`, `--snapshot-path` |
 | `--json` | Emit machine-readable JSON. Anything the text output would have said in prose moves into a 'notes' array, so nothing is lost. The command's own table key is always present — an empty array when nothing matched, never a missing key. A note that reports a count also carries 'shown' and 'total' as numbers, so the figures never have to be parsed back out of its text; 'total' is null when only a lower bound is known, and both keys are absent on notes that are not counts. |  |
 | `--config` <path> | Use this config file instead of the default one. |  |
+
+## `callers`
+
+Find the methods that call a given method, or the ones it calls.
+
+```
+rimsearcher callers <symbol> [options]
+```
+
+Answered from a call-graph table built by 'rimsearcher sources sync', one per source tree. A tree without one is not searched, and the output names those trees — a caller living there would not appear below.
+
+The recorded target is the method named at the call site. A callvirt names the base method even when the object it runs on is a subclass, so calls that dispatch to an override at run time are counted against the base — 'rimsearcher types <type> --derived' finds the overrides themselves.
+
+--callees turns it around and lists what the named method calls.
+
+| Argument | Meaning |
+|---|---|
+| `<symbol>` | The method: 'Verse.Pawn.Tick', 'Verse.Pawn::Tick', 'Verse.ThingDef..ctor'. |
+
+| Option | Meaning | Also accepted |
+|---|---|---|
+| `--callees` | List what this method calls instead of what calls it. | `--calls`, `--outgoing`, `--reverse` |
+| `--source` <tree> | Only count call sites in this source tree. Both ends are still named from every tree, so the answer is narrowed, not blinded. | `--tree`, `--from-tree` |
+| `-n`, `--limit` <n> | How many callers to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `calls` | one row per calling method and target pair: tree, from_assembly, from_type, from_member, to_assembly, to_type, to_member, call_sites. |
+
+Examples:
+
+```
+rimsearcher callers Verse.Pawn.Kill
+rimsearcher callers RimWorld.ThoughtUtility.GiveThoughtsForPawnOrganHarvested --source vethara
+rimsearcher callers Verse.Pawn.Tick --callees
+```
 
 ## `code-search`
 
@@ -371,6 +413,46 @@ rimsearcher get Bullet_Revolver
 rimsearcher get Bullet_Revolver --defaults
 ```
 
+## `il`
+
+Disassemble a method to IL.
+
+```
+rimsearcher il <symbol> [options]
+```
+
+Name the method as 'Verse.Pawn.Tick', 'Verse.Pawn::Tick', or 'M:Verse.Pawn.Tick' — all three work, as does a bare type name plus member. A property is written by its C# name: 'Faction' finds the get_Faction and set_Faction that IL actually holds. A constructor is '.ctor'. Every overload of the name is disassembled, each under its own signature.
+
+Iterators and async methods keep almost nothing in the method itself — the instructions live in a compiler-generated state machine, and that is what a transpiler has to match. This command says so and names the method to ask for instead; --state-machine goes there directly.
+
+Page with --from/--to, which are IL offsets, not line numbers. A method with no body at all (abstract, extern, an engine intrinsic) is reported as such rather than as an empty result.
+
+| Argument | Meaning |
+|---|---|
+| `<symbol>` | The method to disassemble: 'Verse.Pawn.Tick', 'RimWorld.Need.CurLevel', 'Verse.ThingDef..ctor'. |
+
+| Option | Meaning | Also accepted |
+|---|---|---|
+| `--source` <tree> | Which decompiled source tree to read. Omit to read them all. | `--tree`, `--from-tree` |
+| `--from` <offset> | Start at this IL offset. Decimal, or hex with an 0x prefix. The method header is always shown — instructions cannot be read without knowing the locals. | `--start-offset`, `--offset-from` |
+| `--to` <offset> | Stop after this IL offset. | `--end-offset`, `--offset-to` |
+| `--state-machine` | Go straight to the state machine's MoveNext when the named method is an iterator or an async method. Without it the method itself is shown and the state machine is named. | `--movenext`, `--follow` |
+| `-n`, `--limit` <n> | How many lines to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `il` | one row per disassembled method: assembly, type, member, signature, bodyless, first_offset, last_offset, shown_from, shown_to, lines. |
+
+Examples:
+
+```
+rimsearcher il Verse.Pawn.Tick
+rimsearcher il Verse.Pawn.GetGizmos --state-machine
+rimsearcher il RimWorld.MainTabWindow_Research.DrawProjectInfo --from 0x160 --to 0x3e0
+```
+
 ## `inherit`
 
 Show what an XML node inherits from and what inherits from it, including abstract parents.
@@ -481,6 +563,53 @@ rimsearcher list HediffDef
 rimsearcher list GenStepDef --find scatter
 rimsearcher list CreepJoinerBaseDef --own-class CreepJoinerAggressiveDef
 rimsearcher list ThingDef --scope all,-vanilla
+```
+
+## `members`
+
+List the members of a C# type, filtered by kind and by the modifiers on them.
+
+```
+rimsearcher members <type> [options]
+```
+
+Members are read from the assembly, not from the decompiled C#, so the filters below are the metadata bits themselves rather than a guess at keywords in the text.
+
+Only what the type declares is listed. Inherited members live on the base type and are not repeated here — --inherited walks the chain and lists those too, each under the type that declares it.
+
+A property appears twice over: once as itself under the C# name, and once as the get_/set_ methods IL actually holds. 'rimsearcher il' takes the latter.
+
+| Argument | Meaning |
+|---|---|
+| `<type>` | A type name: 'Verse.ThingComp', 'ThingComp', or a fragment of one. |
+
+| Option | Meaning | Also accepted |
+|---|---|---|
+| `--source` <tree> | Which decompiled source tree to read. Omit to read them all. | `--tree`, `--from-tree` |
+| `--name` <text> | Only members whose name contains this text. | `--contains`, `--member-name` |
+| `--member-kind` <kind> | Only one kind: method, constructor, property, field, or event. Comma-separated for several. | `--kinds`, `--of-kind` |
+| `--static` | Only static members. | `--statics` |
+| `--instance` | Only instance members. | `--non-static` |
+| `--virtual` | Only virtual members — the ones a subclass can override. | `--virtuals`, `--patchable` |
+| `--abstract` | Only abstract members. These have no body of their own; the implementations are on the types that derive from this one. | `--abstracts` |
+| `--overrides` | Only members that override a base one. The test is the metadata bit, not a name match — a member that merely shares a name with a base member is not an override. | `--overriding`, `--override` |
+| `--access` <level> | Only members at this accessibility: public, protected, internal, private, 'protected internal', or 'private protected'. | `--accessibility`, `--visibility` |
+| `--inherited` | Also list what the base types declare, each row saying which type declares it. | `--with-inherited`, `--include-base` |
+| `-n`, `--limit` <n> | How many members to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `members` | one row per member: assembly, type, kind, member, signature, static, virtual, abstract, override, accessibility. |
+
+Examples:
+
+```
+rimsearcher members Verse.ThingComp
+rimsearcher members Verse.Pawn --virtual
+rimsearcher members Verse.Pawn --name Faction --inherited
+rimsearcher members RimWorld.GenRecipe --member-kind method --static
 ```
 
 ## `modlist list`
@@ -885,13 +1014,15 @@ rimsearcher sources list
 
 Each tree carries a manifest naming the assemblies it was decompiled from and their hashes, so 'stale' here means exactly one thing: a dll on disk is not the dll this tree came from.
 
+The copies and edges columns say which of the three projections a tree has: the C# it holds, a copy of the assemblies it came from, and a table of the call sites in them. A tree built before those were kept has neither, and 'il' there falls back to the installed dll while 'callers' cannot see into it at all.
+
 It does not say what changed inside the source. That is git's job — see the note this command prints.
 
 `--json` keys, besides the global `notes`:
 
 | Key | Holds |
 |---|---|
-| `trees` | one row per decompiled source tree: tree, files, assemblies, status. |
+| `trees` | one row per decompiled source tree: tree, files, assemblies, copies, edges, status. |
 
 Examples:
 
@@ -911,6 +1042,8 @@ Which mods to cover comes from the snapshot, not from a hand-written list: the s
 
 A tree whose source assemblies have not changed is left alone. Comparing versions is not this command's job: keep the tree in git and 'git diff' answers it, with rename detection and history that a bespoke comparison cannot offer. A tree with uncommitted git changes is also left alone — overwriting it would discard the working diff, which is the only record of the last sync until you commit. Commit or restore that tree, then run this again. --force does not override this: that flag only rebuilds trees whose assemblies have not changed.
 
+Each tree also gets a copy of the assemblies it was built from and a table of the call sites in them, so that 'read', 'il' and 'callers' all answer from one build rather than from whatever is installed at the moment each is asked. Both are derived data and are added to the tree's .gitignore. A tree that is already current but was built before those were kept gets both without being decompiled again.
+
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `--modlist` <name> | Cover the mods in this saved mod list instead of the ones in the snapshot. | `--list`, `--profile` |
@@ -922,7 +1055,7 @@ A tree whose source assemblies have not changed is left alone. Comparing version
 
 | Key | Holds |
 |---|---|
-| `rebuilt` | without --dry-run: one row per tree that was rewritten — tree, assemblies, files. 'plan' is absent then. |
+| `rebuilt` | without --dry-run: one row per tree that was rewritten — tree, assemblies, files, edges. 'edges' is null for a tree whose call-graph table could not be built. 'plan' is absent then. |
 | `plan` | with --dry-run: one row per tree that would be rebuilt — tree, assemblies, reason, root. Nothing is written, and 'rebuilt' is absent. |
 
 Examples:
@@ -931,6 +1064,45 @@ Examples:
 rimsearcher sources sync
 rimsearcher sources sync --dry-run
 rimsearcher sources sync --only erdelf.humanoidalienraces --force
+```
+
+## `types`
+
+Find C# types and show what they derive from and what derives from them.
+
+```
+rimsearcher types <name> [options]
+```
+
+The name can be a full one ('Verse.ThingComp'), a bare one ('ThingComp'), or a fragment — a full name is tried first, then a bare one, then anything ending in it, and the first of those that matches is what you get. Several types can carry the same bare name across mods; all of them are listed rather than one being picked.
+
+--derived walks downward and --bases upward. Both stop at the edge of the synced trees: System.Object and the rest of the framework are not in any tree, so a base chain ending somewhere else is the chain leaving what was read, not a gap in it.
+
+| Argument | Meaning |
+|---|---|
+| `<name>` | A type name: 'Verse.ThingComp', 'ThingComp', or a fragment of one. |
+
+| Option | Meaning | Also accepted |
+|---|---|---|
+| `--source` <tree> | Which decompiled source tree to read. Omit to read them all. | `--tree`, `--from-tree` |
+| `--derived` | List the types that derive from it, or implement it when it is an interface. Direct ones only unless --transitive. | `--subclasses`, `--implementors`, `--children` |
+| `--transitive` | With --derived, follow the chain all the way down instead of one level. | `--deep`, `--recursive` |
+| `--bases` | List the chain of base types upward instead. | `--base-types`, `--parents`, `--ancestors` |
+| `--namespace` <prefix> | Only types whose namespace starts with this. | `--ns`, `--in-namespace` |
+| `-n`, `--limit` <n> | How many types to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+
+`--json` keys, besides the global `notes`:
+
+| Key | Holds |
+|---|---|
+| `types` | one row per type: assembly, type, namespace, base, interfaces, derived, compiler_generated. |
+
+Examples:
+
+```
+rimsearcher types Verse.ThingComp --derived --transitive
+rimsearcher types CompProperties --namespace RimWorld
+rimsearcher types Verse.Pawn --bases
 ```
 
 ## `values`

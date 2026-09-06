@@ -6,6 +6,7 @@ Answers questions about RimWorld's defs and C# from a snapshot of what the game 
 Usage: rimsearcher <command> [arguments] [options]
 
 Commands:
+  callers             Find the methods that call a given method, or the ones it calls.
   code-search         Search the decompiled C# with a regular expression.
   datamod attach      Make the exporter mod visible to the game until it is detached again.
   datamod detach      Hide the exporter mod from the game again.
@@ -15,9 +16,11 @@ Commands:
   export              Run the game unattended with a chosen mod list and import what it exports.
   fields              List the field paths that a def type actually uses, with how often each occurs.
   get                 Show one def in full: its identity, its fields, and any translations of it.
+  il                  Disassemble a method to IL.
   inherit             Show what an XML node inherits from and what inherits from it, including abstract parents.
   keyed               Look up the UI text behind a translation key, or find the key behind a piece of UI text.
   list                List every def of one type — or, with no type given, every def type in the snapshot.
+  members             List the members of a C# type, filtered by kind and by the modifiers on them.
   modlist list        List the mod lists available on this machine.
   modlist save        Capture the mods currently enabled in the game as a named list.
   modlist show        Show the mods in one list, in load order.
@@ -33,6 +36,7 @@ Commands:
   snapshot use        Pin a snapshot so later commands use it without being told each time.
   sources list        List the decompiled source trees and say which ones no longer match the installed assemblies.
   sources sync        Decompile the assemblies the game actually loads into the configured source tree.
+  types               Find C# types and show what they derive from and what derives from them.
   values              List the distinct values a field takes, most common first.
   where               Find defs by the value of a field. This is the reverse lookup: from a C# class or a value back to the defs that use it.
 

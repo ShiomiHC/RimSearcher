@@ -1,5 +1,6 @@
-﻿using RimSearcher.Cli;
+using RimSearcher.Cli;
 using RimSearcher.Config;
+using RimSearcher.Metadata;
 using RimSearcher.Output;
 using RimSearcher.Sources;
 
@@ -91,11 +92,15 @@ public sealed class SourcesListCommand : Command
         Remarks =
             "Each tree carries a manifest naming the assemblies it was decompiled from and their hashes, so " +
             "'stale' here means exactly one thing: a dll on disk is not the dll this tree came from.\n\n" +
+            "The copies and edges columns say which of the three projections a tree has: the C# it holds, a " +
+            "copy of the assemblies it came from, and a table of the call sites in them. A tree built before " +
+            "those were kept has neither, and 'il' there falls back to the installed dll while 'callers' " +
+            "cannot see into it at all.\n\n" +
             "It does not say what changed inside the source. That is git's job — see the note this command prints.",
         Options = [],
         UsesGlobals = true,
         Examples = ["rimsearcher sources list"],
-        JsonKeys = [new() { Key = "trees", Rows = true, What = "one row per decompiled source tree: tree, files, assemblies, status." }],
+        JsonKeys = [new() { Key = "trees", Rows = true, What = "one row per decompiled source tree: tree, files, assemblies, copies, edges, status." }],
     };
 
     public override int Run(CommandContext ctx)
@@ -125,6 +130,8 @@ public sealed class SourcesListCommand : Command
         var outside = 0;
         var empty = 0;
         var emptyOrphan = 0;
+        var noCopies = 0;
+        var noEdges = 0;
 
         foreach (var name in onDisk.Union(plans.Keys, StringComparer.OrdinalIgnoreCase)
                                    .OrderBy(n => n, StringComparer.OrdinalIgnoreCase))
@@ -154,6 +161,14 @@ public sealed class SourcesListCommand : Command
             else
                 { status = "current"; current++; }
 
+            // 三种投影是不是齐的。它们各自决定一条命令答不答得上来,而没有任何别处说得出来:
+            // 副本没了 'il' 就退回读安装目录里那份(可能是另一个版本),边表没了 'callers'
+            // 在这棵树上就是盲的。
+            var copies = exists ? CountCopies(dir) : 0;
+            var peek = exists ? CallGraphStore.Peek(dir) : null;
+            if (exists && copies == 0) noCopies++;
+            if (exists && files > 0 && peek is null) noEdges++;
+
             rows.Add(new Dictionary<string, object?>
             {
                 ["tree"] = name,
@@ -161,6 +176,8 @@ public sealed class SourcesListCommand : Command
                 // 「反编译出来是空的」与「这里没有这个目录」要的下一步不是一回事。
                 ["files"] = exists ? files.ToString() : "",
                 ["assemblies"] = plan is null ? (state?.Assemblies.Count.ToString() ?? "") : plan.Assemblies.Count.ToString(),
+                ["copies"] = exists ? copies.ToString() : "",
+                ["edges"] = peek is { } p ? p.Edges.ToString() : exists ? "none" : "",
                 ["status"] = status,
             });
         }
@@ -236,7 +253,23 @@ public sealed class SourcesListCommand : Command
                 $"{(notInstalled.Count == 1 ? "is" : "are")} not installed on this machine, so no tree can be " +
                 $"built for {(notInstalled.Count == 1 ? "it" : "them")}: {string.Join(", ", notInstalled)}.");
 
-        ctx.Report.Table("trees", ["tree", "files", "assemblies", "status"], rows);
+        if (noCopies > 0 || noEdges > 0)
+        {
+            var parts = new List<string>();
+            if (noCopies > 0)
+                parts.Add("no copy of the assemblies it came from, so 'il' there reads whatever is installed " +
+                          $"now — {Tally.Complete(noCopies).Render("source tree")}");
+            if (noEdges > 0)
+                parts.Add("no call-graph table, so 'callers' does not reach into it — " +
+                          $"{Tally.Complete(noEdges).Render("source tree")}");
+
+            ctx.Report.Notice(NoticeKind.Boundary,
+                "Built before the assemblies and call sites were kept alongside the C#: " +
+                string.Join("; ", parts) +
+                ". 'rimsearcher sources sync' adds both without decompiling again.");
+        }
+
+        ctx.Report.Table("trees", ["tree", "files", "assemblies", "copies", "edges", "status"], rows);
         SourcesShared.SayHowToDiff(ctx, root);
         return 0;
     }
@@ -244,6 +277,16 @@ public sealed class SourcesListCommand : Command
     private static int CountFiles(string dir)
     {
         try { return Directory.EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories).Count(); }
+        catch { return 0; }
+    }
+
+    private static int CountCopies(string dir)
+    {
+        try
+        {
+            var copies = AssemblyStore.CopyDirectory(dir);
+            return Directory.Exists(copies) ? Directory.EnumerateFiles(copies, "*.dll").Count() : 0;
+        }
         catch { return 0; }
     }
 }
@@ -266,7 +309,12 @@ public sealed class SourcesSyncCommand : Command
             "that a bespoke comparison cannot offer. A tree with uncommitted git changes is also left alone — " +
             "overwriting it would discard the working diff, which is the only record of the last sync until " +
             "you commit. Commit or restore that tree, then run this again. --force does not override this: " +
-            "that flag only rebuilds trees whose assemblies have not changed.",
+            "that flag only rebuilds trees whose assemblies have not changed.\n\n" +
+            "Each tree also gets a copy of the assemblies it was built from and a table of the call sites in " +
+            "them, so that 'read', 'il' and 'callers' all answer from one build rather than from whatever is " +
+            "installed at the moment each is asked. Both are derived data and are added to the tree's " +
+            ".gitignore. A tree that is already current but was built before those were kept gets both " +
+            "without being decompiled again.",
         Options =
         [
             new OptionSpec
@@ -313,7 +361,8 @@ public sealed class SourcesSyncCommand : Command
             new()
             {
                 Key = "rebuilt",
-                What = "without --dry-run: one row per tree that was rewritten — tree, assemblies, files. " +
+                What = "without --dry-run: one row per tree that was rewritten — tree, assemblies, files, " +
+                       "edges. 'edges' is null for a tree whose call-graph table could not be built. " +
                        "'plan' is absent then.",
             },
             new()
@@ -363,6 +412,7 @@ public sealed class SourcesSyncCommand : Command
         // 哈希整批来源 dll(vanilla 那几个大文件不到一秒),换来「没变就不重跑」。
         var work = new List<(SourceTreePlan Plan, SourceTreeState Manifest, string Reason)>();
         var skipped = new List<string>();
+        var filled = new List<string>();
         var blocked = new List<string>();
         var dirty = new List<string>();
 
@@ -381,6 +431,9 @@ public sealed class SourcesSyncCommand : Command
             if (!force && existing is not null && existing.SameSources(manifest) && Directory.Exists(dir))
             {
                 skipped.Add(plan.Name);
+                // 树是当前的,缺的只是另外两种投影。补它们不必重新反编译 ——
+                // .cs 已经出自这几个 dll,而副本与边表是同一份 dll 的另外两种读法。
+                if (!dryRun && Backfill(ctx, plan, plans, manifest, dir)) filled.Add(plan.Name);
                 continue;
             }
 
@@ -415,6 +468,15 @@ public sealed class SourcesSyncCommand : Command
                 $"{Tally.Complete(notInstalled.Count).Render("mod")} in {from} " +
                 $"{(notInstalled.Count == 1 ? "is" : "are")} not installed here and " +
                 $"{(notInstalled.Count == 1 ? "was" : "were")} skipped: {string.Join(", ", notInstalled)}.");
+
+        if (filled.Count > 0)
+        {
+            AssemblyStore.EnsureIgnored(root);
+            ctx.Report.Notice(NoticeKind.Boundary,
+                "Already current, and given the assembly copies and the call-graph table without being " +
+                $"decompiled again — {Tally.Complete(filled.Count).Render("source tree")}: " +
+                $"{NameList.Render(filled, 6)}. The C# in each was already built from those same dlls.");
+        }
 
         if (work.Count == 0)
         {
@@ -453,6 +515,8 @@ public sealed class SourcesSyncCommand : Command
         Directory.CreateDirectory(root);
         var failures = new List<string>();
         var totalFiles = 0;
+        var totalEdges = 0;
+        var noGraph = new List<string>();
 
         foreach (var (plan, manifest, _) in work)
         {
@@ -486,9 +550,33 @@ public sealed class SourcesSyncCommand : Command
 
             if (!ok) { TryDeleteDir(staging); continue; }
 
+            // 三种投影同源:.cs 已经在暂存里了,dll 副本跟着一起进去,一起转正。
+            AssemblyStore.CopyInto(staging, plan.Root, plan.Assemblies);
+
             manifest.Write(staging);
-            TryDeleteDir(target);
-            Directory.Move(staging, target);
+
+            // 旧树先挪开再删,不是先删再挪 —— 先删的话,转正这一步失败就把上一版一起带走了,
+            // 而那正是「失败时回滚」这套暂存机制要保住的东西。实测过一次:转正报了拒绝访问,
+            // 树就此不在磁盘上,只剩 git 里那份能捡回来。
+            var previous = target + ".previous";
+            TryDeleteDir(previous);
+            if (Directory.Exists(target)) Directory.Move(target, previous);
+
+            try { Directory.Move(staging, target); }
+            catch
+            {
+                if (Directory.Exists(previous) && !Directory.Exists(target)) Directory.Move(previous, target);
+                throw;
+            }
+
+            TryDeleteDir(previous);
+
+            // 边表在转正**之后**建。建它要把副本连同它们引用的程序集一起打开,而那些句柄
+            // 会按住暂存目录不放,于是 Directory.Move 报「拒绝访问」—— 整棵树就此丢掉,
+            // 只因为第三种投影多开了几个文件。写边表本身是原子的(先写 .tmp 再改名)。
+            var edges = BuildCallGraph(ctx, plan, plans, manifest, target);
+            totalEdges += edges ?? 0;
+            if (edges is null) noGraph.Add(plan.Name);
 
             totalFiles += files;
             rows.Add(new Dictionary<string, object?>
@@ -496,8 +584,11 @@ public sealed class SourcesSyncCommand : Command
                 ["tree"] = plan.Name,
                 ["assemblies"] = plan.Assemblies.Count,
                 ["files"] = files,
+                ["edges"] = edges,
             });
         }
+
+        AssemblyStore.EnsureIgnored(root);
 
         TryDeleteDir(Path.Combine(root, SourcesShared.StagingDir));
 
@@ -513,13 +604,89 @@ public sealed class SourcesSyncCommand : Command
             return 1;
         }
 
+        if (noGraph.Count > 0)
+            ctx.Report.Notice(NoticeKind.Boundary,
+                "Rebuilt without a call-graph table, so 'rimsearcher callers' does not reach into " +
+                $"{(noGraph.Count == 1 ? "it" : "them")} — " +
+                $"{Tally.Complete(noGraph.Count).Render("source tree")}: {NameList.Render(noGraph, 6)}. " +
+                "The C# and the assembly copies are in place; only the index over call sites is missing.");
+
         ctx.Report.Notice(NoticeKind.Boundary,
             $"{Tally.Complete(rows.Count).Render("source tree")} rebuilt from {from}, " +
-            $"{Tally.Complete(totalFiles).Render("C# file")} in total" +
+            $"{Tally.Complete(totalFiles).Render("C# file")} and " +
+            $"{Tally.Complete(totalEdges).Render("call edge")} in total" +
             (skipped.Count > 0 ? $"; {Tally.Complete(skipped.Count).Render("source tree")} already current" : "") + ".");
-        ctx.Report.Table("rebuilt", ["tree", "assemblies", "files"], rows);
+        ctx.Report.Table("rebuilt", ["tree", "assemblies", "files", "edges"], rows);
         SourcesShared.SayHowToDiff(ctx, root);
         return 0;
+    }
+
+    /// <summary>
+    /// 树是当前的,但副本或边表缺着 —— 把缺的那部分补上,不重新反编译。
+    ///
+    /// 这条路存在是因为「当前」这个判据只管 .cs:在副本与边表存在之前建的树,每一棵都是
+    /// 当前的,而 <c>--force</c> 是唯一能让它们长出另外两种投影的开关 —— 那要把全部树重新
+    /// 反编译一遍,只为拷几个文件和扫一遍指令流。
+    /// </summary>
+    private static bool Backfill(
+        CommandContext ctx, SourceTreePlan plan, IReadOnlyList<SourceTreePlan> plans,
+        SourceTreeState manifest, string dir)
+    {
+        var missingCopies = plan.Assemblies.Any(
+            d => !File.Exists(AssemblyStore.CopyPath(dir, AssemblyStore.Relative(plan.Root, d))));
+        var missingGraph = CallGraphStore.Peek(dir) is null;
+        if (!missingCopies && !missingGraph) return false;
+
+        if (missingCopies) AssemblyStore.CopyInto(dir, plan.Root, plan.Assemblies);
+        BuildCallGraph(ctx, plan, plans, manifest, dir);
+        return true;
+    }
+
+    /// <summary>
+    /// 这棵树的调用边表。读的是刚抄进暂存目录的那份副本 —— 与 .cs 同源的正是它,
+    /// 而安装目录里的原件在这一刻已经可能是别的版本了。
+    ///
+    /// 建不出来返回 <c>null</c>,不是 0:「这棵树里没有调用」与「这棵树没建成表」在
+    /// 反查的结果里同形,而后者的下一步是重建。
+    /// </summary>
+    private static int? BuildCallGraph(
+        CommandContext ctx, SourceTreePlan plan, IReadOnlyList<SourceTreePlan> plans,
+        SourceTreeState manifest, string treeDir)
+    {
+        try
+        {
+            var copies = plan.Assemblies
+                .Select(dll => new ResolvedAssembly
+                {
+                    Tree = plan.Name,
+                    Name = Path.GetFileNameWithoutExtension(dll),
+                    Path = AssemblyStore.CopyPath(treeDir, AssemblyStore.Relative(plan.Root, dll)),
+                    Origin = AssemblyOrigin.Copy,
+                })
+                .Where(a => File.Exists(a.Path))
+                .ToList();
+
+            if (copies.Count == 0) return null;
+
+            var search = plan.Assemblies
+                .SelectMany(dll => SourcePlanner.ReferencePaths(plan, dll, plans, ctx.Config))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            ctx.Progress.WriteLine($"[{plan.Name}] 建调用边表…");
+
+            var graph = CallGraphBuilder.Build(
+                plan.Name, copies, search, [.. manifest.Assemblies.Select(a => a.Sha256)]);
+
+            CallGraphStore.Write(treeDir, graph);
+            return graph.Edges.Count;
+        }
+        catch
+        {
+            // 边表建不出来不该把已经反编译好的那棵树一起丢掉 —— 它是第三种投影,
+            // 缺了它另外两种照旧可用。
+            return null;
+        }
     }
 
     private static void TryDeleteDir(string dir)

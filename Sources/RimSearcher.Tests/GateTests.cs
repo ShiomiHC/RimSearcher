@@ -77,6 +77,11 @@ public class GateTests
             ["modlist list.modlists"] = ["modlist", "list"],
             ["modlist show.mods"] = ["modlist", "show", "fixture-current"],
             ["sources list.trees"] = ["sources", "list"],
+            // 元数据那四条读的是夹具里那份真程序集(FixtureAssembly),不是手写的 .cs。
+            ["il.il"] = ["il", "RimWorld.CompShield.PostSpawnSetup"],
+            ["types.types"] = ["types", "Verse.ThingComp"],
+            ["members.members"] = ["members", "Verse.ThingComp"],
+            ["callers.calls"] = ["callers", "Verse.Widgets.Label"],
         };
 
         var declared = new CommandRegistry().Specs

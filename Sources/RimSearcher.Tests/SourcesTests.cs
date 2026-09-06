@@ -405,6 +405,61 @@ public class SourcesTests
             "and that repository is the only thing that can answer 'what changed'.");
     }
 
+    // ---- 副本目录 ----
+
+    /// <summary>
+    /// 一个 mod 里两个同名 dll,抄进树里之后还得是两份。
+    ///
+    /// 实测 keeptpa.nivarianrace 就有两个 LumiParticle.dll,来自两个不同的目录。按文件名
+    /// 抄的话后一个盖掉前一个,清单里两条记录指向同一个文件 —— 被盖掉的那个程序集里的每一个
+    /// 类型都查不到,而 types / members / il 说的都是「没有这个类型」。
+    /// </summary>
+    [Fact]
+    public void 一个mod里的两个同名dll抄进树里之后还是两份()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "rimsearcher-copies-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var modRoot = Path.Combine(temp, "mod");
+            var a = Path.Combine(modRoot, "Assemblies", "Lumi.dll");
+            var b = Path.Combine(modRoot, "Assemblies", "Extra", "Lumi.dll");
+            Directory.CreateDirectory(Path.GetDirectoryName(a)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(b)!);
+            File.WriteAllText(a, "one");
+            File.WriteAllText(b, "two");
+
+            var tree = Path.Combine(temp, "tree");
+            Directory.CreateDirectory(tree);
+            Assert.Equal(2, RimSearcher.Metadata.AssemblyStore.CopyInto(tree, modRoot, [a, b]));
+
+            var copies = Directory.EnumerateFiles(RimSearcher.Metadata.AssemblyStore.CopyDirectory(tree),
+                                                  "*.dll", SearchOption.AllDirectories).ToList();
+            Assert.Equal(2, copies.Count);
+            Assert.Equal(["one", "two"], copies.Select(File.ReadAllText).Order().ToList());
+
+            // 清单那条路也要各自找到自己的那份,而不是两条都落到同一个文件上。
+            new SourceTreeState
+            {
+                PackageId = "x",
+                GameVersion = GameVersion,
+                Root = modRoot,
+                Assemblies =
+                [
+                    new SourceAssembly { Path = "Assemblies/Lumi.dll", Sha256 = "" },
+                    new SourceAssembly { Path = "Assemblies/Extra/Lumi.dll", Sha256 = "" },
+                ],
+            }.Write(tree);
+
+            var resolved = RimSearcher.Metadata.AssemblyStore.Resolve(tree);
+            Assert.Equal(2, resolved.Count);
+            Assert.Equal(2, resolved.Select(r => r.Path).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        }
+        finally
+        {
+            try { Directory.Delete(temp, recursive: true); } catch { /* 临时目录清不掉不算失败 */ }
+        }
+    }
+
     // ---- git 工作区 ----
 
     /// <summary>
