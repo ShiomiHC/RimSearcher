@@ -26,9 +26,14 @@ public static class SnapshotSchema
     /// 查询侧能力位为假时不去碰它们。
     ///
     /// type_fields 后来把 path 抽成 type_field_paths 字典(1373 万行里只有 52 万条不同
-    /// 路径,平均 116 字符)。这一条与上面几条不同 —— 它改的是**既有表的形状**,于是同名
-    /// 表在磁盘上有两种样子。同样不涨版本,同样的理由;区分不靠导出器版本(两种形状能出自
-    /// 同一个导出器),靠 SnapshotDb 探 path_id 列在不在。
+    /// 路径,平均 116 字符),再后来整张表拆成 type_subtrees + subtree_paths(那 1373 万行
+    /// 是一次 JOIN 的展开结果,两个因子合起来只有 3.85%)。这两条与上面几条不同 ——
+    /// 它们改的是**既有表的形状**,于是声明层在磁盘上有三种样子。
+    ///
+    /// 同样不涨版本,同样的理由,而且拆表这一次理由更硬:磁盘上现有十九份库,其中十二份是
+    /// --keep 留下的旧代,它们**永远不会**被重导,而重导正是拒读消息唯一能指的出路。
+    /// 区分不靠导出器版本(三种形状能出自同一个导出器),靠 SnapshotDb 探表/列在不在 ——
+    /// 那比版本号更精确:版本号说的是「这份库建于哪一档」,探到的是「它现在长什么样」。
     /// </remarks>
     public const int Version = 8;
 
@@ -263,18 +268,54 @@ public static class SnapshotSchema
         -- 逐行存字符串是 26 倍冗余,实测占整库一半以上(表 1.9G / 库 4.4G)。
         -- 冗余这么高是因为所有 Def 子类共享基类那棵字段树,而深度 6 那一层占了 78%。
         --
-        -- 表名沿用,列换成 path_id。**旧库的这张表是 (def_type, path) **,靠列名分辨
-        -- (SnapshotDb.TypeFieldsAreDictionary)。不涨 schema_version:精确相等的检查会让
-        -- 磁盘上每一份旧库拒读,连同 --keep 留下的那些旧代 —— 而它们唯一的用途正是拿来 diff。
+        -- 不涨 schema_version:精确相等的检查会让磁盘上每一份旧库拒读,连同 --keep 留下的
+        -- 那些旧代 —— 而它们唯一的用途正是拿来 diff。形状靠表/列在不在分辨,见下。
         CREATE TABLE type_field_paths (
             id   INTEGER PRIMARY KEY,
             path TEXT NOT NULL
         );
 
-        CREATE TABLE type_fields (
-            def_type TEXT NOT NULL,
-            path_id  INTEGER NOT NULL
+        -- (类型, 路径) 那张展开表**已经拆掉了**。它是一次 JOIN 的结果,而两个因子小得多:
+        --
+        --   哪个类型带哪几棵子树   type_subtrees   4959 行    56K
+        --   一棵子树摊开是哪些路径  subtree_paths   52.4 万行   6.2M
+        --
+        -- 纯官方 baseline 上,这两张表加起来是原表 1374 万行的 3.85%,连 type_names 一共
+        -- 6.3M —— 旧形状是表 352.9M + 覆盖索引 359.4M = 712.3M,113 倍。整库 1144.9M → 438.8M。
+        -- 冗余出在:所有 Def 子类共享基类那棵字段树,于是同一棵子树被 222 个类型各抄一遍。
+        -- 「子树」按路径**首段**切(`comps[0].props.x` 归到 `comps`)—— 2884 棵子树对
+        -- 2865 个不同首段,比值 1.007:一个字段名底下摊开成什么样几乎完全由字段名决定,
+        -- 因为决定它的是那个字段的 C# 类型,与哪个 Def 子类持有它无关。
+        --
+        -- 这是**无损的集合去重**,不是内容取舍:切分是划分(每条路径恰属一个首段),
+        -- 折叠是去重,复原是并集。tools/type-fields-equivalence.py 在真库上比过两边的**全部**
+        -- 1373.9 万对:行数相等、集合哈希逐对相同、222 个类型一个不多不少。
+        --
+        -- 查询侧不因此变快也不变慢(实测三条 --path-contains,1.1~1.3s,差异在噪声里)——
+        -- 那一层本来就不是热点。省的是磁盘,而磁盘上这一层曾占整库 62%。
+        --
+        -- 磁盘上于是有三种形状,一律靠表/列在不在分辨(SnapshotDb.TypeFieldsAreSubtrees):
+        --   现行  type_subtrees + subtree_paths
+        --   旧    type_fields(def_type, path_id)
+        --   更旧  type_fields(def_type, path)
+        CREATE TABLE type_names (
+            id   INTEGER PRIMARY KEY,
+            name TEXT NOT NULL
         );
+
+        -- 两张都是 WITHOUT ROWID:表自己就是那条索引。带 rowid 的话还要再建一条覆盖索引
+        -- 把两列连 rowid 抄一遍 —— 旧形状上那条索引(359.4M)比表本身(352.9M)还大。
+        CREATE TABLE type_subtrees (
+            type_id    INTEGER NOT NULL,
+            subtree_id INTEGER NOT NULL,
+            PRIMARY KEY (type_id, subtree_id)
+        ) WITHOUT ROWID;
+
+        CREATE TABLE subtree_paths (
+            subtree_id INTEGER NOT NULL,
+            path_id    INTEGER NOT NULL,
+            PRIMARY KEY (subtree_id, path_id)
+        ) WITHOUT ROWID;
 
         -- 一条「与新实例不同」的值,在同类型的 def 里有多普遍。
         --
@@ -406,8 +447,11 @@ public static class SnapshotSchema
     [
         new("field_values", "leaf",  true, "150 万行,where/values 的主谓词。"),
         new("field_values", "value", true, "150 万行,按值反查。"),
-        new("type_fields",  "def_type", true,
-            "1373 万行。失配时 SQLite 转去覆盖扫 path 索引:12.2s,换成 NOCASE 后 0.113s。"),
+        // 这个查找此前落在 type_fields.def_type 上,1373 万行,失配时 SQLite 转去覆盖扫
+        // path 索引:12.2s,NOCASE 后 0.113s —— 那条实测是这份清单存在的由来。子树分解之后
+        // 同一个查找落在 type_names 的 222 行上,索引与否都量不出来,于是登记为不需要。
+        new("type_names", "name", false,
+            "222 行(纯官方的 def 类型数)。全扫,与 NOCASE 与否无关。"),
 
         // 这一列现在住在 field_value_paths 里(2.6 万行),NOCASE 与否都是全扫,
         // 而 2.6 万行的全扫是 8ms。此前登记在 field_values 上的那条判断(「换 197ms 不值」)
@@ -484,14 +528,16 @@ public static class SnapshotSchema
         CREATE INDEX idx_xn_defname ON xml_nodes(def_name);
         CREATE INDEX idx_xw_key     ON xml_written(def_type, node_key);
         CREATE INDEX idx_xw_path    ON xml_written(path);
-        -- 同上那条 collation 规则,这张表上代价最大:1373 万行(纯官方),而唯一的查询
-        -- (SnapshotDb.TypeDeclaredPaths)是 `def_type = @t COLLATE NOCASE`。BINARY 的索引
-        -- 于是一次都用不上,SQLite 转而在 path 索引上做覆盖全扫 —— 实测 12.2s。
-        -- 换成 NOCASE 后走 def_type 等值查找:**0.119s**。
-        -- path 那条索引一并删掉:唯一的谓词是 `path LIKE '%x%'`,前缀不定,索引本来就
-        -- 帮不上忙,它只是把优化器骗去扫自己。它单独占 1.7G(整表连索引 3.9G)。
-        -- 覆盖索引:该类型的 path_id 全在索引里,不用回表。
-        CREATE INDEX idx_tf_type_nc ON type_fields(def_type COLLATE NOCASE, path_id);
+        -- 声明层(type_names / type_subtrees / subtree_paths)一条索引都没有,三条理由各不同:
+        --   type_names   222 行,全扫。此前那条 idx_tf_type_nc 是同一个查找的落点,
+        --                当时挨的是 1373 万行,所以非 NOCASE 不可(12.2s 对 0.119s);
+        --                拆表之后同一个查找落在 222 行上,索引与否都量不出来。
+        --   两张 WITHOUT ROWID   表自己就是主键那条索引,查询正是顺着主键走的。
+        --   反查方向(一条路径落在哪几棵子树里)   现在没有查询要它。真要加,先得有用它的查询。
+        --
+        -- type_field_paths.path 也没有索引,而 `--path-contains` 的谓词正落在它上面:
+        -- 那是 `LIKE '%x%'`,前缀不定,索引帮不上忙,只会把优化器骗去扫自己。旧形状上
+        -- 那条 path 索引就是这么单独占了 1.7G,还把 12.2s 那条计划钓了出来。
         CREATE INDEX idx_sv_type    ON shared_values(def_type);
         CREATE INDEX idx_econ_name  ON economy(def_name);
         CREATE INDEX idx_econ_mod   ON economy(mod);

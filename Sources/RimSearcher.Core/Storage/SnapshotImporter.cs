@@ -111,9 +111,17 @@ public sealed class SnapshotImporter
                 INSERT INTO xml_written (def_type, node_key, key_is_name, path, inner_text, patched)
                 VALUES ($t,$k,$kn,$p,$x,$pa)
                 """);
-            using var insertTf = Prepare(db, """
-                INSERT INTO type_fields (def_type, path_id)
-                VALUES ($t,$pid)
+            using var insertTypeName = Prepare(db, """
+                INSERT INTO type_names (id, name)
+                VALUES ($id,$n)
+                """);
+            using var insertTypeSubtree = Prepare(db, """
+                INSERT OR IGNORE INTO type_subtrees (type_id, subtree_id)
+                VALUES ($t,$s)
+                """);
+            using var insertSubtreePath = Prepare(db, """
+                INSERT INTO subtree_paths (subtree_id, path_id)
+                VALUES ($s,$p)
                 """);
             using var insertTfPath = Prepare(db, """
                 INSERT INTO type_field_paths (id, path)
@@ -156,8 +164,13 @@ public sealed class SnapshotImporter
             // rowid,而两条 INSERT 之间夹着别的语句。
             long nextKeyedId = 1;
             long nextEconomyId = 1;
-            // type_fields 的路径字典,id 就是它进来的次序(Count + 1)。
+            // 声明层的路径字典,id 就是它进来的次序(Count + 1)。
             var tfPathIds = new Dictionary<string, long>(StringComparer.Ordinal);
+            // def 类型名 → 号。纯官方 222 个。
+            var typeNameIds = new Dictionary<string, long>(StringComparer.Ordinal);
+            // 子树 → 号。键是**排序后的 path_id 串**,内容相同即同一棵 —— 不靠哈希碰运气,
+            // 那 1374 万行的冗余整个压在「相不相等」这一个判断上。纯官方 2884 棵,键合计约 4M。
+            var subtreeIds = new Dictionary<string, long>(StringComparer.Ordinal);
             // 字段路径的字典。同 tfPathIds:第一次见到就发号,行里只存号。
             // baseline 上 150 万行摊到 2.6 万条不同路径,这张表因此只有 838K。
             var fvPathIds = new Dictionary<string, long>(StringComparer.Ordinal);
@@ -344,6 +357,9 @@ public sealed class SnapshotImporter
                     if (root.TryGetProperty(IntermediateFormat.KeyPaths, out var tpaths)
                         && tpaths.ValueKind == JsonValueKind.Array)
                     {
+                        // 这个类型的路径按首段分组 —— 每一组就是一棵子树。一条记录里装着
+                        // 一个类型的全部路径,所以分组不必跨记录攒。
+                        var byHead = new Dictionary<string, List<long>>(StringComparer.Ordinal);
                         foreach (var p in tpaths.EnumerateArray())
                         {
                             var path = p.GetString();
@@ -358,9 +374,44 @@ public sealed class SnapshotImporter
                                 Bind(insertTfPath, "$p", path);
                                 insertTfPath.ExecuteNonQuery();
                             }
-                            Bind(insertTf, "$t", defTypeF);
-                            Bind(insertTf, "$pid", pathId);
-                            insertTf.ExecuteNonQuery();
+                            var head = HeadSegment(path);
+                            if (!byHead.TryGetValue(head, out var bucket))
+                                byHead[head] = bucket = [];
+                            bucket.Add(pathId);
+                        }
+
+                        if (byHead.Count > 0)
+                        {
+                            // 同一个类型出现在两条记录里时接着往下挂,不另发一个号 ——
+                            // 那会让它在 type_names 里有两行,而查询按名字找,只会撞见头一行。
+                            if (!typeNameIds.TryGetValue(defTypeF, out var typeId))
+                            {
+                                typeId = typeNameIds.Count + 1;
+                                typeNameIds[defTypeF] = typeId;
+                                Bind(insertTypeName, "$id", typeId);
+                                Bind(insertTypeName, "$n", defTypeF);
+                                insertTypeName.ExecuteNonQuery();
+                            }
+
+                            foreach (var bucket in byHead.Values)
+                            {
+                                bucket.Sort();
+                                var key = string.Join(',', bucket);
+                                if (!subtreeIds.TryGetValue(key, out var subtreeId))
+                                {
+                                    subtreeId = subtreeIds.Count + 1;
+                                    subtreeIds[key] = subtreeId;
+                                    foreach (var pathId in bucket)
+                                    {
+                                        Bind(insertSubtreePath, "$s", subtreeId);
+                                        Bind(insertSubtreePath, "$p", pathId);
+                                        insertSubtreePath.ExecuteNonQuery();
+                                    }
+                                }
+                                Bind(insertTypeSubtree, "$t", typeId);
+                                Bind(insertTypeSubtree, "$s", subtreeId);
+                                insertTypeSubtree.ExecuteNonQuery();
+                            }
                         }
                     }
                     continue;
@@ -1077,6 +1128,19 @@ public sealed class SnapshotImporter
     /// <summary>布尔落成 0/1。缺席作假 —— 这几列都是 NOT NULL,没有第三态可表达。</summary>
     private static int Flag(JsonElement el, string key)
         => el.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.True ? 1 : 0;
+
+    /// <summary>
+    /// 一条字段路径的首段:<c>comps[0].props.x</c> → <c>comps</c>,<c>defName</c> → 自己。
+    /// 声明层按它切子树(见 <see cref="SnapshotSchema"/> 的 type_names 那段)。
+    ///
+    /// 切在**第一个** <c>.</c> 或 <c>[</c> 上,两者都算:列表字段的首段后面直接跟下标。
+    /// 这个切法保证每条路径恰属一个首段 —— 分组因而是一个划分,复原时取并集即原样。
+    /// </summary>
+    internal static string HeadSegment(string path)
+    {
+        var i = path.AsSpan().IndexOfAny('.', '[');
+        return i < 0 ? path : path[..i];
+    }
 
     private static SqliteCommand Prepare(SqliteConnection db, string sql)
     {

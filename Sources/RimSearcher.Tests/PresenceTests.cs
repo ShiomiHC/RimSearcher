@@ -220,8 +220,7 @@ public class PresenceTests
         using var cmd = raw.CreateCommand();
         cmd.CommandText = "SELECT COUNT(*) FROM xml_written";
         Assert.True((long)cmd.ExecuteScalar()! > 0);
-        cmd.CommandText = "SELECT COUNT(*) FROM type_fields t JOIN type_field_paths d ON d.id = t.path_id "
-                        + "WHERE t.def_type = 'ThingDef' AND d.path = 'neverSet'";
+        cmd.CommandText = DeclaredPathsSql + " WHERE n.name = 'ThingDef' AND d.path = 'neverSet'";
         Assert.Equal(1L, (long)cmd.ExecuteScalar()!);
         cmd.CommandText = "SELECT patch_ops_defname FROM xml_nodes WHERE def_name = 'ChildGun'";
         Assert.Equal(2L, (long)cmd.ExecuteScalar()!);
@@ -259,6 +258,13 @@ public class PresenceTests
     /// 钉的是索引定义而不是查询计划:fixture 那张表只有几行,优化器在小表上本来就不用索引,
     /// 计划断言在这里恒真,测不出这件事。
     /// </summary>
+    /// <summary>声明层现行形状的读法,与 <c>SnapshotDb.TypeDeclaredPaths</c> 同一条路。</summary>
+    private const string DeclaredPathsSql =
+        "SELECT COUNT(*) FROM type_names n "
+        + "JOIN type_subtrees ts ON ts.type_id = n.id "
+        + "JOIN subtree_paths sp ON sp.subtree_id = ts.subtree_id "
+        + "JOIN type_field_paths d ON d.id = sp.path_id";
+
     /// <summary>
     /// 路径提进字典表之后,同一条路径在多个 def 类型下必须共用一个 id —— 那正是省下来的东西
     /// (纯官方 1373 万行只有 52 万个不同 path)。字典没去重的话表还是那么大,而这里
@@ -277,12 +283,122 @@ public class PresenceTests
         Assert.Equal(distinctPaths, (long)cmd.ExecuteScalar()!);
 
         // fixture 里 ThingDef 与 HediffDef 都声明了 defName,两条引用指向同一个字典行。
-        cmd.CommandText = "SELECT COUNT(DISTINCT t.path_id) FROM type_fields t "
-                        + "JOIN type_field_paths d ON d.id = t.path_id WHERE d.path = 'defName'";
+        cmd.CommandText = "SELECT COUNT(DISTINCT sp.path_id) FROM subtree_paths sp "
+                        + "JOIN type_field_paths d ON d.id = sp.path_id WHERE d.path = 'defName'";
         Assert.Equal(1L, (long)cmd.ExecuteScalar()!);
-        cmd.CommandText = "SELECT COUNT(DISTINCT t.def_type) FROM type_fields t "
-                        + "JOIN type_field_paths d ON d.id = t.path_id WHERE d.path = 'defName'";
+        cmd.CommandText = "SELECT COUNT(DISTINCT n.name) FROM type_names n "
+                        + "JOIN type_subtrees ts ON ts.type_id = n.id "
+                        + "JOIN subtree_paths sp ON sp.subtree_id = ts.subtree_id "
+                        + "JOIN type_field_paths d ON d.id = sp.path_id WHERE d.path = 'defName'";
         Assert.True((long)cmd.ExecuteScalar()! > 1);
+    }
+
+    /// <summary>
+    /// 子树分解是**无损的集合去重**,不是内容取舍:复原出来的 (类型, 路径) 对必须与导出
+    /// 声明的逐条相同。压缩比是这一条的副产品 —— 先钉相等,再钉省下来了。
+    ///
+    /// 钉的是从库里读回来的东西,不是导入时那几个内存字典 —— 后者与「写没写进去」分不开。
+    /// </summary>
+    [Fact]
+    public void 子树分解复原回原样()
+    {
+        // fixture 的两条 type_fields 记录,逐字取自 Fixture 里那两个数组。
+        var declared = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "ThingDef|burstCount", "ThingDef|costList[0].count", "ThingDef|costList[0].quality",
+            "ThingDef|costList[0].thingDef", "ThingDef|damage", "ThingDef|defName",
+            "ThingDef|descriptionHyperlinks[0].def", "ThingDef|label", "ThingDef|neverSet",
+            "ThingDef|speed", "ThingDef|statBases[0].stat", "ThingDef|statBases[0].value",
+            "ThingDef|thingClass", "ThingDef|things[0].chance", "ThingDef|things[0].def",
+            "ThingDef|things[0].hp",
+            "HediffDef|defName", "HediffDef|label", "HediffDef|maxSeverity",
+        };
+
+        using var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Fixture.PresenceDb};Pooling=False");
+        raw.Open();
+        using var cmd = raw.CreateCommand();
+        cmd.CommandText = "SELECT n.name, d.path FROM type_names n "
+                        + "JOIN type_subtrees ts ON ts.type_id = n.id "
+                        + "JOIN subtree_paths sp ON sp.subtree_id = ts.subtree_id "
+                        + "JOIN type_field_paths d ON d.id = sp.path_id";
+        var restored = new List<string>();
+        using (var rd = cmd.ExecuteReader())
+            while (rd.Read()) restored.Add(rd.GetString(0) + "|" + rd.GetString(1));
+
+        // 行数也钉:集合相等挡不住同一对被摊开两遍(那正是「子树重叠」会有的样子)。
+        Assert.Equal(declared.Count, restored.Count);
+        Assert.Equal(declared, restored.ToHashSet(StringComparer.Ordinal));
+
+        // 省下来的:defName 与 label 各自那棵单路径子树被两个类型共用,于是子树数
+        // 少于 (类型, 首段) 对数。fixture 小,差额就是这两棵。
+        cmd.CommandText = "SELECT COUNT(*) FROM type_subtrees";
+        var pairs = (long)cmd.ExecuteScalar()!;
+        cmd.CommandText = "SELECT COUNT(DISTINCT subtree_id) FROM subtree_paths";
+        Assert.Equal(pairs - 2, (long)cmd.ExecuteScalar()!);
+    }
+
+    /// <summary>
+    /// 拆表之前的两种形状还躺在磁盘上(<c>--keep</c> 留下的十二份旧代永远不会被重导),
+    /// 所以读侧必须照旧读得动它们。
+    ///
+    /// **注入实验会静默地没注入**,而没注入正好长得像「新形状读通了」—— 所以先钉注入本身:
+    /// 旧表在、新表不在。三种形状各走一遍,同一句话必须逐字相同。
+    /// </summary>
+    [Theory]
+    [InlineData(true)]   // type_fields(def_type, path_id) —— 路径进了字典的那一档
+    [InlineData(false)]  // type_fields(def_type, path)    —— 最早那一档
+    public void 拆表之前的旧形状照旧读得出来(bool dictionary)
+    {
+        var path = Path.Combine(Path.GetTempPath(),
+                                $"rs-legacy-tf-{(dictionary ? "dict" : "plain")}-{Guid.NewGuid():N}.db");
+        File.Copy(Fixture.PresenceDb, path, overwrite: true);
+        try
+        {
+            using (var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={path};Pooling=False"))
+            {
+                raw.Open();
+                using var cmd = raw.CreateCommand();
+                cmd.CommandText = dictionary
+                    ? """
+                      CREATE TABLE type_fields (def_type TEXT NOT NULL, path_id INTEGER NOT NULL);
+                      INSERT INTO type_fields (def_type, path_id)
+                        SELECT n.name, sp.path_id FROM type_names n
+                          JOIN type_subtrees ts ON ts.type_id = n.id
+                          JOIN subtree_paths sp ON sp.subtree_id = ts.subtree_id;
+                      DROP TABLE type_subtrees; DROP TABLE subtree_paths; DROP TABLE type_names;
+                      """
+                    : """
+                      CREATE TABLE type_fields (def_type TEXT NOT NULL, path TEXT NOT NULL);
+                      INSERT INTO type_fields (def_type, path)
+                        SELECT n.name, d.path FROM type_names n
+                          JOIN type_subtrees ts ON ts.type_id = n.id
+                          JOIN subtree_paths sp ON sp.subtree_id = ts.subtree_id
+                          JOIN type_field_paths d ON d.id = sp.path_id;
+                      DROP TABLE type_subtrees; DROP TABLE subtree_paths; DROP TABLE type_names;
+                      """;
+                cmd.ExecuteNonQuery();
+
+                // 注入真发生了吗:旧表有行,新表不在。
+                cmd.CommandText = "SELECT COUNT(*) FROM type_fields";
+                Assert.Equal(19L, (long)cmd.ExecuteScalar()!);
+                cmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE name = 'subtree_paths'";
+                Assert.Equal(0L, (long)cmd.ExecuteScalar()!);
+            }
+
+            var (nulls, _, nullCode) = Fixture.Run("fields", "ThingDef", "--path-contains", "neverSet",
+                                                   "--db", path);
+            Assert.Equal(1, nullCode);
+            Assert.Contains("every def of the type has them as null", nulls, StringComparison.Ordinal);
+
+            var (missing, _, missCode) = Fixture.Run("fields", "ThingDef", "--path-contains", "noSuchFieldXYZ",
+                                                     "--db", path);
+            Assert.Equal(1, missCode);
+            Assert.Contains("does not declare such a field", missing, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
     }
 
     /// <summary>
@@ -306,9 +422,10 @@ public class PresenceTests
                 Assert.False(string.IsNullOrWhiteSpace(l.Why), $"{l.Table}.{l.Column}");
         }
 
-        // type_fields 那条 path 索引:谓词只有 `LIKE '%x%'`,前缀不定,索引帮不上忙 ——
-        // 它唯一的作用是把优化器骗去扫自己(1.7G,12.2s 那条计划)。加回来会静默变慢。
-        Assert.DoesNotContain("ON type_fields(path)", indexes, StringComparison.Ordinal);
+        // `--path-contains` 的谓词只有 `LIKE '%x%'`,前缀不定,索引帮不上忙 —— 它唯一的
+        // 作用是把优化器骗去扫自己(旧形状上那条 1.7G,12.2s 那条计划)。加回来会静默变慢。
+        // 拆表之后这个谓词落在 type_field_paths 上,所以钉的是它。
+        Assert.DoesNotContain("ON type_field_paths(path)", indexes, StringComparison.Ordinal);
 
         // 查询侧确实是 NOCASE —— 两边任何一侧改了都要一起改,否则索引又失效。
         Assert.Contains("COLLATE NOCASE", SnapshotDb.TypeDeclaredPathsWhere, StringComparison.Ordinal);
@@ -329,7 +446,7 @@ public class PresenceTests
         using var cmd = raw.CreateCommand();
         cmd.CommandText = "SELECT COUNT(*) FROM xml_written";
         Assert.Equal(0L, (long)cmd.ExecuteScalar()!);
-        cmd.CommandText = "SELECT COUNT(*) FROM type_fields";
+        cmd.CommandText = "SELECT COUNT(*) FROM type_subtrees";
         Assert.Equal(0L, (long)cmd.ExecuteScalar()!);
     }
 

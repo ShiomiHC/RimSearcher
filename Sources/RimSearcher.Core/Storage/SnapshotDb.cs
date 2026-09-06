@@ -2095,15 +2095,30 @@ public sealed class SnapshotDb : IDisposable
     /// 这个 def 类型声明了哪些字段路径。<c>null</c> = 这份快照没量过。
     /// </summary>
     /// <summary>
-    /// 与 <c>idx_tf_type_nc</c> 必须是同一种排序。BINARY 的索引配 NOCASE 的谓词等于没有索引
-    /// —— 这张表 1373 万行,那一次失配实测 12.2s 对 0.113s。两边改一侧就要改另一侧。
+    /// 子树分解之后,类型名住在 <c>type_names</c> 的 222 行里,一次全扫,NOCASE 不要索引。
     /// </summary>
-    public const string TypeDeclaredPathsWhere = "WHERE t.def_type = @t COLLATE NOCASE";
+    public const string TypeDeclaredPathsWhere = "WHERE n.name = @t COLLATE NOCASE";
 
     /// <summary>
-    /// 这份库的 <c>type_fields</c> 是不是字典化的那一版。**靠列名认,不靠版本号** ——
+    /// 拆表之前的那两种形状共用的谓词。与 <c>idx_tf_type_nc</c> 必须是同一种排序 ——
+    /// BINARY 的索引配 NOCASE 的谓词等于没有索引,那张表 1373 万行,失配实测 12.2s 对 0.113s。
+    /// 新库里既没有这张表也没有那条索引,这个常量只走在旧库上。
+    /// </summary>
+    public const string TypeDeclaredPathsLegacyWhere = "WHERE t.def_type = @t COLLATE NOCASE";
+
+    /// <summary>
+    /// 这份库的声明层是不是拆成子树的那一版。**靠表在不在认,不靠版本号** ——
     /// schema_version 相等的检查一旦为此涨档,磁盘上每一份旧库都会拒读,连同 <c>--keep</c>
-    /// 留下的那些旧代,而它们唯一的用途正是拿来 <c>snapshot diff</c>。
+    /// 留下的那些旧代,而它们唯一的用途正是拿来 <c>snapshot diff</c>,重导对它们不适用。
+    ///
+    /// <c>PRAGMA table_info</c> 对不存在的表回零行,于是探一列就够。
+    /// </summary>
+    private bool TypeFieldsAreSubtrees => _tfSub ??= HasColumn("subtree_paths", "path_id");
+    private bool? _tfSub;
+
+    /// <summary>
+    /// 拆表之前那两种形状里,较新的一种(路径进了字典)。同 <see cref="TypeFieldsAreSubtrees"/>,
+    /// 靠列名认。
     /// </summary>
     private bool TypeFieldsAreDictionary => _tfDict ??= HasColumn("type_fields", "path_id");
     private bool? _tfDict;
@@ -2176,14 +2191,28 @@ public sealed class SnapshotDb : IDisposable
     {
         if (!Meta.IndexesTypeFields) return null;
 
-        // 旧库的路径就在这张表上,新库的在字典表里 —— 两条路给的是同一份东西。
-        var dict = TypeFieldsAreDictionary;
-        var pathExpr = dict ? "d.path" : "t.path";
-        var from = dict ? "type_fields t JOIN type_field_paths d ON d.id = t.path_id"
+        // 磁盘上有三种形状,三条路给的是同一份东西(见 SnapshotSchema 的 type_names 那段)。
+        // 子树那条不必去重:每条路径恰属一个首段,所以同一类型下两棵子树的路径集不相交。
+        string pathExpr, from, where;
+        if (TypeFieldsAreSubtrees)
+        {
+            pathExpr = "d.path";
+            from = "type_names n "
+                 + "JOIN type_subtrees ts ON ts.type_id = n.id "
+                 + "JOIN subtree_paths sp ON sp.subtree_id = ts.subtree_id "
+                 + "JOIN type_field_paths d ON d.id = sp.path_id";
+            where = TypeDeclaredPathsWhere;
+        }
+        else
+        {
+            var dict = TypeFieldsAreDictionary;
+            pathExpr = dict ? "d.path" : "t.path";
+            from = dict ? "type_fields t JOIN type_field_paths d ON d.id = t.path_id"
                         : "type_fields t";
+            where = TypeDeclaredPathsLegacyWhere;
+        }
 
         var p = new Dictionary<string, object?> { ["@t"] = defType };
-        var where = TypeDeclaredPathsWhere;
         var filters = (pathFilters ?? []).Where(f => !string.IsNullOrEmpty(f)).ToList();
         if (filters.Count > 0)
         {
