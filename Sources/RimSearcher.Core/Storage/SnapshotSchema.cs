@@ -415,7 +415,10 @@ public static class SnapshotSchema
         new("field_value_paths", "path", false,
             "2.6 万行。谓词一律是 LIKE '%x',前缀不定,索引帮不上忙;全扫实测 8ms。"),
         new("defs", "def_type", false, "1.6 万行。BINARY 索引仍被当覆盖索引扫,实测 39ms。"),
-        new("defs", "def_name", false, "同上,covering scan。"),
+        new("defs", "def_name", true,
+            "1.6 万行,但 inherit 的后代集 CTE 里它挨的是**逐行**一次覆盖扫(一次相关子查询 "
+            + "加一条 NOCASE 的 join)。此前登记为 false、理由写「covering scan 39ms」—— "
+            + "那量的是单次;实测 inherit --path-contains 8437ms → 402ms。"),
         new("defs", "class",    false, "没有索引,1.6 万行全扫。"),
         new("xml_written", "def_type", false,
             "19 万行。实测优化器仍走 idx_xw_key 的双列等值查找(42ms)—— 失配没有兑现成代价。"),
@@ -451,6 +454,15 @@ public static class SnapshotSchema
     /// </summary>
     public const string Indexes = """
         CREATE INDEX idx_defs_name  ON defs(def_name);
+        -- 同一条 collation 规则的**第三次**落点(前两次:field_values 的 leaf/value、
+        -- type_fields 的 def_type)。`inherit --path-contains` 的后代集 CTE 里,
+        -- `d.def_name = x.def_name COLLATE NOCASE` 与一个同样 NOCASE 的相关子查询,
+        -- 配 BINARY 的 idx_defs_name 用不上索引:SQLite 转去**逐行**覆盖扫整条索引。
+        -- baseline 上实测 `inherit BaseWeapon --path-contains statBases` 8437ms → 402ms。
+        --
+        -- 上面那条 BINARY 的留着:defs 只有 1.6 万行,而按 def_name 的等值查找(get)
+        -- 是 BINARY 的,改掉就轮到它失去索引。
+        CREATE INDEX idx_defs_name_nc ON defs(def_name COLLATE NOCASE);
         CREATE INDEX idx_defs_type  ON defs(def_type);
         CREATE INDEX idx_defs_mod   ON defs(source_mod);
         CREATE INDEX idx_fv_def     ON field_values(def_id);
