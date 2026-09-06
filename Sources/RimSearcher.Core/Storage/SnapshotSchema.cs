@@ -1,4 +1,4 @@
-using Microsoft.Data.Sqlite;
+﻿using Microsoft.Data.Sqlite;
 
 namespace RimSearcher.Storage;
 
@@ -115,9 +115,23 @@ public static class SnapshotSchema
         -- is_default:这一行与「这个类型刚 new 出来时」的关系,取值见 IntermediateFormat.DefaultState
         -- (0 一定被改过 / 1 与代码默认值无从区分 / 2 没法比)。存原样而不是存 bool ——
         -- 「没法比」并进任何一边都会让呈现侧说出一句它证不了的话(R1)。
+        -- 路径提进字典表,同 type_field_paths 那一手。baseline(1.21G)实测:150 万行里
+        -- 只有 2.6 万条不同 path,行数 57:1、字节 39:1(32.7M -> 838K)。省下的空间是次要的,
+        -- 主要收益在**谓词跑在哪张表上**:后缀匹配写成 `path LIKE '%x'`,前导通配让任何
+        -- B-tree 都用不上,于是它此前是一次 150 万行全表扫(热 0.42s);跑在 2.6 万行的
+        -- 字典上再按 path_id 回表,同一条谓词 0.008s。
+        --
+        -- 表名沿用,列换成 path_id。**旧库的这张表是带 path 的**,靠列名分辨
+        -- (SnapshotDb.FieldValuesAreDictionary)。不涨 schema_version,理由与 type_fields
+        -- 那处逐字相同:精确相等的检查会让磁盘上每一份旧库拒读,连同 --keep 留下的旧代。
+        CREATE TABLE field_value_paths (
+            id   INTEGER PRIMARY KEY,
+            path TEXT NOT NULL
+        );
+
         CREATE TABLE field_values (
             def_id     INTEGER NOT NULL,
-            path       TEXT NOT NULL,
+            path_id    INTEGER NOT NULL,
             leaf       TEXT NOT NULL,
             value      TEXT,
             is_default INTEGER NOT NULL DEFAULT 0
@@ -395,9 +409,11 @@ public static class SnapshotSchema
         new("type_fields",  "def_type", true,
             "1373 万行。失配时 SQLite 转去覆盖扫 path 索引:12.2s,换成 NOCASE 后 0.113s。"),
 
-        new("field_values", "path", false,
-            "只在 --exact-path 那一支等值比。150 万行全扫实测 197ms,而这一列存的是完整路径,"
-            + "一条索引要几百 M —— 换 197ms 不值。"),
+        // 这一列现在住在 field_value_paths 里(2.6 万行),NOCASE 与否都是全扫,
+        // 而 2.6 万行的全扫是 8ms。此前登记在 field_values 上的那条判断(「换 197ms 不值」)
+        // 只量了 --exact-path 的等值比,没量后缀 LIKE —— 后者才是主路径,实测 0.42s。
+        new("field_value_paths", "path", false,
+            "2.6 万行。谓词一律是 LIKE '%x',前缀不定,索引帮不上忙;全扫实测 8ms。"),
         new("defs", "def_type", false, "1.6 万行。BINARY 索引仍被当覆盖索引扫,实测 39ms。"),
         new("defs", "def_name", false, "同上,covering scan。"),
         new("defs", "class",    false, "没有索引,1.6 万行全扫。"),
@@ -438,6 +454,9 @@ public static class SnapshotSchema
         CREATE INDEX idx_defs_type  ON defs(def_type);
         CREATE INDEX idx_defs_mod   ON defs(source_mod);
         CREATE INDEX idx_fv_def     ON field_values(def_id);
+        -- 字典化之后的回表方向:谓词在 field_value_paths 上跑完,拿一批 path_id 回来找行。
+        -- 没有它的话优化器只能把 150 万行整个扫一遍去比 path_id,字典化就白做了。
+        CREATE INDEX idx_fv_pathid  ON field_values(path_id);
         CREATE INDEX idx_fv_leaf    ON field_values(leaf);
         CREATE INDEX idx_fv_value   ON field_values(value);
         -- 查这两列一律带 COLLATE NOCASE(见 SnapshotDb 的 PathCondition / ValueWhere),

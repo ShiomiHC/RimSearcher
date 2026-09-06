@@ -502,11 +502,11 @@ public sealed class SnapshotDb : IDisposable
         // 「the def does have N fields」与「Drop --path-contains to see them」看到的
         // 必须是同一个 N。点名过滤(--path-contains def…)能把它召回来 —— 调用方点了名
         // 的东西不许消失,与 --defaults 同一条规矩。
-        var total = Scalar("SELECT COUNT(*) FROM field_values WHERE def_id = @id AND path <> 'defName'", p);
+        var total = Scalar($"SELECT COUNT(*) FROM field_values fv {FvJoin} WHERE def_id = @id AND {FvPath} <> 'defName'", p);
 
         var filters = (pathFilters ?? []).Where(f => !string.IsNullOrEmpty(f)).ToList();
         var where = filters.Count == 0
-            ? "WHERE def_id = @id AND path <> 'defName'"
+            ? $"WHERE def_id = @id AND {FvPath} <> 'defName'"
             : "WHERE def_id = @id";
         if (filters.Count > 0)
         {
@@ -514,27 +514,28 @@ public sealed class SnapshotDb : IDisposable
             for (var i = 0; i < filters.Count; i++)
             {
                 p["@f" + i] = "%" + Escape(filters[i]) + "%";
-                ors.Add($"path LIKE @f{i} ESCAPE '\\'");
+                ors.Add($"{FvPath} LIKE @f{i} ESCAPE '\\'");
             }
             where += " AND (" + string.Join(" OR ", ors) + ")";
         }
 
         var matched = filters.Count == 0
             ? total
-            : Scalar($"SELECT COUNT(*) FROM field_values {where}", p);
+            : Scalar($"SELECT COUNT(*) FROM field_values fv {FvJoin} {where}", p);
         var defaulted = Scalar(
-            $"SELECT COUNT(*) FROM field_values {where} AND is_default = {Contract.DefaultState.Same}", p);
+            $"SELECT COUNT(*) FROM field_values fv {FvJoin} {where} AND is_default = {Contract.DefaultState.Same}", p);
 
         // 命中的**全部**路径,不受 limit 与 includeDefaults 影响 —— 「其中几条是整段命中」
         // 必须在截断之前数完,否则同一个 --path-contains 换个 --limit 就换一句结论。
         var allPaths = new List<string>();
-        using (var pr = Query($"SELECT path FROM field_values {where} ORDER BY rowid", p))
+        using (var pr = Query($"SELECT {FvPath} FROM field_values fv {FvJoin} {where} ORDER BY fv.rowid", p))
             while (pr.Read()) allPaths.Add(pr.GetString(0));
 
         var listed = includeDefaults ? where : $"{where} AND is_default <> {Contract.DefaultState.Same}";
         var rows = new List<FieldRow>();
         using var rd = Query(
-            $"SELECT path, leaf, value, is_default FROM field_values {listed} ORDER BY rowid LIMIT {limit}", p);
+            $"SELECT {FvPath}, fv.leaf, fv.value, fv.is_default FROM field_values fv {FvJoin} {listed} " +
+            $"ORDER BY fv.rowid LIMIT {limit}", p);
         while (rd.Read())
             rows.Add(new FieldRow(rd.GetString(0), rd.GetString(1),
                                   rd.IsDBNull(2) ? null : rd.GetString(2), rd.GetInt32(3)));
@@ -670,7 +671,7 @@ public sealed class SnapshotDb : IDisposable
         if (defType is { Length: > 0 }) { p["@dt"] = defType; conds.Add("d.def_type = @dt COLLATE NOCASE"); }
 
         var where = "WHERE " + string.Join(" AND ", conds);
-        var from = $"FROM field_values fv JOIN defs d ON d.id = fv.def_id {where}";
+        var from = $"FROM field_values fv {FvJoin} JOIN defs d ON d.id = fv.def_id {where}";
         // 两个计数一次扫出来。分两条 SELECT 时同一个 FROM 要走两遍,而点分路径上的
         // FROM 是一次全表扫(path 列无索引)—— 口径不变,只是不扫第二遍。
         int total = 0, defs = 0;
@@ -679,7 +680,7 @@ public sealed class SnapshotDb : IDisposable
 
         var rows = new List<(DefRow, string, string?, int)>();
         using var rd = Query(
-            $"SELECT {DefColumns}, fv.path, fv.value, fv.is_default {from} " +
+            $"SELECT {DefColumns}, {FvPath}, fv.value, fv.is_default {from} " +
             $"ORDER BY d.def_name LIMIT {limit} OFFSET {offset}", p);
         while (rd.Read())
             rows.Add((ReadDefRow(rd), rd.GetString(10), rd.IsDBNull(11) ? null : rd.GetString(11), rd.GetInt32(12)));
@@ -716,8 +717,8 @@ public sealed class SnapshotDb : IDisposable
         var shapes = new Dictionary<string, int>(StringComparer.Ordinal);
         var order = new List<string>();
         using var rd = Query(
-            "SELECT fv.path, COUNT(*) FROM field_values fv JOIN defs d ON d.id = fv.def_id " +
-            $"WHERE {string.Join(" AND ", conds)} GROUP BY fv.path", p);
+            $"SELECT {FvPath}, COUNT(*) FROM field_values fv {FvJoin} JOIN defs d ON d.id = fv.def_id " +
+            $"WHERE {string.Join(" AND ", conds)} GROUP BY {FvPath}", p);
         while (rd.Read())
         {
             var shape = Search.PathSegments.Shape(rd.GetString(0));
@@ -756,7 +757,7 @@ public sealed class SnapshotDb : IDisposable
 
         var rows = new List<(string, int)>();
         using var rd = Query(
-            "SELECT d.source_mod, COUNT(DISTINCT d.id) FROM field_values fv " +
+            $"SELECT d.source_mod, COUNT(DISTINCT d.id) FROM field_values fv {FvJoin} " +
             $"JOIN defs d ON d.id = fv.def_id WHERE {string.Join(" AND ", conds)} " +
             "GROUP BY d.source_mod ORDER BY COUNT(DISTINCT d.id) DESC", p);
         while (rd.Read())
@@ -791,7 +792,7 @@ public sealed class SnapshotDb : IDisposable
         if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
         if (defType is { Length: > 0 }) { p["@dt"] = defType; conds.Add("d.def_type = @dt COLLATE NOCASE"); }
 
-        var where = "FROM field_values fv JOIN defs d ON d.id = fv.def_id " +
+        var where = $"FROM field_values fv {FvJoin} JOIN defs d ON d.id = fv.def_id " +
                     $"WHERE {string.Join(" AND ", conds)}";
         var total = Scalar($"SELECT COUNT(DISTINCT d.id) {where}", p);
 
@@ -819,13 +820,13 @@ public sealed class SnapshotDb : IDisposable
         for (var i = 0; i < filters.Count; i++)
         {
             p[$"@f{i}"] = "%" + Escape(filters[i]) + "%";
-            any.Add($"fv.path LIKE @f{i} ESCAPE '\\'");
+            any.Add(PathIs($"path LIKE @f{i} ESCAPE '\\'"));
         }
-        var where = "FROM field_values fv JOIN defs d ON d.id = fv.def_id " +
+        var where = $"FROM field_values fv {FvJoin} JOIN defs d ON d.id = fv.def_id " +
                     $"WHERE d.def_type = @t COLLATE NOCASE AND ({string.Join(" OR ", any)})";
 
         return (Scalar($"SELECT COUNT(DISTINCT fv.def_id) {where}", p),
-                Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT fv.path {where})", p));
+                Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT {FvPath} {where})", p));
     }
 
     /// <summary>
@@ -851,26 +852,26 @@ public sealed class SnapshotDb : IDisposable
             {
                 var e = Escape(filters[i]);
                 p[$"@f{i}"] = "%" + e + "%";
-                any.Add($"fv.path LIKE @f{i} ESCAPE '\\'");
+                any.Add(PathIs($"path LIKE @f{i} ESCAPE '\\'"));
 
                 // 「完整的一段」有六种落法:整条就是它,或者它是开头段 / 中间段 / 结尾段,
                 // 后面接 `.` 或 `[`。下标不算段的一部分 —— comps[3] 里那个 comps 就是完整的一段。
                 p[$"@s{i}_0"] = e;         p[$"@s{i}_1"] = e + ".%";        p[$"@s{i}_2"] = e + "[%";
                 p[$"@s{i}_3"] = "%." + e;  p[$"@s{i}_4"] = "%." + e + ".%"; p[$"@s{i}_5"] = "%." + e + "[%";
-                for (var k = 0; k < 6; k++) anyWhole.Add($"fv.path LIKE @s{i}_{k} ESCAPE '\\'");
+                for (var k = 0; k < 6; k++) anyWhole.Add(PathIs($"path LIKE @s{i}_{k} ESCAPE '\\'"));
             }
             where += $" AND ({string.Join(" OR ", any)})";
             whole = $" AND ({string.Join(" OR ", anyWhole)})";
         }
         var total = Scalar(
-            $"SELECT COUNT(*) FROM (SELECT DISTINCT fv.path FROM field_values fv JOIN defs d ON d.id = fv.def_id {where})", p);
+            $"SELECT COUNT(*) FROM (SELECT DISTINCT {FvPath} FROM field_values fv {FvJoin} JOIN defs d ON d.id = fv.def_id {where})", p);
         var wholeCount = whole.Length == 0 ? total : Scalar(
-            "SELECT COUNT(*) FROM (SELECT DISTINCT fv.path FROM field_values fv " +
+            $"SELECT COUNT(*) FROM (SELECT DISTINCT {FvPath} FROM field_values fv {FvJoin} " +
             $"JOIN defs d ON d.id = fv.def_id {where}{whole})", p);
         var rows = new List<(string, int)>();
         using var rd = Query(
-            $"SELECT fv.path, COUNT(*) c FROM field_values fv JOIN defs d ON d.id = fv.def_id {where} " +
-            $"GROUP BY fv.path ORDER BY c DESC, fv.path LIMIT {limit} OFFSET {offset}", p);
+            $"SELECT {FvPath}, COUNT(*) c FROM field_values fv {FvJoin} JOIN defs d ON d.id = fv.def_id {where} " +
+            $"GROUP BY {FvPath} ORDER BY c DESC, {FvPath} LIMIT {limit} OFFSET {offset}", p);
         while (rd.Read()) rows.Add((rd.GetString(0), rd.GetInt32(1)));
         return (rows, total, wholeCount);
     }
@@ -907,7 +908,7 @@ public sealed class SnapshotDb : IDisposable
         return "WHERE " + string.Join(" AND ", conds);
     }
 
-    private static string SuffixWhere(PathQuery path, ScopeFilter scope, Dictionary<string, object?> p)
+    private string SuffixWhere(PathQuery path, ScopeFilter scope, Dictionary<string, object?> p)
     {
         var conds = new List<string>();
         PathCondition(path, p, conds);
@@ -919,7 +920,7 @@ public sealed class SnapshotDb : IDisposable
     /// 路径条件的唯一产地。行表与计数表分开建条件的话,同一个 <c>--exact-path</c> 会让
     /// 「这一页几条」与「一共几条」数的是两个集合。
     /// </summary>
-    private static void PathCondition(PathQuery path, Dictionary<string, object?> p, List<string> conds)
+    private void PathCondition(PathQuery path, Dictionary<string, object?> p, List<string> conds)
     {
         if (path.Exact)
         {
@@ -927,12 +928,12 @@ public sealed class SnapshotDb : IDisposable
             if (path.Text.Contains("[]", StringComparison.Ordinal))
             {
                 p["@path"] = Escape(path.Text).Replace("[]", "[%]", StringComparison.Ordinal);
-                conds.Add("fv.path LIKE @path ESCAPE '\\' COLLATE NOCASE");
+                conds.Add(PathIs($"path LIKE @path ESCAPE '\\' COLLATE NOCASE"));
             }
             else
             {
                 p["@path"] = path.Text;
-                conds.Add("fv.path = @path COLLATE NOCASE");
+                conds.Add(PathIs("path = @path COLLATE NOCASE"));
             }
         }
         else if (path.IndexTolerant)
@@ -958,9 +959,9 @@ public sealed class SnapshotDb : IDisposable
                 }
                 if ((mask & (1 << dots)) != 0) sb.Append("[%]");
                 p[$"@ip{mask}"] = sb.ToString();
-                any.Add($"fv.path LIKE @ip{mask} ESCAPE '\\'");
+                any.Add($"path LIKE @ip{mask} ESCAPE '\\'");
             }
-            conds.Add($"({string.Join(" OR ", any)})");
+            conds.Add(PathIs(string.Join(" OR ", any)));
         }
         else if (path.Text.Contains('.') || path.Text.Contains('['))
         {
@@ -970,7 +971,7 @@ public sealed class SnapshotDb : IDisposable
             // 一段尾巴(`filter.thingDefs[]` 不是整条路径,加了旗照样空)。
             // 字面含 `[]` 的路径实测一条都没有(三份快照各 0,含 `[` 的有 34 万),旧行为无损。
             p["@path"] = "%" + Escape(path.Text).Replace("[]", "[%]", StringComparison.Ordinal);
-            conds.Add("fv.path LIKE @path ESCAPE '\\'");
+            conds.Add(PathIs($"path LIKE @path ESCAPE '\\'"));
         }
         else
         {
@@ -996,11 +997,11 @@ public sealed class SnapshotDb : IDisposable
         // 产地块必须描述**值表实际统计的那批行**。--type 只筛值表而不筛产地块,就会出现
         // 「表里只有 ThingDef,产地却说还有 HediffDef 和 AbilityDef」。
         if (defType is { Length: > 0 }) { p["@cdt"] = defType; where += " AND d.def_type = @cdt COLLATE NOCASE"; }
-        const string join = "FROM field_values fv JOIN defs d ON d.id = fv.def_id";
+        var join = $"FROM field_values fv {FvJoin} JOIN defs d ON d.id = fv.def_id";
 
-        var pathTotal = Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT fv.path {join} {where})", p);
+        var pathTotal = Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT {FvPath} {join} {where})", p);
         var paths = new List<(string, int)>();
-        using (var rd = Query($"SELECT fv.path, COUNT(*) c {join} {where} GROUP BY fv.path ORDER BY c DESC, fv.path LIMIT {limit}", p))
+        using (var rd = Query($"SELECT {FvPath}, COUNT(*) c {join} {where} GROUP BY {FvPath} ORDER BY c DESC, {FvPath} LIMIT {limit}", p))
             while (rd.Read()) paths.Add((rd.GetString(0), rd.GetInt32(1)));
 
         var types = new List<(string, int)>();
@@ -1091,7 +1092,7 @@ public sealed class SnapshotDb : IDisposable
         var conds = new List<string>
         {
             "t.fields_truncated > 0",
-            "t.def_type IN (SELECT DISTINCT d.def_type FROM field_values fv " +
+            $"t.def_type IN (SELECT DISTINCT d.def_type FROM field_values fv {FvJoin} " +
             $"JOIN defs d ON d.id = fv.def_id {innerWhere})",
         };
         if (scope.SqlPredicate("t.source_mod", p) is { } sc) conds.Add(sc);
@@ -1123,7 +1124,7 @@ public sealed class SnapshotDb : IDisposable
     {
         var p = new Dictionary<string, object?>();
         var where = SuffixWhere(path, scope, p);
-        return Scalar($"SELECT EXISTS(SELECT 1 FROM field_values fv JOIN defs d ON d.id = fv.def_id {where})", p) != 0;
+        return Scalar($"SELECT EXISTS(SELECT 1 FROM field_values fv {FvJoin} JOIN defs d ON d.id = fv.def_id {where})", p) != 0;
     }
 
     /// <summary>
@@ -1148,20 +1149,20 @@ public sealed class SnapshotDb : IDisposable
         };
         var conds = new List<string>
         {
-            "(fv.path LIKE @b0 ESCAPE '\\' COLLATE NOCASE OR fv.path LIKE @b1 ESCAPE '\\' COLLATE NOCASE " +
-            "OR fv.path LIKE @b2 ESCAPE '\\' COLLATE NOCASE OR fv.path LIKE @b3 ESCAPE '\\' COLLATE NOCASE)",
+            PathIs($"path LIKE @b0 ESCAPE '\\' COLLATE NOCASE OR path LIKE @b1 ESCAPE '\\' COLLATE NOCASE " +
+                   $"OR path LIKE @b2 ESCAPE '\\' COLLATE NOCASE OR path LIKE @b3 ESCAPE '\\' COLLATE NOCASE"),
         };
         if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
         var where = "WHERE " + string.Join(" AND ", conds);
-        const string join = "FROM field_values fv JOIN defs d ON d.id = fv.def_id";
+        var join = $"FROM field_values fv {FvJoin} JOIN defs d ON d.id = fv.def_id";
 
-        var total = Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT fv.path {join} {where})", p);
+        var total = Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT {FvPath} {join} {where})", p);
         var rows = new List<(string, int)>();
         string? topType = null;
         if (total > 0)
         {
-            using (var rd = Query($"SELECT fv.path, COUNT(DISTINCT d.id) c {join} {where} " +
-                                  $"GROUP BY fv.path ORDER BY c DESC, fv.path LIMIT {limit}", p))
+            using (var rd = Query($"SELECT {FvPath}, COUNT(DISTINCT d.id) c {join} {where} " +
+                                  $"GROUP BY {FvPath} ORDER BY c DESC, {FvPath} LIMIT {limit}", p))
                 while (rd.Read()) rows.Add((rd.GetString(0), rd.GetInt32(1)));
             using (var rd = Query($"SELECT d.def_type {join} {where} " +
                                   "GROUP BY d.def_type ORDER BY COUNT(DISTINCT d.id) DESC, d.def_type LIMIT 1", p))
@@ -1188,13 +1189,13 @@ public sealed class SnapshotDb : IDisposable
     {
         var p = new Dictionary<string, object?>();
         var where = ValueWhere(value, match, scope, p, defType);
-        const string join = "FROM field_values fv JOIN defs d ON d.id = fv.def_id";
+        var join = $"FROM field_values fv {FvJoin} JOIN defs d ON d.id = fv.def_id";
 
-        var total = Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT fv.path, d.def_type {join} {where})", p);
+        var total = Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT {FvPath}, d.def_type {join} {where})", p);
         var rows = new List<(string, string, int, string)>();
         using var rd = Query(
-            $"SELECT fv.path, d.def_type, COUNT(DISTINCT d.id) c, MIN(fv.value) {join} {where} " +
-            $"GROUP BY fv.path, d.def_type ORDER BY c DESC, fv.path LIMIT {limit} OFFSET {offset}", p);
+            $"SELECT {FvPath}, d.def_type, COUNT(DISTINCT d.id) c, MIN(fv.value) {join} {where} " +
+            $"GROUP BY {FvPath}, d.def_type ORDER BY c DESC, {FvPath} LIMIT {limit} OFFSET {offset}", p);
         while (rd.Read())
             rows.Add((rd.GetString(0), rd.GetString(1), rd.GetInt32(2), rd.IsDBNull(3) ? "" : rd.GetString(3)));
 
@@ -1203,7 +1204,7 @@ public sealed class SnapshotDb : IDisposable
         {
             var ep = new Dictionary<string, object?>();
             var ew = ValueWhere(value, ValueMatch.Exact, scope, ep, defType);
-            exact = Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT fv.path, d.def_type {join} {ew})", ep);
+            exact = Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT {FvPath}, d.def_type {join} {ew})", ep);
         }
         return (rows, total, exact);
     }
@@ -1254,7 +1255,7 @@ public sealed class SnapshotDb : IDisposable
         var ownShapes = new HashSet<(string Shape, string Type)>();
         var defTypes = new HashSet<string>(StringComparer.Ordinal);
         using (var rd = Query(
-            "SELECT DISTINCT fv.path, d.def_type FROM field_values fv JOIN defs d ON d.id = fv.def_id " +
+            $"SELECT DISTINCT {FvPath}, d.def_type FROM field_values fv {FvJoin} JOIN defs d ON d.id = fv.def_id " +
             $"WHERE {string.Join(" AND ", oc)}", op))
             while (rd.Read())
             {
@@ -1273,8 +1274,8 @@ public sealed class SnapshotDb : IDisposable
         var rough = new Dictionary<string, int>(StringComparer.Ordinal);
         var types = new Dictionary<string, SortedSet<string>>(StringComparer.Ordinal);
         using (var rd = Query(
-            "SELECT fv.path, d.def_type, COUNT(DISTINCT d.id) FROM field_values fv " +
-            $"JOIN defs d ON d.id = fv.def_id {where} GROUP BY fv.path, d.def_type", p))
+            $"SELECT {FvPath}, d.def_type, COUNT(DISTINCT d.id) FROM field_values fv {FvJoin} " +
+            $"JOIN defs d ON d.id = fv.def_id {where} GROUP BY {FvPath}, d.def_type", p))
             while (rd.Read())
             {
                 var shape = Search.PathSegments.Shape(rd.GetString(0));
@@ -1334,8 +1335,8 @@ public sealed class SnapshotDb : IDisposable
             foreach (var path in paths[shape].Distinct(StringComparer.Ordinal))
             { var k = $"@p{pk.Count}"; pp[k] = path; pk.Add(k); }
             shown.Add((shape, Scalar(
-                "SELECT COUNT(DISTINCT d.id) FROM field_values fv JOIN defs d ON d.id = fv.def_id " +
-                $"{pw} AND fv.path IN ({string.Join(",", pk)})", pp),
+                $"SELECT COUNT(DISTINCT d.id) FROM field_values fv {FvJoin} JOIN defs d ON d.id = fv.def_id " +
+                $"{pw} AND " + PathIs($"path IN ({string.Join(",", pk)})"), pp),
                 string.Join("/", types[shape])));
         }
         return (shown.OrderByDescending(s => s.Defs).ThenBy(s => s.Shape, StringComparer.Ordinal).ToList(),
@@ -1389,13 +1390,13 @@ public sealed class SnapshotDb : IDisposable
             if (Search.PathSegments.ContainerPrefix(path) is not { } prefix) continue;
             p["@si" + i] = id;
             p["@sp" + i] = Escape(prefix) + "%";
-            ors.Add($"(fv.def_id = @si{i} AND fv.path LIKE @sp{i} ESCAPE '\\')");
+            ors.Add($"(fv.def_id = @si{i} AND " + PathIs($"path LIKE @sp{i} ESCAPE '\\'") + ")");
             i++;
         }
         if (ors.Count == 0) return;
 
         using var rd = Query(
-            "SELECT fv.def_id, fv.path, fv.leaf FROM field_values fv " +
+            $"SELECT fv.def_id, {FvPath}, fv.leaf FROM field_values fv {FvJoin} " +
             $"WHERE ({string.Join(" OR ", ors)}) AND fv.is_default <> {Contract.DefaultState.Same} " +
             // 按 rowid 排 = 导出器写入的顺序 = 这一块在 XML/类声明里的顺序。
             // 按 path 字典序排会让同一块里语义最近的几个字段散到各处(fuelPerTile 就是
@@ -1421,10 +1422,10 @@ public sealed class SnapshotDb : IDisposable
             where += " AND d.def_type = @dt COLLATE NOCASE";
         }
 
-        var total = Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT fv.value FROM field_values fv JOIN defs d ON d.id = fv.def_id {where})", p);
+        var total = Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT fv.value FROM field_values fv {FvJoin} JOIN defs d ON d.id = fv.def_id {where})", p);
         var rows = new List<(string, int)>();
         using var rd = Query(
-            $"SELECT fv.value, COUNT(*) c FROM field_values fv JOIN defs d ON d.id = fv.def_id {where} " +
+            $"SELECT fv.value, COUNT(*) c FROM field_values fv {FvJoin} JOIN defs d ON d.id = fv.def_id {where} " +
             $"GROUP BY fv.value ORDER BY c DESC, fv.value LIMIT {limit} OFFSET {offset}", p);
         while (rd.Read()) rows.Add((rd.IsDBNull(0) ? "" : rd.GetString(0), rd.GetInt32(1)));
         return (rows, total);
@@ -1863,14 +1864,14 @@ public sealed class SnapshotDb : IDisposable
         // 后代集是这条命令里最贵的一件事。
         var same = value is null
             ? "0"
-            : "(SELECT COUNT(DISTINCT fv.def_id) FROM field_values fv JOIN kin k ON k.id = fv.def_id " +
-              "  WHERE fv.path LIKE @f ESCAPE '\\' AND fv.value = @v COLLATE NOCASE)";
+            : $"(SELECT COUNT(DISTINCT fv.def_id) FROM field_values fv {FvJoin} JOIN kin k ON k.id = fv.def_id " +
+              "  WHERE " + PathIs($"path LIKE @f ESCAPE '\\'") + " AND fv.value = @v COLLATE NOCASE)";
         if (value is not null) p["@v"] = value;
 
         using var rd = Query(
             cte + "SELECT (SELECT COUNT(*) FROM kin), " +
-            "(SELECT COUNT(DISTINCT fv.def_id) FROM field_values fv JOIN kin k ON k.id = fv.def_id " +
-            $" WHERE fv.path LIKE @f ESCAPE '\\'), {same}, " +
+            $"(SELECT COUNT(DISTINCT fv.def_id) FROM field_values fv {FvJoin} JOIN kin k ON k.id = fv.def_id " +
+            " WHERE " + PathIs($"path LIKE @f ESCAPE '\\'") + $"), {same}, " +
             "(SELECT COUNT(*) FROM kin k JOIN defs d ON d.id = k.id WHERE d.fields_truncated > 0)", p);
         return rd.Read()
             ? (rd.GetInt32(0), rd.GetInt32(1), rd.GetInt32(2), rd.GetInt32(3))
@@ -1894,9 +1895,11 @@ public sealed class SnapshotDb : IDisposable
             cte +
             "SELECT fv.value, COUNT(DISTINCT fv.def_id) AS c, " +
             "  (SELECT COUNT(*) FROM (SELECT DISTINCT fv2.value COLLATE NOCASE FROM field_values fv2 " +
-            "     JOIN kin k2 ON k2.id = fv2.def_id WHERE fv2.path LIKE @f ESCAPE '\\')) " +
-            "FROM field_values fv JOIN kin k ON k.id = fv.def_id " +
-            "WHERE fv.path LIKE @f ESCAPE '\\' " +
+            (FieldValuesAreDictionary ? "JOIN field_value_paths fvp2 ON fvp2.id = fv2.path_id " : "") +
+            "     JOIN kin k2 ON k2.id = fv2.def_id WHERE " +
+            (FieldValuesAreDictionary ? "fvp2.path" : "fv2.path") + " LIKE @f ESCAPE '\\')) " +
+            $"FROM field_values fv {FvJoin} JOIN kin k ON k.id = fv.def_id " +
+            "WHERE " + PathIs($"path LIKE @f ESCAPE '\\'") + " " +
             "GROUP BY fv.value COLLATE NOCASE ORDER BY c DESC, fv.value LIMIT 1", p);
         return rd.Read()
             ? (rd.IsDBNull(0) ? null : rd.GetString(0), rd.GetInt32(1), rd.GetInt32(2))
@@ -2080,8 +2083,8 @@ public sealed class SnapshotDb : IDisposable
         using var rd = Query(
             // anchor 取的是元素里第一个对上标签的格,所以行序参与输出 —— 不排就靠 rowid,
             // 而那不是承诺。
-            "SELECT path, leaf, value, is_default FROM field_values WHERE def_id = @id "
-            + "ORDER BY path", p);
+            $"SELECT {FvPath}, fv.leaf, fv.value, fv.is_default FROM field_values fv {FvJoin} "
+            + $"WHERE fv.def_id = @id ORDER BY {FvPath}", p);
         while (rd.Read())
             rows.Add(new FieldRow(rd.GetString(0), rd.GetString(1),
                                   rd.IsDBNull(2) ? null : rd.GetString(2), rd.GetInt32(3)));
@@ -2104,6 +2107,40 @@ public sealed class SnapshotDb : IDisposable
     /// </summary>
     private bool TypeFieldsAreDictionary => _tfDict ??= HasColumn("type_fields", "path_id");
     private bool? _tfDict;
+
+    /// <summary>
+    /// 这份库的字段路径住在字典表里,还是逐行存在 <c>field_values.path</c> 上。
+    /// 同 <see cref="TypeFieldsAreDictionary"/>,**靠列名认** —— 两种形状能出自同一个导出器,
+    /// 而 <c>--keep</c> 留下的旧代永远是老形状,那些库唯一的用途正是拿来 diff。
+    /// </summary>
+    private bool FieldValuesAreDictionary => _fvDict ??= HasColumn("field_values", "path_id");
+    private bool? _fvDict;
+
+    /// <summary>
+    /// 每一处 <c>FROM field_values fv</c> 后面跟的那一段,以及 SELECT / GROUP BY 里那个路径列。
+    /// 字典库把路径接回来,旧库什么都不接。**这一对只管取值,不管筛选** —— 筛选走
+    /// <see cref="PathIs"/>。
+    /// </summary>
+    private string FvJoin => FieldValuesAreDictionary ? "JOIN field_value_paths fvp ON fvp.id = fv.path_id" : "";
+
+    /// <inheritdoc cref="FvJoin"/>
+    private string FvPath => FieldValuesAreDictionary ? "fvp.path" : "fv.path";
+
+    /// <summary>
+    /// 路径谓词。<paramref name="cond"/> 写成对裸列名 <c>path</c> 的条件,由这里决定它跑在哪张表上。
+    ///
+    /// 字典库上**不能**把它写成 <c>fvp.path LIKE …</c> 挂在 <see cref="FvJoin"/> 那条 JOIN 上:
+    /// 实测优化器会从 defs 驱动、按 def_id 取出 150 万行、再逐行按 rowid 去字典表取路径才比 ——
+    /// 谓词跑在大表上,字典化白做(改造前后同一条查询 1.78s 对 2.08s,反而更慢)。
+    /// 写成对 <c>path_id</c> 的 IN 子查询就把顺序钉死了:先在 2.6 万行的字典上扫出一批号,
+    /// 再顺 <c>idx_fv_pathid</c> 回表。
+    ///
+    /// 旧库上原样加一层括号,与改造前逐字同一条谓词。
+    /// </summary>
+    private string PathIs(string cond)
+        => FieldValuesAreDictionary
+            ? $"fv.path_id IN (SELECT id FROM field_value_paths WHERE {cond})"
+            : $"({cond})";
 
     /// <summary>
     /// 这份库的 translations 记不记得译文出自哪个语言文件、同一句在这个 mod 里出现过几次。

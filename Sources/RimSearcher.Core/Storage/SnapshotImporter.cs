@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO.Compression;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
@@ -90,7 +90,8 @@ public sealed class SnapshotImporter
                                   generated, class, fields_truncated)
                 VALUES ($id,$t,$n,$l,$d,$sm,$sf,$g,$c,$ft)
                 """);
-            using var insertFv = Prepare(db, "INSERT INTO field_values (def_id, path, leaf, value, is_default) VALUES ($id,$p,$lf,$v,$def)");
+            using var insertFv = Prepare(db, "INSERT INTO field_values (def_id, path_id, leaf, value, is_default) VALUES ($id,$pid,$lf,$v,$def)");
+            using var insertFvPath = Prepare(db, "INSERT INTO field_value_paths (id, path) VALUES ($id,$p)");
             using var insertFts = Prepare(db, "INSERT INTO defs_fts (rowid, def_name, label, description, translated) VALUES ($id,$n,$l,$d,$tr)");
             using var insertTr = Prepare(db, """
                 INSERT INTO translations (def_id, def_type, def_name, path, key, key_state, applied, translated, original, language, source_mod, source_file, source_file_count, origin)
@@ -157,6 +158,9 @@ public sealed class SnapshotImporter
             long nextEconomyId = 1;
             // type_fields 的路径字典,id 就是它进来的次序(Count + 1)。
             var tfPathIds = new Dictionary<string, long>(StringComparer.Ordinal);
+            // 字段路径的字典。同 tfPathIds:第一次见到就发号,行里只存号。
+            // baseline 上 150 万行摊到 2.6 万条不同路径,这张表因此只有 838K。
+            var fvPathIds = new Dictionary<string, long>(StringComparer.Ordinal);
 
             swRead.Start();
             foreach (var line in ReadLines(exportPath))
@@ -229,8 +233,16 @@ public sealed class SnapshotImporter
                             var path = triple[0].GetString() ?? "";
                             var value = triple[1].GetString();
                             if (NoiseFilter.IsNoise(path, value)) { noise++; continue; }
+                            if (!fvPathIds.TryGetValue(path, out var fvPathId))
+                            {
+                                fvPathId = fvPathIds.Count + 1;
+                                fvPathIds[path] = fvPathId;
+                                Bind(insertFvPath, "$id", fvPathId);
+                                Bind(insertFvPath, "$p", path);
+                                insertFvPath.ExecuteNonQuery();
+                            }
                             Bind(insertFv, "$id", id);
-                            Bind(insertFv, "$p", path);
+                            Bind(insertFv, "$pid", fvPathId);
                             Bind(insertFv, "$lf", NoiseFilter.Leaf(path));
                             Bind(insertFv, "$v", value);
                             Bind(insertFv, "$def", triple[2].GetInt32());
@@ -692,10 +704,11 @@ public sealed class SnapshotImporter
                 fill.CommandText =
                     "CREATE TEMP TABLE type_defs AS SELECT def_type, COUNT(*) n FROM defs GROUP BY def_type; " +
                     "INSERT INTO shared_values (def_type, path, value, defs) " +
-                    "SELECT d.def_type, fv.path, fv.value, COUNT(DISTINCT fv.def_id) n " +
+                    "SELECT d.def_type, fp.path, fv.value, COUNT(DISTINCT fv.def_id) n " +
                     "  FROM field_values fv JOIN defs d ON d.id = fv.def_id " +
+                    "       JOIN field_value_paths fp ON fp.id = fv.path_id " +
                     $" WHERE fv.is_default <> {Contract.DefaultState.Same} " +
-                    " GROUP BY d.def_type, fv.path, fv.value " +
+                    " GROUP BY d.def_type, fp.path, fv.value " +
                     "HAVING n >= 8 " +
                     "   AND n * 2 > (SELECT n FROM type_defs t WHERE t.def_type = d.def_type); " +
                     "DROP TABLE type_defs;";

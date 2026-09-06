@@ -1,4 +1,4 @@
-using Microsoft.Data.Sqlite;
+﻿using Microsoft.Data.Sqlite;
 
 namespace RimSearcher.Snapshot;
 
@@ -47,22 +47,28 @@ public static class SnapshotDiff
                 "LEFT JOIN newer.defs n ON n.def_type = o.def_type AND n.def_name = o.def_name " +
                 "WHERE n.id IS NULL ORDER BY o.def_type, o.def_name LIMIT " + limit);
 
-            const string FieldUnion = """
+            // 两侧各自包一层,把 field_values 摊平成同一个形状 (def_id, path, value, rid)。
+            // **两侧的形状可以不同** —— 新库的路径住在字典表里、`--keep` 留下的旧代还是
+            // 逐行存字符串,而 diff 的正主就是拿旧代比新库。逐 alias 探列名,而不是假定同形。
+            var newerFv = FieldView(db, "newer");
+            var priorFv = FieldView(db, "prior");
+
+            var FieldUnion = $"""
                 SELECT n.def_name AS def_name, n.def_type AS def_type, fv.path AS path,
                        ov.value AS old_value, fv.value AS new_value, n.source_mod AS mod
                 FROM newer.defs n
-                JOIN newer.field_values fv ON fv.def_id = n.id
+                JOIN {newerFv} fv ON fv.def_id = n.id
                 JOIN prior.defs o ON o.def_type = n.def_type AND o.def_name = n.def_name
-                LEFT JOIN prior.field_values ov ON ov.def_id = o.id AND ov.path = fv.path
-                WHERE ov.rowid IS NULL OR ov.value IS NOT fv.value
+                LEFT JOIN {priorFv} ov ON ov.def_id = o.id AND ov.path = fv.path
+                WHERE ov.rid IS NULL OR ov.value IS NOT fv.value
                 UNION ALL
                 SELECT o.def_name, o.def_type, ov.path,
                        ov.value, NULL, o.source_mod
                 FROM prior.defs o
-                JOIN prior.field_values ov ON ov.def_id = o.id
+                JOIN {priorFv} ov ON ov.def_id = o.id
                 JOIN newer.defs n ON n.def_type = o.def_type AND n.def_name = o.def_name
-                LEFT JOIN newer.field_values fv ON fv.def_id = n.id AND fv.path = ov.path
-                WHERE fv.rowid IS NULL
+                LEFT JOIN {newerFv} fv ON fv.def_id = n.id AND fv.path = ov.path
+                WHERE fv.rid IS NULL
                 """;
 
             using (var materialise = db.CreateCommand())
@@ -89,6 +95,27 @@ public static class SnapshotDiff
             detach.CommandText = "DETACH DATABASE prior; DETACH DATABASE newer;";
             try { detach.ExecuteNonQuery(); } catch (SqliteException) { /* 主路径已失败 */ }
         }
+    }
+
+    /// <summary>
+    /// 一侧的字段行,摊平成 (def_id, path, value, rid)。字典化的库从 field_value_paths 取
+    /// 路径,旧库直接取自己的 path 列 —— 上层那段 SQL 因此两种库通吃,也吃得下两种混着比。
+    ///
+    /// <c>rid</c> 单列出来:外层拿它判 LEFT JOIN 有没有配上,而子查询没有 rowid。
+    /// </summary>
+    private static string FieldView(SqliteConnection db, string alias)
+        => HasColumn(db, alias, "field_values", "path_id")
+            ? $"(SELECT v.def_id AS def_id, p.path AS path, v.value AS value, v.rowid AS rid " +
+              $"   FROM {alias}.field_values v JOIN {alias}.field_value_paths p ON p.id = v.path_id)"
+            : $"(SELECT v.def_id AS def_id, v.path AS path, v.value AS value, v.rowid AS rid " +
+              $"   FROM {alias}.field_values v)";
+
+    private static bool HasColumn(SqliteConnection db, string alias, string table, string column)
+    {
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = $"SELECT COUNT(*) FROM pragma_table_info('{table}', '{alias}') WHERE name = $c";
+        cmd.Parameters.AddWithValue("$c", column);
+        return Convert.ToInt32(cmd.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture) > 0;
     }
 
     private static void Attach(SqliteConnection db, string path, string alias)
