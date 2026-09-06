@@ -193,12 +193,40 @@ public static class SnapshotSchema
         --
         -- 空表与「这一档没导」在 SQL 上同形,不许当成「量过了、没有」;查询侧靠能力位
         -- (IndexesInjectionKeys)决定读不读。
+        -- 四列字符串全进字典:49.7 万行里 def_type 只有 222 个不同值(1595 倍冗余)、
+        -- def_name 1.4 万(31 倍)、两条路径各 4 万上下(各 4 倍)。表连索引 103.0M → 31.3M。
+        --
+        -- **def_type / def_name 没有删掉**,尽管七个库连旧代共 440 万行逐行与 defs 经
+        -- def_id 接出来的一致、def_id 一个空都没有。因为 SnapshotImporter.Owner 判不出
+        -- 归属时**有意写 null**(同名跨 def 类型是常态,它不肯挑一个),那时这两列是该行
+        -- 仅剩的身份。那个 0 是这几份快照的性质,不是 schema 的性质。
+        --
+        -- 顺带修掉一处排序规则失配:读侧是 `def_name = @n COLLATE NOCASE`,而
+        -- idx_ik_defname 是 BINARY 的,49.7 万行上一次都用不上(导入期那次自查是 BINARY,
+        -- 索引一直在为它服务)。现在大小写不敏感那一问落在 1.4 万行的名字字典上,主表按整数号找。
+        CREATE TABLE injection_key_types (
+            id       INTEGER PRIMARY KEY,
+            def_type TEXT NOT NULL
+        );
+
+        CREATE TABLE injection_key_names (
+            id       INTEGER PRIMARY KEY,
+            def_name TEXT NOT NULL
+        );
+
+        -- path 与 suggested_path 共用一份:两者是同一个槽位的两种拼法,取值域高度重叠
+        -- (4.4 万 + 5.5 万条,并起来 5.6 万)。
+        CREATE TABLE injection_key_paths (
+            id   INTEGER PRIMARY KEY,
+            path TEXT NOT NULL
+        );
+
         CREATE TABLE injection_keys (
-            def_id         INTEGER,
-            def_type       TEXT,
-            def_name       TEXT NOT NULL,
-            path           TEXT NOT NULL,
-            suggested_path TEXT NOT NULL,
+            def_id            INTEGER,
+            def_type_id       INTEGER,
+            def_name_id       INTEGER NOT NULL,
+            path_id           INTEGER NOT NULL,
+            suggested_path_id INTEGER NOT NULL,
             is_collection  INTEGER NOT NULL DEFAULT 0,
             translation_allowed INTEGER NOT NULL DEFAULT 1,
             full_list_translation_allowed INTEGER NOT NULL DEFAULT 0
@@ -467,6 +495,11 @@ public static class SnapshotSchema
         new("xml_written", "def_type", false,
             "19 万行。实测优化器仍走 idx_xw_key 的双列等值查找(42ms)—— 失配没有兑现成代价。"),
         new("keyed", "key", false, "1.3 万行,覆盖索引扫。"),
+        // 这一条**此前根本没登记**(清单自己的限度:查不出新表忘了登记)。当时它挨的是
+        // injection_keys 的 49.7 万行,而 idx_ik_defname 是 BINARY 的 —— 又一次失配。
+        // 字典化之后这一问落在 1.4 万行的名字字典上,主表按整数号找。
+        new("injection_key_names", "def_name", false,
+            "1.4 万行。全扫,再按整数号回主表 —— 主表那一侧是 idx_ik_defname。"),
         new("shared_values", "def_type", false, "314 行。"),
         new("economy", "category", false, "1038 行。"),
         new("economy", "calc_state", false, "同上。"),
@@ -480,9 +513,14 @@ public static class SnapshotSchema
     ///
     /// 「索引最后建」那条通则对别的表都成立,对这张不成立,分界是**导入期间读不读它**。
     /// </summary>
+    /// <remarks>
+    /// 字典化之后这两条都是整数索引。**字典表自己一条索引都不用**:导入期那次自查不再
+    /// 拿字符串查库,它在内存里已经攒着同一份字典(发号就在那儿),直接绑号 —— 于是
+    /// 「导入期间读不读它」那条分界对字典表是「不读」。
+    /// </remarks>
     public const string InjectionKeyIndexes = """
-        CREATE INDEX idx_ik_defname ON injection_keys(def_name);
-        CREATE INDEX idx_ik_suggested ON injection_keys(def_type, def_name, suggested_path);
+        CREATE INDEX idx_ik_defname ON injection_keys(def_name_id);
+        CREATE INDEX idx_ik_suggested ON injection_keys(def_type_id, def_name_id, suggested_path_id);
         """;
 
     public static void CreateInjectionKeyIndexes(SqliteConnection db)

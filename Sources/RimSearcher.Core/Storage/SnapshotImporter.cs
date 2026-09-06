@@ -98,10 +98,16 @@ public sealed class SnapshotImporter
                 VALUES ($id,$t,$n,$p,$key,$state,$applied,$tr,$o,$lang,$sm,$sf,$sfc,$origin)
                 """);
             using var insertIk = Prepare(db, """
-                INSERT INTO injection_keys (def_id, def_type, def_name, path, suggested_path,
+                INSERT INTO injection_keys (def_id, def_type_id, def_name_id, path_id, suggested_path_id,
                                             is_collection, translation_allowed, full_list_translation_allowed)
                 VALUES ($id,$t,$n,$p,$sp,$col,$ta,$fl)
                 """);
+            using var insertIkType = Prepare(db,
+                "INSERT INTO injection_key_types (id, def_type) VALUES ($id,$v)");
+            using var insertIkName = Prepare(db,
+                "INSERT INTO injection_key_names (id, def_name) VALUES ($id,$v)");
+            using var insertIkPath = Prepare(db,
+                "INSERT INTO injection_key_paths (id, path) VALUES ($id,$v)");
             using var insertXn = Prepare(db, """
                 INSERT INTO xml_nodes (def_type, name, parent_name, abstract, def_name, label,
                                        source_mod, source_file, patch_ops, patch_ops_defname, patch_ops_label)
@@ -174,6 +180,22 @@ public sealed class SnapshotImporter
             // 字段路径的字典。同 tfPathIds:第一次见到就发号,行里只存号。
             // baseline 上 150 万行摊到 2.6 万条不同路径,这张表因此只有 838K。
             var fvPathIds = new Dictionary<string, long>(StringComparer.Ordinal);
+            // 名册那四列的字典。**导入期那次自查直接用这三个**,不回库拿字符串找号 ——
+            // 于是字典表自己不需要中途建索引(见 SnapshotSchema.InjectionKeyIndexes)。
+            var ikTypeIds = new Dictionary<string, long>(StringComparer.Ordinal);
+            var ikNameIds = new Dictionary<string, long>(StringComparer.Ordinal);
+            var ikPathIds = new Dictionary<string, long>(StringComparer.Ordinal);
+
+            long Intern(Dictionary<string, long> ids, SqliteCommand insert, string value)
+            {
+                if (ids.TryGetValue(value, out var id)) return id;
+                id = ids.Count + 1;
+                ids[value] = id;
+                Bind(insert, "$id", id);
+                Bind(insert, "$v", value);
+                insert.ExecuteNonQuery();
+                return id;
+            }
 
             swRead.Start();
             foreach (var line in ReadLines(exportPath))
@@ -530,10 +552,15 @@ public sealed class SnapshotImporter
                     var ikName = Str(root, IntermediateFormat.KeyDefName) ?? "";
                     var ikType = Str(root, IntermediateFormat.KeyDefType) ?? "";
                     Bind(insertIk, "$id", Owner(Candidates(idsByName, ikName), ikType));
-                    Bind(insertIk, "$t", ikType);
-                    Bind(insertIk, "$n", ikName);
-                    Bind(insertIk, "$p", Str(root, IntermediateFormat.KeyPath) ?? "");
-                    Bind(insertIk, "$sp", Str(root, IntermediateFormat.KeySuggestedPath) ?? "");
+                    // 空的 def_type 落成 NULL,不发号 —— 那一列本来就可空,而给空串发个号
+                    // 会让「没有类型」与「类型是空串」在库里同形。
+                    Bind(insertIk, "$t", ikType.Length == 0
+                        ? null : Intern(ikTypeIds, insertIkType, ikType));
+                    Bind(insertIk, "$n", Intern(ikNameIds, insertIkName, ikName));
+                    Bind(insertIk, "$p", Intern(ikPathIds, insertIkPath,
+                        Str(root, IntermediateFormat.KeyPath) ?? ""));
+                    Bind(insertIk, "$sp", Intern(ikPathIds, insertIkPath,
+                        Str(root, IntermediateFormat.KeySuggestedPath) ?? ""));
                     Bind(insertIk, "$col", Flag(root, IntermediateFormat.KeyIsCollection));
                     Bind(insertIk, "$ta", Flag(root, IntermediateFormat.KeyTranslationAllowed));
                     Bind(insertIk, "$fl", Flag(root, IntermediateFormat.KeyFullListTranslationAllowed));
@@ -578,10 +605,20 @@ public sealed class SnapshotImporter
             //
             // 没有 def 类型的行(从语言文件收割来的,键串里本来就不带类型)按 defName 反查 ——
             // 名册这一侧带着类型,于是**顺便把类型也认了回来**,同名跨类型时才认不出。
+            //
+            // 名册字典化之后,进出这条查询的都是号:上面发号用的三个字典还在手上,
+            // 于是不必让 SQL 拿字符串再找一遍(那样字典表就得中途建索引)。
+            // 字典里没有的字符串给 -1 —— 号从 1 起,-1 一行都匹配不上,与旧写法上
+            // 「这个名字/键串根本不在册」落到同一处(no rows → NoSlot)。
+            var ikTypeById = ikTypeIds.ToDictionary(kv => kv.Value, kv => kv.Key);
+            var ikPathById = ikPathIds.ToDictionary(kv => kv.Value, kv => kv.Key);
+            long IkId(Dictionary<string, long> ids, string? s)
+                => s is not null && ids.TryGetValue(s, out var id) ? id : -1;
+
             using var probeSlot = Prepare(db,
-                "SELECT def_type, path, translation_allowed FROM injection_keys " +
-                "WHERE def_name = $n AND (path = $k OR suggested_path = $k) " +
-                "AND ($t IS NULL OR def_type = $t) LIMIT 2");
+                "SELECT def_type_id, path_id, translation_allowed FROM injection_keys " +
+                "WHERE def_name_id = $n AND (path_id = $k OR suggested_path_id = $k) " +
+                "AND ($t IS NULL OR def_type_id = $t) LIMIT 2");
 
             var rostered = meta.IndexesInjectionKeys;
             var slotSeen = new Dictionary<(string? Type, string Name, string Key),
@@ -597,16 +634,19 @@ public sealed class SnapshotImporter
                 var probe = defType is { Length: > 0 } ? defType : null;
                 if (!slotSeen.TryGetValue((probe, defName, key), out var hit))
                 {
-                    Bind(probeSlot, "$n", defName);
-                    Bind(probeSlot, "$k", key);
-                    Bind(probeSlot, "$t", probe);
+                    Bind(probeSlot, "$n", IkId(ikNameIds, defName));
+                    Bind(probeSlot, "$k", IkId(ikPathIds, key));
+                    // **只有 probe 为 null 才是「不限类型」。** 类型给了但不在字典里要一行都
+                    // 匹配不上(旧写法上就是 `def_type = 一个没有的值`),所以那时给 -1 而不是
+                    // NULL —— 两者在这条 SQL 上是放行与全不中,差一个反的结论。
+                    Bind(probeSlot, "$t", probe is null ? null : IkId(ikTypeIds, probe));
                     using var rd = probeSlot.ExecuteReader();
                     if (!rd.Read())
                         hit = (probe, InjectionKey.ToFieldPath(key), InjectionKey.State.NoSlot);
                     else
                     {
-                        var foundType = rd.IsDBNull(0) ? null : rd.GetString(0);
-                        var indexPath = rd.GetString(1);
+                        var foundType = rd.IsDBNull(0) ? null : ikTypeById[rd.GetInt64(0)];
+                        var indexPath = ikPathById[rd.GetInt64(1)];
                         var allowed = rd.GetInt64(2) != 0;
                         // 两条以上时类型认不出来(同名跨 def 类型),但**在不在册是认得出的** ——
                         // 那一问才是这一列要答的,所以只把类型留空,不退回 unknown。

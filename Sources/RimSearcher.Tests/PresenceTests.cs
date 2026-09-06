@@ -433,9 +433,15 @@ public class PresenceTests
         // 名册的索引必须留在**导入中途**那一批里。挪回下面这批 schema 一样对、查询一样快,
         // 只有导入慢 —— 实测 1475 秒对建两条索引的代价,而慢不报错,没有闸就读不出来。
         Assert.DoesNotContain("ON injection_keys(", indexes, StringComparison.Ordinal);
-        Assert.Contains("ON injection_keys(def_name)", SnapshotSchema.InjectionKeyIndexes, StringComparison.Ordinal);
-        Assert.Contains("ON injection_keys(def_type, def_name, suggested_path)",
+        Assert.Contains("ON injection_keys(def_name_id)", SnapshotSchema.InjectionKeyIndexes,
+                        StringComparison.Ordinal);
+        Assert.Contains("ON injection_keys(def_type_id, def_name_id, suggested_path_id)",
                         SnapshotSchema.InjectionKeyIndexes, StringComparison.Ordinal);
+
+        // 字典表反过来**不许**中途建索引:导入期那次自查用的是内存里的同一份字典,
+        // 不回库找号。真加了不会错,只是白建三条 —— 而白建的索引没人读得出来。
+        Assert.DoesNotContain("ON injection_key_", SnapshotSchema.InjectionKeyIndexes,
+                              StringComparison.Ordinal);
     }
 
     [Fact]

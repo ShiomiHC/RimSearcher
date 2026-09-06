@@ -1479,10 +1479,22 @@ public sealed class SnapshotDb : IDisposable
         if (!Meta.IndexesInjectionKeys || !HasInjectionKeys) return null;
         var p = new Dictionary<string, object?> { ["@n"] = defName };
         var rows = new List<InjectionKeyRow>();
-        using var rd = Query(
-            "SELECT def_name, def_type, path, suggested_path, is_collection, translation_allowed, " +
-            "full_list_translation_allowed FROM injection_keys " +
-            "WHERE def_name = @n COLLATE NOCASE ORDER BY path", p);
+        // 两种形状:字符串列的旧库,与四列全进字典的新库。同 TypeFieldsAreSubtrees,靠列名认。
+        // 谓词走字典的 IN 子查询而不是挂在 JOIN 上 —— 后者会让优化器从主表驱动,
+        // 字典化就白做了(路径字典那次实测 1.78s 对 2.08s)。
+        var sql = InjectionKeysAreDictionary
+            ? "SELECT n.def_name, t.def_type, p.path, q.path, k.is_collection, "
+              + "k.translation_allowed, k.full_list_translation_allowed FROM injection_keys k "
+              + "JOIN injection_key_names n ON n.id = k.def_name_id "
+              + "LEFT JOIN injection_key_types t ON t.id = k.def_type_id "
+              + "JOIN injection_key_paths p ON p.id = k.path_id "
+              + "JOIN injection_key_paths q ON q.id = k.suggested_path_id "
+              + "WHERE k.def_name_id IN (SELECT id FROM injection_key_names "
+              + "WHERE def_name = @n COLLATE NOCASE) ORDER BY p.path"
+            : "SELECT def_name, def_type, path, suggested_path, is_collection, translation_allowed, "
+              + "full_list_translation_allowed FROM injection_keys "
+              + "WHERE def_name = @n COLLATE NOCASE ORDER BY path";
+        using var rd = Query(sql, p);
         while (rd.Read())
             rows.Add(new InjectionKeyRow(rd.GetString(0), rd.IsDBNull(1) ? null : rd.GetString(1),
                 rd.GetString(2), rd.GetString(3),
@@ -2176,8 +2188,17 @@ public sealed class SnapshotDb : IDisposable
     private bool TranslationsHaveKey => _trKey ??= HasColumn("translations", "key_state");
     private bool? _trKey;
 
-    private bool HasInjectionKeys => _ik ??= HasColumn("injection_keys", "suggested_path");
+    private bool HasInjectionKeys => _ik ??= HasColumn("injection_keys", "suggested_path")
+                                          || InjectionKeysAreDictionary;
     private bool? _ik;
+
+    /// <summary>
+    /// 这份库的名册是不是四列全进字典的那一版。同 <see cref="TypeFieldsAreSubtrees"/>,靠列名认 ——
+    /// <c>--keep</c> 留下的旧代永远是老形状,而它们唯一的用途正是拿来 diff。
+    /// </summary>
+    private bool InjectionKeysAreDictionary
+        => _ikDict ??= HasColumn("injection_keys", "suggested_path_id");
+    private bool? _ikDict;
 
     private bool HasColumn(string table, string column)
     {
