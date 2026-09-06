@@ -217,6 +217,31 @@ public sealed class SnapshotDb : IDisposable
         => $"No snapshot database at '{path}'. Run 'rimsearcher snapshot list' to see what is registered, " +
            "or 'rimsearcher export' to produce one from the game.";
 
+    /// <summary>
+    /// 读侧的连接参数。库是只读的、一次命令用完就关,SQLite 的默认值是按「小库 + 长驻进程」
+    /// 定的,两条都不成立:默认 2MB 页缓存放不下 1GB 库的一次全表扫,而 temp_store 的默认
+    /// 会把 ORDER BY 的中间结果写到磁盘。
+    ///
+    /// 失败一律咽掉:这三条**只影响快慢,不影响答案**,而 Open 是所有查询的必经之路 ——
+    /// 老库、别的 SQLite 编译选项、只读介质上任一条 PRAGMA 不被接受,都不该让一次查询崩掉。
+    /// </summary>
+    private static void Tune(SqliteConnection db)
+    {
+        try
+        {
+            using var cmd = db.CreateCommand();
+            cmd.CommandText = """
+                PRAGMA mmap_size  = 1073741824;
+                PRAGMA cache_size = -65536;
+                PRAGMA temp_store = MEMORY;
+                """;
+            cmd.ExecuteNonQuery();
+        }
+        catch (SqliteException)
+        {
+        }
+    }
+
     public static SnapshotDb Open(string path)
     {
         if (!File.Exists(path)) throw new SnapshotFormatError(NoDatabaseAt(path));
@@ -234,6 +259,7 @@ public sealed class SnapshotDb : IDisposable
             Pooling = false,
         }.ToString());
         db.Open();
+        Tune(db);
 
         var meta = new Dictionary<string, string>(StringComparer.Ordinal);
         try
