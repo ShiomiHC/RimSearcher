@@ -534,7 +534,7 @@ public sealed class SnapshotDb : IDisposable
         var listed = includeDefaults ? where : $"{where} AND is_default <> {Contract.DefaultState.Same}";
         var rows = new List<FieldRow>();
         using var rd = Query(
-            $"SELECT {FvPath}, fv.leaf, fv.value, fv.is_default FROM field_values fv {FvJoin} {listed} " +
+            $"SELECT {FvPath}, {FvLeaf}, fv.value, fv.is_default FROM field_values fv {FvJoin} {listed} " +
             $"ORDER BY fv.rowid LIMIT {limit}", p);
         while (rd.Read())
             rows.Add(new FieldRow(rd.GetString(0), rd.GetString(1),
@@ -679,9 +679,13 @@ public sealed class SnapshotDb : IDisposable
             if (cnt.Read()) { total = cnt.GetInt32(0); defs = cnt.GetInt32(1); }
 
         var rows = new List<(DefRow, string, string?, int)>();
+        // 一个 def 匹配多条路径时一行一条,所以 def_name 排不完 —— 必须有决胜列。
+        // 少了它,行序是「优化器这次选了哪条索引」的副产品:leaf 从大表挪到路径字典之后
+        // 驱动索引从 idx_fv_leaf_nc 换成 idx_fv_pathid,同一个 def 的几行顺序就翻了。
+        // 而这条查询**带 LIMIT/OFFSET** —— 非确定的序上翻页会漏行,也会重复。
         using var rd = Query(
             $"SELECT {DefColumns}, {FvPath}, fv.value, fv.is_default {from} " +
-            $"ORDER BY d.def_name LIMIT {limit} OFFSET {offset}", p);
+            $"ORDER BY d.def_name, {FvPath}, fv.rowid LIMIT {limit} OFFSET {offset}", p);
         while (rd.Read())
             rows.Add((ReadDefRow(rd), rd.GetString(10), rd.IsDBNull(11) ? null : rd.GetString(11), rd.GetInt32(12)));
         return (rows, total, defs);
@@ -976,7 +980,7 @@ public sealed class SnapshotDb : IDisposable
         else
         {
             p["@leaf"] = NoiseFilter.Leaf(path.Text);
-            conds.Add("fv.leaf = @leaf COLLATE NOCASE");
+            conds.Add(LeafIs("leaf = @leaf COLLATE NOCASE"));
         }
     }
 
@@ -1396,7 +1400,7 @@ public sealed class SnapshotDb : IDisposable
         if (ors.Count == 0) return;
 
         using var rd = Query(
-            $"SELECT fv.def_id, {FvPath}, fv.leaf FROM field_values fv {FvJoin} " +
+            $"SELECT fv.def_id, {FvPath}, {FvLeaf} FROM field_values fv {FvJoin} " +
             $"WHERE ({string.Join(" OR ", ors)}) AND fv.is_default <> {Contract.DefaultState.Same} " +
             // 按 rowid 排 = 导出器写入的顺序 = 这一块在 XML/类声明里的顺序。
             // 按 path 字典序排会让同一块里语义最近的几个字段散到各处(fuelPerTile 就是
@@ -2095,8 +2099,8 @@ public sealed class SnapshotDb : IDisposable
         using var rd = Query(
             // anchor 取的是元素里第一个对上标签的格,所以行序参与输出 —— 不排就靠 rowid,
             // 而那不是承诺。
-            $"SELECT {FvPath}, fv.leaf, fv.value, fv.is_default FROM field_values fv {FvJoin} "
-            + $"WHERE fv.def_id = @id ORDER BY {FvPath}", p);
+            $"SELECT {FvPath}, {FvLeaf}, fv.value, fv.is_default FROM field_values fv {FvJoin} "
+            + $"WHERE fv.def_id = @id ORDER BY {FvPath}, fv.rowid", p);
         while (rd.Read())
             rows.Add(new FieldRow(rd.GetString(0), rd.GetString(1),
                                   rd.IsDBNull(2) ? null : rd.GetString(2), rd.GetInt32(3)));
@@ -2152,6 +2156,24 @@ public sealed class SnapshotDb : IDisposable
 
     /// <inheritdoc cref="FvJoin"/>
     private string FvPath => FieldValuesAreDictionary ? "fvp.path" : "fv.path";
+
+    /// <summary>
+    /// 这份库的 <c>leaf</c> 住在路径字典上,还是逐行存在 <c>field_values</c> 里。
+    /// 它是 <c>NoiseFilter.Leaf(path)</c> 的返回值,path 的纯函数,所以挪得动;
+    /// 旧库里它还在大表上。同 <see cref="FieldValuesAreDictionary"/>,靠列名认。
+    /// </summary>
+    private bool LeafLivesOnPaths => _fvLeaf ??= HasColumn("field_value_paths", "leaf");
+    private bool? _fvLeaf;
+
+    /// <inheritdoc cref="FvJoin"/>
+    private string FvLeaf => LeafLivesOnPaths ? "fvp.leaf" : "fv.leaf";
+
+    /// <summary>
+    /// leaf 谓词。<paramref name="cond"/> 写成对裸列名 <c>leaf</c> 的条件。
+    /// 新库上它跑在 2.6 万行的路径字典里再回表(同 <see cref="PathIs"/> 那条实测),
+    /// 旧库上原样加一层括号 —— 那时 <c>leaf</c> 就在 <c>field_values</c> 上,不会有歧义。
+    /// </summary>
+    private string LeafIs(string cond) => LeafLivesOnPaths ? PathIs(cond) : $"({cond})";
 
     /// <summary>
     /// 路径谓词。<paramref name="cond"/> 写成对裸列名 <c>path</c> 的条件,由这里决定它跑在哪张表上。

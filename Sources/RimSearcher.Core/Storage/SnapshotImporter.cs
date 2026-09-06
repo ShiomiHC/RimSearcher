@@ -90,8 +90,10 @@ public sealed class SnapshotImporter
                                   generated, class, fields_truncated)
                 VALUES ($id,$t,$n,$l,$d,$sm,$sf,$g,$c,$ft)
                 """);
-            using var insertFv = Prepare(db, "INSERT INTO field_values (def_id, path_id, leaf, value, is_default) VALUES ($id,$pid,$lf,$v,$def)");
-            using var insertFvPath = Prepare(db, "INSERT INTO field_value_paths (id, path) VALUES ($id,$p)");
+            using var insertFv = Prepare(db,
+                "INSERT INTO field_values (def_id, path_id, value, is_default) VALUES ($id,$pid,$v,$def)");
+            using var insertFvPath = Prepare(db,
+                "INSERT INTO field_value_paths (id, path, leaf) VALUES ($id,$p,$lf)");
             using var insertFts = Prepare(db, "INSERT INTO defs_fts (rowid, def_name, label, description, translated) VALUES ($id,$n,$l,$d,$tr)");
             using var insertTr = Prepare(db, """
                 INSERT INTO translations (def_id, def_type, def_name, path, key, key_state, applied, translated, original, language, source_mod, source_file, source_file_count, origin)
@@ -274,11 +276,13 @@ public sealed class SnapshotImporter
                                 fvPathIds[path] = fvPathId;
                                 Bind(insertFvPath, "$id", fvPathId);
                                 Bind(insertFvPath, "$p", path);
+                                // leaf 跟着 path 走一次,不跟着行走 150 万次 ——
+                                // 它是 path 的纯函数,同一条 path 底下必然同一个值。
+                                Bind(insertFvPath, "$lf", NoiseFilter.Leaf(path));
                                 insertFvPath.ExecuteNonQuery();
                             }
                             Bind(insertFv, "$id", id);
                             Bind(insertFv, "$pid", fvPathId);
-                            Bind(insertFv, "$lf", NoiseFilter.Leaf(path));
                             Bind(insertFv, "$v", value);
                             Bind(insertFv, "$def", triple[2].GetInt32());
                             insertFv.ExecuteNonQuery();

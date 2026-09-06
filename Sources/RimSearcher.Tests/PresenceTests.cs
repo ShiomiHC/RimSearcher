@@ -294,6 +294,91 @@ public class PresenceTests
     }
 
     /// <summary>
+    /// <c>leaf</c> 住在路径字典上,而且逐行等于 <c>NoiseFilter.Leaf(path)</c>。
+    ///
+    /// 挪得动的**理由**是它是 path 的纯函数(单一算处,就在导入那一行),不是「实测每条
+    /// path 底下只有一个值」—— 后者是这几份快照的性质。所以这条闸重算一遍那个函数来比,
+    /// 而不是去查「有没有一条 path 配了两个 leaf」:那种查法在函数被改坏时一样绿。
+    /// </summary>
+    [Fact]
+    public void leaf住在路径字典上且就是那个纯函数()
+    {
+        using var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Fixture.PresenceDb};Pooling=False");
+        raw.Open();
+        using var cmd = raw.CreateCommand();
+
+        // 大表上不许再有这一列 —— 有的话下面的比对一样绿,而库一个字节都没省。
+        cmd.CommandText = "SELECT COUNT(*) FROM pragma_table_info('field_values') WHERE name = 'leaf'";
+        Assert.Equal(0L, (long)cmd.ExecuteScalar()!);
+
+        cmd.CommandText = "SELECT path, leaf FROM field_value_paths";
+        var checked_ = 0;
+        using (var rd = cmd.ExecuteReader())
+            while (rd.Read())
+            {
+                Assert.Equal(NoiseFilter.Leaf(rd.GetString(0)), rd.GetString(1));
+                checked_++;
+            }
+        // 空表会让上面的循环一次不跑而这条测试照绿 —— 那正是「没注入」的样子。
+        Assert.True(checked_ > 0, "路径字典是空的,上面的逐行比对一次都没发生");
+    }
+
+    /// <summary>
+    /// <c>leaf</c> 还长在 <c>field_values</c> 上的旧库照旧读得出来。后缀匹配那条路
+    /// (<c>values &lt;裸字段名&gt;</c>)正是唯一用到它的谓词。
+    /// </summary>
+    [Fact]
+    public void leaf还在大表上的旧库照旧读得出来()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"rs-legacy-leaf-{Guid.NewGuid():N}.db");
+        File.Copy(Fixture.PresenceDb, path, overwrite: true);
+        try
+        {
+            using (var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={path};Pooling=False"))
+            {
+                raw.Open();
+                using var cmd = raw.CreateCommand();
+                cmd.CommandText = """
+                    CREATE TABLE fv_old (def_id INTEGER NOT NULL, path_id INTEGER NOT NULL,
+                                         leaf TEXT NOT NULL, value TEXT,
+                                         is_default INTEGER NOT NULL DEFAULT 0);
+                    INSERT INTO fv_old SELECT f.def_id, f.path_id, p.leaf, f.value, f.is_default
+                      FROM field_values f JOIN field_value_paths p ON p.id = f.path_id;
+                    DROP TABLE field_values;
+                    ALTER TABLE fv_old RENAME TO field_values;
+                    CREATE TABLE fvp_old (id INTEGER PRIMARY KEY, path TEXT NOT NULL);
+                    INSERT INTO fvp_old SELECT id, path FROM field_value_paths;
+                    DROP TABLE field_value_paths;
+                    ALTER TABLE fvp_old RENAME TO field_value_paths;
+                    CREATE INDEX idx_fv_leaf_nc ON field_values(leaf COLLATE NOCASE);
+                    CREATE INDEX idx_fv_pathid ON field_values(path_id);
+                    CREATE INDEX idx_fv_def ON field_values(def_id);
+                    """;
+                cmd.ExecuteNonQuery();
+
+                // 注入真发生了吗:旧列在、字典上那一列不在。
+                cmd.CommandText = "SELECT COUNT(*) FROM pragma_table_info('field_values') WHERE name = 'leaf'";
+                Assert.Equal(1L, (long)cmd.ExecuteScalar()!);
+                cmd.CommandText = "SELECT COUNT(*) FROM pragma_table_info('field_value_paths') WHERE name = 'leaf'";
+                Assert.Equal(0L, (long)cmd.ExecuteScalar()!);
+            }
+
+            // 后缀匹配走 leaf 谓词。两份库同一条命令,输出必须逐字相同。
+            foreach (var field in new[] { "damage", "speed" })
+            {
+                var (fresh, _, _) = Fixture.Run("values", field, "--db", Fixture.PresenceDb);
+                var (old, _, _) = Fixture.Run("values", field, "--db", path);
+                Assert.Equal(fresh, old);
+                Assert.Contains(field, fresh, StringComparison.Ordinal);
+            }
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    /// <summary>
     /// 子树分解是**无损的集合去重**,不是内容取舍:复原出来的 (类型, 路径) 对必须与导出
     /// 声明的逐条相同。压缩比是这一条的副产品 —— 先钉相等,再钉省下来了。
     ///

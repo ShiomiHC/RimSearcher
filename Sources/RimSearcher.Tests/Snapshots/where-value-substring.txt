@@ -9,7 +9,7 @@ exit 0
 
 Same in every row, not repeated below: def_type=ThingDef, code_default=no, mod=ludeon.rimworld.
 def_name    path                                   value
-Firefoam    graphicData.texPath                    Things/Building/Nozzle
 Firefoam    building.blueprintGraphicData.texPath  Things/Building/Blueprint_Nozzle
+Firefoam    graphicData.texPath                    Things/Building/Nozzle
 FoamPopper  graphicData.texPath                    Things/Building/Cannon
 --- stderr ---

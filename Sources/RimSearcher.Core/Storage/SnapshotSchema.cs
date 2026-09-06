@@ -129,15 +129,23 @@ public static class SnapshotSchema
         -- 表名沿用,列换成 path_id。**旧库的这张表是带 path 的**,靠列名分辨
         -- (SnapshotDb.FieldValuesAreDictionary)。不涨 schema_version,理由与 type_fields
         -- 那处逐字相同:精确相等的检查会让磁盘上每一份旧库拒读,连同 --keep 留下的旧代。
+        -- leaf 住在这儿而不是 field_values 上:它是 NoiseFilter.Leaf(path) 的返回值,
+        -- **path 的纯函数**(单一算处,就在导入那一行),于是每条 path 底下它是常量。
+        -- 逐行存等于把 2.6 万个答案抄 150 万遍 —— 22.4M 字符,而不同取值只有 5392 个。
+        --
+        -- 收益的大头不是那 22.4M,是**两条索引整个消失**:谓词一律是
+        -- `leaf = @x COLLATE NOCASE`,原来要在 150 万行上配一条 NOCASE 索引,
+        -- 而 BINARY 那条(DISTINCT/GROUP BY 用)得一并留着,两条共 71.0M。
+        -- 现在这一问落在 2.6 万行的字典上,回表顺已有的 idx_fv_pathid 走。
         CREATE TABLE field_value_paths (
             id   INTEGER PRIMARY KEY,
-            path TEXT NOT NULL
+            path TEXT NOT NULL,
+            leaf TEXT NOT NULL
         );
 
         CREATE TABLE field_values (
             def_id     INTEGER NOT NULL,
             path_id    INTEGER NOT NULL,
-            leaf       TEXT NOT NULL,
             value      TEXT,
             is_default INTEGER NOT NULL DEFAULT 0
         );
@@ -473,8 +481,11 @@ public static class SnapshotSchema
     /// </summary>
     public static readonly IReadOnlyList<NoCaseLookup> NoCaseLookups =
     [
-        new("field_values", "leaf",  true, "150 万行,where/values 的主谓词。"),
         new("field_values", "value", true, "150 万行,按值反查。"),
+        // leaf 从 field_values 挪到了 field_value_paths(它是 path 的纯函数),于是这一问
+        // 从 150 万行落到 2.6 万行,两条索引一起没了。同 path 那条的理由与实测。
+        new("field_value_paths", "leaf", false,
+            "2.6 万行,与 path 同表。全扫,再按 path_id 顺 idx_fv_pathid 回表。"),
         // 这个查找此前落在 type_fields.def_type 上,1373 万行,失配时 SQLite 转去覆盖扫
         // path 索引:12.2s,NOCASE 后 0.113s —— 那条实测是这份清单存在的由来。子树分解之后
         // 同一个查找落在 type_names 的 222 行上,索引与否都量不出来,于是登记为不需要。
@@ -551,13 +562,12 @@ public static class SnapshotSchema
         -- 字典化之后的回表方向:谓词在 field_value_paths 上跑完,拿一批 path_id 回来找行。
         -- 没有它的话优化器只能把 150 万行整个扫一遍去比 path_id,字典化就白做了。
         CREATE INDEX idx_fv_pathid  ON field_values(path_id);
-        CREATE INDEX idx_fv_leaf    ON field_values(leaf);
+        -- leaf 那两条索引没了 —— 那一列不在这张表上了(见 field_value_paths 的注释)。
         CREATE INDEX idx_fv_value   ON field_values(value);
-        -- 查这两列一律带 COLLATE NOCASE(见 SnapshotDb 的 PathCondition / ValueWhere),
-        -- 而上面两条是 BINARY 的:collation 不匹配时 SQLite 不用索引,于是每条谓词都全表扫。
-        -- 加一对 NOCASE 的而不是改上面两条 —— DistinctValues 的 DISTINCT/GROUP BY fv.value
+        -- 查这一列一律带 COLLATE NOCASE(见 SnapshotDb 的 ValueWhere),而上面那条是
+        -- BINARY 的:collation 不匹配时 SQLite 不用索引,于是每条谓词都全表扫。
+        -- 加一条 NOCASE 的而不是改上面那条 —— DistinctValues 的 DISTINCT/GROUP BY fv.value
         -- 是 BINARY,改掉就轮到它失去索引。
-        CREATE INDEX idx_fv_leaf_nc  ON field_values(leaf COLLATE NOCASE);
         CREATE INDEX idx_fv_value_nc ON field_values(value COLLATE NOCASE);
         CREATE INDEX idx_tr_defname ON translations(def_name);
         CREATE INDEX idx_keyed_key   ON keyed(key);
