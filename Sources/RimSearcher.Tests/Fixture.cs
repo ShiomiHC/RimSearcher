@@ -1,4 +1,4 @@
-using System.IO.Compression;
+﻿using System.IO.Compression;
 using System.Text;
 using RimSearcher.Contract;
 using RimSearcher.Storage;
@@ -54,6 +54,9 @@ public static class Fixture
 
     /// <summary>0.1.0 那一档,给「这份快照根本没量过」的措辞当落点。</summary>
     public static string OtherDb { get { _ = Db; return Path.Combine(SnapshotDir, "other.db"); } }
+
+    /// <summary>一份**旧代**(SnapshotRetention 轮转出来的 `{name}.prev`)。跨快照那句不许点它。</summary>
+    public static string PrevDb { get { _ = Db; return Path.Combine(SnapshotDir, "other.prev.db"); } }
 
     /// <summary>
     /// 导出器 0.5.0:XML 写成的路径、按 defName/label 的 patch 计数、类型字段全集都在。
@@ -134,6 +137,14 @@ public static class Fixture
                 var coreExport = Path.Combine(dir, "core" + IntermediateFormat.FileExtension);
                 WriteOtherExport(coreExport, "OnlyInCoreSnapshot", "CoreMod.CompOnlyInCore");
                 new SnapshotImporter().Import(coreExport, CoreDbPath);
+
+                // 第三份半:一份**旧代**(`{name}.prev` 是 SnapshotRetention 轮转出来的
+                // 上一次导出)。它独有一个 def,而跨快照那句话不许点它 —— 旧代与它的当代
+                // 几乎必然同答案,并排念一遍只是噪音。显式 `--snapshot other.prev` 照常够得着,
+                // 两件事各有一条断言。
+                var prevExport = Path.Combine(dir, "other.prev" + IntermediateFormat.FileExtension);
+                WriteOtherExport(prevExport, "OnlyInPrevGeneration", "PrevMod.CompOnlyInPrev");
+                new SnapshotImporter().Import(prevExport, Path.Combine(SnapshotDir, "other.prev.db"));
 
                 // 第四份:导出器 0.4.0,**单字段上的 Class= 也量过了**那一档。
                 // 主 fixture 停在 0.2.0(只量列表元素)、other 停在 0.1.0(一点没量),

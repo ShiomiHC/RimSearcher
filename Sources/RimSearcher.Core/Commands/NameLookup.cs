@@ -194,6 +194,45 @@ internal static class NameLookup
     }
 
     /// <summary>
+    /// 「别的快照里有没有」这类补充信息的公共遍历面。<paramref name="probe"/> 回 null 表示
+    /// 那份库里没有,非 null 的原样带回,次序按登记处而不是按谁先跑完。
+    ///
+    /// **两条收窄,都只作用于这里,不影响显式寻址**(<c>--snapshot baseline.prev</c> 照常可用):
+    ///
+    /// 一是**不探旧代**。<c>{name}.prev</c> 是同一份快照的上一次导出,「那边有没有」几乎
+    /// 必然与它的当代同答案 —— 探完只会让同一句话把 'baseline' 和 'baseline.prev' 并排念
+    /// 一遍。本机 19 份库里 12 份是旧代,而每份都要开库、跑同一条谓词。
+    ///
+    /// 二是**并行**。每份库是各自的文件、各自的只读连接,彼此不共享任何东西;
+    /// 这条路径上唯一的成本就是各库那一次查询。
+    ///
+    /// 打不开的快照一律咽掉:补充信息不该让一句「没找到」变成一次崩溃。
+    /// </summary>
+    private static List<(string Alias, object What)> Fanout(CommandContext ctx, Func<SnapshotDb, object?> probe)
+    {
+        var here = Path.GetFullPath(ctx.Db.Path);
+        var targets = SnapshotCatalog.Enumerate(ctx.Config)
+            .Where(e => !string.Equals(Path.GetFullPath(e.Path), here, StringComparison.OrdinalIgnoreCase))
+            .Where(e => !SnapshotRetention.IsGeneration(e.Alias))
+            .ToList();
+
+        var hits = new (string Alias, object What)?[targets.Count];
+        Parallel.For(0, targets.Count, i =>
+        {
+            try
+            {
+                using var other = SnapshotDb.Open(targets[i].Path);
+                if (probe(other) is { } what) hits[i] = (targets[i].Alias, what);
+            }
+            catch
+            {
+            }
+        });
+
+        return [.. hits.Where(h => h is not null).Select(h => h!.Value)];
+    }
+
+    /// <summary>
     /// 这个名字是不是一个 mod。快照里有它 → 那是个 <c>--scope</c>;本机装着但快照没覆盖
     /// → 那是要重新导出。两句话都要点名 packageId,因为 <c>--scope</c> 只认它。
     /// </summary>
@@ -224,24 +263,8 @@ internal static class NameLookup
     /// </summary>
     public static string? Elsewhere(CommandContext ctx, Func<SnapshotDb, int> probe, string noun)
     {
-        var here = ctx.Db.Path;
-        var found = new List<(string Alias, int Count)>();
-
-        foreach (var entry in SnapshotCatalog.Enumerate(ctx.Config))
-        {
-            if (string.Equals(Path.GetFullPath(entry.Path), Path.GetFullPath(here), StringComparison.OrdinalIgnoreCase))
-                continue;
-            try
-            {
-                using var other = SnapshotDb.Open(entry.Path);
-                var n = probe(other);
-                if (n > 0) found.Add((entry.Alias, n));
-            }
-            catch
-            {
-                // 打不开的快照不该让一句「没找到」变成一次崩溃 —— 它本来就只是补充信息。
-            }
-        }
+        var found = Fanout(ctx, db => probe(db) is var n && n > 0 ? (object)n : null)
+            .Select(f => (f.Alias, Count: (int)f.What)).ToList();
 
         if (found.Count == 0) return null;
 
@@ -257,30 +280,12 @@ internal static class NameLookup
     /// </summary>
     private static Sighting? InOtherSnapshot(CommandContext ctx, string name)
     {
-        var here = ctx.Db.Path;
-        var found = new List<(string Alias, string What)>();
-
-        foreach (var entry in SnapshotCatalog.Enumerate(ctx.Config))
+        var found = Fanout(ctx, other =>
         {
-            if (string.Equals(Path.GetFullPath(entry.Path), Path.GetFullPath(here), StringComparison.OrdinalIgnoreCase))
-                continue;
-            try
-            {
-                using var other = SnapshotDb.Open(entry.Path);
-                var defs = other.GetDefsNamed(name);
-                if (defs.Count > 0)
-                {
-                    found.Add((entry.Alias, $"a {defs[0].DefType} from {defs[0].SourceMod}"));
-                    continue;
-                }
-                if (other.NodesNamed(name).Count > 0)
-                    found.Add((entry.Alias, "an XML node in its inheritance layer"));
-            }
-            catch
-            {
-                // 打不开的快照不该让一句「没找到」变成一次崩溃。它本来就只是补充信息。
-            }
-        }
+            var defs = other.GetDefsNamed(name);
+            if (defs.Count > 0) return $"a {defs[0].DefType} from {defs[0].SourceMod}";
+            return other.NodesNamed(name).Count > 0 ? "an XML node in its inheritance layer" : null;
+        }).Select(f => (f.Alias, What: (string)f.What)).ToList();
 
         if (found.Count == 0) return null;
 

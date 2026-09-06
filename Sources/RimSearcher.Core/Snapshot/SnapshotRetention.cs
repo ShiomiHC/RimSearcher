@@ -160,6 +160,18 @@ public static class SnapshotRetention
     public static string PrevAlias(string destPath, int generation)
         => Path.GetFileNameWithoutExtension(destPath) + ".prev" + (generation == 1 ? "" : generation.ToString());
 
+    /// <summary>
+    /// 这个别名是不是某份快照的**旧代**。判据就是 <see cref="PrevAlias"/> 造出来的形状,
+    /// 两处贴着写,免得命名规则改了而识别没跟上。
+    ///
+    /// 旧代与别的库一样能被显式寻址(<c>--snapshot baseline.prev</c> 照常可用),
+    /// 这个判定只服务于**不由调用方点名的那些遍历** —— 见
+    /// <see cref="Commands.NameLookup.Elsewhere"/>。
+    /// </summary>
+    public static bool IsGeneration(string alias)
+        => System.Text.RegularExpressions.Regex.IsMatch(alias, @"\.prev\d*$",
+               System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
     /// <summary>磁盘上现有的旧代数 —— 从 1 起连续数,断了就停。</summary>
     private static int ExistingGenerations(string destPath)
     {

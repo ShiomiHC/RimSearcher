@@ -2198,6 +2198,28 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 跨快照那句补充信息**不探旧代**。`{name}.prev` 是同一份快照的上一次导出,
+    /// 「那边有没有」几乎必然与它的当代同答案 —— 探完只会让同一句话把 'other' 与
+    /// 'other.prev' 并排念一遍,而本机 19 份库里 12 份是旧代,每份都要开库跑一遍谓词。
+    ///
+    /// 收窄只作用于**不由调用方点名的那些遍历**:显式寻址照常够得着,两件事各钉一条。
+    /// </summary>
+    [Fact]
+    public void 跨快照那句不点旧代而显式寻址照常够得着()
+    {
+        // OnlyInPrevGeneration 只在 other.prev.db 里。
+        var (fanout, _, code) = Fixture.Run("get", "OnlyInPrevGeneration");
+        Assert.Equal(1, code);
+        Assert.DoesNotContain("other.prev", fanout, StringComparison.Ordinal);
+        Assert.DoesNotContain("is not in the snapshot this query used", fanout, StringComparison.Ordinal);
+
+        // 显式点名那条路不受影响 —— 旧代仍是一份能查的库。
+        var (explicitly, _, ok) = Fixture.Run("get", "OnlyInPrevGeneration", "--db", Fixture.PrevDb);
+        Assert.Equal(0, ok);
+        Assert.Contains("OnlyInPrevGeneration", explicitly, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 「像不像类名」这个判据决定要不要说一句**猜测**,而猜错的代价是把未经验证的
     /// 「如果 X 是抽象基类……」摆在输出位置,读的人当结论用。
     ///
@@ -4759,6 +4781,7 @@ public class GrammarTests
         (string Literal, string Why)[] expected =
         [
             ("comps[N]", "占位符禁令:下标必须被换成真数字,印出 [N] 就是 bug"),
+            ("other.prev", "fixture 数据:旧代快照的文件名,产地只按 SnapshotRetention 的规则识别形状"),
             ("<block>", "占位符禁令:help 里的占位符不许漏进数据输出"),
             ("\\\"kind\\\": \\\"next_step\\\"", "JSON 合同:产地按键名分开写,整段拼出来的形态搜不到"),
             ("'rimsearcher where --value Firefoam'", "插值:产地是 $\"…--value {name}'\""),
