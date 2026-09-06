@@ -1,4 +1,4 @@
-using RimSearcher.Cli;
+﻿using RimSearcher.Cli;
 using RimSearcher.Output;
 using RimSearcher.Search;
 using RimSearcher.Snapshot;
@@ -1761,9 +1761,9 @@ public sealed class ListCommand : Command
     public override CommandSpec Spec => new()
     {
         Name = "list",
-        // "types" 归 C# 侧那条命令。这里让出来一次真实用法都没牺牲:Vethara 的会话里
-        // `rimsearcher list` 敲过 3646 次,`rimsearcher types` 零次 —— 而那个词在 C# 侧
-        // 指的是类型本身,两义并存会让 `types ThingComp` 体面地回答另一个问题。
+        // "types" 归 C# 侧那条命令。这里让出来一次真实用法都没牺牲:995 份会话里敲过的
+        // 3786 次 rimsearcher 中,`list` 119 次、`types` 1 次 —— 而那个词在 C# 侧指的是
+        // 类型本身,两义并存会让 `types ThingComp` 体面地回答另一个问题。
         Aliases = ["ls", "def-types"],
         Summary = "List every def of one type — or, with no type given, every def type in the snapshot.",
         Positionals =

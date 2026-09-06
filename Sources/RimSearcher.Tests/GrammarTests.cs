@@ -4210,7 +4210,7 @@ public class GrammarTests
         //
         // 认的是 def-types,不是 types:后者已经归 C# 侧那条命令(类型本身),两义并存
         // 会让 `types ThingComp` 体面地回答另一个问题。让出去一次真实用法都没牺牲 ——
-        // Vethara 的会话里 `rimsearcher list` 敲过 3646 次,`rimsearcher types` 零次。
+        // 995 份会话里 `rimsearcher list` 119 次,`rimsearcher types` 1 次。
         var (aliased, _, acode) = Fixture.Run("def-types");
         Assert.Equal(0, acode);
         Assert.Equal(bare, aliased);
