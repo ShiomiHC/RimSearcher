@@ -1159,13 +1159,16 @@ public sealed class FindCommand : Command
         if (total == 0 && pq.CanTolerateIndex)
         {
             var tolerant = pq with { IndexTolerant = true };
-            var retry = ctx.Db.FindByField(tolerant, value, exact, scope, limit.Effective, offset, type);
-            if (retry.Total > 0)
+            // 先问形状,再决定要不要跑完整查询。两者的 WHERE 逐条相同,于是「有形状」
+            // 与「有行」是同一件事;而形状一次扫描就答得出来,完整查询要扫两遍(计数
+            // 一遍、取页一遍)。语料里点分路径查空过半是真没有,那条路上两遍全省掉。
+            var shapes = ctx.Db.FindPathShapes(tolerant, value, exact, scope, type);
+            if (shapes.Count > 0)
             {
+                var retry = ctx.Db.FindByField(tolerant, value, exact, scope, limit.Effective, offset, type);
                 // 改写必须说,而且在有结果时最要说:零至少还会让人再看一眼,一张表不会。
                 // 说的是**实际命中的形状**而不是「补了下标」—— 形状原样粘回 --exact-path
                 // 就是收窄后的查询,而「补了下标」还得读者自己再推一次补在哪儿。
-                var shapes = ctx.Db.FindPathShapes(tolerant, value, exact, scope, type);
                 var shown = shapes.Take(Limits.MaxSuggestions).ToList();
                 rewritten =
                     $"Nothing sits at '{path}' as written — indexed paths carry the list index, so this ran as " +
@@ -2291,7 +2294,12 @@ public sealed class ValuesCommand : Command
         if (total == 0 && pq.CanTolerateIndex)
         {
             var tolerant = pq with { IndexTolerant = true };
-            var retry = ctx.Db.DistinctValues(tolerant, scope, limit.Effective, type, offset);
+            // 先问「这条路径存不存在」再跑完整查询:EXISTS 命中即停,而完整查询要把
+            // 整张表数完再取一页。真没有的那一档(语料里过半)因此少扫一遍。
+            // 判据仍是 retry.Total —— EXISTS 不认 --type,它只当挡在前面的快门。
+            var retry = ctx.Db.FieldPathExists(tolerant, scope)
+                ? ctx.Db.DistinctValues(tolerant, scope, limit.Effective, type, offset)
+                : ([], 0);
             if (retry.Total > 0)
             {
                 // 这条命令的表下方本来就有一句「这些值来自几条路径」(EmitFieldCoverage),

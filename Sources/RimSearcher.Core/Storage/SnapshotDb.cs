@@ -671,8 +671,11 @@ public sealed class SnapshotDb : IDisposable
 
         var where = "WHERE " + string.Join(" AND ", conds);
         var from = $"FROM field_values fv JOIN defs d ON d.id = fv.def_id {where}";
-        var total = Scalar($"SELECT COUNT(*) {from}", p);
-        var defs = Scalar($"SELECT COUNT(DISTINCT d.id) {from}", p);
+        // 两个计数一次扫出来。分两条 SELECT 时同一个 FROM 要走两遍,而点分路径上的
+        // FROM 是一次全表扫(path 列无索引)—— 口径不变,只是不扫第二遍。
+        int total = 0, defs = 0;
+        using (var cnt = Query($"SELECT COUNT(*), COUNT(DISTINCT d.id) {from}", p))
+            if (cnt.Read()) { total = cnt.GetInt32(0); defs = cnt.GetInt32(1); }
 
         var rows = new List<(DefRow, string, string?, int)>();
         using var rd = Query(
