@@ -171,6 +171,36 @@ public class SnapshotRetentionTests
         Assert.True(File.Exists(Path.Combine(dir, "current.prev.db")));
     }
 
+    /// <summary>
+    /// 内容逐条相同、**形状**不同,也不算相同。
+    ///
+    /// 路径字典化那一轮撞过这一条:导出器版本、补丁路线、def 与字段、xml 行数四项全等,
+    /// 于是判「没变」把旧文件原地留下 —— 而那次重导要的恰恰就是新形状。判据比它要判的
+    /// 东西少一块,而少掉的那块正是动手的理由。
+    ///
+    /// 这里用改一列来造出形状差:CLI 自己永远写当前形状,靠它造不出两种。
+    /// </summary>
+    [Fact]
+    public void 库的形状变了时不算相同()
+    {
+        var dir = FreshDir("layout");
+        Import(dir, "current", 10);
+
+        var db = Path.Combine(dir, "current.db");
+        using (var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={db};Pooling=False"))
+        {
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "ALTER TABLE field_values ADD COLUMN shape_probe INTEGER";
+            cmd.ExecuteNonQuery();
+        }
+
+        var (stdout, _, code) = Import(dir, "current", 10);
+        Assert.Equal(0, code);
+        Assert.DoesNotContain("left in place", stdout, StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Combine(dir, "current.prev.db")));
+    }
+
     [Fact]
     public void replaceprev一代不留且旧代一起收掉()
     {

@@ -143,9 +143,11 @@ public static class SnapshotRetention
               "Raise 'snapshot_keep' in the config file, or pass --keep, to keep more of them.";
 
     public static string Unchanged(string name)
+        // 这句逐项点名判据,所以判据加一条这里就得跟上 —— 否则它说得比做得少,
+        // 而读的人拿它当「比过了哪些」的清单用。
         => $"The incoming snapshot matches '{name}' on all of the exporter version, the patch route it read the " +
-           "XML through, the resolved defs and field values, and how many XML lines were indexed, so the " +
-           "existing file was left in place.";
+           "XML through, the resolved defs and field values, how many XML lines were indexed, and the database " +
+           "layout itself, so the existing file was left in place.";
 
     public static string IncomingPath(string destPath) => destPath + ".incoming";
 
@@ -211,7 +213,28 @@ public static class SnapshotRetention
             "SELECT json_extract(value, '$.exporter_version') || '/' || " +
             $"COALESCE(json_extract(value, '$.patch_route'), '-') FROM meta WHERE key = '{SnapshotSchema.MetaKeyRaw}'");
         var rows = Text(db, "SELECT COUNT(*) FROM xml_written");
-        return (meta ?? "?") + " " + (rows ?? "?");
+        return (meta ?? "?") + " " + (rows ?? "?") + " " + (Layout(db) ?? "?");
+    }
+
+    /// <summary>
+    /// 这份库**长什么样** —— 建表建索引的原文摘一个短哈希。
+    ///
+    /// 上面三项比的都是**内容**,而磁盘上那份文件与新导的可以内容逐条相同、形状不同:
+    /// 路径字典化那一轮(field_values 的 path 换成 path_id)撞过 —— 四项全等,于是
+    /// 「没变」,旧文件原地留下,而这次重导要的恰恰就是那个新形状。判据比它要判的东西
+    /// 少一块,而少掉的那块正是这次动手的理由。
+    ///
+    /// 比 <c>sqlite_master</c> 的原文而不是探某一列在不在:后者只认得已经发生过的那次
+    /// 改动,下一次换形状还要再补一条。
+    /// </summary>
+    private static string? Layout(SqliteConnection db)
+    {
+        var sql = Text(db,
+            "SELECT group_concat(sql, ';') FROM (SELECT sql FROM sqlite_master " +
+            "WHERE sql IS NOT NULL ORDER BY type, name)");
+        if (sql is null) return null;
+        var hash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(sql));
+        return Convert.ToHexString(hash)[..12];
     }
 
     /// <summary>表或列在老库里可能根本不存在 —— 那本身就是一种取值,不是失败。</summary>
