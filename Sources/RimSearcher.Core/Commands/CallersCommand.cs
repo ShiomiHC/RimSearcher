@@ -108,9 +108,9 @@ public sealed class CallersCommand : Command
             return 1;
         }
 
-        SayWhatWasSearched(ctx, graphs, root);
-
         var callees = ctx.Args.Flag("callees");
+
+        SayWhatWasSearched(ctx, graphs, root, callees);
 
         // 同一个方法体里调同一个目标两次是两条边。行按「调用方 → 被调方」这一对合并,
         // 次数进 call_sites —— 不合并的话一个循环展开就能把一个调用方印成八行。
@@ -172,14 +172,19 @@ public sealed class CallersCommand : Command
     /// 这次搜的是哪些树。**没有边表的那些必须点名** —— 它们在结果里与「那里确实没有调用者」
     /// 逐字同形,而两者的下一步相反。
     /// </summary>
-    private static void SayWhatWasSearched(CommandContext ctx, CallGraphSet graphs, string root)
+    private static void SayWhatWasSearched(CommandContext ctx, CallGraphSet graphs, string root, bool callees)
     {
         if (graphs.Without.Count > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
                 "Searched without a call-graph table, and therefore not searched at all — " +
                 $"{Tally.Complete(graphs.Without.Count).Render("source tree")}: " +
-                $"{NameList.Render(graphs.Without, 6)}. A caller in one of them is missing from what is " +
-                "below. 'rimsearcher sources sync' builds the tables.");
+                $"{NameList.Render(graphs.Without, 6)}. " +
+                // 两个方向漏的不是同一件事:查调用者时,漏的是住在那些树里的调用点;
+                // 查被调用者时,只有被点名的方法自己住在那里才受影响,而那时是整份答案都没有。
+                (callees
+                    ? "If the method named above lives in one of them, everything it calls is missing from below. "
+                    : "A call site in one of them is missing from below. ") +
+                "'rimsearcher sources sync' builds the tables.");
 
         var stale = graphs.Graphs.Where(g => IsStale(root, g)).Select(g => g.Tree).ToList();
         if (stale.Count > 0)
