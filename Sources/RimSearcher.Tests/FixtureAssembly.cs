@@ -35,19 +35,30 @@ internal static class FixtureAssembly
     /// </summary>
     internal static void BuildInto(string treeDir, string installedDir)
     {
-        Directory.CreateDirectory(installedDir);
-        var installed = Path.Combine(installedDir, Name + ".dll");
+        // 放进子目录而不是根下:真实的 mod 一律是 <mod>/Assemblies/*.dll,而副本按这条
+        // 相对路径分层放。搁在根下的话,「往下数」与「只数顶层」两种实现给的数一样,
+        // 于是这里量不出副本层级 —— 而只数顶层时印出来的 0 与「从来没抄过」同形。
+        var installedRel = Path.Combine("Assemblies", Name + ".dll");
+        var installed = Path.Combine(installedDir, installedRel);
+        Directory.CreateDirectory(Path.GetDirectoryName(installed)!);
         Emit(installed);
 
         AssemblyStore.CopyInto(treeDir, installedDir, [installed]);
-        var copy = AssemblyStore.CopyPath(treeDir, Name + ".dll");
+        var copy = AssemblyStore.CopyPath(treeDir, installedRel);
 
         var manifest = new SourceTreeState
         {
             PackageId = "vanilla",
             GameVersion = "1.6",
             Root = installedDir,
-            Assemblies = [new SourceAssembly { Path = Name + ".dll", Sha256 = AssemblyFilter.Sha256(installed) }],
+            Assemblies =
+            [
+                new SourceAssembly
+                {
+                    Path = installedRel.Replace(Path.DirectorySeparatorChar, '/'),
+                    Sha256 = AssemblyFilter.Sha256(installed),
+                },
+            ],
         };
         manifest.Write(treeDir);
 

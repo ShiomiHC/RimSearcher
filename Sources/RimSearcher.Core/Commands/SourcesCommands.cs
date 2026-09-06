@@ -1,4 +1,4 @@
-using RimSearcher.Cli;
+﻿using RimSearcher.Cli;
 using RimSearcher.Config;
 using RimSearcher.Metadata;
 using RimSearcher.Output;
@@ -285,7 +285,12 @@ public sealed class SourcesListCommand : Command
         try
         {
             var copies = AssemblyStore.CopyDirectory(dir);
-            return Directory.Exists(copies) ? Directory.EnumerateFiles(copies, "*.dll").Count() : 0;
+            // 副本按清单里的相对路径分层放(同名 dll 在一个 mod 里出现两次是常事),
+            // 所以要往下数 —— 只数顶层的话,分层放的那些一个都不算,而 0 正好是
+            // 「从来没抄过」的取值。
+            return Directory.Exists(copies)
+                ? Directory.EnumerateFiles(copies, "*.dll", SearchOption.AllDirectories).Count()
+                : 0;
         }
         catch { return 0; }
     }

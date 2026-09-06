@@ -408,6 +408,22 @@ public class SourcesTests
     // ---- 副本目录 ----
 
     /// <summary>
+    /// 'sources list' 的 copies 那一列数得到分层放的副本。
+    ///
+    /// 副本按清单里的相对路径分层放,而这一列曾只数顶层 —— 于是每棵树都印 0,和
+    /// 「这棵树建的时候还没有副本这回事」逐字同形,连带上面那条边界句声称全部 36 棵树的
+    /// 'il' 都在退回读安装目录。fixture 的那份 dll 正是放在 Assemblies/ 底下的。
+    /// </summary>
+    [Fact]
+    public void 分层放的副本要数得到()
+    {
+        var (stdout, _, _) = Fixture.Run("sources", "list");
+        var row = stdout.Split('\n').FirstOrDefault(l => l.TrimStart().StartsWith("vanilla", StringComparison.Ordinal));
+        Assert.NotNull(row);
+        Assert.Matches(@"vanilla\s+\d+\s+1\s+1\s+", row);
+    }
+
+    /// <summary>
     /// 一个 mod 里两个同名 dll,抄进树里之后还得是两份。
     ///
     /// 实测 keeptpa.nivarianrace 就有两个 LumiParticle.dll,来自两个不同的目录。按文件名
