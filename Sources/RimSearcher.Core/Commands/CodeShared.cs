@@ -117,14 +117,34 @@ internal static class CodeShared
     /// <summary>成员落空。类型找到了,成员没有 —— 这时候能说的比上一条多。</summary>
     internal static void SayNoMember(CommandContext ctx, MetadataLookup lookup, TypeHit type, string member)
     {
-        var names = lookup.FindMethodsAnywhere(member, 6);
-        var elsewhere = names.Where(m => m.Type.FullName != type.FullName)
-                             .Select(m => m.Type.FullName).Distinct().Take(4).ToList();
+        // 先走基类链。这句话说的是「继承来的成员在基类上」,那么它点名的也得是基类 ——
+        // 从全体树里捞同名成员,捞到的多半是别的 mod 里毫不相干的类型,而读者会顺着去问它们。
+        var bases = new Hierarchy(lookup).BaseChain(type.FullName)
+                        .SelectMany(b => lookup.FindTypes(b).Take(1))
+                        .Where(b => lookup.FindMethods(b, member).Count > 0
+                                 || lookup.Members(b).Any(m => string.Equals(m.Name, member,
+                                                                             StringComparison.OrdinalIgnoreCase)))
+                        .Select(b => b.FullName).Take(4).ToList();
+
+        if (bases.Count > 0)
+        {
+            ctx.Report.Notice(NoticeKind.Boundary,
+                $"'{type.FullName}' declares no member named '{member}', and inherits it instead — the base " +
+                $"chain declares it on {NameList.Render(bases, 4)}. Ask there: " +
+                $"'rimsearcher il {bases[0]}.{member}'. " +
+                $"'rimsearcher members {type.FullName} --inherited' lists what it inherits and from where.");
+            return;
+        }
+
+        var elsewhere = lookup.FindMethodsAnywhere(member, 6)
+                              .Where(m => m.Type.FullName != type.FullName)
+                              .Select(m => m.Type.FullName).Distinct().Take(4).ToList();
 
         ctx.Report.Notice(NoticeKind.Boundary,
-            $"'{type.FullName}' has no member named '{member}'. Inherited members are not repeated on the " +
-            "derived type — they live on the base type" +
-            (elsewhere.Count > 0 ? $", and a member by that name is declared on {NameList.Render(elsewhere, 4)}" : "") +
-            ". 'rimsearcher types " + type.FullName + " --bases' walks the chain upward.");
+            $"'{type.FullName}' has no member named '{member}', and neither does anything in its base chain" +
+            (elsewhere.Count > 0
+                ? $". Unrelated types carry the name: {NameList.Render(elsewhere, 4)}"
+                : "") +
+            $". 'rimsearcher members {type.FullName}' lists what it does have.");
     }
 }
