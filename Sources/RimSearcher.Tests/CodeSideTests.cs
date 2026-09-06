@@ -38,18 +38,20 @@ public class CodeSideTests
     }
 
     /// <summary>
-    /// <c>--callees</c> 方向的边界句不许说漏了「调用者」。没有边表的树在两个方向漏掉的
-    /// 不是同一件事:查调用者时漏的是住在那里的调用点,查被调用者时只有被点名的方法自己
-    /// 住在那里才受影响,而那时整份答案都是空的。
+    /// 没有边表的树,在两个方向上不是同一件事。查调用者时,哪棵树没表都可能藏着调用点;
+    /// 查被调用者时,边全出自被点名的方法自己那棵树 —— 别的树没表与这次答案无关,报出来
+    /// 是让读者去疑一件不影响结论的事。
+    ///
+    /// fixture 里 CompShield 住在 vanilla,而 vanilla 有表,另外两棵没有。
     /// </summary>
     [Fact]
-    public void 被调用方向不说漏了调用者()
+    public void 被调用方向不报与答案无关的空树()
     {
-        var (stdout, _, _) = Fixture.Run("callers", "RimWorld.CompShield.PostSpawnSetup", "--callees");
+        var (callers, _, _) = Fixture.Run("callers", "Verse.Widgets.Label");
+        var (callees, _, _) = Fixture.Run("callers", "RimWorld.CompShield.PostSpawnSetup", "--callees");
 
-        // 先钉住这句话确实发了 —— 否则底下那条否定断言在「一句都没印」时也是绿的。
-        Assert.Contains("Searched without a call-graph table", stdout);
-        Assert.Contains("everything it calls is missing", stdout);
-        Assert.DoesNotContain("A call site in one of them", stdout);
+        // 查调用者那一侧必须照报 —— 否则底下那条否定断言在「两侧都不报」时也是绿的。
+        Assert.Contains("Searched without a call-graph table", callers);
+        Assert.DoesNotContain("Searched without a call-graph table", callees);
     }
 }

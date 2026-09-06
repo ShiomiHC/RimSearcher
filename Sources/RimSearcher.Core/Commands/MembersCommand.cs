@@ -191,7 +191,7 @@ public sealed class MembersCommand : Command
 
         if (kept.Count > limit.Effective)
             ctx.Report.TruncationNotice(Tally.Of(limit.Effective, kept.Count), "member",
-                                        "--limit all lists every one");
+                                        "Leave --limit out to get every one");
         else
             ctx.Report.CountNotice(Tally.Complete(kept.Count), "member");
 

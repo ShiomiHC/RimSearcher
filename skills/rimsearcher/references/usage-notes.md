@@ -265,11 +265,10 @@ behaviour on a nested `Class="…"` field instead — every `GenStepDef` in a sn
 No command holds back rows on its own: leave `--limit` out and the answer is the whole result
 set, `read` included, where `--lines`, `--outline` or `--member` print in full however long they
 run and a bare read gives the entire file. `--limit` takes a positive number and nothing else —
-`all`, `none` and `0` are usage errors, because leaving
-the switch out already says that. Paging starts when you pass
-`--limit <n>`, and a paged answer states the three things a pipe would have destroyed: how
-many rows this page holds, how many exist in total, and the
-exact `--offset` for the next page. The last page
+`all`, `none` and `0` are usage errors; leave the switch
+out to get every row. Paging starts when you pass
+`--limit <n>`, and a paged answer states how many rows this page holds, how
+many exist in total, and the exact `--offset` for the next page. The last page
 says it is the last one; an `--offset` past the end is reported as an overshoot, not as
 "nothing found". Passing `--offset` to `get`, `inherit` or `code-search` is a usage error
 that lists the options that command does take, not a silently ignored switch.

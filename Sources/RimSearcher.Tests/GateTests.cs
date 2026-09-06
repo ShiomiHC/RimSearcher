@@ -384,6 +384,47 @@ public class GateTests
     }
 
     /// <summary>
+    /// 印给使用者看的句子里不许出现 <c>--limit all</c>。
+    ///
+    /// <c>--limit</c> 只收正整数,<c>all</c> 是用法错误 —— 而「怎么看全部」这句话正长在
+    /// 截断提示上,读者照着敲就是一条报错。此前 types / members / callers 三条都这么写着。
+    /// 规范说法只有一句,产地是参数解析自己报错时说的那句:留空。
+    ///
+    /// 只扫字符串字面量,注释不算 —— 注释里引用这个写法是在讲历史用量,不是在教人敲。
+    /// </summary>
+    [Fact]
+    public void 提示句里不教人敲limit_all()
+    {
+        var suspect = new Regex(@"--limit\s+all", RegexOptions.IgnoreCase);
+        var dir = Path.Combine(DeclarationTests.RepoRoot(), "Sources", "RimSearcher.Core");
+        var flagged = new List<string>();
+
+        foreach (var file in Directory.EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories))
+        {
+            var lines = File.ReadAllLines(file);
+            for (var i = 0; i < lines.Length; i++)
+            {
+                var line = lines[i];
+                var code = line.TrimStart();
+                if (code.StartsWith("//", StringComparison.Ordinal) || code.StartsWith("///", StringComparison.Ordinal))
+                    continue;
+                if (!suspect.IsMatch(line)) continue;
+                // 行尾注释里的不算:整行里 `"` 之前就出现的才是字面量。
+                var quote = line.IndexOf('"');
+                var hit = suspect.Match(line).Index;
+                if (quote < 0 || hit < quote) continue;
+                var comment = line.IndexOf("//", StringComparison.Ordinal);
+                if (comment >= 0 && hit > comment) continue;
+                flagged.Add($"{Path.GetFileName(file)}:{i + 1}: {line.Trim()}");
+            }
+        }
+
+        Assert.True(flagged.Count == 0,
+            "'--limit all' is a usage error, so no visible sentence may suggest it. " +
+            "Say 'Leave --limit out' instead:\n  " + string.Join("\n  ", flagged));
+    }
+
+    /// <summary>
     /// 这段插值里装的是不是一个数。判不准的代价不对称:漏判只是少守一处,误判会把
     /// <c>$"{Extension} file"</c> 这种「常量 + 恰好同形的名词」判红,逼人把正确的句子改坏。
     /// 所以只认三种明确形态:<c>.Count</c>/<c>.Length</c> 结尾、含算术、以及小写起头的局部变量

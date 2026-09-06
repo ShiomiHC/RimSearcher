@@ -49,7 +49,7 @@ Global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the com
 | The text of one file, member, or line range | `rimsearcher read <file> --member <name>` |
 
 The code side has its own page — which command answers what, plus the traps — in
-[references/code-side.md](references/code-side.md). Three questions still need the
+[references/code-side.md](references/code-side.md). Three questions need the
 DecompilerServer MCP, a separate program: usages of a *field or type* rather than calls to a
 method, reading many members in one call, and comparing two builds. Those are in
 [references/decompiler-mcp.md](references/decompiler-mcp.md); nothing else is.
@@ -59,7 +59,7 @@ method, reading many members in one call, and comparing two builds. Those are in
 PatchOperations rewrite the XML on disk, inheritance merges it, and thousands of defs
 (`Meat_*`, `Corpse_*`, blueprints) exist in no file. Translate the intent:
 
-| Old habit | Now |
+| Instead of | Ask |
 |---|---|
 | grep `<defName>Bullet_` | `rimsearcher search Bullet_` |
 | grep `<li Class="CompProperties_AmbientSound">` | `rimsearcher where compClass CompAmbientSound` |

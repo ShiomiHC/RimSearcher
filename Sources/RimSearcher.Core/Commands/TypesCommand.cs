@@ -230,7 +230,7 @@ public sealed class TypesCommand : Command
         var tally = found.Count > limit.Effective
             ? Tally.Of(limit.Effective, found.Count)
             : Tally.Complete(found.Count);
-        const string more = "--limit all shows every one";
+        const string more = "Leave --limit out to get every one";
 
         if (wantDerived)
         {

@@ -110,7 +110,8 @@ public sealed class CallersCommand : Command
 
         var callees = ctx.Args.Flag("callees");
 
-        SayWhatWasSearched(ctx, graphs, root, callees);
+        SayWhatWasSearched(ctx, graphs, root, callees,
+                           [.. methods.Select(m => m.Type.Assembly.Tree).Distinct(StringComparer.OrdinalIgnoreCase)]);
 
         // 同一个方法体里调同一个目标两次是两条边。行按「调用方 → 被调方」这一对合并,
         // 次数进 call_sites —— 不合并的话一个循环展开就能把一个调用方印成八行。
@@ -145,7 +146,7 @@ public sealed class CallersCommand : Command
         var tally = ordered.Count > limit.Effective
             ? Tally.Of(limit.Effective, ordered.Count)
             : Tally.Complete(ordered.Count);
-        const string more = "--limit all lists every one";
+        const string more = "Leave --limit out to get every one";
 
         if (callees)
         {
@@ -171,18 +172,26 @@ public sealed class CallersCommand : Command
     /// <summary>
     /// 这次搜的是哪些树。**没有边表的那些必须点名** —— 它们在结果里与「那里确实没有调用者」
     /// 逐字同形,而两者的下一步相反。
+    ///
+    /// 两个方向漏的不是同一件事,所以话也分两句:查调用者时,漏的是住在那些树里的调用点,
+    /// 哪棵树没表都算数;查被调用者时,边全都出自被点名的方法自己那棵树 —— 别的树有没有表
+    /// 与这次答案无关,而**它自己那棵**没表时整份答案是空的。后者是查得出来的,不必写成
+    /// 「万一它住在里面」这种设问。
     /// </summary>
-    private static void SayWhatWasSearched(CommandContext ctx, CallGraphSet graphs, string root, bool callees)
+    private static void SayWhatWasSearched(
+        CommandContext ctx, CallGraphSet graphs, string root, bool callees, IReadOnlyList<string> homeTrees)
     {
-        if (graphs.Without.Count > 0)
+        var blind = callees
+            ? graphs.Without.Where(t => homeTrees.Contains(t, StringComparer.OrdinalIgnoreCase)).ToList()
+            : [.. graphs.Without];
+
+        if (blind.Count > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
                 "Searched without a call-graph table, and therefore not searched at all — " +
-                $"{Tally.Complete(graphs.Without.Count).Render("source tree")}: " +
-                $"{NameList.Render(graphs.Without, 6)}. " +
-                // 两个方向漏的不是同一件事:查调用者时,漏的是住在那些树里的调用点;
-                // 查被调用者时,只有被点名的方法自己住在那里才受影响,而那时是整份答案都没有。
+                $"{Tally.Complete(blind.Count).Render("source tree")}: " +
+                $"{NameList.Render(blind, 6)}. " +
                 (callees
-                    ? "If the method named above lives in one of them, everything it calls is missing from below. "
+                    ? "That is where the method named above lives, so nothing it calls is recorded anywhere. "
                     : "A call site in one of them is missing from below. ") +
                 "'rimsearcher sources sync' builds the tables.");
 

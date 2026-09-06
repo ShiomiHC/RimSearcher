@@ -34,7 +34,7 @@ None of this is needed to answer a question about def data.
 `public\s+(?:virtual\s+)?void\s+Notify_\w+\(` across every file is answerable and nothing
 else is.
 
-## What still needs the DecompilerServer MCP
+## What needs the DecompilerServer MCP
 
 Three things, and only these. The MCP is a separate program
 ([decompiler-mcp.md](decompiler-mcp.md)); whether it is installed is a fact about the
