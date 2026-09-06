@@ -534,7 +534,7 @@ public sealed class SnapshotDb : IDisposable
         var listed = includeDefaults ? where : $"{where} AND is_default <> {Contract.DefaultState.Same}";
         var rows = new List<FieldRow>();
         using var rd = Query(
-            $"SELECT {FvPath}, {FvLeaf}, fv.value, fv.is_default FROM field_values fv {FvJoin} {listed} " +
+            $"SELECT {FvPath}, {FvLeaf}, {FvValue}, fv.is_default FROM field_values fv {FvJoin} {listed} " +
             $"ORDER BY fv.rowid LIMIT {limit}", p);
         while (rd.Read())
             rows.Add(new FieldRow(rd.GetString(0), rd.GetString(1),
@@ -549,7 +549,8 @@ public sealed class SnapshotDb : IDisposable
     public int ValueHits(long defId, string text)
     {
         var p = new Dictionary<string, object?> { ["@id"] = defId, ["@v"] = "%" + Escape(text) + "%" };
-        return Scalar("SELECT COUNT(*) FROM field_values WHERE def_id = @id AND value LIKE @v ESCAPE '\\'", p);
+        return Scalar($"SELECT COUNT(*) FROM field_values fv WHERE fv.def_id = @id AND "
+                      + ValueIs("value LIKE @v ESCAPE '\\'"), p);
     }
 
     /// <summary>LIKE 的通配符转义。用户给的过滤串里出现 <c>_</c> 是常事(field_path 之类)。</summary>
@@ -662,8 +663,8 @@ public sealed class SnapshotDb : IDisposable
 
         if (value is { Length: > 0 })
         {
-            if (exact) { p["@v"] = value; conds.Add("fv.value = @v COLLATE NOCASE"); }
-            else { p["@v"] = "%" + Escape(value) + "%"; conds.Add("fv.value LIKE @v ESCAPE '\\'"); }
+            if (exact) { p["@v"] = value; conds.Add(ValueIs("value = @v COLLATE NOCASE")); }
+            else { p["@v"] = "%" + Escape(value) + "%"; conds.Add(ValueIs("value LIKE @v ESCAPE '\\'")); }
         }
         if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
         // 条件进 conds 而不是事后滤行:Total 与 Defs 两个计数与行表共用同一个 FROM,
@@ -684,7 +685,7 @@ public sealed class SnapshotDb : IDisposable
         // 驱动索引从 idx_fv_leaf_nc 换成 idx_fv_pathid,同一个 def 的几行顺序就翻了。
         // 而这条查询**带 LIMIT/OFFSET** —— 非确定的序上翻页会漏行,也会重复。
         using var rd = Query(
-            $"SELECT {DefColumns}, {FvPath}, fv.value, fv.is_default {from} " +
+            $"SELECT {DefColumns}, {FvPath}, {FvValue}, fv.is_default {from} " +
             $"ORDER BY d.def_name, {FvPath}, fv.rowid LIMIT {limit} OFFSET {offset}", p);
         while (rd.Read())
             rows.Add((ReadDefRow(rd), rd.GetString(10), rd.IsDBNull(11) ? null : rd.GetString(11), rd.GetInt32(12)));
@@ -712,8 +713,8 @@ public sealed class SnapshotDb : IDisposable
 
         if (value is { Length: > 0 })
         {
-            if (exact) { p["@v"] = value; conds.Add("fv.value = @v COLLATE NOCASE"); }
-            else { p["@v"] = "%" + Escape(value) + "%"; conds.Add("fv.value LIKE @v ESCAPE '\\'"); }
+            if (exact) { p["@v"] = value; conds.Add(ValueIs("value = @v COLLATE NOCASE")); }
+            else { p["@v"] = "%" + Escape(value) + "%"; conds.Add(ValueIs("value LIKE @v ESCAPE '\\'")); }
         }
         if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
         if (defType is { Length: > 0 }) { p["@dt"] = defType; conds.Add("d.def_type = @dt COLLATE NOCASE"); }
@@ -753,8 +754,8 @@ public sealed class SnapshotDb : IDisposable
 
         if (value is { Length: > 0 })
         {
-            if (exact) { p["@v"] = value; conds.Add("fv.value = @v COLLATE NOCASE"); }
-            else { p["@v"] = "%" + Escape(value) + "%"; conds.Add("fv.value LIKE @v ESCAPE '\\'"); }
+            if (exact) { p["@v"] = value; conds.Add(ValueIs("value = @v COLLATE NOCASE")); }
+            else { p["@v"] = "%" + Escape(value) + "%"; conds.Add(ValueIs("value LIKE @v ESCAPE '\\'")); }
         }
         if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
         if (defType is { Length: > 0 }) { p["@dt"] = defType; conds.Add("d.def_type = @dt COLLATE NOCASE"); }
@@ -790,8 +791,8 @@ public sealed class SnapshotDb : IDisposable
 
         if (value is { Length: > 0 })
         {
-            if (exact) { p["@v"] = value; conds.Add("fv.value = @v COLLATE NOCASE"); }
-            else { p["@v"] = "%" + Escape(value) + "%"; conds.Add("fv.value LIKE @v ESCAPE '\\'"); }
+            if (exact) { p["@v"] = value; conds.Add(ValueIs("value = @v COLLATE NOCASE")); }
+            else { p["@v"] = "%" + Escape(value) + "%"; conds.Add(ValueIs("value LIKE @v ESCAPE '\\'")); }
         }
         if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
         if (defType is { Length: > 0 }) { p["@dt"] = defType; conds.Add("d.def_type = @dt COLLATE NOCASE"); }
@@ -887,24 +888,25 @@ public sealed class SnapshotDb : IDisposable
     /// <summary>
     /// 「取到过这个值」的谓词。抽出来是因为截断尾注要按**同一批 def** 收窄。
     /// </summary>
-    private static string ValueWhere(string value, ValueMatch match, ScopeFilter scope,
-                                     Dictionary<string, object?> p, string? defType = null)
+    // static 不得:ValueIs 要读这份库的形状(同 PathCondition / SuffixWhere)。
+    private string ValueWhere(string value, ValueMatch match, ScopeFilter scope,
+                              Dictionary<string, object?> p, string? defType = null)
     {
         var conds = new List<string>();
         switch (match)
         {
             case ValueMatch.Exact:
                 p["@v"] = value;
-                conds.Add("fv.value = @v COLLATE NOCASE");
+                conds.Add(ValueIs("value = @v COLLATE NOCASE"));
                 break;
             case ValueMatch.Identifier:
                 p["@v"] = value;
                 p["@vq"] = "%." + Escape(value);
-                conds.Add("(fv.value = @v COLLATE NOCASE OR fv.value LIKE @vq ESCAPE '\\')");
+                conds.Add(ValueIs("value = @v COLLATE NOCASE OR value LIKE @vq ESCAPE '\\'"));
                 break;
             default:
                 p["@v"] = "%" + Escape(value) + "%";
-                conds.Add("fv.value LIKE @v ESCAPE '\\'");
+                conds.Add(ValueIs("value LIKE @v ESCAPE '\\'"));
                 break;
         }
         if (scope.SqlPredicate("d.source_mod", p) is { } sc) conds.Add(sc);
@@ -1198,7 +1200,7 @@ public sealed class SnapshotDb : IDisposable
         var total = Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT {FvPath}, d.def_type {join} {where})", p);
         var rows = new List<(string, string, int, string)>();
         using var rd = Query(
-            $"SELECT {FvPath}, d.def_type, COUNT(DISTINCT d.id) c, MIN(fv.value) {join} {where} " +
+            $"SELECT {FvPath}, d.def_type, COUNT(DISTINCT d.id) c, MIN({FvValue}) {join} {where} " +
             $"GROUP BY {FvPath}, d.def_type ORDER BY c DESC, {FvPath} LIMIT {limit} OFFSET {offset}", p);
         while (rd.Read())
             rows.Add((rd.GetString(0), rd.GetString(1), rd.GetInt32(2), rd.IsDBNull(3) ? "" : rd.GetString(3)));
@@ -1248,8 +1250,8 @@ public sealed class SnapshotDb : IDisposable
         var op = new Dictionary<string, object?>();
         var oc = new List<string>();
         PathCondition(own, op, oc);
-        if (match == ValueMatch.Exact) { op["@v"] = value; oc.Add("fv.value = @v COLLATE NOCASE"); }
-        else { op["@v"] = "%" + Escape(value) + "%"; oc.Add("fv.value LIKE @v ESCAPE '\\'"); }
+        if (match == ValueMatch.Exact) { op["@v"] = value; oc.Add(ValueIs("value = @v COLLATE NOCASE")); }
+        else { op["@v"] = "%" + Escape(value) + "%"; oc.Add(ValueIs("value LIKE @v ESCAPE '\\'")); }
         if (scope.SqlPredicate("d.source_mod", op) is { } osc) oc.Add(osc);
 
         // 「自己命中的形状」要连**类型**一起记。只按形状名排除,在放开 def_type 之后会
@@ -1426,11 +1428,11 @@ public sealed class SnapshotDb : IDisposable
             where += " AND d.def_type = @dt COLLATE NOCASE";
         }
 
-        var total = Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT fv.value FROM field_values fv {FvJoin} JOIN defs d ON d.id = fv.def_id {where})", p);
+        var total = Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT {FvValue} FROM field_values fv {FvJoin} JOIN defs d ON d.id = fv.def_id {where})", p);
         var rows = new List<(string, int)>();
         using var rd = Query(
-            $"SELECT fv.value, COUNT(*) c FROM field_values fv {FvJoin} JOIN defs d ON d.id = fv.def_id {where} " +
-            $"GROUP BY fv.value ORDER BY c DESC, fv.value LIMIT {limit} OFFSET {offset}", p);
+            $"SELECT {FvValue}, COUNT(*) c FROM field_values fv {FvJoin} JOIN defs d ON d.id = fv.def_id {where} " +
+            $"GROUP BY {FvValue} ORDER BY c DESC, {FvValue} LIMIT {limit} OFFSET {offset}", p);
         while (rd.Read()) rows.Add((rd.IsDBNull(0) ? "" : rd.GetString(0), rd.GetInt32(1)));
         return (rows, total);
     }
@@ -1881,7 +1883,8 @@ public sealed class SnapshotDb : IDisposable
         var same = value is null
             ? "0"
             : $"(SELECT COUNT(DISTINCT fv.def_id) FROM field_values fv {FvJoin} JOIN kin k ON k.id = fv.def_id " +
-              "  WHERE " + PathIs($"path LIKE @f ESCAPE '\\'") + " AND fv.value = @v COLLATE NOCASE)";
+              "  WHERE " + PathIs($"path LIKE @f ESCAPE '\\'")
+              + " AND " + ValueIs("value = @v COLLATE NOCASE") + ")";
         if (value is not null) p["@v"] = value;
 
         using var rd = Query(
@@ -1909,14 +1912,20 @@ public sealed class SnapshotDb : IDisposable
         // 并列时按值排序定序:名次靠随机决定的话,同一份快照两次运行会给出两个参照值。
         using var rd = Query(
             cte +
-            "SELECT fv.value, COUNT(DISTINCT fv.def_id) AS c, " +
-            "  (SELECT COUNT(*) FROM (SELECT DISTINCT fv2.value COLLATE NOCASE FROM field_values fv2 " +
+            // 内层那个数用的是另一个别名(fv2),接不上 FvJoin/FvValue 的 fv/fvp/fvv,
+            // 所以这三处按形状内联。**分组是 NOCASE 的,不能改成按号分组** ——
+            // 号与值一一对应,而 NOCASE 会把只差大小写的两个值并成一格,两者不是同一个划分。
+            "SELECT " + FvValue + ", COUNT(DISTINCT fv.def_id) AS c, " +
+            "  (SELECT COUNT(*) FROM (SELECT DISTINCT "
+            + (ValuesAreDictionary ? "fvv2.value" : "fv2.value") + " COLLATE NOCASE "
+            + "FROM field_values fv2 " +
             (FieldValuesAreDictionary ? "JOIN field_value_paths fvp2 ON fvp2.id = fv2.path_id " : "") +
+            (ValuesAreDictionary ? "LEFT JOIN field_value_values fvv2 ON fvv2.id = fv2.value_id " : "") +
             "     JOIN kin k2 ON k2.id = fv2.def_id WHERE " +
             (FieldValuesAreDictionary ? "fvp2.path" : "fv2.path") + " LIKE @f ESCAPE '\\')) " +
             $"FROM field_values fv {FvJoin} JOIN kin k ON k.id = fv.def_id " +
             "WHERE " + PathIs($"path LIKE @f ESCAPE '\\'") + " " +
-            "GROUP BY fv.value COLLATE NOCASE ORDER BY c DESC, fv.value LIMIT 1", p);
+            "GROUP BY " + FvValue + " COLLATE NOCASE ORDER BY c DESC, " + FvValue + " LIMIT 1", p);
         return rd.Read()
             ? (rd.IsDBNull(0) ? null : rd.GetString(0), rd.GetInt32(1), rd.GetInt32(2))
             : (null, 0, 0);
@@ -2099,7 +2108,7 @@ public sealed class SnapshotDb : IDisposable
         using var rd = Query(
             // anchor 取的是元素里第一个对上标签的格,所以行序参与输出 —— 不排就靠 rowid,
             // 而那不是承诺。
-            $"SELECT {FvPath}, {FvLeaf}, fv.value, fv.is_default FROM field_values fv {FvJoin} "
+            $"SELECT {FvPath}, {FvLeaf}, {FvValue}, fv.is_default FROM field_values fv {FvJoin} "
             + $"WHERE fv.def_id = @id ORDER BY {FvPath}, fv.rowid", p);
         while (rd.Read())
             rows.Add(new FieldRow(rd.GetString(0), rd.GetString(1),
@@ -2152,7 +2161,12 @@ public sealed class SnapshotDb : IDisposable
     /// 字典库把路径接回来,旧库什么都不接。**这一对只管取值,不管筛选** —— 筛选走
     /// <see cref="PathIs"/>。
     /// </summary>
-    private string FvJoin => FieldValuesAreDictionary ? "JOIN field_value_paths fvp ON fvp.id = fv.path_id" : "";
+    private string FvJoin =>
+        (FieldValuesAreDictionary ? "JOIN field_value_paths fvp ON fvp.id = fv.path_id " : "")
+        // 值那一侧必须是 LEFT:value_id 可空(原来的 value 为 NULL),内连会把那些行整个丢掉。
+        // 用不到 fvv 的查询里这条 JOIN 不花钱 —— 挂在主键上的、一列都没引用的 LEFT JOIN
+        // 会被 SQLite 直接省掉(omit-noop-join)。
+        + (ValuesAreDictionary ? "LEFT JOIN field_value_values fvv ON fvv.id = fv.value_id" : "");
 
     /// <inheritdoc cref="FvJoin"/>
     private string FvPath => FieldValuesAreDictionary ? "fvp.path" : "fv.path";
@@ -2174,6 +2188,29 @@ public sealed class SnapshotDb : IDisposable
     /// 旧库上原样加一层括号 —— 那时 <c>leaf</c> 就在 <c>field_values</c> 上,不会有歧义。
     /// </summary>
     private string LeafIs(string cond) => LeafLivesOnPaths ? PathIs(cond) : $"({cond})";
+
+    /// <summary>
+    /// 这份库的值住在字典表里,还是逐行存在 <c>field_values.value</c> 上。同上,靠列名认。
+    /// </summary>
+    private bool ValuesAreDictionary => _fvVal ??= HasColumn("field_values", "value_id");
+    private bool? _fvVal;
+
+    /// <inheritdoc cref="FvJoin"/>
+    private string FvValue => ValuesAreDictionary ? "fvv.value" : "fv.value";
+
+    /// <summary>
+    /// 值谓词。<paramref name="cond"/> 写成对裸列名 <c>value</c> 的条件。
+    ///
+    /// 同 <see cref="PathIs"/>:谓词跑在 6.5 万行的字典上再顺 <c>idx_fv_value</c> 回表,
+    /// **不要**写成挂在 <see cref="FvJoin"/> 那条 LEFT JOIN 上的 <c>fvv.value LIKE …</c> ——
+    /// 那会让优化器从主表驱动,150 万行逐行去字典取值才比。
+    ///
+    /// NULL 的语义两条路一致:<c>value_id</c> 为空时 IN 不中,与 <c>NULL = @v</c> 同样为假。
+    /// </summary>
+    private string ValueIs(string cond)
+        => ValuesAreDictionary
+            ? $"fv.value_id IN (SELECT id FROM field_value_values WHERE {cond})"
+            : $"({cond})";
 
     /// <summary>
     /// 路径谓词。<paramref name="cond"/> 写成对裸列名 <c>path</c> 的条件,由这里决定它跑在哪张表上。

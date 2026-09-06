@@ -91,7 +91,9 @@ public sealed class SnapshotImporter
                 VALUES ($id,$t,$n,$l,$d,$sm,$sf,$g,$c,$ft)
                 """);
             using var insertFv = Prepare(db,
-                "INSERT INTO field_values (def_id, path_id, value, is_default) VALUES ($id,$pid,$v,$def)");
+                "INSERT INTO field_values (def_id, path_id, value_id, is_default) VALUES ($id,$pid,$v,$def)");
+            using var insertFvValue = Prepare(db,
+                "INSERT INTO field_value_values (id, value) VALUES ($id,$v)");
             using var insertFvPath = Prepare(db,
                 "INSERT INTO field_value_paths (id, path, leaf) VALUES ($id,$p,$lf)");
             using var insertFts = Prepare(db, "INSERT INTO defs_fts (rowid, def_name, label, description, translated) VALUES ($id,$n,$l,$d,$tr)");
@@ -182,6 +184,8 @@ public sealed class SnapshotImporter
             // 字段路径的字典。同 tfPathIds:第一次见到就发号,行里只存号。
             // baseline 上 150 万行摊到 2.6 万条不同路径,这张表因此只有 838K。
             var fvPathIds = new Dictionary<string, long>(StringComparer.Ordinal);
+            // 值的字典。150 万行摊到 6.5 万个不同值(races 311 万摊到 11.1 万),内存约 5M。
+            var fvValueIds = new Dictionary<string, long>(StringComparer.Ordinal);
             // 名册那四列的字典。**导入期那次自查直接用这三个**,不回库拿字符串找号 ——
             // 于是字典表自己不需要中途建索引(见 SnapshotSchema.InjectionKeyIndexes)。
             var ikTypeIds = new Dictionary<string, long>(StringComparer.Ordinal);
@@ -283,7 +287,9 @@ public sealed class SnapshotImporter
                             }
                             Bind(insertFv, "$id", id);
                             Bind(insertFv, "$pid", fvPathId);
-                            Bind(insertFv, "$v", value);
+                            // NULL 不发号 —— 发了的话「这个字段是空的」与「值是空串」同形。
+                            Bind(insertFv, "$v", value is null
+                                ? null : Intern(fvValueIds, insertFvValue, value));
                             Bind(insertFv, "$def", triple[2].GetInt32());
                             insertFv.ExecuteNonQuery();
                             fieldValues++;
@@ -799,11 +805,13 @@ public sealed class SnapshotImporter
                 fill.CommandText =
                     "CREATE TEMP TABLE type_defs AS SELECT def_type, COUNT(*) n FROM defs GROUP BY def_type; " +
                     "INSERT INTO shared_values (def_type, path, value, defs) " +
-                    "SELECT d.def_type, fp.path, fv.value, COUNT(DISTINCT fv.def_id) n " +
+                    "SELECT d.def_type, fp.path, fvv.value, COUNT(DISTINCT fv.def_id) n " +
                     "  FROM field_values fv JOIN defs d ON d.id = fv.def_id " +
                     "       JOIN field_value_paths fp ON fp.id = fv.path_id " +
+                    // LEFT:value_id 可空,内连会把值为空的那批行整个丢出这张表。
+                    "       LEFT JOIN field_value_values fvv ON fvv.id = fv.value_id " +
                     $" WHERE fv.is_default <> {Contract.DefaultState.Same} " +
-                    " GROUP BY d.def_type, fp.path, fv.value " +
+                    " GROUP BY d.def_type, fp.path, fv.value_id " +
                     "HAVING n >= 8 " +
                     "   AND n * 2 > (SELECT n FROM type_defs t WHERE t.def_type = d.def_type); " +
                     "DROP TABLE type_defs;";

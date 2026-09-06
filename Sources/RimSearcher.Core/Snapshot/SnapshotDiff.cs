@@ -104,11 +104,21 @@ public static class SnapshotDiff
     /// <c>rid</c> 单列出来:外层拿它判 LEFT JOIN 有没有配上,而子查询没有 rowid。
     /// </summary>
     private static string FieldView(SqliteConnection db, string alias)
-        => HasColumn(db, alias, "field_values", "path_id")
-            ? $"(SELECT v.def_id AS def_id, p.path AS path, v.value AS value, v.rowid AS rid " +
-              $"   FROM {alias}.field_values v JOIN {alias}.field_value_paths p ON p.id = v.path_id)"
-            : $"(SELECT v.def_id AS def_id, v.path AS path, v.value AS value, v.rowid AS rid " +
-              $"   FROM {alias}.field_values v)";
+    {
+        if (!HasColumn(db, alias, "field_values", "path_id"))
+            return $"(SELECT v.def_id AS def_id, v.path AS path, v.value AS value, v.rowid AS rid "
+                 + $"   FROM {alias}.field_values v)";
+
+        // 值也可能进了字典。**LEFT** JOIN:value_id 可空,内连会把值为空的行整个丢掉,
+        // 而「这一侧没有值」正是 diff 要报的一种变化。
+        var valueDict = HasColumn(db, alias, "field_values", "value_id");
+        return "(SELECT v.def_id AS def_id, p.path AS path, "
+             + (valueDict ? "w.value" : "v.value") + " AS value, v.rowid AS rid "
+             + $"   FROM {alias}.field_values v "
+             + $"   JOIN {alias}.field_value_paths p ON p.id = v.path_id"
+             + (valueDict ? $" LEFT JOIN {alias}.field_value_values w ON w.id = v.value_id" : "")
+             + ")";
+    }
 
     private static bool HasColumn(SqliteConnection db, string alias, string table, string column)
     {

@@ -1,4 +1,4 @@
-using RimSearcher.Output;
+﻿using RimSearcher.Output;
 using RimSearcher.Storage;
 
 namespace RimSearcher.Tests;
@@ -324,6 +324,68 @@ public class PresenceTests
     }
 
     /// <summary>
+    /// 值进字典之后,<c>NULL</c> 与空串必须还分得开:给 NULL 也发个号的话,「这个字段没有值」
+    /// 与「它的值是空串」在库里就同形了。
+    ///
+    /// 实测七份快照 150 万行里 <c>value</c> 一条 NULL 都没有(空串 1289 条),所以这条空值
+    /// 通路没有天然样本 —— 它是靠自己往库里种一条来测的。种进去之后 <c>get</c> 还看得见
+    /// 那一行,才说明取值那个 JOIN 是外连:换成内连,这一行会整个消失而不是显示为空。
+    /// </summary>
+    [Fact]
+    public void 值字典不给NULL发号()
+    {
+        using (var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Fixture.PresenceDb};Pooling=False"))
+        {
+            raw.Open();
+            using var cmd = raw.CreateCommand();
+
+            cmd.CommandText = "SELECT COUNT(*) FROM field_value_values WHERE value IS NULL";
+            Assert.Equal(0L, (long)cmd.ExecuteScalar()!);
+
+            // 字典真去重了 —— 自己不许有重复值。
+            cmd.CommandText = "SELECT COUNT(*) FROM field_value_values";
+            var dict = (long)cmd.ExecuteScalar()!;
+            Assert.True(dict > 0, "值字典是空的,下面几条钉不到东西");
+            cmd.CommandText = "SELECT COUNT(DISTINCT value) FROM field_value_values";
+            Assert.Equal(dict, (long)cmd.ExecuteScalar()!);
+
+            // 大表上不许再有这一列 —— 有的话上面几条一样绿,而库一个字节都没省。
+            cmd.CommandText = "SELECT COUNT(*) FROM pragma_table_info('field_values') WHERE name = 'value'";
+            Assert.Equal(0L, (long)cmd.ExecuteScalar()!);
+        }
+
+        var path = Path.Combine(Path.GetTempPath(), $"rs-null-value-{Guid.NewGuid():N}.db");
+        File.Copy(Fixture.PresenceDb, path, overwrite: true);
+        try
+        {
+            using (var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={path};Pooling=False"))
+            {
+                raw.Open();
+                using var cmd = raw.CreateCommand();
+                cmd.CommandText = """
+                    INSERT INTO field_value_paths (id, path, leaf)
+                      SELECT MAX(id) + 1, 'nullprobe', 'nullprobe' FROM field_value_paths;
+                    INSERT INTO field_values (def_id, path_id, value_id, is_default)
+                      SELECT (SELECT id FROM defs WHERE def_name = 'ChildGun'),
+                             (SELECT id FROM field_value_paths WHERE path = 'nullprobe'), NULL, 0;
+                    """;
+                cmd.ExecuteNonQuery();
+
+                // 注入真发生了吗 —— 没有这一条,下面那个 Contains 测的是别的东西。
+                cmd.CommandText = "SELECT COUNT(*) FROM field_values WHERE value_id IS NULL";
+                Assert.Equal(1L, (long)cmd.ExecuteScalar()!);
+            }
+
+            var (probe, _, _) = Fixture.Run("get", "ChildGun", "--defaults", "--db", path);
+            Assert.Contains("nullprobe", probe, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    /// <summary>
     /// <c>leaf</c> 还长在 <c>field_values</c> 上的旧库照旧读得出来。后缀匹配那条路
     /// (<c>values &lt;裸字段名&gt;</c>)正是唯一用到它的谓词。
     /// </summary>
@@ -340,9 +402,9 @@ public class PresenceTests
                 using var cmd = raw.CreateCommand();
                 cmd.CommandText = """
                     CREATE TABLE fv_old (def_id INTEGER NOT NULL, path_id INTEGER NOT NULL,
-                                         leaf TEXT NOT NULL, value TEXT,
+                                         leaf TEXT NOT NULL, value_id INTEGER,
                                          is_default INTEGER NOT NULL DEFAULT 0);
-                    INSERT INTO fv_old SELECT f.def_id, f.path_id, p.leaf, f.value, f.is_default
+                    INSERT INTO fv_old SELECT f.def_id, f.path_id, p.leaf, f.value_id, f.is_default
                       FROM field_values f JOIN field_value_paths p ON p.id = f.path_id;
                     DROP TABLE field_values;
                     ALTER TABLE fv_old RENAME TO field_values;

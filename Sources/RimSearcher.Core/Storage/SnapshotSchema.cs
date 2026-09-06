@@ -143,10 +143,22 @@ public static class SnapshotSchema
             leaf TEXT NOT NULL
         );
 
+        -- 值也进字典。七份快照上冗余稳定在 23~28 倍(最重的 races:311 万行 11.1 万个
+        -- 不同值),字符 10.5M → 1.5M。同 leaf,大头在索引:按值反查一律带 COLLATE NOCASE,
+        -- 而 DISTINCT/GROUP BY 是 BINARY,于是这一列此前也得配一对索引(共 49.4M)。
+        -- 换成号之后主表只剩一条整数索引,大小写那一问落在 6.5 万行的字典上。
+        --
+        -- **可空**:value_id 为 NULL 就是原来的 value 为 NULL。不给 NULL 发号 ——
+        -- 发了的话「这个字段是空的」与「这个字段的值是空串」就在库里同形了。
+        CREATE TABLE field_value_values (
+            id    INTEGER PRIMARY KEY,
+            value TEXT
+        );
+
         CREATE TABLE field_values (
             def_id     INTEGER NOT NULL,
             path_id    INTEGER NOT NULL,
-            value      TEXT,
+            value_id   INTEGER,
             is_default INTEGER NOT NULL DEFAULT 0
         );
 
@@ -481,7 +493,9 @@ public static class SnapshotSchema
     /// </summary>
     public static readonly IReadOnlyList<NoCaseLookup> NoCaseLookups =
     [
-        new("field_values", "value", true, "150 万行,按值反查。"),
+        // 值从 field_values 挪进了字典,于是这一问从 150 万行落到 6.5 万行,主表那一对
+        // BINARY/NOCASE 索引并成一条整数索引。
+        new("field_value_values", "value", true, "6.5 万行(races 11.1 万),按值反查的等值支。"),
         // leaf 从 field_values 挪到了 field_value_paths(它是 path 的纯函数),于是这一问
         // 从 150 万行落到 2.6 万行,两条索引一起没了。同 path 那条的理由与实测。
         new("field_value_paths", "leaf", false,
@@ -563,12 +577,12 @@ public static class SnapshotSchema
         -- 没有它的话优化器只能把 150 万行整个扫一遍去比 path_id,字典化就白做了。
         CREATE INDEX idx_fv_pathid  ON field_values(path_id);
         -- leaf 那两条索引没了 —— 那一列不在这张表上了(见 field_value_paths 的注释)。
-        CREATE INDEX idx_fv_value   ON field_values(value);
-        -- 查这一列一律带 COLLATE NOCASE(见 SnapshotDb 的 ValueWhere),而上面那条是
-        -- BINARY 的:collation 不匹配时 SQLite 不用索引,于是每条谓词都全表扫。
-        -- 加一条 NOCASE 的而不是改上面那条 —— DistinctValues 的 DISTINCT/GROUP BY fv.value
-        -- 是 BINARY,改掉就轮到它失去索引。
-        CREATE INDEX idx_fv_value_nc ON field_values(value COLLATE NOCASE);
+        -- 回表方向,同 idx_fv_pathid:谓词在 6.5 万行的值字典上跑完,拿一批号回来找行。
+        -- 整数列没有 BINARY/NOCASE 之分,所以这里只需要一条 —— 原来那一对共 49.4M。
+        CREATE INDEX idx_fv_value   ON field_values(value_id);
+        -- 大小写不敏感那一问现在落在字典上。等值比对得上索引;`LIKE '%x%'` 用不上,
+        -- 但那是 6.5 万行的扫,不是 150 万行的扫。
+        CREATE INDEX idx_fvv_value_nc ON field_value_values(value COLLATE NOCASE);
         CREATE INDEX idx_tr_defname ON translations(def_name);
         CREATE INDEX idx_keyed_key   ON keyed(key);
         CREATE INDEX idx_xn_name    ON xml_nodes(name);
