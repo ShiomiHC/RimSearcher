@@ -376,9 +376,13 @@ public sealed class GetCommand : Command
                 // 复验。复验跑完了(见 yesMeans 处):抽象地说「工具区分不了」实测 0/10,
                 // 把两个 def 各自点名才 4/10,两次复制合并 8/20 对 0/30、p=0.0002。于是搬进来,
                 // 与输出侧 yesMeans 同形 —— 那正是这两处口径必须一致的那条闸盯着的东西。
+                // 「因为它们最常被读成作者选的」这半句 2026-09-07 删掉:它是个理由,而它
+                // 想防的那次误读由后面「照着默认值写一遍与根本没写完全同形」那句直接点名 ——
+                // 上面那轮实测(0/10 对 4/10)量的正是后面那句,不是这个理由。
+                // 「默认不列出」这个事实留着,输出里的「Not listed: N fields…」也照旧印。
                 Help = "Also list fields whose value is the one a fresh instance of the declaring type already "
-                     + "carries. They are left out by default because they are the ones most often read as something "
-                     + "an author chose. The 'xml' column on those rows says whether this def's own XML wrote the "
+                     + "carries. They are left out by default. "
+                     + "The 'xml' column on those rows says whether this def's own XML wrote the "
                      + "path (here), only an ancestor did (parent), neither (no), or that the row cannot be "
                      + "pinned to a line inside a container the XML did write (under <container>). The table "
                      + "says beside it which XML that was: 'read after every patch ran' or "
