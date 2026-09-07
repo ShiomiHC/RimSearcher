@@ -521,7 +521,7 @@ Rows are marked 'in effect' or 'on disk'. Only 'in effect' is what the game disp
 
 | Key | Holds |
 |---|---|
-| `keys` | one row per keyed translation — key, translated, original, origin ('in effect' or 'on disk'), placeholder, mod, source, and query (which of the queries the row answers, present on a single-query call too). Always an array, including when a single key matched exactly, so the shape does not change with the kind of match. The query column is the one thing that does change with the call: listing the whole layer takes no query, so there the rows have no such column rather than a blank one that would read as a value nobody could compute. |
+| `keys` | one row per keyed translation — key, translated, original, origin ('in effect' or 'on disk'), placeholder, mod, source, and query (which of the queries the row answers, present on a single-query call too). Always an array, including when a single key matched exactly, so the shape does not change with the kind of match. The query column is the one thing that does change with the call: listing the whole layer takes no query, so there the rows have no such column. |
 
 Examples:
 

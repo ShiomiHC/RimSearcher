@@ -341,8 +341,9 @@ stopped the exporter, and the four caps have different consequences — read tha
 | *N nested objects were left unwalked past the depth cap* | N whole subtrees, of unknown size. |
 | *N fields were dropped past this def's field cap* | N paths, anywhere on the def. |
 
-A def whose only line is the first row has nothing missing, and `get` says so instead of
-warning about absent paths. The other three each drop a different kind of thing, which is
+A def whose only line is the first row has nothing missing, and `get` says so. It is still
+listed by `snapshot truncated`, which counts every cut alike. The other three each drop a
+different kind of thing, which is
 why the count is a lower bound rather than a total: a stopped list or an unwalked subtree
 counts once no matter how much sits under it.
 

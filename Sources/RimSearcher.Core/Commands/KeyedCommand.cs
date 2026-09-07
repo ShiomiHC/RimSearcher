@@ -89,8 +89,7 @@ public sealed class KeyedCommand : Command
                        "answers, present on a single-query call too). Always an array, including when a " +
                        "single key matched exactly, so the shape does not change with the kind of match. " +
                        "The query column is the one thing that does change with the call: listing the whole " +
-                       "layer takes no query, so there the rows have no such column rather than a blank one " +
-                       "that would read as a value nobody could compute.",
+                       "layer takes no query, so there the rows have no such column.",
             },
         ],
     };
