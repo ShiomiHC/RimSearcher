@@ -2299,7 +2299,9 @@ public class GrammarTests
         var (stdout, _, _) = Fixture.Run("where", "--value", "CompShield");
 
         var m = Regex.Match(stdout,
-            @"Defs whose export was cut short [^']*?holding (\d+) defs? cut short between them\. " +
+            // 「between them」只在名单有两个以上类型时才出现,而夹具里被砍的 def 只有
+            // 一个(ThingDef Bullet_Revolver)—— 这条闸验的是计数与命令,不是那半句。
+            @"Defs whose export was cut short [^']*?holding (\d+) defs? cut short(?: between them)?\. " +
             @"'rimsearcher snapshot truncated([^']*)' lists them\.");
         Assert.True(m.Success, stdout);
 
@@ -3795,13 +3797,17 @@ public class GrammarTests
     [Fact]
     public void 完整性脚注要跟着自己划的类型一起收()
     {
-        const string Note = "cut short between them";
+        // 认这句话在不在,用它开头那句 —— 结尾的「between them」是随类型个数走的,
+        // 拿它当锚会把「这句没出」与「这句出了但只点了一个类型」混成同一个绿。
+        const string Note = "Defs whose export was cut short";
 
         // 语料:comps[0].compClass 同时落在 ThingDef 与 HediffDef 上,而只有 ThingDef
         // 那边有被截过的 def(Bullet_Revolver)。不划类型时这句话成立,要出。
         var (wide, _, _) = Fixture.Run("values", "compClass");
         Assert.Contains(Note, wide, StringComparison.Ordinal);
         Assert.Contains("ThingDef", wide, StringComparison.Ordinal);
+        // 名单上只有 ThingDef 一个类型、它下面只有一个 def —— 没有 them 可指。
+        Assert.DoesNotContain("cut short between them", wide, StringComparison.Ordinal);
 
         // 划到 HediffDef 之后,表里一条 ThingDef 都没有了 —— 这句话跟着一起没。
         var (narrow, _, _) = Fixture.Run("values", "compClass", "--type", "HediffDef");

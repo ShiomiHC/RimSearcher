@@ -4,7 +4,7 @@ exit 0
 3 matches.
   - Those 3 matches come from 2 defs: a def that matches on more than one path has a row for each, so the def_name column repeats.
   - Nothing sits at 'statBases.stat' as written — indexed paths carry the list index, so this ran as statBases[].stat (3). That shape goes back in with --exact-path to pin it.
-  - Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans every def type that uses this path at all, not just the ones in the rows above — ThingDef, holding 1 def cut short between them. 'rimsearcher snapshot truncated --type ThingDef' lists them.
+  - Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans every def type that uses this path at all, not just the ones in the rows above — ThingDef, holding 1 def cut short. 'rimsearcher snapshot truncated --type ThingDef' lists them.
 
 Same in every row, not repeated below: def_type=ThingDef, code_default=no, mod=ludeon.rimworld.
 def_name            path               value

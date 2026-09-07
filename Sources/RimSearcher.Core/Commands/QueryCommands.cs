@@ -3011,8 +3011,12 @@ internal static class Completeness
             "one of the ones they lost. " +
             (alreadyNamed
                 ? $"That risk spans {basis}, holding {tally} cut short. "
+                // 「between them」要有 them 才成立:名单只有一个类型时(basis 是通用短语、
+                // 没点过它的名,于是走这一支而非上面那支),它指的是一个类型里的一个 def。
                 : $"That risk spans {basis} — {NameList.Render(types, Limits.MaxSuggestions)}, " +
-                  $"holding {tally} cut short between them. ") +
+                  (types.Count > 1
+                      ? $"holding {tally} cut short between them. "
+                      : $"holding {tally} cut short. ")) +
             $"'{cmd}' lists " +
             (shown.Count == types.Count
                 ? "them."
