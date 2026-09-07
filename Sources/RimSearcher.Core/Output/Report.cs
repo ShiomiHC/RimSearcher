@@ -306,9 +306,7 @@ public sealed class Report
     /// 而挂在哪个参数上正是这两句话的全部信息。给了就一直给:单参数调用也印,否则句子的
     /// 形状随参数个数变。
     ///
-    /// 不许改成句首前缀:计数必须落在行首(<c>SkillPromiseTests</c> 那条承诺按这个形状判),
-    /// 而限定语挂在名词后面才不会被读进后面那个从句 —— 理由与
-    /// <see cref="Tally.RenderTotalFirst"/> 的同名参数逐字相同。
+    /// 位置规则见 <see cref="Tally.RenderTotalFirst"/> 的同名参数。
     /// </param>
     public Report PageNotice(string noun, int shown, int offset, int total, string qualifier = "")
     {

@@ -183,7 +183,7 @@ public class ArgParserTests
         var e = Assert.Single(r.Errors, x => x.Contains("Unexpected argument"));
         Assert.Contains("'--'", e);
         Assert.Contains("'--exact'", e);
-        // 出路是整条命令,而且里面不再有 `--`:负数已经不需要它了。
+        // 出路是去掉 `--` 的整条命令。
         Assert.Contains("where statBases[].value -74 --exact --type ThingDef", e);
         Assert.DoesNotContain(" -- ", e);
     }

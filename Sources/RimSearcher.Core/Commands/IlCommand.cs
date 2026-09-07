@@ -96,9 +96,8 @@ public sealed class IlCommand : Command
 
         using var lookup = CodeShared.Open(ctx, out _);
 
-        // 几个符号并成一串方法,下面的反汇编循环一个字没改 —— 行里带着 assembly / type /
-        // member 三列,块与块分得开。Locate 落空时自己已经说了话(它分得清「这不是方法」
-        // 「这是个类型」「这棵树没读过」),所以这里只管接着往下走。
+        // 行里带着 assembly / type / member 三列,块与块分得开。Locate 落空时自己已经说了话
+        // (它分得清「这不是方法」「这是个类型」「这棵树没读过」),这里不要再报一遍。
         var methods = new List<MethodHit>();
         var seenMethods = new HashSet<string>(StringComparer.Ordinal);
         foreach (var one in asked)

@@ -100,8 +100,7 @@ public sealed class InheritCommand : Command
     /// 一个名字在继承层落空。三种互斥成因各说各的 —— 名字错了 / 这个 def 不参与继承 /
     /// 它根本不在快照里,报成同一句「没有」会让前两种被读成第三种。
     ///
-    /// 只有单名调用走这里。几个名字一起给时,这三段按名字重复几遍会淹掉真正印出来的块,
-    /// 那一路只报一句名单。
+    /// 只有单名调用走这里 —— 多名那一路只报一句名单。
     /// </summary>
     private static int Miss(CommandContext ctx, string name)
     {
@@ -164,8 +163,6 @@ public sealed class InheritCommand : Command
 
         if (nodes.Count == 0)
         {
-            // 单名那条路在上面就收场了 —— 它的三段说破按名字重复几遍不是帮助,
-            // 读的人这时要的是「哪几个没有」。
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"No XML node answers to any of these: {NameList.Render(missing, Limits.MaxSuggestions)}. " +
                 "Only nodes that declare Name=, ParentName= or Abstract= are in this layer, so a def that " +
@@ -181,10 +178,9 @@ public sealed class InheritCommand : Command
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"No XML node answers to {NameList.Render(missing, Limits.MaxSuggestions)}, so nothing below " +
                 "is about it. The blocks that did come back are unaffected.");
-            // 落空的名字里那些**在快照里另有落点**的,各自说一句。这一档在可变位置参数上
-            // 才真正需要:`inherit ThingDef Bullet_Revolver` 此前是硬失败,解析层照着
-            // 「恰好多出一个位置参数」认出了那个类型;可变之后它成了一个查不到的名字,
-            // 而「查不到」与「你把类型写在了名字格上」是两件事。库在这一层,判得出来。
+            // 落空的名字里那些**在快照里另有落点**的,各自说一句。`inherit ThingDef
+            // Bullet_Revolver` 里的 `ThingDef` 落在名字格上,是个查不到的名字,而「查不到」
+            // 与「你把类型写在了名字格上」是两件事。库在这一层,判得出来。
             foreach (var n in missing)
                 if (NameLookup.Locate(ctx, n) is { } sighting)
                     ctx.Report.Notice(NoticeKind.NextStep, sighting.Sentence);

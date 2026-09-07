@@ -152,8 +152,8 @@ public sealed class MembersCommand : Command
 
         using var lookup = CodeShared.Open(ctx, out _);
 
-        // 几个名字并成一串类型,下面一个字没改 —— 行里带着 type 与 assembly 两列,
-        // 读的人分得出哪一行属于哪个类型,所以不必按名字切块。
+        // 几个名字并成一串类型 —— 行里带着 type 与 assembly 两列,读的人分得出哪一行
+        // 属于哪个类型,所以不必按名字切块。
         // 去重带上程序集:同名类型在两个 mod 里各有一份是常事,而两个名字(一个全名、
         // 一个片段)指到同一个类型时,印两遍看着像两个类型。
         var types = new List<TypeHit>();

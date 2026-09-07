@@ -26,8 +26,8 @@ public static class ArgParser
     /// <c>-74</c> / <c>-0.5</c> 只可能是取值 —— 不放行的话它落进「未知选项」,而报错里
     /// 给的近似候选(实测 <c>Did you mean --db?</c>)与真正的问题毫无关系。
     ///
-    /// 这一条同时是 <c>--</c> 被误用的成因:要查一个负值,此前唯一走得通的写法是拿 <c>--</c>
-    /// 把它挡出去,而 <c>--</c> 之后的每个词都成了位置参数,连 <c>--exact</c> 一起。
+    /// 这一条同时是 <c>--</c> 被误用的成因:负值不需要 <c>--</c> 挡,而拿 <c>--</c> 挡了的话,
+    /// 它之后的每个词都成了位置参数,连 <c>--exact</c> 一起。
     /// </summary>
     private static readonly System.Text.RegularExpressions.Regex NegativeNumber =
         new(@"^-(\d|\.\d)", System.Text.RegularExpressions.RegexOptions.Compiled);
@@ -217,9 +217,7 @@ public static class ArgParser
             // `--` 吞掉的那一档。多出来的位置参数里有以 `-` 打头的词,而 `--` 又确实给过 ——
             // 那时「多给了 N 个位置参数」这句话是真的,但它说不出这 N 个是从哪儿来的:
             // 调用方写下的 `--exact` 在他眼里是个选项。这一档比下面的类型打头更具体,先判。
-            //
-            // 给的出路是**去掉 `--` 之后的整条命令**,而不是「把 `--` 挪个位置」:`--` 此前
-            // 唯一的用处是把负数挡出选项解析,而负数现在直接就是取值,于是这里不再有它的活。
+            // 给的出路是**去掉 `--` 之后的整条命令**,不是「把 `--` 挪个位置」。
             var dashSwallowed = sawDoubleDash &&
                                 positionals.Skip(declared.Length).Any(p => p.StartsWith('-'));
             var rest = string.Join(" ", positionals.Skip(1));

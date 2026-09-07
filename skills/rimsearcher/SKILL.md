@@ -57,7 +57,7 @@ and `--offset` apply to each one separately rather than to the batch. The rows l
 table, with a column naming which argument each row answers (`get` is the exception: it
 prints a block per def, as it does for one name). A name that misses does not sink the
 others — the call still exits 0, and only an all-miss exits 1. **Do not run one process per
-name**; process start dominates, and the answers do not line up for comparison.
+name.**
 
 The code side has its own page — which command answers what, plus the traps — in
 [references/code-side.md](references/code-side.md). Three questions need the

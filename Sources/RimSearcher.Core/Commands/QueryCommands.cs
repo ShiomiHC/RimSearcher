@@ -2362,8 +2362,7 @@ public sealed class FieldsCommand : Command
                 Key = "fields",
                 Rows = true,
                 What = "one row per field path: path, defs (how many defs use it), def_type (which type the " +
-                       "row was counted under — present on a single-type call too, so the shape does not " +
-                       "change with how many types were asked for).",
+                       "row was counted under — present on a single-type call too).",
             },
             Completeness.JsonKey,
         ],
@@ -2387,7 +2386,7 @@ public sealed class FieldsCommand : Command
         foreach (var type in asked)
             if (RunOne(ctx, type, limit, filters, offset, table) == 0) listed.Add(type);
 
-        // 一个类型都没列出来才算失败 —— 与 read 同一条:部分命中仍是结果。
+        // 部分命中仍是结果,全空才 1。
         if (listed.Count == 0) return 1;
 
         // 截断声明合成一块,不按类型各发一块 —— `completeness` 是个具名块,发两次会撞键。
@@ -2403,8 +2402,8 @@ public sealed class FieldsCommand : Command
     }
 
     /// <summary>
-    /// 一个类型的那一份。行不自己发,追加进 <paramref name="table"/> —— 几个类型共用一张表,
-    /// 分开发就成了几张同名表(而键名撞车会静默覆盖)。
+    /// 一个类型的那一份。行追加进 <paramref name="table"/> —— 分开发就成了几张
+    /// 同名表,而键名撞车会静默覆盖。
     /// </summary>
     private static int RunOne(CommandContext ctx, string type, LimitValue limit,
                               IReadOnlyList<string> filters, int offset,
@@ -2530,8 +2529,7 @@ public sealed class ValuesCommand : Command
                 Key = "values",
                 Rows = true,
                 What = "one row per distinct value: value, defs, field_path (which of the paths asked for the " +
-                       "row was counted under — present on a single-path call too, so the shape does not " +
-                       "change with how many paths were asked for).",
+                       "row was counted under — present on a single-path call too).",
             },
             new()
             {
@@ -2541,7 +2539,7 @@ public sealed class ValuesCommand : Command
                        "That object says which path was asked for and which full paths and def types its " +
                        "values came from: asked, matched_paths, def_types, defs_with_field. A bare name " +
                        "matches by suffix, so this says what was actually pooled. Always an array, including " +
-                       "when one path was asked for, so the shape does not change with how many were. Always " +
+                       "when one path was asked for. Always " +
                        "present: on an empty result that object's three members are empty and " +
                        "defs_with_field is 0, so a missing key never has to be told apart from nothing matching.",
             },
@@ -2570,7 +2568,7 @@ public sealed class ValuesCommand : Command
         // 集合到这里关掉:开着的话下面那两块也会被归进 field。
         ctx.Report.EndItems();
 
-        // 一条路径都没查到值才算失败 —— 与 read / fields 同一条:部分命中仍是结果。
+        // 部分命中仍是结果,全空才 1。
         if (listed.Count == 0) return 1;
 
         // `completeness` 是具名块,每条路径发一块会撞键 —— 只发一块。
