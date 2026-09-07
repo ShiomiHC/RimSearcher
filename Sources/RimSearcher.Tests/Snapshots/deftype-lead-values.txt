@@ -2,8 +2,9 @@ $ rimsearcher values ThingDef thingClass
 exit 0
 --- stdout ---
 Read 'ThingDef' as --type ThingDef, not as <fieldPath>: on 'values' the def type is an option. Written out, this call is 'rimsearcher values thingClass --type ThingDef'.
-4 values within --type ThingDef.
+4 values of 'thingClass' within --type ThingDef.
 
+asked            thingClass
 matched_paths    thingClass (6)
 def_types        ThingDef (6 of 9)
 defs_with_field  6
@@ -14,6 +15,7 @@ def_type  defs_cut_short
 ThingDef  1
 verify: rimsearcher snapshot truncated --type ThingDef
 
+Same in every row, not repeated below: field_path=thingClass.
 value                 defs
 RimWorld.Apparel      2
 RimWorld.Building     2

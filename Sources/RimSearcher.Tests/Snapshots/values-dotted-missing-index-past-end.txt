@@ -4,6 +4,7 @@ exit 1
 --offset 9 is past the end: 'statBases.stat' takes 2 values in all.
 Nothing sits at 'statBases.stat' as written — indexed paths carry the list index, so this ran with that index left open. The 'field' block below names the paths actually pooled, and any one of them goes back in with --exact-path.
 
+asked            statBases.stat
 matched_paths    statBases[0].stat (2), statBases[1].stat (1)
 def_types        ThingDef (2 of 9)
 defs_with_field  2

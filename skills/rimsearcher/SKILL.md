@@ -49,6 +49,15 @@ Global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the com
 | A code *shape* across all files | `rimsearcher code-search <regex>` |
 | The text of one file, member, or line range | `rimsearcher read <file> --member <name>` |
 
+**Anything you look up by name takes several names in one call.** `get`, `economy`,
+`inherit`, `types`, `members`, `il`, `callers`, `read`, `fields` and `values` all do:
+`rimsearcher values compClass thingClass`, `rimsearcher fields ThingDef HediffDef`,
+`rimsearcher read A.cs B.cs --outline`. Each name gets its own count line, `--limit` and
+`--offset` apply to each one separately, and the rows go into one table with a column
+saying which name each row came from. A name that misses does not sink the others — the
+call still exits 0. **Do not run one process per name**; process start dominates, and the
+answers do not line up for comparison.
+
 The code side has its own page — which command answers what, plus the traps — in
 [references/code-side.md](references/code-side.md). Three questions need the
 DecompilerServer MCP, a separate program: usages of a *field or type* rather than calls to a

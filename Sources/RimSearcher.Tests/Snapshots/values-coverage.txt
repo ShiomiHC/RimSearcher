@@ -1,8 +1,9 @@
 $ rimsearcher values compClass
 exit 0
 --- stdout ---
-3 values.
+3 values of 'compClass'.
 
+asked            compClass
 matched_paths    comps[0].compClass (3), comps[1].compClass (2)
 def_types        ThingDef (2 of 9), HediffDef (1 of 1)
 defs_with_field  3
@@ -13,10 +14,11 @@ def_type  defs_cut_short
 ThingDef  1
 verify: rimsearcher snapshot truncated --type ThingDef
 
+Same in every row, not repeated below: field_path=compClass.
 value                        defs
 RimWorld.CompShield          2
 TestMod.CompBoltedOn         2
 Verse.HediffComp_Disappears  1
 
-These values come from 2 field paths pooled together, not from one field. Any path named above goes back in with --exact-path to pool that one alone; '[]' there stands for any index.
+The values of 'compClass' come from 2 field paths pooled together, not from one field. Any path named for it above goes back in with --exact-path to pool that one alone; '[]' there stands for any index.
 --- stderr ---

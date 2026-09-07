@@ -2458,7 +2458,18 @@ public sealed class ValuesCommand : Command
             "Answers 'what am I allowed to put here' and 'which classes are actually in use' without reading any XML. " +
             "A bare name such as compClass matches every path ending in it, so the table above the values tells you " +
             "which full paths and which def types actually contributed, and how many defs are covered.",
-        Positionals = [new PositionalSpec { Name = "fieldPath", Help = "A field path or its last segment, such as compClass." }],
+        Positionals =
+        [
+            new PositionalSpec
+            {
+                Name = "fieldPath",
+                Variadic = true,
+                Help = "A field path or its last segment, such as compClass. Several paths go in one call; " +
+                       "--limit and --offset apply to each one on its own, each gets its own count line and " +
+                       "its own entry in the 'field' block, and the field_path column says which one a row " +
+                       "came from.",
+            },
+        ],
         Options =
         [
             CommonOptions.Limit("values"), CommonOptions.Offset("values"), CommonOptions.Scope,
@@ -2472,15 +2483,25 @@ public sealed class ValuesCommand : Command
         ],
         JsonKeys =
         [
-            new() { Key = "values", Rows = true, What = "one row per distinct value: value, defs." },
+            new()
+            {
+                Key = "values",
+                Rows = true,
+                What = "one row per distinct value: value, defs, field_path (which of the paths asked for the " +
+                       "row was counted under — present on a single-path call too, so the shape does not " +
+                       "change with how many paths were asked for).",
+            },
             new()
             {
                 Key = "field",
-                What = "an object, not an array: which full paths and def types the values came from " +
-                       "(matched_paths, def_types, defs_with_field). A bare name matches by suffix, so this " +
-                       "says what was actually pooled. Always present: on an empty result its three members " +
-                       "are empty and defs_with_field is 0, so a missing key never has to be told apart from " +
-                       "nothing matching.",
+                What = "an array with one entry per field path asked for, in the order given; each entry " +
+                       "holds a 'field' object (field[0].field), the same nesting 'get' uses for defs[]. " +
+                       "That object says which path was asked for and which full paths and def types its " +
+                       "values came from: asked, matched_paths, def_types, defs_with_field. A bare name " +
+                       "matches by suffix, so this says what was actually pooled. Always an array, including " +
+                       "when one path was asked for, so the shape does not change with how many were. Always " +
+                       "present: on an empty result that object's three members are empty and " +
+                       "defs_with_field is 0, so a missing key never has to be told apart from nothing matching.",
             },
             Completeness.JsonKey,
         ],
@@ -2488,11 +2509,64 @@ public sealed class ValuesCommand : Command
 
     public override int Run(CommandContext ctx)
     {
-        var path = ctx.Args.Positional(0)!;
         var limit = ctx.Limit();
         var scope = ctx.Scope();
         var type = ctx.Args.Value("type");
         var offset = ctx.Args.Offset();
+
+        // 同一条路径给两遍只查一遍:行会重,而那几句计数会一字不差地说两次。
+        var asked = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in ctx.Args.Positionals)
+            if (seen.Add(p)) asked.Add(p);
+
+        var table = new List<IReadOnlyDictionary<string, object?>>();
+        // 实际查出了值的那几条路径,各自贡献了哪些 def 类型。截断声明要圈的是它们。
+        var listed = new List<(string Asked, IReadOnlyList<(string DefType, int Count)> DefTypes)>();
+        foreach (var one in asked)
+            RunOne(ctx, one, limit, scope, type, offset, table, listed);
+        // 集合到这里关掉:开着的话下面那两块也会被归进 field。
+        ctx.Report.EndItems();
+
+        // 一条路径都没查到值才算失败 —— 与 read / fields 同一条:部分命中仍是结果。
+        if (listed.Count == 0) return 1;
+
+        // `completeness` 是具名块,每条路径发一块会撞键 —— 只发一块。
+        //
+        // 数按 **def 类型**取,不按路径取:几条路径各问一次「被砍过、且有这条路径的 def」
+        // 再加起来,同一个 def 会被数几遍(那正是 TruncatedDefsSharingValue 头上那段注释
+        // 记着的坑:子集计数能大过全集)。而这个数按类型取还更贴切 —— 被砍在这条路径
+        // **之前**的 def 根本没留下这条路径,按路径问的那一版恰好看不见它们,
+        // 而它们正是这句话要警告的那批。按类型取是个真上界,也正是下面 verify: 那条
+        // 命令印出来的数。
+        var types = listed.SelectMany(l => l.DefTypes.Select(d => d.DefType))
+                          .Distinct(StringComparer.Ordinal).ToList();
+        var byType = types.SelectMany(t => ctx.Db.TruncatedDefsOfType(t).ByType)
+                          .GroupBy(t => t.Type, StringComparer.Ordinal)
+                          .Select(g => (Type: g.Key, Defs: g.Max(t => t.Defs)))
+                          .ToList();
+        if (byType.Count > 0)
+            Completeness.NoteIndexedPathsOnly(ctx, new TruncationScope(byType.Sum(t => t.Defs), byType),
+                type is { Length: > 0 }
+                    ? $"all of {type}"
+                    : "every def type that uses " + (listed.Count > 1 ? "any of these paths" : "this path") +
+                      " at all");
+
+        // field_path 排在末列,不排首列:文本渲染器折不掉第 0 列,而单条路径的调用里这一列
+        // 每行都一样 —— 摆在末列它自己折进表头,摆在首列就是一整条冗余。
+        ctx.Report.Table("values", ["value", "defs", "field_path"], table);
+        return 0;
+    }
+
+    /// <summary>
+    /// 一条路径的那一份。行不自己发,追加进 <paramref name="table"/> —— 几条路径共用一张表。
+    /// 查出了值就把自己记进 <paramref name="listed"/>,截断声明由 <see cref="Run"/> 合起来发。
+    /// </summary>
+    private static void RunOne(CommandContext ctx, string path, LimitValue limit, ScopeFilter scope,
+                               string? type, int offset,
+                               List<IReadOnlyDictionary<string, object?>> table,
+                               List<(string Asked, IReadOnlyList<(string DefType, int Count)> DefTypes)> listed)
+    {
         var pq = new PathQuery(path, ctx.Args.Flag("exact-path"));
         var (rows, total) = ctx.Db.DistinctValues(pq, scope, limit.Effective, type, offset);
 
@@ -2542,8 +2616,8 @@ public sealed class ValuesCommand : Command
                 // 翻过头**不是**「没有这个字段」—— 这个字段存在,它的产地也是量得出来的。
                 // 这一格照旧摆真数(不是零),两个面都摆:它与正常列表是同一件事,
                 // 只是这一页恰好没有行。下面那一支才是空的那种,那边三格才为空。
-                EmitFieldCoverage(ctx, pq, scope, type);
-                return 1;
+                EmitFieldCoverage(ctx, path, pq, scope, type);
+                return;
             }
 
             // 三种成因,要的下一步不同 —— 与 `where` 的分流同形:字段不存在 / 不在这个
@@ -2585,35 +2659,37 @@ public sealed class ValuesCommand : Command
             // 机器侧「这次一个值都没有」与「你把键名问错了」逐字节同形 —— 而 skill 正教读者
             // 「缺键 = 问错了键」,照着走会去改键名,方向就反了。
             // 文本面不摆:那边上面那句话已经把话说完了,再来一行 `defs_with_field 0` 是噪声。
-            if (ctx.Json) ctx.Report.Detail("field", [
+            if (ctx.Json) ctx.Report.Item("field").Detail("field", [
+                new("asked", path),
                 new("matched_paths", ""),
                 new("def_types", ""),
                 new("defs_with_field", (object)0),
             ]);
-            return 1;
+            return;
         }
 
         // 计数行走在产地块前面,而不是跟着它下面那张表。line 1 是管道下唯一的幸存者,
         // 那个位置得留给「一共几个、看到了几个」;产地三行是口径,少看一眼不会把
         // 截断读成完整。
-        ctx.Report.PageNotice("value", rows.Count, offset, total);
+        ctx.Report.PageNotice("value", rows.Count, offset, total, $" of '{path}'");
 
         // 排在计数之后,理由同 `where` 那处:line 1 归「一共几条」。
         NoteRewrite();
 
-        var cov = EmitFieldCoverage(ctx, pq, scope, type);
+        var cov = EmitFieldCoverage(ctx, path, pq, scope, type);
 
         // 这张表把几条路径的值**并成了一池**,而 matched_paths 只列得下前几条。不指出
         // 收窄的办法,读的人手上就只有一个没法拆开的池子。
         if (cov.PathTotal > 1 && !pq.Exact)
             ctx.Report.Notice(NoticeKind.Boundary,
-                $"These values come from {Tally.Complete(cov.PathTotal).Render("field path")} pooled together, " +
-                "not from one field. Any path named above goes back in with --exact-path to pool that one " +
-                "alone; '[]' there stands for any index.",
+                $"The values of '{path}' come from {Tally.Complete(cov.PathTotal).Render("field path")} " +
+                "pooled together, not from one field. Any path named for it above goes back in with " +
+                "--exact-path to pool that one alone; '[]' there stands for any index.",
                 footnote: true);
 
         // 表上方 —— 理由同 list 那处。
-        ctx.AnnounceExcluded(scope, rest => ctx.Db.DistinctValues(pq, rest, 0, type, 0).Total, "value");
+        ctx.AnnounceExcluded(scope, rest => ctx.Db.DistinctValues(pq, rest, 0, type, 0).Total,
+                             "value", $" of '{path}'");
 
         // **这张表的轴是字段,不是值。** 两个闭卷样本把它读反了,而且在两个不同的时点:
         // 一个在读到 where 的外延提示**之前**跑它探路,拿到取值域就认定范围锁定;
@@ -2647,20 +2723,16 @@ public sealed class ValuesCommand : Command
                 $"'rimsearcher where --value {Advisory.Quote(top)} --exact' asks it for '{top}', the first " +
                 "row here. A value domain read here does not bound where those values occur.");
 
-        // 说明区之后、表之前:它自成一块,插在说明中间会把连着的那几句劈成两段。
-        // 跟着 --type 一起收:表已经滤成一个类型了,这块不能还在说别的类型。
-        Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(pq, scope, type),
-            type is { Length: > 0 }
-                ? $"all of {type}"
-                : "every def type that uses this path at all");
+        // 截断声明不在这儿发:它自成一块,几条路径合成一块由 Run 在说明区之后、表之前发。
+        listed.Add((path, cov.DefTypes));
 
-        ctx.Report.Table("values", ["value", "defs"],
-            rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+        foreach (var r in rows)
+            table.Add(new Dictionary<string, object?>
             {
                 ["value"] = r.Value,
                 ["defs"] = r.Count,
-            }).ToList());
-        return 0;
+                ["field_path"] = path,
+            });
     }
 
     /// <summary>
@@ -2673,7 +2745,7 @@ public sealed class ValuesCommand : Command
     /// </summary>
     private static (IReadOnlyList<(string Path, int Count)> Paths, int PathTotal,
                     IReadOnlyList<(string DefType, int Count)> DefTypes, int DefsCovered)
-        EmitFieldCoverage(CommandContext ctx, PathQuery pq, ScopeFilter scope, string? type)
+        EmitFieldCoverage(CommandContext ctx, string asked, PathQuery pq, ScopeFilter scope, string? type)
     {
         var cov = ctx.Db.ValueCoverage(pq, scope, Limits.MaxSuggestions, type);
 
@@ -2687,7 +2759,11 @@ public sealed class ValuesCommand : Command
         var typeList = string.Join(", ", cov.DefTypes.Select(x =>
             $"{x.DefType} ({x.Count} of {ctx.Db.CountDefsOfType(x.DefType, scope)})"));
 
-        ctx.Report.Detail("field", [
+        // 走集合而不是裸键:几条路径各有一份产地,写同一个键后写的会静默盖掉先写的。
+        // 单条路径的调用也走集合 —— 形状随路径条数变的话,消费方得先数参数才知道
+        // `field` 是对象还是数组。
+        ctx.Report.Item("field").Detail("field", [
+            new("asked", asked),
             new("matched_paths", pathList),
             new("def_types", typeList),
             new("defs_with_field", (object)cov.DefsCovered),

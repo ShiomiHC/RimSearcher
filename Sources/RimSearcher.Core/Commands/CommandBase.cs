@@ -217,7 +217,13 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
     ///
     /// 计数放句尾,免得动词跟着单复数变 —— NounRegistry 管名词,不管动词。
     /// </summary>
-    public void AnnounceExcluded(ScopeFilter scope, Func<ScopeFilter, int> count, string noun)
+    /// <param name="qualifier">
+    /// 紧跟名词的限定语(<c>" of 'compClass'"</c>),口径与 <see cref="Tally.RenderTotalFirst"/>
+    /// 的同名参数逐字相同。一次调用收几个参数的命令必须给它 —— 不给,几句挨着的
+    /// 「it finds 3 values」分不出说的是哪个参数。
+    /// </param>
+    public void AnnounceExcluded(ScopeFilter scope, Func<ScopeFilter, int> count, string noun,
+                                 string qualifier = "")
     {
         var rest = scope.Complement();
         if (rest is null) return;
@@ -225,7 +231,7 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
         if (n == 0) return;
         Report.Notice(NoticeKind.Boundary,
             $"What --scope {scope.Expression} left out is not empty for this query: with " +
-            $"--scope {rest.Describe()} instead, it finds {Tally.Complete(n).Render(noun)}.");
+            $"--scope {rest.Describe()} instead, it finds {Tally.Complete(n).Render(noun, qualifier)}.");
     }
 
     /// <summary>

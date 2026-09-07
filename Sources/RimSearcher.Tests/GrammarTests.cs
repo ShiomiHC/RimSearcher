@@ -1056,7 +1056,9 @@ public class GrammarTests
         foreach (var (argv, want) in new[]
                  {
                      ((string[])["get", "Apparel_ShieldBelt"], "12 fields."),
-                     (["values", "compClass"], "3 values."),
+                     // 路径名跟在名词后面(几条路径一次问时那句话得说清数的是谁),
+                     // 计数本身照旧落在行首。
+                     (["values", "compClass"], "3 values of 'compClass'."),
                  })
         {
             var (text, _, _) = Fixture.Run(argv);
@@ -2734,8 +2736,12 @@ public class GrammarTests
         // 三个成员的取值也要同型:非空时是两串加一个数,空时不许改成 null 或整个不摆。
         var (noField, _, _) = Fixture.Run("values", "zzznotafield", "--json");
         using var nf = System.Text.Json.JsonDocument.Parse(noField);
-        Assert.True(nf.RootElement.TryGetProperty("field", out var fieldObj),
+        Assert.True(nf.RootElement.TryGetProperty("field", out var fieldArr),
                     "'values zzznotafield --json' 的空结果上没有 'field' 键");
+        // 几条路径一次问之后这一格是数组,单条路径也是 —— 形状不随路径条数变。
+        Assert.Equal(System.Text.Json.JsonValueKind.Array, fieldArr.ValueKind);
+        var fieldObj = fieldArr.EnumerateArray().Single().GetProperty("field");
+        Assert.Equal("zzznotafield", fieldObj.GetProperty("asked").GetString());
         Assert.Equal(System.Text.Json.JsonValueKind.String, fieldObj.GetProperty("matched_paths").ValueKind);
         Assert.Equal(System.Text.Json.JsonValueKind.String, fieldObj.GetProperty("def_types").ValueKind);
         Assert.Equal(0, fieldObj.GetProperty("defs_with_field").GetInt32());
@@ -2751,7 +2757,8 @@ public class GrammarTests
         Assert.Equal(0, pd.RootElement.GetProperty("values").GetArrayLength());
         Assert.True(pd.RootElement.TryGetProperty("field", out var pastField),
                     "'values thingClass --offset 9000 --json' 翻过头的那一页上没有 'field' 键");
-        Assert.True(pastField.GetProperty("defs_with_field").GetInt32() > 0,
+        Assert.True(pastField.EnumerateArray().Single().GetProperty("field")
+                             .GetProperty("defs_with_field").GetInt32() > 0,
                     "越界页把真实覆盖数印成了 0 —— 那与「没有 def 有这个字段」同形");
 
         // 文本面不许跟着摆 —— 那边上面那句话已经把话说完了,再来一行是噪声。
@@ -5102,6 +5109,66 @@ public class GrammarTests
         }
 
         var (_, _, allMissing) = Fixture.Run("fields", "NoSuchTypeXYZ", "NoSuchTypeABC", "--json");
+        Assert.Equal(1, allMissing);
+    }
+
+    /// <summary>
+    /// values 的多路径形态。除了「行等于分别问再拼起来」,这里还钉住 `field` 那一格 ——
+    /// 它是**按路径一份**的产地说明,合并成一份就等于把两条路径的 matched_paths 说成
+    /// 同一条的,而那正是这一格存在的理由。
+    /// </summary>
+    [Fact]
+    public void values多路径的行等于分别问再拼起来()
+    {
+        static List<string> Rows(string json, string? of = null)
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("values", out var arr)) return [];
+            return arr.EnumerateArray()
+                      .Where(r => of is null || r.GetProperty("field_path").GetString() == of)
+                      .Select(r => string.Join("|", r.EnumerateObject()
+                                                     .Where(p => p.Name != "field_path")
+                                                     .Select(p => $"{p.Name}={p.Value.GetRawText()}")))
+                      .ToList();
+        }
+
+        var (comp, _, _) = Fixture.Run("values", "compClass", "--json");
+        var (thing, _, _) = Fixture.Run("values", "thingClass", "--json");
+        var (multi, _, code) = Fixture.Run("values", "compClass", "zzznotafield", "thingClass", "--json");
+        Assert.Equal(0, code);
+        Assert.Equal(Rows(comp), Rows(multi, "compClass"));
+        Assert.Equal(Rows(thing), Rows(multi, "thingClass"));
+
+        // --limit 是每条路径 1 个值,不是两条路径合计 1 个。
+        var (paged, _, _) = Fixture.Run("values", "compClass", "thingClass", "--limit", "1", "--json");
+        Assert.Equal(1, Rows(paged, "compClass").Count);
+        Assert.Equal(1, Rows(paged, "thingClass").Count);
+
+        using (var doc = System.Text.Json.JsonDocument.Parse(multi))
+        {
+            // field 按问的顺序一路径一份,查空的那条也在 —— 少了它,「问了三条」与
+            // 「问了两条」在机器侧同形。
+            var field = doc.RootElement.GetProperty("field").EnumerateArray()
+                           .Select(f => f.GetProperty("field")).ToList();
+            Assert.Equal(["compClass", "zzznotafield", "thingClass"],
+                         field.Select(f => f.GetProperty("asked").GetString()));
+            Assert.Equal(0, field[1].GetProperty("defs_with_field").GetInt32());
+            Assert.True(field[0].GetProperty("defs_with_field").GetInt32() > 0);
+
+            // 每条路径各有一句带路径名的计数,计数仍落在行首。
+            var texts = doc.RootElement.GetProperty("notes").EnumerateArray()
+                           .Select(n => n.GetProperty("text").GetString()!).ToList();
+            Assert.Contains(texts, t => Regex.IsMatch(t, @"^\d+ values? of 'compClass'"));
+            Assert.Contains(texts, t => Regex.IsMatch(t, @"^\d+ values? of 'thingClass'"));
+            Assert.Contains(texts, t => t.Contains("zzznotafield", StringComparison.Ordinal));
+
+            // 单条路径的调用上 field_path 恒在。
+            using var one = System.Text.Json.JsonDocument.Parse(comp);
+            foreach (var row in one.RootElement.GetProperty("values").EnumerateArray())
+                Assert.Equal("compClass", row.GetProperty("field_path").GetString());
+        }
+
+        var (_, _, allMissing) = Fixture.Run("values", "zzznotafield", "zzzalsonotafield", "--json");
         Assert.Equal(1, allMissing);
     }
 }

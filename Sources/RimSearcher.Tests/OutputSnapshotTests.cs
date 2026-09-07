@@ -303,6 +303,16 @@ public class OutputSnapshotTests
         { "fields-multi-missing",  ["fields", "ThingDef", "NoSuchTypeXYZ"] },
         { "fields-multi-all-missing", ["fields", "NoSuchTypeXYZ", "NoSuchTypeABC"] },
         { "values-coverage",       ["values", "compClass"] },
+        // 几条路径一次问。守的是:每条各出一句带路径名的计数、`field` 那一格按路径各摆
+        // 一份(单条路径也是数组)、行并进同一张表且 field_path 在末列、`completeness`
+        // 只发一块。
+        { "values-multi",          ["values", "compClass", "thingClass"] },
+        { "values-multi-json",     ["values", "compClass", "thingClass", "--json"] },
+        // --limit 按路径各算各的,不是并起来切一刀。
+        { "values-multi-paged",    ["values", "compClass", "thingClass", "--limit", "1"] },
+        // 一条路径查空:其余照印、退出码 0。全都查空才 1。
+        { "values-multi-missing",  ["values", "compClass", "zzznotafield"] },
+        { "values-multi-all-missing", ["values", "zzznotafield", "zzzalsonotafield"] },
         { "values-miss",           ["values", "noSuchField"] },
         // 零结果的第四种成因:敲的名字是**上一层**。索引只存叶子,`comps` 自己不落行,
         // 值在 `comps[0].compClass` 上 —— 而 C# 字段名就长这样,是最容易敲的那个词。

@@ -1116,14 +1116,14 @@ rimsearcher types Verse.ThingComp --derived --transitive --declares CompTick
 List the distinct values a field takes, most common first.
 
 ```
-rimsearcher values <fieldPath> [options]
+rimsearcher values <fieldPath>... [options]
 ```
 
 Answers 'what am I allowed to put here' and 'which classes are actually in use' without reading any XML. A bare name such as compClass matches every path ending in it, so the table above the values tells you which full paths and which def types actually contributed, and how many defs are covered.
 
 | Argument | Meaning |
 |---|---|
-| `<fieldPath>` | A field path or its last segment, such as compClass. |
+| `<fieldPath>` | A field path or its last segment, such as compClass. Several paths go in one call; --limit and --offset apply to each one on its own, each gets its own count line and its own entry in the 'field' block, and the field_path column says which one a row came from. |
 
 | Option | Meaning | Also accepted |
 |---|---|---|
@@ -1137,8 +1137,8 @@ Answers 'what am I allowed to put here' and 'which classes are actually in use' 
 
 | Key | Holds |
 |---|---|
-| `values` | one row per distinct value: value, defs. |
-| `field` | an object, not an array: which full paths and def types the values came from (matched_paths, def_types, defs_with_field). A bare name matches by suffix, so this says what was actually pooled. Always present: on an empty result its three members are empty and defs_with_field is 0, so a missing key never has to be told apart from nothing matching. |
+| `values` | one row per distinct value: value, defs, field_path (which of the paths asked for the row was counted under — present on a single-path call too, so the shape does not change with how many paths were asked for). |
+| `field` | an array with one entry per field path asked for, in the order given; each entry holds a 'field' object (field[0].field), the same nesting 'get' uses for defs[]. That object says which path was asked for and which full paths and def types its values came from: asked, matched_paths, def_types, defs_with_field. A bare name matches by suffix, so this says what was actually pooled. Always an array, including when one path was asked for, so the shape does not change with how many were. Always present: on an empty result that object's three members are empty and defs_with_field is 0, so a missing key never has to be told apart from nothing matching. |
 | `completeness` | an object, present only when some def in scope had its export cut short: scope (which def types this covers, in words), defs_cut_short (how many), types (one row per def type with its own count), verify (a ready command that lists them). Absent means no def in that scope lost fields at export. |
 
 Examples:

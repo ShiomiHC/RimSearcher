@@ -1,0 +1,98 @@
+$ rimsearcher values compClass thingClass --json
+exit 0
+--- stdout ---
+{
+  "notes": [
+    {
+      "kind": "count",
+      "text": "3 values of 'compClass'.",
+      "shown": 3,
+      "total": 3
+    },
+    {
+      "kind": "boundary",
+      "text": "The values of 'compClass' come from 2 field paths pooled together, not from one field. Any path named for it above goes back in with --exact-path to pool that one alone; '[]' there stands for any index."
+    },
+    {
+      "kind": "boundary",
+      "text": "This table's axis is the field: it lists the values 'compClass' takes. Which fields hold a value you already have is the inverse question and a different command — 'rimsearcher where --value RimWorld.CompShield --exact' asks it for 'RimWorld.CompShield', the first row here. A value domain read here does not bound where those values occur."
+    },
+    {
+      "kind": "count",
+      "text": "4 values of 'thingClass'.",
+      "shown": 4,
+      "total": 4
+    },
+    {
+      "kind": "boundary",
+      "text": "This table's axis is the field: it lists the values 'thingClass' takes. Which fields hold a value you already have is the inverse question and a different command — 'rimsearcher where --value RimWorld.Apparel --exact' asks it for 'RimWorld.Apparel', the first row here. A value domain read here does not bound where those values occur."
+    }
+  ],
+  "completeness": {
+    "scope": "every def type that uses any of these paths at all",
+    "defs_cut_short": 1,
+    "types": [
+      {
+        "def_type": "ThingDef",
+        "defs_cut_short": 1
+      }
+    ],
+    "verify": "rimsearcher snapshot truncated --type ThingDef"
+  },
+  "values": [
+    {
+      "value": "RimWorld.CompShield",
+      "defs": 2,
+      "field_path": "compClass"
+    },
+    {
+      "value": "TestMod.CompBoltedOn",
+      "defs": 2,
+      "field_path": "compClass"
+    },
+    {
+      "value": "Verse.HediffComp_Disappears",
+      "defs": 1,
+      "field_path": "compClass"
+    },
+    {
+      "value": "RimWorld.Apparel",
+      "defs": 2,
+      "field_path": "thingClass"
+    },
+    {
+      "value": "RimWorld.Building",
+      "defs": 2,
+      "field_path": "thingClass"
+    },
+    {
+      "value": "RimWorld.Bullet",
+      "defs": 1,
+      "field_path": "thingClass"
+    },
+    {
+      "value": "Verse.ThingWithComps",
+      "defs": 1,
+      "field_path": "thingClass"
+    }
+  ],
+  "field": [
+    {
+      "field": {
+        "asked": "compClass",
+        "matched_paths": "comps[0].compClass (3), comps[1].compClass (2)",
+        "def_types": "ThingDef (2 of 9), HediffDef (1 of 1)",
+        "defs_with_field": 3
+      }
+    },
+    {
+      "field": {
+        "asked": "thingClass",
+        "matched_paths": "thingClass (6)",
+        "def_types": "ThingDef (6 of 9)",
+        "defs_with_field": 6
+      }
+    }
+  ]
+}
+--- stderr ---
