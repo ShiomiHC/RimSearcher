@@ -2305,31 +2305,54 @@ public sealed class SnapshotDb : IDisposable
         return false;
     }
 
+    /// <summary>
+    /// 磁盘上有三种形状,三条路给的是同一份东西(见 SnapshotSchema 的 type_names 那段)。
+    /// 子树那条不必去重:每条路径恰属一个首段,所以同一类型下两棵子树的路径集不相交。
+    /// </summary>
+    private (string PathExpr, string From, string Where) TypeDeclaredSource()
+    {
+        if (TypeFieldsAreSubtrees)
+            return ("d.path",
+                    "type_names n "
+                    + "JOIN type_subtrees ts ON ts.type_id = n.id "
+                    + "JOIN subtree_paths sp ON sp.subtree_id = ts.subtree_id "
+                    + "JOIN type_field_paths d ON d.id = sp.path_id",
+                    TypeDeclaredPathsWhere);
+
+        var dict = TypeFieldsAreDictionary;
+        return (dict ? "d.path" : "t.path",
+                dict ? "type_fields t JOIN type_field_paths d ON d.id = t.path_id" : "type_fields t",
+                TypeDeclaredPathsLegacyWhere);
+    }
+
+    /// <summary>
+    /// 这个类型的声明路径里最深的那条有几段(点与下标各算一段)。
+    ///
+    /// 「这个类型不声明这样的字段」是一句**确定的否定**,而它的依据是一张按递归深度收的表:
+    /// 类型图不是树也不是 DAG(实测有一个 471 个类型的强连通分量),摊平成路径不存在
+    /// 「展开完」这回事。所以那句话必须带上自己的量程 —— 缺了它,「嵌套过深所以没测到」
+    /// 与「这个类型真没这个字段」在输出里完全同形。产地 Docs/22 第 9.3 / 12.2 节。
+    ///
+    /// 只在落空那条路上算一次:那条路本来就是贵的一条,而它正是最需要这个数的地方。
+    /// </summary>
+    public int? TypeDeclaredPathMaxSegments(string defType)
+    {
+        if (!Meta.IndexesTypeFields) return null;
+        var (pathExpr, from, where) = TypeDeclaredSource();
+        var p = new Dictionary<string, object?> { ["@t"] = defType };
+        using var rd = Query(
+            $"SELECT MAX(LENGTH({pathExpr}) - LENGTH(REPLACE({pathExpr}, '.', '')) + "
+            + $"LENGTH({pathExpr}) - LENGTH(REPLACE({pathExpr}, '[', '')) + 1) "
+            + $"FROM {from} {where}", p);
+        if (!rd.Read() || rd.IsDBNull(0)) return null;
+        return rd.GetInt32(0);
+    }
+
     public IReadOnlyList<string>? TypeDeclaredPaths(string defType, IReadOnlyList<string>? pathFilters = null)
     {
         if (!Meta.IndexesTypeFields) return null;
 
-        // 磁盘上有三种形状,三条路给的是同一份东西(见 SnapshotSchema 的 type_names 那段)。
-        // 子树那条不必去重:每条路径恰属一个首段,所以同一类型下两棵子树的路径集不相交。
-        string pathExpr, from, where;
-        if (TypeFieldsAreSubtrees)
-        {
-            pathExpr = "d.path";
-            from = "type_names n "
-                 + "JOIN type_subtrees ts ON ts.type_id = n.id "
-                 + "JOIN subtree_paths sp ON sp.subtree_id = ts.subtree_id "
-                 + "JOIN type_field_paths d ON d.id = sp.path_id";
-            where = TypeDeclaredPathsWhere;
-        }
-        else
-        {
-            var dict = TypeFieldsAreDictionary;
-            pathExpr = dict ? "d.path" : "t.path";
-            from = dict ? "type_fields t JOIN type_field_paths d ON d.id = t.path_id"
-                        : "type_fields t";
-            where = TypeDeclaredPathsLegacyWhere;
-        }
-
+        var (pathExpr, from, where) = TypeDeclaredSource();
         var p = new Dictionary<string, object?> { ["@t"] = defType };
         var filters = (pathFilters ?? []).Where(f => !string.IsNullOrEmpty(f)).ToList();
         if (filters.Count > 0)

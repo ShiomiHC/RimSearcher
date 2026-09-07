@@ -199,8 +199,13 @@ public class PresenceTests
         var (missing, _, missCode) = Fixture.Run("fields", "ThingDef", "--path-contains", "noSuchFieldXYZ",
                                                  "--db", Fixture.PresenceDb);
         Assert.Equal(1, missCode);
-        Assert.Contains("does not declare such a field", missing, StringComparison.Ordinal);
+        Assert.Contains("declared-path list has none either", missing, StringComparison.Ordinal);
         Assert.DoesNotContain("every def of the type has them as null", missing, StringComparison.Ordinal);
+
+        // 这个否定的依据是一张**有深度上限**的表:类型图里有一个 471 个类型的强连通分量,
+        // 摊平成路径不存在「展开完」这回事(Docs/22 第 12 节)。所以它得把自己的量程说出来 ——
+        // 不说的话,「嵌套过深所以没测到」与「这个类型真没这个字段」印出来完全同形。
+        Assert.Matches(@"reaches \d+ segments deep", missing);
     }
 
     [Fact]
@@ -540,7 +545,8 @@ public class PresenceTests
             var (missing, _, missCode) = Fixture.Run("fields", "ThingDef", "--path-contains", "noSuchFieldXYZ",
                                                      "--db", path);
             Assert.Equal(1, missCode);
-            Assert.Contains("does not declare such a field", missing, StringComparison.Ordinal);
+            Assert.Contains("declared-path list has none either", missing, StringComparison.Ordinal);
+            Assert.Matches(@"reaches \d+ segments deep", missing);
         }
         finally
         {

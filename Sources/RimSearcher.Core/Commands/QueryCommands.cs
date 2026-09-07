@@ -2399,9 +2399,17 @@ public sealed class FieldsCommand : Command
                 }
                 if (declared is { Count: 0 })
                 {
+                    // 量程跟着这句否定一起说。声明集是按递归深度收的,而类型图有环 ——
+                    // 「展开完」不存在(Docs/22 第 12.2 节:471 个类型的强连通分量)。
+                    // 不说深度的话,一个嵌套过深的字段与一个根本不存在的字段印出来同形。
+                    var reach = ctx.Db.TypeDeclaredPathMaxSegments(type);
                     ctx.Report.Notice(NoticeKind.Boundary,
-                        $"'{type}' has field paths, but none contains {PathFilterText.Say(filters)}, and the " +
-                        "type does not declare such a field either.");
+                        $"'{type}' has field paths, but none contains {PathFilterText.Say(filters)}, and its " +
+                        "declared-path list has none either" +
+                        (reach is { } n
+                            ? $" — that list reaches {n} segments deep, so a field nested past that is outside " +
+                              "what it measured."
+                            : "."));
                     return 1;
                 }
                 ctx.Report.Notice(NoticeKind.Boundary,

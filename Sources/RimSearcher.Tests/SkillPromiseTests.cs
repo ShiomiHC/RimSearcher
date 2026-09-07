@@ -288,7 +288,7 @@ public class SkillPromiseTests
         // 2026-09-01:原文写的是「落空不等于类型没这个字段,去读声明类」—— 那是 type_fields
         // 之前的出路,现在 fields 自己就把两态分开了。免责收窄到 get/where,新出路连同它的
         // 版本下限一起钉住。
-        new("it keeps **the type declares it, no def has a value** apart from **the type does not declare such a field either**",
+        new("it keeps **the type declares it, no def has a value** apart from **the declared-path list has none either**",
             nameof(PresenceTests.新快照fields能分开全是null和没有这个字段)),
         new("A snapshot that carries no such list says so",
             nameof(PresenceTests.旧快照fields落空说清分不开)),

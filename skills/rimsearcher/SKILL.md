@@ -248,8 +248,10 @@ way to state:
   `get`/`where` absence is not evidence the type lacks the field. `fields <DefType>
   --path-contains <text>` is the one place that is settled for you rather than left to the
   declaring class: it keeps **the type declares it, no def has a value** apart from **the
-  type does not declare such a field either**, off a list of declared paths that does not
-  depend on any def having a value. A snapshot that carries no such list says so.
+  declared-path list has none either**, off a list of declared paths that does not
+  depend on any def having a value. That list is collected to a bounded nesting depth and
+  the notice says how deep it reached — a field nested past that is outside what it
+  measured. A snapshot that carries no such list says so.
 
 ## Snapshots
 
