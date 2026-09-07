@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -49,8 +49,12 @@ namespace RimSearcher.DataMod
         /// 0.11.0 起尾行带 timings_ms:每一层各花了多少毫秒,导出为什么慢从此有产地。
         /// 0.12.0 把 inj_keys 拆出 inj_keys_emit(导出器自己那半,差额是游戏在走 def),
         /// 并给字段表加了按类型的缓存 —— 同一个嵌套类型此前每走到一次就重算一次反射。
+        /// 0.13.0 起每条截断记录**是哪一种**上限截的(四个键:每 def 条数 / 值长度 / 深度 /
+        /// 集合宽度)。此前只有一个总数,而四种截断的出路互不相同,拿总数猜大头本项目自己
+        /// 连猜错两次;同时每 def 条数上限 5000 -> 50000 —— 深度一放开,它就成了剩余截断
+        /// 里唯一的大头(实测单 def 最大 10083 条),而此前它看着像可以取消。
         /// </summary>
-        public const string ExporterVersion = "0.12.0";
+        public const string ExporterVersion = "0.13.0";
 
         public static ExportLimits Limits = new ExportLimits();
 
@@ -255,13 +259,6 @@ namespace RimSearcher.DataMod
 
             if (File.Exists(targetPath)) File.Delete(targetPath);
             File.Move(temp, targetPath);
-
-            try
-            {
-                File.WriteAllText(Path.Combine(Path.GetTempPath(), "rimsearcher-trunc-breakdown.json"),
-                                  TruncBreakdown.ToJson());
-            }
-            catch (Exception ex) { Log.Warning("[RimSearcher] breakdown not written: " + ex.Message); }
             return targetPath;
         }
 
@@ -284,6 +281,9 @@ namespace RimSearcher.DataMod
 
             var limits = new JsonLine()
                 .Int("max_field_depth", Limits.MaxFieldDepth)
+                // 两个遍历两个数。合成一个键的话「这份库是按什么深度导的」在类型侧与
+                // 实例侧答的是同一个数,而它们现在差了 22 层。
+                .Int("max_instance_field_depth", Limits.MaxInstanceFieldDepth)
                 .Int("max_field_values_per_def", Limits.MaxFieldValuesPerDef)
                 .Int("max_value_length", Limits.MaxValueLength)
                 .Int("max_collection_items", Limits.MaxCollectionItems)
@@ -371,7 +371,7 @@ namespace RimSearcher.DataMod
             Walk(def, "", 0, fields, state);
 
             var pack = def.modContentPack;
-            return new JsonLine()
+            var line = new JsonLine()
                 .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindDef)
                 .Str(IntermediateFormat.KeyDefType, defType.Name)
                 .Str(IntermediateFormat.KeyDefName, def.defName ?? "")
@@ -382,8 +382,17 @@ namespace RimSearcher.DataMod
                 .Bool(IntermediateFormat.KeyGenerated, def.generated)
                 .Str(IntermediateFormat.KeyClass, def.GetType().FullName)
                 .Fields(IntermediateFormat.KeyFields, fields)
-                .Int(IntermediateFormat.KeyFieldsTruncated, TruncBreakdown.Note(defType.Name, state))
-                .ToString();
+                .Int(IntermediateFormat.KeyFieldsTruncated, state.Truncated);
+
+            // 成因只在真截断了的那几个 def 上发 —— 没截断时四个零占的是每一行的位置,
+            // 而截断的 def 是 15964 里的 27 个。
+            if (state.Truncated > 0)
+                line.Int(IntermediateFormat.KeyTruncatedByCap, state.TruncCount)
+                    .Int(IntermediateFormat.KeyTruncatedByLength, state.TruncLen)
+                    .Int(IntermediateFormat.KeyTruncatedByDepth, state.TruncDepth)
+                    .Int(IntermediateFormat.KeyTruncatedByItems, state.TruncItems);
+
+            return line.ToString();
         }
 
         /// <summary>
@@ -396,54 +405,16 @@ namespace RimSearcher.DataMod
         }
 
 
-        /// <summary>实验用,不进主线:按 def 类型分别累计四类截断,连同涉及的 def 个数。</summary>
-        internal static class TruncBreakdown
-        {
-            private sealed class Row { public int Count, Len, Depth, Items, Defs; }
-            private static readonly Dictionary<string, Row> Rows = new Dictionary<string, Row>();
-
-            public static int Note(string defType, object stateObj)
-            {
-                var st = (WalkState)stateObj;
-                var total = st.Truncated;
-                if (total == 0) return 0;
-                Row r;
-                if (!Rows.TryGetValue(defType, out r)) { r = new Row(); Rows[defType] = r; }
-                r.Count += st.TruncCount; r.Len += st.TruncLen;
-                r.Depth += st.TruncDepth; r.Items += st.TruncItems;
-                r.Defs++;
-                return total;
-            }
-
-            public static string ToJson()
-            {
-                var sb = new StringBuilder();
-                sb.Append("{");
-                var first = true;
-                foreach (var kv in Rows)
-                {
-                    if (!first) sb.Append(",");
-                    first = false;
-                    sb.Append(Q).Append(kv.Key).Append(Q).Append(":{")
-                      .Append(Q).Append("defs").Append(Q).Append(":").Append(kv.Value.Defs)
-                      .Append(",").Append(Q).Append("by_count").Append(Q).Append(":").Append(kv.Value.Count)
-                      .Append(",").Append(Q).Append("by_value_length").Append(Q).Append(":").Append(kv.Value.Len)
-                      .Append(",").Append(Q).Append("by_depth").Append(Q).Append(":").Append(kv.Value.Depth)
-                      .Append(",").Append(Q).Append("by_collection").Append(Q).Append(":").Append(kv.Value.Items)
-                      .Append("}");
-                }
-                sb.Append("}");
-                return sb.ToString();
-            }
-
-            private const string Q = "\"";
-        }
-
         private sealed class WalkState
         {
             public int Emitted;
-            // 实验:原先四种截断共用一个 Truncated,于是「这个 def 被截了」答不出是哪一种。
+
+            // 四种截断分开数。合成一个数的时候「这个 def 被截了」答不出是哪一种,而四种的
+            // 出路完全不同:深度要放开、条数上限要抬、值长度是展示取舍、集合是宽度问题。
+            // 实测这四类在同一份库上分别是 1192 / 29 / 0 / 5 条 —— 单看总数会把大头猜错
+            // (本轮就照着「最大下标正好 199」猜成集合上限,连错两次)。
             public int TruncCount, TruncLen, TruncDepth, TruncItems;
+
             public int Truncated { get { return TruncCount + TruncLen + TruncDepth + TruncItems; } }
             public readonly HashSet<object> Seen = new HashSet<object>(ReferenceEqualityComparer.Instance);
         }

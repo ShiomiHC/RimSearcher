@@ -114,7 +114,21 @@ public static class SnapshotSchema
             source_file      TEXT,
             generated        INTEGER NOT NULL DEFAULT 0,
             class            TEXT,
-            fields_truncated INTEGER NOT NULL DEFAULT 0
+            fields_truncated INTEGER NOT NULL DEFAULT 0,
+
+            -- fields_truncated 的四个成分(0.13.0 起)。总数答得出「被截了」,答不出
+            -- 「为什么被截」,而四种的出路完全不同 —— 深度要放开、条数上限要抬、
+            -- 值长度是展示取舍、集合是宽度问题。一次实测里那个总数的大头被连猜错两次
+            -- (依据是「最大列表下标正好 199」,那是相关性;真正撞的是单 def 条数上限)。
+            --
+            -- **不涨 schema_version**,理由与 type_fields 拆表那次逐字相同:精确相等的
+            -- 检查会让磁盘上每一份旧库拒读,连同 --keep 留下的旧代。旧库上这四列整个不在,
+            -- 呈现侧靠 SnapshotDb.DefsHaveTruncationBreakdown 探列名,不当成四个零 ——
+            -- 「没分类过」与「四类都是零」在读者那儿是两句不同的话。
+            truncated_by_cap    INTEGER NOT NULL DEFAULT 0,
+            truncated_by_length INTEGER NOT NULL DEFAULT 0,
+            truncated_by_depth  INTEGER NOT NULL DEFAULT 0,
+            truncated_by_items  INTEGER NOT NULL DEFAULT 0
         );
 
         -- is_default:这一行与「这个类型刚 new 出来时」的关系,取值见 IntermediateFormat.DefaultState

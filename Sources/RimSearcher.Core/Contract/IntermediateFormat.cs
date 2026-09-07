@@ -1,4 +1,4 @@
-// 中间格式契约 —— 产地唯一。
+﻿// 中间格式契约 —— 产地唯一。
 //
 // 这个文件被两个程序集编译:游戏侧 RimSearcher.DataMod(net472,写)与 CLI 侧
 // RimSearcher.Core(net10.0,读),故必须保持 net472 可编译:
@@ -105,6 +105,24 @@ namespace RimSearcher.Contract
         /// <summary>字段表:<c>[["path","value",默认态],…]</c>,默认态见 <see cref="DefaultState"/>。</summary>
         public const string KeyFields = "fields";
         public const string KeyFieldsTruncated = "fields_truncated";
+
+        /// <summary>
+        /// <see cref="KeyFieldsTruncated"/> 的四个成分,只在真截断了的 def 行上出现
+        /// (0.13.0 起)。总数答不出「为什么被截」,而四种的出路完全不同 ——
+        /// 深度要放开、条数上限要抬、值长度是展示取舍、集合是宽度问题。
+        ///
+        /// 四个键**同时缺席 = 这份库没分类过**,不是四个零。旧库上呈现侧照旧只说总数。
+        /// </summary>
+        public const string KeyTruncatedByCap = "truncated_by_cap";
+
+        /// <inheritdoc cref="KeyTruncatedByCap"/>
+        public const string KeyTruncatedByLength = "truncated_by_length";
+
+        /// <inheritdoc cref="KeyTruncatedByCap"/>
+        public const string KeyTruncatedByDepth = "truncated_by_depth";
+
+        /// <inheritdoc cref="KeyTruncatedByCap"/>
+        public const string KeyTruncatedByItems = "truncated_by_items";
 
         public const string KeyPath = "path";
         public const string KeyTranslated = "translated";
@@ -485,17 +503,44 @@ namespace RimSearcher.Contract
     /// <summary>
     /// 导出上限。数值是可调参数,但**每 def 被截条数随行带出**(fields_truncated),
     /// 「字段被截」与「没有该字段」永远可区分。
+    ///
+    /// 那句话只承诺了这一件事。**「被截」与「为什么被截」是两回事** —— 0.13.0 之前
+    /// 四种截断共用一个计数器,总数答得出前者答不出后者,而一次实测里那个总数的大头
+    /// 被连猜错两次。成因从 0.13.0 起分四个键随行带出,见 KeyTruncatedByCap。
     /// </summary>
     public sealed class ExportLimits
     {
-        /// <summary>字段递归深度上限。叶子不占深度,所以这个 6 比它读起来要深。</summary>
+        /// <summary>
+        /// **类型全集遍历**(TypeFieldWalk)的递归深度上限。叶子不占深度,所以这个 6 比它
+        /// 读起来要深 —— 实测产出的路径最深 11 段。
+        ///
+        /// 这一层放不开:类型递归不受实际数据约束,每加一层路径数 ×3.3 起(深度 6 是
+        /// 1806 万条,深度 7 至少 5994 万且数不完)。分家的理由见 MaxInstanceFieldDepth。
+        /// </summary>
         public int MaxFieldDepth = 6;
 
-        /// <summary>实验:只作用于 def 实例遍历与两侧 XML,类型全集遍历仍走 MaxFieldDepth。</summary>
+        /// <summary>
+        /// **def 实例**遍历与两侧 XML 的递归深度上限(0.13.0 起与上面那个分家)。
+        ///
+        /// 分家之前是一个数驱动四处遍历,于是「把深度开大一点」的账由三个没人想动的遍历
+        /// 一起付:抬到 9 时导出 25 分钟跑不完,而走 def 实例那一层本来只占 4.5 秒。
+        /// 分家后 6 -> 28 只多花 1.8 秒。
+        ///
+        /// 28 留了余量:实测库里最深的路径 25 段,没有一条撞到它。两侧 XML 也走这个数 ——
+        /// 只放开实例侧会让 2020 行进了索引却在 XML 侧查不到,于是标成 not-written
+        /// (语义是「XML 确实没写」),而 XML 真写了。产地 Docs/22 第 5 / 9.1 节。
+        /// </summary>
         public int MaxInstanceFieldDepth = 28;
 
-        /// <summary>单 def 的 field_values 条数上限。</summary>
-        public int MaxFieldValuesPerDef = 100000;
+        /// <summary>
+        /// 单 def 的 field_values 条数上限。
+        ///
+        /// 深度还是 6 的时候这一项从没被撞到过(那时最大的 def 才 521 条),据此差点判定
+        /// 它可以取消 —— 而那个 521 是在**被深度截断过的库**上量的。深度一放开,
+        /// ThinkTreeDef 的单个 def 就涨到 5000,这一项成了剩余截断里唯一的大头
+        /// (1226 条里的 1192 条)。放开后实测单 def 最大 10083 条,50000 是五倍余量。
+        /// </summary>
+        public int MaxFieldValuesPerDef = 50000;
 
         /// <summary>单个字段值的字符数上限,超出截断并计入 fields_truncated。</summary>
         public int MaxValueLength = 400;

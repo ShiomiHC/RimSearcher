@@ -87,8 +87,10 @@ public sealed class SnapshotImporter
         {
             using var insertDef = Prepare(db, """
                 INSERT INTO defs (id, def_type, def_name, label, description, source_mod, source_file,
-                                  generated, class, fields_truncated)
-                VALUES ($id,$t,$n,$l,$d,$sm,$sf,$g,$c,$ft)
+                                  generated, class, fields_truncated,
+                                  truncated_by_cap, truncated_by_length, truncated_by_depth,
+                                  truncated_by_items)
+                VALUES ($id,$t,$n,$l,$d,$sm,$sf,$g,$c,$ft,$tcap,$tlen,$tdep,$titm)
                 """);
             using var insertFv = Prepare(db,
                 "INSERT INTO field_values (def_id, path_id, value_id, is_default) VALUES ($id,$pid,$v,$def)");
@@ -252,6 +254,11 @@ public sealed class SnapshotImporter
                         ? ftEl.GetInt32() : 0;
                     if (truncated > 0) truncatedDefs++;
 
+                    // 成因四键只在真截断了的行上出现,缺席就是 0 —— 这里不需要区分
+                    // 「缺席」与「零」,那一问由**整份库有没有这四列**回答(旧库整个没有)。
+                    int Cause(string key)
+                        => root.TryGetProperty(key, out var el) ? el.GetInt32() : 0;
+
                     Bind(insertDef, "$id", id);
                     Bind(insertDef, "$t", defTypeHere);
                     Bind(insertDef, "$n", defName);
@@ -262,6 +269,10 @@ public sealed class SnapshotImporter
                     Bind(insertDef, "$g", root.TryGetProperty(IntermediateFormat.KeyGenerated, out var gEl) && gEl.GetBoolean() ? 1 : 0);
                     Bind(insertDef, "$c", Str(root, IntermediateFormat.KeyClass));
                     Bind(insertDef, "$ft", truncated);
+                    Bind(insertDef, "$tcap", Cause(IntermediateFormat.KeyTruncatedByCap));
+                    Bind(insertDef, "$tlen", Cause(IntermediateFormat.KeyTruncatedByLength));
+                    Bind(insertDef, "$tdep", Cause(IntermediateFormat.KeyTruncatedByDepth));
+                    Bind(insertDef, "$titm", Cause(IntermediateFormat.KeyTruncatedByItems));
                     insertDef.ExecuteNonQuery();
                     defs++;
 

@@ -803,7 +803,8 @@ public sealed class GetCommand : Command
             // 而两个加数从头到尾都在 CLI 手上。
             if (def.FieldsTruncated > 0)
                 ctx.Report.Notice(NoticeKind.Boundary,
-                    $"The exporter stopped short on this def: {ExportCap.OnDef(def.FieldsTruncated)}, " +
+                    "The exporter stopped short on this def: " +
+                    $"{ExportCap.OnDef(def.FieldsTruncated, ctx.Db.TruncationCausesFor(def.Id))}, " +
                     "so a path missing from the list below is not evidence that the def lacks it. " +
                     // 主语自带,不靠上文:--path-contains 那一支的上文说的是「matching N, out of
                     // M on the def」,而这一句在两支下逐字相同。

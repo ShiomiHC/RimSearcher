@@ -387,6 +387,24 @@ internal static class ExportCap
     public static string OnDef(int fields)
         => $"{Tally.AtLeast(fields).Render("field")} were dropped at export time for depth or size";
 
+    /// <summary>
+    /// 同上,但说得出**是哪一种**上限。<paramref name="by"/> 为 null = 这份库没分类过
+    /// (0.13.0 之前导的),退回上面那句含糊的「depth or size」——四类都印成零会把
+    /// 「没量过」说成「量过了、四类都没发生」,而后者是句假话。
+    ///
+    /// 分类不是装饰:四种截断的出路完全不同(深度要放开、条数上限要抬、值长度是展示
+    /// 取舍、集合是宽度问题),而合在一个数里连本项目自己都把大头连猜错两次。
+    /// </summary>
+    public static string OnDef(int fields, TruncationCauses? by)
+    {
+        if (by is null || by.Total == 0) return OnDef(fields);
+        var parts = by.Ranked().ToList();
+        var head = $"{Tally.AtLeast(fields).Render("field")} were dropped at export time";
+        return parts.Count == 1
+            ? $"{head}, all of them {parts[0].Cause}"
+            : head + ": " + string.Join(", ", parts.Select(p => $"{p.Count} {p.Cause}"));
+    }
+
     /// <summary>一批 def 里有几个被截过。<paramref name="among"/> 是插在计数与谓语之间的定语。</summary>
     public static string OverDefs(int defs, string among = "")
         => $"{Tally.Complete(defs).Render("def")}{among} had fields dropped at export time for depth or size";

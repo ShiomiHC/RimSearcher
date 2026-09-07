@@ -3,6 +3,27 @@ using RimSearcher.Snapshot;
 
 namespace RimSearcher.Storage;
 
+/// <summary>
+/// 一个 def 的截断成因,四类分开。产地是导出器的 WalkState —— 那四个数在 0.13.0 之前
+/// 共用一个计数器,于是「被截了」答得出、「为什么」答不出,而四种的出路完全不同。
+/// </summary>
+public sealed record TruncationCauses(int Cap, int Length, int Depth, int Items)
+{
+    public int Total => Cap + Length + Depth + Items;
+
+    /// <summary>非零的那几类,按条数从多到少。全零时为空 —— 调用方据此闭嘴。</summary>
+    public IEnumerable<(string Cause, int Count)> Ranked()
+        => new[]
+           {
+               ("past this def's field cap", Cap),
+               ("with the value cut to the length cap", Length),
+               ("nested past the depth cap", Depth),
+               ("past the list item cap", Items),
+           }
+           .Where(x => x.Item2 > 0)
+           .OrderByDescending(x => x.Item2);
+}
+
 public sealed record DefRow(long Id, string DefType, string DefName, string? Label, string? Description,
                             string? SourceMod, string? SourceFile, bool Generated, string? Class,
                             int FieldsTruncated);
@@ -2296,6 +2317,32 @@ public sealed class SnapshotDb : IDisposable
     private bool InjectionKeysAreDictionary
         => _ikDict ??= HasColumn("injection_keys", "suggested_path_id");
     private bool? _ikDict;
+
+    private bool? _hasTruncationBreakdown;
+
+    /// <summary>
+    /// 这份库分不分得清「为什么被截」。假 = 0.13.0 之前导的,四种截断在库里只有一个总数 ——
+    /// 那种库上呈现侧只说得出总数,**不许把缺席印成四个零**。
+    /// </summary>
+    public bool DefsHaveTruncationBreakdown
+        => _hasTruncationBreakdown ??= HasColumn("defs", "truncated_by_cap");
+
+    /// <summary>
+    /// 一个 def 的截断成因。null = 这份库没分类过(不是四类都为零)。
+    ///
+    /// 单独一次查而不是挂在 <see cref="DefRow"/> 上:问这件事的只有「这一个 def 被截了」
+    /// 那一句,而 DefColumns 的列序被几处硬编码的下标依赖着,往里加列会静默错位。
+    /// </summary>
+    public TruncationCauses? TruncationCausesFor(long defId)
+    {
+        if (!DefsHaveTruncationBreakdown) return null;
+        using var rd = Query(
+            "SELECT truncated_by_cap, truncated_by_length, truncated_by_depth, truncated_by_items "
+            + "FROM defs WHERE id = @id",
+            new Dictionary<string, object?> { ["@id"] = defId });
+        if (!rd.Read()) return null;
+        return new TruncationCauses(rd.GetInt32(0), rd.GetInt32(1), rd.GetInt32(2), rd.GetInt32(3));
+    }
 
     private bool HasColumn(string table, string column)
     {
