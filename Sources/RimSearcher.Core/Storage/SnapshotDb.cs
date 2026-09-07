@@ -2344,6 +2344,18 @@ public sealed class SnapshotDb : IDisposable
         => _hasTruncationBreakdown ??= HasColumn("defs", "truncated_by_cap");
 
     /// <summary>
+    /// 这份库里**真有**分好类的截断。列在不在与列里有没有数是两件事:0.13.0 之前导出的
+    /// 那份文件进了新库,四列拿的是 DEFAULT 0,于是「有那四列」为真而一个成因也答不出来。
+    /// 指路句问的是后者 —— 指向一句它印不出来的话,比不指路更糟。
+    /// </summary>
+    public bool TruncationCausesMeasured
+        => _causesMeasured ??= DefsHaveTruncationBreakdown
+           && Scalar("SELECT COUNT(*) FROM defs WHERE truncated_by_cap + truncated_by_length "
+                         + "+ truncated_by_depth + truncated_by_items > 0") > 0;
+
+    private bool? _causesMeasured;
+
+    /// <summary>
     /// 一个 def 的截断成因。null = 这份库没分类过(不是四类都为零)。
     ///
     /// 单独一次查而不是挂在 <see cref="DefRow"/> 上:问这件事的只有「这一个 def 被截了」

@@ -823,9 +823,12 @@ public sealed class GetCommand : Command
                         // 最后一句 the N paths above are all of them),读者要把三句拼起来才
                         // 拿到「250 就是全部」。数与断言分家时,那个数就只是个可加的量 ——
                         // 而另一支恰恰教人去加。
-                        : $"The {Tally.Complete(total).Render("field path")} counted above " +
-                          $"{(total == 1 ? "is" : "are")} all this def has — " +
-                          "what the exporter cut is text, not rows: " + said +
+                        // 「counted above」不行:--path-contains 那一支的上文是「matching N, out of
+                        // M on the def」,同一个词在两支下指着不同的数。这一句与另一支一样自带主语。
+                        : (total == 1
+                              ? "The only field path this def has is indexed"
+                              : $"All {Tally.Complete(total).Render("field path")} this def has are indexed") +
+                          " — what the exporter cut is text, not rows: " + said +
                           ", so those rows show the front of their value and not the rest.");
             }
 
@@ -3000,9 +3003,15 @@ internal static class Completeness
             $"This says no indexed value sits at that path — not that no such field exists. {how} " +
             "Two things keep a field out of this index without any sign here: a value that was null " +
             "on every def, and a field the game marks as an unsaved runtime cache. " +
+            // 第三种成因点的是「导出器在那个 def 上停下来了」,不是四种上限里的某一种 ——
+            // 此前这里写死了「每 def 条数上限」,而实测七个快照上那一种一次都没撞到,
+            // 真发生的是深度与集合。**值长度那一类不在这句里**:它不让字段缺席。
             (ctx.Db.TruncatedDefCount() > 0
-                ? "A third, hitting the per-def field cap, does leave a sign — " +
-                  "'rimsearcher snapshot truncated' lists those defs. "
+                ? "A third, the exporter stopping short on a def — past its field cap, past the depth " +
+                  "cap, or partway down a list — does leave a sign: 'rimsearcher snapshot truncated' " +
+                  "lists those defs" +
+                  // 「哪一种上限」只有分类过的库答得出。旧库上这半句会指向一句它印不出来的话。
+                  (ctx.Db.TruncationCausesMeasured ? ", and 'get' on one says which cap it hit. " : ". ")
                 : "") +
             (ctx.Db.Meta.IndexesTypeFields
                 ? ""

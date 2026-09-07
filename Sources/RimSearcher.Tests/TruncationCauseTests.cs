@@ -98,7 +98,8 @@ public class TruncationCauseTests
         Assert.Equal(0, code);
         return stdout.Split('\n').Single(
             l => l.Contains("The exporter stopped short", StringComparison.Ordinal)
-                 || l.Contains("all this def has", StringComparison.Ordinal));
+                 || l.Contains("this def has is indexed", StringComparison.Ordinal)
+                 || l.Contains("this def has are indexed", StringComparison.Ordinal));
     }
 
     // ---- 入库 ----
@@ -198,9 +199,28 @@ public class TruncationCauseTests
         var db = Build("cut", new MiniDef("Cut", 3, (0, 3, 0, 0)));
         var said = GetLine(db, "Cut");
         // 「没缺行」与那个数在同一句里说完 —— 表上只有 label 一条路径,而它就是全部。
-        Assert.Contains("The 1 field path counted above is all this def has", said);
+        Assert.Contains("The only field path this def has is indexed", said);
         Assert.Contains("what the exporter cut is text, not rows: 3 values were cut to the length cap", said);
         Assert.DoesNotContain("dropped", said);
+    }
+
+    /// <summary>
+    /// 指路句「'get' 会告诉你撞的是哪一种上限」只在**真分过类**的库上说。
+    ///
+    /// 「有那四列」与「列里有数」是两件事:0.13.0 之前导出的那份文件进了新库,四列拿的是
+    /// DEFAULT 0 —— 有列而一个成因也答不出来。指向一句它印不出来的话,比不指路更糟。
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void 指路句只在真分过类的库上说(bool classified)
+    {
+        var db = Build(classified ? "guide-y" : "guide-n",
+                       new MiniDef("T", 2, classified ? (1, 0, 0, 1) : null));
+        var (stdout, _, _) = Fixture.Run("values", "nosuchpath", "--db", db);
+        Assert.Contains("'rimsearcher snapshot truncated' lists those defs", stdout);
+        if (classified) Assert.Contains("says which cap it hit", stdout);
+        else Assert.DoesNotContain("says which cap it hit", stdout);
     }
 
     /// <summary>
