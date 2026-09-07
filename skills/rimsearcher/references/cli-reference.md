@@ -75,7 +75,7 @@ Every command takes these, and they are written **after** the command name: `rim
 Find the methods that call a given method, or the ones it calls.
 
 ```
-rimsearcher callers <symbol> [options]
+rimsearcher callers <symbol>... [options]
 ```
 
 Answered from a call-graph table built by 'rimsearcher sources sync', one per source tree. A tree without one is not searched, and the output names those trees — a caller living there would not appear below.
@@ -86,7 +86,7 @@ The recorded target is the method named at the call site. A callvirt names the b
 
 | Argument | Meaning |
 |---|---|
-| `<symbol>` | The method: 'Verse.Pawn.Tick', 'Verse.Pawn::Tick', 'Verse.ThingDef..ctor'. |
+| `<symbol>` | The method: 'Verse.Pawn.Tick', 'Verse.Pawn::Tick', 'Verse.ThingDef..ctor'. Several methods go into the same table — the to_type and to_member columns say which calls belong to which — and one that cannot be resolved is reported in a note while the others still print. |
 
 | Option | Meaning | Also accepted |
 |---|---|---|
@@ -422,7 +422,7 @@ rimsearcher get --type GeneDef --defaults --json
 Disassemble a method to IL.
 
 ```
-rimsearcher il <symbol> [options]
+rimsearcher il <symbol>... [options]
 ```
 
 Name the method as 'Verse.Pawn.Tick', 'Verse.Pawn::Tick', or 'M:Verse.Pawn.Tick' — all three work, as does a bare type name plus member. A property is written by its C# name: 'Faction' finds the get_Faction and set_Faction that IL actually holds. A constructor is '.ctor'. Every overload of the name is disassembled, each under its own signature.
@@ -433,7 +433,7 @@ Page with --from/--to, which are IL offsets, not line numbers. A method with no 
 
 | Argument | Meaning |
 |---|---|
-| `<symbol>` | The method to disassemble: 'Verse.Pawn.Tick', 'RimWorld.Need.CurLevel', 'Verse.ThingDef..ctor'. |
+| `<symbol>` | The method to disassemble: 'Verse.Pawn.Tick', 'RimWorld.Need.CurLevel', 'Verse.ThingDef..ctor'. Several methods go into the same table, in the order given; one that cannot be resolved is reported in a note and the others still print. |
 
 | Option | Meaning | Also accepted |
 |---|---|---|
@@ -574,7 +574,7 @@ rimsearcher list ThingDef --scope all,-vanilla
 List the members of a C# type, filtered by kind and by the modifiers on them.
 
 ```
-rimsearcher members <type> [options]
+rimsearcher members <type>... [options]
 ```
 
 Members are read from the assembly, not from the decompiled C#, so the filters below are the metadata bits themselves rather than a guess at keywords in the text.
@@ -585,7 +585,7 @@ A property appears twice over: once as itself under the C# name, and once as the
 
 | Argument | Meaning |
 |---|---|
-| `<type>` | A type name: 'Verse.ThingComp', 'ThingComp', or a fragment of one. |
+| `<type>` | A type name: 'Verse.ThingComp', 'ThingComp', or a fragment of one. Several names go into the same table — the 'type' and 'assembly' columns say which row belongs to which — and a name that matches nothing is reported in a note while the others still print. |
 
 | Option | Meaning | Also accepted |
 |---|---|---|
@@ -1075,7 +1075,7 @@ rimsearcher sources sync --only erdelf.humanoidalienraces --force
 Find C# types and show what they derive from and what derives from them.
 
 ```
-rimsearcher types <name> [options]
+rimsearcher types <name>... [options]
 ```
 
 The name can be a full one ('Verse.ThingComp'), a bare one ('ThingComp'), or a fragment — a full name is tried first, then a bare one, then anything ending in it, and the first of those that matches is what you get. Several types can carry the same bare name across mods; all of them are listed rather than one being picked.
@@ -1084,7 +1084,7 @@ The name can be a full one ('Verse.ThingComp'), a bare one ('ThingComp'), or a f
 
 | Argument | Meaning |
 |---|---|
-| `<name>` | A type name: 'Verse.ThingComp', 'ThingComp', or a fragment of one. |
+| `<name>` | A type name: 'Verse.ThingComp', 'ThingComp', or a fragment of one. Several names go into the same table — the 'type' column says which row came from which — and a name that matches nothing is reported in a note while the others still print. |
 
 | Option | Meaning | Also accepted |
 |---|---|---|
@@ -1100,7 +1100,7 @@ The name can be a full one ('Verse.ThingComp'), a bare one ('ThingComp'), or a f
 
 | Key | Holds |
 |---|---|
-| `types` | one row per type: assembly, type, namespace, base, interfaces, derived, compiler_generated. |
+| `types` | one row per type: assembly, type, namespace, base, interfaces, derived, compiler_generated. Several names put their rows in this one array, in the order the names were given. |
 
 Examples:
 

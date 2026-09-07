@@ -34,7 +34,11 @@ public sealed class CallersCommand : Command
             new PositionalSpec
             {
                 Name = "symbol",
-                Help = "The method: 'Verse.Pawn.Tick', 'Verse.Pawn::Tick', 'Verse.ThingDef..ctor'.",
+                Variadic = true,
+                Help = "The method: 'Verse.Pawn.Tick', 'Verse.Pawn::Tick', 'Verse.ThingDef..ctor'. Several " +
+                       "methods go into the same table — the to_type and to_member columns say which calls " +
+                       "belong to which — and one that cannot be resolved is reported in a note while the " +
+                       "others still print.",
             },
         ],
         Options =
@@ -78,15 +82,23 @@ public sealed class CallersCommand : Command
 
     public override int Run(CommandContext ctx)
     {
-        var raw = ctx.Args.Positional(0)
-            ?? throw new CliUsageException("Name the method, for example 'Verse.Pawn.Kill'.");
+        var asked = ctx.Args.Positionals;
+        if (asked.Count == 0)
+            throw new CliUsageException("Name the method, for example 'Verse.Pawn.Kill'.");
 
         ctx.Report.Promises("calls");
 
         using var lookup = CodeShared.Open(ctx, out var root, everyTree: true);
-        var symbol = SymbolRef.Parse(raw);
 
-        var methods = IlCommand.Locate(ctx, lookup, symbol);
+        // 几个符号并成一串方法。行里带着 to_type / to_member,一次调用问三个方法谁调它们
+        // 与分三次问得到的是同一批行,只是少两次进程启动。Locate 落空时自己已经说了话。
+        var methods = new List<MethodHit>();
+        var seenMethods = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var one in asked)
+            foreach (var m in IlCommand.Locate(ctx, lookup, SymbolRef.Parse(one)))
+                if (seenMethods.Add($"{m.Type.Assembly} {m.Type.FullName} {m.Name} {m.Signature}"))
+                    methods.Add(m);
+
         if (methods.Count == 0)
         {
             ctx.Report.Table("calls", Columns, []);

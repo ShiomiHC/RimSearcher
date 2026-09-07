@@ -54,4 +54,42 @@ public class CodeSideTests
         Assert.Contains("Searched without a call-graph table", callers);
         Assert.DoesNotContain("Searched without a call-graph table", callees);
     }
+
+    /// <summary>
+    /// 代码侧四条命令的多名形态:一次问几个,行等于分几次问再拼起来。
+    ///
+    /// 这四条的行里本来就带着归属列(types 的 type、members 的 type+assembly、
+    /// il 与 callers 的 to_type/to_member),所以多名不需要新增任何一列,也不切块 ——
+    /// 这条断言钉的就是「只是少了几次进程启动,拿到的行一行不多一行不少」。
+    ///
+    /// 落空的名字不吃掉别的名字的行:中间夹一个查不到的符号,退出码仍是 0。
+    /// </summary>
+    [Theory]
+    [InlineData("types", "types", "Verse.ThingComp", "RimWorld.CompShield")]
+    [InlineData("members", "members", "Verse.ThingComp", "RimWorld.CompShield")]
+    [InlineData("il", "il", "RimWorld.CompShield.PostSpawnSetup", "Verse.Widgets.Label")]
+    [InlineData("callers", "calls", "Verse.Widgets.Label", "RimWorld.CompShield.PostSpawnSetup")]
+    public void 代码侧多名的行等于分别问再拼起来(string command, string key, string first, string second)
+    {
+        // 比的是那条命令**声明过的**行数组。il 另外还发 il_1 / il_2 这样一块一份的反汇编
+        // 正文,它们的键名带序号,拼起来比会因为编号重排而必然不等 —— 而那不是数据差异。
+        List<string> Rows(string json)
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            return doc.RootElement.GetProperty(key).EnumerateArray().Select(r => r.GetRawText()).ToList();
+        }
+
+        var (a, _, _) = Fixture.Run(command, first, "--json");
+        var (b, _, _) = Fixture.Run(command, second, "--json");
+        var (both, _, code) = Fixture.Run(command, first, second, "--json");
+
+        // 拼起来再按整行去重:两个名字指到同一个东西时,多名那边只印一遍。
+        var expected = Rows(a).Concat(Rows(b)).Distinct(StringComparer.Ordinal).ToList();
+        Assert.NotEmpty(expected);
+        Assert.Equal(expected, Rows(both));
+
+        var (withMiss, _, missCode) = Fixture.Run(command, first, "No.Such.Symbol.At.All", "--json");
+        Assert.Equal(code, missCode);
+        Assert.Equal(Rows(a), Rows(withMiss));
+    }
 }

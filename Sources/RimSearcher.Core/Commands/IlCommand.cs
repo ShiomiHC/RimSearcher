@@ -33,7 +33,10 @@ public sealed class IlCommand : Command
             new PositionalSpec
             {
                 Name = "symbol",
-                Help = "The method to disassemble: 'Verse.Pawn.Tick', 'RimWorld.Need.CurLevel', 'Verse.ThingDef..ctor'.",
+                Variadic = true,
+                Help = "The method to disassemble: 'Verse.Pawn.Tick', 'RimWorld.Need.CurLevel', " +
+                       "'Verse.ThingDef..ctor'. Several methods go into the same table, in the order given; " +
+                       "one that cannot be resolved is reported in a note and the others still print.",
             },
         ],
         Options =
@@ -85,15 +88,24 @@ public sealed class IlCommand : Command
 
     public override int Run(CommandContext ctx)
     {
-        var raw = ctx.Args.Positional(0)
-            ?? throw new CliUsageException("Name the method to disassemble, for example 'Verse.Pawn.Tick'.");
+        var asked = ctx.Args.Positionals;
+        if (asked.Count == 0)
+            throw new CliUsageException("Name the method to disassemble, for example 'Verse.Pawn.Tick'.");
 
         ctx.Report.Promises("il");
 
         using var lookup = CodeShared.Open(ctx, out _);
-        var symbol = SymbolRef.Parse(raw);
 
-        var methods = Locate(ctx, lookup, symbol);
+        // 几个符号并成一串方法,下面的反汇编循环一个字没改 —— 行里带着 assembly / type /
+        // member 三列,块与块分得开。Locate 落空时自己已经说了话(它分得清「这不是方法」
+        // 「这是个类型」「这棵树没读过」),所以这里只管接着往下走。
+        var methods = new List<MethodHit>();
+        var seenMethods = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var one in asked)
+            foreach (var m in Locate(ctx, lookup, SymbolRef.Parse(one)))
+                if (seenMethods.Add($"{m.Type.Assembly} {m.Type.FullName} {m.Name} {m.Signature}"))
+                    methods.Add(m);
+
         if (methods.Count == 0) return 1;
 
         var follow = ctx.Args.Flag("state-machine");

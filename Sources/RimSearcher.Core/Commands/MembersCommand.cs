@@ -31,7 +31,11 @@ public sealed class MembersCommand : Command
             new PositionalSpec
             {
                 Name = "type",
-                Help = "A type name: 'Verse.ThingComp', 'ThingComp', or a fragment of one.",
+                Variadic = true,
+                Help = "A type name: 'Verse.ThingComp', 'ThingComp', or a fragment of one. Several names go " +
+                       "into the same table — the 'type' and 'assembly' columns say which row belongs to " +
+                       "which — and a name that matches nothing is reported in a note while the others " +
+                       "still print.",
             },
         ],
         Options =
@@ -140,27 +144,44 @@ public sealed class MembersCommand : Command
 
     public override int Run(CommandContext ctx)
     {
-        var name = ctx.Args.Positional(0)
-            ?? throw new CliUsageException("Name a type, for example 'Verse.ThingComp'.");
+        var asked = ctx.Args.Positionals;
+        if (asked.Count == 0)
+            throw new CliUsageException("Name a type, for example 'Verse.ThingComp'.");
 
         ctx.Report.Promises("members");
 
         using var lookup = CodeShared.Open(ctx, out _);
-        var symbol = SymbolRef.Parse(name).AsWholeType();
-        var types = lookup.FindTypes(symbol.TypeName);
+
+        // 几个名字并成一串类型,下面一个字没改 —— 行里带着 type 与 assembly 两列,
+        // 读的人分得出哪一行属于哪个类型,所以不必按名字切块。
+        // 去重带上程序集:同名类型在两个 mod 里各有一份是常事,而两个名字(一个全名、
+        // 一个片段)指到同一个类型时,印两遍看着像两个类型。
+        var types = new List<TypeHit>();
+        var seenTypes = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var one in asked)
+        {
+            var symbol = SymbolRef.Parse(one).AsWholeType();
+            var hit = lookup.FindTypes(symbol.TypeName);
+            if (hit.Count == 0) { CodeShared.SayNoType(ctx, lookup, symbol); continue; }
+
+            // 「这个名字指到不止一个类型」是按**名字**说的话:几个名字一起给时,类型总数
+            // 大于 1 是理所当然的,而这句要说的是「你写的这一个词有歧义」。
+            if (hit.Count > 1)
+                ctx.Report.Notice(NoticeKind.Filter,
+                    $"'{symbol.TypeName}' names {Tally.Complete(hit.Count).Render("type")} across the assemblies " +
+                    $"read here: {NameList.Render([.. hit.Select(t => t.FullName)], 6)}. Every one is listed; " +
+                    "writing the namespace picks one.");
+
+            foreach (var t in hit)
+                if (seenTypes.Add(t.Assembly + " " + t.FullName))
+                    types.Add(t);
+        }
 
         if (types.Count == 0)
         {
-            CodeShared.SayNoType(ctx, lookup, symbol);
             ctx.Report.Table("members", Columns, []);
             return 1;
         }
-
-        if (types.Count > 1)
-            ctx.Report.Notice(NoticeKind.Filter,
-                $"'{symbol.TypeName}' names {Tally.Complete(types.Count).Render("type")} across the assemblies " +
-                $"read here: {NameList.Render([.. types.Select(t => t.FullName)], 6)}. Every one is listed; " +
-                "writing the namespace picks one.");
 
         var inherited = ctx.Args.Flag("inherited");
         var hierarchy = inherited ? new Hierarchy(lookup) : null;
