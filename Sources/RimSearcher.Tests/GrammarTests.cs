@@ -2202,6 +2202,40 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 「这条路径在快照里有,只是不在这个 --scope 里」这一档,`where` 与 `values` 说同一句话。
+    ///
+    /// 语料里 workerClass 只长在 test.mod 的 def 上。收窄到 ludeon.rimworld 之后两条命令
+    /// 落在同一个状态上,而此前只有 `values` 认得它:`where` 把它与「这条路径根本不存在」
+    /// 合成一句,再指路去 `fields --path-contains` 找字段叫什么、去 code-search 读声明 ——
+    /// 而真正管用的下一步是把 --scope 放宽。**出路配错了状态,不只是说得弱。**
+    /// </summary>
+    [Fact]
+    public void 路径只在作用域外时两条命令说同一句()
+    {
+        const string said = "'workerClass' exists in this snapshot but no def has it within --scope ludeon.rimworld.";
+
+        var (v, _, _) = Fixture.Run("values", "workerClass", "--scope", "ludeon.rimworld");
+        Assert.Contains(said, v, StringComparison.Ordinal);
+
+        var (w, _, _) = Fixture.Run("where", "workerClass", "SomeValue", "--scope", "ludeon.rimworld");
+        Assert.Contains(said, w, StringComparison.Ordinal);
+        // 「快照里没有这条路径」是另一个状态,不许再说。
+        Assert.DoesNotContain("has a field path ending in 'workerClass'", w, StringComparison.Ordinal);
+        // 那段「两种成因让字段不进索引」在这里整段不适用 —— 字段就在索引里,86 行摆着。
+        Assert.DoesNotContain("not that no such field exists", w, StringComparison.Ordinal);
+
+        // 快照里真没有的路径走另一支,而那一支的限定语也得两条命令同形:走到那里就是
+        // **域外也没有**,说成 `within --scope X` 会被读成「放宽也许有」。
+        const string nowhere = "ending in 'zzznotafield' (nor anywhere outside --scope ludeon.rimworld).";
+        var (w0, _, _) = Fixture.Run("where", "zzznotafield", "SomeValue", "--scope", "ludeon.rimworld");
+        Assert.Contains(nowhere, w0, StringComparison.Ordinal);
+        Assert.DoesNotContain("exists in this snapshot", w0, StringComparison.Ordinal);
+
+        var (v0, _, _) = Fixture.Run("values", "zzznotafield", "--scope", "ludeon.rimworld");
+        Assert.Contains(nowhere, v0, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// `--path-contains` 过滤过的那个数,**分母跟它同句**。
     ///
     /// `fields` 那侧此前只印命中数,而句式与不加过滤时逐字同形(「N field paths on
@@ -4911,6 +4945,7 @@ public class GrammarTests
             ("projectile.burstCount", "fixture 数据(字段路径)"),
             ("\\ndefName ", "fixture 数据(字段路径,带换行;钉的是「不在表行里」)"),
             ("field paths in this snapshot", "化石,已登记在上一条闸里"),
+            ("has a field path ending in 'workerClass'", "插值模板(产地写的是 '{path}')"),
         ];
 
         var code = new System.Text.StringBuilder();

@@ -1478,6 +1478,20 @@ public sealed class FindCommand : Command
                     ["parentname"] = "abstract XML parents are not in a runtime snapshot at all; see 'rimsearcher get --help'",
                 };
 
+                // 第四种成因,排在其余三种之前:路径在快照里有,只是被 --scope 圈掉了。
+                // 这一档一旦成立,下面那整套(找字段叫什么 / 读声明 / 索引边界)全不适用 ——
+                // 字段就在索引里。产地与 `values` 共用,见 OutsideScope。
+                //
+                // identity 那几个名字不进来:`class` 之类既是身份又可能是真路径,
+                // 而「它是 def 的身份」那句答的是更前面的问题。
+                if (!identity.ContainsKey(path) && !scope.IsAll &&
+                    ctx.Db.FieldPathExists(pq, ctx.Unscoped()))
+                {
+                    ctx.Report.Notice(NoticeKind.NextStep, OutsideScope.Say(path, scope));
+                    NoteElsewhere();
+                    return 1;
+                }
+
                 // 只给了一个词的人给的多半不是字段路径而是一个**值** —— 这条命令的正脸就是
                 // 「从一个类名或一个值反查 def」。落点当场算得出来,就说算出来的那一条。
                 // 值也给了的那一支不进来:下面那句已经拿着那个值点名了 --value。
@@ -1490,8 +1504,11 @@ public sealed class FindCommand : Command
                 var deeper = identity.ContainsKey(path) ? null : Completeness.ValuesLiveDeeper(ctx, path, scope);
 
                 ctx.Report.Notice(NoticeKind.NextStep,
+                    // 上面那一档已经把「只是被圈掉了」拿走,走到这里就是**域外也没有** ——
+                    // 所以限定语说的是这个,不是 `within --scope X`。后者会被读成
+                    // 「放宽也许有」,而这一支恰恰是放宽也没有。与 `values` 逐字同形。
                     $"No def in this snapshot has a field path ending in '{path}'" +
-                    (scope.IsAll ? "" : $" within --scope {scope.Expression}") + "." +
+                    (scope.IsAll ? "" : $" (nor anywhere outside --scope {scope.Expression})") + "." +
                     // 尾巴撤掉时那个句点后面不许留空格 —— 基线闸按行尾空白判红。
                     (identity.TryGetValue(path, out var hint)
                         ? $" '{path}' is part of a def's identity rather than one of its fields: {hint}."
@@ -2693,8 +2710,7 @@ public sealed class ValuesCommand : Command
                     : withoutType
                         ? $"'{path}' exists in this snapshot but not on any {type}. Drop --type to see which def types have it."
                         : outsideScope
-                            ? $"'{path}' exists in this snapshot but no def has it within --scope {scope.Expression}. " +
-                              "Widen the scope, or run 'rimsearcher mods' to see what this scope could have matched."
+                            ? OutsideScope.Say(path, scope)
                             : $"No def in this snapshot has a field path ending in '{path}'" +
                               (scope.IsAll ? "" : $" (nor anywhere outside --scope {scope.Expression})") + "." +
                               // 尾巴撤掉时那个句点后面不许留空格 —— 基线闸按行尾空白判红。
@@ -2863,6 +2879,26 @@ internal static class PathFilterText
 {
     public static string Say(IReadOnlyList<string> parts)
         => parts.Count == 1 ? $"'{parts[0]}'" : string.Join(" or ", parts.Select(p => $"'{p}'"));
+}
+
+/// <summary>
+/// 「这条路径在这份快照里有,只是不在这个 <c>--scope</c> 里」的唯一产地。
+///
+/// 这一档与「快照里根本没有这条路径」在结果上逐字同形(两边都是零行),而**出路相反**:
+/// 前者把 <c>--scope</c> 放宽就有,后者放宽也没有、该去问这个字段到底叫什么。
+/// 判据是白拿的 —— 同一条存在性查询,作用域换成 all 再问一次。
+///
+/// <c>where</c> 那侧此前没有这一档:它的零结果只分三种成因(路径不存在 / 值不在值域里 /
+/// 名字是 def 的身份),作用域不在其中,而它的存在性判据**是带作用域的**。于是
+/// 「只是被圈掉了」落进了「路径不存在」那一支,读者被指去 <c>fields --path-contains</c>
+/// 找字段叫什么、去 code-search 读声明 —— 出路配错了状态。
+/// (`values` 那段注释写着「与 `where` 的分流同形」,那句对称性一直不成立。)
+/// </summary>
+internal static class OutsideScope
+{
+    public static string Say(string path, Snapshot.ScopeFilter scope)
+        => $"'{path}' exists in this snapshot but no def has it within --scope {scope.Expression}. " +
+           "Widen the scope, or run 'rimsearcher mods' to see what this scope could have matched.";
 }
 
 /// <summary>
