@@ -24,20 +24,21 @@ Global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the com
 
 | The question | Where it is answered |
 |---|---|
-| What does this def actually contain? | `rimsearcher get <defName>` |
+| What does this def actually contain? | `rimsearcher get <defName>` — several names at once print one block each, in the order given |
+| Every def of one type, in full | `rimsearcher get --type <DefType> --json` with **no def name** — one block per def, def-name order. One process instead of one per name |
 | Which C# class does this def actually run? | `rimsearcher get <defName>` — the `*Class` rows |
 | Does the vanilla XML write this line — Replace or Add? | `rimsearcher get <defName> --defaults` — the `xml` column: `here` / `parent` / `no` / `under <container>`, and a `+patch` suffix when another mod's patch put the line there (Replace still finds it; your patch then depends on that mod staying loaded). What exactly it denies depends on the exporter, and `code_default` below carries that. A snapshot without that column says so. `get --help` carries the rest: how list entries join back to def-name tags, and what `under` leaves undecided. |
 | What is this called? I only know part. | `rimsearcher search <words>` |
 | Which defs use this class / value? | `rimsearcher where <field> <value>` |
 | Which defs pick this class with `Class="…"`? | `rimsearcher where Class <ClassName>` |
 | Same, but only within one def type | add `--type <DefType>` — it works on `where`, `values`, `search` and `get`. The def type is never the first positional: `where HediffDef compClass X` reads `HediffDef` as a *field path* and answers a different question. |
-| One field across a whole batch of defs | `rimsearcher where <field>` with **no value** — one flat row per def that has it. Never `list` + a `get` per name: that is N processes for one table, and `get` nests its output per def while `where` does not. |
+| One field across a whole batch of defs | `rimsearcher where <field>` with **no value** — one flat row per def that has it. Not `list` + a `get` per name: `get` nests its output per def while `where` does not. When you do need the whole field table of many defs, pass every name to one `get`, or `get --type <DefType>` for the type; never one process per name. |
 | What can this field be set to? | `rimsearcher values <field>` |
 | What fields does this def type have? | `rimsearcher fields <DefType>` |
 | Everything of one kind | `rimsearcher list <DefType>` + `--find <text>`; no type = the def types |
 | Which saved mod lists name this mod? | `rimsearcher modlist show --find <text>` |
 | What inherits from this / vice versa? | `rimsearcher inherit <name>` |
-| What is this worth / what does it cost to make? | `rimsearcher economy <defName>` — not a def field, `get` cannot answer it |
+| What is this worth / what does it cost to make? | `rimsearcher economy <defName>` — not a def field, `get` cannot answer it. Leave the name out for the whole priced layer in one call, same keys per row |
 | UI text ↔ translation key | `rimsearcher keyed <key or phrase>` |
 | Which UI text is untranslated? | `rimsearcher keyed --empty-translation` with no query |
 | Where a C# type lives, and what it derives from | `rimsearcher types <Name>` — `--derived`, `--bases`, `--transitive` |
@@ -144,9 +145,17 @@ way to state:
   answer partial — passing it a number turns the count into `at least N`.
 - **Exit codes**: `0` ran, `1` zero rows, `2` usage error, `70` tool defect. **Chain with `;`,
   never `&&`** — an informative zero otherwise drops what you queued after it. A `;` chain reports only the last code, so read the output.
+  With several names on one `get`, `0` means at least one of them printed, not that all did:
+  a name that matched nothing has its own note and no object in `defs`, so check the array
+  against the names you asked for rather than the code. All of them missing is `1`.
   **Everything lands on stdout except a usage error** — the reasoning behind a zero
   included. `2` is the exception: its message is on stderr with stdout empty, so
   `2>/dev/null` turns a mistyped option into a silent empty result.
+- **Batch shapes keep every per-block sentence, so do not pipe them either.** `get A B C`
+  and `get --type <DefType>` print one block per def, and each block carries its own counts,
+  truncation warnings and footnotes; a `head` keeps the first def's and drops the rest, which
+  reads as "the others had nothing to declare". Take the whole thing, in `--json` when it is
+  long: the notes stay addressable there, and per-def notes name the def they belong to.
 - **`--json`**: root object; prose moves into `notes` as `{kind, text}`; the data key
   depends on the command but is always present, empty array and all — an empty result never
   shows up as a missing key. Keys **beside** that one can be conditional; each command's

@@ -1,0 +1,30 @@
+$ rimsearcher get --type StatDef --json
+exit 0
+--- stdout ---
+{
+  "notes": [
+    {
+      "kind": "count",
+      "text": "0 fields.",
+      "shown": 0,
+      "total": 0
+    }
+  ],
+  "defs": [
+    {
+      "def": {
+        "def_name": "Firefoam",
+        "def_type": "StatDef",
+        "label": "",
+        "description": "",
+        "class": "Verse.StatDef",
+        "mod": "ludeon.rimworld",
+        "source": "Stats_Basics.xml",
+        "xml": "not indexed (exporter 0.2.0)"
+      },
+      "fields": [],
+      "translations": []
+    }
+  ]
+}
+--- stderr ---

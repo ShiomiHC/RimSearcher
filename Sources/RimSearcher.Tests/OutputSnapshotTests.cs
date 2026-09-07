@@ -121,6 +121,27 @@ public class OutputSnapshotTests
         { "get-name-collision-typed", ["get", "Firefoam", "--type", "StatDef"] },
         // 桶名不一致(XML 根元素 TestVariantDef,def 落在 TestBaseDef 桶)时 inherits_from 仍要在场。
         { "get-bucket-mismatch",   ["get", "VariantOne"] },
+        // 2026-09-07:一次取几个 def / 一整类。三个入口一套块渲染,单名那条路的基线(上面
+        // 全部)一个字节不许动 —— 下游脚本与 skill 都照着它写。这一批钉的是多块那条路:
+        // 块序 = 名字给的顺序;缺席的名字只留一句 note、其余照印、退出码 0;撞名与
+        // 「不是这个类型」两句在多名下逐字不变;--type 不给名字 = 整类,按 def_name 排。
+        { "get-multi",             ["get", "Apparel_ShieldBelt", "Bullet_Revolver"] },
+        { "get-multi-json",        ["get", "Apparel_ShieldBelt", "Bullet_Revolver", "--json"] },
+        { "get-multi-missing",     ["get", "Apparel_ShieldBelt", "NoSuchDef", "Bullet_Revolver"] },
+        { "get-multi-missing-json", ["get", "Apparel_ShieldBelt", "NoSuchDef", "Bullet_Revolver", "--json"] },
+        // 全部缺席才是 1。
+        { "get-multi-all-missing", ["get", "NoSuchOne", "NoSuchOther"] },
+        { "get-multi-collision",   ["get", "Firefoam", "Bullet_Revolver"] },
+        { "get-multi-typed-miss",  ["get", "Bullet_Revolver", "Firefoam", "--type", "StatDef"] },
+        // 同一个名字给两遍只印一遍:两块逐字相同,第二块会被读成另一个同名 def。
+        { "get-multi-repeat",      ["get", "Bullet_Revolver", "bullet_revolver"] },
+        { "get-type-all",          ["get", "--type", "TestBaseDef"] },
+        { "get-type-all-json",     ["get", "--type", "StatDef", "--json"] },
+        { "get-type-all-unknown",  ["get", "--type", "NoSuchDef"] },
+        // 什么都不给:用法错,两条出路都点名。
+        { "get-nothing",           ["get"] },
+        // 类型打头 + 多名:改写仍发生,名字全部保留。
+        { "deftype-lead-get-multi", ["get", "ThingDef", "Apparel_ShieldBelt", "Bullet_Revolver"] },
         { "where-hit",              ["where", "compClass", "RimWorld.CompShield"] },
         // 第三方的类坐在官方 def 上 —— mod 列答的不是「谁挂的」。两份摆一起:
         // 上面那条是游戏自己的类,一个字都不许多;这条才该出声。

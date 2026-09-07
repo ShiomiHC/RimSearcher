@@ -150,9 +150,17 @@ public static class ArgParser
         // 而那正是不许重解释的那一档:`thingDef` 是真字段名,路径匹配 NOCASE,
         // `where ThingDef X` 与 `where thingDef X` 从入参上分不开。那一档只出声,
         // 由命令自己判 —— 它手上有库,判得出「这个词同时是个 def 类型」。
-        if (!variadic && declared.Length > 0 && positionals.Count == declared.Length + 1 &&
-            byKey.TryGetValue("type", out var typeOpt) && !values.ContainsKey(typeOpt.Name) &&
-            DefTypeShape.IsMatch(positionals[0]))
+        //
+        // 可变位置参数(get)上「恰好多出一个」不再是硬失败 —— `get ThingDef X` 会读成两个
+        // 名字,而 'ThingDef' 那一块落空。判据放宽成「至少两个」:抢走的只有「几个名字里
+        // 第一个恰好以 Def 收尾」这一种写法,而那句说明原样印出来,读的人当场看得见。
+        // 显式给过 --type 时同样让位(下面那条 usage 错误),两者不一致正是最该出声的时候。
+        var typeLead = declared.Length > 0 && positionals.Count >= declared.Length + 1 &&
+                       (variadic || positionals.Count == declared.Length + 1) &&
+                       !string.Equals(declared[0].Name, "defType", StringComparison.Ordinal) &&
+                       DefTypeShape.IsMatch(positionals[0]);
+        var typeExplicit = byKey.TryGetValue("type", out var typeOpt0) && values.ContainsKey(typeOpt0.Name);
+        if (typeLead && !typeExplicit && byKey.TryGetValue("type", out var typeOpt))
         {
             var lead = positionals[0];
             positionals.RemoveAt(0);
@@ -162,6 +170,19 @@ public static class ArgParser
             notes.Add($"Read '{lead}' as --type {lead}, not as <{declared[0].Name}>: on '{spec.Name}' the def " +
                       $"type is an option. Written out, this call is '{CommandRegistry.ExeName} {spec.Name} " +
                       string.Join(" ", positionals) + $" --type {lead}'.");
+        }
+
+        // 可变位置参数上,首位像类型而 --type 又明写了:两个类型不一致,不许悄悄把首位
+        // 当成一个 def 名字吞下去 —— 那样得到的是一块「No def is named 'ThingDef'」,
+        // 而真正的问题(两处类型对不上)一个字都不会出现。
+        if (variadic && typeLead && typeExplicit && byKey.TryGetValue("type", out var explicitType) &&
+            values.TryGetValue(explicitType.Name, out var typed) && typed.Count > 0)
+        {
+            var lead = positionals[0];
+            var rest = string.Join(" ", positionals.Skip(1));
+            errors.Add($"The def type is given twice: '{lead}' as an argument and --type {typed[^1]} as an " +
+                       $"option. Keep one — with --type {typed[^1]} the whole query is " +
+                       $"'{CommandRegistry.ExeName} {spec.Name} {rest} --type {typed[^1]}'.");
         }
 
         if (!variadic && positionals.Count > declared.Length)

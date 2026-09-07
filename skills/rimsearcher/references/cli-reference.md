@@ -376,7 +376,7 @@ rimsearcher fields HediffDef
 Show one def in full: its identity, its fields, and any translations of it.
 
 ```
-rimsearcher get <defName> [options]
+rimsearcher get [defName]... [options]
 ```
 
 Field paths are the merged, post-patch shape the game actually had in memory when the snapshot was taken, so PatchOperations and inheritance are already applied. A def created in code rather than XML says so on its source line.
@@ -389,20 +389,20 @@ defName is not listed as a field: the def_name line above the table is that valu
 
 | Argument | Meaning |
 |---|---|
-| `<defName>` | The exact def name. 'search' finds it if you only know part of it. |
+| `<defName>` | The exact def name. 'search' finds it if you only know part of it. Several names print one block each, in the order given; a name that matches nothing is reported in a note and the others still print. Leave the names out and give --type to print every def of that type. *(optional)* |
 
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n> | How many fields to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--path-contains` <text> | Only show field paths containing this text. Repeat it to widen the selection. | `--filter`, `--grep`, `--field-contains`, `--path-filter`, `--field`, `--field-path`, `--path` |
-| `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind` |
+| `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. Given with no def name at all, it selects every def of that type instead, one block each in def-name order. | `--def-type`, `--kind` |
 | `--defaults` | Also list fields whose value is the one a fresh instance of the declaring type already carries. They are left out by default because they are the ones most often read as something an author chose. The 'xml' column on those rows says whether this def's own XML wrote the path (here), only an ancestor did (parent), neither (no), or that the row cannot be pinned to a line inside a container the XML did write (under <container>). The table says beside it which XML that was: 'read after every patch ran' or 'read before patches ran'. A yes with xml=here is an explicit write of the default. Without the xml column, a def whose XML writes that same value and a def that never mentions the field look the same. How many were left out is always printed, and --path-contains shows a named field either way. | `--with-defaults`, `--all-fields` |
 
 `--json` keys, besides the global `notes`:
 
 | Key | Holds |
 |---|---|
-| `defs` | one object per def carrying the name — each with 'def' (identity), 'fields' (path/value/code_default rows, plus 'xml' when the snapshot recorded which XML lines were written) and 'translations'. Both inner tables are always there, empty array and all. 'defs' stays an array even for a single def, because a name can belong to several def types at once. |
+| `defs` | one object per def carrying the name — each with 'def' (identity), 'fields' (path/value/code_default rows, plus 'xml' when the snapshot recorded which XML lines were written) and 'translations'. Both inner tables are always there, empty array and all. 'defs' stays an array even for a single def, because a name can belong to several def types at once. With several names the objects come in the order the names were given, and with --type alone in def-name order; a name that matched nothing has no object here and one note in 'notes' that quotes it. |
 
 Examples:
 
@@ -411,6 +411,8 @@ rimsearcher get Apparel_ShieldBelt
 rimsearcher get Apparel_ShieldBelt --path-contains statBases
 rimsearcher get Bullet_Revolver
 rimsearcher get Bullet_Revolver --defaults
+rimsearcher get Gun_Autopistol Gun_Revolver --type ThingDef
+rimsearcher get --type GeneDef --defaults --json
 ```
 
 ## `il`

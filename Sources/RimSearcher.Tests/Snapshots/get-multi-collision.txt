@@ -1,0 +1,67 @@
+$ rimsearcher get Firefoam Bullet_Revolver
+exit 0
+--- stdout ---
+2 defs share the name 'Firefoam' across different def types; all of them are shown. Pass --type <DefType> for just one.
+What follows is 3 defs in a row, one block each, in the order the names were given. Every count, footnote and truncation warning below belongs to the block it sits in — read the def_name line at the top of a block to know which def the lines under it are about.
+
+def_name       Firefoam
+def_type       ThingDef
+label          firefoam
+class          Verse.ThingDef
+mod            ludeon.rimworld
+source         Buildings_Special.xml
+inherits_from  BaseProjectile (see 'rimsearcher inherit Firefoam')
+xml            not indexed (exporter 0.2.0)
+8 fields.
+
+Same in every row, not repeated below: code_default=no.
+path                                   value
+soundImpactDefault                     BulletImpact_Ground
+soundDrop                              Standard_Drop
+soundPickup                            Standard_Pickup
+soundInteract                          Standard_Pickup
+thingClass                             RimWorld.Building
+statBases[0].stat                      MarketValue
+graphicData.texPath                    Things/Building/Nozzle
+building.blueprintGraphicData.texPath  Things/Building/Blueprint_Nozzle
+Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_default' is not this def having made a choice — the count in brackets: soundDrop (9), soundImpactDefault (9), soundInteract (9), soundPickup (9).
+  - The game also prices this thing. Its market value, cost to make and work amount are computed, not stored, so no field above holds them — 'rimsearcher economy Firefoam' is the only road to those numbers.
+  - 2 translations.
+
+Same in every row, not repeated below: language=ChineseSimplified, origin=in pack.
+path         translated      original
+description  一团灭火泡沫。  A blob of firefoam.
+label        灭火泡沫        firefoam
+
+def_name     Firefoam
+def_type     StatDef
+class        Verse.StatDef
+mod          ludeon.rimworld
+source       Stats_Basics.xml
+xml          not indexed (exporter 0.2.0)
+0 fields.
+
+def_name       Bullet_Revolver
+def_type       ThingDef
+label          revolver bullet
+class          Verse.ThingDef
+mod            ludeon.rimworld
+source         Projectiles_Guns.xml
+inherits_from  BaseBullet (see 'rimsearcher inherit Bullet_Revolver')
+xml            not indexed (exporter 0.2.0)
+7 fields.
+  - Not listed: 1 field whose value matches the declaring type's own default; --defaults lists them. That match is not evidence that nothing wrote them: a def whose XML writes the default value and a def that never mentions the field are byte-for-byte identical here. The snapshot holds 8 field paths for this def; a null-valued field never entered the index and is in neither count. Every list index the def has appears below.
+  - The exporter stopped short on this def: at least 3 fields were dropped at export time for depth or size, so a path missing from the list below is not evidence that the def lacks it. Added to the 8 paths that did get indexed, that is at least 11 field paths on this def.
+
+path                         value                code_default
+soundImpactDefault           BulletImpact_Ground  no
+soundDrop                    Standard_Drop        no
+soundPickup                  Standard_Pickup      no
+soundInteract                Standard_Pickup      no
+thingClass                   RimWorld.Bullet      no
+projectile.damageAmountBase  12                   no
+projectile.speed             70                   unknown
+Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_default' is not this def having made a choice — the count in brackets: soundDrop (9), soundImpactDefault (9), soundInteract (9), soundPickup (9).
+
+This snapshot never scanned the language files on disk, so every row here is one the game actually had: the absence of an 'on disk' row is not evidence that no installed mod translates it. No 'mod_roots' is configured on this machine, so there is nowhere to scan: set it in the config file and import again to measure that layer.
+--- stderr ---

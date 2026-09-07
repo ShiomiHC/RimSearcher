@@ -4869,4 +4869,57 @@ public class GrammarTests
             "找到它,照绿(立闸时的注入实验正是这么失手的)。新加的那条要么钉一句在产地里唯一的话," +
             "要么与产地共用同一个字面量。\n" + string.Join("\n", ambiguous));
     }
+
+    /// <summary>
+    /// 2026-09-07:几个名字、或 --type 不给名字,走的都是单名那套块渲染 —— 这件事在 JSON 面
+    /// 可以直接验:多名的 defs 逐个等于各自单名调用交回的那个对象,顺序 = 名字给的顺序;
+    /// 整类的 defs 等于该类型每个 def 单名调用的对象,按 def_name 排。缺席的名字不进 defs,
+    /// 只在 notes 留一句引它,退出码仍是 0;全部缺席才是 1。
+    ///
+    /// 「与单名逐字相同」这一条是下游脚本换成批量形态的前提:它照着单名的对象写的解析,
+    /// 换个入口不许换形状。baseline 快照上 232 条 GeneDef 逐条比过一次(0 差异,32 倍提速),
+    /// 这里在 fixture 上钉住同一件事。
+    /// </summary>
+    [Fact]
+    public void 多名与整类的每一块都与单名调用逐字相同()
+    {
+        static List<System.Text.Json.JsonElement> Defs(string json)
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            return doc.RootElement.GetProperty("defs").EnumerateArray().Select(e => e.Clone()).ToList();
+        }
+        static string Raw(System.Text.Json.JsonElement e) => e.GetRawText();
+
+        var (bullet, _, _) = Fixture.Run("get", "Bullet_Revolver", "--json");
+        var (belt, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--json");
+        var expected = Defs(bullet).Concat(Defs(belt)).Select(Raw).ToList();
+        Assert.Equal(2, expected.Count);
+
+        // 中间夹一个缺席的名字:不进 defs、不换顺序、不换退出码。
+        var (multi, _, code) = Fixture.Run("get", "Bullet_Revolver", "NoSuchDef", "Apparel_ShieldBelt", "--json");
+        Assert.Equal(0, code);
+        Assert.Equal(expected, Defs(multi).Select(Raw).ToList());
+        using (var doc = System.Text.Json.JsonDocument.Parse(multi))
+        {
+            var texts = doc.RootElement.GetProperty("notes").EnumerateArray()
+                           .Select(n => n.GetProperty("text").GetString()!).ToList();
+            Assert.Contains(texts, t => t.StartsWith("No def is named 'NoSuchDef'", StringComparison.Ordinal));
+        }
+
+        var (_, _, allMissing) = Fixture.Run("get", "NoSuchDef", "NoSuchDefEither", "--json");
+        Assert.Equal(1, allMissing);
+
+        // 整类:每一块都等于「那个名字 + --type」的单名调用,顺序按 def_name。
+        var (dump, _, dumpCode) = Fixture.Run("get", "--type", "ThingDef", "--json");
+        Assert.Equal(0, dumpCode);
+        var blocks = Defs(dump);
+        Assert.True(blocks.Count > 1, "fixture 里的 ThingDef 不止一个,整类才有得比");
+        var names = blocks.Select(b => b.GetProperty("def").GetProperty("def_name").GetString()!).ToList();
+        Assert.Equal(names.OrderBy(n => n, StringComparer.Ordinal).ToList(), names);
+        foreach (var (block, name) in blocks.Zip(names))
+        {
+            var (one, _, _) = Fixture.Run("get", name, "--type", "ThingDef", "--json");
+            Assert.Equal(Raw(Defs(one).Single()), Raw(block));
+        }
+    }
 }

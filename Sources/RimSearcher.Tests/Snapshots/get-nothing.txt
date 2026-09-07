@@ -1,0 +1,5 @@
+$ rimsearcher get
+exit 2
+--- stdout ---
+--- stderr ---
+get needs at least one <defName>, or --type <DefType> on its own to print every def of that type.

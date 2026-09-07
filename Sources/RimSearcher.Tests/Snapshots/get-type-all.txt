@@ -1,0 +1,28 @@
+$ rimsearcher get --type TestBaseDef
+exit 0
+--- stdout ---
+Every TestBaseDef in this snapshot: 2 defs in a row, one block each, in def-name order. Every count, footnote and truncation warning below belongs to the block it sits in — read the def_name line at the top of a block to know which def the lines under it are about.
+
+def_name     PlainOne
+def_type     TestBaseDef
+label        plain one
+class        Verse.TestBaseDef
+mod          test.mod
+source       Variants.xml
+xml          not indexed (exporter 0.2.0)
+0 fields.
+
+def_name       VariantOne
+def_type       TestBaseDef
+label          variant one
+class          Verse.TestVariantDef
+mod            test.mod
+source         Variants.xml
+inherits_from  BaseProjectile (see 'rimsearcher inherit VariantOne')
+xml            not indexed (exporter 0.2.0)
+1 field.
+
+path         value             code_default
+workerClass  Verse.TestWorker  no
+No value above with 'code_default'=no is one that most of the 2 TestBaseDefs in this snapshot also carry.
+--- stderr ---

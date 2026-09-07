@@ -1,0 +1,194 @@
+$ rimsearcher get Apparel_ShieldBelt Bullet_Revolver --json
+exit 0
+--- stdout ---
+{
+  "notes": [
+    {
+      "kind": "boundary",
+      "text": "What follows is 2 defs in a row, one block each, in the order the names were given. Every count, footnote and truncation warning below belongs to the block it sits in — read the def_name line at the top of a block to know which def the lines under it are about."
+    },
+    {
+      "kind": "count",
+      "text": "12 fields.",
+      "shown": 12,
+      "total": 12
+    },
+    {
+      "kind": "filter",
+      "text": "Not listed: 1 field whose value matches the declaring type's own default; --defaults lists them. That match is not evidence that nothing wrote them: a def whose XML writes the default value and a def that never mentions the field are byte-for-byte identical here. The snapshot holds 13 field paths for this def; a null-valued field never entered the index and is in neither count. Every list index the def has appears below."
+    },
+    {
+      "kind": "advisory",
+      "text": "Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_default' is not this def having made a choice — the count in brackets: soundDrop (9), soundImpactDefault (9), soundInteract (9), soundPickup (9)."
+    },
+    {
+      "kind": "next_step",
+      "text": "The game also prices this thing. Its market value, cost to make and work amount are computed, not stored, so no field above holds them — 'rimsearcher economy Apparel_ShieldBelt' is the only road to those numbers."
+    },
+    {
+      "kind": "count",
+      "text": "1 translation.",
+      "shown": 1,
+      "total": 1
+    },
+    {
+      "kind": "boundary",
+      "text": "This snapshot never scanned the language files on disk, so every row here is one the game actually had: the absence of an 'on disk' row is not evidence that no installed mod translates it. No 'mod_roots' is configured on this machine, so there is nowhere to scan: set it in the config file and import again to measure that layer."
+    },
+    {
+      "kind": "count",
+      "text": "7 fields.",
+      "shown": 7,
+      "total": 7
+    },
+    {
+      "kind": "filter",
+      "text": "Not listed: 1 field whose value matches the declaring type's own default; --defaults lists them. That match is not evidence that nothing wrote them: a def whose XML writes the default value and a def that never mentions the field are byte-for-byte identical here. The snapshot holds 8 field paths for this def; a null-valued field never entered the index and is in neither count. Every list index the def has appears below."
+    },
+    {
+      "kind": "boundary",
+      "text": "The exporter stopped short on this def: at least 3 fields were dropped at export time for depth or size, so a path missing from the list below is not evidence that the def lacks it. Added to the 8 paths that did get indexed, that is at least 11 field paths on this def."
+    },
+    {
+      "kind": "advisory",
+      "text": "Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_default' is not this def having made a choice — the count in brackets: soundDrop (9), soundImpactDefault (9), soundInteract (9), soundPickup (9)."
+    }
+  ],
+  "defs": [
+    {
+      "def": {
+        "def_name": "Apparel_ShieldBelt",
+        "def_type": "ThingDef",
+        "label": "shield belt",
+        "description": "",
+        "class": "Verse.ThingDef",
+        "mod": "ludeon.rimworld",
+        "source": "Apparel_Belts.xml",
+        "xml": "not indexed (exporter 0.2.0)"
+      },
+      "fields": [
+        {
+          "path": "soundImpactDefault",
+          "value": "BulletImpact_Ground",
+          "code_default": "no"
+        },
+        {
+          "path": "soundDrop",
+          "value": "Standard_Drop",
+          "code_default": "no"
+        },
+        {
+          "path": "soundPickup",
+          "value": "Standard_Pickup",
+          "code_default": "no"
+        },
+        {
+          "path": "soundInteract",
+          "value": "Standard_Pickup",
+          "code_default": "no"
+        },
+        {
+          "path": "thingClass",
+          "value": "RimWorld.Apparel",
+          "code_default": "no"
+        },
+        {
+          "path": "comps[1].compClass",
+          "value": "TestMod.CompBoltedOn",
+          "code_default": "no"
+        },
+        {
+          "path": "comps[0].props.energyMax",
+          "value": "0.5",
+          "code_default": "no"
+        },
+        {
+          "path": "comps[0].props.energyLossPerDamage",
+          "value": "0.033",
+          "code_default": "no"
+        },
+        {
+          "path": "statBases[0].stat",
+          "value": "MarketValue",
+          "code_default": "no"
+        },
+        {
+          "path": "statBases[0].value",
+          "value": "120",
+          "code_default": "no"
+        },
+        {
+          "path": "statBases[1].stat",
+          "value": "EnergyShieldRechargeRate",
+          "code_default": "no"
+        },
+        {
+          "path": "statBases[1].value",
+          "value": "0.13",
+          "code_default": "no"
+        }
+      ],
+      "translations": [
+        {
+          "path": "label",
+          "translated": "护盾腰带",
+          "original": "shield belt",
+          "language": "ChineseSimplified",
+          "origin": "in pack"
+        }
+      ]
+    },
+    {
+      "def": {
+        "def_name": "Bullet_Revolver",
+        "def_type": "ThingDef",
+        "label": "revolver bullet",
+        "description": "",
+        "class": "Verse.ThingDef",
+        "mod": "ludeon.rimworld",
+        "source": "Projectiles_Guns.xml",
+        "inherits_from": "BaseBullet (see 'rimsearcher inherit Bullet_Revolver')",
+        "xml": "not indexed (exporter 0.2.0)"
+      },
+      "fields": [
+        {
+          "path": "soundImpactDefault",
+          "value": "BulletImpact_Ground",
+          "code_default": "no"
+        },
+        {
+          "path": "soundDrop",
+          "value": "Standard_Drop",
+          "code_default": "no"
+        },
+        {
+          "path": "soundPickup",
+          "value": "Standard_Pickup",
+          "code_default": "no"
+        },
+        {
+          "path": "soundInteract",
+          "value": "Standard_Pickup",
+          "code_default": "no"
+        },
+        {
+          "path": "thingClass",
+          "value": "RimWorld.Bullet",
+          "code_default": "no"
+        },
+        {
+          "path": "projectile.damageAmountBase",
+          "value": "12",
+          "code_default": "no"
+        },
+        {
+          "path": "projectile.speed",
+          "value": "70",
+          "code_default": "unknown"
+        }
+      ],
+      "translations": []
+    }
+  ]
+}
+--- stderr ---

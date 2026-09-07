@@ -480,6 +480,17 @@ public sealed class SnapshotDb : IDisposable
     }
 
     /// <summary>
+    /// 一个 def 类型的全部 def,按 def_name 排。<c>get --type T</c> 不给名字那一路的产地;
+    /// 不分页 —— 那一路要的就是整类,挑子集是 <c>list</c> 的活。
+    /// </summary>
+    public IReadOnlyList<DefRow> DefsOfType(string defType)
+    {
+        var p = new Dictionary<string, object?> { ["@t"] = defType };
+        return ReadDefs($"SELECT {DefColumns} FROM defs d WHERE d.def_type = @t COLLATE NOCASE " +
+                        "ORDER BY d.def_name, d.id", p);
+    }
+
+    /// <summary>
     /// 一个 def 的字段。<paramref name="pathFilter"/> 非空时只留路径含该子串的行。
     /// <c>Matched</c> 是过滤后的总数,<c>Total</c> 是这个 def 的字段总数 —— 两个都给,
     /// 调用方才分得清「过滤掉了多少」和「被 limit 截了多少」。

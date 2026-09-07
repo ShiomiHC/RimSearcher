@@ -36,6 +36,10 @@ rimsearcher sources sync       # 反编译游戏实际加载的程序集，供 c
 
 `datamod status / attach / detach` 为手工检视。
 
+一次要一批 def 时不要按名字逐条起进程:`get A B C` 收多个名字,`get --type <DefType>`
+不给名字就是该类型全部(一块一个 def),`economy` 不给名字就是整个定价层。
+每种批量形态交回的每一块,与单名调用逐字相同。
+
 ## License
 
 MIT，见 [LICENSE](LICENSE)。

@@ -295,7 +295,28 @@ public sealed class GetCommand : Command
             "defName is not listed as a field: the def_name line above the table is that value, and the " +
             "counts here leave it out. --path-contains naming it brings that row back; 'where' and 'values' " +
             "see it as a path either way.",
-        Positionals = [new PositionalSpec { Name = "defName", Help = "The exact def name. 'search' finds it if you only know part of it." }],
+        // 一个名字与一批名字走同一条路:多名只是把「撞名连印」那套块格式的入口从
+        // 「同名跨类型」放宽到「调用方点了几个名字」。不给名字、只给 --type 是第三个入口,
+        // 同一套块。三个入口一份渲染,单名那条路的输出一个字节不动 —— 下游脚本与 skill
+        // 都照着它写。
+        //
+        // 不给名字就整类,而不是要一个显式 --all:2026-09-07 六份盲测里,两个没见过任何方案
+        // 的被试凭直觉敲的都是这一形;读了两版文案的四人各自嫌自己那版(隔壁草更绿),
+        // 而「忘了名字想先看看」这一题六人全走 list,误触没测出来。定的是隐式,并留了一段
+        // 观察期(tools/scan-get-batch.py 读会话记录),误触真发生再补 --all。
+        Positionals =
+        [
+            new PositionalSpec
+            {
+                Name = "defName",
+                Required = false,
+                Variadic = true,
+                Help = "The exact def name. 'search' finds it if you only know part of it. Several names " +
+                       "print one block each, in the order given; a name that matches nothing is reported " +
+                       "in a note and the others still print. Leave the names out and give --type to " +
+                       "print every def of that type.",
+            },
+        ],
         Options =
         [
             CommonOptions.Limit("fields"),
@@ -325,7 +346,12 @@ public sealed class GetCommand : Command
             // 同名跨 def 类型是 RimWorld 常态(PsychicSensitivity 既是 StatDef 又是 TraitDef)。
             // `get` 的 --type 挑的是**哪个 def**,不是从这个 def 的字段里筛,所以计数句里
             // 不念它 —— 念了会被读成「去掉它还有更多字段」,而去掉它得到的是另一个 def。
-            CommonOptions.Type with { Narrows = false },
+            CommonOptions.Type with
+            {
+                Narrows = false,
+                Help = CommonOptions.Type.Help + " Given with no def name at all, it selects every def of " +
+                       "that type instead, one block each in def-name order.",
+            },
             new OptionSpec
             {
                 Name = "defaults",
@@ -360,6 +386,8 @@ public sealed class GetCommand : Command
             "rimsearcher get Apparel_ShieldBelt --path-contains statBases",
             "rimsearcher get Bullet_Revolver",
             "rimsearcher get Bullet_Revolver --defaults",
+            "rimsearcher get Gun_Autopistol Gun_Revolver --type ThingDef",
+            "rimsearcher get --type GeneDef --defaults --json",
         ],
         JsonKeys =
         [
@@ -371,57 +399,147 @@ public sealed class GetCommand : Command
                        "(path/value/code_default rows, plus 'xml' when the snapshot recorded which XML lines " +
                        "were written) and 'translations'. Both inner tables are always there, empty array " +
                        "and all. 'defs' stays an array even for a single def, because a name can belong to " +
-                       "several def types at once.",
+                       "several def types at once. With several names the objects come in the order the " +
+                       "names were given, and with --type alone in def-name order; a name that matched " +
+                       "nothing has no object here and one note in 'notes' that quotes it.",
             },
         ],
     };
 
     public override int Run(CommandContext ctx)
     {
-        var name = ctx.Args.Positional(0)!;
         var wantType = ctx.Args.Value("type");
-        // 过滤前的全量要留住:同名提示按**这个名字一共有几个 def** 说话,不是按这次显示了几个。
-        var allMatches = ctx.Db.GetDefsNamed(name);
-        var matches = allMatches;
+        var given = ctx.Args.Positionals;
+        if (given.Count == 0 && wantType is not { Length: > 0 })
+            throw new CliUsageException(
+                "get needs at least one <defName>, or --type <DefType> on its own to print every def of that type.");
 
-        if (wantType is { Length: > 0 } && matches.Count > 0)
+        // 同一个名字给了两遍只印一遍 —— 两块逐字相同,而第二块会被读成「另一个同名 def」。
+        // 名字按 NOCASE 比,与 GetDefsNamed 的判据一致。
+        var names = new List<string>();
+        var repeated = new List<string>();
+        foreach (var n in given)
+            (names.Contains(n, StringComparer.OrdinalIgnoreCase) ? repeated : names).Add(n);
+        if (repeated.Count > 0)
+            ctx.Report.Notice(NoticeKind.Filter,
+                $"Given more than once, printed once: {NameList.Render(repeated.Distinct(StringComparer.OrdinalIgnoreCase).ToList(), Limits.MaxSuggestions)}.");
+
+        // 三个入口(一个名字 / 几个名字 / --type 整类)在这里汇成一列 def,下面一套块渲染。
+        // 单名那条路上每一句话、每个分支都与多名之前一字不差 —— 只把 return 1 换成
+        // 「单名才 return」。缺席的名字只在 notes 里留一句,其余照印;一个都没落到就 1。
+        var single = names.Count == 1;
+        var blocks = new List<DefRow>();
+        string? whatFollows = null;
+
+        if (names.Count == 0)
         {
-            var kept = matches.Where(d => string.Equals(d.DefType, wantType, StringComparison.OrdinalIgnoreCase)).ToList();
-            if (kept.Count == 0)
+            var all = ctx.Db.DefsOfType(wantType!);
+            if (all.Count == 0)
             {
+                // 「不是分桶键」不等于「不存在」:同 list 的那一档,子类型的 def 躺在基类的桶里。
+                var holders = ctx.Db.TypesHoldingClass(wantType!, ctx.Unscoped());
+                ctx.Report.Notice(NoticeKind.NextStep, holders.Count > 0
+                    ? $"'{wantType}' is not a def type in this snapshot, but it is the class of " +
+                      $"{Tally.Complete(holders.Sum(h => h.Count)).Render("def")}: " +
+                      string.Join(", ", holders.Select(h => $"{h.Count} under {h.DefType}")) + ". " +
+                      "The game only gives a def database to types with no concrete Def ancestor, so " +
+                      $"subclasses share their base's bucket. 'rimsearcher get --type {holders[0].DefType}' " +
+                      $"prints that whole bucket; 'rimsearcher list {holders[0].DefType} --own-class {wantType}' " +
+                      "names just these."
+                    : DefTypeMiss.Say(wantType!, ctx.Db.Types(ctx.Unscoped()).Select(t => t.Type), "get --type"));
+                return 1;
+            }
+            blocks.AddRange(all);
+            // 整类的分界词是 def_name:同一类型下 def_type 行每块都一样,分不开块。
+            whatFollows = $"Every {all[0].DefType} in this snapshot: {Tally.Complete(all.Count).Render("def")} in a row, " +
+                          "one block each, in def-name order. Every count, footnote and truncation warning " +
+                          "below belongs to the block it sits in — read the def_name line at the top of a " +
+                          "block to know which def the lines under it are about.";
+        }
+
+        foreach (var name in names)
+        {
+            // 过滤前的全量要留住:同名提示按**这个名字一共有几个 def** 说话,不是按这次显示了几个。
+            var allMatches = ctx.Db.GetDefsNamed(name);
+            var matches = allMatches;
+
+            if (wantType is { Length: > 0 } && matches.Count > 0)
+            {
+                var kept = matches.Where(d => string.Equals(d.DefType, wantType, StringComparison.OrdinalIgnoreCase)).ToList();
+                if (kept.Count == 0)
+                {
+                    ctx.Report.Notice(NoticeKind.NextStep,
+                        $"'{name}' exists in this snapshot but not as a {wantType}. It is " +
+                        $"{string.Join(" and ", matches.Select(d => d.DefType).Distinct(StringComparer.Ordinal))}. " +
+                        "Drop --type to see it.");
+                    if (single) return 1;
+                    continue;
+                }
+                matches = kept;
+            }
+
+            if (matches.Count == 0)
+            {
+                // 「名字在哪儿」的六种落点统一由 NameLookup 判,抽象父节点是其中一种。
+                var sighting = NameLookup.Locate(ctx, name);
+                if (sighting is not null)
+                {
+                    ctx.Report.Notice(NoticeKind.NextStep, sighting.Sentence);
+                    if (single) return 1;
+                    continue;
+                }
+
+                var known = ctx.Db.AllDefNames(Snapshot.ScopeFilter.Parse("all", ctx.Db.PackageIds(), ctx.Config));
+                var close = Suggestion.Closest(known, name);
+
+                // 六种落点全在**快照**里,而快照只装 def 侧:句中的「a class」指的是某个 def 的
+                // class 列,不是代码树里的 C# 类型(`MapPortal` 就是这样一个类)。代码树上万个
+                // 文件,不为每次落空去扫,只把没查的那一半说出来并指名能查的那条命令。
                 ctx.Report.Notice(NoticeKind.NextStep,
-                    $"'{name}' exists in this snapshot but not as a {wantType}. It is " +
-                    $"{string.Join(" and ", matches.Select(d => d.DefType).Distinct(StringComparer.Ordinal))}. " +
-                    "Drop --type to see it.");
-                return 1;
+                    $"No def is named '{name}' in this snapshot, and it is not a def type, a class, a mod, " +
+                    "an abstract XML parent, or a name held by any other registered snapshot." +
+                    Suggestion.Say(close, " 'rimsearcher search' matches on labels and translations too.") +
+                    " All of that is the def side; C# type names that no def references live only in the " +
+                    $"decompiled trees, which this lookup never reads: 'rimsearcher code-search \"class {name}\"'.");
+                if (single) return 1;
+                continue;
             }
-            matches = kept;
-        }
 
-        if (matches.Count == 0)
-        {
-            // 「名字在哪儿」的六种落点统一由 NameLookup 判,抽象父节点是其中一种。
-            var sighting = NameLookup.Locate(ctx, name);
-            if (sighting is not null)
+            // 撞名这件事排在**全部段落之前**。此前它在最后:六个同名 def 各带一张完整字段表,
+            // 两百行之后才说「这里其实有六个」,而第一段开口可以是一句否定
+            // (「No field path of Chimera (PawnKindDef) contains ...」),读的人已经拿它当答案走了。
+            // 按全量说话,不按过滤后的集合 —— --type 在场时最需要这句:调用方主动收窄了,
+            // 恰恰说明它知道有歧义、并打算只读一个。
+            if (allMatches.Count > 1)
             {
-                ctx.Report.Notice(NoticeKind.NextStep, sighting.Sentence);
-                return 1;
+                var others = allMatches.Where(d => !matches.Contains(d))
+                                       .Select(d => d.DefType)
+                                       .Distinct(StringComparer.Ordinal)
+                                       .ToList();
+                ctx.Report.Notice(NoticeKind.Boundary, NameCollision.Say(
+                    name, allMatches.Count,
+                    matches.Select(d => d.DefType).Distinct(StringComparer.Ordinal).ToList(),
+                    others));
             }
 
-            var names = ctx.Db.AllDefNames(Snapshot.ScopeFilter.Parse("all", ctx.Db.PackageIds(), ctx.Config));
-            var close = Suggestion.Closest(names, name);
-
-            // 六种落点全在**快照**里,而快照只装 def 侧:句中的「a class」指的是某个 def 的
-            // class 列,不是代码树里的 C# 类型(`MapPortal` 就是这样一个类)。代码树上万个
-            // 文件,不为每次落空去扫,只把没查的那一半说出来并指名能查的那条命令。
-            ctx.Report.Notice(NoticeKind.NextStep,
-                $"No def is named '{name}' in this snapshot, and it is not a def type, a class, a mod, " +
-                "an abstract XML parent, or a name held by any other registered snapshot." +
-                Suggestion.Say(close, " 'rimsearcher search' matches on labels and translations too.") +
-                " All of that is the def side; C# type names that no def references live only in the " +
-                $"decompiled trees, which this lookup never reads: 'rimsearcher code-search \"class {name}\"'.");
-            return 1;
+            blocks.AddRange(matches);
         }
+
+        if (blocks.Count == 0) return 1;
+
+        // 每段各带自己的脚注与截断警告,而那些话只差一个数字 —— 段与段的分界得看得见,
+        // 否则「at least 23 fields were dropped」与「at least 174」并排出现时,没人知道
+        // 哪条管哪个 def。分界由每段自己的 identity 行给出,这里只说破要按哪一行读:
+        // 一个名字撞出几块时按 def_type(名字都一样),几个名字时按 def_name。
+        if (blocks.Count > 1)
+            ctx.Report.Notice(NoticeKind.Boundary, whatFollows ?? (single
+                ? $"What follows is {Tally.Complete(blocks.Count).Render("def")} in a row, one block each. " +
+                  "Every count, footnote and truncation warning below belongs to the block it sits in — " +
+                  "read the def_type line at the top of a block to know which def the lines under it are about."
+                : $"What follows is {Tally.Complete(blocks.Count).Render("def")} in a row, one block each, " +
+                  "in the order the names were given. Every count, footnote and truncation warning below " +
+                  "belongs to the block it sits in — read the def_name line at the top of a block to know " +
+                  "which def the lines under it are about."));
 
         var limit = ctx.Limit();
         var paths = ctx.Args.Values("path-contains");
@@ -430,34 +548,14 @@ public sealed class GetCommand : Command
         // 只把**查询**归一;所有报错句仍引读者自己敲的那一串。
         var fieldPaths = paths.Select(InjectionKey.ToFieldPath).ToList();
 
-        // 撞名这件事排在**全部段落之前**。此前它在最后:六个同名 def 各带一张完整字段表,
-        // 两百行之后才说「这里其实有六个」,而第一段开口可以是一句否定
-        // (「No field path of Chimera (PawnKindDef) contains ...」),读的人已经拿它当答案走了。
-        // 按全量说话,不按过滤后的集合 —— --type 在场时最需要这句:调用方主动收窄了,
-        // 恰恰说明它知道有歧义、并打算只读一个。
-        if (allMatches.Count > 1)
-        {
-            var others = allMatches.Where(d => !matches.Contains(d))
-                                   .Select(d => d.DefType)
-                                   .Distinct(StringComparer.Ordinal)
-                                   .ToList();
-            ctx.Report.Notice(NoticeKind.Boundary, NameCollision.Say(
-                name, allMatches.Count,
-                matches.Select(d => d.DefType).Distinct(StringComparer.Ordinal).ToList(),
-                others));
+        // 下面凡是「只有一块才这么说 / 排」的判断都看 alone,不看某个名字命中了几个。
+        var alone = blocks.Count == 1;
 
-            // 每段各带自己的脚注与截断警告,而那些话只差一个数字 —— 段与段的分界得看得见,
-            // 否则「at least 23 fields were dropped」与「at least 174」并排出现时,没人知道
-            // 哪条管哪个 def。分界由每段自己的 def_type 行给出,这里只说破要按它读。
-            if (matches.Count > 1)
-                ctx.Report.Notice(NoticeKind.Boundary,
-                    $"What follows is {Tally.Complete(matches.Count).Render("def")} in a row, one block each. " +
-                    "Every count, footnote and truncation warning below belongs to the block it sits in — " +
-                    "read the def_type line at the top of a block to know which def the lines under it are about.");
-        }
-
-        foreach (var def in matches)
+        foreach (var def in blocks)
         {
+            // 这个名字一共挂着几个 def(不论 --type 挡掉了谁)。整类那一路没先查过,
+            // 这里统一再查一次 —— 单名路上结果与前面那次相同。
+            var namesakes = ctx.Db.GetDefsNamed(def.DefName).Count;
             // 恒定形状:即使只有一个 def,JSON 里也是 defs[0] —— 形状随数据变会让照着一次
             // 输出写的解析器在下一次撞名时静默拿到别的东西。
             ctx.Report.Item("defs");
@@ -487,7 +585,7 @@ public sealed class GetCommand : Command
                               .Where(n => string.Equals(n.DefName, def.DefName, StringComparison.OrdinalIgnoreCase))
                               .ToList();
             var xmlNode = named.FirstOrDefault(n => DefTypes.Same(n.DefType, def.DefType))
-                       ?? (named.Count == 1 && allMatches.Count == 1 ? named[0] : null);
+                       ?? (named.Count == 1 && namesakes == 1 ? named[0] : null);
             if (xmlNode?.ParentName is { Length: > 0 } parentName)
                 pairs.Add(new("inherits_from", $"{parentName} (see 'rimsearcher inherit {def.DefName}')"));
 
@@ -504,7 +602,7 @@ public sealed class GetCommand : Command
             // 撞名连印时**不动**:那时 line 1 已经是撞名那句,而各段的计数一旦提到自己的
             // identity 块之前,就会紧贴着上一段的表尾,读成上一段的数 —— 上面那句
             // 「读每块顶部的 def_type 行」正是拿这个当分界的。
-            if (matches.Count > 1) ctx.Report.Detail("def", pairs);
+            if (!alone) ctx.Report.Detail("def", pairs);
 
             // 默认不列「与 C# 声明默认值无从区分」的那些行。两个例外都指向同一条:
             // **调用方点了名的东西不许消失** —— --path-contains 已经点名了要哪些路径,--defaults
@@ -519,7 +617,7 @@ public sealed class GetCommand : Command
             // 就写着「above」。
             // 多个 def 同名时,截断声明必须指名道姓 —— 否则两条「Showing 5 of N fields」
             // 并排出现,读者无从知道哪条管哪个 def。
-            var whose = matches.Count == 1 ? "" : $" of {def.DefName} ({def.DefType})";
+            var whose = alone ? "" : $" of {def.DefName} ({def.DefType})";
             if (paths.Count > 0)
             {
                 // 过滤后为空**不等于** def 没有这些字段,只等于没有路径含这段文本。
@@ -618,7 +716,7 @@ public sealed class GetCommand : Command
                 // 撞名连印时才点名这一块是谁 —— 别处那个 def_name 行就在几行之上,
                 // 而多块连印时读者手里有好几个。出路本身不说(见 CountNotice)。
                 ctx.Report.CountNotice(Tally.Of(fields.Count, listable), "field",
-                    matches.Count == 1 ? "" : $"this is {def.DefName} ({def.DefType}).");
+                    alone ? "" : $"this is {def.DefName} ({def.DefType}).");
 
                 // 措辞不许滑成「没人设过它」:XML 里照着默认值写一遍是常事,快照里那两种
                 // 情形完全同形。这一列能证的只有「与声明默认值无从区分」,句子就只说这个,
@@ -699,7 +797,7 @@ public sealed class GetCommand : Command
                     $"Added to the {total} paths that did get indexed, that is " +
                     $"{Tally.AtLeast(total + def.FieldsTruncated).Render("field path")} on this def.");
 
-            if (matches.Count == 1) ctx.Report.Detail("def", pairs);
+            if (alone) ctx.Report.Detail("def", pairs);
 
             // xml 列的取值只从 XmlOrigin 出。值回连要用同一元素的其它格,所以全量取一次
             // 再按元素前缀分组 —— 不按格查库,旧快照根本不走这条路。
@@ -847,7 +945,7 @@ public sealed class GetCommand : Command
             if (translations.Count > 0)
                 ctx.Report.CountNotice(Tally.Of(translations.Count, allTranslations.Count),
                     "translation",
-                    matches.Count == 1 ? "" : $"this is {def.DefName} ({def.DefType}).");
+                    alone ? "" : $"this is {def.DefName} ({def.DefType}).");
 
             // 筛空的那一次要说破。否定那半两档一个字不差 —— 变的只是出路:
             // 归一过的快照里两张表同坐标,所以「没匹配上」就是真没有;没归一的老快照里
@@ -943,11 +1041,11 @@ public sealed class GetCommand : Command
                         "but not enabled when the snapshot was taken. They are searchable, but the game did not " +
                         "apply them.", footnote: true);
 
-                if (byNameOnly && allMatches.Count > 1)
+                if (byNameOnly && namesakes > 1)
                     ctx.Report.Notice(NoticeKind.Boundary,
                         $"These rows were matched by defName alone: they come from language files, whose keys are " +
                         $"'{def.DefName}.<field>' with no def type, and " +
-                        $"{Tally.Complete(allMatches.Count).Render("def")} share this name. " +
+                        $"{Tally.Complete(namesakes).Render("def")} share this name. " +
                         "The game injects them by name too, so which of the same-named defs they belong to is not " +
                         "recorded anywhere.");
             }

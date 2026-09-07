@@ -1,0 +1,14 @@
+$ rimsearcher get Bullet_Revolver Firefoam --type StatDef
+exit 0
+--- stdout ---
+'Bullet_Revolver' exists in this snapshot but not as a StatDef. It is ThingDef. Drop --type to see it.
+  - 2 defs share the name 'Firefoam': this is the StatDef one. The other is a ThingDef, shown only without --type. Fields, parent node and translations below are this def's own.
+  - 0 fields.
+
+def_name     Firefoam
+def_type     StatDef
+class        Verse.StatDef
+mod          ludeon.rimworld
+source       Stats_Basics.xml
+xml          not indexed (exporter 0.2.0)
+--- stderr ---

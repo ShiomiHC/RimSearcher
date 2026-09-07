@@ -2,5 +2,5 @@ $ rimsearcher get ThingDef Apparel_ShieldBelt --type HediffDef
 exit 2
 --- stdout ---
 --- stderr ---
-Unexpected argument(s) 'Apparel_ShieldBelt'. get takes 1 positional argument(s): <defName>. The def type is given twice: 'ThingDef' as an argument and --type HediffDef as an option. Keep one — with --type HediffDef the whole query is 'rimsearcher get Apparel_ShieldBelt --type HediffDef'.
+The def type is given twice: 'ThingDef' as an argument and --type HediffDef as an option. Keep one — with --type HediffDef the whole query is 'rimsearcher get Apparel_ShieldBelt --type HediffDef'.
 Run 'rimsearcher get --help' to see what this command accepts.

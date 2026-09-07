@@ -91,7 +91,7 @@ data sits under a key that depends on the command. `<command> --help` lists each
 | Command | Data key(s) |
 |---|---|
 | `search` | `defs` — one flat row per def |
-| `get` | `defs` — **not rows**: one nested object per def, each `{def, fields, translations}`. A def's field table is `defs[i].fields`; there is no `fields` key at the root. It stays an array for a single def because a name can belong to several def types. |
+| `get` | `defs` — **not rows**: one nested object per def, each `{def, fields, translations}`. A def's field table is `defs[i].fields`; there is no `fields` key at the root. It stays an array for a single def because a name can belong to several def types. Several names put the objects in the order the names were given; `--type` with no name puts every def of that type in def-name order. A name that matched nothing is a note, not an object, so match `defs[i].def.def_name` against what you asked for. |
 | `list` | `defs` (with a def type) or `types` (without) — never both; flat rows either way |
 | `where` with a field path | `matches` — including when `--value` is given as well |
 | `where --value` with no field path | `paths` |
@@ -262,6 +262,11 @@ behaviour on a nested `Class="…"` field instead — every `GenStepDef` in a sn
 
 ## Paging and errors, in detail
 
+`--limit` on `get` counts fields **per def**, not defs: with several names, or with `--type`
+and none, every block is shortened by the same number and the def count itself is whatever you
+asked for. There is no way to shorten the list of defs — that is what `list <DefType>` is for,
+and its `--limit` and `--offset` do count defs.
+
 No command holds back rows on its own: leave `--limit` out and the answer is the whole result
 set, `read` included, where `--lines`, `--outline` or `--member` print in full however long they
 run and a bare read gives the entire file. `--limit` takes a positive number and nothing else —
@@ -299,6 +304,23 @@ saved lists are the only thing an export can run against. One saved from the gam
 screen, one written by `modlist save`, and one typed by hand all appear in `modlist list` and
 read back the same way — a hand-written file carries no display names, which `modlist show`
 states rather than reporting anything missing.
+
+### Pulling a whole layer for a script
+
+Every call is a process, so a script that walks hundreds of defs should not spend one process
+per def. Three shapes cover it, and each returns exactly what the single-name call returns:
+
+- `get A B C [--type <DefType>]` — the named defs, one object per def in `defs`, in the order
+  the names were given.
+- `get --type <DefType>` with no name — every def of that type, in def-name order. On the
+  `baseline` snapshot this is 232 GeneDefs in about 1.5 seconds against about 45 seconds for
+  232 separate calls, and the objects compare equal field for field.
+- `economy` with no defName — the whole priced layer, one row per thing under `things`, with
+  the same 22 keys the single-name call gives. Only `costChain` and `recipes` are exclusive to
+  the single-name call, so a script that needs prices and nothing else wants the bare form.
+
+`--defaults` and `--path-contains` apply to every block alike. There is no batching for
+`inherit`, `keyed` or `read`.
 
 ### Confirming a specific path survived truncation
 
