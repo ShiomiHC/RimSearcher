@@ -385,7 +385,14 @@ internal static class ExportCap
     /// (见 <c>snapshot truncated</c> 那一侧的同一条注解)。
     /// </summary>
     public static string OnDef(int fields)
-        => $"{Tally.AtLeast(fields).Render("field")} were dropped at export time for depth or size";
+        => $"{Head(fields)} for depth or size";
+
+    /// <summary>
+    /// 「至少 N 个字段被丢了」这半句。谓语跟着数走 —— 语料里那个 def 丢了 3 个,
+    /// 于是 were 一直是对的;真快照上 27 个被截的 def 里 24 个只丢了 1 个。
+    /// </summary>
+    private static string Head(int fields)
+        => $"{Tally.AtLeast(fields).Render("field")} {(fields == 1 ? "was" : "were")} dropped at export time";
 
     /// <summary>
     /// 同上,但说得出**是哪一种**上限。<paramref name="by"/> 为 null = 这份库没分类过
@@ -399,7 +406,9 @@ internal static class ExportCap
     {
         if (by is null || by.Total == 0) return OnDef(fields);
         var parts = by.Ranked().ToList();
-        var head = $"{Tally.AtLeast(fields).Render("field")} were dropped at export time";
+        var head = Head(fields);
+        // 只丢了一个时不写「all of them」—— 一条东西没有「全都是」可言。
+        if (fields == 1 && parts.Count == 1) return $"{head}, {parts[0].Cause}";
         return parts.Count == 1
             ? $"{head}, all of them {parts[0].Cause}"
             : head + ": " + string.Join(", ", parts.Select(p => $"{p.Count} {p.Cause}"));

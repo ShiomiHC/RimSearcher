@@ -18,7 +18,7 @@ namespace RimSearcher.Tests;
 /// </summary>
 public class TruncationCauseTests
 {
-    private const string Vague = "were dropped at export time for depth or size";
+    private const string Vague = "dropped at export time for depth or size";
 
     /// <param name="Causes">null = 这一行不带成因键,即 0.13.0 之前的导出器写出来的形态。</param>
     private readonly record struct MiniDef(string Name, int Truncated, (int Cap, int Len, int Dep, int Items)? Causes);
@@ -167,15 +167,34 @@ public class TruncationCauseTests
     }
 
     /// <summary>
+    /// 只丢了一条时谓语跟着变,也不写「all of them」—— 一条东西没有「全都是」可言。
+    ///
+    /// 这一档在语料上永远碰不到:那里被截的 def 丢的是 3 条,于是 were 一直是对的。
+    /// 真快照上恰恰反过来 —— baseline 的 27 个被截 def 里 24 个只丢了 1 条。
+    /// </summary>
+    [Fact]
+    public void 只丢一条时谓语用单数()
+    {
+        var db = Build("single", new MiniDef("One", 1, (0, 0, 0, 1)));
+        var said = GetLine(db, "One");
+        Assert.Contains("at least 1 field was dropped at export time, past the list item cap", said);
+        Assert.DoesNotContain("all of them", said);
+        Assert.DoesNotContain("field were", said);
+    }
+
+    /// <summary>
     /// 0.13.0 之前导出的行(没有成因键)入了新库,四列拿的是 DEFAULT 0。
     /// 这时要退回那句含糊的,而不是把四个零当成量出来的结果印出去。
     /// </summary>
     [Fact]
     public void 旧导出没带成因键时退回含糊那句()
     {
-        var db = Build("legacy", new MiniDef("Legacy", 3, null));
+        var db = Build("legacy", new MiniDef("Legacy", 3, null), new MiniDef("LegacyOne", 1, null));
         var said = GetLine(db, "Legacy");
-        Assert.Contains("at least 3 fields " + Vague, said);
+        Assert.Contains("at least 3 fields were " + Vague, said);
         Assert.DoesNotContain("all of them", said);
+
+        // 含糊那句的谓语也得跟着数走 —— 两句共用同一个开头,漏改一处就只有一半是对的。
+        Assert.Contains("at least 1 field was " + Vague, GetLine(db, "LegacyOne"));
     }
 }
