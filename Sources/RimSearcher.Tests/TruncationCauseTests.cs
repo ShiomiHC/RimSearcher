@@ -98,7 +98,7 @@ public class TruncationCauseTests
         Assert.Equal(0, code);
         return stdout.Split('\n').Single(
             l => l.Contains("The exporter stopped short", StringComparison.Ordinal)
-                 || l.Contains("No field path is missing", StringComparison.Ordinal));
+                 || l.Contains("all this def has", StringComparison.Ordinal));
     }
 
     // ---- 入库 ----
@@ -197,11 +197,10 @@ public class TruncationCauseTests
     {
         var db = Build("cut", new MiniDef("Cut", 3, (0, 3, 0, 0)));
         var said = GetLine(db, "Cut");
-        Assert.Contains("No field path is missing from this def", said);
-        Assert.Contains("3 values were cut to the length cap", said);
+        // 「没缺行」与那个数在同一句里说完 —— 表上只有 label 一条路径,而它就是全部。
+        Assert.Contains("The 1 field path counted above is all this def has", said);
+        Assert.Contains("what the exporter cut is text, not rows: 3 values were cut to the length cap", said);
         Assert.DoesNotContain("dropped", said);
-        // 表上只有 label 一条路径,而这个 def 的路径数就是它。
-        Assert.Contains("The 1 paths counted above are all of them", said);
     }
 
     /// <summary>

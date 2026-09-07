@@ -817,9 +817,16 @@ public sealed class GetCommand : Command
                           $"Added to the {total} paths that did get indexed, that is " +
                           $"{Tally.AtLeast(total + missing).Render("field path")} on this def."
                         // 只有值被切时,缺的不是行而是那几格里的字。上面那句会让人去找不存在的缺行。
-                        : "No field path is missing from this def: " + said +
-                          ", so those rows carry the front of their value and not the rest. " +
-                          $"The {total} paths counted above are all of them.");
+                        //
+                        // 「没缺行」只说一次,而且是**带着那个数**说的:此前它散成三处
+                        // (先一句 No field path is missing、再一句 those rows carry the front、
+                        // 最后一句 the N paths above are all of them),读者要把三句拼起来才
+                        // 拿到「250 就是全部」。数与断言分家时,那个数就只是个可加的量 ——
+                        // 而另一支恰恰教人去加。
+                        : $"The {Tally.Complete(total).Render("field path")} counted above " +
+                          $"{(total == 1 ? "is" : "are")} all this def has — " +
+                          "what the exporter cut is text, not rows: " + said +
+                          ", so those rows show the front of their value and not the rest.");
             }
 
             if (alone) ctx.Report.Detail("def", pairs);
