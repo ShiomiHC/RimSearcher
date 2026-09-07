@@ -1314,8 +1314,8 @@ public static class Fixture
         Keyed("CommandSettleDesc", "在此处建立新殖民地。", "Settle in this location.", false,
               "GameplayCommands.xml", 387);
 
-        // 过线的填充批。两道闸共用,而两道都**必须**有一批过 Limits.MaxLimit(2000)的语料:
-        //   `--limit all` 解除行上限 —— 语料不过线,「夹到 2000」与「全给」印出来一模一样;
+        // 过线的填充批。两道闸共用,而两道都**必须**有一批过两千条的语料:
+        //   不给 --limit 就是全部 —— 语料不过线,「有上限」与「全给」印出来一模一样;
         //   `--empty-translation` 在 SQL 里筛 —— 占位排在这批的最末一条,于是「取完这一页再筛」
         //     会拿着第一页的零去否定全部 2100 条。
         // 全部共用 original 里的 filler 一词,与上面五条的查询词不相交(基线不受牵连)。

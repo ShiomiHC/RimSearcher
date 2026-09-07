@@ -331,7 +331,7 @@ public sealed class GetCommand : Command
             },
             new OptionSpec
             {
-                // 没有它,在几百字段的 def 里找一条路径只能 --limit all 再 grep 输出。
+                // 没有它,在几百字段的 def 里找一条路径只能整份打出来再 grep 输出。
                 Name = "path-contains",
                 Arity = Arity.Multi,
                 // 主名与别名各由一头的实测定:识别测 path-contains 10/10(危险的两种误读
@@ -1738,7 +1738,7 @@ public sealed class FindCommand : Command
         // 的答案里就该有它们。但**为什么取到**要分得开 —— comps[N].compClass 一整批
         // 等于 CompShield,多半是 CompProperties_Shield 的声明里写死的,不是谁在 XML 里挑的。
         // 代码造出来的 def 混在结果里时,那件事必须落在**行上**,不能只落在声明里 ——
-        // 这份结果最常见的下游是「--limit all --json 灌进脚本批量生成补丁」,而脚本不读 notes。
+        // 这份结果最常见的下游是「--json 灌进脚本批量生成补丁」,而脚本不读 notes。
         //
         // 句子数整个结果集(与上面两句同口径),列跟着这一页 —— 于是首页一个 ImpliedDef
         // 都没碰上时,句子照样出声,而那句会自己说清楚「不都在这一页上」。
@@ -3566,7 +3566,7 @@ internal static class Advisory
     /// <summary>
     /// 这一屏里混着加载期由 C# 造出来的 def。
     ///
-    /// 盲测实证:`where` 的结果最常见的下游是 `--limit all --json` 灌进脚本批量生成
+    /// 盲测实证:`where` 的结果最常见的下游是 `--json` 灌进脚本批量生成
     /// PatchOperation,而按 defName 寻址的补丁**打不到**这批 def —— 满配文档的四个臂里
     /// 有三个照样交出了一串够不着的 `Blueprint_*`。文档在场没能挡住,所以这件事得落在输出上。
     ///

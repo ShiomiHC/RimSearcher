@@ -831,7 +831,7 @@ public sealed class SnapshotDb : IDisposable
     ///
     /// 与 <see cref="FindPathShapes"/> 同理,**数在分页之前** —— 首页二十五行按 def 名
     /// 排序,而 ImpliedDefs 的名字扎堆在 <c>Meat_</c> / <c>Corpse_</c> / <c>Blueprint_</c>
-    /// 这几处,首页往往一个都碰不上;拿 <c>--limit all</c> 灌进脚本的人拿到的却是全集。
+    /// 这几处,首页往往一个都碰不上;不给 <c>--limit</c> 灌进脚本的人拿到的却是全集。
     /// 页内口径会让这句话恰好在最该出声的那次哑火。
     ///
     /// 按 <c>DISTINCT d.id</c> 数:同一个 def 可以在多条路径上命中(后缀匹配一放开就常有),

@@ -755,7 +755,7 @@ public sealed class ReadCommand : Command
                     $"--lines wants line numbers from 1 up; '{s.Trim()}' is not one ({what}). " +
                     "Write it as '400-460', '400+60', '400', or 'all'.");
 
-        // 起点加个数,算在 long 上再收回来:window 可能是 int.MaxValue(--limit all),
+        // 起点加个数,算在 long 上再收回来:window 可能是 int.MaxValue(没给 --limit),
         // 而 `--lines 1+2147483647` 的个数由调用方给。溢出会变成负的终点,那时
         // 「读到文件尾」与「起点在文件外」两条支路都走不到,报错也无从谈起。
         static int End(long from, long count) => (int)Math.Min(from + count - 1, int.MaxValue);

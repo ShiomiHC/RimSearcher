@@ -255,7 +255,7 @@ public sealed class Report
     /// 沉默传达「完整」一定会被读错。
     ///
     /// <paramref name="howToSeeMore"/> 留空是常态,与 <see cref="PageNotice"/> 同一条纪律:
-    /// 「--limit all 能一次吃完」这类出路逐字不随查询变,SKILL.md 已按命令列全,在每次计数上
+    /// 「不给 --limit 就一次吃完」这类出路逐字不随查询变,SKILL.md 已按命令列全,在每次计数上
     /// 重念是同一份知识的第三个副本。截断信号由 <c>n of N</c> 这个形状自己带着,不靠尾句。
     /// 只有当出路带着**算出来的**参数时才传它。
     /// </summary>
@@ -295,7 +295,7 @@ public sealed class Report
     ///
     /// 对照是 <c>read</c> 那句递回 <c>--lines</c> / 点名 <c>--outline</c> 的指路:同样
     /// 全史零使用的参数,那一句让八个盲测被试全部用上了。差别在于那句给的是**另一条路**
-    /// (别翻页,看 outline),这句给的是同一条路的下一步 —— 而 `--limit all` 与
+    /// (别翻页,看 outline),这句给的是同一条路的下一步 —— 而「不给 --limit」与
     /// `--path-contains` 在几乎每个真实场景里都比翻页更优,于是这一步没人要走。
     ///
     /// 末页那句留着:没有它,「4 of 8 defs, starting at 5」与半截结果同形。

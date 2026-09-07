@@ -160,7 +160,6 @@ public sealed class KeyedCommand : Command
 
         if (exact.Count == 0)
         {
-            // limit.Effective 而不是夹到 Limits.MaxLimit:`--limit all` 一律解除行上限。
             var (hits, hitTotal, hitMatched) =
                 ctx.Db.KeyedSearch(query, limit.Effective, offset, placeholdersOnly);
             rows = hits;
@@ -336,8 +335,8 @@ public sealed class KeyedCommand : Command
     /// </summary>
     private static int RunAll(CommandContext ctx, LimitValue limit, int offset, bool placeholdersOnly)
     {
-        // 分页在 SQL 里做,不是取全量再切 —— 整层是两千到一万几千行。`--limit all` 那一档
-        // LimitValue.Effective 给的是 int.MaxValue,真的解除上限而不是夹到 2000。
+        // 分页在 SQL 里做,不是取全量再切 —— 整层是两千到一万几千行。不给 --limit 那一档
+        // LimitValue.Effective 给的是 int.MaxValue,真的全给。
         var (rows, total, layerTotal) = ctx.Db.KeyedAll(limit.Effective, offset, placeholdersOnly);
 
         if (rows.Count == 0)
