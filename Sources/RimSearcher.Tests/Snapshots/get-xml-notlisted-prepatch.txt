@@ -2,7 +2,7 @@ $ rimsearcher get ChildGun --fixture-presence
 exit 0
 --- stdout ---
 11 fields.
-Not listed: 3 fields whose value matches the declaring type's own default; --defaults lists them; the 'xml' column, on those rows and on the ones below alike, is the XML read before patches ran. A row that cannot be pinned to a line inside a container the XML did write reads as 'under <container>', not as no. The snapshot holds 14 field paths for this def; a null-valued field never entered the index and is in neither count. Every list index the def has appears below.
+Not listed: 3 fields whose value matches the declaring type's own default; --defaults lists them; the 'xml' column, on those rows and on the ones below alike, is the XML read before patches ran. A row that cannot be pinned to a line inside a container the XML did write reads as 'under <container>', not as not-written. The snapshot holds 14 field paths for this def; a null-valued field never entered the index and is in neither count. Every list index the def has appears below.
 
 def_name       ChildGun
 def_type       ThingDef
@@ -15,7 +15,7 @@ inherits_from  BaseGun (see 'rimsearcher inherit ChildGun')
 Same in every row, not repeated below: code_default=no.
 path                          value                 xml
 thingClass                    RimWorld.Bullet       parent
-comps[0].compClass            TestMod.CompBoltedOn  no
+comps[0].compClass            TestMod.CompBoltedOn  not-written
 damage                        12                    here
 speed                         70                    parent
 costList[0].thingDef          Steel                 here
@@ -26,6 +26,6 @@ things[0].def                 Widget                here
 things[0].chance              0.25                  here
 descriptionHyperlinks[0].def  ChildGun              under descriptionHyperlinks
 No value above with 'code_default'=no is one that most of the 2 ThingDefs in this snapshot also carry.
-  - 3 patch xpaths name this def. The 'xml' column above reads the XML as written on disk, before any PatchOperation ran, so a line one of those patches added reads no there — 'rimsearcher inherit ChildGun' breaks the count down by how each xpath names it.
+  - 3 patch xpaths name this def. The 'xml' column above reads the XML as written on disk, before any PatchOperation ran, so a line one of those patches added reads not-written there — 'rimsearcher inherit ChildGun' breaks the count down by how each xpath names it.
   - The game also prices things like this — market value, cost to make, work amount — and those are computed rather than stored, so no field above would hold them either way. This snapshot never measured them, so it cannot say whether this def is one of the priced ones: 'rimsearcher economy ChildGun' says why and what to re-export.
 --- stderr ---

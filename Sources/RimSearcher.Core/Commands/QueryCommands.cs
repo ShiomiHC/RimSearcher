@@ -276,16 +276,16 @@ public sealed class GetCommand : Command
             "which mod); it is not a path, and nothing here reads the file system to confirm the file is " +
             "still there. Defs the game builds in code carry a placeholder there instead.\n\n" +
             "When present, the 'xml' column says whether this def's own XML wrote the path (here), only an " +
-            "ancestor did (parent), or neither (no) — the fact PatchOperationReplace vs Add turns on. " +
+            "ancestor did (parent), or neither of them did (not-written) — the fact PatchOperationReplace " +
+            "vs Add turns on. " +
             "Index paths such as costList[0].thingDef are joined back to def-name tags such as costList.Steel " +
             "from a sibling value on the same list entry, including two-level tags (things.AncientAmmoStack.chance), " +
             "and using XML lines written by this def or by an ancestor. After that join, here/parent means the " +
-            "line is there, and no means the XML read here does not write it — determined, not a path-shape " +
-            "maybe. The output says which XML it " +
-            "read. 'read after every patch ran' is the merged XML after every PatchOperation ran, and a line " +
+            "line is there, and not-written means the XML read here does not write it. The output says which XML it " +
+            "read.'read after every patch ran' is the merged XML after every PatchOperation ran, and a line " +
             "another mod's patch put there reads as here+patch or parent+patch: Replace still finds that node, " +
             "but your patch now depends on that mod staying loaded. 'read before patches ran' is the XML as " +
-            "written on disk, so there a patched-in node reads as no instead, and 'rimsearcher inherit " +
+            "written on disk, so there a patched-in node reads as not-written instead, and 'rimsearcher inherit " +
             "<defName>' reports how many patch xpaths name this def. A further value, 'under <container>', means the XML wrote that container but " +
             "this row still cannot be pinned to a line in it: the entry did not join, or it joined to a " +
             "short-form tag such as <Steel>75</Steel> whose inline text matches none of the remaining fields, " +
@@ -383,7 +383,7 @@ public sealed class GetCommand : Command
                 Help = "Also list fields whose value is the one a fresh instance of the declaring type already "
                      + "carries. They are left out by default. "
                      + "The 'xml' column on those rows says whether this def's own XML wrote the "
-                     + "path (here), only an ancestor did (parent), neither (no), or that the row cannot be "
+                     + "path (here), only an ancestor did (parent), neither of them did (not-written), or that the row cannot be "
                      + "pinned to a line inside a container the XML did write (under <container>). The table "
                      + "says beside it which XML that was: 'read after every patch ran' or "
                      + "'read before patches ran'. "
@@ -2910,7 +2910,7 @@ internal static class Completeness
         var yesMeans = ctx.Db.Meta.IndexesXmlWritten
             ? $"what a yes leaves open is settled by the '{XmlOrigin.Column}' column on that same row: " +
               $"{XmlOrigin.Here} is an XML line writing that same " +
-              $"value, {XmlOrigin.No} is an XML that does not write it ({readWhen})"
+              $"value, {XmlOrigin.No} is the absence of such a line in the XML {readWhen}"
             : "a yes is not evidence that nothing wrote the value — a def whose XML writes " +
               "that same value and a def that never mentions the field both show yes here";
 

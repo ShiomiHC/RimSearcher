@@ -241,7 +241,7 @@ public class PresenceTests
         var (chatty, _, _) = Fixture.Run("get", "ChildGun", "--defaults", "--db", Fixture.PresenceDb);
         Assert.Contains("3 patch xpaths name this def. The 'xml' column above reads the XML as written "
                         + "on disk, before any PatchOperation ran, so a line one of those patches added "
-                        + "reads no there", chatty);
+                        + "reads not-written there", chatty);
 
         // OtherGun 不在 xml_nodes 里(既没有 Name= 也没有 ParentName、又不 abstract),
         // 于是连计数都没有 —— 这一半沉默,常驻的那句话在 --help 与 --defaults 的说明里。

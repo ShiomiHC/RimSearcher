@@ -11,7 +11,7 @@ mod          ludeon.rimworld
 source       Thoughts_Memory.xml
 
 path             value            code_default  xml
-stages[0].label  observed corpse  no            no
+stages[0].label  observed corpse  no            not-written
 No value above with 'code_default'=no is one that most of the 1 HediffDefs in this snapshot also carry.
 1 translation within --path-contains stages[0].label.
 

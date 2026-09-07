@@ -85,8 +85,11 @@ public sealed class EconomyCommand : Command
             "that same row — and when it does print, it is the counterfactual price, not the one in effect. " +
             "Read any other empty cell as 'the game cannot work this out', not as zero: a profit needs a " +
             "recipeMaker, and a profit rate needs a positive work amount.\n\n" +
-            "A snapshot need not hold this layer at all. This command then says why, rather " +
-            "than reporting that the game prices nothing, and the answer is never a number. There is no " +
+            // 这句原先写成「本命令会说明原因,而不是报成游戏什么都不标价」—— 那是在为一个
+            // 设计选择辩护。改成直接点那两个状态:少一层与什么都不标价是两个不同的答案。
+            "A snapshot need not hold this layer at all. A snapshot without it and a game that prices " +
+            "nothing are two different answers, and this command says which one you hit; the answer is " +
+            "never a number in that case. There is no " +
             "second road to these numbers on such a snapshot — a field called marketValue is still indexed, " +
             "but that is the base value written in XML, not the price the game computes from it, and " +
             "nothing anywhere holds cost or profit.\n\n" +

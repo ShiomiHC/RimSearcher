@@ -8,14 +8,14 @@ namespace RimSearcher.Output;
 ///
 /// <c>here</c> = 这个 def 自己的 XML 写了这条路径,Replace 找得到节点;
 /// <c>parent</c> = 只有祖先写了,指向这个 def 的 xpath 上这条节点不在,Add 才找得到;
-/// <c>no</c> = 这一格没写(含:列表项已按 defName 标签归位,但这一格对应的行不在)。
+/// <c>not-written</c> = 这一格没写(含:列表项已按 defName 标签归位,但这一格对应的行不在)。
 /// 0.7.0 起路径取自**打完补丁**的合并 XML,别的 mod 的 patch 加进来的一行于是带
 /// <c>+patch</c> 后缀(出路仍是 Replace,但从此依赖那个 mod 在场);0.6.0 及更早读的是
-/// 磁盘上的原文、PatchOperation 还没跑,那种行在那些库上照样报 no,而 no 的出路是 Add,
+/// 磁盘上的原文、PatchOperation 还没跑,那种行在那些库上照样报 not-written,而它的出路是 Add,
 /// 于是会插出第二份 —— 那份时间差的出口是 inherit 的 patch_ops 三个计数
 /// (06「patch 溯源」定的口径:0 不说,非 0 报数);
 /// <c>under X</c> = XML 在容器 X 下写过东西,值回连之后仍说不准这一格。
-/// 缺层时这一列根本不出现,由能力位那句通知说,不许印成 <c>no</c>。
+/// 缺层时这一列根本不出现,由能力位那句通知说,不许印成 <c>not-written</c>。
 ///
 /// RimWorld 允许拿 defName 当列表元素的标签名(<c>costList.Steel</c>、<c>things.AncientAmmoStack.chance</c>),
 /// 索引按 <c>costList[0].thingDef</c>。值回连拿同一元素各格的值 V 去对 XML 的 <c>容器.V</c>
@@ -31,7 +31,14 @@ public static class XmlOrigin
     public const string Column = "xml";
     public const string Here = "here";
     public const string Parent = "parent";
-    public const string No = "no";
+    /// <summary>
+    /// 2026-09-07 由 <c>no</c> 改名。<c>no</c> 与它旁边的 <c>code_default</c> 那列的
+    /// yes/no 同形,而这一列不是个是非题:它回答的是「哪份 XML 写了这一行」,取值里
+    /// <c>under X</c> 才是「说不准」。一个读者把 <c>no</c> 读成「说不准」的时候,输出
+    /// 只能靠一句「determined, not a path-shape maybe」去驳 —— 那句是取值重载的症状。
+    /// 取值自陈之后那句就不必写了。
+    /// </summary>
+    public const string No = "not-written";
     /// <summary>
     /// 这一行在打完补丁的合并 XML 里,但磁盘上的原文没写它 —— 是别的 mod 的
     /// PatchOperation 加的。接在 <see cref="Here"/> / <see cref="Parent"/> 后面。

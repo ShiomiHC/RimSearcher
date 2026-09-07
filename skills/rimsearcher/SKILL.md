@@ -15,8 +15,8 @@ parent chain to say whether a line is written here or by an ancestor.
 
 Every command and option is in `<command> --help` and
 [references/cli-reference.md](references/cli-reference.md); worked examples and edges in
-[references/usage-notes.md](references/usage-notes.md). This page carries only what neither
-of those tells you at the moment you need it.
+[references/usage-notes.md](references/usage-notes.md). This page carries the contracts:
+what an answer means, and where a query stops being able to answer.
 
 Global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the command name.
 
@@ -25,9 +25,9 @@ Global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the com
 | The question | Where it is answered |
 |---|---|
 | What does this def actually contain? | `rimsearcher get <defName>` — several names at once print one block each, in the order given |
-| Every def of one type, in full | `rimsearcher get --type <DefType> --json` with **no def name** — one block per def, def-name order. One process instead of one per name |
+| Every def of one type, in full | `rimsearcher get --type <DefType> --json` with **no def name** — one block per def, def-name order, one process |
 | Which C# class does this def actually run? | `rimsearcher get <defName>` — the `*Class` rows |
-| Does the vanilla XML write this line — Replace or Add? | `rimsearcher get <defName> --defaults` — the `xml` column: `here` / `parent` / `no` / `under <container>`, and a `+patch` suffix when another mod's patch put the line there (Replace still finds it; your patch then depends on that mod staying loaded). What exactly it denies depends on the exporter, and `code_default` below carries that. A snapshot without that column says so. `get --help` carries the rest: how list entries join back to def-name tags, and what `under` leaves undecided. |
+| Does the vanilla XML write this line — Replace or Add? | `rimsearcher get <defName> --defaults` — the `xml` column: `here` / `parent` / `not-written` / `under <container>`, and a `+patch` suffix when another mod's patch put the line there (Replace still finds it; your patch then depends on that mod staying loaded). What exactly it denies depends on the exporter, and `code_default` below carries that. A snapshot without that column says so. `get --help` carries the rest: how list entries join back to def-name tags, and what `under` leaves undecided. |
 | What is this called? I only know part. | `rimsearcher search <words>` |
 | Which defs use this class / value? | `rimsearcher where <field> <value>` |
 | Which defs pick this class with `Class="…"`? | `rimsearcher where Class <ClassName>` |
@@ -122,8 +122,8 @@ way to state:
   tell** whether anyone set it: an XML line whose value happens to
   equal the default is indistinguishable from no line at all, so neither direction is
   available **from this column** — the `xml` column beside it, when the snapshot has one, does
-  tell them apart (`here` = an XML line writing that same value, `no` = the XML does not write
-  it), which is the one place that question is answerable. What `no` denies is printed next to
+  tell them apart (`here` = an XML line writing that same value, `not-written` = no such line),
+  which is the one place that question is answerable. What `not-written` denies is printed next to
   the table itself — which XML this snapshot read, before or after the patches ran.
   Reading the C# constructor shows where the default *could* come from, never
   whether the XML says it too. `unknown` = type not constructible. Exemptions cut both

@@ -1,7 +1,7 @@
 # rimsearcher usage notes
 
 SKILL.md holds the contracts; this page holds the mechanics, edges, and worked examples
-behind them. Nothing here overrides SKILL.md — it explains it.
+behind them.
 [cli-reference.md](cli-reference.md) (generated, authoritative) lists every command and option.
 
 ## Snapshot management
