@@ -7,8 +7,12 @@ Nothing sits at 'statBases.stat' as written — indexed paths carry the list ind
 matched_paths    statBases[0].stat (2), statBases[1].stat (1)
 def_types        ThingDef (2 of 9)
 defs_with_field  2
-Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans every def type that uses this path at all, not just the ones in the rows above — ThingDef, holding 1 def cut short. 'rimsearcher snapshot truncated --type ThingDef' lists them.
 This table's axis is the field: it lists the values 'statBases.stat' takes. Which fields hold a value you already have is the inverse question and a different command — 'rimsearcher where --value MarketValue --exact' asks it for 'MarketValue', the first row here. A value domain read here does not bound where those values occur.
+
+Defs that may be missing from this answer, their export cut short — every def type that uses this path at all
+def_type  defs_cut_short
+ThingDef  1
+verify: rimsearcher snapshot truncated --type ThingDef
 
 value                     defs
 MarketValue               2

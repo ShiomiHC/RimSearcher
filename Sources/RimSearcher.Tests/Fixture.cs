@@ -1094,7 +1094,11 @@ public static class Fixture
             ("soundImpactDefault", "BulletImpact_Ground", DefaultState.Differs),
             ("soundDrop", "Standard_Drop", DefaultState.Differs),
             ("soundPickup", "Standard_Pickup", DefaultState.Differs),
-            ("soundInteract", "Standard_Pickup", DefaultState.Differs),
+            // **同一条路径上两态并存**:别的三个 ThingDef 的 soundInteract 就是
+            // Standard_Pickup,这一个只是含着它。合成一列 defs 的话这一行印 4,而
+            // 「soundInteract 就是 Standard_Pickup 的 def」只有 3 个 —— 两个数没有
+            // 任何东西能把它们分开。真快照上这个形态占 28%(194 个真实查询值里 55 个)。
+            ("soundInteract", "Standard_PickupSlow", DefaultState.Differs),
             ("thingClass", "Verse.ThingWithComps", DefaultState.Differs),
             ("ingestible.foodType", "Meat", DefaultState.Differs),
             // 值是 Standard_Pickup 的**超串**,而它坐在一条别的 def 都没有的路径上 ——

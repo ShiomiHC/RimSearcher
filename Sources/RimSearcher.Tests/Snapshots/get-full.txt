@@ -26,7 +26,7 @@ statBases[0].stat                   MarketValue
 statBases[0].value                  120
 statBases[1].stat                   EnergyShieldRechargeRate
 statBases[1].value                  0.13
-Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_default' is not this def having made a choice — the count in brackets: soundDrop (9), soundImpactDefault (9), soundInteract (9), soundPickup (9).
+Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_default' is not this def having made a choice — the count in brackets: soundDrop (9), soundImpactDefault (9), soundPickup (9), soundInteract (8).
   - The game also prices this thing. Its market value, cost to make and work amount are computed, not stored, so no field above holds them — 'rimsearcher economy Apparel_ShieldBelt' is the only road to those numbers.
   - 1 translation.
 

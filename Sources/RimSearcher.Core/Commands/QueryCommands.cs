@@ -1189,9 +1189,13 @@ public sealed class FindCommand : Command
             new()
             {
                 Key = "paths",
-                What = "without a field path: one row per field path that holds the value — path, def_type, defs, " +
-                       "example_value. This is the key that question produces; 'matches' is absent then.",
+                What = "without a field path: one row per field path that holds the value — path, def_type, " +
+                       "example_value, and the def count split in two: defs_exact (the value is exactly the one " +
+                       "asked for) and defs_other (it is inside a longer value). With --exact there is one " +
+                       "meaning, so the column is a single 'defs'. This is the key that question produces; " +
+                       "'matches' is absent then.",
             },
+            Completeness.JsonKey,
         ],
     };
 
@@ -1706,13 +1710,6 @@ public sealed class FindCommand : Command
         // 这里不像 get 那样把默认值行滤掉:调用方点名了一个字段与一个值,「哪些 def 取到过它」
         // 的答案里就该有它们。但**为什么取到**要分得开 —— comps[N].compClass 一整批
         // 等于 CompShield,多半是 CompProperties_Shield 的声明里写死的,不是谁在 XML 里挑的。
-        // 跟着 --type 一起收:表已经滤成一个类型了,这句不能还在说别的类型。
-        // 措辞与 values 那处同源 —— 两条命令说的是同一件事。
-        Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(pq, scope, type),
-            type is { Length: > 0 }
-                ? $"all of {type}, the type this table is already filtered to"
-                : "every def type that uses this path at all, not just the ones in the rows above");
-
         // 代码造出来的 def 混在结果里时,那件事必须落在**行上**,不能只落在声明里 ——
         // 这份结果最常见的下游是「--limit all --json 灌进脚本批量生成补丁」,而脚本不读 notes。
         //
@@ -1744,6 +1741,15 @@ public sealed class FindCommand : Command
         // 它此前是 footnote,于是**同类的两条外延警告分居数据两侧**,而按位置纪律
         // 下方那条正是会被 head/sed 截掉的那条。
         Advisory.NoteMixedPathShapes(ctx, ctx.Db.FindPathShapes(pq, value, exact, scope, type));
+
+        // 说明区之后、表之前 —— 它自成一块,插在说明中间会把连着的那几句劈成两段,
+        // 而那几句靠「连着」才读得出是 N 件互不相干的事。
+        // 跟着 --type 一起收:表已经滤成一个类型了,这块不能还在说别的类型。
+        // 范围措辞与 values 那处同源 —— 两条命令圈的是同一批。
+        Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(pq, scope, type),
+            type is { Length: > 0 }
+                ? $"all of {type}, the type this table is already filtered to"
+                : "every def type that uses this path at all");
 
         ctx.Report.Table("matches",
             generated.Total > 0
@@ -1779,7 +1785,7 @@ public sealed class FindCommand : Command
     private static int ByValue(CommandContext ctx, string value, Snapshot.ScopeFilter scope, LimitValue limit,
                                bool exact, int offset, string? type = null)
     {
-        var (rows, total, exactTotal) = ctx.Db.PathsWithValue(value, scope, limit.Effective,
+        var (rows, total, exactTotal, defsTotal) = ctx.Db.PathsWithValue(value, scope, limit.Effective,
             exact ? ValueMatch.Exact : ValueMatch.Substring, offset, type);
 
         if (rows.Count == 0 && offset > 0 && total > 0)
@@ -1828,41 +1834,68 @@ public sealed class FindCommand : Command
 
         ctx.Report.PageNotice("field path", rows.Count, offset, total);
 
+        // 一共牵动多少个 def。逐行相加得不到这个数 —— 同一个 def 常在好几条路径上都持有
+        // 这个值(`stuffProps.categories[0]` 与 `[1]`),而读者要的正是去重后的那个总数,
+        // 此前只能估(真实会话里:「可能存在重叠,所以总共约 6 个」)。
+        ctx.Report.Notice(NoticeKind.Count,
+            $"{Tally.Complete(defsTotal).Render("def")} hold it altogether, counting each def once.",
+            data: new Dictionary<string, object?> { ["defs"] = defsTotal });
+
         // 子串命中不留痕,与 `--path-contains` 是同一条纪律的值侧:`where --value Bullet` 命中每一个
         // `Bullet_*`,而问的人多半只想要「值就是 Bullet 的那些」。
+        //
+        // 「哪些行会被 --exact 砍掉」不在这里说 —— 那是**每一行**的属性,它坐在
+        // defs_exact / defs_other 两列里(见下面建表处)。这句只报路径侧的两个数与那个动作。
         if (!exact && exactTotal < total)
             ctx.Report.Notice(NoticeKind.Filter,
                 exactTotal == 0
                     ? $"No value here is exactly '{value}'; each match has it inside a longer value — see " +
                       "example_value. --exact would return nothing."
-                    // 拆的是**路径**,而右边那列数的是 def,两个口径叠在一张表里。不说破的话
-                    // 「56 精确」会把整张表连同 defs 列一起读成精确数。
-                    : $"Value exactly '{value}': {Tally.Complete(exactTotal).Render("field path")}; " +
-                      $"containing it: {Tally.Complete(total - exactTotal).Render("field path")}. " +
-                      "--exact keeps the first group only — and also narrows the defs column, which here " +
-                      $"counts every def whose value contains '{value}', both groups together.");
-
-        // 按值一次问清,不按结果里的每条路径各查一次再求和:求和会把同一个被砍的 def 按它
-        // 出现在几条路径上重复计数,而路径 defName(`where --value` 命中 def 名时必然有)的
-        // 「同类型」等于全体 def 类型,单这一项就等于全库 —— 于是子集计数会大于全集。
-        // 表里那批 def 是「取到过这个值」选出来的,这句担保的也必须是同一批。
-        Completeness.NoteIndexedPathsOnly(ctx,
-            ctx.Db.TruncatedDefsSharingValue(value, exact ? ValueMatch.Exact : ValueMatch.Substring, scope),
-            "every def type that holds this value anywhere, not just the ones in the rows above");
+                    : $"{Tally.Complete(exactTotal).Render("field path")} hold it exactly; --exact keeps those.",
+                data: new Dictionary<string, object?> { ["paths_exact"] = exactTotal });
 
         // 表上方 —— 理由同 list 那处。名词用 field path 而不是 path:NounRegistry 只认
         // 前者,而这张表一行就是一条字段路径。
         ctx.AnnounceExcluded(scope, rest => ctx.Db.PathsWithValue(
             value, rest, 0, exact ? ValueMatch.Exact : ValueMatch.Substring, defType: type).Total, "field path");
 
-        ctx.Report.Table("paths", ["path", "def_type", "defs", "example_value"],
-            rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
-            {
-                ["path"] = r.Path,
-                ["def_type"] = r.DefType,
-                ["defs"] = r.Defs,
-                ["example_value"] = r.Sample,
-            }).ToList());
+        // 说明区之后、表之前:它自成一块,插在说明中间会把连着的那几句劈成两段。
+        //
+        // 按值一次问清,不按结果里的每条路径各查一次再求和:求和会把同一个被砍的 def 按它
+        // 出现在几条路径上重复计数,而路径 defName(`where --value` 命中 def 名时必然有)的
+        // 「同类型」等于全体 def 类型,单这一项就等于全库 —— 于是子集计数会大于全集。
+        // 表里那批 def 是「取到过这个值」选出来的,这一块圈的也必须是同一批。
+        Completeness.NoteIndexedPathsOnly(ctx,
+            ctx.Db.TruncatedDefsSharingValue(value, exact ? ValueMatch.Exact : ValueMatch.Substring, scope),
+            "every def type that holds this value anywhere");
+
+        // 子串态下 defs 拆成两列,各自答一个问题:「值就是它的 def 有几个」与「值只是含着
+        // 它的有几个」。合成一列的时候这两个数没有任何东西能把它们分开 —— 一行里两态并存
+        // 在真快照上占 28%(194 个真实查询值里 55 个),而那一列印的是两者之和,读者逐行
+        // 引用它(「出现在 10 个建筑的造价里」)时拿到的是被污染的数。
+        //
+        // --exact 那条路只有一个口径,列名回到裸 defs:一列名字答的是它自己数的那批,
+        // 这时没有第二批。
+        ctx.Report.Table("paths",
+            exact
+                ? ["path", "def_type", "defs", "example_value"]
+                : ["path", "def_type", "defs_exact", "defs_other", "example_value"],
+            rows.Select(r => (IReadOnlyDictionary<string, object?>)(exact
+                ? new Dictionary<string, object?>
+                {
+                    ["path"] = r.Path,
+                    ["def_type"] = r.DefType,
+                    ["defs"] = r.Defs,
+                    ["example_value"] = r.Sample,
+                }
+                : new Dictionary<string, object?>
+                {
+                    ["path"] = r.Path,
+                    ["def_type"] = r.DefType,
+                    ["defs_exact"] = r.DefsExact,
+                    ["defs_other"] = r.Defs - r.DefsExact,
+                    ["example_value"] = r.Sample,
+                })).ToList());
         return 0;
     }
 }
@@ -2275,6 +2308,7 @@ public sealed class FieldsCommand : Command
         JsonKeys =
         [
             new() { Key = "fields", Rows = true, What = "one row per field path: path, defs (how many defs use it)." },
+            Completeness.JsonKey,
         ],
     };
 
@@ -2388,6 +2422,7 @@ public sealed class ValuesCommand : Command
                        "are empty and defs_with_field is 0, so a missing key never has to be told apart from " +
                        "nothing matching.",
             },
+            Completeness.JsonKey,
         ],
     };
 
@@ -2517,12 +2552,6 @@ public sealed class ValuesCommand : Command
                 "alone; '[]' there stands for any index.",
                 footnote: true);
 
-        // 跟着 --type 一起收:表已经滤成一个类型了,这句不能还在说别的类型。
-        Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(pq, scope, type),
-            type is { Length: > 0 }
-                ? $"all of {type}, the type this table is already filtered to"
-                : "every def type that uses this path at all, not just the ones in the rows above");
-
         // 表上方 —— 理由同 list 那处。
         ctx.AnnounceExcluded(scope, rest => ctx.Db.DistinctValues(pq, rest, 0, type, 0).Total, "value");
 
@@ -2557,6 +2586,13 @@ public sealed class ValuesCommand : Command
                 "value you already have is the inverse question and a different command — " +
                 $"'rimsearcher where --value {Advisory.Quote(top)} --exact' asks it for '{top}', the first " +
                 "row here. A value domain read here does not bound where those values occur.");
+
+        // 说明区之后、表之前:它自成一块,插在说明中间会把连着的那几句劈成两段。
+        // 跟着 --type 一起收:表已经滤成一个类型了,这块不能还在说别的类型。
+        Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(pq, scope, type),
+            type is { Length: > 0 }
+                ? $"all of {type}, the type this table is already filtered to"
+                : "every def type that uses this path at all");
 
         ctx.Report.Table("values", ["value", "defs"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
@@ -2989,39 +3025,31 @@ internal static class Completeness
     /// 问的那个字段,所以担保必须按类型给,给不了「只看表里这几行」那么窄 —— 而读的人
     /// 默认按表读,于是名单里冒出表里没有的类型时,整条脚注会被当成虚警。
     /// </param>
+    /// <summary>
+    /// 四条命令共用同一份声明 —— 键的形状是这里定的,各命令只是把它列进自己的键表。
+    /// 抄四遍的话,改一处措辞会留下三份说的是旧形状。
+    /// </summary>
+    public static readonly JsonKeySpec JsonKey = new()
+    {
+        Key = "completeness",
+        What = "an object, present only when some def in scope had its export cut short: scope (which def " +
+               "types this covers, in words — it is wider than the rows above), defs_cut_short (how many), " +
+               "types (one row per def type with its own count), verify (a ready command that lists them). " +
+               "Absent means no def in that scope lost fields at export.",
+    };
+
     public static void NoteIndexedPathsOnly(CommandContext ctx, TruncationScope affected, string basis)
     {
         if (affected.Count == 0) return;
 
-        var types = affected.Types;
-        var shown = types.Take(Limits.MaxSuggestions).ToList();
-        var cmd = "rimsearcher snapshot truncated" +
-                  string.Concat(shown.Select(t => $" --type {t}"));
-        // 类型当场点名,不写「the same def types」。主语固定,计数进从句:名词有登记处,
-        // 动词没有。
-        // 「计数只覆盖索引到的路径」这条规则搬进了 SKILL.md。这里留的是它在**这一次**
-        // 的具体后果:范围圈住了哪几个 def 类型、其中多少个 def 在导出时掉过字段、
-        // 以及那条已经填好参数的交叉验证命令 —— 三样都是查一次才知道的。
-        // basis 自己已经点了那个类型的名时,名单就是同一个词再说一遍。
-        var alreadyNamed = types.Count == 1 && basis.Contains(types[0], StringComparison.Ordinal);
-        var tally = Tally.Complete(affected.Count).Render("def");
+        var shown = affected.ByType.Take(Limits.MaxSuggestions).ToList();
+        // 名单长过上限时那条命令只走得到印出来的这几行 —— 退回裸命令,它覆盖每个类型。
+        // 填好参数的那条更好用,但一条只查了一半的命令看着与查全了的一模一样。
+        var cmd = shown.Count < affected.ByType.Count
+            ? "rimsearcher snapshot truncated"
+            : "rimsearcher snapshot truncated" + string.Concat(shown.Select(t => $" --type {t.Type}"));
 
-        ctx.Report.Notice(NoticeKind.Boundary,
-            "Defs whose export was cut short can be missing from this answer: the field asked about may be " +
-            "one of the ones they lost. " +
-            (alreadyNamed
-                ? $"That risk spans {basis}, holding {tally} cut short. "
-                // 「between them」要有 them 才成立:名单只有一个类型时(basis 是通用短语、
-                // 没点过它的名,于是走这一支而非上面那支),它指的是一个类型里的一个 def。
-                : $"That risk spans {basis} — {NameList.Render(types, Limits.MaxSuggestions)}, " +
-                  (types.Count > 1
-                      ? $"holding {tally} cut short between them. "
-                      : $"holding {tally} cut short. ")) +
-            $"'{cmd}' lists " +
-            (shown.Count == types.Count
-                ? "them."
-                : $"the ones of the {shown.Count} biggest of those types; for the rest, the bare " +
-                  "'rimsearcher snapshot truncated' covers every type at once."));
+        ctx.Report.Add(new CompletenessBlock("completeness", basis, shown, affected.Count, cmd));
     }
 }
 

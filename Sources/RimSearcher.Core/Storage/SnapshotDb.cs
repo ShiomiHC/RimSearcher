@@ -19,7 +19,15 @@ public sealed record FieldRow(string Path, string Leaf, string? Value, int Defau
 /// 只回一个数不够 —— 尾注末尾那条续页命令得带上收窄开关,否则它指向的是全库,
 /// 而尾注刚说的是其中某几个类型的一小批。
 /// </summary>
-public sealed record TruncationScope(int Count, IReadOnlyList<string> Types);
+/// <remarks>
+/// 计数**按类型分开留着**,不是先加总再报一个数:声明印成一张表之后,每个类型一行
+/// 各带自己的数,而合成一个总数就得靠句子把名单和数拼回去 —— 那句话的单复数、
+/// 名单只有一项时该不该说「between them」之类,全是拼装出来的伪问题。
+/// </remarks>
+public sealed record TruncationScope(int Count, IReadOnlyList<(string Type, int Defs)> ByType)
+{
+    public IReadOnlyList<string> Types => [.. ByType.Select(t => t.Type)];
+}
 
 /// <summary>
 /// <see cref="SnapshotDb.PathsWithValue"/> 怎么算「取到过这个值」。
@@ -1119,12 +1127,12 @@ public sealed class SnapshotDb : IDisposable
         // 按类型分组而不是只取一个总数:尾注要把「这批是哪几个类型」说出来。分组同时收得
         // 更紧 —— 只有**真有被砍的 def** 的类型才进名单,而内层那个 DISTINCT 列的是
         // 「用到这条路径的所有类型」。
-        var types = new List<string>();
+        var types = new List<(string, int)>();
         var count = 0;
         using var rd = Query(
             $"SELECT t.def_type, COUNT(*) FROM defs t WHERE {string.Join(" AND ", conds)} " +
             "GROUP BY t.def_type ORDER BY COUNT(*) DESC, t.def_type", p);
-        while (rd.Read()) { types.Add(rd.GetString(0)); count += rd.GetInt32(1); }
+        while (rd.Read()) { types.Add((rd.GetString(0), rd.GetInt32(1))); count += rd.GetInt32(1); }
         return new TruncationScope(count, types);
     }
 
@@ -1133,7 +1141,7 @@ public sealed class SnapshotDb : IDisposable
     {
         var p = new Dictionary<string, object?> { ["@t"] = defType };
         var n = Scalar("SELECT COUNT(*) FROM defs WHERE fields_truncated > 0 AND def_type = @t COLLATE NOCASE", p);
-        return new TruncationScope(n, n > 0 ? [defType] : []);
+        return new TruncationScope(n, n > 0 ? [(defType, n)] : []);
     }
 
     /// <summary>某个字段后缀在快照里到底存不存在 —— find 的零结果要靠它分流成因。</summary>
@@ -1200,7 +1208,8 @@ public sealed class SnapshotDb : IDisposable
     /// 不拆开这两档,「有一个字段的值就是它」与「有一堆字段的值里碰巧含这几个字母」
     /// 逐字同形。
     /// </remarks>
-    public (IReadOnlyList<(string Path, string DefType, int Defs, string Sample)> Rows, int Total, int Exact)
+    public (IReadOnlyList<(string Path, string DefType, int Defs, int DefsExact, string Sample)> Rows,
+            int Total, int Exact, int Defs)
         PathsWithValue(string value, ScopeFilter scope, int limit, ValueMatch match = ValueMatch.Substring, int offset = 0,
                        string? defType = null)
     {
@@ -1209,12 +1218,24 @@ public sealed class SnapshotDb : IDisposable
         var join = $"FROM field_values fv {FvJoin} JOIN defs d ON d.id = fv.def_id";
 
         var total = Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT {FvPath}, d.def_type {join} {where})", p);
-        var rows = new List<(string, string, int, string)>();
+        // 行里的 def 数拆成「值就是它」与其余两半。子串态下这两半是**两个不同的问题**,
+        // 合成一个数之后没有任何东西能把它们分开:实测 194 个真实查询值里 55 个存在
+        // 一行两态并存(3.9 的 verbProperties.range 上,4 个 def 的值是 3.9、6 个是 23.9,
+        // 而那一列印的是 10)。
+        //
+        // 相加恒等于 Defs —— (def, path) 在库里唯一,一个 def 在一行里只有一个值,
+        // 于是它非此即彼。这条实测过:同一批值上「同一个 def 在同一条路径上两态并存」0 例。
+        p["@ev"] = value;
+        var exactDefs = match == ValueMatch.Substring
+            ? $", COUNT(DISTINCT CASE WHEN {FvValue} = @ev COLLATE NOCASE THEN d.id END)"
+            : ", COUNT(DISTINCT d.id)";
+        var rows = new List<(string, string, int, int, string)>();
         using var rd = Query(
-            $"SELECT {FvPath}, d.def_type, COUNT(DISTINCT d.id) c, MIN({FvValue}) {join} {where} " +
+            $"SELECT {FvPath}, d.def_type, COUNT(DISTINCT d.id) c{exactDefs}, MIN({FvValue}) {join} {where} " +
             $"GROUP BY {FvPath}, d.def_type ORDER BY c DESC, {FvPath} LIMIT {limit} OFFSET {offset}", p);
         while (rd.Read())
-            rows.Add((rd.GetString(0), rd.GetString(1), rd.GetInt32(2), rd.IsDBNull(3) ? "" : rd.GetString(3)));
+            rows.Add((rd.GetString(0), rd.GetString(1), rd.GetInt32(2), rd.GetInt32(3),
+                      rd.IsDBNull(4) ? "" : rd.GetString(4)));
 
         var exact = total;
         if (match == ValueMatch.Substring && total > 0)
@@ -1223,7 +1244,12 @@ public sealed class SnapshotDb : IDisposable
             var ew = ValueWhere(value, ValueMatch.Exact, scope, ep, defType);
             exact = Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT {FvPath}, d.def_type {join} {ew})", ep);
         }
-        return (rows, total, exact);
+
+        // 去重后的 def 总数。一个 def 常常在好几条路径上都持有这个值(stuffProps.categories[0]
+        // 与 [1]),于是把 Defs 那一列逐行加起来会把它数好几遍 —— 而「一共多少个 def」正是
+        // 读者拿这张表要的东西,他们此前只能估(「可能存在重叠,所以约 6 个」)。
+        var defs = total == 0 ? 0 : Scalar($"SELECT COUNT(DISTINCT d.id) {join} {where}", p);
+        return (rows, total, exact, defs);
     }
 
     /// <summary>

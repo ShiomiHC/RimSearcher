@@ -173,6 +173,12 @@ public class OutputSnapshotTests
         // 都不说(不点名字段那条路一直说着 —— 跨产地口径不一致)。上面那份带着 --exact,
         // 于是整套基线里**没有一份走过缺省态**,而缺省态才是多数人走的路。
         { "where-value-substring",  ["where", "texPath", "--value", "Things/Building"] },
+        // 一行里两态并存:soundInteract 上三个 def 的值就是 Standard_Pickup,Meat_Muffalo 的
+        // 是 Standard_PickupSlow。此前这两批合成一列 defs 印成 4,而「值就是它的有几个」
+        // 与「只是含着的有几个」是两个问题 —— 真快照上 194 个真实查询值里 55 个是这个形态。
+        // 这一份钉的是**数据形态**,不是命令形态:上面那几份的命令形状全覆盖了,但没有一份
+        // 的数据让两列同时非零。
+        { "where-value-both-kinds", ["where", "--value", "Standard_Pickup"] },
         // 同一条理由的**第三次**,而这一次差的不是 flag 是 def_type:上面那两份的别处形状
         // 与命中行同类型,于是「按命中行的 def_type 收窄」这个决定在字节层从没出过声 ——
         // 收窄掉与没收窄掉,在那两份基线里逐字相同。这一组的答案大头在**另一个类型**上。

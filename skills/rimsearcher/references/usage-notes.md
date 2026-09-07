@@ -94,9 +94,10 @@ data sits under a key that depends on the command. `<command> --help` lists each
 | `get` | `defs` — **not rows**: one nested object per def, each `{def, fields, translations}`. A def's field table is `defs[i].fields`; there is no `fields` key at the root. It stays an array for a single def because a name can belong to several def types. Several names put the objects in the order the names were given; `--type` with no name puts every def of that type in def-name order. A name that matched nothing is a note, not an object, so match `defs[i].def.def_name` against what you asked for. |
 | `list` | `defs` (with a def type) or `types` (without) — never both; flat rows either way |
 | `where` with a field path | `matches` — including when `--value` is given as well |
-| `where --value` with no field path | `paths` |
+| `where --value` with no field path | `paths`. The def count per row is split in two: `defs_exact` (the value is exactly what was asked for) and `defs_other` (it sits inside a longer value). A row can have both non-zero. With `--exact` there is only one meaning, so the column is a single `defs` |
 | `values` | `values`, plus `field` (which full paths and def types the value space was drawn from). Both are always present; on an empty result the members of `field` are empty or zero rather than the key being gone |
 | `fields` | `fields` |
+| `where` / `values` / `fields` | plus `completeness` when some def in scope had its export cut short: `scope` (which def types this covers, in words — wider than the rows), `defs_cut_short`, `types` (one row per def type with its own count), `verify` (a ready command listing them). The key is absent when no def in scope lost fields, so a completeness check reads the key, not the prose |
 | `mods` | `mods` |
 | `inherit` | `nodes` — **not rows**: one nested object per XML node, each `{node, ancestors, children?, witnesses?}` |
 | `keyed` | `keys` |

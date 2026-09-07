@@ -19,7 +19,7 @@ exit 0
     },
     {
       "kind": "advisory",
-      "text": "Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_default' is not this def having made a choice — the count in brackets: soundDrop (9), soundImpactDefault (9), soundInteract (9), soundPickup (9)."
+      "text": "Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_default' is not this def having made a choice — the count in brackets: soundDrop (9), soundImpactDefault (9), soundPickup (9), soundInteract (8)."
     },
     {
       "kind": "next_step",
@@ -51,7 +51,7 @@ exit 0
     },
     {
       "kind": "advisory",
-      "text": "Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_default' is not this def having made a choice — the count in brackets: soundDrop (9), soundImpactDefault (9), soundInteract (9), soundPickup (9)."
+      "text": "Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_default' is not this def having made a choice — the count in brackets: soundDrop (9), soundImpactDefault (9), soundPickup (9), soundInteract (8)."
     }
   ],
   "defs": [

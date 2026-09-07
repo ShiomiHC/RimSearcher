@@ -159,7 +159,10 @@ way to state:
 - **`--json`**: root object; prose moves into `notes` as `{kind, text}`; the data key
   depends on the command but is always present, empty array and all — an empty result never
   shows up as a missing key. Keys **beside** that one can be conditional; each command's
-  `--help` says when. Key map: usage-notes.
+  `--help` says when. Key map: usage-notes. `where`, `values` and `fields` add
+  `completeness` when some def in scope had its export cut short — it carries the scope in
+  words, the count, one row per def type, and a ready command to list them. Its absence
+  means no def in scope lost fields, so a completeness check reads that key, not the prose.
 - **Anything read by a program takes `--json`.** The text tables are laid out for a human
   reader: columns are padded to width, and a column whose value repeats in every row is
   lifted out into a `Same in every row, not repeated below:` line and then **missing from

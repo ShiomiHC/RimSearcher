@@ -302,24 +302,30 @@ public class GrammarTests
             : [];
 
         // find compClass 落在 ThingDef 上,而语料里有一个 ThingDef 在导出时被砍过字段 ——
-        // 那条 boundary 是**有据的**,不是免责声明:它点名了成因,并给出交叉验证的命令。
-        Assert.Equal(["count", "boundary"], kinds);
-        Assert.Contains("snapshot truncated",
-            notes.EnumerateArray().Last().GetProperty("text").GetString());
+        // 那件事**有据**,不是免责声明:它点名了类型、给了数,还给出交叉验证的命令。
+        // 它不在 notes 里:那三样是数据,住在自己的块里(completeness),
+        // 从一句话里抠字符串是两份数据,而措辞是会改的。
+        Assert.Equal(["count"], kinds);
+        var completeness = doc.RootElement.GetProperty("completeness");
+        Assert.Equal(1, completeness.GetProperty("defs_cut_short").GetInt32());
+        Assert.Contains("snapshot truncated", completeness.GetProperty("verify").GetString());
+        Assert.Equal("ThingDef",
+            completeness.GetProperty("types").EnumerateArray().Single().GetProperty("def_type").GetString());
 
         var (stdout, _, _) = Fixture.Run("where", "compClass", "RimWorld.CompShield");
         var lines = stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         // 两个数在这条查询上相等,于是名词是 def(那时它同时数着两样),
-        // 而且不许多印一句 —— 下面 kinds 只有 count 与 boundary 两条把着这件事。
+        // 而且不许多印一句 —— 上面 kinds 只有 count 一条把着这件事。
         Assert.Equal("2 defs.", lines[0]);
-        // 那条 boundary 摆在表**上面**,这是它的位置而不只是它的存在:沉到表下时,
+        // 那一块摆在表**上面**,这是它的位置而不只是它的存在:沉到表下时,
         // `| head` 砍掉尾巴之后剩下的输出与完整输出逐字相同 —— line 1 的计数只担保表,
         // 对表下的东西一个字都没说,于是那一刀不留任何痕迹。
-        Assert.Contains("snapshot truncated", lines[1]);
+        Assert.StartsWith("Defs that may be missing from this answer", lines[1]);
+        Assert.Contains("snapshot truncated", stdout[..stdout.IndexOf("def_name", StringComparison.Ordinal)]);
         // 折叠行是**表的一部分** —— 整列同值的列提到表上方说一次,搬的是数据不是散文。
-        // 「不许有免责声明」那一侧由上面的 kinds 断言把着:notices 里仍然只有 count 与
-        // boundary 两条,渲染器折出来的这行根本不进 notes。
-        var header = lines[2].StartsWith("Same in every row", StringComparison.Ordinal) ? lines[3] : lines[2];
+        // 「不许有免责声明」那一侧由上面的 kinds 断言把着:notices 里仍然只有 count 一条,
+        // 渲染器折出来的这行根本不进 notes。
+        var header = lines.First(l => l.StartsWith("def_name", StringComparison.Ordinal));
         Assert.StartsWith("def_name", header);
     }
 
@@ -525,11 +531,11 @@ public class GrammarTests
         // RimWorld.CompShield 在 test.mod 的 TestModGun 上也有 —— 收窄之后仍有结果,
         // 变的只是这句背书该不该说话。
         var (wide, _, _) = Fixture.Run("where", "--value", "CompShield");
-        Assert.Contains("Defs whose export was cut short", wide);
+        Assert.Contains("Defs that may be missing from this answer", wide);
 
         // 收到 test.mod 之后被砍的那个不在 scope 里,这句背书就不该再提它。
         var (narrow, _, _) = Fixture.Run("where", "--value", "CompShield", "--scope", "test.mod");
-        Assert.DoesNotContain("Defs whose export was cut short", narrow);
+        Assert.DoesNotContain("Defs that may be missing from this answer", narrow);
     }
 
     /// <summary>
@@ -1981,21 +1987,43 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 表头把命中拆成「精确」与「包含」两组,分的是**路径**;而右边那列数的是 def,一直按
-    /// 包含计。两个口径叠在一张表里而不说破,「56 精确」会把整张表连同 defs 列一起读成精确数。
+    /// 「值就是它」与「值只是含着它」是**每一行**的属性,得坐在行里 —— 合成一列 defs
+    /// 之后,一行里两态并存时那个数是两批之和,而读者是逐行引用它的(真实会话:「出现在
+    /// 10 个建筑的造价里」)。真快照上这个形态占 28%(194 个真实查询值里 55 个),
+    /// 其中 3.9 的 verbProperties.range 那一行印 10,而值真是 3.9 的只有 4 个 def。
+    ///
+    /// 一并钉住的三件事:两列只在子串态拆(--exact 只有一个口径,列名回到裸 defs)、
+    /// 并存行两列都非零、以及去重后的 def 总数要在场 —— 逐行相加得不到它,
+    /// 同一个 def 常在好几条路径上都持有这个值。
     /// </summary>
     [Fact]
-    public void 按值反查说破defs列与拆分不同口径()
+    public void 按值反查的def数按行拆成两个口径()
     {
-        // soundPickup / soundInteract 精确,ingestible.ingestSound 只含它。
+        // soundPickup / soundInteract 精确,ingestible.ingestSound 只含它;而
+        // soundInteract 那一行里 Meat_Muffalo 是 Standard_PickupSlow —— 一行两态并存。
         var (split, _, _) = Fixture.Run("where", "--value", "Standard_Pickup");
-        Assert.Contains("Value exactly 'Standard_Pickup': 2 field paths; containing it: 1 field path.",
-            split, StringComparison.Ordinal);
-        Assert.Contains("also narrows the defs column", split, StringComparison.Ordinal);
+        Assert.Contains("defs_exact", split, StringComparison.Ordinal);
+        Assert.Contains("defs_other", split, StringComparison.Ordinal);
 
-        // 一条都不精确时没有两个口径可混,那句话就不该在场 —— 否则它退化成每次都挂的免责声明。
+        // 并存的那一行:两列都非零。具体的数由字节基线钉(where-value-both-kinds),
+        // 这里钉的是「这一行分得开」—— 合成一列的话它印的是两者之和,而那个和
+        // 回答不了任何一个问题。
+        Assert.Matches(new Regex(@"soundInteract\s+[1-9]\d*\s+[1-9]\d*\s"), split);
+
+        // 去重后的总数在场,而它不是把哪一列加起来得到的。
+        Assert.Contains("defs hold it altogether, counting each def once.", split, StringComparison.Ordinal);
+
+        // --exact 只有一个口径:回到裸 defs,不留一列恒为零的 defs_other。
+        // 正向钉表头而不是反向钉「没有 defs_other」—— 后者的锚在产地里有两处同形出处
+        // (列名与 --help 的键说明),那样的反向断言不受「锚要唯一」那道闸保护。
+        var (ex, _, _) = Fixture.Run("where", "--value", "Standard_Pickup", "--exact");
+        // `defs\s` 与 `defs_exact` 分得开 —— 下划线不是 \s,所以这条正则同时钉住
+        // 「有 defs 这一列」与「它不是拆开的那两列之一」。别的列可能被整列折叠搬走。
+        Assert.Matches(new Regex(@"^path\s+.*\bdefs\s", RegexOptions.Multiline), ex);
+
+        // 一条都不精确时,「--exact 会剩下什么」那句仍要在 —— 它答的是「会剩下空」。
         var (none, _, _) = Fixture.Run("where", "--value", "CompShield");
-        Assert.DoesNotContain("also narrows the defs column", none, StringComparison.Ordinal);
+        Assert.Contains("--exact would return nothing", none, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -2010,8 +2038,10 @@ public class GrammarTests
     public void 截断脚注说破自己圈的是哪批def类型()
     {
         var (byPath, _, _) = Fixture.Run("where", "compClass", "RimWorld.CompShield");
-        Assert.Contains("every def type that uses this path at all, not just the ones in the rows above",
-            byPath, StringComparison.Ordinal);
+        // 「比这张表宽」由块自己的标题承载(它自成一块、有自己的范围行),不再靠句子里
+        // 挂一个「not just the ones in the rows above」从句。
+        Assert.Contains("Defs that may be missing from this answer", byPath, StringComparison.Ordinal);
+        Assert.Contains("every def type that uses this path at all", byPath, StringComparison.Ordinal);
 
         var (byValue, _, _) = Fixture.Run("where", "--value", "RimWorld.CompShield");
         Assert.Contains("every def type that holds this value anywhere", byValue, StringComparison.Ordinal);
@@ -2298,31 +2328,37 @@ public class GrammarTests
     {
         var (stdout, _, _) = Fixture.Run("where", "--value", "CompShield");
 
-        var m = Regex.Match(stdout,
-            // 「between them」只在名单有两个以上类型时才出现,而夹具里被砍的 def 只有
-            // 一个(ThingDef Bullet_Revolver)—— 这条闸验的是计数与命令,不是那半句。
-            @"Defs whose export was cut short [^']*?holding (\d+) defs? cut short(?: between them)?\. " +
-            @"'rimsearcher snapshot truncated([^']*)' lists them\.");
-        Assert.True(m.Success, stdout);
+        // 块里每个类型一行、各带自己的数,总数不再由句子拼装 —— 于是这里逐行取数再相加,
+        // 与那条命令自己报的数比。
+        var block = Regex.Match(stdout,
+            @"Defs that may be missing from this answer[^\n]*\n" +
+            @"def_type\s+defs_cut_short\n((?:\w+\s+\d+\n)+)" +
+            @"verify: (rimsearcher snapshot truncated[^\n]*)");
+        Assert.True(block.Success, stdout);
 
-        var claimed = int.Parse(m.Groups[1].Value);
-        var argv = m.Groups[2].Value.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        Assert.NotEmpty(argv);   // 裸命令走到的是全库,不是刚说的那批
+        var byType = Regex.Matches(block.Groups[1].Value, @"(\w+)\s+(\d+)")
+                          .Select(r => (Type: r.Groups[1].Value, Defs: int.Parse(r.Groups[2].Value))).ToList();
+        Assert.NotEmpty(byType);
 
-        var (listed, _, _) = Fixture.Run(["snapshot", "truncated", .. argv]);
+        // 去掉 exe 名,剩下的整条原样交给 CLI —— 拼一遍「snapshot truncated」再接参数的话,
+        // 拼错了这条闸验的就不是块里印的那条命令。
+        var argv = block.Groups[2].Value.Split(' ', StringSplitOptions.RemoveEmptyEntries).Skip(1).ToArray();
+        Assert.Contains("--type", argv);   // 裸命令走到的是全库,不是刚说的那批
+
+        var (listed, _, _) = Fixture.Run(argv);
         // 计数句会把用户自己划的那道线念回去(`1 def within --type ThingDef.`),
         // 取数的正则跟着放宽,不是把那半句当噪音滤掉。
         var got = Regex.Match(listed, @"^(\d+) defs?( within [^.]*)?\.", RegexOptions.Multiline);
         Assert.True(got.Success, listed);
-        Assert.Equal(claimed, int.Parse(got.Groups[1].Value));
+        Assert.Equal(byType.Sum(t => t.Defs), int.Parse(got.Groups[1].Value));
 
         // 句子不许写「defs of **the same def types**」:它指的是「哪些类型能带这条路径」,
         // 与表里那几行的类型没有关系,而「the same」是唯一让人去对照的那个词。
         Assert.DoesNotContain(FossilSameTypes, stdout, StringComparison.Ordinal);
 
-        // 类型要在散文里点名,而且与命令里那几个逐字一致 —— 不点名就没法核对。
-        foreach (var t in argv.Where(a => !a.StartsWith("--", StringComparison.Ordinal)))
-            Assert.Contains(t, stdout.Split("'rimsearcher snapshot truncated")[0], StringComparison.Ordinal);
+        // 命令里点的类型与块里列的逐字一致 —— 对不上就没法核对。
+        foreach (var t in argv.Skip(2).Where(a => !a.StartsWith("--", StringComparison.Ordinal)))
+            Assert.Contains(t, byType.Select(b => b.Type));
     }
 
     /// <summary>
@@ -3027,7 +3063,7 @@ public class GrammarTests
     {
         // 自述侧:被推荐的那条命令自己说了什么。这是被比对的基准,不复述它的理由。
         var (target, _, _) = Fixture.Run("where", "--value", "CompShield");
-        Assert.Contains("can be missing from this answer", target, StringComparison.Ordinal);
+        Assert.Contains("may be missing from this answer", target, StringComparison.Ordinal);
 
         foreach (var argv in new[]
                  {
@@ -3243,11 +3279,11 @@ public class GrammarTests
         Assert.Contains("soundInteract", hit, StringComparison.Ordinal);
         Assert.Contains("path shape", hit, StringComparison.Ordinal);
         // ① 形状要带着**它自己的 def 数**,那个数就是被搬进答案的东西。
-        Assert.Contains("soundInteract (9", hit, StringComparison.Ordinal);
+        Assert.Contains("soundInteract (8", hit, StringComparison.Ordinal);
 
-        // ② 不许出现把各形状加起来的那个总数。这里 soundInteract 9 + 自身命中 9 = 18,
-        //    而 18 不是任何真值 —— 并集这种「看着像答案的错数」比不给数更坏。
-        Assert.DoesNotContain("18", hit, StringComparison.Ordinal);
+        // ② 不许出现把各形状加起来的那个总数。这里 soundInteract 8 + 自身命中 9 = 17,
+        //    而 17 不是任何真值 —— 并集这种「看着像答案的错数」比不给数更坏。
+        Assert.DoesNotContain("17", hit, StringComparison.Ordinal);
 
         // 表上方 —— 与补集句同一条纪律:受众定义上就是拿到一张表的人。
         var said = hit.IndexOf("also sits on", StringComparison.Ordinal);
@@ -3405,9 +3441,12 @@ public class GrammarTests
                                      && (s.Contains("longer value", StringComparison.Ordinal)
                                          || s.Contains("containing it", StringComparison.Ordinal));
 
-        // ① 跨产地:同一个值、同一份快照,不点名字段那条路一直会分开报。
-        Assert.True(Splits(Fixture.Run("where", "--value", "Standard_Pickup").Stdout),
-                    "不点名字段那条路本来就分开报,它是这条闸的另一个产地");
+        // ① 跨产地:同一个值、同一份快照,不点名字段那条路也把两批分开 —— 只是它分在
+        //    **列**里(defs_exact / defs_other)而不在句子里,因为那条路一行是一条路径,
+        //    「哪几个 def 属于哪一批」是行的属性。
+        var byValue = Fixture.Run("where", "--value", "Standard_Pickup").Stdout;
+        Assert.Contains("defs_exact", byValue, StringComparison.Ordinal);
+        Assert.Contains("defs_other", byValue, StringComparison.Ordinal);
 
         // ② 全是超串:主语料里 texPath 的两个值都以 Things/Building 开头,没有一个等于它。
         var none = Fixture.Run("where", "texPath", "--value", "Things/Building").Stdout;
@@ -3799,15 +3838,15 @@ public class GrammarTests
     {
         // 认这句话在不在,用它开头那句 —— 结尾的「between them」是随类型个数走的,
         // 拿它当锚会把「这句没出」与「这句出了但只点了一个类型」混成同一个绿。
-        const string Note = "Defs whose export was cut short";
+        const string Note = "Defs that may be missing from this answer";
 
         // 语料:comps[0].compClass 同时落在 ThingDef 与 HediffDef 上,而只有 ThingDef
         // 那边有被截过的 def(Bullet_Revolver)。不划类型时这句话成立,要出。
         var (wide, _, _) = Fixture.Run("values", "compClass");
         Assert.Contains(Note, wide, StringComparison.Ordinal);
         Assert.Contains("ThingDef", wide, StringComparison.Ordinal);
-        // 名单上只有 ThingDef 一个类型、它下面只有一个 def —— 没有 them 可指。
-        Assert.DoesNotContain("cut short between them", wide, StringComparison.Ordinal);
+        // 单复数与「between them」这类拼装整个消失了:名单是表,不是句子。
+        Assert.DoesNotContain("between them", wide, StringComparison.Ordinal);
 
         // 划到 HediffDef 之后,表里一条 ThingDef 都没有了 —— 这句话跟着一起没。
         var (narrow, _, _) = Fixture.Run("values", "compClass", "--type", "HediffDef");

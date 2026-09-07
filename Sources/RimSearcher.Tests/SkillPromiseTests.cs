@@ -691,7 +691,10 @@ public class SkillPromiseTests
         var declared = registry.Specs.SelectMany(s => s.JsonKeys.Select(k => k.Key))
                                      .ToHashSet(StringComparer.Ordinal);
         // notes 与行内的行结构键不是顶层数据键,但同一段里就摆着 —— 它们属于这段话本身。
-        string[] structural = ["notes", "kind", "text", "file", "line", "is_match", "group", "--json", "--help"];
+        string[] structural = ["notes", "kind", "text", "file", "line", "is_match", "group", "--json", "--help",
+                               // where --value 的行内两列,以及 completeness 那个对象自己的成员:
+                               // 都是键**里面**的结构,不是顶层数据键 —— 与 kind/text/file/line 同类。
+                               "defs_exact", "defs_other", "scope", "defs_cut_short", "verify"];
 
         var mentioned = Regex.Matches(paragraph.Value, @"`([^`]+)`").Select(m => m.Groups[1].Value)
             .Where(t => Regex.IsMatch(t, "^[a-z_]+$"))

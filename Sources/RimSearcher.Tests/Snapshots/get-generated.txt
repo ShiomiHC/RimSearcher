@@ -16,10 +16,10 @@ path                    value
 soundImpactDefault      BulletImpact_Ground
 soundDrop               Standard_Drop
 soundPickup             Standard_Pickup
-soundInteract           Standard_Pickup
+soundInteract           Standard_PickupSlow
 thingClass              Verse.ThingWithComps
 ingestible.foodType     Meat
 ingestible.ingestSound  Standard_PickupFood
-Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_default' is not this def having made a choice — the count in brackets: soundDrop (9), soundImpactDefault (9), soundInteract (9), soundPickup (9).
+Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_default' is not this def having made a choice — the count in brackets: soundDrop (9), soundImpactDefault (9), soundPickup (9).
 The game also prices this thing. Its market value, cost to make and work amount are computed, not stored, so no field above holds them — 'rimsearcher economy Meat_Muffalo' is the only road to those numbers.
 --- stderr ---

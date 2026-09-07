@@ -50,6 +50,17 @@ public sealed record Notice(NoticeKind Kind, string Text, bool Footnote = false)
     /// <c>code-search</c> 那句同时报了命中数 / 文件数 / 读了几棵树,只有行那一对进这里。
     /// </summary>
     public Tally? Count { get; init; }
+
+    /// <summary>
+    /// 这句话里那几个数的结构化形态,<c>--json</c> 里平铺到本条 note 上。
+    /// <c>null</c> = 这句话没有可取的数。
+    ///
+    /// 与 <see cref="Count"/> 同一条理由,只是它不限于「分页那一对」:一句话里的数
+    /// 从字符串里抠出来是两份数据,而措辞是会改的。<see cref="Count"/> 管的是
+    /// 「这张表印了几行 / 一共几行」,这里管的是别的数(一共牵动多少个 def、
+    /// 其中多少条路径精确命中),两者语义不同,合成一个键会让机器侧分不出问的是哪个。
+    /// </summary>
+    public IReadOnlyDictionary<string, object?>? Data { get; init; }
 }
 
 public abstract record Block : ReportEntry
@@ -71,6 +82,23 @@ public sealed record TableBlock(string Name, IReadOnlyList<string> Columns,
 
 /// <summary>键值明细块(get 这类单对象输出)。</summary>
 public sealed record DetailBlock(string Name, IReadOnlyList<KeyValuePair<string, object?>> Pairs) : Block;
+
+/// <summary>
+/// 本次回答**够不到**哪些 def:导出时被砍过字段的那批,按 def 类型一行一个数。
+///
+/// 自成一块而不是挂在表下面当一句话,是因为它的范围与那张表不一样宽 —— 被砍的 def
+/// 丢掉的可能正是这次问的字段,于是担保只能按类型给,给不了「只看表里这几行」那么窄。
+/// 范围写在 <paramref name="Scope"/> 里由块自己带着,句子里就不必再有一个从句去说
+/// 「不止上面那几行」;而每个类型一行各带自己的数之后,「名单只有一项时怎么说」
+/// 这类拼装问题一起消失。
+///
+/// 排在数据表**之前**:沉到末尾的话 `| head` 一切,剩下的输出与完整输出逐字相同 ——
+/// 第一行的计数只担保表,对这一块一个字都没说,于是没有任何信号提示这里少了一句
+/// 「这答案可能缺东西」。
+/// </summary>
+public sealed record CompletenessBlock(string Name, string Scope,
+                                       IReadOnlyList<(string Type, int Defs)> ByType,
+                                       int Defs, string Verify) : Block;
 
 /// <summary>
 /// 自由文本块(代码片段)。文本侧必须逐字保真 —— 表格会按
@@ -142,11 +170,12 @@ public sealed class Report
         return this;
     }
 
-    public Report Notice(NoticeKind kind, string text, bool footnote = false, Tally? count = null)
+    public Report Notice(NoticeKind kind, string text, bool footnote = false, Tally? count = null,
+                         IReadOnlyDictionary<string, object?>? data = null)
     {
         // 声明多半是「一句 + 若干条件句」拼出来的,末尾那个分隔空格在所有条件句都空掉时
         // 留在行尾。一处一处 TrimEnd 修不干净 —— 组合是随快照能力变的,不是随代码变的。
-        _entries.Add(new Notice(kind, text.TrimEnd(), footnote) { Count = count });
+        _entries.Add(new Notice(kind, text.TrimEnd(), footnote) { Count = count, Data = data });
         return this;
     }
 

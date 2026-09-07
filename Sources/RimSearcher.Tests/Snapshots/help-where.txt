@@ -36,8 +36,9 @@ Global options (every command takes these, written after the command):
       --config <path>    Use this config file instead of the default one.
 
 --json keys (besides 'notes'):
-  matches  with a field path: one row per def that has it — def_name, def_type, value, mod. 'mod' is where the def was declared, not who wrote the value: a comp another mod bolts onto a vanilla def still reads as the vanilla mod, and --scope filters that same column.
-  paths    without a field path: one row per field path that holds the value — path, def_type, defs, example_value. This is the key that question produces; 'matches' is absent then.
+  matches       with a field path: one row per def that has it — def_name, def_type, value, mod. 'mod' is where the def was declared, not who wrote the value: a comp another mod bolts onto a vanilla def still reads as the vanilla mod, and --scope filters that same column.
+  paths         without a field path: one row per field path that holds the value — path, def_type, example_value, and the def count split in two: defs_exact (the value is exactly the one asked for) and defs_other (it is inside a longer value). With --exact there is one meaning, so the column is a single 'defs'. This is the key that question produces; 'matches' is absent then.
+  completeness  an object, present only when some def in scope had its export cut short: scope (which def types this covers, in words — it is wider than the rows above), defs_cut_short (how many), types (one row per def type with its own count), verify (a ready command that lists them). Absent means no def in that scope lost fields at export.
 
 Examples:
   rimsearcher where compClass RimWorld.CompShield

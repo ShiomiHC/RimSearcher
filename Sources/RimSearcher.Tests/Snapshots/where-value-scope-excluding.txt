@@ -3,9 +3,14 @@ exit 0
 --- stdout ---
 --scope all,-test.mod (= ludeon.rimworld).
   - 1 field path within --scope all,-test.mod.
-  - Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans every def type that holds this value anywhere, not just the ones in the rows above — ThingDef, holding 1 def cut short. 'rimsearcher snapshot truncated --type ThingDef' lists them.
+  - 5 defs hold it altogether, counting each def once.
   - What --scope all,-test.mod left out is not empty for this query: with --scope test.mod instead, it finds 1 field path.
 
-path       def_type  defs  example_value
-soundDrop  ThingDef  5     Standard_Drop
+Defs that may be missing from this answer, their export cut short — every def type that holds this value anywhere
+def_type  defs_cut_short
+ThingDef  1
+verify: rimsearcher snapshot truncated --type ThingDef
+
+path       def_type  defs_exact  defs_other  example_value
+soundDrop  ThingDef  5           0           Standard_Drop
 --- stderr ---

@@ -2,9 +2,10 @@ $ rimsearcher where --value Bloomstone --type AlloyPartDef
 exit 0
 --- stdout ---
 2 field paths within --type AlloyPartDef.
+4 defs hold it altogether, counting each def once.
 
-Same in every row, not repeated below: def_type=AlloyPartDef, example_value=Bloomstone.
-path                  defs
+Same in every row, not repeated below: def_type=AlloyPartDef, defs_other=0, example_value=Bloomstone.
+path                  defs_exact
 costList[0].thingDef  4
 costList[1].thingDef  2
 --- stderr ---

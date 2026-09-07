@@ -126,6 +126,7 @@ public static class TextRenderer
         TableBlock t => t.Rows.Count == 0 && string.IsNullOrEmpty(t.Caption),
         DetailBlock d => d.Pairs.All(p => OutputText.Cell(p.Value).Length == 0),
         TextBlock x => x.Lines.Count == 0,
+        CompletenessBlock c => c.ByType.Count == 0,
         _ => false,
     };
 
@@ -148,6 +149,21 @@ public static class TextRenderer
                 break;
             case TextBlock x:
                 foreach (var line in x.Lines) sb.Append(line).Append(OutputText.Newline);
+                break;
+            case CompletenessBlock c:
+                // 标题自带范围 —— 名单里冒出表里没有的类型时,读者要的解释在这一行,
+                // 不在表下面的某个从句里。
+                // 「may be」不许省:这些 def 的字段在导出时被砍过,砍掉的**可能**正是这次
+                // 问的那个,也可能不是。写成断定的「missing」是另一件事,而那件事查不出来。
+                sb.Append("Defs that may be missing from this answer, their export cut short — ")
+                  .Append(c.Scope).Append(OutputText.Newline);
+                RenderTable(sb, new TableBlock("completeness", ["def_type", "defs_cut_short"],
+                    [.. c.ByType.Select(t => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+                    {
+                        ["def_type"] = t.Type,
+                        ["defs_cut_short"] = t.Defs,
+                    })]));
+                sb.Append("verify: ").Append(c.Verify).Append(OutputText.Newline);
                 break;
         }
     }
@@ -278,6 +294,8 @@ public static class JsonRenderer
                         note["shown"] = c.Shown;
                         note["total"] = c.Total;
                     }
+                    if (n.Data is { } d)
+                        foreach (var (k, v) in d) Put(note, k, v, $"the '{SnakeCase(n.Kind.ToString())}' note");
                     return note;
                 })
                 .ToList();
@@ -297,6 +315,20 @@ public static class JsonRenderer
                 // Unwrap:带限定词的格在 JSON 面只出值本身。不脱这层壳的话,一个本该是
                 // 数字的字段会变成 {"Value":635,"Note":"…"},整列类型就毁了 —— 而限定词
                 // 本身在 JSON 面另有独立列(见 Qualified 的注释)。
+                // 一份数据一个产地:范围、每类型的数、总数、那条验证命令,机器侧全在这里
+                // 取得到,不必从一句话里抠 —— 措辞一改,抠字符串的下游会静默失配,而失配
+                // 与「这次没有截断」印出来同形。
+                CompletenessBlock c => (c.Name, (object?)new Dictionary<string, object?>
+                {
+                    ["scope"] = c.Scope,
+                    ["defs_cut_short"] = c.Defs,
+                    ["types"] = c.ByType.Select(t => new Dictionary<string, object?>
+                    {
+                        ["def_type"] = t.Type,
+                        ["defs_cut_short"] = t.Defs,
+                    }).ToList(),
+                    ["verify"] = c.Verify,
+                }),
                 TableBlock t => (t.Name, (object?)t.Rows.Select(Unwrap).ToList()),
                 DetailBlock d => (d.Name, d.Pairs.ToDictionary(p => p.Key, p => Bare(p.Value))),
                 // 有结构化形态就用它,不要让消费方去拆 "path:line:text"。

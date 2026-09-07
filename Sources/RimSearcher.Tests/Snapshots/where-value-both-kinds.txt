@@ -1,0 +1,18 @@
+$ rimsearcher where --value Standard_Pickup
+exit 0
+--- stdout ---
+3 field paths.
+  - 9 defs hold it altogether, counting each def once.
+  - 2 field paths hold it exactly; --exact keeps those.
+
+Defs that may be missing from this answer, their export cut short — every def type that holds this value anywhere
+def_type  defs_cut_short
+ThingDef  1
+verify: rimsearcher snapshot truncated --type ThingDef
+
+Same in every row, not repeated below: def_type=ThingDef.
+path                    defs_exact  defs_other  example_value
+soundInteract           8           1           Standard_Pickup
+soundPickup             9           0           Standard_Pickup
+ingestible.ingestSound  0           1           Standard_PickupFood
+--- stderr ---

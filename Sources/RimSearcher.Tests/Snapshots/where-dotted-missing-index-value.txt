@@ -3,8 +3,12 @@ exit 0
 --- stdout ---
 2 defs.
   - Nothing sits at 'statBases.stat' as written — indexed paths carry the list index, so this ran as statBases[].stat (2). That shape goes back in with --exact-path to pin it.
-  - Defs whose export was cut short can be missing from this answer: the field asked about may be one of the ones they lost. That risk spans every def type that uses this path at all, not just the ones in the rows above — ThingDef, holding 1 def cut short. 'rimsearcher snapshot truncated --type ThingDef' lists them.
   - 'MarketValue' also sits on 1 path shape beyond this one, all on ThingDef: statFactors[].stat (1).
+
+Defs that may be missing from this answer, their export cut short — every def type that uses this path at all
+def_type  defs_cut_short
+ThingDef  1
+verify: rimsearcher snapshot truncated --type ThingDef
 
 Same in every row, not repeated below: def_type=ThingDef, path=statBases[0].stat, value=MarketValue, code_default=no, mod=ludeon.rimworld.
 def_name
