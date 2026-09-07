@@ -1336,11 +1336,11 @@ public class GrammarTests
     {
         var (mid, _, midCode) = Fixture.Run("list", "ThingDef", "--limit", "2", "--offset", "2");
         Assert.Equal(0, midCode);
-        Assert.Contains("9 defs, showing 2, starting at 3", mid, StringComparison.Ordinal);
+        Assert.Contains("9 defs of type ThingDef, showing 2, starting at 3", mid, StringComparison.Ordinal);
         Assert.DoesNotContain(NextPageOffer, mid, StringComparison.Ordinal);
 
         var (first, _, _) = Fixture.Run("list", "ThingDef", "--limit", "2");
-        Assert.StartsWith("9 defs, showing the first 2.", first, StringComparison.Ordinal);
+        Assert.StartsWith("9 defs of type ThingDef, showing the first 2.", first, StringComparison.Ordinal);
 
         var (last, _, lastCode) = Fixture.Run("list", "ThingDef", "--limit", "4", "--offset", "5");
         Assert.Equal(0, lastCode);
@@ -4239,7 +4239,7 @@ public class GrammarTests
         Assert.Equal(0, code);
         Assert.Contains("Apparel_ShieldBelt", found, StringComparison.Ordinal);
         // 分母不许丢:筛后的 total 单独摆着会被读成「这个类型总共就这些」。
-        Assert.Contains($"this type holds {total} defs in all", found, StringComparison.Ordinal);
+        Assert.Contains($"ThingDef holds {total} defs in all", found, StringComparison.Ordinal);
 
         // 筛空 ≠ 类型不存在。
         var (miss, _, mcode) = Fixture.Run("list", "ThingDef", "--find", "zzznotathing");
@@ -5224,6 +5224,62 @@ public class GrammarTests
                              "整层枚举的行带了 query 一列,而那一列在这条路上没有值可摆");
 
         var (_, _, allMissing) = Fixture.Run("keyed", "NoSuchUiKey", "NoSuchUiKeyEither", "--json");
+        Assert.Equal(1, allMissing);
+    }
+
+    /// <summary>
+    /// list 的多类型形态。这条命令的 class 一列本来就按数据出(桶里只有一个 class 就不印),
+    /// 几个类型一次问时取并集 —— 同质那几个的行照填真值,不留空。那一条单独钉:漏了它,
+    /// 一个异构类型会把同质类型的 class 值挤成 null,而 null 在这套输出里读作「查不出来」。
+    /// </summary>
+    [Fact]
+    public void list多类型的行等于分别问再拼起来()
+    {
+        static List<string> Rows(string json, string? of = null)
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("defs", out var arr)) return [];
+            return arr.EnumerateArray()
+                      .Where(r => of is null || r.GetProperty("def_type").GetString() == of)
+                      .Select(r => string.Join("|", r.EnumerateObject()
+                                                     .Where(p => p.Name != "def_type")
+                                                     .Select(p => $"{p.Name}={p.Value.GetRawText()}")))
+                      .ToList();
+        }
+
+        var (thing, _, _) = Fixture.Run("list", "ThingDef", "--json");
+        var (alloy, _, _) = Fixture.Run("list", "AlloyPartDef", "--json");
+        var (multi, _, code) = Fixture.Run("list", "ThingDef", "NoSuchTypeXYZ", "AlloyPartDef", "--json");
+        Assert.Equal(0, code);
+        Assert.Equal(Rows(thing), Rows(multi, "ThingDef"));
+        Assert.Equal(Rows(alloy), Rows(multi, "AlloyPartDef"));
+
+        // --limit 是每个类型 2 条,不是两个类型合计 2 条。
+        var (paged, _, _) = Fixture.Run("list", "ThingDef", "AlloyPartDef", "--limit", "2", "--json");
+        Assert.Equal(2, Rows(paged, "ThingDef").Count);
+        Assert.Equal(2, Rows(paged, "AlloyPartDef").Count);
+
+        using (var doc = System.Text.Json.JsonDocument.Parse(multi))
+        {
+            var texts = doc.RootElement.GetProperty("notes").EnumerateArray()
+                           .Select(n => n.GetProperty("text").GetString()!).ToList();
+            Assert.Contains(texts, t => Regex.IsMatch(t, @"^\d+ defs? of type ThingDef\b"));
+            Assert.Contains(texts, t => Regex.IsMatch(t, @"^\d+ defs? of type AlloyPartDef\b"));
+            Assert.Contains(texts, t => t.Contains("NoSuchTypeXYZ", StringComparison.Ordinal));
+
+            // def_type 恒在,单类型调用上也是。
+            foreach (var row in doc.RootElement.GetProperty("defs").EnumerateArray())
+                Assert.False(row.GetProperty("def_type").GetString() is null or "");
+        }
+
+        // class 一列取并集,而同质那个类型的行不因此变成 null。TestBaseDef 是异构桶。
+        var (mixed, _, _) = Fixture.Run("list", "TestBaseDef", "AlloyPartDef", "--json");
+        using (var doc = System.Text.Json.JsonDocument.Parse(mixed))
+            foreach (var row in doc.RootElement.GetProperty("defs").EnumerateArray())
+                Assert.NotEqual(System.Text.Json.JsonValueKind.Null,
+                                row.GetProperty("class").ValueKind);
+
+        var (_, _, allMissing) = Fixture.Run("list", "NoSuchTypeXYZ", "NoSuchTypeABC", "--json");
         Assert.Equal(1, allMissing);
     }
 }

@@ -537,12 +537,12 @@ rimsearcher keyed --empty-translation
 List every def of one type — or, with no type given, every def type in the snapshot.
 
 ```
-rimsearcher list [defType] [options]
+rimsearcher list [defType]... [options]
 ```
 
 | Argument | Meaning |
 |---|---|
-| `<defType>` | A def type such as ThingDef. Leave it out and this lists the def types themselves, with how many defs each holds — all of them, unless you pass --limit. --own-class and --offset need a def type and are refused without one. *(optional)* |
+| `<defType>` | A def type such as ThingDef. Several go in one call; --limit and --offset apply to each on its own, each gets its own count line, and the def_type column says which type a row came from. Leave them all out and this lists the def types themselves, with how many defs each holds — all of them, unless you pass --limit. --own-class and --offset need a def type and are refused without one. *(optional)* |
 
 | Option | Meaning | Also accepted |
 |---|---|---|
@@ -556,7 +556,7 @@ rimsearcher list [defType] [options]
 
 | Key | Holds |
 |---|---|
-| `defs` | with a def type: one row per def — def_name, label, mod, plus 'class' when the bucket holds more than one def class. 'mod' is where the def was declared, not who last changed it: a def another mod patched still reads as its original mod, and --scope filters that same column. |
+| `defs` | with a def type: one row per def — def_name, label, mod, def_type (which of the types asked for the row came from, present on a single-type call too), plus 'class' when one of the buckets holds more than one def class. 'mod' is where the def was declared, not who last changed it: a def another mod patched still reads as its original mod, and --scope filters that same column. |
 | `types` | without one: one row per def type — def_type, defs. Which of the two keys is present follows the def type, so a caller that passed one never has to guess. |
 
 Examples:

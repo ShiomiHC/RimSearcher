@@ -1,9 +1,9 @@
 $ rimsearcher list ThingDef --limit 2 --offset 2
 exit 0
 --- stdout ---
-9 defs, showing 2, starting at 3.
+9 defs of type ThingDef, showing 2, starting at 3.
 
-Same in every row, not repeated below: label=firefoam, mod=ludeon.rimworld.
+Same in every row, not repeated below: label=firefoam, mod=ludeon.rimworld, def_type=ThingDef.
 def_name
 Firefoam
 FoamPopper

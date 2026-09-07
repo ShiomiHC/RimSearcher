@@ -1,0 +1,113 @@
+$ rimsearcher list ThingDef AlloyPartDef --json
+exit 0
+--- stdout ---
+{
+  "notes": [
+    {
+      "kind": "count",
+      "text": "9 defs of type ThingDef.",
+      "shown": 9,
+      "total": 9
+    },
+    {
+      "kind": "count",
+      "text": "4 defs of type AlloyPartDef.",
+      "shown": 4,
+      "total": 4
+    }
+  ],
+  "defs": [
+    {
+      "def_name": "Apparel_ShieldBelt",
+      "class": "ThingDef",
+      "label": "shield belt",
+      "mod": "ludeon.rimworld",
+      "def_type": "ThingDef"
+    },
+    {
+      "def_name": "Bullet_Revolver",
+      "class": "ThingDef",
+      "label": "revolver bullet",
+      "mod": "ludeon.rimworld",
+      "def_type": "ThingDef"
+    },
+    {
+      "def_name": "Firefoam",
+      "class": "ThingDef",
+      "label": "firefoam",
+      "mod": "ludeon.rimworld",
+      "def_type": "ThingDef"
+    },
+    {
+      "def_name": "FoamPopper",
+      "class": "ThingDef",
+      "label": "firefoam",
+      "mod": "ludeon.rimworld",
+      "def_type": "ThingDef"
+    },
+    {
+      "def_name": "GleamingVoidNode",
+      "class": "ThingDef",
+      "label": "gleaming void node",
+      "mod": "test.mod",
+      "def_type": "ThingDef"
+    },
+    {
+      "def_name": "Meat_Muffalo",
+      "class": "ThingDef",
+      "label": "muffalo meat",
+      "mod": "ludeon.rimworld",
+      "def_type": "ThingDef"
+    },
+    {
+      "def_name": "TestModGun",
+      "class": "ThingDef",
+      "label": "test gun",
+      "mod": "test.mod",
+      "def_type": "ThingDef"
+    },
+    {
+      "def_name": "VoidNode",
+      "class": "ThingDef",
+      "label": "void node",
+      "mod": "test.mod",
+      "def_type": "ThingDef"
+    },
+    {
+      "def_name": "VoidNodeShard",
+      "class": "ThingDef",
+      "label": "void node shard",
+      "mod": "test.mod",
+      "def_type": "ThingDef"
+    },
+    {
+      "def_name": "PartAnvil",
+      "class": "AlloyPartDef",
+      "label": "",
+      "mod": "test.mod",
+      "def_type": "AlloyPartDef"
+    },
+    {
+      "def_name": "PartCrucible",
+      "class": "AlloyPartDef",
+      "label": "",
+      "mod": "test.mod",
+      "def_type": "AlloyPartDef"
+    },
+    {
+      "def_name": "PartLadle",
+      "class": "AlloyPartDef",
+      "label": "",
+      "mod": "test.mod",
+      "def_type": "AlloyPartDef"
+    },
+    {
+      "def_name": "PartTongs",
+      "class": "AlloyPartDef",
+      "label": "",
+      "mod": "test.mod",
+      "def_type": "AlloyPartDef"
+    }
+  ]
+}
+--- stderr ---
