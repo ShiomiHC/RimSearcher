@@ -1446,49 +1446,102 @@ public sealed class SnapshotDb : IDisposable
         // 「已经印出来的那些行」要在**开查之前**全部就位:分批之后,后一批查出来的兄弟里
         // 可能有前一批印过的行,按批填就会把它当成新兄弟点名。
         var already = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var (id, path) in rows) already.Add(id + "" + path);
+        // 分隔符写成转义:它是个不可见字符,而两处拼键的地方必须逐字节同形 ——
+        // 字面量那一份在编辑器与 diff 里都看不出来,写错时这份索引会静默地全查不中。
+        foreach (var (id, path) in rows) already.Add(id + "\u0001" + path);
+
+        // 「这批行牵动的 def,它们有人设过的字段」一次取完,块与块之间共用。
+        // 逐块回库时,每块都要为它的 200 个 `path LIKE 前缀%` 各扫一遍路径字典
+        // (带 ESCAPE 的 LIKE 用不上索引),于是**每印一行就全扫一次那 2.6 万行** ——
+        // `where stat --type ThingDef` 的 35166 行上是 6 分钟,而主表那边 0.4 秒就算完了。
+        // 这里的规模该是 def 数(那一次 4326),而按 def_id 取行顺 idx_fv_def 走。
+        var authored = AuthoredFieldsOf(rows.Select(r => r.DefId));
 
         var names = new List<string>();
-        foreach (var batch in rows.Chunk(BatchedOrTerms)) SiblingsOfBatch(batch, already, names);
+        foreach (var batch in rows.Chunk(BatchedOrTerms)) SiblingsOfBatch(batch, authored, already, names);
         return names;
     }
 
     /// <summary>
-    /// 一次 SQL 里挂几个 OR 项。SQLite 的表达式树深度上限是 1000,而这条查询每行一个 OR ——
-    /// 上千行的结果集会让主表早就算好的一条命令,因为一句可有可无的尾注整条 exit 70。
+    /// 一块几行。分块留着不是为了 SQL 了 —— 兄弟名的**顺序**是块内按 rowid 排、块间按
+    /// 行序接,而输出只取前几个,并成一次全局排序会换掉印出来的那几个名字。
     /// </summary>
     private const int BatchedOrTerms = 200;
 
-    private void SiblingsOfBatch((long DefId, string Path)[] batch,
-                                 HashSet<string> already, List<string> names)
+    /// <summary>
+    /// 这批 def 上所有「有人设过」的字段,按 <c>fv.rowid</c>(= 导出器写入顺序)排好。
+    /// 前缀匹配挪进内存,SQL 的谓词只剩 <c>def_id IN (…)</c>。
+    /// </summary>
+    private Dictionary<long, List<(long RowId, string Path, string Leaf)>> AuthoredFieldsOf(IEnumerable<long> defIds)
     {
-        var p = new Dictionary<string, object?>();
-        var ors = new List<string>();
-        var i = 0;
+        var map = new Dictionary<long, List<(long RowId, string Path, string Leaf)>>();
+        foreach (var chunk in defIds.Distinct().Chunk(BatchedOrTerms))
+        {
+            var p = new Dictionary<string, object?>();
+            var keys = new List<string>();
+            for (var i = 0; i < chunk.Length; i++) { p["@d" + i] = chunk[i]; keys.Add("@d" + i); }
+            using var rd = Query(
+                $"SELECT fv.def_id, fv.rowid, {FvPath}, {FvLeaf} FROM field_values fv {FvJoin} " +
+                $"WHERE fv.def_id IN ({string.Join(",", keys)}) " +
+                $"AND fv.is_default <> {Contract.DefaultState.Same} ORDER BY fv.rowid", p);
+            while (rd.Read())
+            {
+                var id = rd.GetInt64(0);
+                if (!map.TryGetValue(id, out var list)) map[id] = list = [];
+                list.Add((rd.GetInt64(1), rd.GetString(2), rd.GetString(3)));
+            }
+        }
+        return map;
+    }
+
+    /// <summary>
+    /// SQLite 的 <c>LIKE '前缀%'</c>:大小写不敏感,但**只折叠 ASCII 的 A–Z**。
+    /// .NET 的 OrdinalIgnoreCase 折得比它宽,照搬会让内存这一侧多认几条。
+    /// </summary>
+    private static bool StartsWithLike(string s, string prefix)
+    {
+        if (s.Length < prefix.Length) return false;
+        for (var i = 0; i < prefix.Length; i++)
+        {
+            var a = s[i];
+            var b = prefix[i];
+            if (a == b) continue;
+            if (a is >= 'A' and <= 'Z') a = (char)(a + 32);
+            if (b is >= 'A' and <= 'Z') b = (char)(b + 32);
+            if (a != b) return false;
+        }
+        return true;
+    }
+
+    private static void SiblingsOfBatch((long DefId, string Path)[] batch,
+                                        Dictionary<long, List<(long RowId, string Path, string Leaf)>> authored,
+                                        HashSet<string> already, List<string> names)
+    {
+        // 一块内的几百个 (def, 前缀) 此前是同一条 WHERE 的几百个 OR 项,同一行被两项
+        // 同时命中也只出一次 —— 按 rowid 去重把那件事原样留住。
+        var seen = new HashSet<long>();
+        var hits = new List<(long RowId, long DefId, string Path, string Leaf)>();
 
         foreach (var (id, path) in batch)
         {
             if (Search.PathSegments.ContainerPrefix(path) is not { } prefix) continue;
-            p["@si" + i] = id;
-            p["@sp" + i] = Escape(prefix) + "%";
-            ors.Add($"(fv.def_id = @si{i} AND " + PathIs($"path LIKE @sp{i} ESCAPE '\\'") + ")");
-            i++;
+            if (!authored.TryGetValue(id, out var fields)) continue;
+            foreach (var f in fields)
+                if (StartsWithLike(f.Path, prefix) && seen.Add(f.RowId))
+                    hits.Add((f.RowId, id, f.Path, f.Leaf));
         }
-        if (ors.Count == 0) return;
+        if (hits.Count == 0) return;
 
-        using var rd = Query(
-            $"SELECT fv.def_id, {FvPath}, {FvLeaf} FROM field_values fv {FvJoin} " +
-            $"WHERE ({string.Join(" OR ", ors)}) AND fv.is_default <> {Contract.DefaultState.Same} " +
-            // 按 rowid 排 = 导出器写入的顺序 = 这一块在 XML/类声明里的顺序。
-            // 按 path 字典序排会让同一块里语义最近的几个字段散到各处(fuelPerTile 就是
-            // 这样被 cooldown* 挤出前三名的)。
-            "ORDER BY fv.rowid", p);
-        while (rd.Read())
+        // 按 rowid 排 = 导出器写入的顺序 = 这一块在 XML/类声明里的顺序。
+        // 按 path 字典序排会让同一块里语义最近的几个字段散到各处(fuelPerTile 就是
+        // 这样被 cooldown* 挤出前三名的)。
+        hits.Sort((a, b) => a.RowId.CompareTo(b.RowId));
+
+        foreach (var h in hits)
         {
             // 已经印在表里的那一行不算它自己的兄弟。
-            if (already.Contains(rd.GetInt64(0) + "" + rd.GetString(1))) continue;
-            var leaf = rd.GetString(2);
-            if (!names.Contains(leaf, StringComparer.Ordinal)) names.Add(leaf);
+            if (already.Contains(h.DefId + "\u0001" + h.Path)) continue;
+            if (!names.Contains(h.Leaf, StringComparer.Ordinal)) names.Add(h.Leaf);
         }
     }
 
