@@ -3,7 +3,7 @@ exit 0
 --- stdout ---
 vanilla/Verse/Constrained.cs, 2 declarations.
 
-Same in every row, not repeated below: modifiers=internal.
+Same in every row, not repeated below: modifiers=internal, file=vanilla/Verse/Constrained.cs.
 kind    name         in           lines  at
 method  Both         Constrained  7      7-13
 class   Constrained               10     5-14

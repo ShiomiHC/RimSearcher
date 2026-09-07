@@ -1,0 +1,21 @@
+$ rimsearcher read vanilla/Verse/Outline.cs vanilla/Verse/Pair.cs --outline
+exit 0
+--- stdout ---
+vanilla/Verse/Outline.cs, 9 declarations.
+vanilla/Verse/Pair.cs, 2 declarations.
+
+kind      modifiers                name      in     lines  at     file
+field     private static readonly  Marker    Outer  1      9-9    vanilla/Verse/Outline.cs
+field     private                  Open      Outer  1      11-11  vanilla/Verse/Outline.cs
+property  public                   Verbatim  Outer  1      13-13  vanilla/Verse/Outline.cs
+method    public                   Shared    Outer  7      15-21  vanilla/Verse/Outline.cs
+method    public                   Shared    Inner  3      25-27  vanilla/Verse/Outline.cs
+class     public                   Inner     Outer  6      23-28  vanilla/Verse/Outline.cs
+property  protected override       SeedPart  Outer  1      30-30  vanilla/Verse/Outline.cs
+property  protected virtual        Radius    Outer  1      32-32  vanilla/Verse/Outline.cs
+class     public                   Outer            29     5-33   vanilla/Verse/Outline.cs
+class     internal                 Pair             3      3-5    vanilla/Verse/Pair.cs
+class     internal                 Pair<T>          3      7-9    vanilla/Verse/Pair.cs
+
+Found by matching braces, not by parsing C#: a declaration this scan does not recognise and one that is not in the file look the same here — both are simply absent. A local function declared inside a method body is one kind it does not recognise.
+--- stderr ---

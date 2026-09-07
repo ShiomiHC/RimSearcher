@@ -729,7 +729,7 @@ rimsearcher mods
 Read source out of the decompiled tree — one member, one type, or a line range.
 
 ```
-rimsearcher read <file> [options]
+rimsearcher read <file>... [options]
 ```
 
 The file is named by its path relative to the decompiled root ('vanilla/Assembly-CSharp/Verse/Pawn.cs'), by any tail of that path, by its bare name, or by a namespace-qualified type name ('RimWorld.Bullet') — the decompiler lays files out by namespace, so that name is the path 'RimWorld/Bullet.cs' written another way, and the namespace has to match. A path that is not there falls back to the bare name and says so; when a bare name matches several files, the answer lists them instead of picking one.
@@ -742,7 +742,7 @@ Page with --lines, never with a pipe. The first line of the answer says which li
 
 | Argument | Meaning |
 |---|---|
-| `<file>` | A path under the decompiled root, a tail of one, a bare file name such as 'Pawn.cs', or a namespace-qualified type name such as 'RimWorld.Bullet'. |
+| `<file>` | A path under the decompiled root, a tail of one, a bare file name such as 'Pawn.cs', or a namespace-qualified type name such as 'RimWorld.Bullet'. Several files read in one call, in the order given; every row carries the file it came from, and --limit counts lines inside each file rather than across the batch. A file that cannot be resolved is reported and the others still print. |
 
 | Option | Meaning | Also accepted |
 |---|---|---|
@@ -758,7 +758,7 @@ Page with --lines, never with a pipe. The first line of the answer says which li
 | Key | Holds |
 |---|---|
 | `source` | without --outline: one row per source line — file, line, text, plus kind and declaration when the line came from --member/--type. The text form's line-number gutter is not repeated here. This is the key the three reading modes produce; 'declarations' is absent then. |
-| `declarations` | with --outline: one row per declaration — kind, modifiers (the leading run of them, verbatim; null when there are none), name, in (the owner), lines, at (the 'start-end' range to hand back to --lines). |
+| `declarations` | with --outline: one row per declaration — file, kind, modifiers (the leading run of them, verbatim; null when there are none), name, in (the owner), lines, at (the 'start-end' range to hand back to --lines). file is in every row, matching 'source', so one parser handles a single file and a batch alike. |
 
 Examples:
 

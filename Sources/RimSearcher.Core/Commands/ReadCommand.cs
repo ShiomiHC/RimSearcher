@@ -51,8 +51,12 @@ public sealed class ReadCommand : Command
             new PositionalSpec
             {
                 Name = "file",
+                Variadic = true,
                 Help = "A path under the decompiled root, a tail of one, a bare file name such as 'Pawn.cs', " +
-                       "or a namespace-qualified type name such as 'RimWorld.Bullet'.",
+                       "or a namespace-qualified type name such as 'RimWorld.Bullet'. Several files read in " +
+                       "one call, in the order given; every row carries the file it came from, and --limit " +
+                       "counts lines inside each file rather than across the batch. A file that cannot be " +
+                       "resolved is reported and the others still print.",
             },
         ],
         Options =
@@ -135,9 +139,10 @@ public sealed class ReadCommand : Command
             new()
             {
                 Key = "declarations",
-                What = "with --outline: one row per declaration — kind, modifiers (the leading run of " +
+                What = "with --outline: one row per declaration — file, kind, modifiers (the leading run of " +
                        "them, verbatim; null when there are none), name, in (the owner), lines, at " +
-                       "(the 'start-end' range to hand back to --lines).",
+                       "(the 'start-end' range to hand back to --lines). file is in every row, matching " +
+                       "'source', so one parser handles a single file and a batch alike.",
             },
         ],
     };
@@ -149,7 +154,7 @@ public sealed class ReadCommand : Command
             throw new CliUsageException(
                 SourcesShared.NotConfiguredToRead("read"));
 
-        var wanted = ctx.Args.Positional(0)!;
+        var asked = ctx.Args.Positionals;
         var member = ctx.Args.Value("member");
         var type = ctx.Args.Value("type");
         var range = ctx.Args.Value("lines");
@@ -171,6 +176,40 @@ public sealed class ReadCommand : Command
         if (sourceName is { Length: > 0 } && !Directory.Exists(Path.Combine(root, sourceName)))
             throw new CliUsageException(CodeSearchCommand.NoSuchTree(sourceName, SourcesShared.TreeNames(root)));
 
+        // 几个文件一次读。逐个解析、逐个按同一种读法读,行并进同一个 source / declarations
+        // ——两张表本来就每行带着 file(--outline 那张 2026-09-08 才补上),所以块与块分得开。
+        // --limit 按**每个文件**计:跨文件计的话,第一个文件把额度吃光,后面几个印零行,
+        // 而那与「那几个文件是空的」印出来同形。
+        var lines = new List<string>();
+        var rows = new List<IReadOnlyDictionary<string, object?>>();
+        var read = 0;
+        var failed = 0;
+        var braceMatched = false;
+
+        foreach (var wanted in asked)
+        {
+            var status = ReadOne(ctx, root, wanted, sourceName, member, type, range, outline,
+                                 asked.Count > 1, lines, rows, ref braceMatched);
+            if (status == 0) read++; else failed++;
+        }
+
+        if (braceMatched) SayBraceMatched(ctx);
+        if (read == 0) return 1;
+
+        if (outline) ctx.Report.Table("declarations", OutlineColumns, rows);
+        else ctx.Report.Text("source", lines, rows);
+        return 0;
+    }
+
+    /// <summary>
+    /// 一个名字:解析成一条路径,按选定的读法把行追加进共用的两个容器。
+    /// 返回 0 表示读到了东西;非 0 时话已经说完(哪一句取决于是哪一种落空)。
+    /// </summary>
+    private static int ReadOne(CommandContext ctx, string root, string wanted, string? sourceName,
+                               string? member, string? type, string? range, bool outline, bool batch,
+                               List<string> lines, List<IReadOnlyDictionary<string, object?>> rows,
+                               ref bool braceMatched)
+    {
         var hits = Resolve(root, wanted, sourceName);
 
         // 路径的中间段写错、文件名对,是最常见的一种落空 —— 而这条命令**已经能**按裸文件名
@@ -224,16 +263,41 @@ public sealed class ReadCommand : Command
         // 全量后只有 6 条超过 harness 的 30000 字符,其中 5 条接了管道。
         var window = cap;
 
-        if (outline) return Outline(ctx, rel, text, cap);
+        // 那条能力边界(靠配平括号找声明)是**脚注**,几个文件一起读时按文件重复几遍
+        // 只会被当成噪声,所以攒起来最后发一次。
+        //
+        // 只在真读到东西时挂:落空那条路自己那句话里已经说了同一件事(「匹配靠括号,
+        // 所以这不是文件里没有它的证据」),再挂一遍是同一句话说两遍。
+        if (outline)
+        {
+            var status = Outline(ctx, rel, text, cap, rows);
+            if (status == 0) braceMatched = true;
+            return status;
+        }
+
         if (member is { Length: > 0 } || type is { Length: > 0 })
-            return Declaration(ctx, rel, text, member, type, cap);
-        return Raw(ctx, rel, text, range, cap, window);
+        {
+            var status = Declaration(ctx, rel, text, member, type, cap, lines, rows);
+            if (status == 0) braceMatched = true;
+            return status;
+        }
+
+        return Raw(ctx, rel, text, range, cap, window, lines, rows, batch);
     }
 
     // ---- 三种读法 ----
 
     /// <summary>轮廓。读什么之前先知道有什么 —— 对上下文预算来说这是最便宜的一步。</summary>
-    private static int Outline(CommandContext ctx, string rel, string[] text, int cap)
+    /// <summary>
+    /// 轮廓表**文本面**的列。<c>file</c> 排在末尾而不是首位:第 0 列不参与常量列折叠
+    /// (见 Renderers.Fold),放在首位的话读一个文件时每行都拖着一整条相对路径,而它恒定。
+    /// JSON 面的键序不受这里影响,那边 file 仍是第一个 —— 消费方按名字取键。
+    /// </summary>
+    private static readonly string[] OutlineColumns =
+        ["kind", "modifiers", "name", "in", "lines", "at", "file"];
+
+    private static int Outline(CommandContext ctx, string rel, string[] text, int cap,
+                               List<IReadOnlyDictionary<string, object?>> rows)
     {
         var decls = DeclarationsIn(text);
         if (decls.Count == 0)
@@ -266,9 +330,10 @@ public sealed class ReadCommand : Command
                 ? $"{tally.RenderTotalFirst("declaration", qualifier: $" in {rel}")}; " +
                   "raise --limit to see the rest."
                 : $"{rel}, {tally.Render("declaration")}.", count: tally);
-        ctx.Report.Table("declarations", ["kind", "modifiers", "name", "in", "lines", "at"],
+        rows.AddRange(
             shown.Select(d => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
+                ["file"] = rel,
                 ["kind"] = d.Kind,
                 // override 与 virtual 分不开的时候,一份轮廓能让人得出「这个类覆写了
                 // 基类的 A、B、C」,而其中某个其实是它自己新引入的。
@@ -280,13 +345,14 @@ public sealed class ReadCommand : Command
                 ["lines"] = d.Lines,
                 ["at"] = $"{d.StartLine}-{d.EndLine}",
             }).ToList());
-        SayBraceMatched(ctx);
+
         return 0;
     }
 
     /// <summary>按名字读一段声明。同名的全给,每段自带来源行。</summary>
     private static int Declaration(CommandContext ctx, string rel, string[] text,
-                                   string? member, string? type, int cap)
+                                   string? member, string? type, int cap,
+                                   List<string> lines, List<IReadOnlyDictionary<string, object?>> rows)
     {
         var decls = DeclarationsIn(text);
 
@@ -297,10 +363,8 @@ public sealed class ReadCommand : Command
 
         if (picked.Count == 0) { SayNoDeclaration(ctx, rel, text, decls, member, type); return 1; }
 
-        var lines = new List<string>();
         // 结构化侧不重复文本侧的排版件(分隔符、标题行):每一行自带它属于哪个声明,
         // 免得消费方从 "rel:12-40  method Foo.Bar" 里反解一遍。
-        var rows = new List<IReadOnlyDictionary<string, object?>>();
         var printed = 0;
         var clipped = 0;
         (int From, int To)? resume = null;
@@ -360,13 +424,14 @@ public sealed class ReadCommand : Command
                       string.Join(" or --lines ", picked.Select(d => $"{d.StartLine}-{d.EndLine}")) + "."));
         }
 
-        ctx.Report.Text("source", lines, rows);
-        SayBraceMatched(ctx);
+
+
         return 0;
     }
 
     /// <summary>裸行。翻页靠它,所以总行数与下一页的参数恒在。</summary>
-    private static int Raw(CommandContext ctx, string rel, string[] text, string? range, int cap, int window)
+    private static int Raw(CommandContext ctx, string rel, string[] text, string? range, int cap, int window,
+                           List<string> lines, List<IReadOnlyDictionary<string, object?>> rows, bool batch)
     {
         var (from, to) = ParseRange(range, text.Length, window, out var rewritten);
 
@@ -385,8 +450,17 @@ public sealed class ReadCommand : Command
         var clipped = 0;
         if (to - from + 1 > cap) { clipped = to - (from + cap - 1); to = from + cap - 1; }
 
-        var lines = new List<string>();
-        var rows = new List<IReadOnlyDictionary<string, object?>>();
+        // 给了不止一个文件时,每一段正文都带标题行 —— 包括第一段。行号从 1 重新开始,
+        // 没有标题的话两个文件的正文在文本面粘成一片,而计数句在另一个区里,对不上是哪一段;
+        // 只给第二段起加标题则更糟:第一段成了唯一没署名的那一段。
+        // 与 --member 那一路同形(它用同样的 `--` 与 `路径:起-止` 标题行)。
+        // 一个文件时一行都不加,那一路的输出与批量形态出现之前逐字相同。
+        if (batch)
+        {
+            if (lines.Count > 0) lines.Add("--");
+            lines.Add($"{rel}:{from}-{to}");
+        }
+
         for (var i = from; i <= to; i++)
         {
             lines.Add(Numbered(i, text[i - 1]));
@@ -426,7 +500,7 @@ public sealed class ReadCommand : Command
                       : "")));
 
         // 裸行读没有任何推断,不挂那条能力边界 —— 挂上去就成了每次返回的常驻免责声明。
-        ctx.Report.Text("source", lines, rows);
+
         return 0;
     }
 

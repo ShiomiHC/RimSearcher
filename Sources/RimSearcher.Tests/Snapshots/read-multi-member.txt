@@ -1,0 +1,23 @@
+$ rimsearcher read vanilla/Verse/Outline.cs vanilla/Verse/Tuples.cs --member Shared
+exit 0
+--- stdout ---
+2 declarations in vanilla/Verse/Outline.cs, 10 lines.
+  - 'Shared' is declared more than once here: Outer.Shared (line 15), Inner.Shared (line 25). '--type <name>' narrows it to one.
+  - No member named 'Shared' was found in vanilla/Verse/Tuples.cs (21 lines, 6 declarations). The match runs on braces, not C# parsing, so this is not evidence the file lacks it — 'rimsearcher code-search' searches the text itself; '--outline' lists what the same matching does find.
+
+vanilla/Verse/Outline.cs:15-21  method Outer.Shared
+    15  		public void Shared(int n)
+    16  		{
+    17  			if (n > 0)
+    18  			{
+    19  				Console.WriteLine(Marker);
+    20  			}
+    21  		}
+--
+vanilla/Verse/Outline.cs:25-27  method Inner.Shared
+    25  			public void Shared(int n)
+    26  			{
+    27  			}
+
+Found by matching braces, not by parsing C#: a declaration this scan does not recognise and one that is not in the file look the same here — both are simply absent. A local function declared inside a method body is one kind it does not recognise.
+--- stderr ---

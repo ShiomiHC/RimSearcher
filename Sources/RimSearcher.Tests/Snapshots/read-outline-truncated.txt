@@ -3,7 +3,7 @@ exit 0
 --- stdout ---
 9 declarations in vanilla/Verse/Outline.cs, showing the first 2; raise --limit to see the rest.
 
-Same in every row, not repeated below: in=Outer, lines=1.
+Same in every row, not repeated below: in=Outer, lines=1, file=vanilla/Verse/Outline.cs.
 kind   modifiers                name    at
 field  private static readonly  Marker  9-9
 field  private                  Open    11-11

@@ -575,6 +575,16 @@ public class OutputSnapshotTests
         { "read-typename-missing", ["read", "RimWorld.NoSuchType"] },
         // 两种读法同时传:不排优先级,当场说破这是两件事。
         { "read-two-modes",        ["read", "Outline.cs", "--lines", "1-3", "--member", "Shared"] },
+        // 几个文件一次读。三种读法各一份 —— 裸行那份守的是「第二个文件起有一条线与标题行」
+        // (行号从 1 重开,不划线两段正文在文本面粘成一片),--member 那份守的是同一个名字
+        // 在几个文件里各自命中,--outline 那份守的是 file 一列在多文件下印出来、单文件下折叠。
+        { "read-multi-lines",      ["read", "vanilla/Verse/Outline.cs", "vanilla/Verse/Widgets.cs", "--lines", "1-3"] },
+        { "read-multi-member",     ["read", "vanilla/Verse/Outline.cs", "vanilla/Verse/Tuples.cs", "--member", "Shared"] },
+        { "read-multi-outline",    ["read", "vanilla/Verse/Outline.cs", "vanilla/Verse/Pair.cs", "--outline"] },
+        { "read-multi-json",       ["read", "vanilla/Verse/Outline.cs", "vanilla/Verse/Widgets.cs", "--lines", "1-3", "--json"] },
+        // 一个文件解析不到:其余照印、退出码 0。全都解析不到才 1。
+        { "read-multi-missing",    ["read", "vanilla/Verse/Outline.cs", "NoSuchFile.cs", "--lines", "1-3"] },
+        { "read-multi-all-missing", ["read", "NoSuchFile.cs", "NoSuchFileEither.cs"] },
         // 括号配平法认错声明的三种形态(语料见 Fixture.WriteSourceTree)。
         //
         // 元组类型:`internal (int left, int right) Split(int at)` 的第一个顶层 '(' 是类型。

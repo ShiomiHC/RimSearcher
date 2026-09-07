@@ -1,0 +1,48 @@
+$ rimsearcher read vanilla/Verse/Outline.cs vanilla/Verse/Widgets.cs --lines 1-3 --json
+exit 0
+--- stdout ---
+{
+  "notes": [
+    {
+      "kind": "truncation",
+      "text": "vanilla/Verse/Outline.cs, lines 1-3 of 34. Pass --lines 4+3 for the next page. Reaching the end that way takes 11 pages at this size; --outline instead lists the file's declarations with each one's line range, to pass back to --lines."
+    },
+    {
+      "kind": "truncation",
+      "text": "vanilla/Verse/Widgets.cs, lines 1-3 of 12. Pass --lines 4+3 for the next page. Reaching the end that way takes 3 pages at this size; --outline instead lists the file's declarations with each one's line range, to pass back to --lines."
+    }
+  ],
+  "source": [
+    {
+      "file": "vanilla/Verse/Outline.cs",
+      "line": 1,
+      "text": "using System;"
+    },
+    {
+      "file": "vanilla/Verse/Outline.cs",
+      "line": 2,
+      "text": ""
+    },
+    {
+      "file": "vanilla/Verse/Outline.cs",
+      "line": 3,
+      "text": "namespace Verse"
+    },
+    {
+      "file": "vanilla/Verse/Widgets.cs",
+      "line": 1,
+      "text": "namespace Verse"
+    },
+    {
+      "file": "vanilla/Verse/Widgets.cs",
+      "line": 2,
+      "text": "{"
+    },
+    {
+      "file": "vanilla/Verse/Widgets.cs",
+      "line": 3,
+      "text": "\tpublic static class Widgets"
+    }
+  ]
+}
+--- stderr ---

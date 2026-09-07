@@ -3,6 +3,7 @@ exit 0
 --- stdout ---
 vanilla/Verse/Tuples.cs, 6 declarations.
 
+Same in every row, not repeated below: file=vanilla/Verse/Tuples.cs.
 kind         modifiers  name    in      lines  at
 field        private    bounds  Tuples  1      5-5
 field        private    spans   Tuples  1      7-7

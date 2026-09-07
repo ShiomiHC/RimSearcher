@@ -3,6 +3,7 @@ exit 0
 --- stdout ---
 vanilla/Verse/Outline.cs, 9 declarations.
 
+Same in every row, not repeated below: file=vanilla/Verse/Outline.cs.
 kind      modifiers                name      in     lines  at
 field     private static readonly  Marker    Outer  1      9-9
 field     private                  Open      Outer  1      11-11
