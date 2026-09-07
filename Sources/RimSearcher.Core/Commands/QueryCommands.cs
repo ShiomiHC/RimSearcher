@@ -1923,7 +1923,10 @@ public sealed class ListCommand : Command
             {
                 Name = "defType",
                 Required = false,
-                Help = "A def type such as ThingDef. Leave it out and this lists the def types themselves, " +
+                Variadic = true,
+                Help = "A def type such as ThingDef. Several go in one call; --limit and --offset apply to " +
+                       "each on its own, each gets its own count line, and the def_type column says which " +
+                       "type a row came from. Leave them all out and this lists the def types themselves, " +
                        "with how many defs each holds — all of them, unless you pass --limit. " +
                        "--own-class and --offset need a def type and are refused without one.",
             },
@@ -1978,10 +1981,11 @@ public sealed class ListCommand : Command
             new()
             {
                 Key = "defs",
-                What = "with a def type: one row per def — def_name, label, mod, plus 'class' when the " +
-                       "bucket holds more than one def class. 'mod' is where the def was declared, not who " +
-                       "last changed it: a def another mod patched still reads as its original mod, and " +
-                       "--scope filters that same column.",
+                What = "with a def type: one row per def — def_name, label, mod, def_type (which of the types " +
+                       "asked for the row came from, present on a single-type call too), plus 'class' when " +
+                       "one of the buckets holds more than one def class. 'mod' is where the def was " +
+                       "declared, not who last changed it: a def another mod patched still reads as its " +
+                       "original mod, and --scope filters that same column.",
             },
             new()
             {
@@ -1996,8 +2000,35 @@ public sealed class ListCommand : Command
     {
         // 分模式的判据是**给没给 def 类型**,而不是一个开关参数 —— 落空分流里那句
         // 「没有这个 def 类型」于是指得回同一条命令。
-        var type = ctx.Args.Positional(0);
-        return type is null ? RunTypes(ctx) : RunDefs(ctx, type);
+        var asked = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var t in ctx.Args.Positionals)
+            if (seen.Add(t)) asked.Add(t);
+
+        if (asked.Count == 0) return RunTypes(ctx);
+
+        // 认领要赶在查询**之前**:下面每一条零行分流都是提前 return。`defs` 与 `types`
+        // 互斥,不能靠声明层的 Rows 统一认领(空数组在机器侧读作「这一路也查过了」),
+        // 只能由两支各自认领 —— 另一支在 RunTypes 里。几个类型只认领一次。
+        ctx.Report.Promises("defs");
+
+        var table = new List<IReadOnlyDictionary<string, object?>>();
+        // class 一列的有无本来就跟着数据走(桶里只有一个 class 就不印)。几个类型一次问时
+        // 取并集:一个类型异构就印,同质那几个的行照填真值,不留空。
+        var showClass = false;
+        var listed = 0;
+        foreach (var type in asked)
+            if (RunDefs(ctx, type, table, ref showClass) == 0) listed++;
+
+        // 一个类型都没列出来才算失败 —— 与 read / fields / values / keyed 同一条。
+        if (listed == 0) return 1;
+
+        ctx.Report.Table("defs",
+            showClass
+                ? ["def_name", "class", "label", "mod", "def_type"]
+                : ["def_name", "label", "mod", "def_type"],
+            table);
+        return 0;
     }
 
     /// <summary>
@@ -2093,18 +2124,17 @@ public sealed class ListCommand : Command
         return 0;
     }
 
-    private static int RunDefs(CommandContext ctx, string type)
+    /// <summary>
+    /// 一个 def 类型的那一份。行不自己发,追加进 <paramref name="table"/> —— 几个类型共用一张表。
+    /// </summary>
+    private static int RunDefs(CommandContext ctx, string type,
+                               List<IReadOnlyDictionary<string, object?>> table, ref bool showClass)
     {
         var limit = ctx.Limit();
         var offset = ctx.Args.Offset();
         var wantClass = ctx.Args.Value("own-class");
         var find = ctx.Args.Value("find");
         var scope = ctx.Scope();
-
-        // 认领要赶在查询**之前**:下面每一条零行分流都是提前 return。`defs` 与 `types`
-        // 互斥,不能靠声明层的 Rows 统一认领(空数组在机器侧读作「这一路也查过了」),
-        // 只能由两支各自认领 —— 另一支在 RunTypes 里。
-        ctx.Report.Promises("defs");
 
         var (rows, total) = ctx.Db.ListByType(type, scope, limit.Effective, offset, wantClass, find);
 
@@ -2219,24 +2249,27 @@ public sealed class ListCommand : Command
         {
             var (_, unfiltered) = ctx.Db.ListByType(type, scope, 1, 0, wantClass);
             ctx.Report.Notice(NoticeKind.Boundary,
-                $"Filtered by --find '{find}'; this type holds {Tally.Complete(unfiltered).Render("def")} " +
+                $"Filtered by --find '{find}'; {type} holds {Tally.Complete(unfiltered).Render("def")} " +
                 (wantClass is null ? "in all." : $"with class '{wantClass}' in all."));
         }
 
-        // 分页必须给总数,否则不知道翻到哪算到头。
-        ctx.Report.PageNotice("def", rows.Count, offset, total);
+        // 分页必须给总数,否则不知道翻到哪算到头。限定语说破这一句数的是哪个类型 ——
+        // 几个类型一次问时,两句「25 of 79 defs」分不出谁是谁。
+        ctx.Report.PageNotice("def", rows.Count, offset, total, $" of type {type}");
 
         // 排在表**上方**,与「计数在它数的那张表上方」同一条纪律:这句说的是
         // 「这张表全不全」,读到行的时候得已经知道。位置对这一条格外要紧 ——
         // 它的受众定义上就是拿到一张长表的人,而那种人最可能 head/sed 截一段就走,
         // 末尾的脚注正好被切掉(本项目实测踩过:`sed -n '9,20p'` 两头一起切,
         // 把确实存在的 comp 读成了空)。
-        ctx.AnnounceExcluded(scope, rest => ctx.Db.ListByType(type, rest, 0, 0, wantClass, find).Total, "def");
+        ctx.AnnounceExcluded(scope, rest => ctx.Db.ListByType(type, rest, 0, 0, wantClass, find).Total,
+                             "def", $" of type {type}");
 
         // 桶里只有一种 class 时不平白多一列(ThingDef 一万多个 def 都是 Verse.ThingDef);
         // 异构时这一列是唯一能把子类型区分开的东西。
         var classes = ctx.Db.ClassesInType(type, scope);
         var heterogeneous = wantClass is null && classes.Count > 1;
+        showClass |= heterogeneous;
         if (heterogeneous)
             ctx.Report.Notice(NoticeKind.Boundary,
                 // 数的是 class,名词就得写「def class」—— 这一句正长在
@@ -2245,22 +2278,22 @@ public sealed class ListCommand : Command
                 NameList.Render([.. classes.Select(c => $"{Tail(c.Class)} ({c.Count})")], Limits.MaxSuggestions) +
                 ". Pass --own-class to pick one.");
 
-        // 同质时不印这一列(见上),但**值照填** —— 不印是排版,而 JSON 里的 null 在这套
+        // 同质时不印 class 一列(见上),但**值照填** —— 不印是排版,而 JSON 里的 null 在这套
         // 输出里恒读作「查不出来」。同质恰恰是查得最清楚的那种,而 `--own-class` 点了名的
         // 那次更刺眼:用户敲的就是这个 class,回答里它却是 null。
         // 数据里真没有 class 时才是 null,而那时它是实话。
-        var columns = heterogeneous
-            ? new[] { "def_name", "class", "label", "mod" }
-            : ["def_name", "label", "mod"];
-
-        ctx.Report.Table("defs", columns,
-            rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+        //
+        // def_type 排在末列,不排首列:文本渲染器折不掉第 0 列,而单类型调用里这一列
+        // 每行都一样 —— 摆在末列它自己折进表头。
+        foreach (var r in rows)
+            table.Add(new Dictionary<string, object?>
             {
                 ["def_name"] = r.DefName,
                 ["class"] = r.Class is { } c ? Tail(c) : null,
                 ["label"] = r.Label,
                 ["mod"] = r.SourceMod,
-            }).ToList());
+                ["def_type"] = type,
+            });
 
         return 0;
     }

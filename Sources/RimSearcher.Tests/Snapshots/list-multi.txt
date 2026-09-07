@@ -1,0 +1,21 @@
+$ rimsearcher list ThingDef AlloyPartDef
+exit 0
+--- stdout ---
+9 defs of type ThingDef.
+4 defs of type AlloyPartDef.
+
+def_name            label               mod              def_type
+Apparel_ShieldBelt  shield belt         ludeon.rimworld  ThingDef
+Bullet_Revolver     revolver bullet     ludeon.rimworld  ThingDef
+Firefoam            firefoam            ludeon.rimworld  ThingDef
+FoamPopper          firefoam            ludeon.rimworld  ThingDef
+GleamingVoidNode    gleaming void node  test.mod         ThingDef
+Meat_Muffalo        muffalo meat        ludeon.rimworld  ThingDef
+TestModGun          test gun            test.mod         ThingDef
+VoidNode            void node           test.mod         ThingDef
+VoidNodeShard       void node shard     test.mod         ThingDef
+PartAnvil                               test.mod         AlloyPartDef
+PartCrucible                            test.mod         AlloyPartDef
+PartLadle                               test.mod         AlloyPartDef
+PartTongs                               test.mod         AlloyPartDef
+--- stderr ---

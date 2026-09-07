@@ -1,0 +1,12 @@
+$ rimsearcher list ThingDef AlloyPartDef --limit 2
+exit 0
+--- stdout ---
+9 defs of type ThingDef, showing the first 2.
+4 defs of type AlloyPartDef, showing the first 2.
+
+def_name            label            mod              def_type
+Apparel_ShieldBelt  shield belt      ludeon.rimworld  ThingDef
+Bullet_Revolver     revolver bullet  ludeon.rimworld  ThingDef
+PartAnvil                            test.mod         AlloyPartDef
+PartCrucible                         test.mod         AlloyPartDef
+--- stderr ---

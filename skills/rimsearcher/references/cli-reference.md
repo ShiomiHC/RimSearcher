@@ -498,7 +498,7 @@ rimsearcher inherit Bullet_Revolver --path-contains damageAmountBase
 Look up the UI text behind a translation key, or find the key behind a piece of UI text.
 
 ```
-rimsearcher keyed [query] [options]
+rimsearcher keyed [query]... [options]
 ```
 
 This is the layer defs do not cover. A def's label and description are translated through DefInjected and belong to 'get' and 'search'; everything else on screen — button captions, alerts, tooltips, failure reasons — is a keyed translation, and only this command reads those.
@@ -509,7 +509,7 @@ Rows are marked 'in effect' or 'on disk'. Only 'in effect' is what the game disp
 
 | Argument | Meaning |
 |---|---|
-| `<query>` | A translation key, or a phrase from the interface in any language the snapshot has. Leave it out to list the layer itself — every keyed translation, or with --empty-translation only the untranslated ones. *(optional)* |
+| `<query>` | A translation key, or a phrase from the interface in any language the snapshot has. Several go in one call; --limit and --offset apply to each on its own, each gets its own count line, and the query column says which one a row answers. Leave them all out to list the layer itself — every keyed translation, or with --empty-translation only the untranslated ones. *(optional)* |
 
 | Option | Meaning | Also accepted |
 |---|---|---|
@@ -521,7 +521,7 @@ Rows are marked 'in effect' or 'on disk'. Only 'in effect' is what the game disp
 
 | Key | Holds |
 |---|---|
-| `keys` | one row per keyed translation — key, translated, original, origin ('in effect' or 'on disk'), placeholder, mod, source. Always an array, including when a single key matched exactly, so the shape does not change with the kind of match. |
+| `keys` | one row per keyed translation — key, translated, original, origin ('in effect' or 'on disk'), placeholder, mod, source, and query (which of the queries the row answers, present on a single-query call too). Always an array, including when a single key matched exactly, so the shape does not change with the kind of match. The query column is the one thing that does change with the call: listing the whole layer takes no query, so there the rows have no such column rather than a blank one that would read as a value nobody could compute. |
 
 Examples:
 
@@ -537,12 +537,12 @@ rimsearcher keyed --empty-translation
 List every def of one type — or, with no type given, every def type in the snapshot.
 
 ```
-rimsearcher list [defType] [options]
+rimsearcher list [defType]... [options]
 ```
 
 | Argument | Meaning |
 |---|---|
-| `<defType>` | A def type such as ThingDef. Leave it out and this lists the def types themselves, with how many defs each holds — all of them, unless you pass --limit. --own-class and --offset need a def type and are refused without one. *(optional)* |
+| `<defType>` | A def type such as ThingDef. Several go in one call; --limit and --offset apply to each on its own, each gets its own count line, and the def_type column says which type a row came from. Leave them all out and this lists the def types themselves, with how many defs each holds — all of them, unless you pass --limit. --own-class and --offset need a def type and are refused without one. *(optional)* |
 
 | Option | Meaning | Also accepted |
 |---|---|---|
@@ -556,7 +556,7 @@ rimsearcher list [defType] [options]
 
 | Key | Holds |
 |---|---|
-| `defs` | with a def type: one row per def — def_name, label, mod, plus 'class' when the bucket holds more than one def class. 'mod' is where the def was declared, not who last changed it: a def another mod patched still reads as its original mod, and --scope filters that same column. |
+| `defs` | with a def type: one row per def — def_name, label, mod, def_type (which of the types asked for the row came from, present on a single-type call too), plus 'class' when one of the buckets holds more than one def class. 'mod' is where the def was declared, not who last changed it: a def another mod patched still reads as its original mod, and --scope filters that same column. |
 | `types` | without one: one row per def type — def_type, defs. Which of the two keys is present follows the def type, so a caller that passed one never has to guess. |
 
 Examples:

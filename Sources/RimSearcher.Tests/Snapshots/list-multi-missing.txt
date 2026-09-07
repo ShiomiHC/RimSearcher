@@ -1,8 +1,8 @@
-$ rimsearcher list ThingDef Bloomstone
+$ rimsearcher list ThingDef NoSuchTypeXYZ
 exit 0
 --- stdout ---
 9 defs of type ThingDef.
-No def type named 'Bloomstone' in this snapshot. 'rimsearcher list' with no def type lists them all.
+No def type named 'NoSuchTypeXYZ' in this snapshot. 'rimsearcher list' with no def type lists them all.
 
 Same in every row, not repeated below: def_type=ThingDef.
 def_name            label               mod

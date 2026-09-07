@@ -291,6 +291,14 @@ public class OutputSnapshotTests
         // 打错类型名再带 --own-class:此前这一支手抄了 DefTypeMiss.Say,抄的是产地后来长出
         // 近似候选之前的那一版,于是拼错 + --own-class 是唯一拿不到拼写建议的路。两支同一个问题。
         { "list-typo-classed",     ["list", "ThingDf", "--own-class", "TestVariantDef"] },
+        // 几个 def 类型一次问。守的是:每个类型各出一句带类型名的计数、行并进同一张表且
+        // def_type 在末列、class 那一列按并集出(一个类型异构就印,同质那几个照填真值)。
+        { "list-multi",            ["list", "ThingDef", "AlloyPartDef"] },
+        { "list-multi-json",       ["list", "ThingDef", "AlloyPartDef", "--json"] },
+        { "list-multi-paged",      ["list", "ThingDef", "AlloyPartDef", "--limit", "2"] },
+        // 一个类型不存在:其余照印、退出码 0。全都不存在才 1。
+        { "list-multi-missing",    ["list", "ThingDef", "NoSuchTypeXYZ"] },
+        { "list-multi-all-missing", ["list", "NoSuchTypeXYZ", "NoSuchTypeABC"] },
         { "fields-filtered",       ["fields", "ThingDef", "--path-contains", "comps"] },
         // 几个类型一次问。守三件事:每个类型各有一句带名字的计数(不带名字两句读起来
         // 像同一个类型说了两遍)、行并进同一张表且 def_type 在末列(单类型调用里它折进
@@ -520,6 +528,14 @@ public class OutputSnapshotTests
         { "keyed-text-placeholders", ["keyed", "filler", "--empty-translation"] },
         // 零结果的两种成因:代码里有这个字面量而语言文件里没有(死 key),
         // 以及问的其实是个 def 名 —— 后者该被指回 get/search,而不是报「没有」。
+        // 几条查询一次问。守的是:每条各出一句带查询词的计数(名词还可能一句一个 ——
+        // 精确命中数的是「几条来源」,按文案搜数的是「几个 key」),行并进同一张表且
+        // query 在末列,表下方那两句只说一遍。
+        { "keyed-multi",           ["keyed", "CannotUseNoPower", "没有电力"] },
+        { "keyed-multi-json",      ["keyed", "CannotUseNoPower", "没有电力", "--json"] },
+        // 一条查空:其余照印、退出码 0。全都查空才 1。
+        { "keyed-multi-missing",   ["keyed", "CannotUseNoPower", "NoSuchUiKey"] },
+        { "keyed-multi-all-missing", ["keyed", "NoSuchUiKey", "NoSuchUiKeyEither"] },
         { "keyed-miss",            ["keyed", "NoSuchUiKey"] },
         { "keyed-miss-def",        ["keyed", "Apparel_ShieldBelt"] },
         // 经济面。这一层的每一种「空」都有自己的成因,而它们印出来同形 ——

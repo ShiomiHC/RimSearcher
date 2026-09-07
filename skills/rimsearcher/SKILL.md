@@ -33,30 +33,31 @@ Global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the com
 | Which defs pick this class with `Class="…"`? | `rimsearcher where Class <ClassName>` |
 | Same, but only within one def type | add `--type <DefType>` — it works on `where`, `values`, `search` and `get`. The def type is never the first positional: `where HediffDef compClass X` reads `HediffDef` as a *field path* and answers a different question. |
 | One field across a whole batch of defs | `rimsearcher where <field>` with **no value** — one flat row per def that has it. Not `list` + a `get` per name: `get` nests its output per def while `where` does not. When you do need the whole field table of many defs, pass every name to one `get`, or `get --type <DefType>` for the type; never one process per name. |
-| What can this field be set to? | `rimsearcher values <field>` |
-| What fields does this def type have? | `rimsearcher fields <DefType>` |
-| Everything of one kind | `rimsearcher list <DefType>` + `--find <text>`; no type = the def types |
+| What can this field be set to? | `rimsearcher values <field>...` |
+| What fields does this def type have? | `rimsearcher fields <DefType>...` |
+| Everything of one kind | `rimsearcher list <DefType>...` + `--find <text>`; no type = the def types |
 | Which saved mod lists name this mod? | `rimsearcher modlist show --find <text>` |
-| What inherits from this / vice versa? | `rimsearcher inherit <name>` |
+| What inherits from this / vice versa? | `rimsearcher inherit <name>...` |
 | What is this worth / what does it cost to make? | `rimsearcher economy <defName>...` — not a def field, `get` cannot answer it. Several names go into the same three tables, so the rows line up for comparison. Leave the name out for the whole priced layer in one call: every row carries the same keys, minus `costChain` and `recipes`, which only the named form computes |
-| UI text ↔ translation key | `rimsearcher keyed <key or phrase>` |
+| UI text ↔ translation key | `rimsearcher keyed <key or phrase>...` |
 | Which UI text is untranslated? | `rimsearcher keyed --empty-translation` with no query |
-| Where a C# type lives, and what it derives from | `rimsearcher types <Name>` — `--derived`, `--bases`, `--transitive` |
-| What is in a type, and which members are virtual or overridden | `rimsearcher members <Type>` — the filters are metadata bits, not keywords in the text |
+| Where a C# type lives, and what it derives from | `rimsearcher types <Name>...` — `--derived`, `--bases`, `--transitive` |
+| What is in a type, and which members are virtual or overridden | `rimsearcher members <Type>...` — the filters are metadata bits, not keywords in the text |
 | Which subclasses override this member | `rimsearcher types <Base> --derived --transitive --declares <Member>` |
-| Who calls this method | `rimsearcher callers <Type>.<Member>` — `--callees` for the other direction |
-| The instructions of one method (transpilers) | `rimsearcher il <Type>.<Member>` — `--state-machine` for an iterator or async method |
+| Who calls this method | `rimsearcher callers <Type>.<Member>...` — `--callees` for the other direction |
+| The instructions of one method (transpilers) | `rimsearcher il <Type>.<Member>...` — `--state-machine` for an iterator or async method |
 | A code *shape* across all files | `rimsearcher code-search <regex>` |
-| The text of one file, member, or line range | `rimsearcher read <file> --member <name>` |
+| The text of one file, member, or line range | `rimsearcher read <file>... --member <name>` |
 
-**Anything you look up by name takes several names in one call.** `get`, `economy`,
-`inherit`, `types`, `members`, `il`, `callers`, `read`, `fields` and `values` all do:
+**Anything you look up by name takes several names in one call** — `get`, `economy`,
+`inherit`, `types`, `members`, `il`, `callers`, `read`, `list`, `fields`, `values`, `keyed`:
 `rimsearcher values compClass thingClass`, `rimsearcher fields ThingDef HediffDef`,
-`rimsearcher read A.cs B.cs --outline`. Each name gets its own count line, `--limit` and
-`--offset` apply to each one separately, and the rows go into one table with a column
-saying which name each row came from. A name that misses does not sink the others — the
-call still exits 0. **Do not run one process per name**; process start dominates, and the
-answers do not line up for comparison.
+`rimsearcher read A.cs B.cs --outline`. Each name gets its own count line, and `--limit`
+and `--offset` apply to each one separately rather than to the batch. The rows land in one
+table, with a column naming which argument each row answers (`get` is the exception: it
+prints a block per def, as it does for one name). A name that misses does not sink the
+others — the call still exits 0, and only an all-miss exits 1. **Do not run one process per
+name**; process start dominates, and the answers do not line up for comparison.
 
 The code side has its own page — which command answers what, plus the traps — in
 [references/code-side.md](references/code-side.md). Three questions need the
