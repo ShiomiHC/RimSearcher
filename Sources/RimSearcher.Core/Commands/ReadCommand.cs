@@ -142,7 +142,7 @@ public sealed class ReadCommand : Command
                 What = "with --outline: one row per declaration — file, kind, modifiers (the leading run of " +
                        "them, verbatim; null when there are none), name, in (the owner), lines, at " +
                        "(the 'start-end' range to hand back to --lines). file is in every row, matching " +
-                       "'source', so one parser handles a single file and a batch alike.",
+                       "'source'.",
             },
         ],
     };
@@ -176,8 +176,6 @@ public sealed class ReadCommand : Command
         if (sourceName is { Length: > 0 } && !Directory.Exists(Path.Combine(root, sourceName)))
             throw new CliUsageException(CodeSearchCommand.NoSuchTree(sourceName, SourcesShared.TreeNames(root)));
 
-        // 几个文件一次读。逐个解析、逐个按同一种读法读,行并进同一个 source / declarations
-        // ——两张表本来就每行带着 file(--outline 那张 2026-09-08 才补上),所以块与块分得开。
         // --limit 按**每个文件**计:跨文件计的话,第一个文件把额度吃光,后面几个印零行,
         // 而那与「那几个文件是空的」印出来同形。
         var lines = new List<string>();
@@ -454,7 +452,6 @@ public sealed class ReadCommand : Command
         // 没有标题的话两个文件的正文在文本面粘成一片,而计数句在另一个区里,对不上是哪一段;
         // 只给第二段起加标题则更糟:第一段成了唯一没署名的那一段。
         // 与 --member 那一路同形(它用同样的 `--` 与 `路径:起-止` 标题行)。
-        // 一个文件时一行都不加,那一路的输出与批量形态出现之前逐字相同。
         if (batch)
         {
             if (lines.Count > 0) lines.Add("--");

@@ -191,9 +191,7 @@ public sealed class EconomyCommand : Command
             new()
             {
                 Key = "costChain",
-                // product 这一列在单名调用上也有,取值恒定 —— 恒在才使得「一个解析器读两种
-                // 调用」成立,而按名字个数决定出不出它,等于让消费方写两条路径,其中一条
-                // 拿到的 undefined 与「这个物没有成本链」同形。文本面把恒定列折进表头。
+                // product 这一列在单名调用上也有,取值恒定。文本面把恒定列折进表头。
                 What = "with defNames: one row per ingredient — product, thingDef, count, unitValue, " +
                        "chainEnd. product is the priced thing this row is an ingredient of, in every row " +
                        "even when only one name was given. chainEnd marks an ingredient with no recipe of " +
@@ -280,8 +278,7 @@ public sealed class EconomyCommand : Command
 
     /// <summary>
     /// 一个或几个名字。几个名字**不各出一块**,而是并进同一张 things / costChain / recipes ——
-    /// 三张表本来就同构(整层那一路的 things 就是这个形状),并排才比得起来,而按名字切块
-    /// 会把「三个腺体谁更贵」变成读者自己对着三块抄数。
+    /// 三张表本来就同构(整层那一路的 things 就是这个形状),并排才比得起来。
     ///
     /// 代价是 costChain / recipes 得多一列说明这一行属于哪个物。那一列在单名调用上照出,
     /// 取值恒定;文本面由常量列折叠收进表头,所以单名那一路的表体一行没变。

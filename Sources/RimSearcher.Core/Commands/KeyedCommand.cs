@@ -137,7 +137,7 @@ public sealed class KeyedCommand : Command
             if (RunOne(ctx, one, limit, offset, placeholdersOnly, total, table, ref anyPlaceholder) == 0)
                 answered++;
 
-        // 一条查询都没答出来才算失败 —— 与 read / fields / values 同一条。
+        // 部分命中仍是结果,全空才 1。
         if (answered == 0) return 1;
 
         ctx.Report.Table("keys", [.. KeyColumns, "query"], table);
@@ -145,9 +145,6 @@ public sealed class KeyedCommand : Command
         return 0;
     }
 
-    /// <summary>
-    /// 一条查询的那一份。行不自己发,追加进 <paramref name="table"/> —— 几条查询共用一张表。
-    /// </summary>
     private static int RunOne(CommandContext ctx, string query, LimitValue limit, int offset,
                               bool placeholdersOnly, int total,
                               List<IReadOnlyDictionary<string, object?>> table, ref bool anyPlaceholder)

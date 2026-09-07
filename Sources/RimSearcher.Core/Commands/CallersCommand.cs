@@ -90,8 +90,8 @@ public sealed class CallersCommand : Command
 
         using var lookup = CodeShared.Open(ctx, out var root, everyTree: true);
 
-        // 几个符号并成一串方法。行里带着 to_type / to_member,一次调用问三个方法谁调它们
-        // 与分三次问得到的是同一批行,只是少两次进程启动。Locate 落空时自己已经说了话。
+        // 几个符号并成一串方法。行里带着 to_type / to_member,块与块分得开。
+        // Locate 落空时自己已经说了话,这里不要再报一遍。
         var methods = new List<MethodHit>();
         var seenMethods = new HashSet<string>(StringComparer.Ordinal);
         foreach (var one in asked)

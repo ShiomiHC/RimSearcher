@@ -362,7 +362,7 @@ What is listed is every path the exporter recorded a value for. When the snapsho
 
 | Key | Holds |
 |---|---|
-| `fields` | one row per field path: path, defs (how many defs use it), def_type (which type the row was counted under — present on a single-type call too, so the shape does not change with how many types were asked for). |
+| `fields` | one row per field path: path, defs (how many defs use it), def_type (which type the row was counted under — present on a single-type call too). |
 | `completeness` | an object, present only when some def in scope had its export cut short: scope (which def types this covers, in words), defs_cut_short (how many), types (one row per def type with its own count), verify (a ready command that lists them). Absent means no def in that scope lost fields at export. |
 
 Examples:
@@ -758,7 +758,7 @@ Page with --lines, never with a pipe. The first line of the answer says which li
 | Key | Holds |
 |---|---|
 | `source` | without --outline: one row per source line — file, line, text, plus kind and declaration when the line came from --member/--type. The text form's line-number gutter is not repeated here. This is the key the three reading modes produce; 'declarations' is absent then. |
-| `declarations` | with --outline: one row per declaration — file, kind, modifiers (the leading run of them, verbatim; null when there are none), name, in (the owner), lines, at (the 'start-end' range to hand back to --lines). file is in every row, matching 'source', so one parser handles a single file and a batch alike. |
+| `declarations` | with --outline: one row per declaration — file, kind, modifiers (the leading run of them, verbatim; null when there are none), name, in (the owner), lines, at (the 'start-end' range to hand back to --lines). file is in every row, matching 'source'. |
 
 Examples:
 
@@ -1137,8 +1137,8 @@ Answers 'what am I allowed to put here' and 'which classes are actually in use' 
 
 | Key | Holds |
 |---|---|
-| `values` | one row per distinct value: value, defs, field_path (which of the paths asked for the row was counted under — present on a single-path call too, so the shape does not change with how many paths were asked for). |
-| `field` | an array with one entry per field path asked for, in the order given; each entry holds a 'field' object (field[0].field), the same nesting 'get' uses for defs[]. That object says which path was asked for and which full paths and def types its values came from: asked, matched_paths, def_types, defs_with_field. A bare name matches by suffix, so this says what was actually pooled. Always an array, including when one path was asked for, so the shape does not change with how many were. Always present: on an empty result that object's three members are empty and defs_with_field is 0, so a missing key never has to be told apart from nothing matching. |
+| `values` | one row per distinct value: value, defs, field_path (which of the paths asked for the row was counted under — present on a single-path call too). |
+| `field` | an array with one entry per field path asked for, in the order given; each entry holds a 'field' object (field[0].field), the same nesting 'get' uses for defs[]. That object says which path was asked for and which full paths and def types its values came from: asked, matched_paths, def_types, defs_with_field. A bare name matches by suffix, so this says what was actually pooled. Always an array, including when one path was asked for. Always present: on an empty result that object's three members are empty and defs_with_field is 0, so a missing key never has to be told apart from nothing matching. |
 | `completeness` | an object, present only when some def in scope had its export cut short: scope (which def types this covers, in words), defs_cut_short (how many), types (one row per def type with its own count), verify (a ready command that lists them). Absent means no def in that scope lost fields at export. |
 
 Examples:
