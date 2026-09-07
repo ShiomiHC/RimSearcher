@@ -50,7 +50,7 @@ Global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the com
 | The text of one file, member, or line range | `rimsearcher read <file> --member <name>` |
 
 **Anything you look up by name takes several names in one call.** `get`, `economy`,
-`inherit`, `types`, `members`, `il`, `callers`, `read`, `fields` and `values` all do:
+`inherit`, `types`, `members`, `il`, `callers`, `read`, `fields`, `values` and `keyed` all do:
 `rimsearcher values compClass thingClass`, `rimsearcher fields ThingDef HediffDef`,
 `rimsearcher read A.cs B.cs --outline`. Each name gets its own count line, `--limit` and
 `--offset` apply to each one separately, and the rows go into one table with a column

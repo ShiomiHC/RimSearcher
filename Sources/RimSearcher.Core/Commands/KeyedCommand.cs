@@ -41,9 +41,12 @@ public sealed class KeyedCommand : Command
             {
                 Name = "query",
                 Required = false,
+                Variadic = true,
                 Help = "A translation key, or a phrase from the interface in any language the snapshot has. " +
-                       "Leave it out to list the layer itself — every keyed translation, or with " +
-                       "--empty-translation only the untranslated ones.",
+                       "Several go in one call; --limit and --offset apply to each on its own, each gets its " +
+                       "own count line, and the query column says which one a row answers. Leave them all " +
+                       "out to list the layer itself — every keyed translation, or with --empty-translation " +
+                       "only the untranslated ones.",
             },
         ],
         Options =
@@ -82,15 +85,23 @@ public sealed class KeyedCommand : Command
                 Key = "keys",
                 Rows = true,
                 What = "one row per keyed translation — key, translated, original, origin ('in effect' or " +
-                       "'on disk'), placeholder, mod, source. Always an array, including when a single key " +
-                       "matched exactly, so the shape does not change with the kind of match.",
+                       "'on disk'), placeholder, mod, source, and query (which of the queries the row " +
+                       "answers, present on a single-query call too). Always an array, including when a " +
+                       "single key matched exactly, so the shape does not change with the kind of match. " +
+                       "The query column is the one thing that does change with the call: listing the whole " +
+                       "layer takes no query, so there the rows have no such column rather than a blank one " +
+                       "that would read as a value nobody could compute.",
             },
         ],
     };
 
     public override int Run(CommandContext ctx)
     {
-        var query = ctx.Args.Positional(0);
+        var asked = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var q in ctx.Args.Positionals)
+            if (seen.Add(q)) asked.Add(q);
+        var query = asked.Count > 0 ? asked[0] : null;
         var limit = ctx.Limit();
         var offset = ctx.Args.Int("offset", 0);
         var placeholdersOnly = ctx.Args.Flag("empty-translation");
@@ -103,7 +114,9 @@ public sealed class KeyedCommand : Command
             ctx.Report.Notice(NoticeKind.Boundary,
                 "This snapshot has no keyed translations at all, so nothing here can be looked up — that is a " +
                 "property of the snapshot, " +
-                (query is null ? "not evidence about what this layer holds. " : $"not evidence about '{query}'. ") +
+                (query is null
+                    ? "not evidence about what this layer holds. "
+                    : $"not evidence about {NameList.Render(asked.Select(q => $"'{q}'").ToList(), asked.Count)}. ") +
                 "Two exports look like this and " +
                 "this line cannot tell them apart: one written before this layer was measured at all, and one " +
                 "written from a game whose language data was not loaded. The fix is the same either way — export " +
@@ -117,6 +130,28 @@ public sealed class KeyedCommand : Command
         if (query is null)
             return RunAll(ctx, limit, offset, placeholdersOnly);
 
+        var table = new List<IReadOnlyDictionary<string, object?>>();
+        var answered = 0;
+        var anyPlaceholder = false;
+        foreach (var one in asked)
+            if (RunOne(ctx, one, limit, offset, placeholdersOnly, total, table, ref anyPlaceholder) == 0)
+                answered++;
+
+        // 一条查询都没答出来才算失败 —— 与 read / fields / values 同一条。
+        if (answered == 0) return 1;
+
+        ctx.Report.Table("keys", [.. KeyColumns, "query"], table);
+        AfterTable(ctx, anyPlaceholder);
+        return 0;
+    }
+
+    /// <summary>
+    /// 一条查询的那一份。行不自己发,追加进 <paramref name="table"/> —— 几条查询共用一张表。
+    /// </summary>
+    private static int RunOne(CommandContext ctx, string query, LimitValue limit, int offset,
+                              bool placeholdersOnly, int total,
+                              List<IReadOnlyDictionary<string, object?>> table, ref bool anyPlaceholder)
+    {
         // 精确 key 命中优先。key 与界面文案不会同形,所以这一步不会抢走「按文案搜」的意图。
         var exact = ctx.Db.KeyedByKey(query);
         var rows = exact;
@@ -246,7 +281,18 @@ public sealed class KeyedCommand : Command
         // 几条来源(in effect 一条,on disk 可以另有几条),按文案搜时数的是命中了几个 key。
         // 两者混用一个词,「一个 key 三条来源」就会被读成「三个 key」。变的只有名词,
         // 计数形态两路同一套。
-        Emit(ctx, shown, matchedOn == "key" ? "keyed translation" : "key", offset, ftsTotal, placeholdersOnly);
+        //
+        // 限定语说破这一句数的是哪条查询 —— 几条查询一次问时,两句「3 keys」分不出谁是谁,
+        // 而名词本身还可能一句一个。
+        ctx.Report.PageNotice(matchedOn == "key" ? "keyed translation" : "key",
+                              shown.Count, offset, ftsTotal, $" for '{query}'");
+        foreach (var r in shown)
+        {
+            var row = RowOf(r);
+            row["query"] = query;
+            table.Add(row);
+            anyPlaceholder |= r.Placeholder;
+        }
 
         // 精确命中把前缀匹配**静默**关掉了:`keyed CommandSettle` 回一行、绝口不提
         // `CommandSettleDesc`,而计数仍是「完整计数」形态 —— 于是一次收窄长得和
@@ -321,7 +367,7 @@ public sealed class KeyedCommand : Command
             return 1;
         }
 
-        Emit(ctx, rows, "keyed translation", offset, total, placeholdersOnly);
+        Emit(ctx, rows, "keyed translation", offset, total);
         return 0;
     }
 
@@ -330,32 +376,45 @@ public sealed class KeyedCommand : Command
     /// 分开写的话,「占位是什么意思」这句只会长在想起来的那两条上。
     /// </summary>
     private static void Emit(CommandContext ctx, IReadOnlyList<Storage.KeyedRow> shown, string noun,
-                             int offset, int total, bool placeholdersOnly)
+                             int offset, int total)
     {
         // 分页三件事在它数的那张表**上方** —— 数得清几条、是不是还有下一页,读到行的时候
         // 得已经知道。全仓只有这一处曾是反的。
         ctx.Report.PageNotice(noun, shown.Count, offset, total);
 
-        ctx.Report.Table("keys", ["key", "translated", "original", "origin", "placeholder", "mod", "source"],
-            shown.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
-            {
-                ["key"] = r.Key,
-                ["translated"] = r.Translated,
-                ["original"] = r.Original,
-                // 「in effect」/「on disk」而不是 runtime/harvested:后者说的是数据怎么来的,
-                // 前者说的是读的人真正要判的那件事 —— 这一句游戏会不会显示。
-                ["origin"] = r.Origin == TranslationOrigin.Runtime ? "in effect" : "on disk",
-                // 恒在,不按有无条件出现:条件出现的列会让「量过了,不是占位」与
-                // 「这一格根本没量」印出来一模一样。
-                ["placeholder"] = r.Placeholder,
-                ["mod"] = r.SourceMod,
-                // 一个 mod 常同时铺 1.4/ 1.5/ 1.6/ 三套 Languages,逐列全同的几行入库时折成
-                // 一行。**不说破就等于把「三份同文」印成「一份」** —— 说破了,读的人也不会
-                // 再去数「这句话有几种说法」。
-                ["source"] = (r.SourceLine > 0 ? $"{r.SourceFile}:{r.SourceLine}" : r.SourceFile)
-                             + (r.SourceFileCount is > 1 ? $" (+{r.SourceFileCount - 1} same)" : ""),
-            }).ToList());
+        // 整层枚举没有查询词,所以这里的行**不带** query 一列 —— 每行都空着的一列读起来
+        // 是「这一格没算出来」,而这里的真相是这个问题不存在。
+        ctx.Report.Table("keys", KeyColumns,
+            shown.Select(r => (IReadOnlyDictionary<string, object?>)RowOf(r)).ToList());
 
+        AfterTable(ctx, shown.Any(r => r.Placeholder));
+    }
+
+    private static readonly string[] KeyColumns =
+        ["key", "translated", "original", "origin", "placeholder", "mod", "source"];
+
+    private static Dictionary<string, object?> RowOf(Storage.KeyedRow r) => new()
+    {
+        ["key"] = r.Key,
+        ["translated"] = r.Translated,
+        ["original"] = r.Original,
+        // 「in effect」/「on disk」而不是 runtime/harvested:后者说的是数据怎么来的,
+        // 前者说的是读的人真正要判的那件事 —— 这一句游戏会不会显示。
+        ["origin"] = r.Origin == TranslationOrigin.Runtime ? "in effect" : "on disk",
+        // 恒在,不按有无条件出现:条件出现的列会让「量过了,不是占位」与
+        // 「这一格根本没量」印出来一模一样。
+        ["placeholder"] = r.Placeholder,
+        ["mod"] = r.SourceMod,
+        // 一个 mod 常同时铺 1.4/ 1.5/ 1.6/ 三套 Languages,逐列全同的几行入库时折成
+        // 一行。**不说破就等于把「三份同文」印成「一份」** —— 说破了,读的人也不会
+        // 再去数「这句话有几种说法」。
+        ["source"] = (r.SourceLine > 0 ? $"{r.SourceFile}:{r.SourceLine}" : r.SourceFile)
+                     + (r.SourceFileCount is > 1 ? $" (+{r.SourceFileCount - 1} same)" : ""),
+    };
+
+    /// <summary>表下方那两条说破。几条查询共用一张表,所以它们跟着表走,不跟着查询走。</summary>
+    private static void AfterTable(CommandContext ctx, bool anyPlaceholder)
+    {
         // origin 那一列印着「in effect」,读的人自然读出「另有 on disk 的没印出来」。
         // 这份库要是没量过磁盘,那个对照根本不存在 —— 说破它。
         DiskLayer.NoteIfUnmeasured(ctx);
@@ -364,7 +423,7 @@ public sealed class KeyedCommand : Command
         //
         // 这一句只剩列义 —— 「哪几行是占位」表上的 placeholder 列自己就印着,
         // 再数一遍是复述。于是两支同文,--empty-translation 也不再分支。
-        if (shown.Any(r => r.Placeholder))
+        if (anyPlaceholder)
             ctx.Report.Notice(NoticeKind.Boundary,
                 "Placeholder means the language file declares the key without a translation, so the game " +
                 "displays the English text instead of what the translated column shows.");

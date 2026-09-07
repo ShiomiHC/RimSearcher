@@ -5171,4 +5171,59 @@ public class GrammarTests
         var (_, _, allMissing) = Fixture.Run("values", "zzznotafield", "zzzalsonotafield", "--json");
         Assert.Equal(1, allMissing);
     }
+
+    /// <summary>
+    /// keyed 的多查询形态。这条命令的计数**名词一句一个**(精确命中数的是一个 key 的几条
+    /// 来源,按文案搜数的是几个 key),所以「哪句说的是哪条查询」全靠那个限定语 —— 这里
+    /// 逐条钉它。
+    ///
+    /// query 那一列只在给了查询词时才有:整层枚举没有查询这回事,每行都空着的一列会被
+    /// 读成「这一格没算出来」。这一条也钉住。
+    /// </summary>
+    [Fact]
+    public void keyed多查询的行等于分别问再拼起来()
+    {
+        static List<string> Rows(string json, string? of = null)
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("keys", out var arr)) return [];
+            return arr.EnumerateArray()
+                      .Where(r => of is null || r.GetProperty("query").GetString() == of)
+                      .Select(r => string.Join("|", r.EnumerateObject()
+                                                     .Where(p => p.Name != "query")
+                                                     .Select(p => $"{p.Name}={p.Value.GetRawText()}")))
+                      .ToList();
+        }
+
+        var (byKey, _, _) = Fixture.Run("keyed", "CannotUseNoPower", "--json");
+        var (byText, _, _) = Fixture.Run("keyed", "没有电力", "--json");
+        var (multi, _, code) = Fixture.Run("keyed", "CannotUseNoPower", "NoSuchUiKey", "没有电力", "--json");
+        Assert.Equal(0, code);
+        Assert.Equal(Rows(byKey), Rows(multi, "CannotUseNoPower"));
+        Assert.Equal(Rows(byText), Rows(multi, "没有电力"));
+
+        using (var doc = System.Text.Json.JsonDocument.Parse(multi))
+        {
+            var texts = doc.RootElement.GetProperty("notes").EnumerateArray()
+                           .Select(n => n.GetProperty("text").GetString()!).ToList();
+            // 名词一句一个,而两句都得说清自己数的是哪条查询。
+            Assert.Contains(texts, t => Regex.IsMatch(t, @"^\d+ keyed translations? for 'CannotUseNoPower'"));
+            Assert.Contains(texts, t => Regex.IsMatch(t, @"^\d+ keys? for '没有电力'"));
+            Assert.Contains(texts, t => t.Contains("NoSuchUiKey", StringComparison.Ordinal));
+        }
+
+        // 单条查询上 query 恒在;整层枚举上这一列不在。
+        using (var doc = System.Text.Json.JsonDocument.Parse(byKey))
+            foreach (var row in doc.RootElement.GetProperty("keys").EnumerateArray())
+                Assert.Equal("CannotUseNoPower", row.GetProperty("query").GetString());
+
+        var (all, _, _) = Fixture.Run("keyed", "--limit", "3", "--json");
+        using (var doc = System.Text.Json.JsonDocument.Parse(all))
+            foreach (var row in doc.RootElement.GetProperty("keys").EnumerateArray())
+                Assert.False(row.TryGetProperty("query", out _),
+                             "整层枚举的行带了 query 一列,而那一列在这条路上没有值可摆");
+
+        var (_, _, allMissing) = Fixture.Run("keyed", "NoSuchUiKey", "NoSuchUiKeyEither", "--json");
+        Assert.Equal(1, allMissing);
+    }
 }
