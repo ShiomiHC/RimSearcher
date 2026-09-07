@@ -1748,7 +1748,7 @@ public sealed class FindCommand : Command
         // 范围措辞与 values 那处同源 —— 两条命令圈的是同一批。
         Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(pq, scope, type),
             type is { Length: > 0 }
-                ? $"all of {type}, the type this table is already filtered to"
+                ? $"all of {type}"
                 : "every def type that uses this path at all");
 
         ctx.Report.Table("matches",
@@ -1865,9 +1865,15 @@ public sealed class FindCommand : Command
         // 出现在几条路径上重复计数,而路径 defName(`where --value` 命中 def 名时必然有)的
         // 「同类型」等于全体 def 类型,单这一项就等于全库 —— 于是子集计数会大于全集。
         // 表里那批 def 是「取到过这个值」选出来的,这一块圈的也必须是同一批。
+        //
+        // 跟着 --type 一起收:表已经滤成一个类型了,这块不能还在说别的类型 —— 读者对
+        // 「另一个类型有 def 被砍过」无事可做,它答的是另一个问题。
         Completeness.NoteIndexedPathsOnly(ctx,
-            ctx.Db.TruncatedDefsSharingValue(value, exact ? ValueMatch.Exact : ValueMatch.Substring, scope),
-            "every def type that holds this value anywhere");
+            ctx.Db.TruncatedDefsSharingValue(value, exact ? ValueMatch.Exact : ValueMatch.Substring,
+                                             scope, type),
+            type is { Length: > 0 }
+                ? $"all of {type}"
+                : "every def type that holds this value anywhere");
 
         // 子串态下 defs 拆成两列,各自答一个问题:「值就是它的 def 有几个」与「值只是含着
         // 它的有几个」。合成一列的时候这两个数没有任何东西能把它们分开 —— 一行里两态并存
@@ -2591,7 +2597,7 @@ public sealed class ValuesCommand : Command
         // 跟着 --type 一起收:表已经滤成一个类型了,这块不能还在说别的类型。
         Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsSharingPath(pq, scope, type),
             type is { Length: > 0 }
-                ? $"all of {type}, the type this table is already filtered to"
+                ? $"all of {type}"
                 : "every def type that uses this path at all");
 
         ctx.Report.Table("values", ["value", "defs"],
@@ -3033,7 +3039,7 @@ internal static class Completeness
     {
         Key = "completeness",
         What = "an object, present only when some def in scope had its export cut short: scope (which def " +
-               "types this covers, in words — it is wider than the rows above), defs_cut_short (how many), " +
+               "types this covers, in words), defs_cut_short (how many), " +
                "types (one row per def type with its own count), verify (a ready command that lists them). " +
                "Absent means no def in that scope lost fields at export.",
     };

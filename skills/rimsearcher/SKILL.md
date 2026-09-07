@@ -93,7 +93,9 @@ a different question. None of them announces itself.
   `--exact-path` pins the whole path, with `[]` standing for any index, and it drops the
   rows those extra shapes contributed.
 - **`get --path-contains` and `where --value` match substrings too** — `--path-contains soundImpact`
-  also returns `soundImpactDefault`, opposite meaning.
+  also returns `soundImpactDefault`, opposite meaning. On `where --value` without a field path
+  the two kinds are separate columns, `defs_exact` and `defs_other`, so a row can be entirely
+  substring hits; `--exact` drops them and leaves one `defs`.
 - **One defName can belong to several def types, and `get` then prints one block per def** —
   `HospitalBed` is both a ThingDef and a ResearchProjectDef. Under `--json` that is a
   `defs[]` of more than one entry in **no guaranteed order**, so `defs[0].fields` reads
@@ -162,7 +164,7 @@ way to state:
   `--help` says when. Key map: usage-notes. `where`, `values` and `fields` add
   `completeness` when some def in scope had its export cut short — it carries the scope in
   words, the count, one row per def type, and a ready command to list them. Its absence
-  means no def in scope lost fields, so a completeness check reads that key, not the prose.
+  means no def in scope lost fields.
 - **Anything read by a program takes `--json`.** The text tables are laid out for a human
   reader: columns are padded to width, and a column whose value repeats in every row is
   lifted out into a `Same in every row, not repeated below:` line and then **missing from

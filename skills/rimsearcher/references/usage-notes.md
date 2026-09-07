@@ -97,7 +97,7 @@ data sits under a key that depends on the command. `<command> --help` lists each
 | `where --value` with no field path | `paths`. The def count per row is split in two: `defs_exact` (the value is exactly what was asked for) and `defs_other` (it sits inside a longer value). A row can have both non-zero. With `--exact` there is only one meaning, so the column is a single `defs` |
 | `values` | `values`, plus `field` (which full paths and def types the value space was drawn from). Both are always present; on an empty result the members of `field` are empty or zero rather than the key being gone |
 | `fields` | `fields` |
-| `where` / `values` / `fields` | plus `completeness` when some def in scope had its export cut short: `scope` (which def types this covers, in words — wider than the rows), `defs_cut_short`, `types` (one row per def type with its own count), `verify` (a ready command listing them). The key is absent when no def in scope lost fields, so a completeness check reads the key, not the prose |
+| `where` / `values` / `fields` | plus `completeness` when some def in scope had its export cut short: `scope` (which def types this covers, in words), `defs_cut_short`, `types` (one row per def type with its own count), `verify` (a ready command listing them). The key is absent when no def in scope lost fields |
 | `mods` | `mods` |
 | `inherit` | `nodes` — **not rows**: one nested object per XML node, each `{node, ancestors, children?, witnesses?}` |
 | `keyed` | `keys` |

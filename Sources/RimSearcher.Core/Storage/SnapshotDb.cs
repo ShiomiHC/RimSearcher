@@ -1097,10 +1097,11 @@ public sealed class SnapshotDb : IDisposable
     /// 会把 <c>defName</c> 这种每个 def 类型都有的路径整个放大成全库 —— 报出来的是
     /// **子集计数大于全集**,而它印出来与一个正常计数逐字同形。
     /// </summary>
-    public TruncationScope TruncatedDefsSharingValue(string value, ValueMatch match, ScopeFilter scope)
+    public TruncationScope TruncatedDefsSharingValue(string value, ValueMatch match, ScopeFilter scope,
+                                                     string? defType = null)
     {
         var p = new Dictionary<string, object?>();
-        return TruncatedAmong(ValueWhere(value, match, scope, p), scope, p);
+        return TruncatedAmong(ValueWhere(value, match, scope, p), scope, p, defType);
     }
 
     /// <summary>

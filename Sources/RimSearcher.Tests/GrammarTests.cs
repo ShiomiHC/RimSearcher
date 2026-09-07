@@ -3852,6 +3852,24 @@ public class GrammarTests
         var (narrow, _, _) = Fixture.Run("values", "compClass", "--type", "HediffDef");
         Assert.Contains("HediffDef (1 of 1)", narrow, StringComparison.Ordinal);
         Assert.DoesNotContain(Note, narrow, StringComparison.Ordinal);
+
+        // 按值反查是第三条到达这块的路,而它此前是唯一没收的那条:同一个 --type
+        // 在这里只滤了表,块照旧按「持有这个值的每个类型」算。于是 --type HediffDef
+        // 的表下面挂着一条 ThingDef 的告警 —— 读者对它无事可做,它答的是另一个问题。
+        var (byValueWide, _, _) = Fixture.Run("where", "--value", "RimWorld.CompShield");
+        Assert.Contains(Note, byValueWide, StringComparison.Ordinal);
+        Assert.Contains("ThingDef", byValueWide, StringComparison.Ordinal);
+
+        var (byValueNarrow, _, _) = Fixture.Run("where", "--value", "RimWorld.CompShield",
+                                                "--type", "HediffDef");
+        Assert.DoesNotContain(Note, byValueNarrow, StringComparison.Ordinal);
+
+        // 反过来:划到真有被砍的那个类型上,这块要还在,而且范围措辞跟着换成点名那一支。
+        var (byValueKept, _, _) = Fixture.Run("where", "--value", "RimWorld.CompShield",
+                                              "--type", "ThingDef");
+        Assert.Contains(Note, byValueKept, StringComparison.Ordinal);
+        Assert.Contains("all of ThingDef", byValueKept, StringComparison.Ordinal);
+        Assert.DoesNotContain("holds this value anywhere", byValueKept, StringComparison.Ordinal);
     }
 
     /// <summary>
