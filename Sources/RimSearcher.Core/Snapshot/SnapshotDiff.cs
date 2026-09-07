@@ -1,4 +1,5 @@
 ﻿using Microsoft.Data.Sqlite;
+using RimSearcher.Storage;
 
 namespace RimSearcher.Snapshot;
 
@@ -11,7 +12,12 @@ public sealed record SnapshotDiffResult(
     IReadOnlyList<DiffDefRow> Added, int AddedTotal,
     IReadOnlyList<DiffDefRow> Removed, int RemovedTotal,
     IReadOnlyList<DiffFieldRow> Fields, int FieldsTotal,
-    int TruncatedDefs);
+    int TruncatedDefs,
+    /// <summary>
+    /// 被截过的那批分成「少了路径 / 只切了值」两拨。null = **两侧至少有一侧**没分过类,
+    /// 那时分不出来 —— 而按 <c>--keep</c> 留下的 `.prev` 全是旧代,这一路是常态不是意外。
+    /// </summary>
+    Storage.SnapshotDb.TruncationSpread? TruncatedSpread);
 
 /// <summary>
 /// 两份快照之间已解析 def / 字段的差。磁盘 XML 与 git 都不在这里 —— 比的是 import 之后
@@ -87,7 +93,7 @@ public static class SnapshotDiff
                 "ORDER BY def_type, def_name, path LIMIT " + limit);
 
             return new SnapshotDiffResult(added, addedTotal, removed, removedTotal,
-                                          fields, fieldsTotal, truncatedDefs);
+                                          fields, fieldsTotal, truncatedDefs, TruncationSplit(db));
         }
         finally
         {
@@ -95,6 +101,34 @@ public static class SnapshotDiff
             detach.CommandText = "DETACH DATABASE prior; DETACH DATABASE newer;";
             try { detach.ExecuteNonQuery(); } catch (SqliteException) { /* 主路径已失败 */ }
         }
+    }
+
+    /// <summary>
+    /// 被截过的 def 分成两拨。**两侧都得分过类**才答得出:一侧分过一侧没分,把没分的那侧
+    /// 一律算成「只切了值」就会把它丢掉的路径说成没丢,而那正是这句话要防的读法。
+    ///
+    /// 「分过类」= 那四列在,且真有一行非零。只看列在不在会把「旧导出进了新库、四列拿
+    /// DEFAULT 0」当成分好类的,那种库上每个被截的 def 都会被判成只切了值。
+    /// </summary>
+    private static SnapshotDb.TruncationSpread? TruncationSplit(SqliteConnection db)
+    {
+        if (!Classified("newer") || !Classified("prior")) return null;
+
+        const string joined = "FROM newer.defs n JOIN prior.defs o "
+                            + "ON o.def_type = n.def_type AND o.def_name = n.def_name ";
+        var lost = $"({Missing("n")} > 0 OR {Missing("o")} > 0)";
+        return new SnapshotDb.TruncationSpread(
+            Scalar(db, $"SELECT COUNT(*) {joined}WHERE {lost}"),
+            Scalar(db, $"SELECT COUNT(*) {joined}"
+                     + $"WHERE (n.fields_truncated > 0 OR o.fields_truncated > 0) AND NOT {lost}"));
+
+        static string Missing(string a)
+            => $"{a}.truncated_by_cap + {a}.truncated_by_depth + {a}.truncated_by_items";
+
+        bool Classified(string alias)
+            => HasColumn(db, alias, "defs", "truncated_by_cap")
+               && Scalar(db, $"SELECT COUNT(*) FROM {alias}.defs WHERE truncated_by_cap "
+                           + "+ truncated_by_length + truncated_by_depth + truncated_by_items > 0") > 0;
     }
 
     /// <summary>

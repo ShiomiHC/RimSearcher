@@ -250,4 +250,59 @@ public class TruncationCauseTests
         // 含糊那句的谓语也得跟着数走 —— 两句共用同一个开头,漏改一处就只有一半是对的。
         Assert.Contains("at least 1 field was " + Vague, GetLine(db, "LegacyOne"));
     }
+
+    // ---- 一整批 def 那一句 ----
+
+    /// <summary>整份库那句截断提示。<c>snapshot status</c> 与 <c>snapshot import</c> 共用它。</summary>
+    private static string StatusLine(string db)
+    {
+        var (stdout, _, code) = Fixture.Run("snapshot", "status", "--db", db);
+        Assert.Equal(0, code);
+        return stdout.Split('\n').Single(l => l.Contains("field path", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// 被截过的 def 里一条路径都没少时,整份库那句不许说「缺了路径」。
+    ///
+    /// 这不是边角:七个官方快照上这一拨占 27 个里的 22 个,而此前那句按总数发,
+    /// 对那 22 个整句是假的。
+    /// </summary>
+    [Fact]
+    public void 整份库那句在只切了值时不说缺路径()
+    {
+        var said = StatusLine(Build("agg-len", new MiniDef("Cut", 4, (0, 4, 0, 0))));
+        Assert.Contains("1 def in this snapshot kept every field path and had only values cut to the "
+                        + "length cap.", said);
+        Assert.DoesNotContain("lost field paths", said);
+        Assert.DoesNotContain("is not evidence that the def lacks it", said);
+    }
+
+    /// <summary>两拨都有时分成两句,各带各的读法,而且两个数加起来是那个总数。</summary>
+    [Fact]
+    public void 整份库那句两拨都有时分开说()
+    {
+        var said = StatusLine(Build("agg-both",
+            new MiniDef("Lost", 2, (1, 0, 1, 0)),
+            new MiniDef("LostToo", 1, (0, 0, 0, 1)),
+            new MiniDef("Cut", 3, (0, 3, 0, 0)),
+            new MiniDef("Clean", 0, (0, 0, 0, 0))));
+        Assert.Contains("2 defs in this snapshot lost field paths at export time", said);
+        Assert.Contains("For those, a field path missing from 'get' is not evidence that the def lacks it.",
+                        said);
+        Assert.Contains("Another 1 def kept every field path and had only values cut to the length cap.",
+                        said);
+        // 没被截的那个不许进任何一拨。
+        Assert.DoesNotContain("4 def", said);
+    }
+
+    /// <summary>没分过类的库上退回那句含糊的总数 —— 两拨一个都不许猜。</summary>
+    [Fact]
+    public void 整份库那句在没分过类的库上退回含糊那句()
+    {
+        var said = StatusLine(Build("agg-legacy", new MiniDef("Legacy", 3, null)));
+        Assert.Contains("1 def in this snapshot had fields " + Vague + ".", said);
+        Assert.Contains("For those, a field path missing from 'get' is not evidence that the def lacks it.",
+                        said);
+        Assert.DoesNotContain("kept every field path", said);
+    }
 }

@@ -434,6 +434,34 @@ internal static class ExportCap
     /// <summary>一批 def 里有几个被截过。<paramref name="among"/> 是插在计数与谓语之间的定语。</summary>
     public static string OverDefs(int defs, string among = "")
         => $"{Tally.Complete(defs).Render("def")}{among} had fields dropped at export time for depth or size";
+
+    /// <summary>
+    /// 同上,但把被截过的那批分成两拨说。<paramref name="spread"/> 为 null = 这份库没分类过,
+    /// 退回上面那句含糊的总数。
+    ///
+    /// 分开说是因为那个总数**盖着两件相反的事**:少了路径的那拨,与一条路径没少、
+    /// 只是值不全的那拨。七个官方快照上后者占 27 个里的 22 个,而按总数发出去的
+    /// 「这些 def 缺了路径」对那 22 个是假的 —— 读者据此去找的行本来就在表里。
+    ///
+    /// 两句各带自己的后果(<paramref name="lostMeans"/> / <paramref name="cutMeans"/>):
+    /// 少了路径与值被切在每条命令上的读法都不一样,合成一句就得挑一个说,而挑哪个都错一半。
+    /// </summary>
+    public static string OverDefs(SnapshotDb.TruncationSpread? spread, int defs, string among,
+                                  string lostMeans, string cutMeans)
+    {
+        if (spread is not { } s) return $"{OverDefs(defs, among)}. {lostMeans}";
+
+        var said = new List<string>();
+        if (s.LostPaths > 0)
+            said.Add($"{Tally.Complete(s.LostPaths).Render("def")}{among} lost field paths at export time — " +
+                     $"past a field cap, past the depth cap, or partway down a list. {lostMeans}");
+        if (s.ValuesOnly > 0)
+            said.Add((said.Count > 0
+                          ? $"Another {Tally.Complete(s.ValuesOnly).Render("def")}"
+                          : $"{Tally.Complete(s.ValuesOnly).Render("def")}{among}") +
+                     $" kept every field path and had only values cut to the length cap. {cutMeans}");
+        return string.Join(" ", said);
+    }
 }
 
 /// <summary>

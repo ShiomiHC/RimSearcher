@@ -2355,6 +2355,24 @@ public sealed class SnapshotDb : IDisposable
 
     private bool? _causesMeasured;
 
+    /// <summary>被截过的一批 def 分成两拨:真少了路径的,与只有值被切、一条路径没少的。</summary>
+    public readonly record struct TruncationSpread(int LostPaths, int ValuesOnly);
+
+    /// <summary>
+    /// 把被截过的 def 分成这两拨。null = 这份库没分类过,那时只答得出一个总数。
+    ///
+    /// 分开数不是为了好看:七个官方快照上「只有值被切」占 27 个里的 22 个,而按总数
+    /// 说出去的那句「这些 def 缺了路径」对那 22 个是假的 —— 它们的行都在表里。
+    /// </summary>
+    public TruncationSpread? TruncatedDefSpread()
+    {
+        if (!TruncationCausesMeasured) return null;
+        const string missing = "truncated_by_cap + truncated_by_depth + truncated_by_items";
+        return new TruncationSpread(
+            Scalar($"SELECT COUNT(*) FROM defs WHERE {missing} > 0"),
+            Scalar($"SELECT COUNT(*) FROM defs WHERE fields_truncated > 0 AND {missing} = 0"));
+    }
+
     /// <summary>
     /// 一个 def 的截断成因。null = 这份库没分类过(不是四类都为零)。
     ///

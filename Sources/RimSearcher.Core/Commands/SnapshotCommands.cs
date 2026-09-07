@@ -181,8 +181,9 @@ public sealed class SnapshotStatusCommand : Command
         var truncated = db.TruncatedDefCount();
         if (truncated > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
-                $"{ExportCap.OverDefs(truncated, " in this snapshot")}. " +
-                "For those, a field path missing from 'get' is not evidence that the def lacks it.");
+                ExportCap.OverDefs(db.TruncatedDefSpread(), truncated, " in this snapshot",
+                    "For those, a field path missing from 'get' is not evidence that the def lacks it.",
+                    "No field path is missing on those; the rows just show the front of their value."));
 
         // 集合差在**这里**逐条列出 packageId,而每次查询一个字都不说(成因见
         // EnvironmentReport.AddedMods)—— 于是「为什么查询不提这件事」的答案得在这一句里,
@@ -357,7 +358,7 @@ public sealed class SnapshotDiffCommand : Command
         {
             ctx.Report.Notice(NoticeKind.Count,
                 "No difference between those snapshots in defs or field values.");
-            NoteTruncation(ctx, diff.TruncatedDefs);
+            NoteTruncation(ctx, diff);
             return 0;
         }
 
@@ -382,7 +383,7 @@ public sealed class SnapshotDiffCommand : Command
                 }).ToList());
         }
 
-        NoteTruncation(ctx, diff.TruncatedDefs);
+        NoteTruncation(ctx, diff);
         return 0;
     }
 
@@ -411,12 +412,17 @@ public sealed class SnapshotDiffCommand : Command
             }).ToList());
     }
 
-    private static void NoteTruncation(CommandContext ctx, int truncatedDefs)
+    /// <summary>
+    /// 两拨各带自己的读法:少了路径的那拨,看不见的是**行**;只切了值的那拨,行两边都在,
+    /// 两侧又都切在同一处,于是切口之后的差异逐字同形地印成「没变」。
+    /// </summary>
+    private static void NoteTruncation(CommandContext ctx, SnapshotDiffResult diff)
     {
-        if (truncatedDefs == 0) return;
+        if (diff.TruncatedDefs == 0) return;
         ctx.Report.Notice(NoticeKind.Boundary,
-            $"{ExportCap.OverDefs(truncatedDefs, " on both sides of this comparison")}. " +
-            "A field that looks unchanged may have been one of the ones they lost.");
+            ExportCap.OverDefs(diff.TruncatedSpread, diff.TruncatedDefs, " on both sides of this comparison",
+                "A field that looks unchanged may have been one of the ones they lost.",
+                "A value that looks unchanged there may still differ past the cut."));
     }
 }
 
@@ -749,10 +755,16 @@ public sealed class SnapshotImportCommand : Command
         ]);
 
         if (stats.TruncatedDefs > 0)
+        {
+            // 分拨去问刚装好的那份库,而不是在导入循环里另数一遍:两处各数各的时,
+            // 判据一改就只改得动其中一处,而两个数印在一起看不出哪个陈了。
+            using var imported = SnapshotDb.Open(dbPath);
             ctx.Report.Notice(NoticeKind.Boundary,
                 // 与 snapshot status 那处逐字同句 —— 同一件事不许两种说法。
-                $"{ExportCap.OverDefs(stats.TruncatedDefs)}. " +
-                "For those, a field path missing from 'get' is not evidence that the def lacks it.");
+                ExportCap.OverDefs(imported.TruncatedDefSpread(), stats.TruncatedDefs, "",
+                    "For those, a field path missing from 'get' is not evidence that the def lacks it.",
+                    "No field path is missing on those; the rows just show the front of their value."));
+        }
 
         // 没收割要说破,两个成因分开说 —— 补救不一样(收回参数 / 去配 mod_roots)。
         if (!harvest)

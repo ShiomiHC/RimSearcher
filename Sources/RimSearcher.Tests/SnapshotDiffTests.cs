@@ -155,6 +155,43 @@ public class SnapshotDiffTests
         Assert.True(note.GetProperty("total").GetInt32() > 1);
     }
 
+    /// <summary>
+    /// 两侧都分过类时,那句截断提示分成两拨,各带各的读法:少了行的那拨看不见的是行,
+    /// 只切了值的那拨行两边都在,而两侧切在同一处,切口之后的差异会印成「没变」。
+    /// </summary>
+    [Fact]
+    public void 两侧都分过类时截断那句分开说()
+    {
+        var dir = PairDir();
+        var (stdout, _, code) = Run(dir, "snapshot", "diff", "classA", "classB");
+        Assert.Equal(0, code);
+        Assert.Contains("1 def on both sides of this comparison lost field paths at export time",
+                        stdout, StringComparison.Ordinal);
+        Assert.Contains("A field that looks unchanged may have been one of the ones they lost.",
+                        stdout, StringComparison.Ordinal);
+        Assert.Contains("Another 1 def kept every field path and had only values cut to the length cap.",
+                        stdout, StringComparison.Ordinal);
+        Assert.Contains("A value that looks unchanged there may still differ past the cut.",
+                        stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain("for depth or size", stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 一侧没分过类就整句退回含糊的总数。**这是常态不是意外**:`--keep` 留下的 `.prev`
+    /// 全是旧代,而 diff 的正主就是拿旧代比新库。把没分过类的那侧算成「只切了值」,
+    /// 等于把它丢掉的行说成没丢。
+    /// </summary>
+    [Fact]
+    public void 一侧没分过类时退回含糊那句()
+    {
+        var dir = PairDir();
+        var (stdout, _, code) = Run(dir, "snapshot", "diff", "classLegacy", "classA");
+        Assert.Equal(0, code);
+        Assert.Contains("dropped at export time for depth or size", stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain("kept every field path", stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain("lost field paths", stdout, StringComparison.Ordinal);
+    }
+
     private static string PairDir()
     {
         lock (Gate)
@@ -168,6 +205,9 @@ public class SnapshotDiffTests
             Import(dir, "newer", SameList, NewerDefs);
             Import(dir, "fieldsonly", SameList, FieldOnlyNewerDefs);
             Import(dir, "otherlist", OtherList, PriorDefs);
+            Import(dir, "classA", SameList, ClassifiedDefs);
+            Import(dir, "classB", SameList, ClassifiedDefs);
+            Import(dir, "classLegacy", SameList, LegacyOfClassified);
 
             File.WriteAllText(Path.Combine(dir, "config.toml"),
                 $"snapshot_dir = '{dir}'\n", new UTF8Encoding(false));
@@ -192,29 +232,45 @@ public class SnapshotDiffTests
 
     private static readonly MiniDef[] PriorDefs =
     [
-        new("ThingDef", "GunA", "ludeon.rimworld", 0,
+        new("ThingDef", "GunA", "ludeon.rimworld", 0, null,
             ("thingClass", "RimWorld.Bullet"), ("damage", "10"), ("foo", "a"), ("bar", "b")),
-        new("ThingDef", "GunB", "ludeon.rimworld", 0, ("thingClass", "RimWorld.Bullet")),
-        new("ThingDef", "SharedTrunc", "ludeon.rimworld", 3, ("foo", "1")),
+        new("ThingDef", "GunB", "ludeon.rimworld", 0, null, ("thingClass", "RimWorld.Bullet")),
+        new("ThingDef", "SharedTrunc", "ludeon.rimworld", 3, null, ("foo", "1")),
     ];
 
     private static readonly MiniDef[] FieldOnlyNewerDefs =
     [
-        new("ThingDef", "GunA", "ludeon.rimworld", 0,
+        new("ThingDef", "GunA", "ludeon.rimworld", 0, null,
             ("thingClass", "RimWorld.Bullet"), ("damage", "20"), ("foo", "a"), ("bar", "b")),
-        new("ThingDef", "GunB", "ludeon.rimworld", 0, ("thingClass", "RimWorld.Bullet")),
-        new("ThingDef", "SharedTrunc", "ludeon.rimworld", 3, ("foo", "1")),
+        new("ThingDef", "GunB", "ludeon.rimworld", 0, null, ("thingClass", "RimWorld.Bullet")),
+        new("ThingDef", "SharedTrunc", "ludeon.rimworld", 3, null, ("foo", "1")),
     ];
 
     private static readonly MiniDef[] NewerDefs =
     [
-        new("ThingDef", "GunA", "ludeon.rimworld", 0,
+        new("ThingDef", "GunA", "ludeon.rimworld", 0, null,
             ("thingClass", "RimWorld.Bullet"), ("damage", "20"), ("foo", "a"), ("bar", "c"), ("baz", "1")),
-        new("ThingDef", "GunC", "ludeon.rimworld", 0, ("thingClass", "RimWorld.Bullet")),
-        new("ThingDef", "SharedTrunc", "ludeon.rimworld", 3, ("foo", "1")),
+        new("ThingDef", "GunC", "ludeon.rimworld", 0, null, ("thingClass", "RimWorld.Bullet")),
+        new("ThingDef", "SharedTrunc", "ludeon.rimworld", 3, null, ("foo", "1")),
     ];
 
+    /// <summary>两侧都分过类的那一对:一个真丢了行,一个只是值被切。</summary>
+    private static readonly MiniDef[] ClassifiedDefs =
+    [
+        new("ThingDef", "LostRows", "ludeon.rimworld", 2, (1, 0, 1, 0), ("foo", "1")),
+        new("ThingDef", "OnlyCut", "ludeon.rimworld", 3, (0, 3, 0, 0), ("foo", "1")),
+    ];
+
+    /// <summary>同一批 def 的旧代形态：同名同总数，但不带成因键。</summary>
+    private static readonly MiniDef[] LegacyOfClassified =
+    [
+        new("ThingDef", "LostRows", "ludeon.rimworld", 2, null, ("foo", "1")),
+        new("ThingDef", "OnlyCut", "ludeon.rimworld", 3, null, ("foo", "1")),
+    ];
+
+    /// <param name="Causes">null = 不带成因键,即 0.13.0 之前导出的形态。</param>
     private readonly record struct MiniDef(string Type, string Name, string Mod, int Truncated,
+                                           (int Cap, int Len, int Dep, int Items)? Causes,
                                            params (string Path, string Value)[] Fields);
 
     private static void Import(string dir, string name, (string Id, string Name)[] mods, MiniDef[] defs)
@@ -250,7 +306,7 @@ public class SnapshotDiffTests
         foreach (var d in defs)
         {
             var pairs = d.Fields.Select(f => new ExportedField(f.Path, f.Value, DefaultState.Differs)).ToList();
-            w.WriteLine(new JsonLine()
+            var line = new JsonLine()
                 .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindDef)
                 .Str(IntermediateFormat.KeyDefType, d.Type)
                 .Str(IntermediateFormat.KeyDefName, d.Name)
@@ -261,8 +317,13 @@ public class SnapshotDiffTests
                 .Bool(IntermediateFormat.KeyGenerated, false)
                 .Str(IntermediateFormat.KeyClass, "Verse." + d.Type)
                 .Fields(IntermediateFormat.KeyFields, pairs)
-                .Int(IntermediateFormat.KeyFieldsTruncated, d.Truncated)
-                .ToString());
+                .Int(IntermediateFormat.KeyFieldsTruncated, d.Truncated);
+            if (d.Causes is { } c)
+                line.Int(IntermediateFormat.KeyTruncatedByCap, c.Cap)
+                    .Int(IntermediateFormat.KeyTruncatedByLength, c.Len)
+                    .Int(IntermediateFormat.KeyTruncatedByDepth, c.Dep)
+                    .Int(IntermediateFormat.KeyTruncatedByItems, c.Items);
+            w.WriteLine(line.ToString());
             records++;
         }
 
