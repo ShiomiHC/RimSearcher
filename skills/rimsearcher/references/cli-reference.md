@@ -462,7 +462,7 @@ rimsearcher il RimWorld.MainTabWindow_Research.DrawProjectInfo --from 0x160 --to
 Show what an XML node inherits from and what inherits from it, including abstract parents.
 
 ```
-rimsearcher inherit <name> [options]
+rimsearcher inherit <name>... [options]
 ```
 
 This is the one part of a snapshot that is read from the mods' XML rather than from the objects the game had in memory, because the game resolves inheritance while loading and then discards it. Abstract parents exist only here: they never become defs, so 'get' will not find them.
@@ -471,7 +471,7 @@ What is shown is the XML before PatchOperations are applied. patch_ops counts xp
 
 | Argument | Meaning |
 |---|---|
-| `<name>` | A Name= of an XML node, or the defName of a def. Both are looked up. |
+| `<name>` | A Name= of an XML node, or the defName of a def. Both are looked up. Several names print one block each, in the order given; a name that matches nothing is reported in a note and the others still print. |
 
 | Option | Meaning | Also accepted |
 |---|---|---|
@@ -482,7 +482,7 @@ What is shown is the XML before PatchOperations are applied. patch_ops counts xp
 
 | Key | Holds |
 |---|---|
-| `nodes` | one object per XML node answering to the name — each with 'node' (identity and patch count), 'ancestors', 'children' when it has any, and 'witnesses' when --path-contains is given. |
+| `nodes` | one object per XML node answering to the names — each with 'node' (identity and patch count), 'ancestors', 'children' when it has any, and 'witnesses' when --path-contains is given. With several names the objects come in the order the names were given; a name that matched nothing has no object here and one note in 'notes' that quotes it. |
 
 Examples:
 

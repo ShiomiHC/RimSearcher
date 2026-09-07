@@ -1,0 +1,5 @@
+$ rimsearcher inherit NoSuchNode NoSuchNodeEither
+exit 1
+--- stdout ---
+No XML node answers to any of these: NoSuchNode, NoSuchNodeEither. Only nodes that declare Name=, ParentName= or Abstract= are in this layer, so a def that inherits from nothing never shows up here; 'rimsearcher get <defName>' looks one up as a def.
+--- stderr ---

@@ -1,7 +1,7 @@
 $ rimsearcher inherit --help
 exit 0
 --- stdout ---
-Usage: rimsearcher inherit <name> [options]
+Usage: rimsearcher inherit <name>... [options]
 
 Show what an XML node inherits from and what inherits from it, including abstract parents.
 
@@ -10,7 +10,7 @@ This is the one part of a snapshot that is read from the mods' XML rather than f
 What is shown is the XML before PatchOperations are applied. patch_ops counts xpaths that name the node with @Name=; patch_ops_defname and patch_ops_label count xpaths that name it by defName= and by label=, and a snapshot exported before those were measured has neither column. An xpath that reaches a node by thingClass or by a wildcard is counted nowhere in this layer, so a 0 is not evidence that the node reached the game unpatched. A node without a Name= reports patch_ops as 'n/a' rather than 0 because that count was never taken; the defName and label counts are still taken. For the merged, post-patch values, read any concrete child with 'get' — everything a parent contributes is already in each of its children.
 
 Arguments:
-  <name>  A Name= of an XML node, or the defName of a def. Both are looked up.
+  <name>  A Name= of an XML node, or the defName of a def. Both are looked up. Several names print one block each, in the order given; a name that matches nothing is reported in a note and the others still print.
 
 Options:
   -n, --limit <n>             How many children to return, at most. Left out, every one is returned. Default: every one.
@@ -27,7 +27,7 @@ Global options (every command takes these, written after the command):
       --config <path>    Use this config file instead of the default one.
 
 --json keys (besides 'notes'):
-  nodes  one object per XML node answering to the name — each with 'node' (identity and patch count), 'ancestors', 'children' when it has any, and 'witnesses' when --path-contains is given.
+  nodes  one object per XML node answering to the names — each with 'node' (identity and patch count), 'ancestors', 'children' when it has any, and 'witnesses' when --path-contains is given. With several names the objects come in the order the names were given; a name that matched nothing has no object here and one note in 'notes' that quotes it.
 
 Examples:
   rimsearcher inherit BaseBullet

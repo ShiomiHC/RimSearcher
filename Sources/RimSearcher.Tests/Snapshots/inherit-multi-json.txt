@@ -1,0 +1,104 @@
+$ rimsearcher inherit BaseBullet Bullet_Revolver --json
+exit 0
+--- stdout ---
+{
+  "notes": [
+    {
+      "kind": "boundary",
+      "text": "'BaseBullet' is targeted by name by 2 patch operations in this snapshot. This layer is the XML before patches, so what the game finally used differs from it by whatever those operations did. This snapshot (exporter 0.2.0) only counted @Name=; re-export to also count xpaths by defName= and by label=."
+    },
+    {
+      "kind": "count",
+      "text": "1 ancestor.",
+      "shown": 1,
+      "total": 1
+    },
+    {
+      "kind": "count",
+      "text": "1 direct child.",
+      "shown": 1,
+      "total": 1
+    },
+    {
+      "kind": "next_step",
+      "text": "An abstract node has no fields of its own in a snapshot. Everything it declares is already merged, post-patch, into each child: 'rimsearcher get Bullet_Revolver'."
+    },
+    {
+      "kind": "boundary",
+      "text": "'Bullet_Revolver' declares no Name=, so patch_ops is not measured for it: only xpaths naming a node with @Name= are counted, and a patch that reaches this def by defName leaves no trace here. This snapshot (exporter 0.2.0) only counted @Name=; re-export to also count xpaths by defName= and by label=."
+    },
+    {
+      "kind": "count",
+      "text": "2 ancestors.",
+      "shown": 2,
+      "total": 2
+    },
+    {
+      "kind": "boundary",
+      "text": "A def inherits its ancestors' fields, so a patch that rewrites an ancestor changes what the game read for 'Bullet_Revolver' as well — and the patch_ops on 'Bullet_Revolver' itself does not count that. Above, patch_ops is not zero for 1 ancestor."
+    }
+  ],
+  "nodes": [
+    {
+      "node": {
+        "name": "BaseBullet",
+        "def_name": "",
+        "def_type": "ThingDef",
+        "abstract": true,
+        "inherits_from": "BaseProjectile",
+        "mod": "ludeon.rimworld",
+        "source": "Projectiles_Guns.xml",
+        "patch_ops": 2
+      },
+      "ancestors": [
+        {
+          "name": "BaseProjectile",
+          "def_type": "ThingDef",
+          "abstract": true,
+          "mod": "ludeon.rimworld",
+          "source": "Projectiles_Guns.xml"
+        }
+      ],
+      "children": [
+        {
+          "name": "",
+          "def_name": "Bullet_Revolver",
+          "def_type": "ThingDef",
+          "abstract": false,
+          "mod": "ludeon.rimworld"
+        }
+      ]
+    },
+    {
+      "node": {
+        "name": "",
+        "def_name": "Bullet_Revolver",
+        "def_type": "ThingDef",
+        "abstract": false,
+        "inherits_from": "BaseBullet",
+        "mod": "ludeon.rimworld",
+        "source": "Projectiles_Guns.xml",
+        "patch_ops": "n/a"
+      },
+      "ancestors": [
+        {
+          "name": "BaseBullet",
+          "def_type": "ThingDef",
+          "abstract": true,
+          "mod": "ludeon.rimworld",
+          "source": "Projectiles_Guns.xml",
+          "patch_ops": 2
+        },
+        {
+          "name": "BaseProjectile",
+          "def_type": "ThingDef",
+          "abstract": true,
+          "mod": "ludeon.rimworld",
+          "source": "Projectiles_Guns.xml",
+          "patch_ops": 0
+        }
+      ]
+    }
+  ]
+}
+--- stderr ---

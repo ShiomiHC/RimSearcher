@@ -47,7 +47,10 @@ public sealed class InheritCommand : Command
             new PositionalSpec
             {
                 Name = "name",
-                Help = "A Name= of an XML node, or the defName of a def. Both are looked up.",
+                Variadic = true,
+                Help = "A Name= of an XML node, or the defName of a def. Both are looked up. Several names " +
+                       "print one block each, in the order given; a name that matches nothing is reported " +
+                       "in a note and the others still print.",
             },
         ],
         Options =
@@ -85,52 +88,106 @@ public sealed class InheritCommand : Command
             {
                 Key = "nodes",
                 Rows = true,
-                What = "one object per XML node answering to the name — each with 'node' (identity and patch " +
-                       "count), 'ancestors', 'children' when it has any, and 'witnesses' when --path-contains is given.",
+                What = "one object per XML node answering to the names — each with 'node' (identity and patch " +
+                       "count), 'ancestors', 'children' when it has any, and 'witnesses' when --path-contains is given. " +
+                       "With several names the objects come in the order the names were given; a name that " +
+                       "matched nothing has no object here and one note in 'notes' that quotes it.",
             },
         ],
     };
 
+    /// <summary>
+    /// 一个名字在继承层落空。三种互斥成因各说各的 —— 名字错了 / 这个 def 不参与继承 /
+    /// 它根本不在快照里,报成同一句「没有」会让前两种被读成第三种。
+    ///
+    /// 只有单名调用走这里。几个名字一起给时,这三段按名字重复几遍会淹掉真正印出来的块,
+    /// 那一路只报一句名单。
+    /// </summary>
+    private static int Miss(CommandContext ctx, string name)
+    {
+        var close = Suggestion.Closest(ctx.Db.AllXmlNodeNames(), name);
+
+        // 三种互斥成因分清楚:名字错了 / 这个 def 不参与继承 / 它根本不在快照里。
+        // 报成同一句「没有」会让前两种被读成第三种,而第三种是最强的那个结论。
+        var isDef = ctx.Db.GetDefsNamed(name).Count > 0;
+        if (isDef)
+        {
+            ctx.Report.Notice(NoticeKind.NextStep,
+                $"'{name}' is a def in this snapshot but its XML declares no Name=, ParentName= or " +
+                "Abstract=, so it takes part in no inheritance. 'rimsearcher get " + name + "' shows it.");
+            // 「有没有 mod 用 PatchOperation 改过这个 def」是另一个问题:本命令别处报的
+            // patch 计数只盖得住声明了 Name= 的节点。不说破,这一格空着而看起来像填了。
+            ctx.Report.Notice(NoticeKind.Boundary,
+                "Whether a PatchOperation edits it is a separate question this snapshot does not answer: " +
+                "the patch counts reported elsewhere here cover only nodes that declare Name=.");
+            return 1;
+        }
+
+        // 第三种成因:别的已注册快照里有没有它、它是不是个 def 类型 / class / mod,
+        // 都是当场问得出的。
+        var sighting = NameLookup.Locate(ctx, name);
+        ctx.Report.Notice(NoticeKind.NextStep,
+            $"No XML node named '{name}' is in this snapshot." +
+            Suggestion.Say(close) +
+            // 继承层只装带 Name=/ParentName=/Abstract= 的节点,**普通 def 不在里面** ——
+            // 这是敲 inherit 落空最常见的成因。
+            (sighting is null
+                ? " Only nodes that declare Name=, ParentName= or Abstract= are in this layer, so a def " +
+                  "that inherits from nothing never shows up here: 'rimsearcher get " + name + "' looks it " +
+                  "up as a def, and 'rimsearcher search' matches on labels and translations too."
+                : ""));
+        if (sighting is not null) ctx.Report.Notice(NoticeKind.NextStep, sighting.Sentence);
+        return 1;
+    }
+
     public override int Run(CommandContext ctx)
     {
-        var name = ctx.Args.Positional(0)!;
+        // 同一个名字给两遍只查一遍 —— 两块逐字相同,而第二块会被读成另一个同名节点。
+        var names = new List<string>();
+        var repeated = new List<string>();
+        foreach (var n in ctx.Args.Positionals)
+            (names.Contains(n, StringComparer.OrdinalIgnoreCase) ? repeated : names).Add(n);
+        if (repeated.Count > 0)
+            ctx.Report.Notice(NoticeKind.Filter,
+                $"Given more than once, printed once: {NameList.Render(repeated.Distinct(StringComparer.OrdinalIgnoreCase).ToList(), Limits.MaxSuggestions)}.");
 
-        var nodes = ctx.Db.NodesNamed(name);
+        var single = names.Count == 1;
+        var found = new List<(string Name, IReadOnlyList<XmlNodeRow> Nodes)>();
+        var missing = new List<string>();
+        foreach (var n in names)
+        {
+            var hit = ctx.Db.NodesNamed(n);
+            if (hit.Count == 0) { missing.Add(n); if (single) return Miss(ctx, n); continue; }
+            found.Add((n, hit));
+        }
+        var nodes = found.SelectMany(f => f.Nodes).ToList();
+
         if (nodes.Count == 0)
         {
-            var close = Suggestion.Closest(ctx.Db.AllXmlNodeNames(), name);
-
-            // 三种互斥成因分清楚:名字错了 / 这个 def 不参与继承 / 它根本不在快照里。
-            // 报成同一句「没有」会让前两种被读成第三种,而第三种是最强的那个结论。
-            var isDef = ctx.Db.GetDefsNamed(name).Count > 0;
-            if (isDef)
-            {
-                ctx.Report.Notice(NoticeKind.NextStep,
-                    $"'{name}' is a def in this snapshot but its XML declares no Name=, ParentName= or " +
-                    "Abstract=, so it takes part in no inheritance. 'rimsearcher get " + name + "' shows it.");
-                // 「有没有 mod 用 PatchOperation 改过这个 def」是另一个问题:本命令别处报的
-                // patch 计数只盖得住声明了 Name= 的节点。不说破,这一格空着而看起来像填了。
-                ctx.Report.Notice(NoticeKind.Boundary,
-                    "Whether a PatchOperation edits it is a separate question this snapshot does not answer: " +
-                    "the patch counts reported elsewhere here cover only nodes that declare Name=.");
-                return 1;
-            }
-
-            // 第三种成因:别的已注册快照里有没有它、它是不是个 def 类型 / class / mod,
-            // 都是当场问得出的。
-            var sighting = NameLookup.Locate(ctx, name);
+            // 单名那条路在上面就收场了 —— 它的三段说破按名字重复几遍不是帮助,
+            // 读的人这时要的是「哪几个没有」。
             ctx.Report.Notice(NoticeKind.NextStep,
-                $"No XML node named '{name}' is in this snapshot." +
-                Suggestion.Say(close) +
-                // 继承层只装带 Name=/ParentName=/Abstract= 的节点,**普通 def 不在里面** ——
-                // 这是敲 inherit 落空最常见的成因。
-                (sighting is null
-                    ? " Only nodes that declare Name=, ParentName= or Abstract= are in this layer, so a def " +
-                      "that inherits from nothing never shows up here: 'rimsearcher get " + name + "' looks it " +
-                      "up as a def, and 'rimsearcher search' matches on labels and translations too."
-                    : ""));
-            if (sighting is not null) ctx.Report.Notice(NoticeKind.NextStep, sighting.Sentence);
+                $"No XML node answers to any of these: {NameList.Render(missing, Limits.MaxSuggestions)}. " +
+                "Only nodes that declare Name=, ParentName= or Abstract= are in this layer, so a def that " +
+                "inherits from nothing never shows up here; 'rimsearcher get <defName>' looks one up as a def.");
+            foreach (var n in missing)
+                if (NameLookup.Locate(ctx, n) is { } sighting)
+                    ctx.Report.Notice(NoticeKind.NextStep, sighting.Sentence);
             return 1;
+        }
+
+        if (missing.Count > 0)
+        {
+            ctx.Report.Notice(NoticeKind.NextStep,
+                $"No XML node answers to {NameList.Render(missing, Limits.MaxSuggestions)}, so nothing below " +
+                "is about it. The blocks that did come back are unaffected.");
+            // 落空的名字里那些**在快照里另有落点**的,各自说一句。这一档在可变位置参数上
+            // 才真正需要:`inherit ThingDef Bullet_Revolver` 此前是硬失败,解析层照着
+            // 「恰好多出一个位置参数」认出了那个类型;可变之后它成了一个查不到的名字,
+            // 而「查不到」与「你把类型写在了名字格上」是两件事。库在这一层,判得出来。
+            foreach (var n in missing)
+                if (NameLookup.Locate(ctx, n) is { } sighting)
+                    ctx.Report.Notice(NoticeKind.NextStep, sighting.Sentence);
         }
 
         var limit = ctx.Limit();
@@ -311,30 +368,37 @@ public sealed class InheritCommand : Command
 
         ctx.Report.EndItems();
 
-        if (nodes.Count > 1)
+        // 「几个节点答应同一个名字」是按**名字**说的话。几个名字一起给时,块总数大于 1
+        // 是理所当然的,而它与「这一个名字底下有两个节点」是两件事 —— 合起来数会把前者
+        // 报成后者,而后者才是读的人要当心的那个(两块看着像重复,其实是不同节点)。
+        foreach (var (askedFor, hit) in found.Where(f => f.Nodes.Count > 1))
             ctx.Report.Notice(NoticeKind.Boundary,
-                $"{Tally.Complete(nodes.Count).Render("XML node")} answer to '{name}'; all of them are shown.");
+                $"{Tally.Complete(hit.Count).Render("XML node")} answer to '{askedFor}'; all of them are shown.");
 
         // 这个数与 `get` 那边的**必然**对不上,而两条命令都用绝对语气报自己那个 —— 差额
         // 不解释的话,读的人只能自己编一个理由(盲测里编的是「那几个是 code-generated」,
         // 而它们明明来自具名 XML 文件,于是那个解释当场被自己推翻)。
         // 差额的真实成因只有一个:这一层只装声明了 Name= / ParentName= / Abstract= 的节点。
-        var sameName = ctx.Db.GetDefsNamed(name);
-        var inLayer = nodes.Count(n => string.Equals(n.DefName, name, StringComparison.OrdinalIgnoreCase));
-        var outside = sameName.Count - inLayer;
-        if (outside > 0)
+        foreach (var (askedFor, hit) in found)
         {
+            var sameName = ctx.Db.GetDefsNamed(askedFor);
+            var inLayer = hit.Count(n => string.Equals(n.DefName, askedFor, StringComparison.OrdinalIgnoreCase));
+            var outside = sameName.Count - inLayer;
+            if (outside == 0) continue;
+
             var types = sameName
-                .Where(d => !nodes.Any(n => string.Equals(n.DefName, name, StringComparison.OrdinalIgnoreCase)
-                                            && string.Equals(n.DefType, d.DefType, StringComparison.OrdinalIgnoreCase)))
+                .Where(d => !hit.Any(n => string.Equals(n.DefName, askedFor, StringComparison.OrdinalIgnoreCase)
+                                          && string.Equals(n.DefType, d.DefType, StringComparison.OrdinalIgnoreCase)))
                 .Select(d => d.DefType)
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
+            // 两边的数都按**这一个名字**取:拿本次印出来的块总数去比,几个名字一起给时
+            // 那两个数会各自跨名字相加,而句子说的是同一个名字下的差额。
             ctx.Report.Notice(NoticeKind.Boundary,
-                $"Outside this layer: {Tally.Complete(outside).Render("def")} also named '{name}', declaring no " +
+                $"Outside this layer: {Tally.Complete(outside).Render("def")} also named '{askedFor}', declaring no " +
                 $"Name=, ParentName= or Abstract= ({NameList.Render(types, Limits.MaxSuggestions)}). An ordinary " +
-                $"def takes part in no inheritance, which is why 'rimsearcher get {name}' counts " +
-                $"{sameName.Count} where this command counts {nodes.Count}.");
+                $"def takes part in no inheritance, which is why 'rimsearcher get {askedFor}' counts " +
+                $"{sameName.Count} where this command counts {hit.Count}.");
         }
 
         return 0;

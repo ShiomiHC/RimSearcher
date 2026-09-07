@@ -260,6 +260,12 @@ public class OutputSnapshotTests
         { "inherit-broken-chain",  ["inherit", "TestModGun"] },
         { "inherit-not-in-layer",  ["inherit", "Apparel_ShieldBelt"] },
         { "inherit-missing",       ["inherit", "NoSuchNode"] },
+        // 几个名字一次给。守的是尾部那两段按**名字**说话:「几个节点答应同一个名字」不是
+        // 「这次印了几块」,而与 get 的计数差额也是一个名字一份。
+        { "inherit-multi",         ["inherit", "BaseBullet", "Bullet_Revolver"] },
+        { "inherit-multi-json",    ["inherit", "BaseBullet", "Bullet_Revolver", "--json"] },
+        { "inherit-multi-missing", ["inherit", "BaseBullet", "NoSuchNode"] },
+        { "inherit-multi-all-missing", ["inherit", "NoSuchNode", "NoSuchNodeEither"] },
         { "get-xml-node-only",     ["get", "BaseBullet"] },
         { "list-limited",          ["list", "ThingDef", "--limit", "2"] },
         // class 那一列同质时不印,而 JSON 里照样得有值 —— 文本面看不出这件事,
