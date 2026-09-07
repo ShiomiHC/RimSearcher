@@ -247,7 +247,7 @@ rimsearcher docs --out skills/rimsearcher/references/cli-reference.md
 Show what the game says a thing is worth, what it costs to make, and how long it takes.
 
 ```
-rimsearcher economy [defName] [options]
+rimsearcher economy [defName]... [options]
 ```
 
 These numbers are not def fields — none of them is written in any XML. The game computes them in its own Debug Output 'Economy' table: a market value can be derived from a recipe, and a cost is a cost list expanded recursively. Asking 'get' for a cost therefore returns nothing, and that nothing looks exactly like a thing having no cost.
@@ -262,7 +262,7 @@ A number printed as '635 (holds when classicMortars=on)' depends on a difficulty
 
 | Argument | Meaning |
 |---|---|
-| `<defName>` | A thing's defName, for the full picture including its cost chain and every recipe that can produce it. Leave it out to list the layer, highest market value first. *(optional)* |
+| `<defName>` | A thing's defName, for the full picture including its cost chain and every recipe that can produce it. Several names put every one of them in the same three tables, so the rows line up for comparison; a name that matches nothing is reported in a note and the others still print. Leave the names out to list the layer, highest market value first. *(optional)* |
 
 | Option | Meaning | Also accepted |
 |---|---|---|
@@ -279,13 +279,14 @@ A number printed as '635 (holds when classicMortars=on)' depends on a difficulty
 | Key | Holds |
 |---|---|
 | `things` | one row per priced thing — defName, label, mod, category, marketValue, marketValueDefined, calcState, fallbackMarketValue, costToMake, profit, profitRate, workToProduce, costList, costDifficultyVar, costDifficultyInverted, chainEndShare, costDeep, profitDeep, producible, madeFromStuff, isWeapon, isApparel. marketValue is the price the game actually uses. fallbackMarketValue is the ingredient-and-work figure it falls back to only when no MarketValue is declared, so it is non-empty only as the counterfactual beside a declared value, and empty when it already is the marketValue. Any other null means the game cannot work that number out; it is never a stand-in for zero. Always an array, including when one defName matched exactly, so the shape does not change with the kind of match. Every key above is present either way; when listing the layer the text table leaves out marketValueDefined, costList, costDifficultyInverted, producible, madeFromStuff, isWeapon and isApparel, and the JSON never does. The text output tags cost numbers whose def declares a difficulty variant; here the numbers stay bare and costDifficultyVar/costDifficultyInverted carry that instead, so a number never arrives as a string. |
-| `costChain` | with a defName: one row per ingredient — thingDef, count, unitValue, chainEnd. chainEnd marks an ingredient with no recipe of its own, where the cost recursion stops and falls back to that ingredient's hand-written market value. |
-| `recipes` | with a defName: every recipe that produces this thing — defName, productCount, workAmount, selfReferential. More than one row means the fallback market value depends on def load order. |
+| `costChain` | with defNames: one row per ingredient — product, thingDef, count, unitValue, chainEnd. product is the priced thing this row is an ingredient of, in every row even when only one name was given. chainEnd marks an ingredient with no recipe of its own, where the cost recursion stops and falls back to that ingredient's hand-written market value. |
+| `recipes` | with defNames: every recipe that produces each named thing — product, defName, productCount, workAmount, selfReferential. product carries which thing the recipe makes, in every row even when only one name was given. More than one row for the same product means that thing's fallback market value depends on def load order. |
 
 Examples:
 
 ```
 rimsearcher economy Gun_Autopistol
+rimsearcher economy Gun_Autopistol Gun_Revolver Gun_BoltActionRifle
 rimsearcher economy --sort profit-rate --limit 20
 rimsearcher economy --scope vethara --category Item
 rimsearcher economy --calc-state recipe --sort chain-end-share

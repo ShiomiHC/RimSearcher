@@ -38,7 +38,7 @@ Global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the com
 | Everything of one kind | `rimsearcher list <DefType>` + `--find <text>`; no type = the def types |
 | Which saved mod lists name this mod? | `rimsearcher modlist show --find <text>` |
 | What inherits from this / vice versa? | `rimsearcher inherit <name>` |
-| What is this worth / what does it cost to make? | `rimsearcher economy <defName>` — not a def field, `get` cannot answer it. Leave the name out for the whole priced layer in one call: every row carries the same keys, minus `costChain` and `recipes`, which only the named form computes |
+| What is this worth / what does it cost to make? | `rimsearcher economy <defName>...` — not a def field, `get` cannot answer it. Several names go into the same three tables, so the rows line up for comparison. Leave the name out for the whole priced layer in one call: every row carries the same keys, minus `costChain` and `recipes`, which only the named form computes |
 | UI text ↔ translation key | `rimsearcher keyed <key or phrase>` |
 | Which UI text is untranslated? | `rimsearcher keyed --empty-translation` with no query |
 | Where a C# type lives, and what it derives from | `rimsearcher types <Name>` — `--derived`, `--bases`, `--transitive` |

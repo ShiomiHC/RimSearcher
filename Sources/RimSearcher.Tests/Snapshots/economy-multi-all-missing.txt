@@ -1,0 +1,5 @@
+$ rimsearcher economy NoSuchThingAtAll NoSuchThingEither
+exit 1
+--- stdout ---
+None of these is priced in this snapshot: NoSuchThingAtAll, NoSuchThingEither. The economy layer holds only items with a market value above 0.01 and buildings the player can build or minify; 'rimsearcher get <defName>' shows what a def does have.
+--- stderr ---

@@ -102,8 +102,12 @@ public sealed class EconomyCommand : Command
             {
                 Name = "defName",
                 Required = false,
+                Variadic = true,
                 Help = "A thing's defName, for the full picture including its cost chain and every recipe " +
-                       "that can produce it. Leave it out to list the layer, highest market value first.",
+                       "that can produce it. Several names put every one of them in the same three tables, " +
+                       "so the rows line up for comparison; a name that matches nothing is reported in a " +
+                       "note and the others still print. Leave the names out to list the layer, highest " +
+                       "market value first.",
             },
         ],
         Options =
@@ -157,6 +161,7 @@ public sealed class EconomyCommand : Command
         Examples =
         [
             "rimsearcher economy Gun_Autopistol",
+            "rimsearcher economy Gun_Autopistol Gun_Revolver Gun_BoltActionRifle",
             "rimsearcher economy --sort profit-rate --limit 20",
             "rimsearcher economy --scope vethara --category Item",
             "rimsearcher economy --calc-state recipe --sort chain-end-share",
@@ -186,16 +191,22 @@ public sealed class EconomyCommand : Command
             new()
             {
                 Key = "costChain",
-                What = "with a defName: one row per ingredient — thingDef, count, unitValue, chainEnd. " +
-                       "chainEnd marks an ingredient with no recipe of its own, where the cost recursion " +
-                       "stops and falls back to that ingredient's hand-written market value.",
+                // product 这一列在单名调用上也有,取值恒定 —— 恒在才使得「一个解析器读两种
+                // 调用」成立,而按名字个数决定出不出它,等于让消费方写两条路径,其中一条
+                // 拿到的 undefined 与「这个物没有成本链」同形。文本面把恒定列折进表头。
+                What = "with defNames: one row per ingredient — product, thingDef, count, unitValue, " +
+                       "chainEnd. product is the priced thing this row is an ingredient of, in every row " +
+                       "even when only one name was given. chainEnd marks an ingredient with no recipe of " +
+                       "its own, where the cost recursion stops and falls back to that ingredient's " +
+                       "hand-written market value.",
             },
             new()
             {
                 Key = "recipes",
-                What = "with a defName: every recipe that produces this thing — defName, productCount, " +
-                       "workAmount, selfReferential. More than one row means the fallback market value " +
-                       "depends on def load order.",
+                What = "with defNames: every recipe that produces each named thing — product, defName, " +
+                       "productCount, workAmount, selfReferential. product carries which thing the recipe " +
+                       "makes, in every row even when only one name was given. More than one row for the " +
+                       "same product means that thing's fallback market value depends on def load order.",
             },
         ],
     };
@@ -206,8 +217,8 @@ public sealed class EconomyCommand : Command
         // (量过了、这个名单下确实没有可生产物)是完整的肯定回答,不能与另外三种同形。
         if (Absent(ctx)) return 1;
 
-        var query = ctx.Args.Positional(0);
-        return query is null ? RunAll(ctx) : RunOne(ctx, query);
+        var given = ctx.Args.Positionals;
+        return given.Count == 0 ? RunAll(ctx) : RunNamed(ctx, given);
     }
 
     /// <summary>
@@ -267,39 +278,129 @@ public sealed class EconomyCommand : Command
             "XML, not the price the game computes from it, and no field anywhere holds cost to make or " +
             "profit. Ranking defs by that field answers a different question, and its output does not say so.");
 
-    private static int RunOne(CommandContext ctx, string defName)
+    /// <summary>
+    /// 一个或几个名字。几个名字**不各出一块**,而是并进同一张 things / costChain / recipes ——
+    /// 三张表本来就同构(整层那一路的 things 就是这个形状),并排才比得起来,而按名字切块
+    /// 会把「三个腺体谁更贵」变成读者自己对着三块抄数。
+    ///
+    /// 代价是 costChain / recipes 得多一列说明这一行属于哪个物。那一列在单名调用上照出,
+    /// 取值恒定;文本面由常量列折叠收进表头,所以单名那一路的表体一行没变。
+    /// </summary>
+    private static int RunNamed(CommandContext ctx, IReadOnlyList<string> given)
     {
         // 这一路恒发 things,另外两张只在这一路上存在 —— 在开查之前认领,而不是在有行的
         // 分支里补:后者漏一条分支就漏一个形状。
         ctx.Report.Promises("things");
-        var rows = ctx.Db.EconomyByName(defName);
+
+        // 同一个名字给两遍只查一遍。名字按 NOCASE 比,与 EconomyByName 的判据一致。
+        var names = new List<string>();
+        var repeated = new List<string>();
+        foreach (var n in given)
+            (names.Contains(n, StringComparer.OrdinalIgnoreCase) ? repeated : names).Add(n);
+        if (repeated.Count > 0)
+            ctx.Report.Notice(NoticeKind.Filter,
+                $"Given more than once, counted once: {NameList.Render(repeated.Distinct(StringComparer.OrdinalIgnoreCase).ToList(), Limits.MaxSuggestions)}.");
+
+        var single = names.Count == 1;
+        var rows = new List<EconomyRow>();
+        var chains = new List<IReadOnlyDictionary<string, object?>>();
+        var recipeRows = new List<IReadOnlyDictionary<string, object?>>();
+        var allRecipes = new List<(string Product, IReadOnlyList<EconomyRecipeRow> Rows)>();
+        var missing = new List<string>();
+
+        foreach (var defName in names)
+        {
+            var hit = ctx.Db.EconomyByName(defName);
+            if (hit.Count == 0)
+            {
+                missing.Add(defName);
+                if (single && Miss(ctx, defName)) return 1;
+                continue;
+            }
+
+            rows.AddRange(hit);
+            foreach (var row in hit)
+            {
+                foreach (var c in ctx.Db.EconomyChain(row.Id))
+                    chains.Add(new Dictionary<string, object?>
+                    {
+                        ["product"] = row.DefName,
+                        ["thingDef"] = c.ThingDef,
+                        ["count"] = c.Count,
+                        ["unitValue"] = c.UnitValue,
+                        ["chainEnd"] = c.ChainEnd,
+                    });
+
+                var recipes = ctx.Db.EconomyRecipes(row.Id);
+                if (recipes.Count > 0) allRecipes.Add((row.DefName, recipes));
+                foreach (var r in recipes)
+                    recipeRows.Add(new Dictionary<string, object?>
+                    {
+                        ["product"] = row.DefName,
+                        ["defName"] = r.DefName,
+                        ["productCount"] = r.ProductCount,
+                        ["workAmount"] = r.WorkAmount,
+                        ["selfReferential"] = r.SelfReferential,
+                    });
+            }
+        }
+
+        // 一个都没落到才收场。落空的名字与查到的名字同时存在时,落空那些只留一句 ——
+        // 单名那一路的两段详细说破(它是不是个 def、这一层收什么)在这里会按名字重复
+        // 好几遍,而读的人要的是「哪几个没有」。
         if (rows.Count == 0)
         {
-            var close = Suggestion.Closest(ctx.Db.AllEconomyNames(), defName);
-            ctx.Report.Notice(NoticeKind.NextStep,
-                $"Nothing named '{defName}' is priced in this snapshot." + Suggestion.Say(close));
-
-            // 「它是个 def,只是不在这一层里」是这条命令最常见的落空成因,而它与打错名字
-            // 的下一步完全不同。这一层只收 ThingDef,且只收有市场价的物与可建的建筑。
-            var defs = ctx.Db.GetDefsNamed(defName);
-            ctx.Report.Notice(NoticeKind.Boundary, defs.Count > 0
-                ? $"'{defName}' is a def in this snapshot, so this is not a spelling problem: the game " +
-                  "prices only items with a market value above 0.01 and buildings the player can build " +
-                  $"or minify. 'rimsearcher get {defName}' shows what it does have."
-                // 名字在快照里根本不存在,而这条命令的候选池只有几千个被定价的物 ——
-                // 「这一层没有」与「这个快照没有」是两件事,不说破就会被读成后者。
-                : $"No def is named '{defName}' either, so this is not just a thing the game leaves " +
-                  $"unpriced. 'rimsearcher search {defName}' matches on labels and translated text as " +
-                  "well as defNames, which is the way in when you have the in-game name rather than the " +
-                  "defName.");
+            if (!single)
+                ctx.Report.Notice(NoticeKind.NextStep,
+                    $"None of these is priced in this snapshot: {NameList.Render(missing, Limits.MaxSuggestions)}. " +
+                    "The economy layer holds only items with a market value above 0.01 and buildings the " +
+                    "player can build or minify; 'rimsearcher get <defName>' shows what a def does have.");
             return 1;
         }
 
-        // 计数恒在,单条命中也报 —— 靠沉默传达「就这一条」一定会被读错。数的是这个名字下
-        // 有几行,而这一层只收 ThingDef,所以实际上恒为 1;报它是为了形状不随命中数变。
+        if (missing.Count > 0)
+            ctx.Report.Notice(NoticeKind.NextStep,
+                $"Not priced in this snapshot, so absent from the tables below: " +
+                $"{NameList.Render(missing, Limits.MaxSuggestions)}. The rows that did come back are " +
+                "unaffected — this layer holds only items with a market value above 0.01 and buildings " +
+                "the player can build or minify.");
+
         ctx.Report.PageNotice("thing", rows.Count, 0, rows.Count);
-        foreach (var row in rows) EmitOne(ctx, row);
+        ctx.Report.Table("things", ThingKeys, rows.Select(ThingRow).ToList());
+        if (chains.Count > 0)
+            ctx.Report.Table("costChain", ["product", "thingDef", "count", "unitValue", "chainEnd"], chains);
+        if (recipeRows.Count > 0)
+            ctx.Report.Table("recipes", ["product", "defName", "productCount", "workAmount", "selfReferential"],
+                             recipeRows);
+
+        Caveats(ctx, rows, allRecipes);
         return 0;
+    }
+
+    /// <summary>
+    /// 一个名字在这一层落空。单名那一路照旧把两段说破印全 —— 打错名字与「它是个 def,
+    /// 只是这一层不收」的下一步完全不同。返回 true 表示话说完了。
+    /// </summary>
+    private static bool Miss(CommandContext ctx, string defName)
+    {
+        var close = Suggestion.Closest(ctx.Db.AllEconomyNames(), defName);
+        ctx.Report.Notice(NoticeKind.NextStep,
+            $"Nothing named '{defName}' is priced in this snapshot." + Suggestion.Say(close));
+
+        // 「它是个 def,只是不在这一层里」是这条命令最常见的落空成因,而它与打错名字
+        // 的下一步完全不同。这一层只收 ThingDef,且只收有市场价的物与可建的建筑。
+        var defs = ctx.Db.GetDefsNamed(defName);
+        ctx.Report.Notice(NoticeKind.Boundary, defs.Count > 0
+            ? $"'{defName}' is a def in this snapshot, so this is not a spelling problem: the game " +
+              "prices only items with a market value above 0.01 and buildings the player can build " +
+              $"or minify. 'rimsearcher get {defName}' shows what it does have."
+            // 名字在快照里根本不存在,而这条命令的候选池只有几千个被定价的物 ——
+            // 「这一层没有」与「这个快照没有」是两件事,不说破就会被读成后者。
+            : $"No def is named '{defName}' either, so this is not just a thing the game leaves " +
+              $"unpriced. 'rimsearcher search {defName}' matches on labels and translated text as " +
+              "well as defNames, which is the way in when you have the in-game name rather than the " +
+              "defName.");
+        return true;
     }
 
     /// <summary>
@@ -371,37 +472,6 @@ public sealed class EconomyCommand : Command
             ["isWeapon"] = row.IsWeapon,
             ["isApparel"] = row.IsApparel,
         };
-
-    private static void EmitOne(CommandContext ctx, EconomyRow row)
-    {
-        // 单条命中照样走表,不走 detail 块:形状不随命中方式变,消费侧的解析代码就不必
-        // 分两支写(与 keyed 同一条纪律)。这一路只有一行,所以文本面也印全。
-        ctx.Report.Table("things", ThingKeys, [ThingRow(row)]);
-
-        var chain = ctx.Db.EconomyChain(row.Id);
-        if (chain.Count > 0)
-            ctx.Report.Table("costChain", ["thingDef", "count", "unitValue", "chainEnd"],
-                chain.Select(c => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
-                {
-                    ["thingDef"] = c.ThingDef,
-                    ["count"] = c.Count,
-                    ["unitValue"] = c.UnitValue,
-                    ["chainEnd"] = c.ChainEnd,
-                }).ToList());
-
-        var recipes = ctx.Db.EconomyRecipes(row.Id);
-        if (recipes.Count > 0)
-            ctx.Report.Table("recipes", ["defName", "productCount", "workAmount", "selfReferential"],
-                recipes.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
-                {
-                    ["defName"] = r.DefName,
-                    ["productCount"] = r.ProductCount,
-                    ["workAmount"] = r.WorkAmount,
-                    ["selfReferential"] = r.SelfReferential,
-                }).ToList());
-
-        Caveats(ctx, [row], recipes);
-    }
 
     private static int RunAll(CommandContext ctx)
     {
@@ -476,7 +546,7 @@ public sealed class EconomyCommand : Command
     /// 数得出来的那个数。
     /// </summary>
     private static void Caveats(CommandContext ctx, IReadOnlyList<EconomyRow> shown,
-                                IReadOnlyList<EconomyRecipeRow>? recipes)
+                                IReadOnlyList<(string Product, IReadOnlyList<EconomyRecipeRow> Rows)>? recipes)
     {
         // 1. 造价全部来自链尾物手填的市场价 —— 那一行的 profit 不反映真实生产消耗。
         //    判据是这个数,**不是「看着像掉落物」**:用手写 RecipeDef 生产的物同样是链尾,
@@ -524,17 +594,23 @@ public sealed class EconomyCommand : Command
         // 4. 多配方 = fallbackMarketValue 有加载顺序依赖(CalculableRecipe 取 DefDatabase 里
         //    第一个匹配,而等比放大的 bulk 配方 workAmount 通常不等比)。
         //    只有单条详情那一路手上有配方表;列表那一路不逐行查,那要 N 次查询。
-        if (recipes is { Count: > 1 })
+        // 判据是**每个物各自有几条配方**,不是配方总数:几个名字一起问时,三个物各一条
+        // 配方加起来也是 3,而它们一个都没有加载顺序依赖。点名是哪几个物,读的人才知道
+        // 上面哪几行的 fallbackMarketValue 不稳。
+        var manyWays = recipes?.Where(g => g.Rows.Count > 1).ToList() ?? [];
+        if (manyWays.Count > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
-                $"{Tally.Complete(recipes.Count).Render("recipe")} can produce this thing, so its " +
-                "fallbackMarketValue depends on def load order: the game takes whichever of them comes " +
-                "first in the database. A bulk recipe usually scales its ingredients but not its work " +
-                "amount, so which one wins changes the number.");
+                string.Join("; ", manyWays.Select(
+                    g => $"{Tally.Complete(g.Rows.Count).Render("recipe")} can produce {g.Product}")) +
+                ", so that thing's fallbackMarketValue depends on def load order: the game takes whichever " +
+                "of them comes first in the database. A bulk recipe usually scales its ingredients but not " +
+                "its work amount, so which one wins changes the number.");
 
-        if (recipes is not null && recipes.Any(r => r.SelfReferential))
+        var selfFed = recipes?.Where(g => g.Rows.Any(r => r.SelfReferential)).Select(g => g.Product).ToList() ?? [];
+        if (selfFed.Count > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
-                "A recipe above accepts this very thing as one of its own ingredients, so the fallback " +
-                "market value has the thing's own hand-written price folded into it — which is the opposite " +
-                "of deriving a price from ingredients.");
+                $"A recipe above accepts {NameList.Render(selfFed, Limits.MaxSuggestions)} as one of its own " +
+                "ingredients, so that thing's fallback market value has its own hand-written price folded " +
+                "into it — which is the opposite of deriving a price from ingredients.");
     }
 }

@@ -1,6 +1,7 @@
-$ rimsearcher economy TestModGun
+$ rimsearcher economy TestModGun testmodgun
 exit 0
 --- stdout ---
+Given more than once, counted once: testmodgun.
 1 thing.
 
 defName     label     mod       category  marketValue  marketValueDefined  calcState  fallbackMarketValue  costToMake                             profit  profitRate  workToProduce  costList                                   costDifficultyVar  costDifficultyInverted  chainEndShare  costDeep  profitDeep  producible  madeFromStuff  isWeapon  isApparel

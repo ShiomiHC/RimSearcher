@@ -147,6 +147,55 @@ public class ArgParserTests
         Assert.Equal("--not-a-flag", r.Positional(0));
     }
 
+    // ---- 负数取值 ----
+
+    [Fact]
+    public void 负数是取值不是未知选项()
+    {
+        var r = ArgParser.Parse(new FindCommand().Spec, GlobalOptions.All, ["statBases[].value", "-74"]);
+        Assert.False(r.HasErrors);
+        Assert.Equal("-74", r.Positional(1));
+    }
+
+    [Fact]
+    public void 负小数也是取值()
+    {
+        var r = ArgParser.Parse(new FindCommand().Spec, GlobalOptions.All, ["offset", "-0.5"]);
+        Assert.False(r.HasErrors);
+        Assert.Equal("-0.5", r.Positional(1));
+    }
+
+    [Fact]
+    public void 数字打头才让路选项名照旧解析()
+    {
+        // 判据是「以数字打头」而不是「以减号打头」—— 后者会把每一个拼错的短选项都放行。
+        var r = Parse("shield", "-x");
+        Assert.Contains(r.Errors, e => e.Contains("-x"));
+    }
+
+    // ---- `--` 把选项吞成位置参数 ----
+
+    [Fact]
+    public void 双横线吞掉选项时报错点名它并给出去掉它的写法()
+    {
+        var r = ArgParser.Parse(new FindCommand().Spec, GlobalOptions.All,
+                                ["statBases[].value", "--", "-74", "--exact", "--type", "ThingDef"]);
+        var e = Assert.Single(r.Errors, x => x.Contains("Unexpected argument"));
+        Assert.Contains("'--'", e);
+        Assert.Contains("'--exact'", e);
+        // 出路是整条命令,而且里面不再有 `--`:负数已经不需要它了。
+        Assert.Contains("where statBases[].value -74 --exact --type ThingDef", e);
+        Assert.DoesNotContain(" -- ", e);
+    }
+
+    [Fact]
+    public void 多给位置参数而没用双横线时不提它()
+    {
+        var r = ArgParser.Parse(new FindCommand().Spec, GlobalOptions.All, ["a", "b", "c"]);
+        var e = Assert.Single(r.Errors, x => x.Contains("Unexpected argument"));
+        Assert.DoesNotContain("'--'", e);
+    }
+
     // ---- 归一化 ----
 
     [Theory]

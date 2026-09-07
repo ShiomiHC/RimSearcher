@@ -1,6 +1,7 @@
-$ rimsearcher economy TestModGun
+$ rimsearcher economy TestModGun NoSuchThingAtAll
 exit 0
 --- stdout ---
+Not priced in this snapshot, so absent from the tables below: NoSuchThingAtAll. The rows that did come back are unaffected — this layer holds only items with a market value above 0.01 and buildings the player can build or minify.
 1 thing.
 
 defName     label     mod       category  marketValue  marketValueDefined  calcState  fallbackMarketValue  costToMake                             profit  profitRate  workToProduce  costList                                   costDifficultyVar  costDifficultyInverted  chainEndShare  costDeep  profitDeep  producible  madeFromStuff  isWeapon  isApparel

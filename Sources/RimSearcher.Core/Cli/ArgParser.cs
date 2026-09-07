@@ -21,6 +21,17 @@ public static class ArgParser
     private static readonly System.Text.RegularExpressions.Regex DefTypeShape =
         new(@"^[A-Za-z_][A-Za-z0-9_]*Def$", System.Text.RegularExpressions.RegexOptions.Compiled);
 
+    /// <summary>
+    /// 负数取值的形状。选项名一律不以数字打头(短名是字母,长名以 <c>--</c> 打头),于是
+    /// <c>-74</c> / <c>-0.5</c> 只可能是取值 —— 不放行的话它落进「未知选项」,而报错里
+    /// 给的近似候选(实测 <c>Did you mean --db?</c>)与真正的问题毫无关系。
+    ///
+    /// 这一条同时是 <c>--</c> 被误用的成因:要查一个负值,此前唯一走得通的写法是拿 <c>--</c>
+    /// 把它挡出去,而 <c>--</c> 之后的每个词都成了位置参数,连 <c>--exact</c> 一起。
+    /// </summary>
+    private static readonly System.Text.RegularExpressions.Regex NegativeNumber =
+        new(@"^-(\d|\.\d)", System.Text.RegularExpressions.RegexOptions.Compiled);
+
     /// <summary>归一化:小写 + 去掉所有非字母数字。fileFilter / file_filter / File-Filter 同归一。</summary>
     public static string Normalize(string s)
     {
@@ -61,12 +72,13 @@ public static class ArgParser
         }
 
         var noMoreOptions = false;
+        var sawDoubleDash = false;
         for (var i = 0; i < argv.Count; i++)
         {
             var arg = argv[i];
 
             if (noMoreOptions) { positionals.Add(arg); continue; }
-            if (arg == "--") { noMoreOptions = true; continue; }
+            if (arg == "--") { noMoreOptions = sawDoubleDash = true; continue; }
 
             if (arg is "-h" or "--help" or "-?" or "/?" or "help")
             {
@@ -74,7 +86,7 @@ public static class ArgParser
                 continue;
             }
 
-            if (arg.Length >= 2 && arg[0] == '-' && arg != "-")
+            if (arg.Length >= 2 && arg[0] == '-' && arg != "-" && !NegativeNumber.IsMatch(arg))
             {
                 var isLong = arg.StartsWith("--", StringComparison.Ordinal);
                 var body = isLong ? arg[2..] : arg[1..];
@@ -202,12 +214,25 @@ public static class ArgParser
             var lead = declared.Length > 0 && !string.Equals(declared[0].Name, "defType", StringComparison.Ordinal) &&
                        positionals.Count > 0 && DefTypeShape.IsMatch(positionals[0])
                 ? positionals[0] : null;
+            // `--` 吞掉的那一档。多出来的位置参数里有以 `-` 打头的词,而 `--` 又确实给过 ——
+            // 那时「多给了 N 个位置参数」这句话是真的,但它说不出这 N 个是从哪儿来的:
+            // 调用方写下的 `--exact` 在他眼里是个选项。这一档比下面的类型打头更具体,先判。
+            //
+            // 给的出路是**去掉 `--` 之后的整条命令**,而不是「把 `--` 挪个位置」:`--` 此前
+            // 唯一的用处是把负数挡出选项解析,而负数现在直接就是取值,于是这里不再有它的活。
+            var dashSwallowed = sawDoubleDash &&
+                                positionals.Skip(declared.Length).Any(p => p.StartsWith('-'));
             var rest = string.Join(" ", positionals.Skip(1));
             var given = lead is not null && byKey.TryGetValue("type", out var declaredType) &&
                         values.TryGetValue(declaredType.Name, out var typeValues) && typeValues.Count > 0
                 ? typeValues[^1] : null;
             errors.Add($"Unexpected argument(s) {extra}. {shape}." +
-                       (lead is null
+                       (dashSwallowed
+                           ? $" '--' turns every following word into a positional argument, so " +
+                             $"{string.Join(", ", positionals.Skip(declared.Length).Where(p => p.StartsWith('-')).Select(p => $"'{p}'"))} " +
+                             $"stopped being options. A value that starts with a minus sign does not need it: " +
+                             $"'{CommandRegistry.ExeName} {spec.Name} {string.Join(" ", argv.Where(a => a != "--"))}'."
+                       : lead is null
                            ? ""
                            : given is not null
                                ? $" The def type is given twice: '{lead}' as an argument and --type {given} as an " +

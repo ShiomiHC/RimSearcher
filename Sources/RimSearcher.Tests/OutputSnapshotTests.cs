@@ -519,6 +519,18 @@ public class OutputSnapshotTests
         { "economy-filtered-empty", ["economy", "--calc-state", "not_producible", "--category", "Building"] },
         { "economy-miss-def",      ["economy", "Bullet_Revolver"] },
         { "economy-miss",          ["economy", "NoSuchThingAtAll"] },
+        // 几个名字。三张表并起来而不是各出一块 —— 守的是 costChain / recipes 的 product 列
+        // 在场且逐行对得上,以及配方那两句说破按**每个物**判(三个物各一条配方加起来是 3,
+        // 而那不是加载顺序依赖)。
+        { "economy-multi",         ["economy", "TestModGun", "Apparel_ShieldBelt", "Meat_Muffalo"] },
+        { "economy-multi-json",    ["economy", "TestModGun", "Apparel_ShieldBelt", "--json"] },
+        // 一部分落空:其余照印、退出码 0,落空的只留一句名单 —— 单名那两段详细说破
+        // 在这里会按名字重复好几遍,而读的人要的是「哪几个没有」。
+        { "economy-multi-missing", ["economy", "TestModGun", "NoSuchThingAtAll"] },
+        // 全部落空才 1。这一份与 economy-miss 摆一起:单名那条路的两段说破一字未改。
+        { "economy-multi-all-missing", ["economy", "NoSuchThingAtAll", "NoSuchThingEither"] },
+        // 同一个名字给两遍只查一遍 —— 两份行逐字相同,第二份会被读成另一个同名的物。
+        { "economy-multi-repeat",  ["economy", "TestModGun", "testmodgun"] },
         // 四态里另外三种(没量过 / 跳过了 / 签名对不上)不在这里:它们要各自一份库,
         // 而库路径是绝对的、含机器名,进不了回显行。守它们的是 GrammarTests 里
         // 「经济面四态各说各的」那条。

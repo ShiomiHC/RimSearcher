@@ -4985,4 +4985,69 @@ public class GrammarTests
             Assert.Equal(Raw(Defs(one).Single()), Raw(block));
         }
     }
+
+    /// <summary>
+    /// economy 的多名形态与 get 不同 —— 它不各出一块,而是并进同一张表。于是「与单名相同」
+    /// 这一条要按行验:多名调用里属于某个物的那些行,逐字等于单名调用交回的那些行。
+    ///
+    /// product 那一列是**这一路唯一新增的东西**,单名调用上也在场且恒定。比行的时候把它
+    /// 摘掉再比:留着的话两边必不相等(单名那边也有它,但这条断言要证的是别的列一个没动),
+    /// 而它自己由下面那条断言单独钉 —— 恒在,且取值就是这一行属于的那个物。
+    /// </summary>
+    [Fact]
+    public void economy多名的每一行都与单名调用逐字相同()
+    {
+        static (List<string> Things, List<string> Chain, List<string> Recipes) Rows(string json, string? of = null)
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            List<string> Take(string key, bool hasProduct)
+            {
+                if (!doc.RootElement.TryGetProperty(key, out var arr)) return [];
+                return arr.EnumerateArray()
+                          .Where(r => of is null || !hasProduct ||
+                                      r.GetProperty("product").GetString() == of)
+                          .Select(r => hasProduct
+                              ? string.Join("|", r.EnumerateObject()
+                                                  .Where(p => p.Name != "product")
+                                                  .Select(p => $"{p.Name}={p.Value.GetRawText()}"))
+                              : r.GetRawText())
+                          .ToList();
+            }
+            return (Take("things", false), Take("costChain", true), Take("recipes", true));
+        }
+
+        var (gun, _, _) = Fixture.Run("economy", "TestModGun", "--json");
+        var (belt, _, _) = Fixture.Run("economy", "Apparel_ShieldBelt", "--json");
+        var (multi, _, code) = Fixture.Run("economy", "TestModGun", "NoSuchThingAtAll", "Apparel_ShieldBelt", "--json");
+        Assert.Equal(0, code);
+
+        foreach (var (name, one) in new[] { ("TestModGun", gun), ("Apparel_ShieldBelt", belt) })
+        {
+            var single = Rows(one, name);
+            var part = Rows(multi, name);
+            Assert.Equal(single.Things.Where(t => t.Contains($"\"{name}\"", StringComparison.Ordinal)).ToList(),
+                         part.Things.Where(t => t.Contains($"\"{name}\"", StringComparison.Ordinal)).ToList());
+            Assert.Equal(single.Chain, part.Chain);
+            Assert.Equal(single.Recipes, part.Recipes);
+        }
+
+        // product 恒在,单名调用上也是 —— 按名字个数决定出不出它,等于让消费方写两条路径。
+        using (var doc = System.Text.Json.JsonDocument.Parse(gun))
+        {
+            foreach (var key in new[] { "costChain", "recipes" })
+                foreach (var row in doc.RootElement.GetProperty(key).EnumerateArray())
+                    Assert.Equal("TestModGun", row.GetProperty("product").GetString());
+        }
+
+        // 落空的名字只在 notes 留一句,退出码仍是 0;全部落空才 1。
+        using (var doc = System.Text.Json.JsonDocument.Parse(multi))
+        {
+            var texts = doc.RootElement.GetProperty("notes").EnumerateArray()
+                           .Select(n => n.GetProperty("text").GetString()!).ToList();
+            Assert.Contains(texts, t => t.Contains("NoSuchThingAtAll", StringComparison.Ordinal));
+        }
+
+        var (_, _, allMissing) = Fixture.Run("economy", "NoSuchThingAtAll", "NoSuchThingEither", "--json");
+        Assert.Equal(1, allMissing);
+    }
 }

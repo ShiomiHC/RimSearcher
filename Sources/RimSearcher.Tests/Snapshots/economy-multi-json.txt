@@ -1,13 +1,17 @@
-$ rimsearcher economy TestModGun --json
+$ rimsearcher economy TestModGun Apparel_ShieldBelt --json
 exit 0
 --- stdout ---
 {
   "notes": [
     {
       "kind": "count",
-      "text": "1 thing.",
-      "shown": 1,
-      "total": 1
+      "text": "2 things.",
+      "shown": 2,
+      "total": 2
+    },
+    {
+      "kind": "boundary",
+      "text": "chainEndShare is 1 for 1 row above, which means the whole cost came from ingredients that have no recipe of their own. For those rows 'profit' is the market value minus a few other hand-written market values, not minus what producing the thing actually consumes."
     },
     {
       "kind": "boundary",
@@ -46,6 +50,30 @@ exit 0
       "madeFromStuff": false,
       "isWeapon": true,
       "isApparel": false
+    },
+    {
+      "defName": "Apparel_ShieldBelt",
+      "label": "shield belt",
+      "mod": "ludeon.rimworld",
+      "category": "Item",
+      "marketValue": 480,
+      "marketValueDefined": true,
+      "calcState": "ok",
+      "fallbackMarketValue": 412.75,
+      "costToMake": 220,
+      "profit": 260,
+      "profitRate": 866.67,
+      "workToProduce": 3000,
+      "costList": "60 x Bloomstone (120), 100 x Firefoam (100)",
+      "costDifficultyVar": null,
+      "costDifficultyInverted": false,
+      "chainEndShare": 1,
+      "costDeep": 220,
+      "profitDeep": 260,
+      "producible": true,
+      "madeFromStuff": false,
+      "isWeapon": false,
+      "isApparel": true
     }
   ],
   "costChain": [
@@ -62,6 +90,20 @@ exit 0
       "count": 1,
       "unitValue": 61.2,
       "chainEnd": false
+    },
+    {
+      "product": "Apparel_ShieldBelt",
+      "thingDef": "Bloomstone",
+      "count": 60,
+      "unitValue": 2,
+      "chainEnd": true
+    },
+    {
+      "product": "Apparel_ShieldBelt",
+      "thingDef": "Firefoam",
+      "count": 100,
+      "unitValue": 1,
+      "chainEnd": true
     }
   ],
   "recipes": [
@@ -78,6 +120,13 @@ exit 0
       "productCount": 4,
       "workAmount": 4200,
       "selfReferential": true
+    },
+    {
+      "product": "Apparel_ShieldBelt",
+      "defName": "Make_Apparel_ShieldBelt",
+      "productCount": 1,
+      "workAmount": 3000,
+      "selfReferential": false
     }
   ]
 }
