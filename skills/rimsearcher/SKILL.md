@@ -38,7 +38,7 @@ Global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the com
 | Everything of one kind | `rimsearcher list <DefType>` + `--find <text>`; no type = the def types |
 | Which saved mod lists name this mod? | `rimsearcher modlist show --find <text>` |
 | What inherits from this / vice versa? | `rimsearcher inherit <name>` |
-| What is this worth / what does it cost to make? | `rimsearcher economy <defName>` — not a def field, `get` cannot answer it. Leave the name out for the whole priced layer in one call, same keys per row |
+| What is this worth / what does it cost to make? | `rimsearcher economy <defName>` — not a def field, `get` cannot answer it. Leave the name out for the whole priced layer in one call: every row carries the same keys, minus `costChain` and `recipes`, which only the named form computes |
 | UI text ↔ translation key | `rimsearcher keyed <key or phrase>` |
 | Which UI text is untranslated? | `rimsearcher keyed --empty-translation` with no query |
 | Where a C# type lives, and what it derives from | `rimsearcher types <Name>` — `--derived`, `--bases`, `--transitive` |
@@ -91,7 +91,7 @@ a different question. None of them announces itself.
   it is a substring), but a dotted one is raw text that does not stop at a `.` —
   `where graphicData.shaderType` also collects `swimmingGraphicData.shaderType`.
   `--exact-path` pins the whole path, with `[]` standing for any index, and it drops the
-  rows those extra shapes contributed: measured, 2953 defs down to 2890.
+  rows those extra shapes contributed.
 - **`get --path-contains` and `where --value` match substrings too** — `--path-contains soundImpact`
   also returns `soundImpactDefault`, opposite meaning.
 - **One defName can belong to several def types, and `get` then prints one block per def** —
@@ -227,7 +227,8 @@ way to state:
   holds for a class no def drives at all — code `new`s it directly, and the construction
   site is the answer.
 - **`values <field>` already answers "which def types have this field"** — its `def_types`
-  row names them with `n of m` coverage. `fields <DefType>` goes the other way and needs
+  row names them, each with how many defs of that type hold a value at the path out of how
+  many defs that type has. `fields <DefType>` goes the other way and needs
   the type up front.
 - **Null-valued fields never enter the index** — absent even from `--defaults`, so on
   `get`/`where` absence is not evidence the type lacks the field. `fields <DefType>

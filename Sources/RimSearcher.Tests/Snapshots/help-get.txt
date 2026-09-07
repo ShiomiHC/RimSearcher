@@ -3,7 +3,7 @@ exit 0
 --- stdout ---
 Usage: rimsearcher get [defName]... [options]
 
-Show one def in full: its identity, its fields, and any translations of it.
+Show a def in full: its identity, its fields, and any translations of it. Several names, or --type on its own, print one such block each.
 
 Field paths are the merged, post-patch shape the game actually had in memory when the snapshot was taken, so PatchOperations and inheritance are already applied. A def created in code rather than XML says so on its source line.
 
@@ -17,7 +17,7 @@ Arguments:
   <defName>  The exact def name. 'search' finds it if you only know part of it. Several names print one block each, in the order given; a name that matches nothing is reported in a note and the others still print. Leave the names out and give --type to print every def of that type. (optional)
 
 Options:
-  -n, --limit <n>             How many fields to return, at most. Left out, every one is returned. Default: every one.
+  -n, --limit <n>             How many fields to return, at most. Left out, every one is returned. It counts fields inside each block; the number of blocks printed is set by the names you give, or by --type. Default: every one.
                               Also accepted: --max-results, --count, --top, --rows, --num, --head.
       --path-contains <text>  Only show field paths containing this text. Repeat it to widen the selection.
                               Also accepted: --filter, --grep, --field-contains, --path-filter, --field, --field-path, --path.

@@ -17,7 +17,7 @@ Answers questions about RimWorld's defs and C# from a snapshot of what the game 
 | `economy` | Show what the game says a thing is worth, what it costs to make, and how long it takes. |
 | `export` | Run the game unattended with a chosen mod list and import what it exports. |
 | `fields` | List the field paths that a def type actually uses, with how often each occurs. |
-| `get` | Show one def in full: its identity, its fields, and any translations of it. |
+| `get` | Show a def in full: its identity, its fields, and any translations of it. Several names, or --type on its own, print one such block each. |
 | `il` | Disassemble a method to IL. |
 | `inherit` | Show what an XML node inherits from and what inherits from it, including abstract parents. |
 | `keyed` | Look up the UI text behind a translation key, or find the key behind a piece of UI text. |
@@ -116,7 +116,7 @@ Search the decompiled C# with a regular expression.
 rimsearcher code-search <pattern> [options]
 ```
 
-This is for shapes that only text can express, such as a method signature pattern across every class. For anything symbol-level — one member's body, callers, overrides, derived types — the DecompilerServer MCP answers it from metadata and is both faster and exact.
+This is for shapes that only text can express, such as a method signature pattern across every class. For anything symbol-level this reads the text where a command reads the metadata, and the metadata answer is both faster and exact: 'types' for a type and what derives from it, 'members' for what is in one, 'callers' for who calls a method, 'read --member' for one body.
 
 It does not search Defs: the game's XML is not on disk in the form the game ended up with. Data questions ('which defs use this class', 'what values does this field take') belong to 'where', 'values', and 'search', which answer them from the snapshot exactly.
 
@@ -373,7 +373,7 @@ rimsearcher fields HediffDef
 
 ## `get`
 
-Show one def in full: its identity, its fields, and any translations of it.
+Show a def in full: its identity, its fields, and any translations of it. Several names, or --type on its own, print one such block each.
 
 ```
 rimsearcher get [defName]... [options]
@@ -393,7 +393,7 @@ defName is not listed as a field: the def_name line above the table is that valu
 
 | Option | Meaning | Also accepted |
 |---|---|---|
-| `-n`, `--limit` <n> | How many fields to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
+| `-n`, `--limit` <n> | How many fields to return, at most. Left out, every one is returned. It counts fields inside each block; the number of blocks printed is set by the names you give, or by --type. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--path-contains` <text> | Only show field paths containing this text. Repeat it to widen the selection. | `--filter`, `--grep`, `--field-contains`, `--path-filter`, `--field`, `--field-path`, `--path` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. Given with no def name at all, it selects every def of that type instead, one block each in def-name order. | `--def-type`, `--kind` |
 | `--defaults` | Also list fields whose value is the one a fresh instance of the declaring type already carries. They are left out by default because they are the ones most often read as something an author chose. The 'xml' column on those rows says whether this def's own XML wrote the path (here), only an ancestor did (parent), neither (no), or that the row cannot be pinned to a line inside a container the XML did write (under <container>). The table says beside it which XML that was: 'read after every patch ran' or 'read before patches ran'. A yes with xml=here is an explicit write of the default. Without the xml column, a def whose XML writes that same value and a def that never mentions the field look the same. How many were left out is always printed, and --path-contains shows a named field either way. | `--with-defaults`, `--all-fields` |

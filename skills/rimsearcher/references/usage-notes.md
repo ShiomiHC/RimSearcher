@@ -313,8 +313,8 @@ per def. Three shapes cover it, and each returns exactly what the single-name ca
 - `get A B C [--type <DefType>]` — the named defs, one object per def in `defs`, in the order
   the names were given.
 - `get --type <DefType>` with no name — every def of that type, in def-name order. On the
-  `baseline` snapshot this is 232 GeneDefs in about 1.5 seconds against about 45 seconds for
-  232 separate calls, and the objects compare equal field for field.
+  `baseline` snapshot this is 232 GeneDefs in about 1.5 seconds, and the objects compare equal
+  field for field with the per-name calls.
 - `economy` with no defName — the whole priced layer, one row per thing under `things`, with
   the same 22 keys the single-name call gives. Only `costChain` and `recipes` are exclusive to
   the single-name call, so a script that needs prices and nothing else wants the bare form.

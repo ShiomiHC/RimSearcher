@@ -29,8 +29,11 @@ public sealed class CodeSearchCommand : Command
         Summary = "Search the decompiled C# with a regular expression.",
         Remarks =
             "This is for shapes that only text can express, such as a method signature pattern across every class. " +
-            "For anything symbol-level — one member's body, callers, overrides, derived types — the DecompilerServer " +
-            "MCP answers it from metadata and is both faster and exact.\n\n" +
+            // 这句以前把整个符号层都推给 MCP,而本 CLI 自己就有 types / members / callers /
+            // read —— 推错了地方,读者会为一个能在这里答的问去开另一个程序。
+            "For anything symbol-level this reads the text where a command reads the metadata, and the metadata " +
+            "answer is both faster and exact: 'types' for a type and what derives from it, 'members' for what is " +
+            "in one, 'callers' for who calls a method, 'read --member' for one body.\n\n" +
             "It does not search Defs: the game's XML is not on disk in the form the game ended up with. " +
             "Data questions ('which defs use this class', 'what values does this field take') belong to " +
             "'where', 'values', and 'search', which answer them from the snapshot exactly.\n\n" +

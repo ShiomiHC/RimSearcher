@@ -264,7 +264,8 @@ public sealed class GetCommand : Command
     {
         Name = "get",
         Aliases = ["show", "inspect", "def"],
-        Summary = "Show one def in full: its identity, its fields, and any translations of it.",
+        Summary = "Show a def in full: its identity, its fields, and any translations of it. " +
+                  "Several names, or --type on its own, print one such block each.",
         Remarks =
             "Field paths are the merged, post-patch shape the game actually had in memory when the snapshot was " +
             "taken, so PatchOperations and inheritance are already applied. A def created in code rather than XML " +
@@ -319,7 +320,15 @@ public sealed class GetCommand : Command
         ],
         Options =
         [
-            CommonOptions.Limit("fields"),
+            // 多块输出里 --limit 截的是每块的字段,不是 def 个数 —— 不说的话
+            // 「--type GeneDef --limit 10」会被读成「只出 10 个 def」,而两种读法的输出
+            // 都是一份看着正常的表。
+            CommonOptions.Limit("fields") with
+            {
+                Help = CommonOptions.Limit("fields").Help +
+                       " It counts fields inside each block; the number of blocks printed is set by the " +
+                       "names you give, or by --type.",
+            },
             new OptionSpec
             {
                 // 没有它,在几百字段的 def 里找一条路径只能 --limit all 再 grep 输出。

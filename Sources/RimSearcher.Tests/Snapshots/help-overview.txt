@@ -15,7 +15,7 @@ Commands:
   economy             Show what the game says a thing is worth, what it costs to make, and how long it takes.
   export              Run the game unattended with a chosen mod list and import what it exports.
   fields              List the field paths that a def type actually uses, with how often each occurs.
-  get                 Show one def in full: its identity, its fields, and any translations of it.
+  get                 Show a def in full: its identity, its fields, and any translations of it. Several names, or --type on its own, print one such block each.
   il                  Disassemble a method to IL.
   inherit             Show what an XML node inherits from and what inherits from it, including abstract parents.
   keyed               Look up the UI text behind a translation key, or find the key behind a piece of UI text.
