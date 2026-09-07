@@ -341,7 +341,7 @@ rimsearcher export --modlist vanilla --dry-run
 List the field paths that a def type actually uses, with how often each occurs.
 
 ```
-rimsearcher fields <defType> [options]
+rimsearcher fields <defType>... [options]
 ```
 
 Use this before 'where' when you are not sure what a field is called. The counts tell you whether a path is universal for the type or only present on a handful of defs.
@@ -350,7 +350,7 @@ What is listed is every path the exporter recorded a value for. When the snapsho
 
 | Argument | Meaning |
 |---|---|
-| `<defType>` | A def type such as ThingDef. |
+| `<defType>` | A def type such as ThingDef. Several types go in one call; --limit and --offset apply to each one on its own, each gets its own count line, and the def_type column says which type a row came from. |
 
 | Option | Meaning | Also accepted |
 |---|---|---|
@@ -362,7 +362,7 @@ What is listed is every path the exporter recorded a value for. When the snapsho
 
 | Key | Holds |
 |---|---|
-| `fields` | one row per field path: path, defs (how many defs use it). |
+| `fields` | one row per field path: path, defs (how many defs use it), def_type (which type the row was counted under — present on a single-type call too, so the shape does not change with how many types were asked for). |
 | `completeness` | an object, present only when some def in scope had its export cut short: scope (which def types this covers, in words), defs_cut_short (how many), types (one row per def type with its own count), verify (a ready command that lists them). Absent means no def in that scope lost fields at export. |
 
 Examples:

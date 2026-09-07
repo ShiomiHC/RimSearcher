@@ -1,13 +1,14 @@
 $ rimsearcher fields ThingDef --limit 3 --offset 3
 exit 0
 --- stdout ---
-26 field paths, showing 3, starting at 4.
+26 field paths on ThingDef, showing 3, starting at 4.
 
 Defs that may be missing from this answer, their export cut short — all of ThingDef, whatever --path-contains says
 def_type  defs_cut_short
 ThingDef  1
 verify: rimsearcher snapshot truncated --type ThingDef
 
+Same in every row, not repeated below: def_type=ThingDef.
 path                defs
 soundPickup         9
 thingClass          6

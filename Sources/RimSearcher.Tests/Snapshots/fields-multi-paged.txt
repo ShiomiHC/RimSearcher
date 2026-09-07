@@ -1,0 +1,17 @@
+$ rimsearcher fields ThingDef AlloyPartDef --limit 2
+exit 0
+--- stdout ---
+26 field paths on ThingDef, showing the first 2.
+2 field paths on AlloyPartDef.
+
+Defs that may be missing from this answer, their export cut short — all of ThingDef, AlloyPartDef, whatever --path-contains says
+def_type  defs_cut_short
+ThingDef  1
+verify: rimsearcher snapshot truncated --type ThingDef
+
+path                  defs  def_type
+soundDrop             9     ThingDef
+soundImpactDefault    9     ThingDef
+costList[0].thingDef  4     AlloyPartDef
+costList[1].thingDef  2     AlloyPartDef
+--- stderr ---

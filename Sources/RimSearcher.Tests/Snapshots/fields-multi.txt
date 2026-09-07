@@ -1,0 +1,41 @@
+$ rimsearcher fields ThingDef AlloyPartDef
+exit 0
+--- stdout ---
+26 field paths on ThingDef.
+2 field paths on AlloyPartDef.
+
+Defs that may be missing from this answer, their export cut short — all of ThingDef, AlloyPartDef, whatever --path-contains says
+def_type  defs_cut_short
+ThingDef  1
+verify: rimsearcher snapshot truncated --type ThingDef
+
+path                                   defs  def_type
+soundDrop                              9     ThingDef
+soundImpactDefault                     9     ThingDef
+soundInteract                          9     ThingDef
+soundPickup                            9     ThingDef
+thingClass                             6     ThingDef
+comps[0].compClass                     2     ThingDef
+comps[1].compClass                     2     ThingDef
+graphicData.texPath                    2     ThingDef
+statBases[0].stat                      2     ThingDef
+building.blueprintGraphicData.texPath  1     ThingDef
+comps[0].Class                         1     ThingDef
+comps[0].props.energyLossPerDamage     1     ThingDef
+comps[0].props.energyMax               1     ThingDef
+defName                                1     ThingDef
+ingestible.foodType                    1     ThingDef
+ingestible.ingestSound                 1     ThingDef
+projectile.burstCount                  1     ThingDef
+projectile.damageAmountBase            1     ThingDef
+projectile.speed                       1     ThingDef
+statBases[0].value                     1     ThingDef
+statBases[1].stat                      1     ThingDef
+statBases[1].value                     1     ThingDef
+statFactors[0].stat                    1     ThingDef
+stuffProps.categories[0]               1     ThingDef
+stuffProps.categories[1]               1     ThingDef
+verbs[0].defaultProjectile             1     ThingDef
+costList[0].thingDef                   4     AlloyPartDef
+costList[1].thingDef                   2     AlloyPartDef
+--- stderr ---

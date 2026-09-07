@@ -1,0 +1,40 @@
+$ rimsearcher fields ThingDef NoSuchTypeXYZ
+exit 0
+--- stdout ---
+26 field paths on ThingDef.
+No def type named 'NoSuchTypeXYZ' in this snapshot. 'rimsearcher list' with no def type lists them all.
+
+Defs that may be missing from this answer, their export cut short — all of ThingDef, whatever --path-contains says
+def_type  defs_cut_short
+ThingDef  1
+verify: rimsearcher snapshot truncated --type ThingDef
+
+Same in every row, not repeated below: def_type=ThingDef.
+path                                   defs
+soundDrop                              9
+soundImpactDefault                     9
+soundInteract                          9
+soundPickup                            9
+thingClass                             6
+comps[0].compClass                     2
+comps[1].compClass                     2
+graphicData.texPath                    2
+statBases[0].stat                      2
+building.blueprintGraphicData.texPath  1
+comps[0].Class                         1
+comps[0].props.energyLossPerDamage     1
+comps[0].props.energyMax               1
+defName                                1
+ingestible.foodType                    1
+ingestible.ingestSound                 1
+projectile.burstCount                  1
+projectile.damageAmountBase            1
+projectile.speed                       1
+statBases[0].value                     1
+statBases[1].stat                      1
+statBases[1].value                     1
+statFactors[0].stat                    1
+stuffProps.categories[0]               1
+stuffProps.categories[1]               1
+verbs[0].defaultProjectile             1
+--- stderr ---

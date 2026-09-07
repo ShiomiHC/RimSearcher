@@ -491,8 +491,11 @@ namespace RimSearcher.Contract
         /// <summary>字段递归深度上限。叶子不占深度,所以这个 6 比它读起来要深。</summary>
         public int MaxFieldDepth = 6;
 
+        /// <summary>实验:只作用于 def 实例遍历与两侧 XML,类型全集遍历仍走 MaxFieldDepth。</summary>
+        public int MaxInstanceFieldDepth = 28;
+
         /// <summary>单 def 的 field_values 条数上限。</summary>
-        public int MaxFieldValuesPerDef = 5000;
+        public int MaxFieldValuesPerDef = 100000;
 
         /// <summary>单个字段值的字符数上限,超出截断并计入 fields_truncated。</summary>
         public int MaxValueLength = 400;

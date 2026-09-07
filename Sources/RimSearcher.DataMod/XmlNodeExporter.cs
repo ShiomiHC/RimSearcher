@@ -69,7 +69,7 @@ namespace RimSearcher.DataMod
                         if (nodeKey != null)
                         {
                             List<string> texts;
-                            var written = XmlFieldPaths.Collect(el, DefExporter.Limits.MaxFieldDepth,
+                            var written = XmlFieldPaths.Collect(el, DefExporter.Limits.MaxInstanceFieldDepth,
                                                                 DefExporter.Limits.MaxCollectionItems,
                                                                 out texts);
                             if (pre == null)

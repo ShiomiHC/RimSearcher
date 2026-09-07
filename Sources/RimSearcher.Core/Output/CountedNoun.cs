@@ -36,12 +36,15 @@ public readonly record struct Tally
     public bool IsTruncated => LowerBound || (Total is { } t && t > Shown);
 
     /// <summary>渲染成「12 defs」/「12 of 347 defs」/「at least 12 defs」。</summary>
-    public string Render(string noun)
+    /// <param name="qualifier">
+    /// 紧跟名词的限定语,口径与 <see cref="RenderTotalFirst"/> 那个同名参数逐字相同。
+    /// </param>
+    public string Render(string noun, string qualifier = "")
     {
         var word = NounRegistry.Form(noun, LowerBound || Total is null ? Shown : Total.Value);
-        if (LowerBound) return $"at least {Shown} {NounRegistry.Form(noun, Shown)}";
-        if (Total is { } t && t > Shown) return $"{Shown} of {t} {word}";
-        return $"{Shown} {NounRegistry.Form(noun, Shown)}";
+        if (LowerBound) return $"at least {Shown} {NounRegistry.Form(noun, Shown)}{qualifier}";
+        if (Total is { } t && t > Shown) return $"{Shown} of {t} {word}{qualifier}";
+        return $"{Shown} {NounRegistry.Form(noun, Shown)}{qualifier}";
     }
 
     /// <summary>

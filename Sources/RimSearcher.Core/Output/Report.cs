@@ -300,12 +300,24 @@ public sealed class Report
     ///
     /// 末页那句留着:没有它,「4 of 8 defs, starting at 5」与半截结果同形。
     /// </summary>
-    public Report PageNotice(string noun, int shown, int offset, int total)
+    /// <param name="qualifier">
+    /// 这句计数**数的是谁**,紧跟在名词后面(<c>" on ThingDef"</c>)。一次调用收几个参数的
+    /// 命令必须给它 —— 没有它,两条挨着的「26 field paths」读起来像同一个类型说了两遍,
+    /// 而挂在哪个参数上正是这两句话的全部信息。给了就一直给:单参数调用也印,否则句子的
+    /// 形状随参数个数变。
+    ///
+    /// 不许改成句首前缀:计数必须落在行首(<c>SkillPromiseTests</c> 那条承诺按这个形状判),
+    /// 而限定语挂在名词后面才不会被读进后面那个从句 —— 理由与
+    /// <see cref="Tally.RenderTotalFirst"/> 的同名参数逐字相同。
+    /// </param>
+    public Report PageNotice(string noun, int shown, int offset, int total, string qualifier = "")
     {
         var seen = offset + shown;
         var tally = shown < total ? Tally.Of(shown, total) : Tally.Complete(shown);
         return Notice(tally.IsTruncated ? NoticeKind.Truncation : NoticeKind.Count,
-            (tally.IsTruncated ? tally.RenderTotalFirst(noun, offset == 0) : tally.Render(noun)) + Within +
+            (tally.IsTruncated
+                ? tally.RenderTotalFirst(noun, offset == 0, qualifier)
+                : tally.Render(noun, qualifier)) + Within +
             (offset > 0 ? $", starting at {offset + 1}" : "") +
             (seen >= total && offset > 0 ? "; that is the last page." : "."), count: tally);
     }

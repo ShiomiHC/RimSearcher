@@ -292,6 +292,16 @@ public class OutputSnapshotTests
         // 近似候选之前的那一版,于是拼错 + --own-class 是唯一拿不到拼写建议的路。两支同一个问题。
         { "list-typo-classed",     ["list", "ThingDf", "--own-class", "TestVariantDef"] },
         { "fields-filtered",       ["fields", "ThingDef", "--path-contains", "comps"] },
+        // 几个类型一次问。守三件事:每个类型各有一句带名字的计数(不带名字两句读起来
+        // 像同一个类型说了两遍)、行并进同一张表且 def_type 在末列(单类型调用里它折进
+        // 表头,多类型调用里它印出来)、`completeness` 只发一块(具名块发两次会撞键)。
+        { "fields-multi",          ["fields", "ThingDef", "AlloyPartDef"] },
+        { "fields-multi-json",     ["fields", "ThingDef", "AlloyPartDef", "--json"] },
+        // --limit / --offset 按类型各算各的,不是并起来切一刀。
+        { "fields-multi-paged",    ["fields", "ThingDef", "AlloyPartDef", "--limit", "2"] },
+        // 一个类型不存在:其余照印、退出码 0。全都不存在才 1。
+        { "fields-multi-missing",  ["fields", "ThingDef", "NoSuchTypeXYZ"] },
+        { "fields-multi-all-missing", ["fields", "NoSuchTypeXYZ", "NoSuchTypeABC"] },
         { "values-coverage",       ["values", "compClass"] },
         { "values-miss",           ["values", "noSuchField"] },
         // 零结果的第四种成因:敲的名字是**上一层**。索引只存叶子,`comps` 自己不落行,

@@ -2286,7 +2286,17 @@ public sealed class FieldsCommand : Command
             "miss that is not means the type has no such field. A snapshot without that set says so, and there a " +
             "path missing here is not evidence that the field does not exist — for the shape of a nested object, " +
             "read its class with 'code-search' and 'read'.",
-        Positionals = [new PositionalSpec { Name = "defType", Help = "A def type such as ThingDef." }],
+        Positionals =
+        [
+            new PositionalSpec
+            {
+                Name = "defType",
+                Variadic = true,
+                Help = "A def type such as ThingDef. Several types go in one call; --limit and --offset apply " +
+                       "to each one on its own, each gets its own count line, and the def_type column says " +
+                       "which type a row came from.",
+            },
+        ],
         Options =
         [
             CommonOptions.Limit("field paths"),
@@ -2313,17 +2323,59 @@ public sealed class FieldsCommand : Command
         ],
         JsonKeys =
         [
-            new() { Key = "fields", Rows = true, What = "one row per field path: path, defs (how many defs use it)." },
+            new()
+            {
+                Key = "fields",
+                Rows = true,
+                What = "one row per field path: path, defs (how many defs use it), def_type (which type the " +
+                       "row was counted under — present on a single-type call too, so the shape does not " +
+                       "change with how many types were asked for).",
+            },
             Completeness.JsonKey,
         ],
     };
 
     public override int Run(CommandContext ctx)
     {
-        var type = ctx.Args.Positional(0)!;
         var limit = ctx.Limit();
         var filters = ctx.Args.Values("path-contains");
         var offset = ctx.Args.Offset();
+
+        // 同一个类型给两遍只查一遍:行会重,而那两句计数会一字不差地说两次 —— 读起来
+        // 像两个类型碰巧同样大。
+        var asked = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var t in ctx.Args.Positionals)
+            if (seen.Add(t)) asked.Add(t);
+
+        var table = new List<IReadOnlyDictionary<string, object?>>();
+        var listed = new List<string>();
+        foreach (var type in asked)
+            if (RunOne(ctx, type, limit, filters, offset, table) == 0) listed.Add(type);
+
+        // 一个类型都没列出来才算失败 —— 与 read 同一条:部分命中仍是结果。
+        if (listed.Count == 0) return 1;
+
+        // 截断声明合成一块,不按类型各发一块 —— `completeness` 是个具名块,发两次会撞键。
+        // 圈的范围跟着实际列出来的那几个类型走。
+        var cut = listed.Select(ctx.Db.TruncatedDefsOfType).ToList();
+        var byType = cut.SelectMany(s => s.ByType).ToList();
+        if (byType.Count > 0)
+            Completeness.NoteIndexedPathsOnly(ctx, new TruncationScope(cut.Sum(s => s.Count), byType),
+                $"all of {NameList.Render(listed, listed.Count)}, whatever --path-contains says");
+
+        ctx.Report.Table("fields", ["path", "defs", "def_type"], table);
+        return 0;
+    }
+
+    /// <summary>
+    /// 一个类型的那一份。行不自己发,追加进 <paramref name="table"/> —— 几个类型共用一张表,
+    /// 分开发就成了几张同名表(而键名撞车会静默覆盖)。
+    /// </summary>
+    private static int RunOne(CommandContext ctx, string type, LimitValue limit,
+                              IReadOnlyList<string> filters, int offset,
+                              List<IReadOnlyDictionary<string, object?>> table)
+    {
         var (rows, total, whole) = ctx.Db.FieldPathsForType(type, limit.Effective, filters, offset);
 
         if (rows.Count == 0)
@@ -2365,30 +2417,32 @@ public sealed class FieldsCommand : Command
             return 1;
         }
 
-        ctx.Report.PageNotice("field path", rows.Count, offset, total);
+        ctx.Report.PageNotice("field path", rows.Count, offset, total, $" on {type}");
 
         // 与 `get --path-contains` 同一条纪律:子串匹配不留痕。这里的代价更大 —— 这条命令是
         // 「这个类型有没有这个字段」的正式问法,而「一条都不是整段」正是「没有」的形状。
         if (filters.Count > 0 && whole < total)
             ctx.Report.Notice(NoticeKind.Filter,
                 whole == 0
-                    ? $"None of those has {PathFilterText.Say(filters)} as a whole path segment: each match contains it " +
-                      $"inside a longer name, and this line removes none of the " +
-                      $"{Tally.Complete(total).Render("field path")} that matched."
-                    : $"Whole path segment: {Tally.Complete(whole).Render("field path")}; " +
+                    ? $"None of {type}'s matched paths has {PathFilterText.Say(filters)} as a whole path " +
+                      "segment: each match contains it inside a longer name, and this line removes none of " +
+                      $"the {Tally.Complete(total).Render("field path")} that matched."
+                    : $"On {type}, whole path segment: {Tally.Complete(whole).Render("field path")}; " +
                       $"inside a longer name: {Tally.Complete(total - whole).Render("field path")}.");
 
-        // 这一处圈的是整个 def 类型,与 --path-contains 无关 —— 表已经按 --path-contains 滤过,而被砍掉的
-        // 字段本来就不在表里,按 --path-contains 收窄这个数就是拿看得见的东西去限定看不见的东西。
-        Completeness.NoteIndexedPathsOnly(ctx, ctx.Db.TruncatedDefsOfType(type),
-            $"all of {type}, whatever --path-contains says");
+        // 截断声明不在这儿发:它圈的是整个 def 类型(与 --path-contains 无关 —— 表已经按
+        // --path-contains 滤过,而被砍掉的字段本来就不在表里,按 --path-contains 收窄这个数
+        // 就是拿看得见的东西去限定看不见的东西),几个类型合成一块由 Run 发。
 
-        ctx.Report.Table("fields", ["path", "defs"],
-            rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+        // def_type 排在末列,不排首列:文本渲染器折不掉第 0 列,而单类型调用里这一列
+        // 每行都一样 —— 摆在末列它自己折进表头,摆在首列就是一整条冗余。
+        foreach (var r in rows)
+            table.Add(new Dictionary<string, object?>
             {
                 ["path"] = r.Path,
                 ["defs"] = r.Count,
-            }).ToList());
+                ["def_type"] = type,
+            });
         return 0;
     }
 }

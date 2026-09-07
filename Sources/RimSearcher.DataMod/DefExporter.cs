@@ -255,6 +255,13 @@ namespace RimSearcher.DataMod
 
             if (File.Exists(targetPath)) File.Delete(targetPath);
             File.Move(temp, targetPath);
+
+            try
+            {
+                File.WriteAllText(Path.Combine(Path.GetTempPath(), "rimsearcher-trunc-breakdown.json"),
+                                  TruncBreakdown.ToJson());
+            }
+            catch (Exception ex) { Log.Warning("[RimSearcher] breakdown not written: " + ex.Message); }
             return targetPath;
         }
 
@@ -375,7 +382,7 @@ namespace RimSearcher.DataMod
                 .Bool(IntermediateFormat.KeyGenerated, def.generated)
                 .Str(IntermediateFormat.KeyClass, def.GetType().FullName)
                 .Fields(IntermediateFormat.KeyFields, fields)
-                .Int(IntermediateFormat.KeyFieldsTruncated, state.Truncated)
+                .Int(IntermediateFormat.KeyFieldsTruncated, TruncBreakdown.Note(defType.Name, state))
                 .ToString();
         }
 
@@ -388,10 +395,56 @@ namespace RimSearcher.DataMod
             return def.generated ? IntermediateFormat.ImpliedDefsSourceFile : "";
         }
 
+
+        /// <summary>实验用,不进主线:按 def 类型分别累计四类截断,连同涉及的 def 个数。</summary>
+        internal static class TruncBreakdown
+        {
+            private sealed class Row { public int Count, Len, Depth, Items, Defs; }
+            private static readonly Dictionary<string, Row> Rows = new Dictionary<string, Row>();
+
+            public static int Note(string defType, object stateObj)
+            {
+                var st = (WalkState)stateObj;
+                var total = st.Truncated;
+                if (total == 0) return 0;
+                Row r;
+                if (!Rows.TryGetValue(defType, out r)) { r = new Row(); Rows[defType] = r; }
+                r.Count += st.TruncCount; r.Len += st.TruncLen;
+                r.Depth += st.TruncDepth; r.Items += st.TruncItems;
+                r.Defs++;
+                return total;
+            }
+
+            public static string ToJson()
+            {
+                var sb = new StringBuilder();
+                sb.Append("{");
+                var first = true;
+                foreach (var kv in Rows)
+                {
+                    if (!first) sb.Append(",");
+                    first = false;
+                    sb.Append(Q).Append(kv.Key).Append(Q).Append(":{")
+                      .Append(Q).Append("defs").Append(Q).Append(":").Append(kv.Value.Defs)
+                      .Append(",").Append(Q).Append("by_count").Append(Q).Append(":").Append(kv.Value.Count)
+                      .Append(",").Append(Q).Append("by_value_length").Append(Q).Append(":").Append(kv.Value.Len)
+                      .Append(",").Append(Q).Append("by_depth").Append(Q).Append(":").Append(kv.Value.Depth)
+                      .Append(",").Append(Q).Append("by_collection").Append(Q).Append(":").Append(kv.Value.Items)
+                      .Append("}");
+                }
+                sb.Append("}");
+                return sb.ToString();
+            }
+
+            private const string Q = "\"";
+        }
+
         private sealed class WalkState
         {
             public int Emitted;
-            public int Truncated;
+            // 实验:原先四种截断共用一个 Truncated,于是「这个 def 被截了」答不出是哪一种。
+            public int TruncCount, TruncLen, TruncDepth, TruncItems;
+            public int Truncated { get { return TruncCount + TruncLen + TruncDepth + TruncItems; } }
             public readonly HashSet<object> Seen = new HashSet<object>(ReferenceEqualityComparer.Instance);
         }
 
@@ -465,7 +518,7 @@ namespace RimSearcher.DataMod
         {
             if (value == null) return;
 
-            if (state.Emitted >= Limits.MaxFieldValuesPerDef) { state.Truncated++; return; }
+            if (state.Emitted >= Limits.MaxFieldValuesPerDef) { state.TruncCount++; return; }
 
             string leaf;
             if (TryLeaf(value, out leaf))
@@ -478,14 +531,14 @@ namespace RimSearcher.DataMod
                 if (leaf.Length > Limits.MaxValueLength)
                 {
                     leaf = leaf.Substring(0, Limits.MaxValueLength);
-                    state.Truncated++;
+                    state.TruncLen++;
                 }
                 output.Add(new ExportedField(path, leaf, defaultState));
                 state.Emitted++;
                 return;
             }
 
-            if (depth >= Limits.MaxFieldDepth) { state.Truncated++; return; }
+            if (depth >= Limits.MaxInstanceFieldDepth) { state.TruncDepth++; return; }
             if (!value.GetType().IsValueType && !state.Seen.Add(value)) return;
 
             var enumerable = value as IEnumerable;
@@ -501,7 +554,7 @@ namespace RimSearcher.DataMod
                 var i = 0;
                 foreach (var item in enumerable)
                 {
-                    if (i >= Limits.MaxCollectionItems) { state.Truncated++; break; }
+                    if (i >= Limits.MaxCollectionItems) { state.TruncItems++; break; }
                     var itemBaseline = baselineItems != null && i < baselineItems.Count ? baselineItems[i] : null;
                     Emit(item, path + "[" + i.ToString(CultureInfo.InvariantCulture) + "]", depth + 1,
                          output, state, baselineKnown, itemBaseline, elementType);
@@ -520,7 +573,7 @@ namespace RimSearcher.DataMod
             // 换判据同时删掉了大批「运行时正好等于声明」的行 —— 它们报告的是作者没做的事。
             if (NestedClass.ShouldEmit(value.GetType(), declared))
             {
-                if (state.Emitted >= Limits.MaxFieldValuesPerDef) { state.Truncated++; return; }
+                if (state.Emitted >= Limits.MaxFieldValuesPerDef) { state.TruncCount++; return; }
                 var typeName = value.GetType().FullName;
                 // 与基准同不同的判据跟别处一致:基准里同一位置是同一个类型 = 无从区分,
                 // 类型不同或基准里根本没有这一项 = 作者写了 Class=。

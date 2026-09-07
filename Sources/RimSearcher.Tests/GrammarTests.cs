@@ -2596,7 +2596,7 @@ public class GrammarTests
 
         // --path-contains 是 Multi,给几次念几次。
         var (paths, _, _) = Fixture.Run("fields", "ThingDef", "--path-contains", "comps");
-        Assert.Contains("field paths within --path-contains comps.", paths, StringComparison.Ordinal);
+        Assert.Contains("field paths on ThingDef within --path-contains comps.", paths, StringComparison.Ordinal);
 
         // 一个都没给就一个字不多 —— 否则这半句退化成每条输出都挂的免责声明。
         var (bare, _, _) = Fixture.Run("where", "thingClass", "RimWorld.Bullet");
@@ -5048,6 +5048,60 @@ public class GrammarTests
         }
 
         var (_, _, allMissing) = Fixture.Run("economy", "NoSuchThingAtAll", "NoSuchThingEither", "--json");
+        Assert.Equal(1, allMissing);
+    }
+
+    /// <summary>
+    /// fields 的多类型形态:--limit / --offset **按类型各算各的**,不是把几个类型并起来
+    /// 再切一刀。这一条得单独钉 —— 并起来切也交得出一张看着正常的表,而那张表里排在
+    /// 后面的类型会一行都没有,与「那个类型没有字段」同形。
+    ///
+    /// def_type 那一列是这一路唯一新增的东西,单类型调用上也在场。比行时摘掉它。
+    /// </summary>
+    [Fact]
+    public void fields多类型的行等于分别问再拼起来()
+    {
+        static List<string> Rows(string json, string? of = null)
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("fields", out var arr)) return [];
+            return arr.EnumerateArray()
+                      .Where(r => of is null || r.GetProperty("def_type").GetString() == of)
+                      .Select(r => string.Join("|", r.EnumerateObject()
+                                                     .Where(p => p.Name != "def_type")
+                                                     .Select(p => $"{p.Name}={p.Value.GetRawText()}")))
+                      .ToList();
+        }
+
+        var (thing, _, _) = Fixture.Run("fields", "ThingDef", "--json");
+        var (alloy, _, _) = Fixture.Run("fields", "AlloyPartDef", "--json");
+        var (multi, _, code) = Fixture.Run("fields", "ThingDef", "NoSuchTypeXYZ", "AlloyPartDef", "--json");
+        Assert.Equal(0, code);
+        Assert.Equal(Rows(thing), Rows(multi, "ThingDef"));
+        Assert.Equal(Rows(alloy), Rows(multi, "AlloyPartDef"));
+
+        // --limit 是每个类型 2 条,不是两个类型合计 2 条。
+        var (paged, _, _) = Fixture.Run("fields", "ThingDef", "AlloyPartDef", "--limit", "2", "--json");
+        Assert.Equal(2, Rows(paged, "ThingDef").Count);
+        Assert.Equal(2, Rows(paged, "AlloyPartDef").Count);
+
+        // def_type 恒在,单类型调用上也是 —— 按类型个数决定出不出它,等于让消费方写两条路径。
+        using (var doc = System.Text.Json.JsonDocument.Parse(thing))
+            foreach (var row in doc.RootElement.GetProperty("fields").EnumerateArray())
+                Assert.Equal("ThingDef", row.GetProperty("def_type").GetString());
+
+        // 每个类型各有一句带名字的计数 —— 少了名字,两句话读起来像同一个类型说了两遍。
+        using (var doc = System.Text.Json.JsonDocument.Parse(multi))
+        {
+            var texts = doc.RootElement.GetProperty("notes").EnumerateArray()
+                           .Select(n => n.GetProperty("text").GetString()!).ToList();
+            // 计数仍落在行首(SkillPromiseTests 那条承诺按这个形状判),类型名跟在名词后面。
+            Assert.Contains(texts, t => Regex.IsMatch(t, @"^\d+ field paths? on ThingDef\b"));
+            Assert.Contains(texts, t => Regex.IsMatch(t, @"^\d+ field paths? on AlloyPartDef\b"));
+            Assert.Contains(texts, t => t.Contains("NoSuchTypeXYZ", StringComparison.Ordinal));
+        }
+
+        var (_, _, allMissing) = Fixture.Run("fields", "NoSuchTypeXYZ", "NoSuchTypeABC", "--json");
         Assert.Equal(1, allMissing);
     }
 }

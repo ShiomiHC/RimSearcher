@@ -1,0 +1,173 @@
+$ rimsearcher fields ThingDef AlloyPartDef --json
+exit 0
+--- stdout ---
+{
+  "notes": [
+    {
+      "kind": "count",
+      "text": "26 field paths on ThingDef.",
+      "shown": 26,
+      "total": 26
+    },
+    {
+      "kind": "count",
+      "text": "2 field paths on AlloyPartDef.",
+      "shown": 2,
+      "total": 2
+    }
+  ],
+  "completeness": {
+    "scope": "all of ThingDef, AlloyPartDef, whatever --path-contains says",
+    "defs_cut_short": 1,
+    "types": [
+      {
+        "def_type": "ThingDef",
+        "defs_cut_short": 1
+      }
+    ],
+    "verify": "rimsearcher snapshot truncated --type ThingDef"
+  },
+  "fields": [
+    {
+      "path": "soundDrop",
+      "defs": 9,
+      "def_type": "ThingDef"
+    },
+    {
+      "path": "soundImpactDefault",
+      "defs": 9,
+      "def_type": "ThingDef"
+    },
+    {
+      "path": "soundInteract",
+      "defs": 9,
+      "def_type": "ThingDef"
+    },
+    {
+      "path": "soundPickup",
+      "defs": 9,
+      "def_type": "ThingDef"
+    },
+    {
+      "path": "thingClass",
+      "defs": 6,
+      "def_type": "ThingDef"
+    },
+    {
+      "path": "comps[0].compClass",
+      "defs": 2,
+      "def_type": "ThingDef"
+    },
+    {
+      "path": "comps[1].compClass",
+      "defs": 2,
+      "def_type": "ThingDef"
+    },
+    {
+      "path": "graphicData.texPath",
+      "defs": 2,
+      "def_type": "ThingDef"
+    },
+    {
+      "path": "statBases[0].stat",
+      "defs": 2,
+      "def_type": "ThingDef"
+    },
+    {
+      "path": "building.blueprintGraphicData.texPath",
+      "defs": 1,
+      "def_type": "ThingDef"
+    },
+    {
+      "path": "comps[0].Class",
+      "defs": 1,
+      "def_type": "ThingDef"
+    },
+    {
+      "path": "comps[0].props.energyLossPerDamage",
+      "defs": 1,
+      "def_type": "ThingDef"
+    },
+    {
+      "path": "comps[0].props.energyMax",
+      "defs": 1,
+      "def_type": "ThingDef"
+    },
+    {
+      "path": "defName",
+      "defs": 1,
+      "def_type": "ThingDef"
+    },
+    {
+      "path": "ingestible.foodType",
+      "defs": 1,
+      "def_type": "ThingDef"
+    },
+    {
+      "path": "ingestible.ingestSound",
+      "defs": 1,
+      "def_type": "ThingDef"
+    },
+    {
+      "path": "projectile.burstCount",
+      "defs": 1,
+      "def_type": "ThingDef"
+    },
+    {
+      "path": "projectile.damageAmountBase",
+      "defs": 1,
+      "def_type": "ThingDef"
+    },
+    {
+      "path": "projectile.speed",
+      "defs": 1,
+      "def_type": "ThingDef"
+    },
+    {
+      "path": "statBases[0].value",
+      "defs": 1,
+      "def_type": "ThingDef"
+    },
+    {
+      "path": "statBases[1].stat",
+      "defs": 1,
+      "def_type": "ThingDef"
+    },
+    {
+      "path": "statBases[1].value",
+      "defs": 1,
+      "def_type": "ThingDef"
+    },
+    {
+      "path": "statFactors[0].stat",
+      "defs": 1,
+      "def_type": "ThingDef"
+    },
+    {
+      "path": "stuffProps.categories[0]",
+      "defs": 1,
+      "def_type": "ThingDef"
+    },
+    {
+      "path": "stuffProps.categories[1]",
+      "defs": 1,
+      "def_type": "ThingDef"
+    },
+    {
+      "path": "verbs[0].defaultProjectile",
+      "defs": 1,
+      "def_type": "ThingDef"
+    },
+    {
+      "path": "costList[0].thingDef",
+      "defs": 4,
+      "def_type": "AlloyPartDef"
+    },
+    {
+      "path": "costList[1].thingDef",
+      "defs": 2,
+      "def_type": "AlloyPartDef"
+    }
+  ]
+}
+--- stderr ---

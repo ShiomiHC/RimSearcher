@@ -90,7 +90,7 @@ namespace RimSearcher.DataMod
         }
 
         private static List<PatchedXmlNodes.Node> Extract(XmlDocument doc)
-            => PatchedXmlNodes.Extract(doc, DefExporter.Limits.MaxFieldDepth,
+            => PatchedXmlNodes.Extract(doc, DefExporter.Limits.MaxInstanceFieldDepth,
                                        DefExporter.Limits.MaxCollectionItems);
     }
 }

@@ -1,0 +1,6 @@
+$ rimsearcher fields NoSuchTypeXYZ NoSuchTypeABC
+exit 1
+--- stdout ---
+No def type named 'NoSuchTypeXYZ' in this snapshot. 'rimsearcher list' with no def type lists them all.
+No def type named 'NoSuchTypeABC' in this snapshot. 'rimsearcher list' with no def type lists them all.
+--- stderr ---
