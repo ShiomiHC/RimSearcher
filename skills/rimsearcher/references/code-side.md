@@ -43,8 +43,9 @@ environment.
 - **Usages of a field or a type**, as opposed to calls to a method. The call table records
   method calls only, so `where is this field read` has no exact answer here —
   `code-search` matches the name as text.
-- **Reading many members in one call.** `batch_get_decompiled_source` returns several at
-  once; `read` is one file per run.
+- **Reading several differently-named members in one call.** `batch_get_decompiled_source`
+  takes a list of members; `read` takes several *files* per run but one `--member` name,
+  which it then matches in each of them.
 - **Comparing two versions of an assembly.** Nothing on this side loads two builds at once.
 
 ## Traps

@@ -95,7 +95,7 @@ data sits under a key that depends on the command. `<command> --help` lists each
 | `list` | `defs` (with a def type) or `types` (without) — never both; flat rows either way |
 | `where` with a field path | `matches` — including when `--value` is given as well |
 | `where --value` with no field path | `paths`. The def count per row is split in two: `defs_exact` (the value is exactly what was asked for) and `defs_other` (it sits inside a longer value). A row can have both non-zero. With `--exact` there is only one meaning, so the column is a single `defs` |
-| `values` | `values`, plus `field` (which full paths and def types the value space was drawn from). Both are always present; on an empty result the members of `field` are empty or zero rather than the key being gone |
+| `values` | `values`, plus `field` — an array with one entry per path asked for, in the order given, each entry `{field: {asked, matched_paths, def_types, defs_with_field}}`, saying which full paths and def types that path's value space was drawn from. Both keys are always present, and `field` is an array even for one path; on an empty result that entry's members are empty or zero rather than the key being gone |
 | `fields` | `fields` |
 | `where` / `values` / `fields` | plus `completeness` when some def in scope had its export cut short: `scope` (which def types this covers, in words), `defs_cut_short`, `types` (one row per def type with its own count), `verify` (a ready command listing them). The key is absent when no def in scope lost fields |
 | `mods` | `mods` |
@@ -317,11 +317,16 @@ per def. Three shapes cover it, and each returns exactly what the single-name ca
   `baseline` snapshot this is 232 GeneDefs in about 1.5 seconds, and the objects compare equal
   field for field with the per-name calls.
 - `economy` with no defName — the whole priced layer, one row per thing under `things`, with
-  the same 22 keys the single-name call gives. Only `costChain` and `recipes` are exclusive to
-  the single-name call, so a script that needs prices and nothing else wants the bare form.
+  the same 22 keys a named call gives. `costChain` and `recipes` are computed only for named
+  things, so a script that needs prices and nothing else wants the bare form.
 
-`--defaults` and `--path-contains` apply to every block alike. There is no batching for
-`inherit`, `keyed` or `read`.
+`--defaults` and `--path-contains` apply to every block alike.
+
+The same holds for every other lookup: `inherit`, `keyed`, `read`, `list`, `fields`,
+`values`, `types`, `members`, `il` and `callers` all take several arguments per call. Their
+rows go into one table with a column naming the argument each row answers, so a script
+groups by that column instead of by which process it came from; `--limit` and `--offset`
+apply per argument, so a batch is not silently truncated at the batch level.
 
 ### Confirming a specific path survived truncation
 
