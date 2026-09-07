@@ -330,14 +330,25 @@ apply per argument, so a batch is not silently truncated at the batch level.
 
 ### Confirming a specific path survived truncation
 
-Every truncation report is a count, never a list of what was dropped: the exporter stops at
-the per-def cap and does not go on counting, so `snapshot truncated`'s number is a lower
-bound and no command can name the missing paths. Asking "was `statBases` itself cut on this
-def?" has no direct answer.
+Every truncation report is a count, never a list of what was dropped, so asking "was
+`statBases` itself cut on this def?" has no direct answer. But `get` does say **which cap**
+stopped the exporter, and the four caps have different consequences — read that first:
 
-The way through is a second snapshot. Export the same def with fewer mods enabled — fewer
-mods means fewer patched-in fields, which is what the per-def cap counts — and diff the path
-sets from `get <def> --json` on each, normalising `[0]`, `[1]`, … to `[]` first.
-A path present in the smaller snapshot and absent in the larger one was cut; an empty
-difference is the confirmation. Reverse the reading if the def is truncated in *both*: then
-the diff bounds nothing and only a re-export with a smaller list settles it.
+| What `get` says | What is actually missing |
+|---|---|
+| *N values were cut to the length cap* | **No path at all.** Those rows are in the table; only the tail of their text is gone. |
+| *N lists stopped at the item cap* | Entries past the cap of N lists, and everything under them. |
+| *N nested objects were left unwalked past the depth cap* | N whole subtrees, of unknown size. |
+| *N fields were dropped past this def's field cap* | N paths, anywhere on the def. |
+
+A def whose only line is the first row has nothing missing, and `get` says so instead of
+warning about absent paths. The other three each drop a different kind of thing, which is
+why the count is a lower bound rather than a total: a stopped list or an unwalked subtree
+counts once no matter how much sits under it.
+
+Only the last row responds to exporting with fewer mods enabled — the per-def cap is the one
+that counts patched-in fields. When that is the cap you are up against, diff the path sets
+from `get <def> --json` on both snapshots, normalising `[0]`, `[1]`, … to `[]` first: a path
+present in the smaller and absent in the larger was cut, and an empty difference is the
+confirmation. For the other three caps a smaller mod list changes nothing, so an empty
+difference there confirms nothing.

@@ -300,7 +300,8 @@ public sealed class ModListShowCommand : Command
         if (rows.Count == 0)
         {
             ctx.Report.Notice(NoticeKind.NextStep,
-                $"No mod matching '{filter}' appears in any of the {searched} lists on this machine. " +
+                $"No mod matching '{filter}' appears in any of the " +
+                $"{Tally.Complete(searched).Render("mod list")} on this machine. " +
                 "That says nothing about whether it is installed — only that no saved list names it.");
             NoteSkipped();
             return 1;

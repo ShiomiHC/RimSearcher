@@ -91,11 +91,14 @@ public class TruncationCauseTests
         return db;
     }
 
+    /// <summary>那条截断提示句。语料里每个 mini def 只有一个字段(label),于是表上的路径数恒为 1。</summary>
     private static string GetLine(string db, string name)
     {
         var (stdout, _, code) = Fixture.Run("get", name, "--db", db);
         Assert.Equal(0, code);
-        return stdout.Split('\n').Single(l => l.Contains("dropped at export time", StringComparison.Ordinal));
+        return stdout.Split('\n').Single(
+            l => l.Contains("The exporter stopped short", StringComparison.Ordinal)
+                 || l.Contains("No field path is missing", StringComparison.Ordinal));
     }
 
     // ---- 入库 ----
@@ -142,13 +145,28 @@ public class TruncationCauseTests
 
     // ---- 那一句 ----
 
-    /// <summary>成因只有一类时不列举,直说「全是这一种」。</summary>
-    [Fact]
-    public void 单一成因说全是这一种()
+    /// <summary>
+    /// 四类各带自己的名词,不共用「N fields were dropped」那个头。
+    ///
+    /// 四个数**数的不是同一样东西**:条数上限是每碰一格加一;值长度那一类一条路径都没丢;
+    /// 深度与集合各是「一整棵没走的子树 / 一条没走完的列表」算一。共用一个名词时,
+    /// 现在盘上七个库里最大的那一类(值长度)会被读成「丢了 29 个字段」。
+    /// </summary>
+    [Theory]
+    [InlineData(4, 0, 0, 0, "4 fields were dropped past this def's field cap")]
+    [InlineData(0, 4, 0, 0, "4 values were cut to the length cap")]
+    [InlineData(0, 0, 4, 0, "4 nested objects were left unwalked past the depth cap")]
+    [InlineData(0, 0, 0, 4, "4 lists stopped at the item cap")]
+    [InlineData(1, 0, 0, 0, "1 field was dropped past this def's field cap")]
+    [InlineData(0, 1, 0, 0, "1 value was cut to the length cap")]
+    [InlineData(0, 0, 1, 0, "1 nested object was left unwalked past the depth cap")]
+    [InlineData(0, 0, 0, 1, "1 list stopped at the item cap")]
+    public void 每一类各带自己的名词(int cap, int len, int dep, int items, string expected)
     {
-        var db = Build("one", new MiniDef("OneCause", 4, (0, 0, 4, 0)));
-        var said = GetLine(db, "OneCause");
-        Assert.Contains("at least 4 fields were dropped at export time, all of them nested past the depth cap", said);
+        var db = Build($"noun{cap}{len}{dep}{items}",
+                       new MiniDef("N", cap + len + dep + items, (cap, len, dep, items)));
+        var said = GetLine(db, "N");
+        Assert.Contains(expected, said);
         Assert.DoesNotContain(Vague, said);
     }
 
@@ -159,27 +177,43 @@ public class TruncationCauseTests
         var db = Build("many", new MiniDef("Many", 6, (2, 1, 3, 0)));
         var said = GetLine(db, "Many");
         Assert.Contains(
-            "at least 6 fields were dropped at export time: 3 nested past the depth cap, "
-            + "2 past this def's field cap, 1 with the value cut to the length cap", said);
+            "3 nested objects were left unwalked past the depth cap; "
+            + "2 fields were dropped past this def's field cap; "
+            + "1 value was cut to the length cap", said);
         Assert.DoesNotContain(Vague, said);
         // 没发生的那一类一个字都不占 —— 印成零会让人以为集合上限也在参与。
-        Assert.DoesNotContain("list item cap", said);
+        Assert.DoesNotContain("item cap", said);
     }
 
     /// <summary>
-    /// 只丢了一条时谓语跟着变,也不写「all of them」—— 一条东西没有「全都是」可言。
+    /// 只有值被切时,**没有一条路径缺席** —— 那一格就在表里,缺的是它后半截的字。
     ///
-    /// 这一档在语料上永远碰不到:那里被截的 def 丢的是 3 条,于是 were 一直是对的。
-    /// 真快照上恰恰反过来 —— baseline 的 27 个被截 def 里 24 个只丢了 1 条。
+    /// 此前这一支会印「a path missing from the list below is not evidence that the def
+    /// lacks it」并把这几条加进路径总数:读者被派去找不存在的缺行,而那个总数把已经
+    /// 数过的行又数了一遍。现在盘上七个库里这一类恰恰是最大的一类。
     /// </summary>
     [Fact]
-    public void 只丢一条时谓语用单数()
+    public void 只有值被切时不报缺行也不加进总数()
     {
-        var db = Build("single", new MiniDef("One", 1, (0, 0, 0, 1)));
-        var said = GetLine(db, "One");
-        Assert.Contains("at least 1 field was dropped at export time, past the list item cap", said);
-        Assert.DoesNotContain("all of them", said);
-        Assert.DoesNotContain("field were", said);
+        var db = Build("cut", new MiniDef("Cut", 3, (0, 3, 0, 0)));
+        var said = GetLine(db, "Cut");
+        Assert.Contains("No field path is missing from this def", said);
+        Assert.Contains("3 values were cut to the length cap", said);
+        Assert.DoesNotContain("dropped", said);
+        // 表上只有 label 一条路径,而这个 def 的路径数就是它。
+        Assert.Contains("The 1 paths counted above are all of them", said);
+    }
+
+    /// <summary>
+    /// 混着来时,加进总数的只有**没进索引**的那几类。值长度不算 —— 它的路径就在表里。
+    /// </summary>
+    [Fact]
+    public void 加进总数的只有没进索引的那几类()
+    {
+        var db = Build("mix", new MiniDef("Mix", 5, (1, 3, 0, 1)));
+        var said = GetLine(db, "Mix");
+        // 1(条数) + 1(集合) = 2 条没进索引,加上表上那 1 条 = 至少 3 条,而不是 1+5=6。
+        Assert.Contains("Added to the 1 paths that did get indexed, that is at least 3 field paths", said);
     }
 
     /// <summary>

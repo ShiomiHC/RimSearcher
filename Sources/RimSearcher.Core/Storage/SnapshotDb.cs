@@ -3,22 +3,38 @@ using RimSearcher.Snapshot;
 
 namespace RimSearcher.Storage;
 
+/// <summary>四种上限各自的截断。措辞不在这里,在 <c>ExportCap</c>。</summary>
+public enum TruncationCause { Cap, Length, Depth, Items }
+
 /// <summary>
 /// 一个 def 的截断成因,四类分开。产地是导出器的 WalkState —— 那四个数在 0.13.0 之前
 /// 共用一个计数器,于是「被截了」答得出、「为什么」答不出,而四种的出路完全不同。
+///
+/// **四个数的统计单元互不相同**,加起来那个总数因此不是任何一样东西的条数:
+/// 条数上限是每碰一格加一(真的是「丢了几条」);值长度那一类**一条路径都没丢**,
+/// 丢的是那一格值的后半截;深度与集合各是「一整棵没走的子树 / 一条没走完的列表」
+/// 算一,而那底下有多少条谁都没数。<see cref="Missing"/> 是「没进索引的条数」的下界,
+/// 它把值长度那一类排除在外。
 /// </summary>
 public sealed record TruncationCauses(int Cap, int Length, int Depth, int Items)
 {
     public int Total => Cap + Length + Depth + Items;
 
+    /// <summary>
+    /// 至少有多少条路径**没进索引**。值长度不算 —— 那条路径就在表里,只是值不全,
+    /// 把它加进「这个 def 一共有几条字段路径」会把一个已经数过的东西再数一遍。
+    /// 深度与集合各只算一条,而它们底下的子树没数过,所以这是下界不是估计。
+    /// </summary>
+    public int Missing => Cap + Depth + Items;
+
     /// <summary>非零的那几类,按条数从多到少。全零时为空 —— 调用方据此闭嘴。</summary>
-    public IEnumerable<(string Cause, int Count)> Ranked()
+    public IEnumerable<(TruncationCause Cause, int Count)> Ranked()
         => new[]
            {
-               ("past this def's field cap", Cap),
-               ("with the value cut to the length cap", Length),
-               ("nested past the depth cap", Depth),
-               ("past the list item cap", Items),
+               (TruncationCause.Cap, Cap),
+               (TruncationCause.Length, Length),
+               (TruncationCause.Depth, Depth),
+               (TruncationCause.Items, Items),
            }
            .Where(x => x.Item2 > 0)
            .OrderByDescending(x => x.Item2);

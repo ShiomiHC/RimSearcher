@@ -401,17 +401,34 @@ internal static class ExportCap
     ///
     /// 分类不是装饰:四种截断的出路完全不同(深度要放开、条数上限要抬、值长度是展示
     /// 取舍、集合是宽度问题),而合在一个数里连本项目自己都把大头连猜错两次。
+    ///
+    /// **每一类各带自己的名词**,不共用「N fields were dropped」那个头 —— 四个数
+    /// 数的不是同一样东西:值长度那一类一条路径都没丢(那一格就在表里,只是值不全),
+    /// 深度与集合各是「一整棵没走的子树 / 一条没走完的列表」算一。共用一个名词时,
+    /// 现在盘上七个库里最大的那一类(值长度)会被读成「丢了 29 个字段」,而正确的
+    /// 读法是「29 个字段的值不全」。
     /// </summary>
-    public static string OnDef(int fields, TruncationCauses? by)
+    public static string OnDef(TruncationCauses? by, int fields)
     {
         if (by is null || by.Total == 0) return OnDef(fields);
-        var parts = by.Ranked().ToList();
-        var head = Head(fields);
-        // 只丢了一个时不写「all of them」—— 一条东西没有「全都是」可言。
-        if (fields == 1 && parts.Count == 1) return $"{head}, {parts[0].Cause}";
-        return parts.Count == 1
-            ? $"{head}, all of them {parts[0].Cause}"
-            : head + ": " + string.Join(", ", parts.Select(p => $"{p.Count} {p.Cause}"));
+        return string.Join("; ", by.Ranked().Select(p => Phrase(p.Cause, p.Count)));
+    }
+
+    private static string Phrase(TruncationCause cause, int n)
+    {
+        var was = n == 1 ? "was" : "were";
+        return cause switch
+        {
+            // 这一类是真的「丢了几条」:上限一到,此后每碰一格加一。
+            TruncationCause.Cap => $"{Tally.Complete(n).Render("field")} {was} dropped past this def's field cap",
+            // 路径在表里,值不全 —— 这一类不许说成 dropped。
+            TruncationCause.Length => $"{Tally.Complete(n).Render("value")} {was} cut to the length cap",
+            // 一棵子树算一,底下有多少条没数过。
+            TruncationCause.Depth =>
+                $"{Tally.Complete(n).Render("nested object")} {was} left unwalked past the depth cap",
+            TruncationCause.Items => $"{Tally.Complete(n).Render("list")} stopped at the item cap",
+            _ => throw new ArgumentOutOfRangeException(nameof(cause)),
+        };
     }
 
     /// <summary>一批 def 里有几个被截过。<paramref name="among"/> 是插在计数与谓语之间的定语。</summary>

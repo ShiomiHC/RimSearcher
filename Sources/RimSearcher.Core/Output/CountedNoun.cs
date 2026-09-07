@@ -155,6 +155,11 @@ public static class NounRegistry
         // 数的是**印出来的表格行**,不是某一类东西 —— 说破那几条口径边界时,指的就是
         // 读的人眼前数得出来的那几行。
         ["row"] = "rows",
+        // 截断成因那四类各带自己的名词,一个都不能借 "field":值长度那一类一条路径都没丢
+        // (下面这两个也是),而深度与集合各是「一整棵没走的子树 / 一条没走完的列表」算一,
+        // 底下有多少条字段谁都没数。借了 "field" 就等于替读者报了一个没人量过的数。
+        ["nested object"] = "nested objects",
+        ["list"] = "lists",
     };
 
     public static IReadOnlyCollection<string> Known => Plurals.Keys;

@@ -802,14 +802,25 @@ public sealed class GetCommand : Command
             // 只有那个和。实测六个样本全都认出「索引数是下界」,只有两个把 +N 做完 ——
             // 而两个加数从头到尾都在 CLI 手上。
             if (def.FieldsTruncated > 0)
+            {
+                var by = ctx.Db.TruncationCausesFor(def.Id);
+                var said = ExportCap.OnDef(by, def.FieldsTruncated);
+                // 加数是「没进索引的条数」,不是那个总数:值长度那一类的路径就在下面这张表里,
+                // 把它加进去等于把已经数过的行再数一遍。成因没量过的库退回总数(旧行为)。
+                var missing = by is null || by.Total == 0 ? def.FieldsTruncated : by.Missing;
                 ctx.Report.Notice(NoticeKind.Boundary,
-                    "The exporter stopped short on this def: " +
-                    $"{ExportCap.OnDef(def.FieldsTruncated, ctx.Db.TruncationCausesFor(def.Id))}, " +
-                    "so a path missing from the list below is not evidence that the def lacks it. " +
-                    // 主语自带,不靠上文:--path-contains 那一支的上文说的是「matching N, out of
-                    // M on the def」,而这一句在两支下逐字相同。
-                    $"Added to the {total} paths that did get indexed, that is " +
-                    $"{Tally.AtLeast(total + def.FieldsTruncated).Render("field path")} on this def.");
+                    missing > 0
+                        ? "The exporter stopped short on this def: " + said +
+                          ", so a path missing from the list below is not evidence that the def lacks it. " +
+                          // 主语自带,不靠上文:--path-contains 那一支的上文说的是「matching N, out of
+                          // M on the def」,而这一句在两支下逐字相同。
+                          $"Added to the {total} paths that did get indexed, that is " +
+                          $"{Tally.AtLeast(total + missing).Render("field path")} on this def."
+                        // 只有值被切时,缺的不是行而是那几格里的字。上面那句会让人去找不存在的缺行。
+                        : "No field path is missing from this def: " + said +
+                          ", so those rows carry the front of their value and not the rest. " +
+                          $"The {total} paths counted above are all of them.");
+            }
 
             if (alone) ctx.Report.Detail("def", pairs);
 
