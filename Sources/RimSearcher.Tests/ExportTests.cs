@@ -1,3 +1,4 @@
+using System.Text;
 using RimSearcher.Commands;
 
 namespace RimSearcher.Tests;
@@ -72,6 +73,11 @@ public class ExportTests
     /// <summary>
     /// 日志任何模式下都要落在我们指定的地方:Unity 默认那份 Player.log 这次跑可能一个字都不写
     /// (实测一次挂死的导出,那个文件的时间戳停在半小时前)。
+    ///
+    /// 开关与路径必须是**相邻的两个元素**。这个开关由 Unity 自己解析,它不认 <c>key=value</c>,
+    /// 不认就整个静默忽略 —— 于是日志一个字都不落盘,而失败信息还在指着那个路径。
+    /// 2026-09-07 四种写法各起一次游戏实测:带等号的两种都不建文件(1.4M 日志全从 stdout 出),
+    /// 空格分隔的两种都写出 1.4M 的文件。大小写不影响。
     /// </summary>
     [Theory]
     [InlineData(true)]
@@ -79,9 +85,64 @@ public class ExportTests
     public void 任何模式都把游戏日志落到临时目录(bool showWindow)
     {
         var argv = ExportCommand.BuildGameArguments(Temp, Out, showWindow);
-        Assert.Contains(argv, a => a.StartsWith("-logfile=", StringComparison.Ordinal) &&
-                                   a.Contains(ExportCommand.GameLogName, StringComparison.Ordinal) &&
-                                   a.Contains(Temp, StringComparison.Ordinal));
+        var i = argv.ToList().FindIndex(a => a.Equals("-logFile", StringComparison.OrdinalIgnoreCase));
+        Assert.True(i >= 0 && i + 1 < argv.Count, "the log switch is not in the command line at all.");
+        Assert.Equal(Path.Combine(Temp, ExportCommand.GameLogName), argv[i + 1]);
+
+        Assert.DoesNotContain(argv, a => a.StartsWith("-logfile=", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// 失败信息里那句指路牌不许指空。它是**诊断路径上**的话:平时不发作,只在出事那一刻发作,
+    /// 而那一刻人会照着它去找文件。曾有一轮 229 秒的失败导出,唯一的现场就是被这句话许诺、
+    /// 实则从未存在的日志。
+    /// </summary>
+    [Fact]
+    public void 日志文件不在时不说它被留下了()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "rs-lognote-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var absent = ExportCommand.GameLogNote(dir);
+            Assert.DoesNotContain("kept at", absent, StringComparison.Ordinal);
+            Assert.Contains("no log file", absent, StringComparison.Ordinal);
+
+            File.WriteAllText(Path.Combine(dir, ExportCommand.GameLogName), "something\n");
+            var present = ExportCommand.GameLogNote(dir);
+            Assert.Contains("kept at", present, StringComparison.Ordinal);
+            Assert.Contains(Path.Combine(dir, ExportCommand.GameLogName), present, StringComparison.Ordinal);
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
+    /// <summary>
+    /// 「游戏最后的输出」要从日志文件里取。<c>-logFile</c> 一生效,stdout 就只剩 Unity 那三十行
+    /// memorysetup 配置块(实测 1771 字节),照着它印等于把噪音当现场交出去。
+    /// 文件读不到才退回 stdout —— 那是唯一还剩点东西的地方。
+    /// </summary>
+    [Fact]
+    public void 最后几行优先取自日志文件()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "rs-lastlines-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(dir);
+        var log = Path.Combine(dir, ExportCommand.GameLogName);
+        var stdout = new StringBuilder("memorysetup-temp-allocator-size-gfx=262144\n");
+        try
+        {
+            // 文件不在:退回 stdout。
+            Assert.Contains("memorysetup", ExportCommand.LastLines(log, stdout), StringComparison.Ordinal);
+
+            File.WriteAllText(log, "loading defs\nNullReferenceException in PlayDataLoader\n");
+            var fromFile = ExportCommand.LastLines(log, stdout);
+            Assert.Contains("NullReferenceException", fromFile, StringComparison.Ordinal);
+            Assert.DoesNotContain("memorysetup", fromFile, StringComparison.Ordinal);
+
+            // 空文件也算读不到 —— 空着的现场不该把 stdout 那点东西挤掉。
+            File.WriteAllText(log, "   \n");
+            Assert.Contains("memorysetup", ExportCommand.LastLines(log, stdout), StringComparison.Ordinal);
+        }
+        finally { Directory.Delete(dir, recursive: true); }
     }
 
     /// <summary>

@@ -173,10 +173,17 @@ public sealed class ExportCommand : Command
         {
             $"-savedatafolder={temp}",
             $"-{IntermediateFormat.CommandLineSwitch}={outFile}",
-            // 日志必须落在我们指定的地方:Unity 默认那份 LocalLow\Player.log 在挂死的一次跑里
-            // 可能一个字都不写。
-            $"-logfile={Path.Combine(temp, GameLogName)}",
         };
+        // 日志必须落在我们指定的地方:Unity 默认那份 LocalLow\Player.log 在挂死的一次跑里
+        // 可能一个字都不写。
+        //
+        // **空格分隔,不是 `key=value`** —— Unity 自己解析这个开关,不认带等号的写法,
+        // 而且不认就整个静默忽略。2026-09-07 四种写法各起一次游戏实测:
+        // `-logfile=<p>` / `-logFile=<p>` 都不建文件(1.4M 日志全从 stdout 出),
+        // `-logfile <p>` / `-logFile <p>` 都写出 1.4M 的文件、stdout 只剩 1771 字节的
+        // memorysetup 块。大小写不影响,分隔方式影响。
+        argv.Add("-logFile");
+        argv.Add(Path.Combine(temp, GameLogName));
         if (!showWindow) { argv.Add("-batchmode"); argv.Add("-nographics"); }
         // 无值开关。游戏侧读它用的是 CommandLineArgPassed —— 那一支不认 `key=value`,
         // 所以这里也不许写成 `-x=1`。
@@ -295,13 +302,43 @@ public sealed class ExportCommand : Command
     }
 
     /// <summary>
-    /// 失败时才从游戏日志里取最后几行 —— 平常那几十行是 Unity 启动横幅,只在什么都没产出时
-    /// 才构成线索。
+    /// 失败信息里交代游戏日志在哪。**文件真在才说它被留下了** —— 这句话是诊断路径上唯一的
+    /// 指路牌,指到一个不存在的文件比不说更贵:人会去找,找不到,然后怀疑是自己看错了目录。
     /// </summary>
-    private static string LastLines(StringBuilder log, int n = 5)
+    public static string GameLogNote(string temp)
     {
-        var lines = log.ToString()
-                       .Split('\n')
+        var path = Path.Combine(temp, GameLogName);
+        return File.Exists(path)
+            ? $" The game's own log was kept at {path}."
+            : $" The game wrote no log file at {path}.";
+    }
+
+    /// <summary>
+    /// 游戏最后说的几行。**先读日志文件,读不到才退回 stdout** —— <c>-logFile</c> 生效之后
+    /// stdout 只剩 Unity 那三十行 memorysetup 配置块(实测 1771 字节),拿它当「游戏最后的
+    /// 输出」印出来是纯噪音;真内容都在文件里。
+    /// </summary>
+    public static string LastLines(string logPath, StringBuilder stdout, int n = 5)
+    {
+        string text;
+        try
+        {
+            // 共享打开:这条路径上进程刚被 kill,句柄未必已经放干净。
+            using var fs = new FileStream(logPath, FileMode.Open, FileAccess.Read,
+                                          FileShare.ReadWrite | FileShare.Delete);
+            using var sr = new StreamReader(fs);
+            text = sr.ReadToEnd();
+        }
+        catch (IOException) { text = ""; }
+        catch (UnauthorizedAccessException) { text = ""; }
+
+        if (text.Trim().Length == 0) text = stdout.ToString();
+        return LastLines(text, n);
+    }
+
+    private static string LastLines(string log, int n)
+    {
+        var lines = log.Split('\n')
                        .Select(l => l.TrimEnd('\r'))
                        .Where(l => l.Trim().Length > 0)
                        .ToList();
@@ -473,8 +510,8 @@ public sealed class ExportCommand : Command
                 try { proc.Kill(entireProcessTree: true); } catch { /* 已经退了 */ }
 
                 // 失败时临时目录留着 —— 游戏日志在里面,是唯一的现场。
-                throw new CliUsageException(stall + LastLines(gameLog) +
-                    $" The game's own log was kept at {Path.Combine(temp, GameLogName)}.");
+                throw new CliUsageException(stall + LastLines(Path.Combine(temp, GameLogName), gameLog) +
+                    GameLogNote(temp));
             }
         }
 
@@ -489,8 +526,8 @@ public sealed class ExportCommand : Command
                     ? ""
                     : " If it is enabled, a mod in the list may need a graphics device while loading: " +
                       "retry with --show-window.") +
-                LastLines(gameLog) +
-                $" The game's own log was kept at {Path.Combine(temp, GameLogName)}.");
+                LastLines(Path.Combine(temp, GameLogName), gameLog) +
+                GameLogNote(temp));
 
         // 与 `snapshot import` 同一个口径:收割默认开,只有显式否定才关 —— 两条路都能造快照。
         var importer = new SnapshotImporter
