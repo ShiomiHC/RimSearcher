@@ -172,8 +172,10 @@ public sealed class EconomyCommand : Command
                        "when it already is the marketValue. Any other null means the game cannot work " +
                        "that number out; it is never a stand-in for zero. Always an array, including when " +
                        "one defName matched exactly, so the shape does not change with the kind of match. " +
-                       "Every key above is present either way; the text table drops seven of them when " +
-                       "listing the layer, to keep the rows readable, but the JSON never does. " +
+                       // 「少七列」不点名的话,想要其中一列的读者读不出该不该改走 --json。
+                       "Every key above is present either way; when listing the layer the text table leaves " +
+                       "out marketValueDefined, costList, costDifficultyInverted, producible, madeFromStuff, " +
+                       "isWeapon and isApparel, and the JSON never does. " +
                        "The text output tags cost numbers whose def declares a difficulty variant; here " +
                        "the numbers stay bare and costDifficultyVar/costDifficultyInverted carry that " +
                        "instead, so a number never arrives as a string.",
