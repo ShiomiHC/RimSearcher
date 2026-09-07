@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using RimSearcher.DataMod;
@@ -250,6 +250,102 @@ public class ExporterTests
         Assert.DoesNotContain("comps", paths);
         Assert.DoesNotContain("nested", paths);
         Assert.DoesNotContain("comps[1].compClass", paths);
+    }
+
+    // ---- 类型全集的记忆化:必须与朴素展开逐条相同 ----
+
+    private class TW_Root { public TW_A a = new(); public TW_B b = new(); }
+    private class TW_A { public TW_B b = new(); public int x; }
+    private class TW_B { public TW_A a = new(); public TW_C c = new(); public int y; }
+    private class TW_C { public int z; }
+    private class TW_List { public List<TW_A> items = new(); public TW_A one = new(); }
+
+    // 两条**等长**的路径通到同一个类型 —— 等长是关键:预算一样,(类型, 预算) 这个键
+    // 才会在两条祖先链上同时出现,错误的缓存复用才有机会发生。第一版闸的类型图两条路
+    // 一长一短,键永远不撞,于是注入了错误也照样全绿。
+    private class TW_Shared { public TW_W2 w2 = new(); public TW_W1 w1 = new(); }
+    private class TW_W1 { public TW_Deep d = new(); public int p; }
+    private class TW_W2 { public TW_Deep d = new(); public int q; }
+    private class TW_Deep { public TW_Back back = new(); public int y; }
+    private class TW_Back { public TW_W1 w1 = new(); public int z; }
+
+    /// <summary>
+    /// 改造前那版的逐行复刻,只用来当参照物。**不许拿被测代码去验被测代码** ——
+    /// 记忆化要证的正是「换了实现,吐出来的还是同一批」。
+    /// </summary>
+    private static HashSet<string> NaiveCollect(Type type, int maxDepth)
+    {
+        var into = new HashSet<string>(StringComparer.Ordinal);
+        var stack = new HashSet<Type>();
+        Walk(type, "", 0);
+        return into;
+
+        void Walk(Type t, string prefix, int depth)
+        {
+            if (t == null || !stack.Add(t)) return;
+            try
+            {
+                foreach (var f in FieldWalk.InstanceFields(t))
+                {
+                    var ft = Nullable.GetUnderlyingType(f.FieldType) ?? f.FieldType;
+                    var path = prefix.Length == 0 ? f.Name : prefix + "." + f.Name;
+                    if (TypeFieldWalk.DefaultIsLeaf(ft)) { into.Add(path); continue; }
+                    if (ft != typeof(string) && typeof(System.Collections.IEnumerable).IsAssignableFrom(ft))
+                    {
+                        if (depth >= maxDepth) continue;
+                        var elem = NestedClass.ElementType(ft);
+                        if (elem == null) continue;
+                        elem = Nullable.GetUnderlyingType(elem) ?? elem;
+                        var ix = path + "[0]";
+                        if (TypeFieldWalk.DefaultIsLeaf(elem)) { into.Add(ix); continue; }
+                        if (elem.IsClass && elem != typeof(string)) into.Add(ix + ".Class");
+                        Walk(elem, ix, depth + 1);
+                        continue;
+                    }
+                    if (depth >= maxDepth) continue;
+                    if (ft.IsClass && ft != typeof(string)) into.Add(path + ".Class");
+                    Walk(ft, path, depth + 1);
+                }
+            }
+            finally { stack.Remove(t); }
+        }
+    }
+
+    /// <summary>
+    /// 这个类型图是照着记忆化**会出错的那一种形状**造的:B 在 `root.b` 下面展开得到
+    /// `b.a.x`,在 `root.a.b` 下面却因为 A 已在祖先链上而被截断。两处的 (B, 预算) 完全
+    /// 相同,结果却不同 —— 缓存条目一旦跨祖先链复用,`a.b.a.x` 就会凭空冒出来。
+    ///
+    /// 这不是假想:实测里第一版记忆化正是这么错的,而它跑得更快、行数更多,
+    /// 从外面看像是「捡回了更多路径」。
+    /// </summary>
+    [Theory]
+    [InlineData(1)] [InlineData(2)] [InlineData(3)] [InlineData(4)] [InlineData(6)] [InlineData(9)]
+    public void 类型全集记忆化与朴素展开逐条相同(int depth)
+    {
+        foreach (var root in new[] { typeof(TW_Root), typeof(TW_A), typeof(TW_B), typeof(TW_List),
+                                     typeof(TW_Shared), typeof(TW_W1), typeof(TW_Deep) })
+        {
+            var fast = TypeFieldWalk.Collect(root, depth, _ => false, TypeFieldWalk.DefaultIsLeaf);
+            var naive = NaiveCollect(root, depth);
+            Assert.Equal(naive.OrderBy(x => x, StringComparer.Ordinal),
+                         fast.OrderBy(x => x, StringComparer.Ordinal));
+        }
+    }
+
+    [Fact]
+    public void 同一类型在不同祖先链下的截断不许互相污染()
+    {
+        var paths = TypeFieldWalk.Collect(typeof(TW_Root), 4, _ => false, TypeFieldWalk.DefaultIsLeaf);
+        // root.b 那一支:B 之上没有 A,所以 A 展得开。
+        Assert.Contains("b.a.x", paths);
+        // root.a 那一支:A 已在祖先链上,b.a 必须停在这里 —— 它自己那条 .Class 照发
+        // (那一句在递归**之前**,报的是「这个位置是多态的」,不是「底下展开了」)。
+        Assert.DoesNotContain("a.b.a.x", paths);
+        Assert.Contains("a.b.a.Class", paths);
+        // 两支都够得着的那个,两边都在。
+        Assert.Contains("a.b.c.z", paths);
+        Assert.Contains("b.c.z", paths);
     }
 
     // ---- 打完补丁的合并文档 ----

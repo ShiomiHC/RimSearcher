@@ -23,11 +23,17 @@ namespace RimSearcher.DataMod
         public static HashSet<string> Collect(Type type, int maxDepth,
                                               Func<FieldInfo, bool> skip,
                                               Func<Type, bool> isLeaf)
-        {
-            var into = new HashSet<string>(StringComparer.Ordinal);
-            Walk(type, "", 0, maxDepth, skip, isLeaf, into, new HashSet<Type>());
-            return into;
-        }
+            => For(skip, isLeaf).Collect(type, maxDepth);
+
+        /// <summary>
+        /// 一批类型共用一个 walker —— 缓存就靠这个跨类型复用,而收益全在这里:
+        /// 222 个 Def 子类共享基类那棵字段树,朴素走法把它重算 222 遍。
+        ///
+        /// 缓存**挂在实例上而不是静态字段上**,因为结果是 skip / isLeaf 这两个判据的函数。
+        /// 挂静态就会让两次判据不同的调用互相串味,而串味出来的路径集看着完全正常。
+        /// </summary>
+        public static Walker For(Func<FieldInfo, bool> skip, Func<Type, bool> isLeaf)
+            => new Walker(skip, isLeaf);
 
         /// <summary>测试用的默认叶子:原语、枚举、字符串、Type。</summary>
         public static bool DefaultIsLeaf(Type type)
@@ -39,55 +45,119 @@ namespace RimSearcher.DataMod
             return false;
         }
 
-        private static void Walk(Type type, string prefix, int depth, int maxDepth,
-                                 Func<FieldInfo, bool> skip, Func<Type, bool> isLeaf,
-                                 HashSet<string> into, HashSet<Type> stack)
+        internal sealed class Walker
         {
-            if (type == null) return;
-            if (!stack.Add(type)) return;
-            try
+            private readonly Func<FieldInfo, bool> _skip;
+            private readonly Func<Type, bool> _isLeaf;
+
+            // 一棵子树连它**走到过哪些类型**一起缓存。复用的前提不是「上次没被截断」,
+            // 而是「这次的祖先链与它无交集」—— 同一个 (类型, 预算) 在两条祖先链下的
+            // 结果可以不同(TW_Root 那个闸就是照这个形状造的),只记前者会把一次没截断的
+            // 结果搬到会截断的路径上,凭空多出一批路径,而且跑得更快、看着像捡回了更多。
+            private readonly Dictionary<Key, Entry> _memo = new Dictionary<Key, Entry>();
+
+            public Walker(Func<FieldInfo, bool> skip, Func<Type, bool> isLeaf)
             {
-                foreach (var field in FieldWalk.InstanceFields(type))
+                _skip = skip;
+                _isLeaf = isLeaf;
+            }
+
+            public HashSet<string> Collect(Type type, int maxDepth)
+            {
+                var into = new HashSet<string>(StringComparer.Ordinal);
+                var e = Sub(type, maxDepth, new HashSet<Type>());
+                foreach (var p in e.Paths) into.Add(p);
+                return into;
+            }
+
+            private Entry Sub(Type type, int budget, HashSet<Type> stack)
+            {
+                if (type == null) return Entry.Empty;
+
+                var key = new Key(type, budget);
+                Entry hit;
+                if (_memo.TryGetValue(key, out hit) && !hit.Touched.Overlaps(stack))
+                    return hit;
+
+                var paths = new List<string>();
+                var touched = new HashSet<Type> { type };
+                var clipped = false;
+                stack.Add(type);
+                try
                 {
-                    if (skip != null && skip(field)) continue;
-                    var ft = UnwrapNullable(field.FieldType);
-                    var path = prefix.Length == 0 ? field.Name : prefix + "." + field.Name;
-
-                    if (isLeaf(ft))
+                    foreach (var field in FieldWalk.InstanceFields(type))
                     {
-                        into.Add(path);
-                        continue;
-                    }
+                        if (_skip != null && _skip(field)) continue;
+                        var ft = UnwrapNullable(field.FieldType);
 
-                    if (IsCollection(ft))
-                    {
-                        if (depth >= maxDepth) continue;
-                        var elem = NestedClass.ElementType(ft);
-                        if (elem == null) continue;
-                        elem = UnwrapNullable(elem);
-                        var indexed = path + "[0]";
-                        if (isLeaf(elem))
+                        if (_isLeaf(ft)) { paths.Add(field.Name); continue; }
+
+                        if (IsCollection(ft))
                         {
-                            into.Add(indexed);
+                            if (budget <= 0) continue;
+                            var elem = NestedClass.ElementType(ft);
+                            if (elem == null) continue;
+                            elem = UnwrapNullable(elem);
+                            var indexed = field.Name + "[0]";
+                            if (_isLeaf(elem)) { paths.Add(indexed); continue; }
+                            MaybeClass(indexed, elem, paths);
+                            Descend(elem, indexed, budget - 1, stack, paths, touched, ref clipped);
                             continue;
                         }
-                        MaybeClass(indexed, elem, into);
-                        Walk(elem, indexed, depth + 1, maxDepth, skip, isLeaf, into, stack);
-                        continue;
-                    }
 
-                    if (depth >= maxDepth) continue;
-                    MaybeClass(path, ft, into);
-                    Walk(ft, path, depth + 1, maxDepth, skip, isLeaf, into, stack);
+                        if (budget <= 0) continue;
+                        MaybeClass(field.Name, ft, paths);
+                        Descend(ft, field.Name, budget - 1, stack, paths, touched, ref clipped);
+                    }
+                }
+                finally { stack.Remove(type); }
+
+                var entry = new Entry(paths, touched) { Clipped = clipped };
+                // 这一趟被祖先链截断过,结果就只对这条路径成立,不进缓存。
+                if (!clipped) _memo[key] = entry;
+                return entry;
+            }
+
+            private void Descend(Type next, string prefix, int budget, HashSet<Type> stack,
+                                 List<string> paths, HashSet<Type> touched, ref bool clipped)
+            {
+                if (stack.Contains(next)) { touched.Add(next); clipped = true; return; }
+                var sub = Sub(next, budget, stack);
+                foreach (var p in sub.Paths) paths.Add(prefix + "." + p);
+                touched.UnionWith(sub.Touched);
+                if (sub.Clipped) clipped = true;
+            }
+
+            private void MaybeClass(string path, Type type, List<string> into)
+            {
+                if (type.IsClass && type != typeof(string)) into.Add(path + ".Class");
+            }
+
+            private struct Key : IEquatable<Key>
+            {
+                private readonly Type _type;
+                private readonly int _budget;
+                public Key(Type type, int budget) { _type = type; _budget = budget; }
+                public bool Equals(Key other) => _type == other._type && _budget == other._budget;
+                public override bool Equals(object obj) => obj is Key k && Equals(k);
+                public override int GetHashCode() => (_type == null ? 0 : _type.GetHashCode()) * 397 ^ _budget;
+            }
+
+            private sealed class Entry
+            {
+                public static readonly Entry Empty =
+                    new Entry(new List<string>(), new HashSet<Type>());
+
+                public readonly List<string> Paths;
+                public readonly HashSet<Type> Touched;
+                public bool Clipped;
+
+                public Entry(List<string> paths, HashSet<Type> touched)
+                {
+                    Paths = paths;
+                    Touched = touched;
                 }
             }
-            finally { stack.Remove(type); }
-        }
-
-        private static void MaybeClass(string path, Type type, HashSet<string> into)
-        {
-            if (type.IsClass && type != typeof(string))
-                into.Add(path + ".Class");
         }
 
         private static bool IsCollection(Type type)
