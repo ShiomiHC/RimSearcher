@@ -2202,6 +2202,31 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// `--path-contains` 过滤过的那个数,**分母跟它同句**。
+    ///
+    /// `fields` 那侧此前只印命中数,而句式与不加过滤时逐字同形(「N field paths on
+    /// ThingDef」),于是一个已经被滤过的数读起来像这个类型的全部,滤掉了多少一个字没有。
+    /// `get` 那侧一直是「命中 out of 总数」——同一个问题两条命令两种口径。
+    /// </summary>
+    [Fact]
+    public void 过滤过的计数带着自己的分母()
+    {
+        var (all, _, _) = Fixture.Run("fields", "ThingDef");
+        var total = int.Parse(all.Split(' ')[0]);
+
+        var (some, _, code) = Fixture.Run("fields", "ThingDef", "--path-contains", "comps");
+        Assert.Equal(0, code);
+        Assert.Contains($"out of {total} field paths on ThingDef", some, StringComparison.Ordinal);
+        // 分母得真是分母:过滤后的数不许与它相等,否则这条闸测不到东西。
+        Assert.DoesNotContain($"{total} field paths, out of", some, StringComparison.Ordinal);
+
+        // get 那侧同句同形 —— 两条命令问的是同一件事。
+        var (one, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--path-contains", "comps");
+        Assert.Contains("out of", one, StringComparison.Ordinal);
+        Assert.Contains("Matching 'comps'", one, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 「本快照没有」在读的人眼里就是「这东西不存在」,所以 `where` 落空也要说破别处有。
     ///
     /// 叠加不替换:本快照那句成因分流一个字不许少,别处那句排在它**后面**。
@@ -2793,11 +2818,16 @@ public class GrammarTests
             // 总数在计数句里,而计数句在 notes —— 直接读行数会被 --limit 骗。
             var text = string.Join(" ", doc.RootElement.GetProperty("notes")
                           .EnumerateArray().Select(n => n.GetProperty("text").GetString()));
+            // 过滤那句现在自带分母(「Matching 'comps': N field paths, out of M ...」),
+            // 于是「取最大的那个数」会一律取到 M —— 换个 --path-contains 它都不变,
+            // 这条闸就恒绿。要的是命中数 N,它只出现在 out of 前面。
+            var hit = System.Text.RegularExpressions.Regex.Match(
+                text, @"(\d+)\s+field paths?, out of");
+            if (hit.Success) return int.Parse(hit.Groups[1].Value);
+
             var m = System.Text.RegularExpressions.Regex.Match(text, @"(\d+)\s+field paths?");
             Assert.True(m.Success, $"'{string.Join(" ", argv)}' 的计数句里读不到总数: {text}");
-            // 「N of M」时要的是 M。
-            var all = System.Text.RegularExpressions.Regex.Matches(text, @"(\d+)\s+field paths?");
-            return all.Select(x => int.Parse(x.Groups[1].Value)).Max();
+            return int.Parse(m.Groups[1].Value);
         }
 
         var onlyComps = Total("fields", "ThingDef", "--path-contains", "comps", "--limit", "1");

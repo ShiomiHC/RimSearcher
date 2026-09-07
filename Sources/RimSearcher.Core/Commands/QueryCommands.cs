@@ -689,26 +689,14 @@ public sealed class GetCommand : Command
                         : [];
 
                     ctx.Report.Notice(NoticeKind.Filter,
-                        $"Matching {PathFilterText.Say(paths)}{whose}: " +
-                        $"{Tally.Complete(matched).Render("field")}, out of " +
-                        $"{Tally.Complete(total).Render("field")} on the def." +
-                        (whole == 0
-                            // 这里不能下存在性的强断言:「前缀式列举」是正常用法,而要找的
-                            // 字段往往就在这句话下面那张表里。只摆事实,并说破这句 Filter
-                            // **一行都没滤掉** —— 上一句的「N out of M」会被读成表已经被剔过。
-                            ? $" None of those has {PathFilterText.Say(paths)} as a whole path segment: each match contains " +
-                              "it inside a longer name, and this line removes none of them." +
-                              (alsoValue.Count > 0
-                                  ? " This def also carries " +
-                                    $"{PathFilterText.Say(alsoValue)} as a field's value, not in any path. " +
-                                    "A name/value pair puts the field's own name in the value column " +
-                                    "(statBases[N].stat = MarketValue), where --path-contains cannot reach it — " +
-                                    $"'rimsearcher where --value {alsoValue[0]}' goes at it from that side."
-                                  : "")
-                            : whole < matched
-                                ? $" Whole path segment: {Tally.Complete(whole).Render("field")}; " +
-                                  $"inside a longer name: {Tally.Complete(matched - whole).Render("field")}."
-                                : ""));
+                        PathFilterSummary.Say(paths, "on the def", "field", matched, total, whole, whose) +
+                        (alsoValue.Count > 0
+                            ? " This def also carries " +
+                              $"{PathFilterText.Say(alsoValue)} as a field's value, not in any path. " +
+                              "A name/value pair puts the field's own name in the value column " +
+                              "(statBases[N].stat = MarketValue), where --path-contains cannot reach it — " +
+                              $"'rimsearcher where --value {alsoValue[0]}' goes at it from that side."
+                            : ""));
                     if (fields.Count < matched)
                         // 同 ReadCommand 那处:自己拼句子,于是没跟上 ece5f54 换的文法。
                         // "Showing" 前缀跟着去掉 —— 新文法里 "showing" 已经在句中了。
@@ -2481,16 +2469,17 @@ public sealed class FieldsCommand : Command
 
         ctx.Report.PageNotice("field path", rows.Count, offset, total, $" on {type}");
 
-        // 与 `get --path-contains` 同一条纪律:子串匹配不留痕。这里的代价更大 —— 这条命令是
-        // 「这个类型有没有这个字段」的正式问法,而「一条都不是整段」正是「没有」的形状。
-        if (filters.Count > 0 && whole < total)
+        // 与 `get --path-contains` 同一条纪律,而且是同一句话(产地 PathFilterSummary):
+        // 子串匹配不留痕,这里的代价更大 —— 这条命令是「这个类型有没有这个字段」的正式
+        // 问法,而「一条都不是整段」正是「没有」的形状。
+        //
+        // 分母另查一次:上面那个 total 已经被 --path-contains 滤过,而分页那句
+        // 「N field paths on {type}」与不加过滤时逐字同形 —— 不把分母说进来,读者
+        // 拿不到「滤掉了多少」。
+        if (filters.Count > 0)
             ctx.Report.Notice(NoticeKind.Filter,
-                whole == 0
-                    ? $"None of {type}'s matched paths has {PathFilterText.Say(filters)} as a whole path " +
-                      "segment: each match contains it inside a longer name, and this line removes none of " +
-                      $"the {Tally.Complete(total).Render("field path")} that matched."
-                    : $"On {type}, whole path segment: {Tally.Complete(whole).Render("field path")}; " +
-                      $"inside a longer name: {Tally.Complete(total - whole).Render("field path")}.");
+                PathFilterSummary.Say(filters, $"on {type}", "field path",
+                                      total, ctx.Db.FieldPathsForType(type, 1).Total, whole));
 
         // 截断声明不在这儿发:它圈的是整个 def 类型(与 --path-contains 无关 —— 表已经按
         // --path-contains 滤过,而被砍掉的字段本来就不在表里,按 --path-contains 收窄这个数
@@ -2874,6 +2863,34 @@ internal static class PathFilterText
 {
     public static string Say(IReadOnlyList<string> parts)
         => parts.Count == 1 ? $"'{parts[0]}'" : string.Join(" or ", parts.Select(p => $"'{p}'"));
+}
+
+/// <summary>
+/// 「<c>--path-contains</c> 命中了几条、总共几条、其中整段的几条」这一句。产地唯一 ——
+/// <c>get</c> 问一个 def、<c>fields</c> 问一个类型,问的是同一件事。
+///
+/// **分母与命中数同句**。`fields` 那侧此前只印命中数,而句式与不加过滤时逐字同形
+/// (「2863 field paths on QuestScriptDef」,不加过滤是「3094 field paths on
+/// QuestScriptDef」),于是一个已经被滤过的数读起来像这个类型的全部,而滤掉了多少
+/// 一个字都没有。整段/子串那半句原先另发一条,得读者自己把 2854 + 9 加回 2863。
+///
+/// 整段那半句不许收在存在性的强断言上:「前缀式列举」是正常用法,要找的字段往往就在
+/// 这句话下面那张表里。只摆事实,并说破这一行**一条都没滤掉** —— 前半句的
+/// 「N out of M」会被读成表已经被剔过。
+/// </summary>
+internal static class PathFilterSummary
+{
+    public static string Say(IReadOnlyList<string> filters, string subject, string noun,
+                             int matched, int total, int whole, string whose = "")
+        => $"Matching {PathFilterText.Say(filters)}{whose}: {Tally.Complete(matched).Render(noun)}, " +
+           $"out of {Tally.Complete(total).Render(noun)} {subject}." +
+           (whole == 0
+               ? $" None of those has {PathFilterText.Say(filters)} as a whole path segment: each match " +
+                 "contains it inside a longer name, and this line removes none of them."
+               : whole < matched
+                   ? $" Whole path segment: {Tally.Complete(whole).Render(noun)}; " +
+                     $"inside a longer name: {Tally.Complete(matched - whole).Render(noun)}."
+                   : "");
 }
 
 internal static class DefTypeMiss

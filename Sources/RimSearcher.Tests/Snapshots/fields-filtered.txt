@@ -2,6 +2,7 @@ $ rimsearcher fields ThingDef --path-contains comps
 exit 0
 --- stdout ---
 5 field paths on ThingDef within --path-contains comps.
+Matching 'comps': 5 field paths, out of 26 field paths on ThingDef.
 
 Defs that may be missing from this answer, their export cut short — all of ThingDef, whatever --path-contains says
 def_type  defs_cut_short
