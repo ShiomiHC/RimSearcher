@@ -254,7 +254,10 @@ public class SkillPromiseTests
         // 改后的措辞刻意收在这道闸证得到的两件事上:形状被印出来(那条 leaf 断言),
         // 粘回去只剩一条(那条 pinned 断言)。**不写「path 列」** —— 闸证的是它出现在输出里,
         // 而单形状那一档它根本不在列里。
-        new("the output names those shapes,\n  and passing one back with `--exact-path` keeps that one alone",
+        // 2026-09-09 改写:原句「passing one back with --exact-path」没写命令形状,而这个
+        // 开关在 where 上是旗、在 get 上收值。实测有人照着这句敲成
+        // `where texPath --exact-path graphicData.texPath`,那条路径被当成了**值**。
+        new("the output names those shapes;\n  rerun as `where <that shape> --exact-path` to keep that one alone",
             nameof(GrammarTests.点路径的后缀按段对齐而exactpath再钉成整条)),
         new("`[]` stands for any index on the positional path of `where` and `values`, and on every\n  `--path-contains`",
             nameof(GrammarTests.下标通配在每个收路径的入口都认)),

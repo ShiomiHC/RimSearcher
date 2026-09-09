@@ -2251,7 +2251,8 @@ public class GrammarTests
         // 下面那张表里,所以「这一行一条都没滤掉」这半句是承重的。
         // (原先还钉「nothing here is called exactly that」:那是把上面这句机制翻译成
         //  两种读法让人挑,机制自己已经说全,已删。)
-        Assert.Contains("removes none of them", get0, StringComparison.Ordinal);
+        Assert.Contains("Nothing is filtered out for that", get0, StringComparison.Ordinal);
+        Assert.Contains("every match is in the table below", get0, StringComparison.Ordinal);
         // 而「这一行没滤掉什么」说完,还得说得出想滤该敲什么 —— 2026-09-09 之前这一族
         // 没有 --exact-path,于是这句话到此为止,自陈无出路。两句都钉:补出路时把
         // 上面那半句顶掉,「你要的东西被藏起来了」这种误读就没人挡了。

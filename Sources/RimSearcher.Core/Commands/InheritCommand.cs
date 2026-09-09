@@ -98,7 +98,11 @@ public sealed class InheritCommand : Command
                 Key = "nodes",
                 Rows = true,
                 What = "one object per XML node answering to the names — each with 'node' (identity and patch " +
-                       "count), 'ancestors', 'children' when it has any, and 'witnesses' when --path-contains is given. " +
+                       // 本轮把 --exact-path 补到 inherit 之后这句就少说了一个开关 ——
+                       // 两个都出见证表。只写 --path-contains 的话,要整条路径的读者会
+                       // 以为那个键拿不到,改敲子串。
+                       "count), 'ancestors', 'children' when it has any, and 'witnesses' when --path-contains " +
+                       "or --exact-path is given. " +
                        "With several names the objects come in the order the names were given; a name that " +
                        "matched nothing has no object here and one note in 'notes' that quotes it.",
             },

@@ -29,7 +29,7 @@ Global options (every command takes these, written after the command):
       --config <path>    Use this config file instead of the default one.
 
 --json keys (besides 'notes'):
-  nodes  one object per XML node answering to the names — each with 'node' (identity and patch count), 'ancestors', 'children' when it has any, and 'witnesses' when --path-contains is given. With several names the objects come in the order the names were given; a name that matched nothing has no object here and one note in 'notes' that quotes it.
+  nodes  one object per XML node answering to the names — each with 'node' (identity and patch count), 'ancestors', 'children' when it has any, and 'witnesses' when --path-contains or --exact-path is given. With several names the objects come in the order the names were given; a name that matched nothing has no object here and one note in 'notes' that quotes it.
 
 Examples:
   rimsearcher inherit BaseBullet

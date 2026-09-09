@@ -84,10 +84,14 @@ public sealed class ReadCommand : Command
                 Name = "lines",
                 Aliases = ["line", "range", "line-range"],
                 Placeholder = "<a-b|a+n|a>",
+                // 「不给就是整份文件」紧挨着写法列举,不放在 --limit 那句后面 ——
+                // 放后面时它的 `it` 会被读成 --limit(撤掉 `--lines all` 后这句是要整份
+                // 文件的人唯一的落点,读错方向就没了)。两处代词都点名到选项。
                 Help = "Read raw lines instead: '400-460' is inclusive (',' and ':' work in place of the " +
                        "'-'), '400+60' is sixty lines from 400, '400' starts there and runs to the end of " +
-                       "the file. Whatever it asks for is printed in full unless --limit says otherwise — " +
-                       "that is also what shortens a start-only '400'. Without it the whole file is read.",
+                       "the file. Without --lines the whole file is read. Whatever --lines asks for is " +
+                       "printed in full unless --limit says otherwise — that is also what shortens a " +
+                       "start-only '400'.",
             },
             // 同一个区间的两个数各占一个选项。这是**别处工具的通行写法**,而不是这条
             // 命令的第二种口味:真实调用里 --start 与 --end 各 64 次 / 49 份会话、完全
@@ -810,11 +814,15 @@ public sealed class ReadCommand : Command
         if (!Same(normalized, given.Replace(" ", ""))) rewritten = normalized;
         spec = normalized;
 
-        int At(string s, string what)
+        // what 只在写法分成两半时给。整个 spec 就是一个数时不补「(the start)」——
+        // 那个括号存在的理由是指出坏的是哪一半,而此时没有另一半;敲 `--lines all`
+        // 的人要的是整份文件,读到「start」只会去猜起点该填几。
+        int At(string s, string? what)
             => int.TryParse(s.Trim(), out var v) && v > 0
                 ? v
                 : throw new CliUsageException(
-                    $"--lines wants line numbers from 1 up; '{s.Trim()}' is not one ({what}). " +
+                    $"--lines wants line numbers from 1 up; '{s.Trim()}' is not one" +
+                    (what is null ? ". " : $" ({what}). ") +
                     "Write it as '400-460', '400+60', or '400'.");
 
         // 起点加个数,算在 long 上再收回来:window 可能是 int.MaxValue(没给 --limit),
@@ -840,7 +848,7 @@ public sealed class ReadCommand : Command
             return (from, End(from, count));
         }
 
-        var only = At(spec, "the start");
+        var only = At(spec, null);
         return (only, End(only, window));
     }
 

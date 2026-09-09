@@ -100,8 +100,8 @@ a different question. None of them announces itself.
   `extraGenSteps[N]`; `fields MapGeneratorDef --path-contains enStep` reaches both because
   it is a substring), and a dotted one matches whole segments the same way —
   `where graphicData.shaderType` does not collect `swimmingGraphicData.shaderType`.
-  It is still a suffix, so segments can sit above it — the output names those shapes,
-  and passing one back with `--exact-path` keeps that one alone.
+  It is still a suffix, so segments can sit above it — the output names those shapes;
+  rerun as `where <that shape> --exact-path` to keep that one alone.
   `[]` stands for any index on the positional path of `where` and `values`, and on every
   `--path-contains`: `comps[].props.energyMax` matches every `comps[N].props.energyMax`.
 - **`get --path-contains` and `where --value` match substrings too** — `--path-contains soundImpact`

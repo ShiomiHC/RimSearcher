@@ -12,7 +12,7 @@ mod            ludeon.rimworld
 source         Buildings_Special.xml
 inherits_from  BaseProjectile (see 'rimsearcher inherit Firefoam')
 xml            not indexed (exporter 0.2.0)
-Matching 'raphicData' of Firefoam (ThingDef): 2 fields, out of 8 fields on the def. None of those has 'raphicData' as a whole path segment: each match contains it inside a longer name, and this line removes none of them. Passing one path from the column back as '--exact-path <that path>' keeps that one alone.
+Matching 'raphicData' of Firefoam (ThingDef): 2 fields, out of 8 fields on the def. None of those has 'raphicData' as a whole path segment: each match contains it inside a longer name. Nothing is filtered out for that — every match is in the table below. Passing one path from the column back as '--exact-path <that path>' keeps that one alone.
 
 Same in every row, not repeated below: code_default=no.
 path                                   value

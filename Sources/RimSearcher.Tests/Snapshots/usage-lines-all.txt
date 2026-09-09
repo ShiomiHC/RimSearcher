@@ -2,4 +2,4 @@ $ rimsearcher read vanilla/Verse/Outline.cs --lines all
 exit 2
 --- stdout ---
 --- stderr ---
---lines wants line numbers from 1 up; 'all' is not one (the start). Write it as '400-460', '400+60', or '400'.
+--lines wants line numbers from 1 up; 'all' is not one. Write it as '400-460', '400+60', or '400'.

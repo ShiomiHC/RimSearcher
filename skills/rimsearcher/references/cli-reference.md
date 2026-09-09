@@ -485,7 +485,7 @@ What is shown is the XML before PatchOperations are applied. patch_ops counts xp
 
 | Key | Holds |
 |---|---|
-| `nodes` | one object per XML node answering to the names — each with 'node' (identity and patch count), 'ancestors', 'children' when it has any, and 'witnesses' when --path-contains is given. With several names the objects come in the order the names were given; a name that matched nothing has no object here and one note in 'notes' that quotes it. |
+| `nodes` | one object per XML node answering to the names — each with 'node' (identity and patch count), 'ancestors', 'children' when it has any, and 'witnesses' when --path-contains or --exact-path is given. With several names the objects come in the order the names were given; a name that matched nothing has no object here and one note in 'notes' that quotes it. |
 
 Examples:
 
@@ -751,7 +751,7 @@ Page with --lines, never with a pipe. The first line of the answer says which li
 |---|---|---|
 | `--member` <name> | Read the declaration of this member. Every member of that name in the file is returned; --type narrows it to one declaring type. | `--method`, `--method-name`, `--member-name`, `--property` |
 | `--type` <name> | Read this whole type. With --member it instead says which type the member must belong to. | `--class-name`, `--type-name`, `--extract-class` |
-| `--lines` <a-b|a+n|a> | Read raw lines instead: '400-460' is inclusive (',' and ':' work in place of the '-'), '400+60' is sixty lines from 400, '400' starts there and runs to the end of the file. Whatever it asks for is printed in full unless --limit says otherwise — that is also what shortens a start-only '400'. Without it the whole file is read. | `--line`, `--range`, `--line-range` |
+| `--lines` <a-b|a+n|a> | Read raw lines instead: '400-460' is inclusive (',' and ':' work in place of the '-'), '400+60' is sixty lines from 400, '400' starts there and runs to the end of the file. Without --lines the whole file is read. Whatever --lines asks for is printed in full unless --limit says otherwise — that is also what shortens a start-only '400'. | `--line`, `--range`, `--line-range` |
 | `--start` <n> | Read from this line. With --end it is a range; on its own it runs to the end of the file, which --limit then shortens. Same read as --lines, spelled as two options. |  |
 | `--end` <n> | Read up to and including this line. On its own it starts at line 1. |  |
 | `--source` <name> | Only resolve the file name inside this source tree. 'rimsearcher sources list' names them. | `--root`, `--tree` |

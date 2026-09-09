@@ -3010,9 +3010,12 @@ internal static class PathFilterSummary
     /// 而它目前没有任何实测需求。</item>
     /// </list>
     ///
-    /// 「and this line removes none of them」**不能**被这句顶掉,两句管的是两件事:
-    /// 那句说的是这一行自己没滤掉任何东西(要的字段就在下面表里),这句说的是想滤
-    /// 该敲什么。删掉前者,读者会把「不是整段」读成「你要的东西被藏起来了」。
+    /// 「什么都没被滤掉」那句**不能**被这句顶掉,两句管的是两件事:那句说的是这一行
+    /// 自己没滤掉任何东西(要的字段就在下面表里),这句说的是想滤该敲什么。删掉前者,
+    /// 读者会把「不是整段」读成「你要的东西被藏起来了」。
+    ///
+    /// 2026-09-09 改掉那句里的 this line:它指的是这条注意行自己,而读者手边正有一张表,
+    /// 「line」先被读成表里的一行。改成直说没滤掉、并把落点指到表上。
     /// </summary>
     private const string Pin = " Passing one path from the column back as " +
                                "'--exact-path <that path>' keeps that one alone.";
@@ -3023,7 +3026,8 @@ internal static class PathFilterSummary
            $"out of {Tally.Complete(total).Render(noun)} {subject}." +
            (whole == 0
                ? $" None of those has {PathFilterText.Say(filters)} as a whole path segment: each match " +
-                 "contains it inside a longer name, and this line removes none of them." + Pin
+                 "contains it inside a longer name. Nothing is filtered out for that — every match is " +
+                 "in the table below." + Pin
                : whole < matched
                    ? $" Whole path segment: {Tally.Complete(whole).Render(noun)}; " +
                      $"inside a longer name: {Tally.Complete(matched - whole).Render(noun)}."

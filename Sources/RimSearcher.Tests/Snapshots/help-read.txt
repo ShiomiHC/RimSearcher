@@ -21,7 +21,7 @@ Options:
                            Also accepted: --method, --method-name, --member-name, --property.
       --type <name>        Read this whole type. With --member it instead says which type the member must belong to.
                            Also accepted: --class-name, --type-name, --extract-class.
-      --lines <a-b|a+n|a>  Read raw lines instead: '400-460' is inclusive (',' and ':' work in place of the '-'), '400+60' is sixty lines from 400, '400' starts there and runs to the end of the file. Whatever it asks for is printed in full unless --limit says otherwise — that is also what shortens a start-only '400'. Without it the whole file is read.
+      --lines <a-b|a+n|a>  Read raw lines instead: '400-460' is inclusive (',' and ':' work in place of the '-'), '400+60' is sixty lines from 400, '400' starts there and runs to the end of the file. Without --lines the whole file is read. Whatever --lines asks for is printed in full unless --limit says otherwise — that is also what shortens a start-only '400'.
                            Also accepted: --line, --range, --line-range.
       --start <n>          Read from this line. With --end it is a range; on its own it runs to the end of the file, which --limit then shortens. Same read as --lines, spelled as two options.
       --end <n>            Read up to and including this line. On its own it starts at line 1.
