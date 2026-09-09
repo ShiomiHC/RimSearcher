@@ -71,10 +71,17 @@ public static class CommonOptions
     };
 
     /// <summary>翻页。措辞产地在 <see cref="Report.PageNotice"/>;每条列表命令都认它。</summary>
+    /// <remarks>
+    /// 一个别名都不留。原先挂着 skip / start / page-from,而这三个词在 28377 次真实调用里
+    /// **逐字各 0 次**(主名 --offset 自己 5 次),产地 tools/scan-alias-spelling.py。
+    ///
+    /// 摘掉不是为了短:`start` 同时是 read 上写行区间的第一直觉(--start 与 --end 各
+    /// 64 次 / 49 份会话,完全成对),而它被这里占着,同一个词在 CLI 里就有两个意思。
+    /// 让位之后 read 才收得下它,见 ReadCommand 的 --start。
+    /// </remarks>
     public static OptionSpec Offset(string what) => new()
     {
         Name = "offset",
-        Aliases = ["skip", "start", "page-from"],
         Placeholder = "<n>",
         Help = $"Skip this many {what} before listing. The total is always reported, so you can tell when " +
                "you have reached the end.",

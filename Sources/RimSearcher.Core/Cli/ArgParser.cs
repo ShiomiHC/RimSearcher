@@ -304,9 +304,13 @@ public static class ArgParser
             //
             // 「别的命令收它」在这一支**不说** —— 它与「这里有什么」面对的是同一种局面
             // (本命令没有近似名),而那件事回答不了读者的问题:`export --check` 会被指去
-            // 'docs'(那条判的是文档文件是否最新),`read --start` 会被指去 search / where /
-            // list(那边它是 --offset 的别名,跳过 N 条结果,而写它的人要的是行号)。
+            // 'docs',而那条判的是文档文件是否最新,与要导出的东西无关。
             // 名字在别处存在,不蕴含那边那个就是这里要的东西。
+            //
+            // 这里原先还举 `read --start` 会被指去 search / where / list(那边它是
+            // --offset 的别名)。那个例子 2026-09-09 起不存在了:实测那三个别名逐字
+            // 各 0 次,已从 --offset 摘掉,`--start` 转由 read 自己收作行号。**决定没变,
+            // 变的是它剩几条腿** —— 上面 export 那条与它同形,单独也立得住。
             //
             // 选项表则是自足的:它同时答得出「这里有什么」和「这里没有什么」。
             msg += $" This command accepts: {string.Join(", ", options.Select(o => "--" + o.Name).OrderBy(s => s, StringComparer.Ordinal))}.";

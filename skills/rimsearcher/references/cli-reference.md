@@ -267,7 +267,7 @@ A number printed as '635 (holds when classicMortars=on)' depends on a difficulty
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n> | How many things to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
-| `--offset` <n> | Skip this many things before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
+| `--offset` <n> | Skip this many things before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. |  |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods` |
 | `--category` <Item|Building> | Keep only items or only buildings. The two are not comparable: a building's market value is what you get back for deconstructing it, not what it sells for. | `--cat` |
 | `--calc-state` <ok|recipe|used|not_producible> | Keep only rows whose fallback market value came about a particular way. 'ok' and 'recipe' both mean the thing declares its own market value, so the fallback is only the counterfactual — 'recipe' derives it from a recipe, 'ok' from the cost list. 'used' means nothing is declared, so the fallback is the market value itself. 'not_producible' means nothing produces the thing, so there is no fallback at all. | `--state` |
@@ -356,7 +356,7 @@ What is listed is every path the exporter recorded a value for. When the snapsho
 |---|---|---|
 | `-n`, `--limit` <n> | How many field paths to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--path-contains` <text> | Only list paths containing this text. Repeat it to widen the selection. '[]' stands for any index, so a path shape this tool printed — 'comps[].props.energyMax' — goes straight back in. | `--filter`, `--grep` |
-| `--offset` <n> | Skip this many field paths before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
+| `--offset` <n> | Skip this many field paths before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. |  |
 
 `--json` keys, besides the global `notes`:
 
@@ -514,7 +514,7 @@ Rows are marked 'in effect' or 'on disk'. Only 'in effect' is what the game disp
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n> | How many keys to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
-| `--offset` <n> | Skip this many keys before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
+| `--offset` <n> | Skip this many keys before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. |  |
 | `--empty-translation` | List only keys the language file leaves untranslated — the key is there but carries no translation, so the game falls back to English. This is what a translation-coverage question wants, and it needs no query: on its own it filters the whole layer. | `--empty-translations`, `--untranslated`, `--todo` |
 
 `--json` keys, besides the global `notes`:
@@ -548,7 +548,7 @@ rimsearcher list [defType]... [options]
 |---|---|---|
 | `-n`, `--limit` <n> | How many defs to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods` |
-| `--offset` <n> | Skip this many defs before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
+| `--offset` <n> | Skip this many defs before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. |  |
 | `--own-class` <ClassName> | Only defs whose own class is this. Def types that hold several classes list them below the count. Many def types hold just one class and pick their behaviour in a nested field instead — GenStepDef is all Verse.GenStepDef, with the GenStep subclass on 'genStep' — and this option cannot see that. 'rimsearcher where Class <ClassName>' can. | `--def-class`, `--class`, `--runtime-class` |
 | `--find` <text> | Only defs whose name or label contains this. The filter runs before --limit, so a count of what matched is always reported — unlike piping to grep, which only ever sees the current page. | `--filter`, `--grep`, `--search`, `--match` |
 
@@ -786,7 +786,7 @@ Matching runs in stages and stops at the first one that finds anything: full-tex
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n> | How many defs to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
-| `--offset` <n> | Skip this many defs before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
+| `--offset` <n> | Skip this many defs before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. |  |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind` |
 
@@ -1128,7 +1128,7 @@ Answers 'what am I allowed to put here' and 'which classes are actually in use' 
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n> | How many values to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
-| `--offset` <n> | Skip this many values before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
+| `--offset` <n> | Skip this many values before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. |  |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind` |
 | `--exact-path` | Match the field path as a whole instead of as a suffix, so 'graphicData.shaderType' stops collecting 'swimmingGraphicData.shaderType' as well. | `--whole-path`, `--path-exact` |
@@ -1167,7 +1167,7 @@ The field path is matched from the end, so 'compClass' finds 'comps[3].compClass
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n> | How many matches to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
-| `--offset` <n> | Skip this many matches before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. | `--skip`, `--start`, `--page-from` |
+| `--offset` <n> | Skip this many matches before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. |  |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind` |
 | `--exact` | Require the whole value to match, with either a field path or --value. Without it, the value is matched as a substring. | `--exact-match`, `--whole` |
