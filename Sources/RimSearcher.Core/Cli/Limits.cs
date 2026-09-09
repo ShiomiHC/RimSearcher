@@ -17,6 +17,16 @@ public static class Limits
     /// <summary>code-search 正则单文件匹配超时(毫秒),防灾难性回溯。</summary>
     public const int CodeSearchRegexTimeoutMs = 2000;
 
+    /// <summary>
+    /// code-search 的文本形态里一行最多印几个字符 —— **横向**那道闸的默认值,
+    /// 印几行的三把刀一刀都咬不到它。
+    ///
+    /// 反编译产物把整张调试表压成一个表达式:真语料里 <c>DebugOutputsEconomy.cs</c>
+    /// 有一行 6026 字符,一次 <c>--limit 40</c> 的调用里五行这种巨行占掉了约七成输出。
+    /// 240 是两三行终端宽度,够放下一处命中的上下文而不至于淹掉旁边的短行。
+    /// </summary>
+    public const int CodeSearchLineChars = 240;
+
     /// <summary>同名文件几选一时最多列几条。</summary>
     public const int AmbiguousFiles = 8;
 

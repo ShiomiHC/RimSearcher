@@ -1,0 +1,10 @@
+$ rimsearcher code-search hungerRate
+exit 0
+--- stdout ---
+2 matches in 1 file; 10 files read across 2 of 3 source trees on disk — the rest hold no file matching --file-glob '*.cs', and 'sources list' says which have never been decompiled.
+1 printed line ran past --max-line-chars 240, with '…' for what was left out; the longest is 604 characters. What you see of it is the neighbourhood of the matches. '--max-line-chars 0' prints them whole; --json carries the whole line.
+
+vanilla/Verse/DebugTables.cs  2 matches
+7: 			float hungerRate = 1f;
+8: … Col("modName", (Def d) => d.modContentPack.Name), new Col("hungerRate", (Def d) => d.race.hungerRate.ToString("F2")), new Col("bodySize", (Def d) => d.race.body….GetStatValue(StatOf.MarketValue).ToString("F0")), new Col("hungerRateFactor", …
+--- stderr ---

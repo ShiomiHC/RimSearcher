@@ -143,6 +143,9 @@ public static class NounRegistry
         ["call edge"] = "call edges",
         ["directory"] = "directories",
         ["line"] = "lines",
+        // 横向裁剪数的是「印出来的行里有几行太长」,与 "line"(命中了几行)分开登记:
+        // 借了它,一句说宽度的话会被读成又有一批命中行没印出来。
+        ["printed line"] = "printed lines",
         ["declaration"] = "declarations",
         // 数的是「按当前页大小还要翻几次」,与 "line"(总量)不是一回事 —— 同一个文件换个
         // --limit 就换一个页数,而行数不变。

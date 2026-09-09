@@ -154,9 +154,13 @@ way to state:
 - **Leave `--limit` out and you get every row**; `read` with no `--lines` gives the whole file.
   Pass a number to shorten an answer on purpose; the count line then says how many exist, and
   on `list`, `search`, `where`, `values`, `fields` and `keyed` an `--offset` walks the rest.
-  `code-search` reads and prints everything too: none of `--limit`,
+  `code-search` reads and prints every line too: none of `--limit`,
   `--max-per-file` and `--max-files` carries a default, and only `--max-files` can make an
-  answer partial — passing it a number turns the count into `at least N`.
+  answer partial — passing it a number turns the count into `at least N`. What it does shorten
+  without being asked is an over-long line: decompiled code puts a whole table on one line, so
+  `--max-line-chars` (240) prints such a line as the neighbourhood of its matches with `…` for
+  the rest. That is width, not rows — `--max-line-chars 0` prints them whole, and `--json`
+  carries the whole line either way.
 - **Exit codes**: `0` ran, `1` zero rows, `2` usage error, `70` tool defect. **Chain with `;`,
   never `&&`** — an informative zero otherwise drops what you queued after it. A `;` chain reports only the last code, so read the output.
   With several names on one `get`, `0` means at least one of them printed, not that all did:

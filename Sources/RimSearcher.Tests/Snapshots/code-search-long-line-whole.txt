@@ -1,0 +1,9 @@
+$ rimsearcher code-search hungerRate --max-line-chars 0
+exit 0
+--- stdout ---
+2 matches in 1 file; 10 files read across 2 of 3 source trees on disk — the rest hold no file matching --file-glob '*.cs', and 'sources list' says which have never been decompiled.
+
+vanilla/Verse/DebugTables.cs  2 matches
+7: 			float hungerRate = 1f;
+8: 			MakeTable(rows, new Col("defName", (Def d) => d.defName), new Col("label", (Def d) => d.label), new Col("modName", (Def d) => d.modContentPack.Name), new Col("hungerRate", (Def d) => d.race.hungerRate.ToString("F2")), new Col("bodySize", (Def d) => d.race.bodySize.ToString("F2")), new Col("healthScale", (Def d) => d.race.healthScale.ToString("F2")), new Col("marketValue", (Def d) => d.GetStatValue(StatOf.MarketValue).ToString("F0")), new Col("hungerRateFactor", (Def d) => d.race.hungerRateFactor.ToString("F2")), new Col("wildness", (Def d) => d.GetStatValue(StatOf.Wildness).ToStringPercent()));
+--- stderr ---

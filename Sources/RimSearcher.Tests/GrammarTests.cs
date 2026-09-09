@@ -607,6 +607,143 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 第四把刀是横向的。判三件事,每件都有一个与之同形的错误:
+    ///
+    ///   一、超长行印出来的是**匹配处附近**,不是行首那一截 —— 行首那截在反编译的巨行上
+    ///       往往一个命中都不含,读者会得出「这行为什么算命中」。
+    ///   二、没超上限的行一个字都不动 —— 否则「短行也带省略号」会被读成源码里就有。
+    ///   三、结构化那一侧是整行。两种形态在这里有意不同形,而 JSON 的消费方拿它对源码。
+    /// </summary>
+    [Fact]
+    public void 超长行只印匹配处附近而结构化侧仍是整行()
+    {
+        var (stdout, _, code) = Fixture.Run("code-search", "hungerRate");
+        Assert.Equal(0, code);
+
+        // 短行那处命中原样在，一个省略号都没有。
+        Assert.Contains("7: \t\t\tfloat hungerRate = 1f;", stdout, StringComparison.Ordinal);
+
+        var longLine = stdout.Split('\n').Single(l => l.TrimStart().StartsWith("8:", StringComparison.Ordinal));
+        Assert.Contains("…", longLine, StringComparison.Ordinal);
+        Assert.Contains("hungerRate", longLine, StringComparison.Ordinal);
+        // 巨行的开头是 MakeTable(rows, new Col("defName"… —— 第一处命中在几十字符之后,
+        // 所以「从行首截一段」与「印匹配附近」在这一行上分得开。
+        Assert.DoesNotContain("MakeTable(rows", longLine, StringComparison.Ordinal);
+        // 末尾那簇(hungerRateFactor)与开头那簇隔着两百多个字符,合并不了,于是中间必有缺口。
+        Assert.Contains("hungerRateFactor", longLine, StringComparison.Ordinal);
+        Assert.True(longLine.Length < 320, $"裁过的行仍有 {longLine.Length} 字符:\n{longLine}");
+
+        // 说破:这一刀砍的是宽度不是条数。承重的是**名词**与**取法**两处 —— "printed line"
+        // 而不是 "line"(后者与「又少了 N 行」同形),以及「你看到的是哪一截」。这句挂在
+        // truncation 上、紧挨着 --limit 那条真·少了行的申报,所以两处都不许退化。
+        Assert.Contains("--max-line-chars", stdout, StringComparison.Ordinal);
+        Assert.Contains("printed line ran past", stdout, StringComparison.Ordinal);
+        Assert.Contains("What you see of it is the neighbourhood", stdout, StringComparison.Ordinal);
+
+        // 出路真的通:抬到 0 就是整行,且那句申报随之消失。
+        var (whole, _, wholeCode) = Fixture.Run("code-search", "hungerRate", "--max-line-chars", "0");
+        Assert.Equal(0, wholeCode);
+        Assert.Contains("MakeTable(rows", whole, StringComparison.Ordinal);
+        Assert.DoesNotContain("…", whole, StringComparison.Ordinal);
+        Assert.DoesNotContain("--max-line-chars", whole, StringComparison.Ordinal);
+
+        // 结构化那侧不受它管 —— 裁与不裁,text 都是同一条整行。
+        foreach (var argv in new[]
+                 {
+                     new[] { "code-search", "hungerRate", "--json" },
+                     ["code-search", "hungerRate", "--max-line-chars", "40", "--json"],
+                 })
+        {
+            var (json, _, _) = Fixture.Run(argv);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var text = doc.RootElement.GetProperty("matches").EnumerateArray()
+                          .Select(m => m.GetProperty("text").GetString()!)
+                          .Single(t => t.Contains("MakeTable", StringComparison.Ordinal));
+            Assert.DoesNotContain("…", text, StringComparison.Ordinal);
+            Assert.True(text.Length > 500, $"--json 那侧的 text 被裁到了 {text.Length} 字符。");
+        }
+
+        // 命中计数不随这一刀变:横向与纵向不许互相干扰。
+        static int Matches(params string[] argv)
+        {
+            var (out_, _, _) = Fixture.Run(argv);
+            return int.Parse(Regex.Match(out_, @"^(\d+) match").Groups[1].Value);
+        }
+        Assert.Equal(Matches("code-search", "hungerRate", "--max-line-chars", "0"),
+                     Matches("code-search", "hungerRate", "--max-line-chars", "40"));
+
+        // 写错值时点名它收什么,并且把 0 那条出路写进错误里 —— 那是它与另外三把刀的差别。
+        var (bad, stderr, badCode) = Fixture.Run("code-search", "hungerRate", "--max-line-chars", "wide");
+        Assert.Equal(2, badCode);
+        Assert.Empty(bad);
+        Assert.Contains("0 to print every line whole", stderr, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 横向裁剪的两种取法各自说话。上下文行没有匹配可对中,印的是**行首那一截** ——
+    /// 而 2026-09-09 那版把两种行合成一句「what you see is the neighbourhood of the matches」,
+    /// 于是上下文行被裁的每一次那句话都是假的:读者照它去找命中,眼前那一截里根本没有。
+    ///
+    /// 三态各一个落点,因为错的方式不同:只裁命中行、只裁上下文行、两者同时。
+    /// </summary>
+    [Fact]
+    public void 横向裁剪按行的种类说话()
+    {
+        // 只有命中行被裁(第 8 行超长且命中)。
+        var (hit, _, _) = Fixture.Run("code-search", "hungerRateFactor", "--max-line-chars", "80");
+        Assert.Contains("What you see of it is the neighbourhood", hit, StringComparison.Ordinal);
+        // 混合那支的锚要带上分号 —— 不带的话选项说明里那句同形,闸会在那儿找到它照绿。
+        Assert.DoesNotContain("; a context line has no match to centre on", hit, StringComparison.Ordinal);
+        Assert.DoesNotContain("so what you see is the start of the line", hit, StringComparison.Ordinal);
+
+        // 只有上下文行被裁:命中的是第 7 行那句短的,超长的两行都是 -C 邻居。
+        var (ctx, _, _) = Fixture.Run(
+            "code-search", "float hungerRate", "--context", "2", "--max-line-chars", "60");
+        Assert.Contains("so what you see is the start of the line", ctx, StringComparison.Ordinal);
+        Assert.DoesNotContain("What you see of them is the neighbourhood", ctx, StringComparison.Ordinal);
+        Assert.DoesNotContain("A matching line shows the neighbourhood", ctx, StringComparison.Ordinal);
+        // 印出来的那一截真的是行首 —— 措辞对不对与做的是不是这件事得分开问。
+        Assert.Contains("8- \t\t\tMakeTable(rows", ctx, StringComparison.Ordinal);
+
+        // 两者同时:命中第 8 行(长),第 9 行(长)是它的 -C 邻居。
+        var (both, _, _) = Fixture.Run(
+            "code-search", "hungerRateFactor", "--context", "1", "--max-line-chars", "80");
+        Assert.Contains("A matching line shows the neighbourhood of its matches", both, StringComparison.Ordinal);
+        Assert.Contains("a context line has no match to centre on", both, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 「省略号吞掉了一处 .Translate()」只在那张表**真的印出来**时说。
+    ///
+    /// 这句唯一改变下一步的信息就是「表在下面」。解释层只读命中行,而横向裁剪连上下文行
+    /// 一起裁 —— 2026-09-09 那版按「有没有裁掉某处 .Translate()」触发,于是上下文行里的
+    /// 一处 Translate 就能把读者领去对一张根本不存在的表。
+    /// </summary>
+    [Fact]
+    public void 吞掉的Translate只在表印出来时说破()
+    {
+        // 命中行被裁,尾部那处 "CannotUseNoPower".Translate() 落进省略号,而表照印。
+        var (said, _, _) = Fixture.Run("code-search", "Tooltip\\(", "--max-line-chars", "60");
+        Assert.Contains("took a .Translate() call into the", said, StringComparison.Ordinal);
+        Assert.Contains("CannotUseNoPower", said, StringComparison.Ordinal);
+        // 说破的前提是它真的看不见了:印出来的那一截里没有 .Translate()。
+        var shown = said.Split('\n').Single(l => l.TrimStart().StartsWith("9:", StringComparison.Ordinal));
+        Assert.DoesNotContain("\"CannotUseNoPower\".Translate()", shown, StringComparison.Ordinal);
+
+        // 同一处 Translate 落在**上下文行**里被裁掉:它从来不进表,于是这句话没有位置可站。
+        var (quiet, _, _) = Fixture.Run(
+            "code-search", "float hungerRate", "--context", "2", "--max-line-chars", "60");
+        Assert.DoesNotContain("took a .Translate() call into the", quiet, StringComparison.Ordinal);
+        // 表本身也不在 —— 那个 key 是它唯一会印出来的地方。
+        Assert.DoesNotContain("CannotUseNoPower", quiet, StringComparison.Ordinal);
+
+        // 解释层关掉时同理:表不在,这句也不在。
+        var (off, _, _) = Fixture.Run(
+            "code-search", "Tooltip\\(", "--max-line-chars", "60", "--no-resolve-keys");
+        Assert.DoesNotContain("took a .Translate() call into the", off, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 点开头的目录不是源码树。判据在 SourcesShared.TreeNames,这里守的是
     /// code-search 真的走了那一份 —— 语料里 .git 下摆着一个匹配 *.cs 的文件。
     /// </summary>
@@ -5021,6 +5158,9 @@ public class GrammarTests
             ("Outer.Shared", "fixture 数据(类型名)"),
             ("class Outer", "fixture 数据(源码片段)"),
             ("zz.othermod", "fixture 数据(树名;钉的是命名空间消歧后另一棵树不在结果里)"),
+            ("MakeTable(rows", "fixture 数据(巨行的开头;钉的是横向裁剪取的是匹配处而不是行首那一截)"),
+            ("What you see of them is the neighbourhood", "插值:产地是 $\"What you see of {单复数} is the neighbourhood\""),
+            ("\\\"CannotUseNoPower\\\".Translate()", "fixture 数据(巨行尾部那处调用;钉的是它真被省略号吞掉了)"),
             ("1- namespace RimWorld", "fixture 数据(带行号的源码行)"),
             ("5- \\t}", "fixture 数据(带行号的源码行)"),
             ("invalid argument", "禁笼统报错:写错必须点名接受的形式,产地从不写这四个字"),

@@ -1,7 +1,11 @@
 $ rimsearcher code-search Translate
 exit 0
 --- stdout ---
-3 matches in 1 file; 9 files read across 2 of 3 source trees on disk — the rest hold no file matching --file-glob '*.cs', and 'sources list' says which have never been decompiled.
+4 matches in 2 files; 10 files read across 2 of 3 source trees on disk — the rest hold no file matching --file-glob '*.cs', and 'sources list' says which have never been decompiled.
+1 printed line ran past --max-line-chars 240, with '…' for what was left out; the longest is 352 characters. What you see of it is the neighbourhood of the matches. '--max-line-chars 0' prints them whole; --json carries the whole line.
+
+vanilla/Verse/DebugTables.cs  1 match
+9: …lue(StatOf.Wildness).ToStringPercent()), "CannotUseNoPower".Translate());
 
 vanilla/Verse/Widgets.cs  3 matches
 7: 			Draw(rect, "CannotUseNoPower".Translate());

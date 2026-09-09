@@ -19,6 +19,15 @@ namespace RimSearcher.Commands;
 ///
 /// 三把刀都没有默认值 —— 不给就是全读全印。<c>--max-files</c> 曾有个 50000,而语料
 /// 只有两万五千个文件,那道闸够不着;它留下来的价值是**能造出部分答案**,不是拦住谁。
+///
+/// **第四把刀是横向的**,与上面三把不在一个维度上:<c>--max-line-chars</c> 决定一行
+/// 印几个字符。反编译产物把整张调试表压成一个表达式(真语料里最长 6026 字符),而
+/// 上面三把数的都是**行**,一刀都咬不到它 —— 一次 <c>--limit 40</c> 里五行巨行就能占掉
+/// 约七成输出。命中行只印匹配处附近,上下文行没有落点可对中、从行首留一截,缺口都写成
+/// <c>…</c>;两种取法在输出里分开说,合成一句就有一种会被讲成假的。
+///
+/// 它**只裁文本形态**:<c>--json</c> 那侧的 <c>text</c> 永远是整行。裁过的行粘不回源码,
+/// 而结构化那一侧的消费方要的正是能对得上的原文。
 /// </summary>
 public sealed class CodeSearchCommand : Command
 {
@@ -37,11 +46,15 @@ public sealed class CodeSearchCommand : Command
             "It does not search Defs: the game's XML is not on disk in the form the game ended up with. " +
             "Data questions ('which defs use this class', 'what values does this field take') belong to " +
             "'where', 'values', and 'search', which answer them from the snapshot exactly.\n\n" +
-            "Three switches cut the answer, and they divide in two. --limit and --max-per-file decide how many " +
-            "matching lines are printed; neither shortens the scan, so the match count stays exact whichever of " +
-            "them bites. --max-files decides how much is read, so when that one bites the count drops to a lower " +
-            "bound ('at least N') and the answer says which trees it never reached. None of the three carries " +
-            "a default; each option below says what happens when it is left out.",
+            "Three switches cut down the list of lines, and they divide in two. --limit and --max-per-file decide " +
+            "how many matching lines are printed; neither shortens the scan, so the match count stays exact " +
+            "whichever of them bites. --max-files decides how much is read, so when that one bites the count " +
+            "drops to a lower bound ('at least N') and the answer says which trees it never reached. None of " +
+            "the three carries a default; each option below says what happens when it is left out.\n\n" +
+            "A fourth shortens over-long lines instead of dropping them: --max-line-chars. Decompiled code " +
+            "puts a whole table on one line, and such a line prints as the neighbourhood of its matches. " +
+            "This one does carry a default, and it only shortens the text form — under --json every line " +
+            "arrives whole.",
         // 叫 regex 不叫 pattern:这个参数的语言此前只写在下面那句描述里,而读者写命令时
         // 看的是用法行,于是 29 次 / 26 份会话伸手加一个 `--regex` 去断言默认值(实参多带
         // `|` 择一 —— 他们怕的是那个竖线被当字面)。名字里说出语言,断言就没有位置可站。
@@ -101,6 +114,24 @@ public sealed class CodeSearchCommand : Command
                        "printed — there is no cap to lift. Matches past it are still counted, so the total " +
                        "stays exact.",
                 Default = "every one",
+            },
+            new OptionSpec
+            {
+                // 唯一**横向**的闸。它有默认值而上面三把没有,理由也相反:那三把撤掉默认值
+                // 是因为语料够不着它们,而这一把在真语料上每次都够得着 —— 巨行是反编译的
+                // 常态形状,默认不裁就等于把预算交给语料的排版。
+                Name = "max-line-chars",
+                // --max-line 不留:实测读者伸手写 `--max-line 40` 时想的是「最多 40 行」,
+                // 而它是 40 个字符 —— 一个会静默给出另一种答案的写法,比没有这个别名更坏。
+                Aliases = ["max-columns", "max-line-length", "max-chars-per-line"],
+                Placeholder = "<n>",
+                // 首句必须是**行为**。写成「一行最多印几个字符」时读者照 `cut -c` 理解,
+                // 以为是从行首数 N 个字符,而真正的取法要读到第二句才出现。
+                Help = "A line longer than this prints as the neighbourhood of its matches, with '…' for the " +
+                       "characters left out. A context line has no match to centre on, so it shows the start " +
+                       "of the line instead. Pass 0 to print every line whole. It does not touch --json: the " +
+                       "text there is always the whole line.",
+                Default = Limits.CodeSearchLineChars.ToString(),
             },
             new OptionSpec
             {
@@ -166,7 +197,8 @@ public sealed class CodeSearchCommand : Command
                 Rows = true,
                 What = "one row per printed line — file, line, is_match, group, text. Context lines come " +
                        "through with is_match false, and 'group' is the merged window they belong to, so the " +
-                       "text form's '--' separator needs no counterpart here.",
+                       "text form's '--' separator needs no counterpart here. 'text' is the whole line even " +
+                       "when the text form shortened it to the neighbourhood of its matches.",
             },
             new()
             {
@@ -200,6 +232,12 @@ public sealed class CodeSearchCommand : Command
         var (before, after) = ParseContext(contextSpec, out var contextRewritten);
         var limit = ctx.Limit();
         var maxPerFile = PositiveOrEveryOne(ctx, "max-per-file");
+        // 值照收照校验(写错了要报错,不因为换了个输出形态就静默),但 --json 那侧不裁,
+        // 于是这一刀连同它的申报在那里一起不发生 —— 说破一件没发生的事已经够坏,而这一句
+        // 挂在 truncation 上,机器侧会把它读成「结果不全」。
+        var lineChars = LineCharCap(ctx);
+        if (ctx.Json) lineChars = 0;
+        var elision = new Elision();
 
         Regex regex;
         try
@@ -282,7 +320,8 @@ public sealed class CodeSearchCommand : Command
 
                 if (hitsHere > 0) filesWithMatches++;
                 if (hitsHere > toPrint.Count && toPrint.Count >= maxPerFile) perFileCapped++;
-                if (toPrint.Count > 0) Emit(lines, rows, rel, text, toPrint, before, after, hitsHere);
+                if (toPrint.Count > 0)
+                    Emit(lines, rows, rel, text, toPrint, before, after, hitsHere, regex, lineChars, elision);
             }
 
             if (readHere == 0) unreached.Add((tree, treeFiles.Count));
@@ -405,6 +444,25 @@ public sealed class CodeSearchCommand : Command
             ctx.Report.Notice(NoticeKind.Truncation,
                 $"--max-per-file allows {Tally.Complete(maxPerFile).Render("match")} from any one file, and " +
                 $"{Tally.Complete(perFileCapped).Render("file")} had more than that. Raise it to see the rest.");
+        // 横向那一刀自己申报。名词是 printed line 而不是 line,措辞是「你看到的是哪一截」——
+        // 这两处一起挡住「又少了 N 行」那个读法,不必再补一句「一行都没少」。
+        //
+        // 两种行分开说:命中行对着匹配裁,上下文行没有落点可对中、只能从行首留一截。
+        // 合成一句就得挑一个取法去讲两种行,而另一种当场变成假话。
+        if (elision.Lines > 0)
+            ctx.Report.Notice(NoticeKind.Truncation,
+                $"{Tally.Complete(elision.Lines).Render("printed line")} ran past --max-line-chars " +
+                $"{lineChars}, with '{Gap}' for what was left out; the longest is {elision.Longest} " +
+                "characters. " +
+                (elision.MatchLines > 0 && elision.ContextLines > 0
+                    ? "A matching line shows the neighbourhood of its matches; a context line has no " +
+                      "match to centre on, so it shows the start of the line. "
+                    : elision.MatchLines > 0
+                        ? $"What you see of {(elision.Lines == 1 ? "it" : "them")} is the neighbourhood " +
+                          "of the matches. "
+                        : $"{(elision.Lines == 1 ? "It is a context line, which has" : "They are context lines, which have")} " +
+                          "no match to centre on, so what you see is the start of the line. ") +
+                "'--max-line-chars 0' prints them whole; --json carries the whole line.");
         if (filesCapped) SayFilesCapped(ctx, sourceName, glob, filesRead,
                                         partialTree, partialRead, partialTotal, unreached);
         if (timedOut.Count > 0)
@@ -416,7 +474,7 @@ public sealed class CodeSearchCommand : Command
         if (lines.Count == 0) return 1;
 
         ctx.Report.Text("matches", lines, rows);
-        if (!ctx.Args.Flag("no-resolve-keys")) ResolveUiText(ctx, rows);
+        if (!ctx.Args.Flag("no-resolve-keys")) ResolveUiText(ctx, rows, elision);
         return 0;
     }
 
@@ -432,7 +490,8 @@ public sealed class CodeSearchCommand : Command
     /// 3. **没有可用快照**时整节缺席。code-search 本身不需要快照,所以取不到库不能让命令
     ///    失败 —— 但也不能静默,静默就等于宣布这些 key 没有译文。
     /// </summary>
-    private static void ResolveUiText(CommandContext ctx, List<IReadOnlyDictionary<string, object?>> rows)
+    private static void ResolveUiText(CommandContext ctx, List<IReadOnlyDictionary<string, object?>> rows,
+                                      Elision elision)
     {
         var literal = new List<string>();
         var assembled = 0;
@@ -467,6 +526,15 @@ public sealed class CodeSearchCommand : Command
 
         var distinct = literal.Distinct(StringComparer.Ordinal).OrderBy(k => k, StringComparer.Ordinal).ToList();
         var resolved = distinct.Where(found.ContainsKey).ToList();
+        // 横向裁剪把一处 .Translate() 收进了省略号:表里于是有一个在它上面那行可见文本里
+        // 找不到出处的 key,而「表里多了一行」与「表算错了」在读者那儿同形。
+        //
+        // 条件钉在**表真的印出来**这一支上:这句唯一改变下一步的信息就是「表在下面」,
+        // 而键解析不到时表根本不在,这时说它就是把人领去对一张不存在的表。
+        if (elision.HidTranslate && resolved.Count > 0)
+            ctx.Report.Notice(NoticeKind.Boundary,
+                "A shortened line took a .Translate() call into the '…', so the table below can name a " +
+                "key that no longer appears in the line above it. Keys are read from the whole line.");
         if (resolved.Count > 0)
             ctx.Report.Table("ui_text", ["key", "translated", "original"],
                 resolved.Select(k => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
@@ -588,7 +656,8 @@ public sealed class CodeSearchCommand : Command
     /// 结构化侧不受影响:<c>file</c> 本来就在每一行上,JSON 消费方拿到的东西一个字没变。
     /// </summary>
     private static void Emit(List<string> lines, List<IReadOnlyDictionary<string, object?>> rows,
-                             string rel, string[] text, List<int> hits, int before, int after, int hitsHere)
+                             string rel, string[] text, List<int> hits, int before, int after, int hitsHere,
+                             Regex regex, int lineChars, Elision elision)
     {
         var isHit = hits.ToHashSet();
         var group = rows.Count == 0 ? 0 : (int)rows[^1]["group"]! + 1;
@@ -622,7 +691,10 @@ public sealed class CodeSearchCommand : Command
             firstGroup = false;
             for (var c = start; c <= end; c++)
             {
-                lines.Add($"{(c + 1).ToString().PadLeft(pad)}{(isHit.Contains(c) ? ":" : "-")} {text[c].TrimEnd()}");
+                // 文本形态裁,结构化形态不裁 —— 同一份行,两种读者。
+                var whole = text[c].TrimEnd();
+                var shown = Elide(whole, regex, isHit.Contains(c), lineChars, elision);
+                lines.Add($"{(c + 1).ToString().PadLeft(pad)}{(isHit.Contains(c) ? ":" : "-")} {shown}");
                 // 文本侧那条 "--" 分隔符在结构化侧变成 group 序号:JSON 里不插假行表示断开。
                 rows.Add(new Dictionary<string, object?>
                 {
@@ -630,12 +702,112 @@ public sealed class CodeSearchCommand : Command
                     ["line"] = c + 1,
                     ["is_match"] = isHit.Contains(c),
                     ["group"] = group,
-                    ["text"] = text[c].TrimEnd(),
+                    ["text"] = whole,
                 });
             }
             group++;
             i++;
         }
+    }
+
+    /// <summary>
+    /// 横向裁剪的现场统计:裁了几行、最长那行原本多少字符、有没有把一处
+    /// <c>.Translate()</c> 藏进省略号里。
+    /// </summary>
+    private sealed class Elision
+    {
+        /// <summary>命中行与上下文行**分开记**:两种行印出来的那一截取法不同,合并成一个数
+        /// 就只能用一个取法去讲两种行,而其中一种会被讲成假的。</summary>
+        public int MatchLines;
+
+        public int ContextLines;
+        public int Lines => MatchLines + ContextLines;
+        public int Longest;
+        public bool HidTranslate;
+    }
+
+    /// <summary>缺口记号。单字符,且不是 C# 里写得出的东西 —— 省略号不会与源码本身同形。</summary>
+    private const string Gap = "…";
+
+    /// <summary>匹配两侧至少留几个字符,免得预算很小时只剩匹配本身、看不出它在什么中间。</summary>
+    private const int MinElideMargin = 8;
+
+    /// <summary>
+    /// 超长行只印匹配处附近。**只作用于文本形态** —— 结构化那一侧的 <c>text</c> 是整行,
+    /// 因为裁过的行粘不回源码,而机器侧的消费方要的正是能对得上的原文。
+    ///
+    /// 一行里多处命中时,各自的窗口重叠就合并,于是缺口只出现在真的跳过了字符的地方。
+    /// 上下文行(<c>-C</c> 窗口里没命中的那些)没有落点可对中,退回行首:那里有缩进与
+    /// 语句开头,是这种行上唯一能自证身份的一截。
+    /// </summary>
+    private static string Elide(string line, Regex regex, bool isHit, int cap, Elision tally)
+    {
+        if (cap <= 0 || line.Length <= cap) return line;
+
+        var spans = new List<(int Start, int End)>();
+        if (isHit)
+        {
+            var margin = Math.Max(MinElideMargin, cap / 4);
+            try
+            {
+                foreach (Match m in regex.Matches(line))
+                {
+                    var s = Math.Max(0, m.Index - margin);
+                    var e = Math.Min(line.Length, m.Index + Math.Max(m.Length, 1) + margin);
+                    if (spans.Count > 0 && s <= spans[^1].End)
+                        spans[^1] = (spans[^1].Start, Math.Max(spans[^1].End, e));
+                    else spans.Add((s, e));
+                }
+            }
+            // 逐行扫描那侧已经用同一个超时判过这一行,这里是第二次跑同一个正则(要的是位置
+            // 不是有没有)。真在这儿超时就当没有落点,不许把一行印成半个异常。
+            catch (RegexMatchTimeoutException) { spans.Clear(); }
+        }
+
+        if (spans.Count == 0) spans.Add((0, Math.Min(line.Length, cap)));
+
+        var text = new System.Text.StringBuilder();
+        var budget = cap;
+        var covered = 0;
+        foreach (var (start, wanted) in spans)
+        {
+            if (budget <= 0) break;
+            var end = Math.Min(wanted, start + budget);
+            if (text.Length == 0) { if (start > 0) text.Append(Gap); }
+            else text.Append(Gap);
+            text.Append(line, start, end - start);
+            budget -= end - start;
+            covered = end;
+        }
+        if (covered < line.Length) text.Append(Gap);
+
+        var shown = text.ToString();
+        if (isHit) tally.MatchLines++; else tally.ContextLines++;
+        tally.Longest = Math.Max(tally.Longest, line.Length);
+        // 整行里有 .Translate() 而印出来的那截没有:ui_text 表会多出一个在可见文本里找不到
+        // 出处的 key,而「表里多了一行」与「表算错了」在读者那儿同形。
+        //
+        // **只看命中行**:解释那一层本来就只读命中行,上下文行里的 .Translate() 一次都没有
+        // 进过表 —— 拿它触发这句话,就是把读者领去对一张不存在的表。
+        if (isHit
+            && line.Contains(".Translate", StringComparison.Ordinal)
+            && !shown.Contains(".Translate", StringComparison.Ordinal))
+            tally.HidTranslate = true;
+        return shown;
+    }
+
+    /// <summary>
+    /// <c>--max-line-chars</c> 收 0,而印几行的那三把刀不收 —— 分开写就是为了这个差别:
+    /// 印零行、读零个文件没有意义,「一个字符都不裁」有。
+    /// </summary>
+    private static int LineCharCap(CommandContext ctx)
+    {
+        var raw = ctx.Args.Value("max-line-chars");
+        if (string.IsNullOrEmpty(raw)) return Limits.CodeSearchLineChars;
+        if (int.TryParse(raw, out var n) && n >= 0) return n;
+        throw new CliUsageException(
+            $"--max-line-chars expects a whole number of characters, or 0 to print every line whole " +
+            $"(got '{raw}').");
     }
 
     /// <summary>路径一律相对**根目录**,于是它带着树名,而且不随 --source 改变形状。</summary>

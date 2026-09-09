@@ -120,7 +120,9 @@ This is for shapes that only text can express, such as a method signature patter
 
 It does not search Defs: the game's XML is not on disk in the form the game ended up with. Data questions ('which defs use this class', 'what values does this field take') belong to 'where', 'values', and 'search', which answer them from the snapshot exactly.
 
-Three switches cut the answer, and they divide in two. --limit and --max-per-file decide how many matching lines are printed; neither shortens the scan, so the match count stays exact whichever of them bites. --max-files decides how much is read, so when that one bites the count drops to a lower bound ('at least N') and the answer says which trees it never reached. None of the three carries a default; each option below says what happens when it is left out.
+Three switches cut down the list of lines, and they divide in two. --limit and --max-per-file decide how many matching lines are printed; neither shortens the scan, so the match count stays exact whichever of them bites. --max-files decides how much is read, so when that one bites the count drops to a lower bound ('at least N') and the answer says which trees it never reached. None of the three carries a default; each option below says what happens when it is left out.
+
+A fourth shortens over-long lines instead of dropping them: --max-line-chars. Decompiled code puts a whole table on one line, and such a line prints as the neighbourhood of its matches. This one does carry a default, and it only shortens the text form — under --json every line arrives whole.
 
 | Argument | Meaning |
 |---|---|
@@ -131,6 +133,7 @@ Three switches cut the answer, and they divide in two. --limit and --max-per-fil
 | `--file-glob` <glob> | Only search files whose path matches this glob. A glob with no '/' matches the file name alone (*.cs is every .cs file at any depth); with a '/' it matches the path relative to the decompiled root, which begins with the source tree's name even under --source, and there '*' stops at a '/' while '**' crosses it. So */Verse/* is one level down, **/Verse/** is any. Default: `*.cs`. | `--path-glob`, `--files`, `--file-filter`, `--glob`, `--file-pattern`, `--file-extension`, `--file-type`, `--path-filter`, `--include` |
 | `--max-files` <n> | How many files the scan may read before it stops, counted after --file-glob has filtered. Left out, every file the glob selects is read. This is the only switch that can make the answer partial: pass it a number and the match count drops to a lower bound. Default: `every file`. | `--file-limit`, `--scan-limit`, `--max-scan` |
 | `--max-per-file` <n> | How many matching lines to print from any one file, at most. Left out, every one is printed — there is no cap to lift. Matches past it are still counted, so the total stays exact. Default: `every one`. | `--per-file`, `--matches-per-file`, `--max-matches-per-file`, `--file-preview` |
+| `--max-line-chars` <n> | A line longer than this prints as the neighbourhood of its matches, with '…' for the characters left out. A context line has no match to centre on, so it shows the start of the line instead. Pass 0 to print every line whole. It does not touch --json: the text there is always the whole line. Default: `240`. | `--max-columns`, `--max-line-length`, `--max-chars-per-line` |
 | `--source` <name> | Which decompiled source tree to search. Omit to search them all. | `--root`, `--tree` |
 | `-C`, `--context` <n|a-b|a+n> | Show lines around each match. A number N is N above and N below; '0-20' is 0 above and 20 below, '10+4' is 10 above and 4 below. Windows that overlap or touch are merged, so no line is printed twice. Default: `0`. | `--context-lines`, `--around` |
 | `-n`, `--limit` <n> | How many matching lines to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
@@ -141,7 +144,7 @@ Three switches cut the answer, and they divide in two. --limit and --max-per-fil
 
 | Key | Holds |
 |---|---|
-| `matches` | one row per printed line — file, line, is_match, group, text. Context lines come through with is_match false, and 'group' is the merged window they belong to, so the text form's '--' separator needs no counterpart here. |
+| `matches` | one row per printed line — file, line, is_match, group, text. Context lines come through with is_match false, and 'group' is the merged window they belong to, so the text form's '--' separator needs no counterpart here. 'text' is the whole line even when the text form shortened it to the neighbourhood of its matches. |
 | `ui_text` | present only when a printed matching line calls .Translate() on a literal key that the snapshot can resolve — key, translated, original, one row per distinct key. Keys that resolve to nothing, and lines whose key is assembled at runtime, are reported in the notes rather than as empty rows. Suppressed entirely by --no-resolve-keys. |
 
 Examples:

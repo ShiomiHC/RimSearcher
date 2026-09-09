@@ -1648,6 +1648,30 @@ public static class Fixture
             "\t}",
             "}");
 
+        // 横向裁剪的落点。反编译产物把整张调试表压成一个表达式,真语料里最长的一行是 6026
+        // 字符 —— 印几行的三道闸一刀都咬不到它。刻意不含 `public` / `Translate` /
+        // `: ThingComp`,免得动到那批基线的计数;这里的 pattern 是 `hungerRate`。
+        //
+        // 长行上的四处命中分成两簇(前 ~110 字符内两处,后 ~380 起两处),于是裁剪要合并的段
+        // 与要省的缺口都在同一行里;短行那处命中同一个词,钉住「没超上限的行一个字都不动」。
+        File_("vanilla/Verse/DebugTables.cs",
+            "namespace Verse",
+            "{",
+            "\tinternal static class DebugTables",
+            "\t{",
+            "\t\tinternal static void Animals(List<Def> rows)",
+            "\t\t{",
+            "\t\t\tfloat hungerRate = 1f;",
+            "\t\t\tMakeTable(rows, new Col(\"defName\", (Def d) => d.defName), new Col(\"label\", (Def d) => d.label), new Col(\"modName\", (Def d) => d.modContentPack.Name), new Col(\"hungerRate\", (Def d) => d.race.hungerRate.ToString(\"F2\")), new Col(\"bodySize\", (Def d) => d.race.bodySize.ToString(\"F2\")), new Col(\"healthScale\", (Def d) => d.race.healthScale.ToString(\"F2\")), new Col(\"marketValue\", (Def d) => d.GetStatValue(StatOf.MarketValue).ToString(\"F0\")), new Col(\"hungerRateFactor\", (Def d) => d.race.hungerRateFactor.ToString(\"F2\")), new Col(\"wildness\", (Def d) => d.GetStatValue(StatOf.Wildness).ToStringPercent()));",
+            // 第二条巨行,刻意**不含** hungerRate:于是同一份语料能造出三种取法各自的落点 ——
+            // 命中行被裁、上下文行被裁、两者同时。末尾那个 .Translate() 也是刻意的:它被省略号
+            // 吞掉时,ui_text 表里那个 key 在可见文本里就没有出处了,而那句说破只有在表**真的
+            // 印出来**时才成立。
+            "\t\t\tTooltip(rect, new Col(\"bodySize\", (Def d) => d.race.bodySize.ToString(\"F2\")), new Col(\"healthScale\", (Def d) => d.race.healthScale.ToString(\"F2\")), new Col(\"marketValue\", (Def d) => d.GetStatValue(StatOf.MarketValue).ToString(\"F0\")), new Col(\"wildness\", (Def d) => d.GetStatValue(StatOf.Wildness).ToStringPercent()), \"CannotUseNoPower\".Translate());",
+            "\t\t}",
+            "\t}",
+            "}");
+
         File_(".git/objects/Sneaky.cs",
             "public class Sneaky : ThingComp");
 

@@ -599,6 +599,11 @@ public class OutputSnapshotTests
         { "code-search-ui-text",   ["code-search", "Translate"] },
         // 同一次调用关掉它:那三条声明必须一起消失,不许留一句孤零零的边界话。
         { "code-search-no-resolve-keys", ["code-search", "Translate", "--no-resolve-keys"] },
+        // 横向那一刀。三份摆一起:默认裁、抬到 0 印整行、以及裁过之后 --json 那侧仍是整行 ——
+        // 中间那份是这条路的出路,第三份钉住两种形态在这里**有意**不同形。
+        { "code-search-long-line", ["code-search", "hungerRate"] },
+        { "code-search-long-line-whole", ["code-search", "hungerRate", "--max-line-chars", "0"] },
+        { "code-search-long-line-json", ["code-search", "hungerRate", "--json"] },
         // keyed 的两个方向。key → 显示什么;文案 → 是哪个 key(带上「拿它去搜代码」那一步)。
         { "keyed-hit",             ["keyed", "CannotUseNoPower"] },
         // 查询词恰好是一个真 key,而同前缀还有别的 —— 精确命中把前缀匹配关掉的那一刻。
