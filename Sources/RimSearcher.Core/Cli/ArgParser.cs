@@ -517,9 +517,14 @@ public sealed class ParseResult(
         var exact = Values("exact-path");
         if (loose.Count > 0 && exact.Count > 0)
             throw new CliUsageException(
-                "--path-contains and --exact-path are the two settings of one dial — a path matched as a " +
-                "substring, or matched whole. Pass one or the other. Repeating either one widens the " +
-                "selection; mixing them would leave the 'whole path segment' count with no single meaning.");
+                // 末句不解释「为什么不许混」—— 那是替限制找理由,删掉读者不少一个动作。
+                // 「重复同一个旗会放宽」也不在这里说:触发这条报错的调用正在收窄
+                // (--path-contains comps --exact-path comps[0].compClass),那句是反向指引。
+                // 两个旗各带自己的占位符,因为一个收片段、一个收整条路径,而混用的人多半
+                // 正把片段原样换旗重敲。
+                "--path-contains and --exact-path cannot be combined: one matches the path as a substring, " +
+                "the other as a whole. Pass --path-contains <text> for a fragment, or --exact-path <path> " +
+                "for a complete field path.");
         return exact.Count > 0 ? (exact, true) : (loose, false);
     }
 

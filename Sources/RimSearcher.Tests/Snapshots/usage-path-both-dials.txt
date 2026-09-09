@@ -2,4 +2,4 @@ $ rimsearcher get Apparel_ShieldBelt --path-contains comps --exact-path comps[0]
 exit 2
 --- stdout ---
 --- stderr ---
---path-contains and --exact-path are the two settings of one dial — a path matched as a substring, or matched whole. Pass one or the other. Repeating either one widens the selection; mixing them would leave the 'whole path segment' count with no single meaning.
+--path-contains and --exact-path cannot be combined: one matches the path as a substring, the other as a whole. Pass --path-contains <text> for a fragment, or --exact-path <path> for a complete field path.

@@ -1,7 +1,7 @@
 $ rimsearcher get ChildGun --defaults --path-contains costList --path-contains things --path-contains Hyperlinks --fixture-presence
 exit 0
 --- stdout ---
-Matching 'costList' or 'things' or 'Hyperlinks': 7 fields, out of 14 fields on the def. Whole path segment: 6 fields; inside a longer name: 1 field. Passing one path from the column back as '--exact-path <that path>' keeps that one alone.
+Matching 'costList' or 'things' or 'Hyperlinks': 7 fields, out of 14 fields on the def. Whole path segment: 6 fields; inside a longer name: 1 field.
 
 def_name       ChildGun
 def_type       ThingDef

@@ -190,8 +190,12 @@ public static class CommonOptions
         Placeholder = "<path>",
         // 措辞不带本命令的名词。三条命令拿这个筛选去做的事各不相同(列字段 / 列路径 /
         // 数见证者),而这条旗改的只有一件:比法。挂上名词就得三份措辞,而它们说的是同一件事。
-        Help = "The same selection as --path-contains, except the path has to match whole rather than as a " +
-               "substring. " + AnyIndexNote,
+        // 不写「与 --path-contains 同一个筛选」。它在 inherit 上是假的 —— 那边这个筛选不挑
+        // 要显示的行,是拿路径去数见证者。而且那句话请人把手上的片段原样换个旗再敲一遍,
+        // 那必然回 0 行:这条收的是整条路径,不是片段。**输入形状才是那 7 次失败调用缺的
+        // 东西**,所以它进正文,而不是留给读者从「whole」二字里推。
+        Help = "Match the field path as a whole rather than as a substring, so this takes a complete field " +
+               "path rather than a fragment of one. " + AnyIndexNote,
         Narrows = true,
     };
 

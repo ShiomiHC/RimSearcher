@@ -1153,7 +1153,11 @@ public sealed class FindCommand : Command
             // 仍是两件事(compClass 命中每一条以它结尾的路径)。
             "The field path is matched from the end and whole segments at a time, so 'compClass' finds " +
             "'comps[3].compClass' without you knowing the index, and 'graphicData.shaderType' does not reach " +
-            "'swimmingGraphicData.shaderType'; --exact-path pins the whole path. This replaces grepping " +
+            // 段对齐落地后,`; --exact-path pins the whole path` 删掉:它紧跟在
+            // swimmingGraphicData 那个例子后面,读起来像是为那件事备的 —— 而那件事现在
+            // 由后缀规则自己挡住了。它真正还挡的(后缀上面多出来的段)这句没说,而选项表
+            // 两行后的「Match the field path as a whole instead of as a suffix」已经说完。
+            "'swimmingGraphicData.shaderType'. This replaces grepping " +
             "the XML: the values here are the merged, post-patch ones, and a class reference is an exact match " +
             "rather than a text hit.",
         Positionals =
@@ -2972,11 +2976,20 @@ internal static class OutsideScope
 internal static class PathFilterSummary
 {
     /// <summary>
-    /// 出路两支共用一句。它们说的是同一件事(命中比问的宽),出路也是同一条。
+    /// 出路**只挂 <c>whole == 0</c> 那一支**,不是两支共用。
     ///
-    /// 2026-09-09 补。此前这一族拿两个数分了态,却没有任何开关能按着它筛 ——
-    /// <c>--exact-path</c> 那时只有 where / values 认,实测有人照着那边学会这个词、
-    /// 带到 <c>get</c> 上敲了 7 次,一次都没成。
+    /// 2026-09-09 补出路时两支都挂了,同日复查改掉。错在出路答的不是它挂着的那个态:
+    /// 两个数分的是「整段命中 / 嵌在更长名字里」,而 <c>--exact-path</c> 钉的是整条路径,
+    /// 它给不出「只要那 6 条整段的」。两支于是相反 ——
+    ///
+    /// <list type="bullet">
+    /// <item><c>whole == 0</c>:根本不存在「整段那一档」可给,把其中一条整条报出来是此处
+    /// 唯一的收窄。实测有人照着 where 学会这个词、带到 <c>get</c> 上敲了 7 次一次没成,
+    /// 缺的正是这句。留。</item>
+    /// <item><c>0 &lt; whole &lt; matched</c>:存在一个读者要得起的子集,而这条尾巴把 7 条
+    /// 收成 1 条 —— 拿一个够不着的开关顶替一个没造的开关。删。想按整段筛得先有那个开关,
+    /// 而它目前没有任何实测需求。</item>
+    /// </list>
     ///
     /// 「and this line removes none of them」**不能**被这句顶掉,两句管的是两件事:
     /// 那句说的是这一行自己没滤掉任何东西(要的字段就在下面表里),这句说的是想滤
@@ -2994,7 +3007,7 @@ internal static class PathFilterSummary
                  "contains it inside a longer name, and this line removes none of them." + Pin
                : whole < matched
                    ? $" Whole path segment: {Tally.Complete(whole).Render(noun)}; " +
-                     $"inside a longer name: {Tally.Complete(matched - whole).Render(noun)}." + Pin
+                     $"inside a longer name: {Tally.Complete(matched - whole).Render(noun)}."
                    : "");
 }
 

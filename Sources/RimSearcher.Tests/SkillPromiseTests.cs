@@ -246,7 +246,15 @@ public class SkillPromiseTests
         // 而合着写正是「得开那个旗才用得上 `[]`」这个读法的出处(三条 --path-contains
         // 因此把它当字面量,恒空)。拆成两条,各连各的闸:前半仍是那道整条/后缀的闸,
         // 后半是新立的、逐入口敲一遍的那道。
-        new("`--exact-path` pins the whole path and drops the rows those extra shapes contributed",
+        // 2026-09-09 再改一次(同日两次,方向不同)。原句是
+        // 「it does not say what sits above those segments: --exact-path pins the whole path
+        //  and drops the rows those extra shapes contributed」—— 前半是假的:`where` 总把整条
+        // 路径印出来,多形状时进 path 列,单形状时折进 `Same in every row`。说「不说」会请读者
+        // 再跑一条命令去问一件已经在屏幕上的事。
+        // 改后的措辞刻意收在这道闸证得到的两件事上:形状被印出来(那条 leaf 断言),
+        // 粘回去只剩一条(那条 pinned 断言)。**不写「path 列」** —— 闸证的是它出现在输出里,
+        // 而单形状那一档它根本不在列里。
+        new("the output names those shapes,\n  and passing one back with `--exact-path` keeps that one alone",
             nameof(GrammarTests.点路径的后缀按段对齐而exactpath再钉成整条)),
         new("`[]` stands for any index on the positional path of `where` and `values`, and on every\n  `--path-contains`",
             nameof(GrammarTests.下标通配在每个收路径的入口都认)),
