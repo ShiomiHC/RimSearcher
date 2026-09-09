@@ -82,6 +82,7 @@ public sealed class InheritCommand : Command
                        "Matching is the substring match 'get --path-contains' uses, so the same " +
                        "text selects the same fields in both commands.",
             },
+            CommonOptions.ExactPathFilter() with { Arity = Arity.Single },
         ],
         Examples =
         [
@@ -195,7 +196,8 @@ public sealed class InheritCommand : Command
         }
 
         var limit = ctx.Limit();
-        var pathFilter = ctx.Args.Value("path-contains");
+        var (pathFilters, exactPath) = ctx.Args.PathFilters();
+        var pathFilter = pathFilters.Count > 0 ? pathFilters[0] : null;
 
         foreach (var node in nodes)
         {
@@ -336,7 +338,7 @@ public sealed class InheritCommand : Command
                     "The mod that defines it was not enabled when the snapshot was taken, so what it " +
                     "contributed is not visible here.");
 
-            if (pathFilter is { Length: > 0 }) Witnesses(ctx, node, chain, pathFilter);
+            if (pathFilter is { Length: > 0 }) Witnesses(ctx, node, chain, pathFilter, exactPath);
 
             if (node.Name is { Length: > 0 })
             {
@@ -416,8 +418,12 @@ public sealed class InheritCommand : Command
     /// 这条推论有洞(子节点可以覆写,导出时字段表可能被截),洞逐条说破,判断权留在外面。
     /// </summary>
     private static void Witnesses(CommandContext ctx, XmlNodeRow node,
-                                  IReadOnlyList<XmlNodeRow> chain, string pathFilter)
+                                  IReadOnlyList<XmlNodeRow> chain, string pathFilter, bool exactPath)
     {
+        // 「含这段文本」在 --exact-path 那一档是假的:那一档比的是整条。同一句话
+        // 两档共用时,说错的是判据本身,而读者拿它当口径去解释下面每一个数。
+        var holding = exactPath ? "exactly at" : "containing";
+
         // 只有具名节点才有「后代」这回事 —— 无 Name= 的节点谁也继承不了它。
         var layers = new List<XmlNodeRow>();
         if (node.Name is { Length: > 0 }) layers.Add(node);
@@ -442,7 +448,7 @@ public sealed class InheritCommand : Command
             if (self is not null)
             {
                 exclude = (self.DefName, self.DefType);
-                var fields = ctx.Db.Fields(self.Id, int.MaxValue, [pathFilter]);
+                var fields = ctx.Db.Fields(self.Id, int.MaxValue, [pathFilter], exactPath: exactPath);
                 var values = fields.Rows.Select(r => r.Value ?? "").Distinct(StringComparer.Ordinal).ToList();
 
                 if (values.Count == 1)
@@ -456,7 +462,7 @@ public sealed class InheritCommand : Command
                 else if (values.Count == 0)
                 {
                     ctx.Report.Notice(NoticeKind.Boundary,
-                        $"'{self.DefName}' itself carries no field path containing '{pathFilter}', so there is no " +
+                        $"'{self.DefName}' itself carries no field path {holding} '{pathFilter}', so there is no " +
                         "value of its own to compare against; the counts below say which layers' descendants " +
                         "carry one at all.");
                 }
@@ -465,7 +471,7 @@ public sealed class InheritCommand : Command
                     ctx.Report.Notice(NoticeKind.Boundary,
                         $"'{self.DefName}' carries {Tally.Complete(values.Count).Render("value")} matching " +
                         $"'{pathFilter}' ({NameList.Render(values.Select(Quote).ToList(), 4)}), so there is no " +
-                        "single value to compare against. Narrow --path-contains until one is left.");
+                        "single value to compare against. Narrow the path filter until one is left.");
                 }
             }
         }
@@ -479,7 +485,7 @@ public sealed class InheritCommand : Command
         var byMode = false;
         if (reference is null && exclude is null && node.Name is { Length: > 0 })
         {
-            var dom = ctx.Db.DominantValue(node.Name, pathFilter);
+            var dom = ctx.Db.DominantValue(node.Name, pathFilter, exactPath);
             if (dom.Value is not null)
             {
                 reference = dom.Value;
@@ -502,7 +508,7 @@ public sealed class InheritCommand : Command
         var truncated = 0;
         foreach (var layer in layers)
         {
-            var w = ctx.Db.Witnesses(layer.Name!, pathFilter, reference, exclude);
+            var w = ctx.Db.Witnesses(layer.Name!, pathFilter, reference, exclude, exactPath);
             truncated = Math.Max(truncated, w.Truncated);
             var row = new Dictionary<string, object?>
             {
@@ -518,7 +524,7 @@ public sealed class InheritCommand : Command
 
         // 数怎么读,说一次。不说的话这张表就是三四列没有单位的整数。
         ctx.Report.Notice(NoticeKind.NextStep,
-            $"Each row counts the other defs descending from that layer: how many carry a field path containing " +
+            $"Each row counts the other defs descending from that layer: how many carry a field path {holding} " +
             $"'{pathFilter}'" + (reference is null ? "" : ", and how many of those read the same value") +
             ". A layer that declares a field passes it to every descendant, so a layer whose with_path falls " +
             "short of other_defs is not the one declaring this field; reaching other_defs does not point back " +
@@ -552,13 +558,13 @@ public sealed class InheritCommand : Command
         if (node.DefType is { Length: > 0 } &&
             rows.Any(r => r["with_path"] is int w && w > 0 && Equals(r["other_defs"], r["with_path"])))
         {
-            var wide = ctx.Db.TypeDefsWithPath(node.DefType, [pathFilter]);
+            var wide = ctx.Db.TypeDefsWithPath(node.DefType, [pathFilter], exactPath);
             var all = ctx.Db.CountDefsOfType(node.DefType,
                 Snapshot.ScopeFilter.Parse("all", ctx.Db.PackageIds(), ctx.Config));
             if (wide.Defs > 0 && all > 0)
                 ctx.Report.Notice(NoticeKind.Boundary,
                     $"The denominator for a full row: across the whole snapshot, {wide.Defs} of the {all} " +
-                    $"{node.DefType}s carry a path containing '{pathFilter}', layer or no layer. A row where " +
+                    $"{node.DefType}s carry a path {holding} '{pathFilter}', layer or no layer. A row where " +
                     "with_path equals other_defs is evidence only to the extent that fraction is smaller.");
         }
 

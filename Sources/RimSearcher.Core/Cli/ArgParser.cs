@@ -504,6 +504,26 @@ public sealed class ParseResult(
             $"--{name} expects a whole number of rows to skip, zero or more (got '{raw}').");
     }
 
+    /// <summary>
+    /// 路径轴的两条拼法收成一份:<c>--path-contains</c>(子串)与 <c>--exact-path</c>(整条)。
+    /// 回传的 bool 是「按整条比」。
+    ///
+    /// 两个一起给要报错而不是取并集:它们是同一条轴上的两档,一次调用只能站一档 ——
+    /// 取并集的话那句「其中几条是整段命中」按哪一档数都说不清,而那句数正是这条轴上
+    /// 唯一分得开两态的东西。同 <c>read</c> 的 --lines 与 --start/--end。
+    /// </summary>
+    public (IReadOnlyList<string> Paths, bool Exact) PathFilters()
+    {
+        var loose = Values("path-contains");
+        var exact = Values("exact-path");
+        if (loose.Count > 0 && exact.Count > 0)
+            throw new CliUsageException(
+                "--path-contains and --exact-path are the two settings of one dial — a path matched as a " +
+                "substring, or matched whole. Pass one or the other. Repeating either one widens the " +
+                "selection; mixing them would leave the 'whole path segment' count with no single meaning.");
+        return exact.Count > 0 ? (exact, true) : (loose, false);
+    }
+
     public int Int(string name, int fallback)
     {
         var raw = Value(name);

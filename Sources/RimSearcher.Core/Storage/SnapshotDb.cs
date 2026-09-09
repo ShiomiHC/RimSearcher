@@ -548,7 +548,8 @@ public sealed class SnapshotDb : IDisposable
     /// </summary>
     public (IReadOnlyList<FieldRow> Rows, int Matched, int Total, int Defaulted,
             IReadOnlyList<string> MatchedPaths) Fields(
-        long defId, int limit, IReadOnlyList<string>? pathFilters = null, bool includeDefaults = true)
+        long defId, int limit, IReadOnlyList<string>? pathFilters = null, bool includeDefaults = true,
+        bool exactPath = false)
     {
         var p = new Dictionary<string, object?> { ["@id"] = defId };
         // defName 不是这个 def 的一个字段,是它的身份 —— 值已经在表上方的 def_name 行里,
@@ -569,7 +570,7 @@ public sealed class SnapshotDb : IDisposable
             var ors = new List<string>();
             for (var i = 0; i < filters.Count; i++)
             {
-                p["@f" + i] = "%" + PathLike(filters[i]) + "%";
+                p["@f" + i] = PathFilterLike(filters[i], exactPath);
                 ors.Add($"{FvPath} LIKE @f{i} ESCAPE '\\'");
             }
             where += " AND (" + string.Join(" OR ", ors) + ")";
@@ -627,6 +628,21 @@ public sealed class SnapshotDb : IDisposable
     /// </summary>
     private static string PathLike(string s)
         => Escape(s).Replace("[]", "[%]", StringComparison.Ordinal);
+
+    /// <summary>
+    /// <c>--path-contains</c> 那一族的 LIKE 模式,唯一产地。<paramref name="exact"/> 是
+    /// <c>--exact-path</c>:整条相等,而不是子串。
+    ///
+    /// 抽出来是因为这个模式在五处各拼一遍(<see cref="Fields"/> / <see cref="FieldPathsForType"/> /
+    /// <see cref="TypeDefsWithPath"/> / <see cref="TypeDeclaredPaths"/> / <see cref="KinCte"/>),
+    /// 而它们是五段互不相干的 SQL —— 一个开关接上其中几处、漏掉另几处时,漏掉的那几处
+    /// 印出来的数与表里的行对不上账,而两边都不报错。
+    ///
+    /// 整条那一支仍走 LIKE 而不是 <c>=</c>:<c>[]</c> 是下标通配,<see cref="PathLike"/> 已经
+    /// 把它翻成 <c>[%]</c>,换成等值比会让每个带 <c>[]</c> 的写法恒空。
+    /// </summary>
+    private static string PathFilterLike(string text, bool exact)
+        => exact ? PathLike(text) : "%" + PathLike(text) + "%";
 
     public (IReadOnlyList<DefRow> Rows, int Total) ListByType(
         string defType, ScopeFilter scope, int limit, int offset, string? className = null, string? nameLike = null)
@@ -886,7 +902,8 @@ public sealed class SnapshotDb : IDisposable
     /// 路径上都有值(<c>ingestible.*</c> 在语料里就有七十几条),相加得到的数会大过这个类型
     /// 的 def 总数。
     /// </summary>
-    public (int Defs, int Paths) TypeDefsWithPath(string defType, IReadOnlyList<string> pathFilters)
+    public (int Defs, int Paths) TypeDefsWithPath(string defType, IReadOnlyList<string> pathFilters,
+                                                  bool exactPath = false)
     {
         var filters = pathFilters.Where(f => !string.IsNullOrEmpty(f)).ToList();
         if (filters.Count == 0) return (0, 0);
@@ -895,7 +912,7 @@ public sealed class SnapshotDb : IDisposable
         var any = new List<string>();
         for (var i = 0; i < filters.Count; i++)
         {
-            p[$"@f{i}"] = "%" + PathLike(filters[i]) + "%";
+            p[$"@f{i}"] = PathFilterLike(filters[i], exactPath);
             any.Add(PathIs($"path LIKE @f{i} ESCAPE '\\'"));
         }
         var where = $"FROM field_values fv {FvJoin} JOIN defs d ON d.id = fv.def_id " +
@@ -914,7 +931,8 @@ public sealed class SnapshotDb : IDisposable
     /// 多个一起给是**并集**(声明层的措辞就是 "Repeat it to widen the selection")。
     /// </param>
     public (IReadOnlyList<(string Path, int Count)> Rows, int Total, int WholeSegment) FieldPathsForType(
-        string defType, int limit, IReadOnlyList<string>? pathFilters = null, int offset = 0)
+        string defType, int limit, IReadOnlyList<string>? pathFilters = null, int offset = 0,
+        bool exactPath = false)
     {
         var p = new Dictionary<string, object?> { ["@t"] = defType };
         var where = "WHERE d.def_type = @t COLLATE NOCASE";
@@ -929,7 +947,7 @@ public sealed class SnapshotDb : IDisposable
                 // 下面六条整段模式全建在 e 上,所以 `[]` 的通配得在这里一次放完 ——
                 // 分两次的话「命中」与「整段命中」会按两套文法数。
                 var e = PathLike(filters[i]);
-                p[$"@f{i}"] = "%" + e + "%";
+                p[$"@f{i}"] = PathFilterLike(filters[i], exactPath);
                 any.Add(PathIs($"path LIKE @f{i} ESCAPE '\\'"));
 
                 // 「完整的一段」有六种落法:整条就是它,或者它是开头段 / 中间段 / 结尾段,
@@ -2017,10 +2035,11 @@ public sealed class SnapshotDb : IDisposable
     /// (<see cref="TruncatedDefCount"/>)在这里没用:它恒为非零,而恒真的免责声明会被学着跳过。
     /// </remarks>
     public (int Descendants, int WithPath, int SameValue, int Truncated) Witnesses(
-        string ancestorName, string pathFilter, string? value, (string DefName, string DefType)? exclude)
+        string ancestorName, string pathFilter, string? value, (string DefName, string DefType)? exclude,
+        bool exactPath = false)
     {
         var p = new Dictionary<string, object?>();
-        var cte = KinCte(ancestorName, pathFilter, exclude, p);
+        var cte = KinCte(ancestorName, pathFilter, exclude, p, exactPath);
 
         // 三个数一趟取回:分开跑三趟的话递归 CTE 也跑三趟,而 BuildingBase 这种量级的
         // 后代集是这条命令里最贵的一件事。
@@ -2048,10 +2067,11 @@ public sealed class SnapshotDb : IDisposable
     /// 众数把这件事变回可数的:众数占满带路径的那批就是共享,散开就是各写各的。
     /// 与「问的那个 def 自己装着什么」不是同一个口径,所以调用方必须在表头说破它是哪一种。
     /// </summary>
-    public (string? Value, int Defs, int Distinct) DominantValue(string ancestorName, string pathFilter)
+    public (string? Value, int Defs, int Distinct) DominantValue(string ancestorName, string pathFilter,
+                                                                 bool exactPath = false)
     {
         var p = new Dictionary<string, object?>();
-        var cte = KinCte(ancestorName, pathFilter, null, p);
+        var cte = KinCte(ancestorName, pathFilter, null, p, exactPath);
 
         // 并列时按值排序定序:名次靠随机决定的话,同一份快照两次运行会给出两个参照值。
         using var rd = Query(
@@ -2079,10 +2099,11 @@ public sealed class SnapshotDb : IDisposable
     /// 一个具名层之下的 def 集(<c>kin</c>)。两条查询共用,免得同一个后代集算出两种。
     /// </summary>
     private static string KinCte(string ancestorName, string pathFilter,
-                                 (string DefName, string DefType)? exclude, Dictionary<string, object?> p)
+                                 (string DefName, string DefType)? exclude, Dictionary<string, object?> p,
+                                 bool exactPath = false)
     {
         p["@root"] = ancestorName;
-        p["@f"] = "%" + PathLike(pathFilter) + "%";
+        p["@f"] = PathFilterLike(pathFilter, exactPath);
 
         // 自环与 XML 里写得出的环由 UNION(而非 UNION ALL)吃掉:去重之后递归自然收敛。
         var cte =
@@ -2510,7 +2531,8 @@ public sealed class SnapshotDb : IDisposable
         return rd.GetInt32(0);
     }
 
-    public IReadOnlyList<string>? TypeDeclaredPaths(string defType, IReadOnlyList<string>? pathFilters = null)
+    public IReadOnlyList<string>? TypeDeclaredPaths(string defType, IReadOnlyList<string>? pathFilters = null,
+                                                    bool exactPath = false)
     {
         if (!Meta.IndexesTypeFields) return null;
 
@@ -2522,7 +2544,7 @@ public sealed class SnapshotDb : IDisposable
             var ors = new List<string>();
             for (var i = 0; i < filters.Count; i++)
             {
-                p["@f" + i] = "%" + PathLike(filters[i]) + "%";
+                p["@f" + i] = PathFilterLike(filters[i], exactPath);
                 ors.Add($"{pathExpr} LIKE @f{i} ESCAPE '\\'");
             }
             where += " AND (" + string.Join(" OR ", ors) + ")";

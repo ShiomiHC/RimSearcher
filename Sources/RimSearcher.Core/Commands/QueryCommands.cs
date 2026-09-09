@@ -373,6 +373,7 @@ public sealed class GetCommand : Command
                        CommonOptions.AnyIndexNote,
                 Narrows = true,
             },
+            CommonOptions.ExactPathFilter(),
             // 同名跨 def 类型是 RimWorld 常态(PsychicSensitivity 既是 StatDef 又是 TraitDef)。
             // `get` 的 --type 挑的是**哪个 def**,不是从这个 def 的字段里筛,所以计数句里
             // 不念它 —— 念了会被读成「去掉它还有更多字段」,而去掉它得到的是另一个 def。
@@ -576,7 +577,9 @@ public sealed class GetCommand : Command
                   "which def the lines under it are about."));
 
         var limit = ctx.Limit();
-        var paths = ctx.Args.Values("path-contains");
+        var (paths, exactPath) = ctx.Args.PathFilters();
+        // 报错句里点的旗必须是读者自己敲的那个 —— 同 read 的 --lines / --start。
+        var pathSpelling = exactPath ? "--exact-path" : "--path-contains";
         // 字段索引存的是方括号式(stages[0].label),而拿语言文件来查的人手上是点下标式
         // (stages.0.label)—— 后者在字段表里一条都不中,且那与「这个字段不存在」同形。
         // 只把**查询**归一;所有报错句仍引读者自己敲的那一串。
@@ -643,7 +646,8 @@ public sealed class GetCommand : Command
             // 是明说要全量。于是过滤只发生在什么都没点名的那一次。
             var withDefaults = ctx.Args.Flag("defaults") || paths.Count > 0;
             var (fields, matched, total, defaulted, matchedPaths) =
-                ctx.Db.Fields(def.Id, limit.Effective, fieldPaths, includeDefaults: withDefaults);
+                ctx.Db.Fields(def.Id, limit.Effective, fieldPaths, includeDefaults: withDefaults,
+                              exactPath: exactPath);
 
             // 表在这一段的**末尾**才挂上去(渲染顺序 = Add 顺序)。分界与折叠行那条同理:
             // 数得清多少、全不全,读到行的时候得已经知道 —— 所以计数、过滤、截断在表之前。
@@ -667,11 +671,11 @@ public sealed class GetCommand : Command
                     // 没有」在输出上同形,而这个数当场查得出来 —— 不报,前者就会被当后者用。
                     var (kin, kinPaths) = asValue.Count > 0
                         ? (0, 0)
-                        : ctx.Db.TypeDefsWithPath(def.DefType, fieldPaths);
+                        : ctx.Db.TypeDefsWithPath(def.DefType, fieldPaths, exactPath);
 
                     ctx.Report.Notice(NoticeKind.Boundary,
-                        $"No field path{whose} contains {PathFilterText.Say(paths)}; the def does have " +
-                        $"{Tally.Complete(total).Render("field")}. Drop --path-contains to see them." +
+                        $"No field path{whose} {(exactPath ? "is exactly" : "contains")} {PathFilterText.Say(paths)}; the def does have " +
+                        $"{Tally.Complete(total).Render("field")}. Drop {pathSpelling} to see them." +
                         // 动词不进登记处:冒号在前、名单在后,主句就没有随数量变形的成分。
                         (asValue.Count > 0
                             ? " Found on this def as a field's value rather than anywhere in a path: " +
@@ -683,7 +687,7 @@ public sealed class GetCommand : Command
                             ? $" Other defs of this type do have it: {Tally.Complete(kin).Render("def")} across " +
                               $"{Tally.Complete(kinPaths).Render("field path")}. So it is missing from this def, " +
                               $"not from {def.DefType} — a field that is null on a def never entered the index. " +
-                              $"'rimsearcher fields {def.DefType} --path-contains {paths[0]}' names those paths."
+                              $"'rimsearcher fields {def.DefType} {pathSpelling} {paths[0]}' names those paths."
                             : ""));
 
                     // 一个同类都没有,而那段文本也不是个值:此时「索引里没有」与「字段不存在」
@@ -1178,7 +1182,7 @@ public sealed class FindCommand : Command
                        "Without it, the value is matched as a substring.",
                 Narrows = true,
             },
-            CommonOptions.ExactPath,
+            CommonOptions.ExactPath(),
             new OptionSpec
             {
                 // 「别 grep XML」拿走了一种能力,就得给回等价的一种:不知道字段叫什么时
@@ -2402,6 +2406,7 @@ public sealed class FieldsCommand : Command
                        CommonOptions.AnyIndexNote,
                 Narrows = true,
             },
+            CommonOptions.ExactPathFilter(),
             CommonOptions.Offset("field paths"),
         ],
         Examples =
@@ -2426,7 +2431,8 @@ public sealed class FieldsCommand : Command
     public override int Run(CommandContext ctx)
     {
         var limit = ctx.Limit();
-        var filters = ctx.Args.Values("path-contains");
+        var (filters, exactPath) = ctx.Args.PathFilters();
+        var pathSpelling = exactPath ? "--exact-path" : "--path-contains";
         var offset = ctx.Args.Offset();
 
         // 同一个类型给两遍只查一遍:行会重,而那两句计数会一字不差地说两次 —— 读起来
@@ -2439,7 +2445,7 @@ public sealed class FieldsCommand : Command
         var table = new List<IReadOnlyDictionary<string, object?>>();
         var listed = new List<string>();
         foreach (var type in asked)
-            if (RunOne(ctx, type, limit, filters, offset, table) == 0) listed.Add(type);
+            if (RunOne(ctx, type, limit, filters, offset, exactPath, table) == 0) listed.Add(type);
 
         // 部分命中仍是结果,全空才 1。
         if (listed.Count == 0) return 1;
@@ -2450,7 +2456,7 @@ public sealed class FieldsCommand : Command
         var byType = cut.SelectMany(s => s.ByType).ToList();
         if (byType.Count > 0)
             Completeness.NoteIndexedPathsOnly(ctx, new TruncationScope(cut.Sum(s => s.Count), byType),
-                $"all of {NameList.Render(listed, listed.Count)}, whatever --path-contains says");
+                $"all of {NameList.Render(listed, listed.Count)}, whatever {pathSpelling} says");
 
         ctx.Report.Table("fields", ["path", "defs", "def_type"], table);
         return 0;
@@ -2461,10 +2467,10 @@ public sealed class FieldsCommand : Command
     /// 同名表,而键名撞车会静默覆盖。
     /// </summary>
     private static int RunOne(CommandContext ctx, string type, LimitValue limit,
-                              IReadOnlyList<string> filters, int offset,
+                              IReadOnlyList<string> filters, int offset, bool exactPath,
                               List<IReadOnlyDictionary<string, object?>> table)
     {
-        var (rows, total, whole) = ctx.Db.FieldPathsForType(type, limit.Effective, filters, offset);
+        var (rows, total, whole) = ctx.Db.FieldPathsForType(type, limit.Effective, filters, offset, exactPath);
 
         if (rows.Count == 0)
         {
@@ -2476,7 +2482,7 @@ public sealed class FieldsCommand : Command
 
             if (filters.Count > 0 && ctx.Db.FieldPathsForType(type, 1).Rows.Count > 0)
             {
-                var declared = ctx.Db.TypeDeclaredPaths(type, filters);
+                var declared = ctx.Db.TypeDeclaredPaths(type, filters, exactPath);
                 if (declared is { Count: > 0 })
                 {
                     ctx.Report.Notice(NoticeKind.Boundary,
@@ -2501,7 +2507,8 @@ public sealed class FieldsCommand : Command
                     return 1;
                 }
                 ctx.Report.Notice(NoticeKind.Boundary,
-                    $"'{type}' has field paths, but none contains {PathFilterText.Say(filters)}. Drop --path-contains to see them all.");
+                    $"'{type}' has field paths, but none {(exactPath ? "is" : "contains")} {PathFilterText.Say(filters)}. " +
+                    $"Drop {(exactPath ? "--exact-path" : "--path-contains")} to see them all.");
                 Completeness.NoteIndexHoldsValuesOnly(ctx, filters[0]);
                 return 1;
             }
@@ -2571,7 +2578,7 @@ public sealed class ValuesCommand : Command
         Options =
         [
             CommonOptions.Limit("values"), CommonOptions.Offset("values"), CommonOptions.Scope,
-            CommonOptions.Type, CommonOptions.ExactPath,
+            CommonOptions.Type, CommonOptions.ExactPath(),
         ],
         Examples =
         [
@@ -2946,16 +2953,30 @@ internal static class OutsideScope
 /// </summary>
 internal static class PathFilterSummary
 {
+    /// <summary>
+    /// 出路两支共用一句。它们说的是同一件事(命中比问的宽),出路也是同一条。
+    ///
+    /// 2026-09-09 补。此前这一族拿两个数分了态,却没有任何开关能按着它筛 ——
+    /// <c>--exact-path</c> 那时只有 where / values 认,实测有人照着那边学会这个词、
+    /// 带到 <c>get</c> 上敲了 7 次,一次都没成。
+    ///
+    /// 「and this line removes none of them」**不能**被这句顶掉,两句管的是两件事:
+    /// 那句说的是这一行自己没滤掉任何东西(要的字段就在下面表里),这句说的是想滤
+    /// 该敲什么。删掉前者,读者会把「不是整段」读成「你要的东西被藏起来了」。
+    /// </summary>
+    private const string Pin = " Passing one path from the column back as " +
+                               "'--exact-path <that path>' keeps that one alone.";
+
     public static string Say(IReadOnlyList<string> filters, string subject, string noun,
                              int matched, int total, int whole, string whose = "")
         => $"Matching {PathFilterText.Say(filters)}{whose}: {Tally.Complete(matched).Render(noun)}, " +
            $"out of {Tally.Complete(total).Render(noun)} {subject}." +
            (whole == 0
                ? $" None of those has {PathFilterText.Say(filters)} as a whole path segment: each match " +
-                 "contains it inside a longer name, and this line removes none of them."
+                 "contains it inside a longer name, and this line removes none of them." + Pin
                : whole < matched
                    ? $" Whole path segment: {Tally.Complete(whole).Render(noun)}; " +
-                     $"inside a longer name: {Tally.Complete(matched - whole).Render(noun)}."
+                     $"inside a longer name: {Tally.Complete(matched - whole).Render(noun)}." + Pin
                    : "");
 }
 

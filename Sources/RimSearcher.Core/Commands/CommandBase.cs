@@ -118,8 +118,12 @@ public static class CommonOptions
     /// 后缀匹配的对侧开关。默认那条后缀是纯文本、不在 <c>.</c> 上对齐,于是
     /// <c>graphicData.shaderType</c> 连 <c>swimmingGraphicData.shaderType</c> 一起收走 ——
     /// 结果里那句「横跨几种路径形状」说得出这件事,而在此之前没有一条命令能把它筛掉。
+    ///
+    /// 这一条是**旗**,因为 <c>where</c> / <c>values</c> 的路径走位置参数,它只改匹配方式。
+    /// <c>get</c> / <c>inherit</c> / <c>fields</c> 的路径走选项,那边同名的是
+    /// <see cref="ExactPathFilter"/>,收值。
     /// </summary>
-    public static readonly OptionSpec ExactPath = new()
+    public static OptionSpec ExactPath() => new()
     {
         Name = "exact-path",
         Aliases = ["whole-path", "path-exact"],
@@ -131,6 +135,30 @@ public static class CommonOptions
         // 两句同屏。`values` 的 Remarks 确实没讲「点号不切开」这件事,但那个缺口在这条旗
         // 收窄之前就在,补它是另一件事 —— 不靠一句在 where 上重复的话去顺带盖住。
         Help = "Match the field path as a whole instead of as a suffix.",
+        Narrows = true,
+    };
+
+    /// <summary>
+    /// <c>--path-contains</c> 的严格那一档,收值。<paramref name="noun"/> 是本命令列的东西。
+    ///
+    /// **它收值而不是当旗,是实测定的。** 读者是在 <c>where</c> 上学会这个词的,而那边
+    /// 路径走位置参数、这个词是旗。带到 <c>get</c> 上的 7 次调用**无一例外**写成
+    /// <c>--exact-path &lt;路径&gt;</c> —— 迁移过来的是这个词,不是那个形状。写成旗的话
+    /// 那 7 次仍然跑不对:路径会被当成 def 名,而输出还照印一整块。
+    ///
+    /// 于是同一个词在两族上 arity 不同,而这跟着**路径由谁携带**走:哪边携带路径,
+    /// 这个词就长在哪边。两族的语义逐字相同 —— 整条匹配。
+    /// </summary>
+    public static OptionSpec ExactPathFilter() => new()
+    {
+        Name = "exact-path",
+        Aliases = ["whole-path", "path-exact"],
+        Arity = Arity.Multi,
+        Placeholder = "<path>",
+        // 措辞不带本命令的名词。三条命令拿这个筛选去做的事各不相同(列字段 / 列路径 /
+        // 数见证者),而这条旗改的只有一件:比法。挂上名词就得三份措辞,而它们说的是同一件事。
+        Help = "The same selection as --path-contains, except the path has to match whole rather than as a " +
+               "substring. " + AnyIndexNote,
         Narrows = true,
     };
 

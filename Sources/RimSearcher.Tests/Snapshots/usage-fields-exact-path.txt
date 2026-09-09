@@ -1,6 +1,14 @@
 $ rimsearcher fields ThingDef --exact-path graphicData.texPath
-exit 2
+exit 0
 --- stdout ---
+1 field path on ThingDef within --exact-path graphicData.texPath.
+Matching 'graphicData.texPath': 1 field path, out of 26 field paths on ThingDef.
+
+Defs that may be missing from this answer, their export cut short — all of ThingDef, whatever --exact-path says
+def_type  defs_cut_short
+ThingDef  1
+verify: rimsearcher snapshot truncated --type ThingDef
+
+path                 defs  def_type
+graphicData.texPath  2     ThingDef
 --- stderr ---
-Unknown option '--exact-path'. This command accepts: --config, --db, --json, --limit, --offset, --path-contains, --snapshot.
-Run 'rimsearcher fields --help' to see what this command accepts.
