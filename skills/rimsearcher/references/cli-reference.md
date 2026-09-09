@@ -356,7 +356,7 @@ What is listed is every path the exporter recorded a value for. When the snapsho
 |---|---|---|
 | `-n`, `--limit` <n> | How many field paths to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--path-contains` <text> | Only list paths containing this text. Repeat it to widen the selection. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. | `--filter`, `--grep`, `--path` |
-| `--exact-path` <path> | Match the field path as a whole rather than as a substring, so this takes a complete field path rather than a fragment of one. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. | `--whole-path`, `--path-exact` |
+| `--exact-path` <path> | Match this one field path end to end, so it takes a complete field path rather than a fragment of one. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. | `--whole-path`, `--path-exact` |
 | `--offset` <n> | Skip this many field paths before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. |  |
 
 `--json` keys, besides the global `notes`:
@@ -398,7 +398,7 @@ defName is not listed as a field: the def_name line above the table is that valu
 |---|---|---|
 | `-n`, `--limit` <n> | How many fields to return, at most. Left out, every one is returned. It counts fields inside each block; the number of blocks printed is set by the names you give, or by --type. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--path-contains` <text> | Only show field paths containing this text. Repeat it to widen the selection. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. | `--filter`, `--grep`, `--values`, `--path` |
-| `--exact-path` <path> | Match the field path as a whole rather than as a substring, so this takes a complete field path rather than a fragment of one. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. | `--whole-path`, `--path-exact` |
+| `--exact-path` <path> | Match this one field path end to end, so it takes a complete field path rather than a fragment of one. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. | `--whole-path`, `--path-exact` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. Given with no def name at all, it selects every def of that type instead, one block each in def-name order. | `--def-type`, `--kind` |
 | `--defaults` | Also list fields whose value is the one a fresh instance of the declaring type already carries. They are left out by default. The 'xml' column on those rows says whether this def's own XML wrote the path (here), only an ancestor did (parent), neither of them did (not-written), or that the row cannot be pinned to a line inside a container the XML did write (under <container>). The table says beside it which XML that was: 'read after every patch ran' or 'read before patches ran'. A yes with xml=here is an explicit write of the default. Without the xml column, a def whose XML writes that same value and a def that never mentions the field look the same. How many were left out is always printed, and --path-contains shows a named field either way. | `--with-defaults` |
 
@@ -479,7 +479,7 @@ What is shown is the XML before PatchOperations are applied. patch_ops counts xp
 |---|---|---|
 | `-n`, `--limit` <n> | How many children to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--path-contains` <text> | Count, for every layer in the chain, the other defs descending from it that carry a field path containing this text, and how many of those carry the same value. This is a witness count, not a record of where the field was declared — the snapshot holds no such record, and the output below the table says what the count does and does not settle. Matching is the substring match 'get --path-contains' uses, so the same text selects the same fields in both commands. | `--filter`, `--grep`, `--path` |
-| `--exact-path` <path> | Match the field path as a whole rather than as a substring, so this takes a complete field path rather than a fragment of one. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. | `--whole-path`, `--path-exact` |
+| `--exact-path` <path> | Match this one field path end to end, so it takes a complete field path rather than a fragment of one. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. | `--whole-path`, `--path-exact` |
 
 `--json` keys, besides the global `notes`:
 
@@ -1136,7 +1136,7 @@ Answers 'what am I allowed to put here' and 'which classes are actually in use' 
 | `--offset` <n> | Skip this many values before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. |  |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind` |
-| `--exact-path` | Match the field path as a whole instead of as a suffix. | `--whole-path`, `--path-exact` |
+| `--exact-path` | Match the field path given as an argument end to end. | `--whole-path`, `--path-exact` |
 | `--path-contains` <text> | Only match field paths containing this text; when a path argument is given, it has to match as well. Repeat it to widen the selection. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. | `--filter`, `--grep` |
 
 `--json` keys, besides the global `notes`:
@@ -1163,7 +1163,7 @@ Find defs by the value of a field. This is the reverse lookup: from a C# class o
 rimsearcher where [fieldPath] [value] [options]
 ```
 
-The field path is matched from the end and whole segments at a time, so 'compClass' finds 'comps[3].compClass' without you knowing the index, and 'graphicData.shaderType' does not reach 'swimmingGraphicData.shaderType'. This replaces grepping the XML: the values here are the merged, post-patch ones, and a class reference is an exact match rather than a text hit.
+The field path is matched from the end, a segment at a time, so 'compClass' finds 'comps[3].compClass' without you knowing the index, and 'graphicData.shaderType' does not reach 'swimmingGraphicData.shaderType'. This replaces grepping the XML: the values here are the merged, post-patch ones, and a class reference is an exact match rather than a text hit.
 
 | Argument | Meaning |
 |---|---|
@@ -1177,7 +1177,7 @@ The field path is matched from the end and whole segments at a time, so 'compCla
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind` |
 | `--exact` | Require the whole value to match, with either a field path or --value. Without it, the value is matched as a substring. | `--exact-match`, `--whole` |
-| `--exact-path` | Match the field path as a whole instead of as a suffix. | `--whole-path`, `--path-exact` |
+| `--exact-path` | Match the field path given as an argument end to end. | `--whole-path`, `--path-exact` |
 | `--path-contains` <text> | Only match field paths containing this text; when a path argument is given, it has to match as well. Repeat it to widen the selection. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. | `--filter`, `--grep` |
 | `--value` <text> | The value to look for, same as giving it as an argument. Without a field path, every indexed field is searched and the report names which paths hold it. | `--any-field`, `--search-values`, `--holding` |
 

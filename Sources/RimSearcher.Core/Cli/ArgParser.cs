@@ -522,9 +522,11 @@ public sealed class ParseResult(
                 // (--path-contains comps --exact-path comps[0].compClass),那句是反向指引。
                 // 两个旗各带自己的占位符,因为一个收片段、一个收整条路径,而混用的人多半
                 // 正把片段原样换旗重敲。
-                "--path-contains and --exact-path cannot be combined: one matches the path as a substring, " +
-                "the other as a whole. Pass --path-contains <text> for a fragment, or --exact-path <path> " +
-                "for a complete field path.");
+                // 不写 "as a whole":那个词在这一轮之前同时指整段名字、整条路径、整个值,
+                // 而这句话正处在读者拿片段换旗重敲的当口。
+                "--path-contains and --exact-path cannot be combined: one matches a fragment of the path, " +
+                "the other matches it end to end. Pass --path-contains <text> for a fragment, or " +
+                "--exact-path <path> for a complete field path.");
         return exact.Count > 0 ? (exact, true) : (loose, false);
     }
 

@@ -5,7 +5,7 @@ Usage: rimsearcher where [fieldPath] [value] [options]
 
 Find defs by the value of a field. This is the reverse lookup: from a C# class or a value back to the defs that use it.
 
-The field path is matched from the end and whole segments at a time, so 'compClass' finds 'comps[3].compClass' without you knowing the index, and 'graphicData.shaderType' does not reach 'swimmingGraphicData.shaderType'. This replaces grepping the XML: the values here are the merged, post-patch ones, and a class reference is an exact match rather than a text hit.
+The field path is matched from the end, a segment at a time, so 'compClass' finds 'comps[3].compClass' without you knowing the index, and 'graphicData.shaderType' does not reach 'swimmingGraphicData.shaderType'. This replaces grepping the XML: the values here are the merged, post-patch ones, and a class reference is an exact match rather than a text hit.
 
 Arguments:
   <fieldPath>  A field path or just its last segment, such as compClass or defaultProjectile. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. Omit it to search every field instead. (optional)
@@ -21,7 +21,7 @@ Options:
                               Also accepted: --def-type, --kind.
       --exact                 Require the whole value to match, with either a field path or --value. Without it, the value is matched as a substring.
                               Also accepted: --exact-match, --whole.
-      --exact-path            Match the field path as a whole instead of as a suffix.
+      --exact-path            Match the field path given as an argument end to end.
                               Also accepted: --whole-path, --path-exact.
       --path-contains <text>  Only match field paths containing this text; when a path argument is given, it has to match as well. Repeat it to widen the selection. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax.
                               Also accepted: --filter, --grep.

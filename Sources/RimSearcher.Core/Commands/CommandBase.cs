@@ -140,7 +140,11 @@ public static class CommonOptions
         // 后面不跟 `graphicData.shaderType` 那个例子:`where` 的 Remarks 用的就是这一对,
         // 两句同屏。`values` 的 Remarks 确实没讲「点号不切开」这件事,但那个缺口在这条旗
         // 收窄之前就在,补它是另一件事 —— 不靠一句在 where 上重复的话去顺带盖住。
-        Help = "Match the field path as a whole instead of as a suffix.",
+        // 正面说自己做什么,不说自己不是什么。原句「as a whole instead of as a suffix」
+        // 与 get 那族的「as a whole rather than as a substring」同词不同义 —— 两边否定的
+        // 是各自的默认,而读者是从一族学到另一族的,于是 whole 读成了两件事。
+        // 缺省态不必在这里重复:位置参数自己的说明就写着「一条路径或它的最后一段」。
+        Help = "Match the field path given as an argument end to end.",
         Narrows = true,
     };
 
@@ -206,8 +210,10 @@ public static class CommonOptions
         // 要显示的行,是拿路径去数见证者。而且那句话请人把手上的片段原样换个旗再敲一遍,
         // 那必然回 0 行:这条收的是整条路径,不是片段。**输入形状才是那 7 次失败调用缺的
         // 东西**,所以它进正文,而不是留给读者从「whole」二字里推。
-        Help = "Match the field path as a whole rather than as a substring, so this takes a complete field " +
-               "path rather than a fragment of one. " + AnyIndexNote,
+        // 同上,正面陈述。输入形状那半句留着 —— 那 7 次失败调用缺的正是它,
+        // 而它推不出来(「end to end」不告诉人这里该填整条还是片段)。
+        Help = "Match this one field path end to end, so it takes a complete field path rather than a " +
+               "fragment of one. " + AnyIndexNote,
         Narrows = true,
     };
 

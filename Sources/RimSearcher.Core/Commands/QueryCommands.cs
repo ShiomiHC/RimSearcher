@@ -1151,12 +1151,14 @@ public sealed class FindCommand : Command
             // swimmingGraphicData.shaderType」这句 2026-09-09 删掉。它是判据的辩护 ——
             // 而判据已经改成段对齐,那句现在是假的。--exact-path 那半句留着:后缀与整条
             // 仍是两件事(compClass 命中每一条以它结尾的路径)。
-            "The field path is matched from the end and whole segments at a time, so 'compClass' finds " +
+            // 「whole segments」改「a segment at a time」:whole 这个词此前同时在指整段名字、
+            // 整条路径、整个值三件事,而这一句正好挨着 --exact-path 那两行。
+            "The field path is matched from the end, a segment at a time, so 'compClass' finds " +
             "'comps[3].compClass' without you knowing the index, and 'graphicData.shaderType' does not reach " +
             // 段对齐落地后,`; --exact-path pins the whole path` 删掉:它紧跟在
             // swimmingGraphicData 那个例子后面,读起来像是为那件事备的 —— 而那件事现在
             // 由后缀规则自己挡住了。它真正还挡的(后缀上面多出来的段)这句没说,而选项表
-            // 两行后的「Match the field path as a whole instead of as a suffix」已经说完。
+            // 两行后的「Match the field path given as an argument end to end」已经说完。
             "'swimmingGraphicData.shaderType'. This replaces grepping " +
             "the XML: the values here are the merged, post-patch ones, and a class reference is an exact match " +
             "rather than a text hit.",
@@ -1283,7 +1285,7 @@ public sealed class FindCommand : Command
             if (ctx.Args.Flag("exact-path"))
                 throw new CliUsageException(
                     // 不用 "pins":段对齐落地后它全 CLI 只剩这一处,读者在 --help 上学到的
-                    // 是 "Match the field path as a whole instead of as a suffix",对不上。
+                    // 是 "Match the field path given as an argument end to end",对不上。
                     "--exact-path changes how the field path given as an argument is matched, and this " +
                     "call does not give one. " +
                     "Pass the path ('rimsearcher where statBases[].stat MarketValue --exact-path'), or " +

@@ -96,9 +96,9 @@ Each of these is a case where the obvious move returns a clean, complete-looking
 a different question. None of them announces itself.
 
 - **`where`'s path is matched from the end; every `--path-contains` filter is a substring.**
-  A bare name matches the last segment whole (`where genSteps` never sees
-  `extraGenSteps[N]`; `fields MapGeneratorDef --path-contains enStep` reaches both because
-  it is a substring), and a dotted one matches whole segments the same way —
+  A bare name matches the last segment whole (`where label` never collects
+  `cannotEnterLabel`; `fields ThingDef --path-contains label` does, because it is a
+  substring), and a dotted one matches whole segments the same way —
   `where graphicData.shaderType` does not collect `swimmingGraphicData.shaderType`.
   It is still a suffix, so segments can sit above it — the output names those shapes;
   rerun as `where <that shape> --exact-path` to keep that one alone.
