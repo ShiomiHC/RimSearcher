@@ -2524,6 +2524,36 @@ public sealed class FieldsCommand : Command
 
             if (filters.Count > 0 && ctx.Db.FieldPathsForType(type, 1).Rows.Count > 0)
             {
+                // --exact-path 自己把结果筛空,与「这个类型没有这个字段」是两件事。
+                // 排在最前:这条成因一旦成立,后面三条都不适用 —— 而它们的句子模板全都
+                // 写着 contains,在整条相等的语义下那是**假话**:`fields ThingDef
+                // --exact-path MarketValue` 落空,而 race.meatMarketValue 含着它。
+                //
+                // 口径与 where 那侧的同一条诊断一致(先问自己是不是成因,再列形状),
+                // 只是那边按后缀问、这边按子串问 —— 两条命令的 --exact-path 各自
+                // 放宽回它自己的默认谓词。
+                if (exactPath)
+                {
+                    var relaxed = ctx.Db.FieldPathsForType(type, Limits.MaxSuggestions, filters);
+                    if (relaxed.Rows.Count > 0)
+                    {
+                        var shown = relaxed.Rows.Select(r => r.Path).ToList();
+                        // 动词不进随数量变形的位置:分词短语当标签,冒号后是名单 ——
+                        // 与 where 那侧「Matched as a suffix instead:」同一个形态,
+                        // 谓词换成这条命令自己的默认(子串)。
+                        ctx.Report.Notice(NoticeKind.NextStep,
+                            $"No field path on '{type}' is exactly {PathFilterText.Say(filters)}. " +
+                            "Matched as a substring instead: " +
+                            string.Join(", ", shown) +
+                            (relaxed.Total > shown.Count
+                                ? $", plus {Tally.Complete(relaxed.Total - shown.Count).Render("field path")} not shown"
+                                : "") +
+                            ". --exact-path is what emptied this, not the type: any one of those goes " +
+                            "straight back into it, or drop the flag to see them all.");
+                        return 1;
+                    }
+                }
+
                 var declared = ctx.Db.TypeDeclaredPaths(type, filters, exactPath);
                 if (declared is { Count: > 0 })
                 {
@@ -2554,13 +2584,17 @@ public sealed class FieldsCommand : Command
                     // 再往深里找一次。
                     var reach = ctx.Db.TypeDeclaredPathMaxSegments(type);
                     ctx.Report.Notice(NoticeKind.Boundary,
-                        $"'{type}' has field paths, but none contains {PathFilterText.Say(filters)}, and its " +
-                        "declared-path list has none either" +
+                        // 「declared-path list」是个要外部定义才读得懂的名词 —— 它的定义
+                        // 只在 SKILL 里。换成自陈的关系从句:与前半句「有值的那些路径」
+                        // 正好成对照,也与代码侧 members / read 的 declares 同一个对立面
+                        // (类型自己声明的 vs 实际到手的),同一个词在两侧不再需要各学一遍。
+                        $"'{type}' has field paths, but none contains {PathFilterText.Say(filters)}, and " +
+                        "none of the fields the type itself declares has it either" +
                         (asValue is not null
                             ? "."
                             : reach is { } n
-                                ? $" — that list reaches {n} segments deep, so a field nested past that is outside " +
-                                  "what it measured."
+                                ? $" — that declared set reaches {n} segments deep, so a field nested past that " +
+                                  "is outside what it measured."
                                 : ".") +
                         notAValue);
                     if (asValue is not null) ctx.Report.Notice(NoticeKind.NextStep, asValue);

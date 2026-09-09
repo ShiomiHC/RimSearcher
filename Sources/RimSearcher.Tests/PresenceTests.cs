@@ -199,7 +199,7 @@ public class PresenceTests
         var (missing, _, missCode) = Fixture.Run("fields", "ThingDef", "--path-contains", "noSuchFieldXYZ",
                                                  "--db", Fixture.PresenceDb);
         Assert.Equal(1, missCode);
-        Assert.Contains("declared-path list has none either", missing, StringComparison.Ordinal);
+        Assert.Contains("none of the fields the type itself declares has it either", missing, StringComparison.Ordinal);
         Assert.DoesNotContain("every def of the type has them as null", missing, StringComparison.Ordinal);
 
         // 这个否定的依据是一张**有深度上限**的表:类型图里有一个 471 个类型的强连通分量,
@@ -538,7 +538,7 @@ public class PresenceTests
         var (missing, _, missCode) = Fixture.Run("fields", "ThingDef", "--path-contains", "noSuchFieldXYZ",
                                                  "--db", path);
         Assert.Equal(1, missCode);
-        Assert.Contains("declared-path list has none either", missing, StringComparison.Ordinal);
+        Assert.Contains("none of the fields the type itself declares has it either", missing, StringComparison.Ordinal);
         Assert.Matches(@"reaches \d+ segments deep", missing);
     }
 
