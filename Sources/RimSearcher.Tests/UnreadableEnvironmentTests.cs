@@ -15,7 +15,7 @@ public class UnreadableEnvironmentTests
 {
     private static string TempDir(string tag)
     {
-        var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "unreadable", tag);
+        var dir = Path.Combine(TestTemp.Root, "unreadable", tag);
         Directory.CreateDirectory(dir);
         return dir;
     }

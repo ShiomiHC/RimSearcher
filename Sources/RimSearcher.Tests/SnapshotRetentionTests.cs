@@ -236,7 +236,7 @@ public class SnapshotRetentionTests
 
     private static string FreshDir(string name, int? keep = null)
     {
-        var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "snapshot-retention", name);
+        var dir = Path.Combine(TestTemp.Root, "snapshot-retention", name);
         if (Directory.Exists(dir)) Directory.Delete(dir, true);
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "config.toml"),

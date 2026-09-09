@@ -619,6 +619,14 @@ public sealed class ReadCommand : Command
                         .Select(d => d.Name).Distinct(StringComparer.Ordinal).ToList();
         var close = Suggestion.Closest(pool, name);
 
+        // 元数据先问一次:那份 dll 知道这个名字长在谁身上,而这里只有花括号。
+        //
+        // 实测 59 次 read --member 落空里 37% 当场交卷,抽验 12 个被丢掉的符号有 10 个
+        // 真的存在;另有 28% 跟着下面那条继承提示走 —— 而 `Need_Food.HungerMultiplier`
+        // 那次顺着走到 Need.cs 仍是空,真答案 `HungerLevelUtility` 是个静态工具类,
+        // 继承链上永远走不到。同一个问题元数据侧(`il`)早就答对了。
+        var elsewhere = member is { Length: > 0 } ? WhoHasIt(ctx, member) : null;
+
         ctx.Report.Notice(NoticeKind.NextStep,
             $"No {(member is { Length: > 0 } ? "member" : "type")} named '{name}' was found in {rel} " +
             $"({Tally.Complete(text.Length).Render("line")}, " +
@@ -629,20 +637,23 @@ public sealed class ReadCommand : Command
             // ③ --outline 的能力不许写得比它自己的自述强(曾写 "every",而 RegionProcessor.cs
             // 整文件一份 `delegate` 声明,轮廓 0 条,于是那份清单被当成了「文件里没有」的证据)。
             // 为什么能压这么短:这三条的完整版常驻 SKILL.md,落空路径不必再讲一遍。
-            " The match runs on braces, not C# parsing, so this is not evidence the file lacks it — " +
-            "'rimsearcher code-search' searches the text itself; '--outline' lists what the same " +
-            "matching does find.");
+            //
+            // **成因查明时整段撤掉**:它讲的是「这次落空可能是我没看见」,而下一句已经
+            // 说出这个名字声明在哪个类型上了。两句并排时读者读不出 Need_Food.cs 里到底
+            // 有没有,而那三条下一步全都指着与真答案相反的方向。这条免责留给「元数据里
+            // 也没有」的那一支 —— 那时它才是这次落空唯一说得住的解释。
+            // 口径与 fields 那侧同:查明了成因就不再列泛化的可能性。
+            (elsewhere is null
+                ? " The match runs on braces, not C# parsing, so this is not evidence the file lacks it — " +
+                  "'rimsearcher code-search' searches the text itself; '--outline' lists what the same " +
+                  "matching does find."
+                : ""));
 
-        // 元数据先问一次:那份 dll 知道这个名字长在谁身上,而这里只有花括号。
-        //
-        // 实测 59 次 read --member 落空里 37% 当场交卷,抽验 12 个被丢掉的符号有 10 个
-        // 真的存在;另有 28% 跟着下面那条继承提示走 —— 而 `Need_Food.HungerMultiplier`
-        // 那次顺着走到 Need.cs 仍是空,真答案 `HungerLevelUtility` 是个静态工具类,
-        // 继承链上永远走不到。同一个问题元数据侧(`il`)早就答对了。
-        //
-        // 答出来就 return:下面那条提示是**猜**的(基类名算得出,基类有没有这个成员没查),
-        // 而这一句是查过的。两句并排时读者会先照做能粘贴的那一条,那正是走岔的那步。
-        if (member is { Length: > 0 } && SayWhoHasIt(ctx, member)) return;
+        if (elsewhere is not null)
+        {
+            ctx.Report.Notice(NoticeKind.NextStep, elsewhere);
+            return;
+        }
 
         // 「这个文件里没有」会被读成「这个类型没有这个成员」。反编译产物**不重复父类的成员**:
         // `read MapPortal.cs --member Destroy` 落空,而 Destroy 在再上一层的 Thing 里。
@@ -673,13 +684,13 @@ public sealed class ReadCommand : Command
     /// 只点名类型,不给行号:元数据可能来自比 .cs 新的一份 dll,而「这个名字长在谁身上」
     /// 这一级经得起那点差异,行号经不起。
     /// </summary>
-    private static bool SayWhoHasIt(CommandContext ctx, string member)
+    private static string? WhoHasIt(CommandContext ctx, string member)
     {
         using var lookup = CodeShared.OpenQuietly(ctx);
-        if (lookup is null) return false;
+        if (lookup is null) return null;
 
         var hits = lookup.FindMembersAnywhere(member, 32);
-        if (hits.Count == 0) return false;
+        if (hits.Count == 0) return null;
 
         var types = hits.Select(h => h.Type.FullName).Distinct(StringComparer.Ordinal).ToList();
         var shown = types.Take(Limits.MaxSuggestions).ToList();
@@ -688,16 +699,14 @@ public sealed class ReadCommand : Command
         // 一个字段没有自己的块,这一句不说的话,下一步又会落回同一个空。
         var kinds = hits.Select(h => h.Kind).Distinct(StringComparer.Ordinal).ToList();
 
-        ctx.Report.Notice(NoticeKind.NextStep,
-            $"The assemblies do have '{member}': it is declared on " +
-            NameList.Render(shown, Limits.MaxSuggestions) +
-            (types.Count > shown.Count
-                ? $", plus {Tally.Complete(types.Count - shown.Count).Render("type")} more"
-                : "") +
-            $" (as {NameList.Render(kinds, 3)}). " +
-            $"'rimsearcher members {shown[0]} --name {member}' shows the declaration, and " +
-            $"'rimsearcher read {shown[0].Split('.')[^1]}.cs --member {member}' reads it there.");
-        return true;
+        return $"The assemblies do have '{member}': it is declared on " +
+               NameList.Render(shown, Limits.MaxSuggestions) +
+               (types.Count > shown.Count
+                   ? $", plus {Tally.Complete(types.Count - shown.Count).Render("type")} more"
+                   : "") +
+               $" (as {NameList.Render(kinds, 3)}). " +
+               $"'rimsearcher members {shown[0]} --name {member}' shows the declaration, and " +
+               $"'rimsearcher read {shown[0].Split('.')[^1]}.cs --member {member}' reads it there.";
     }
 
     /// <summary>

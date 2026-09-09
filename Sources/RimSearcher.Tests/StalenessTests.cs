@@ -53,7 +53,7 @@ public class StalenessTests
     [Fact]
     public void 版本从游戏目录的程序集读出来()
     {
-        var gameDir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "fake-game");
+        var gameDir = Path.Combine(TestTemp.Root, "fake-game");
         var managed = SourcePlanner.ManagedPath(gameDir);
         Directory.CreateDirectory(managed);
         var self = typeof(StalenessTests).Assembly;
@@ -102,7 +102,7 @@ public class StalenessTests
 
     private static (RimConfig Config, string ModDir) Environment(string name, string packageId = "test.contentmod")
     {
-        var root = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "content", name);
+        var root = Path.Combine(TestTemp.Root, "content", name);
         if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
         var modDir = WriteModTree(Path.Combine(root, "mods", packageId), packageId);
         return (new RimConfig { ModRoots = [Path.Combine(root, "mods")] }, modDir);
@@ -201,7 +201,7 @@ public class StalenessTests
         var (config, _) = Environment("home");
         var before = HashOf(config, "test.contentmod");
 
-        var moved = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "content", "moved", "mods");
+        var moved = Path.Combine(TestTemp.Root, "content", "moved", "mods");
         if (Directory.Exists(moved)) Directory.Delete(moved, recursive: true);
         Directory.CreateDirectory(moved);
         CopyTree(config.ModRoots[0], moved);
@@ -272,7 +272,7 @@ public class StalenessTests
     private static (string Db, RimConfig Config, string ModDir, string ConfigPath) SnapshotOfModTree(
         string name, string[]? activeMods = null, string? gameVersion = null)
     {
-        var root = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "content", name);
+        var root = Path.Combine(TestTemp.Root, "content", name);
         if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
 
         const string PackageId = "test.mod";

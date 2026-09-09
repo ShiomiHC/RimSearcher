@@ -14,7 +14,7 @@ public class ImportTests
 
     private static string Temp(string name)
     {
-        var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "import");
+        var dir = Path.Combine(TestTemp.Root, "import");
         Directory.CreateDirectory(dir);
         var p = Path.Combine(dir, name);
         if (File.Exists(p)) File.Delete(p);
@@ -68,7 +68,7 @@ public class ImportTests
     private static string ModRootWith(string tag, string typeDir,
                                       params (string Key, string Text)[] entries)
     {
-        var root = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "import", tag + "-mods");
+        var root = Path.Combine(TestTemp.Root, "import", tag + "-mods");
         if (Directory.Exists(root)) Directory.Delete(root, true);
         var mod = Path.Combine(root, "SomeTranslationMod");
         Directory.CreateDirectory(Path.Combine(mod, "About"));
@@ -88,7 +88,7 @@ public class ImportTests
     private static string ModRootWithKeyed(string tag, string packageId,
                                            params (string Key, string Text)[] entries)
     {
-        var root = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "import", tag + "-keyedmods");
+        var root = Path.Combine(TestTemp.Root, "import", tag + "-keyedmods");
         if (Directory.Exists(root)) Directory.Delete(root, true);
         var mod = Path.Combine(root, "SomeUiMod");
         Directory.CreateDirectory(Path.Combine(mod, "About"));

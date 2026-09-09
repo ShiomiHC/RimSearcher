@@ -1379,7 +1379,7 @@ public class GrammarTests
     /// </summary>
     private static (string Dir, string Config) LongFileTree()
     {
-        var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests",
+        var dir = Path.Combine(TestTemp.Root,
             "readwindow-" + Guid.NewGuid().ToString("N")[..8]);
         var tree = Path.Combine(dir, "sources", "vanilla", "Verse");
         Directory.CreateDirectory(tree);
@@ -3204,7 +3204,7 @@ public class GrammarTests
     [Fact]
     public void 没量过磁盘那一层的库要说破而不是沉默()
     {
-        var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "harvestnote");
+        var dir = Path.Combine(TestTemp.Root, "harvestnote");
         Directory.CreateDirectory(dir);
         var modRoot = Path.Combine(dir, "mods");
         Directory.CreateDirectory(modRoot);
@@ -3254,7 +3254,7 @@ public class GrammarTests
         }
 
         // 默认那一路真的会去扫:配了 mod_roots 而不给任何开关,导出来的库自称量过。
-        var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "harvestdefault");
+        var dir = Path.Combine(TestTemp.Root, "harvestdefault");
         if (Directory.Exists(dir)) Directory.Delete(dir, true);
         Directory.CreateDirectory(Path.Combine(dir, "mods"));
         var config = Path.Combine(dir, "config.toml");
@@ -3612,7 +3612,7 @@ public class GrammarTests
     [Fact]
     public void 展示位的分界线不许落在并列上()
     {
-        var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "tiesnap");
+        var dir = Path.Combine(TestTemp.Root, "tiesnap");
         if (Directory.Exists(dir)) Directory.Delete(dir, true);
         Directory.CreateDirectory(dir);
         var config = Path.Combine(dir, "config.toml");
@@ -3748,7 +3748,7 @@ public class GrammarTests
         // ③ 混合:一个精确等于 5、另一个是 5.5。主语料凑不出这一档,走专用语料。
         // 每次重导。复用上一个用例留下的 tie.db 会让这一格测到**上一版语料** ——
         // 语料一改、这条闸就静默地测起了旧数据,而它照绿。
-        var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "widesnap");
+        var dir = Path.Combine(TestTemp.Root, "widesnap");
         if (Directory.Exists(dir)) Directory.Delete(dir, true);
         Directory.CreateDirectory(dir);
         var cfg = Path.Combine(dir, "config.toml");
@@ -3785,7 +3785,7 @@ public class GrammarTests
     {
         static string Env(string name, string? modRoots)
         {
-            var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", name);
+            var dir = Path.Combine(TestTemp.Root, name);
             if (Directory.Exists(dir)) Directory.Delete(dir, true);
             Directory.CreateDirectory(dir);
             var config = Path.Combine(dir, "config.toml");
@@ -3806,8 +3806,8 @@ public class GrammarTests
         // 点库要写 --db:Fixture.Run 在 argv 里没有 --db 时会**追加**主 fixture 的库,
         // 而追加的那个压过 --snapshot —— 前一版就是这么写的,于是查询侧读的一直是主语料,
         // 闸照绿(那两条断言碰巧只吃 config)。**空转的参数不会报错,只会让闸名不副实。**
-        var dbA = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "harvestcalA", "a.db");
-        var dbB = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "harvestcalB", "b.db");
+        var dbA = Path.Combine(TestTemp.Root, "harvestcalA", "a.db");
+        var dbB = Path.Combine(TestTemp.Root, "harvestcalB", "b.db");
         Assert.True(File.Exists(dbA) && File.Exists(dbB), "两份快照没落到预期路径");
         var qA = Fixture.Run("keyed", "CannotUseNoPower", "--config", cfgA, "--db", dbA).Stdout;
         var qB = Fixture.Run("keyed", "CannotUseNoPower", "--config", cfgB, "--db", dbB).Stdout;

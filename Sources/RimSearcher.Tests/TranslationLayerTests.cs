@@ -22,7 +22,7 @@ public class TranslationLayerTests
     /// </summary>
     private static SnapshotDb ImportWithModTree(string caseName, params (string Rel, string Body)[] files)
     {
-        var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "translayer", caseName);
+        var dir = Path.Combine(TestTemp.Root, "translayer", caseName);
         if (Directory.Exists(dir)) Directory.Delete(dir, true);
         var modDir = Path.Combine(dir, "mods", "TestLangMod");
         Directory.CreateDirectory(modDir);
@@ -136,7 +136,7 @@ public class TranslationLayerTests
     private static SnapshotDb ImportLines(string caseName, string exporterVersion,
                                           params string[] lines)
     {
-        var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "translayer", caseName);
+        var dir = Path.Combine(TestTemp.Root, "translayer", caseName);
         if (Directory.Exists(dir)) Directory.Delete(dir, true);
         Directory.CreateDirectory(dir);
         var export = Path.Combine(dir, caseName + IntermediateFormat.FileExtension);

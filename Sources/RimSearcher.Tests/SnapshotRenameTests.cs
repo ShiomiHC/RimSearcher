@@ -205,7 +205,7 @@ public class SnapshotRenameTests
 
     private static string FreshDir(string name)
     {
-        var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "snapshot-rename", name);
+        var dir = Path.Combine(TestTemp.Root, "snapshot-rename", name);
         if (Directory.Exists(dir)) Directory.Delete(dir, true);
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "config.toml"), "", new UTF8Encoding(false));

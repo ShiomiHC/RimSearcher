@@ -2535,7 +2535,13 @@ public sealed class FieldsCommand : Command
                 }
                 // 打进来的文本是这个类型的一个**取值**时,答案就在同一个库里 —— 先算,
                 // 算出来了就不必再走下面那两条「路径面为什么可能漏」的解释。
-                var asValue = FilterIsValue(ctx, type, filters, exactPath);
+                var (valueAxisChecked, asValue) = FilterIsValue(ctx, type, filters, exactPath);
+
+                // 问过而没命中,就把这个否定也说出来 —— 沉默会让它与「压根没问值面」同形。
+                // 只在问过时出声:filters 不止一条那次确实没问,那时说什么都是假的。
+                var notAValue = valueAxisChecked && asValue is null
+                    ? $" No def of '{type}' holds {PathFilterText.Say(filters)} as a value either."
+                    : "";
 
                 if (declared is { Count: 0 })
                 {
@@ -2555,13 +2561,15 @@ public sealed class FieldsCommand : Command
                             : reach is { } n
                                 ? $" — that list reaches {n} segments deep, so a field nested past that is outside " +
                                   "what it measured."
-                                : "."));
+                                : ".") +
+                        notAValue);
                     if (asValue is not null) ctx.Report.Notice(NoticeKind.NextStep, asValue);
                     return 1;
                 }
                 ctx.Report.Notice(NoticeKind.Boundary,
-                    $"'{type}' has field paths, but none {(exactPath ? "is" : "contains")} {PathFilterText.Say(filters)}. " +
-                    $"Drop {(exactPath ? "--exact-path" : "--path-contains")} to see them all.");
+                    $"'{type}' has field paths, but none {(exactPath ? "is" : "contains")} {PathFilterText.Say(filters)}." +
+                    notAValue +
+                    $" Drop {(exactPath ? "--exact-path" : "--path-contains")} to see them all.");
                 // 同一条纪律:成因查明了就不再列那三种「字段可能在、只是没进索引」的可能。
                 // 那段免责整段假定问的是个字段名,而这次问的不是。
                 if (asValue is not null) ctx.Report.Notice(NoticeKind.NextStep, asValue);
@@ -2622,18 +2630,24 @@ public sealed class FieldsCommand : Command
     /// 限定 <paramref name="type"/> 查,不查全库:问的是「这个类型上」,而
     /// <c>WorkSpeedGlobal</c> 在别的类型上也坐着值,不限定就会把别人的答案报成他的。
     /// </summary>
-    /// <returns>该说的那句话,不适用就是 null。</returns>
-    private static string? FilterIsValue(CommandContext ctx, string type,
-                                         IReadOnlyList<string> filters, bool exactPath)
+    /// <returns>
+    /// <c>Checked</c>:值面到底问没问过。<c>Hit</c>:问到了该说的那句话,问过但没有就是 null。
+    ///
+    /// 这两件事必须分开报。只回一个 null 的话,「没问值面」与「问了、确实不是个值」
+    /// 印出来同形 —— 而读者问的正是「这个词跟这个类型有没有关系」,值面是答案的一半。
+    /// 复查时这条缝就出在相邻的两条输出上:一条大声说值面命中了,另一条对未命中沉默。
+    /// </returns>
+    private static (bool Checked, string? Hit) FilterIsValue(CommandContext ctx, string type,
+                                                             IReadOnlyList<string> filters, bool exactPath)
     {
         // 给了几个筛子时,「哪一个是值」本身要先答一次,而那是两可的指路。
-        if (filters.Count != 1) return null;
+        if (filters.Count != 1) return (false, null);
         var text = filters[0];
 
         // Identifier 而不是子串:问的是「值**就是**这个词」。子串会让 Beauty 认领
         // BeautyOutdoors,而那是另一个答案 —— 口径同 TailIsValue。
         var rows = ctx.Db.PathsWithValue(text, ctx.Scope(), 64, Storage.ValueMatch.Identifier, 0, type).Rows;
-        if (rows.Count == 0) return null;
+        if (rows.Count == 0) return (true, null);
 
         var shapes = rows.Select(r => Search.PathSegments.Shape(r.Path))
                          .Distinct(StringComparer.Ordinal)
@@ -2641,15 +2655,16 @@ public sealed class FieldsCommand : Command
         var shown = shapes.Take(Limits.MaxSuggestions).ToList();
         var defs = rows.Sum(r => r.Defs);
 
-        return $"'{text}' is a value on '{type}', not a field name: it sits at " +
+        return (true, $"'{text}' is a value on '{type}', not a field name: it sits at " +
                string.Join(" / ", shown) +
                (shapes.Count > shown.Count
                    ? $", plus {Tally.Complete(shapes.Count - shown.Count).Render("path shape")} more"
                    : "") +
                $" on {Tally.Complete(defs).Render("def")}. " +
-               // 参数填满 —— 占位的指路会先被照做一次,而那一次仍在错的轴上。
-               $"'rimsearcher where {shown[0]} --value {text} --type {type}' asks it" +
-               (exactPath ? ", and --exact-path never reaches a value." : ".");
+               // 命令里**不填路径**:路径不止一条时,填第一条就把答案窄成了它的一支,
+               // 而那一支与整个答案印出来同形。不给路径的那个形态一次覆盖全部。
+               $"'rimsearcher where --value {text} --type {type}' asks it" +
+               (exactPath ? ", and --exact-path never reaches a value." : "."));
     }
 }
 

@@ -116,7 +116,7 @@ public class TomlTests
     [Fact]
     public void 配置文件不存在时用默认值()
     {
-        var cfg = RimConfig.Load(Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "definitely-not-here.toml"));
+        var cfg = RimConfig.Load(Path.Combine(TestTemp.Root, "definitely-not-here.toml"));
         Assert.NotNull(cfg);
         Assert.Empty(cfg.ModRoots);
     }

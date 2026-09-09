@@ -25,7 +25,7 @@ public class TruncationCauseTests
 
     private static string Dir()
     {
-        var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "trunc-cause");
+        var dir = Path.Combine(TestTemp.Root, "trunc-cause");
         Directory.CreateDirectory(dir);
         return dir;
     }

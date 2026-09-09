@@ -156,8 +156,11 @@ public sealed class MembersCommand : Command
         // `where --value X [--type T]`,那边早就是这样。
         var byName = ctx.Args.Value("name");
         if (asked.Count == 0 && byName is not { Length: > 0 })
+            // 动词是 declare 不是 have:这条命令按**声明**匹配,而继承来的成员算在基类上。
+            // 写 have 的话,问「哪些类型有这个成员」的人会拿一份只含声明处的名单当全集。
+            // 同一个词在 --help、SKILL 与下面那两句里也都是 declare。
             throw new CliUsageException(
-                "Name a type, for example 'Verse.ThingComp' — or, to ask which types have a member of a " +
+                "Name a type, for example 'Verse.ThingComp' — or, to ask which types declare a member of a " +
                 "given name, give --name on its own: 'rimsearcher members --name HungerMultiplier'.");
 
         ctx.Report.Promises("members");
@@ -171,10 +174,12 @@ public sealed class MembersCommand : Command
             var found = lookup.FindMembersAnywhere(byName!, int.MaxValue, substring: true);
             if (found.Count == 0)
             {
+                // 「继承的成员算在基类上」那句这里**不说**:它在有命中时承重(告诉读者
+                // 名单为什么不含派生类),而零命中时解释不了这次的空 —— 真是继承来的,
+                // 基类那条声明照样会命中。摆在这里等于给一个不成立的安慰。
                 ctx.Report.Notice(NoticeKind.Boundary,
                     $"No type in the assemblies read here declares a member whose name contains '{byName}'. " +
-                    "Only what each type declares is matched — an inherited member is declared on the base " +
-                    "type and is found under that name. 'rimsearcher code-search' searches the C# text instead.");
+                    $"'rimsearcher code-search {byName}' searches the C# text instead.");
                 ctx.Report.Table("members", Columns, []);
                 return 1;
             }

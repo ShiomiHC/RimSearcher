@@ -112,6 +112,27 @@ public class CodeSideTests
 
         Assert.Equal(1, code);
         Assert.Contains("Verse.Widgets", stdout);
+
+        // 成因查明时那条免责整段撤掉。它讲的是「这次落空可能是我没看见」,而上一句
+        // 已经说出这个名字声明在哪儿 —— 并排印时读者读不出这个文件里到底有没有,
+        // 而它给的三条下一步全指着与真答案相反的方向。
+        Assert.DoesNotContain("not evidence the file lacks it", stdout);
+    }
+
+    /// <summary>
+    /// 反过来:元数据里也没有时,那条免责**要在**。它此时是这次落空唯一说得住的解释 ——
+    /// 花括号确实可能漏掉一个存在的声明。
+    ///
+    /// 没有这一格的话,上面那条断言在「免责句被无条件删掉」时也是绿的。
+    /// </summary>
+    [Fact]
+    public void 元数据也没有时花括号那条免责仍在()
+    {
+        var (stdout, _, code) = Fixture.Run("read", "vanilla/RimWorld/CompShield.cs", "--member", "ZzzNoSuchMemberXyz");
+
+        Assert.Equal(1, code);
+        Assert.Contains("not evidence the file lacks it", stdout);
+        Assert.DoesNotContain("The assemblies do have", stdout);
     }
 
     /// <summary>

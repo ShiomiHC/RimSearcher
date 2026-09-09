@@ -197,7 +197,7 @@ public class SnapshotDiffTests
         lock (Gate)
         {
             if (_pairDir is not null) return _pairDir;
-            var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "snapshot-diff");
+            var dir = Path.Combine(TestTemp.Root, "snapshot-diff");
             if (Directory.Exists(dir)) Directory.Delete(dir, true);
             Directory.CreateDirectory(dir);
 

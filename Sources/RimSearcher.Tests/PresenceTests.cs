@@ -359,35 +359,31 @@ public class PresenceTests
             Assert.Equal(0L, (long)cmd.ExecuteScalar()!);
         }
 
-        var path = Path.Combine(Path.GetTempPath(), $"rs-null-value-{Guid.NewGuid():N}.db");
+        // 落在本进程独占的根里,用完**不删** —— 这份库刚被 CLI 读过,而读侧开着
+        // mmap_size=1G,紧接着 File.Delete 在 Windows 上会间歇性地撞上「文件正被
+        // 另一个进程使用」(实测十轮红一次)。清理交给 TestTemp 下次启动按 pid 做。
+        var path = Path.Combine(TestTemp.Root, $"rs-null-value-{Guid.NewGuid():N}.db");
         File.Copy(Fixture.PresenceDb, path, overwrite: true);
-        try
+        using (var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={path};Pooling=False"))
         {
-            using (var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={path};Pooling=False"))
-            {
-                raw.Open();
-                using var cmd = raw.CreateCommand();
-                cmd.CommandText = """
-                    INSERT INTO field_value_paths (id, path, leaf)
-                      SELECT MAX(id) + 1, 'nullprobe', 'nullprobe' FROM field_value_paths;
-                    INSERT INTO field_values (def_id, path_id, value_id, is_default)
-                      SELECT (SELECT id FROM defs WHERE def_name = 'ChildGun'),
-                             (SELECT id FROM field_value_paths WHERE path = 'nullprobe'), NULL, 0;
-                    """;
-                cmd.ExecuteNonQuery();
+            raw.Open();
+            using var cmd = raw.CreateCommand();
+            cmd.CommandText = """
+                INSERT INTO field_value_paths (id, path, leaf)
+                  SELECT MAX(id) + 1, 'nullprobe', 'nullprobe' FROM field_value_paths;
+                INSERT INTO field_values (def_id, path_id, value_id, is_default)
+                  SELECT (SELECT id FROM defs WHERE def_name = 'ChildGun'),
+                         (SELECT id FROM field_value_paths WHERE path = 'nullprobe'), NULL, 0;
+                """;
+            cmd.ExecuteNonQuery();
 
-                // 注入真发生了吗 —— 没有这一条,下面那个 Contains 测的是别的东西。
-                cmd.CommandText = "SELECT COUNT(*) FROM field_values WHERE value_id IS NULL";
-                Assert.Equal(1L, (long)cmd.ExecuteScalar()!);
-            }
+            // 注入真发生了吗 —— 没有这一条,下面那个 Contains 测的是别的东西。
+            cmd.CommandText = "SELECT COUNT(*) FROM field_values WHERE value_id IS NULL";
+            Assert.Equal(1L, (long)cmd.ExecuteScalar()!);
+        }
 
-            var (probe, _, _) = Fixture.Run("get", "ChildGun", "--defaults", "--db", path);
-            Assert.Contains("nullprobe", probe, StringComparison.Ordinal);
-        }
-        finally
-        {
-            if (File.Exists(path)) File.Delete(path);
-        }
+        var (probe, _, _) = Fixture.Run("get", "ChildGun", "--defaults", "--db", path);
+        Assert.Contains("nullprobe", probe, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -397,51 +393,47 @@ public class PresenceTests
     [Fact]
     public void leaf还在大表上的旧库照旧读得出来()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"rs-legacy-leaf-{Guid.NewGuid():N}.db");
+        // 落在本进程独占的根里,用完**不删** —— 这份库刚被 CLI 读过,而读侧开着
+        // mmap_size=1G,紧接着 File.Delete 在 Windows 上会间歇性地撞上「文件正被
+        // 另一个进程使用」(实测十轮红一次)。清理交给 TestTemp 下次启动按 pid 做。
+        var path = Path.Combine(TestTemp.Root, $"rs-legacy-leaf-{Guid.NewGuid():N}.db");
         File.Copy(Fixture.PresenceDb, path, overwrite: true);
-        try
+        using (var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={path};Pooling=False"))
         {
-            using (var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={path};Pooling=False"))
-            {
-                raw.Open();
-                using var cmd = raw.CreateCommand();
-                cmd.CommandText = """
-                    CREATE TABLE fv_old (def_id INTEGER NOT NULL, path_id INTEGER NOT NULL,
-                                         leaf TEXT NOT NULL, value_id INTEGER,
-                                         is_default INTEGER NOT NULL DEFAULT 0);
-                    INSERT INTO fv_old SELECT f.def_id, f.path_id, p.leaf, f.value_id, f.is_default
-                      FROM field_values f JOIN field_value_paths p ON p.id = f.path_id;
-                    DROP TABLE field_values;
-                    ALTER TABLE fv_old RENAME TO field_values;
-                    CREATE TABLE fvp_old (id INTEGER PRIMARY KEY, path TEXT NOT NULL);
-                    INSERT INTO fvp_old SELECT id, path FROM field_value_paths;
-                    DROP TABLE field_value_paths;
-                    ALTER TABLE fvp_old RENAME TO field_value_paths;
-                    CREATE INDEX idx_fv_leaf_nc ON field_values(leaf COLLATE NOCASE);
-                    CREATE INDEX idx_fv_pathid ON field_values(path_id);
-                    CREATE INDEX idx_fv_def ON field_values(def_id);
-                    """;
-                cmd.ExecuteNonQuery();
+            raw.Open();
+            using var cmd = raw.CreateCommand();
+            cmd.CommandText = """
+                CREATE TABLE fv_old (def_id INTEGER NOT NULL, path_id INTEGER NOT NULL,
+                                     leaf TEXT NOT NULL, value_id INTEGER,
+                                     is_default INTEGER NOT NULL DEFAULT 0);
+                INSERT INTO fv_old SELECT f.def_id, f.path_id, p.leaf, f.value_id, f.is_default
+                  FROM field_values f JOIN field_value_paths p ON p.id = f.path_id;
+                DROP TABLE field_values;
+                ALTER TABLE fv_old RENAME TO field_values;
+                CREATE TABLE fvp_old (id INTEGER PRIMARY KEY, path TEXT NOT NULL);
+                INSERT INTO fvp_old SELECT id, path FROM field_value_paths;
+                DROP TABLE field_value_paths;
+                ALTER TABLE fvp_old RENAME TO field_value_paths;
+                CREATE INDEX idx_fv_leaf_nc ON field_values(leaf COLLATE NOCASE);
+                CREATE INDEX idx_fv_pathid ON field_values(path_id);
+                CREATE INDEX idx_fv_def ON field_values(def_id);
+                """;
+            cmd.ExecuteNonQuery();
 
-                // 注入真发生了吗:旧列在、字典上那一列不在。
-                cmd.CommandText = "SELECT COUNT(*) FROM pragma_table_info('field_values') WHERE name = 'leaf'";
-                Assert.Equal(1L, (long)cmd.ExecuteScalar()!);
-                cmd.CommandText = "SELECT COUNT(*) FROM pragma_table_info('field_value_paths') WHERE name = 'leaf'";
-                Assert.Equal(0L, (long)cmd.ExecuteScalar()!);
-            }
-
-            // 后缀匹配走 leaf 谓词。两份库同一条命令,输出必须逐字相同。
-            foreach (var field in new[] { "damage", "speed" })
-            {
-                var (fresh, _, _) = Fixture.Run("values", field, "--db", Fixture.PresenceDb);
-                var (old, _, _) = Fixture.Run("values", field, "--db", path);
-                Assert.Equal(fresh, old);
-                Assert.Contains(field, fresh, StringComparison.Ordinal);
-            }
+            // 注入真发生了吗:旧列在、字典上那一列不在。
+            cmd.CommandText = "SELECT COUNT(*) FROM pragma_table_info('field_values') WHERE name = 'leaf'";
+            Assert.Equal(1L, (long)cmd.ExecuteScalar()!);
+            cmd.CommandText = "SELECT COUNT(*) FROM pragma_table_info('field_value_paths') WHERE name = 'leaf'";
+            Assert.Equal(0L, (long)cmd.ExecuteScalar()!);
         }
-        finally
+
+        // 后缀匹配走 leaf 谓词。两份库同一条命令,输出必须逐字相同。
+        foreach (var field in new[] { "damage", "speed" })
         {
-            if (File.Exists(path)) File.Delete(path);
+            var (fresh, _, _) = Fixture.Run("values", field, "--db", Fixture.PresenceDb);
+            var (old, _, _) = Fixture.Run("values", field, "--db", path);
+            Assert.Equal(fresh, old);
+            Assert.Contains(field, fresh, StringComparison.Ordinal);
         }
     }
 
@@ -501,57 +493,53 @@ public class PresenceTests
     [InlineData(false)]  // type_fields(def_type, path)    —— 最早那一档
     public void 拆表之前的旧形状照旧读得出来(bool dictionary)
     {
-        var path = Path.Combine(Path.GetTempPath(),
+        // 落在本进程独占的根里,用完**不删** —— 这份库刚被 CLI 读过,而读侧开着
+        // mmap_size=1G,紧接着 File.Delete 在 Windows 上会间歇性地撞上「文件正被
+        // 另一个进程使用」(实测十轮红一次)。清理交给 TestTemp 下次启动按 pid 做。
+        var path = Path.Combine(TestTemp.Root,
                                 $"rs-legacy-tf-{(dictionary ? "dict" : "plain")}-{Guid.NewGuid():N}.db");
         File.Copy(Fixture.PresenceDb, path, overwrite: true);
-        try
+        using (var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={path};Pooling=False"))
         {
-            using (var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={path};Pooling=False"))
-            {
-                raw.Open();
-                using var cmd = raw.CreateCommand();
-                cmd.CommandText = dictionary
-                    ? """
-                      CREATE TABLE type_fields (def_type TEXT NOT NULL, path_id INTEGER NOT NULL);
-                      INSERT INTO type_fields (def_type, path_id)
-                        SELECT n.name, sp.path_id FROM type_names n
-                          JOIN type_subtrees ts ON ts.type_id = n.id
-                          JOIN subtree_paths sp ON sp.subtree_id = ts.subtree_id;
-                      DROP TABLE type_subtrees; DROP TABLE subtree_paths; DROP TABLE type_names;
-                      """
-                    : """
-                      CREATE TABLE type_fields (def_type TEXT NOT NULL, path TEXT NOT NULL);
-                      INSERT INTO type_fields (def_type, path)
-                        SELECT n.name, d.path FROM type_names n
-                          JOIN type_subtrees ts ON ts.type_id = n.id
-                          JOIN subtree_paths sp ON sp.subtree_id = ts.subtree_id
-                          JOIN type_field_paths d ON d.id = sp.path_id;
-                      DROP TABLE type_subtrees; DROP TABLE subtree_paths; DROP TABLE type_names;
-                      """;
-                cmd.ExecuteNonQuery();
+            raw.Open();
+            using var cmd = raw.CreateCommand();
+            cmd.CommandText = dictionary
+                ? """
+                  CREATE TABLE type_fields (def_type TEXT NOT NULL, path_id INTEGER NOT NULL);
+                  INSERT INTO type_fields (def_type, path_id)
+                    SELECT n.name, sp.path_id FROM type_names n
+                      JOIN type_subtrees ts ON ts.type_id = n.id
+                      JOIN subtree_paths sp ON sp.subtree_id = ts.subtree_id;
+                  DROP TABLE type_subtrees; DROP TABLE subtree_paths; DROP TABLE type_names;
+                  """
+                : """
+                  CREATE TABLE type_fields (def_type TEXT NOT NULL, path TEXT NOT NULL);
+                  INSERT INTO type_fields (def_type, path)
+                    SELECT n.name, d.path FROM type_names n
+                      JOIN type_subtrees ts ON ts.type_id = n.id
+                      JOIN subtree_paths sp ON sp.subtree_id = ts.subtree_id
+                      JOIN type_field_paths d ON d.id = sp.path_id;
+                  DROP TABLE type_subtrees; DROP TABLE subtree_paths; DROP TABLE type_names;
+                  """;
+            cmd.ExecuteNonQuery();
 
-                // 注入真发生了吗:旧表有行,新表不在。
-                cmd.CommandText = "SELECT COUNT(*) FROM type_fields";
-                Assert.Equal(19L, (long)cmd.ExecuteScalar()!);
-                cmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE name = 'subtree_paths'";
-                Assert.Equal(0L, (long)cmd.ExecuteScalar()!);
-            }
-
-            var (nulls, _, nullCode) = Fixture.Run("fields", "ThingDef", "--path-contains", "neverSet",
-                                                   "--db", path);
-            Assert.Equal(1, nullCode);
-            Assert.Contains("every def of the type has them as null", nulls, StringComparison.Ordinal);
-
-            var (missing, _, missCode) = Fixture.Run("fields", "ThingDef", "--path-contains", "noSuchFieldXYZ",
-                                                     "--db", path);
-            Assert.Equal(1, missCode);
-            Assert.Contains("declared-path list has none either", missing, StringComparison.Ordinal);
-            Assert.Matches(@"reaches \d+ segments deep", missing);
+            // 注入真发生了吗:旧表有行,新表不在。
+            cmd.CommandText = "SELECT COUNT(*) FROM type_fields";
+            Assert.Equal(19L, (long)cmd.ExecuteScalar()!);
+            cmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE name = 'subtree_paths'";
+            Assert.Equal(0L, (long)cmd.ExecuteScalar()!);
         }
-        finally
-        {
-            if (File.Exists(path)) File.Delete(path);
-        }
+
+        var (nulls, _, nullCode) = Fixture.Run("fields", "ThingDef", "--path-contains", "neverSet",
+                                               "--db", path);
+        Assert.Equal(1, nullCode);
+        Assert.Contains("every def of the type has them as null", nulls, StringComparison.Ordinal);
+
+        var (missing, _, missCode) = Fixture.Run("fields", "ThingDef", "--path-contains", "noSuchFieldXYZ",
+                                                 "--db", path);
+        Assert.Equal(1, missCode);
+        Assert.Contains("declared-path list has none either", missing, StringComparison.Ordinal);
+        Assert.Matches(@"reaches \d+ segments deep", missing);
     }
 
     /// <summary>

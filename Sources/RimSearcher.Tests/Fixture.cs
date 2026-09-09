@@ -25,7 +25,7 @@ public static class Fixture
     {
         get
         {
-            var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "snapshots");
+            var dir = Path.Combine(TestTemp.Root, "snapshots");
             Directory.CreateDirectory(dir);
             return dir;
         }
@@ -96,18 +96,24 @@ public static class Fixture
     {
         get
         {
-            var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests");
-            Directory.CreateDirectory(dir);
-            var path = Path.Combine(dir, "tie" + IntermediateFormat.FileExtension);
-            WriteTieExport(path);
-            return path;
+            lock (Gate)
+            {
+                if (_tieExport is not null && File.Exists(_tieExport)) return _tieExport;
+                var dir = TestTemp.Root;
+                Directory.CreateDirectory(dir);
+                var path = Path.Combine(dir, "tie" + IntermediateFormat.FileExtension);
+                WriteTieExport(path);
+                return _tieExport = path;
+            }
         }
     }
+
+    private static string? _tieExport;
 
     /// <summary>语料的导出文件本身 —— 要自己跑一遍 `snapshot import` 的用例用它当输入。</summary>
     public static string ExportPath
     {
-        get { _ = Db; return Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "fixture" + IntermediateFormat.FileExtension); }
+        get { _ = Db; return Path.Combine(TestTemp.Root, "fixture" + IntermediateFormat.FileExtension); }
     }
 
     /// <summary>造好一次,整个测试进程共用。</summary>
@@ -118,7 +124,7 @@ public static class Fixture
             lock (Gate)
             {
                 if (_dbPath is not null && File.Exists(_dbPath)) return _dbPath;
-                var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests");
+                var dir = TestTemp.Root;
                 Directory.CreateDirectory(dir);
                 var export = Path.Combine(dir, "fixture" + IntermediateFormat.FileExtension);
                 WriteExport(export);
@@ -247,15 +253,28 @@ public static class Fixture
     /// </summary>
     public static string EconomyStateDb(string state, string? error = null)
     {
-        var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "economy-state");
-        Directory.CreateDirectory(dir);
-        var export = Path.Combine(dir, state + IntermediateFormat.FileExtension);
-        var db = Path.Combine(dir, state + ".db");
+        // 同一个 state 有不止一条用例要,而 Import 的最后一步是删掉旧库再改名 ——
+        // 两个线程同时走到那里就是「文件正被另一个进程使用」。造好一次,之后照着 key 复用。
+        lock (Gate)
+        {
+            var key = state + " " + error;
+            if (_economyDbs.TryGetValue(key, out var cached) && File.Exists(cached)) return cached;
 
-        WriteOtherExport(export, economyState: state, economyError: error);
-        new SnapshotImporter().Import(export, db);
-        return db;
+            var dir = Path.Combine(TestTemp.Root, "economy-state");
+            Directory.CreateDirectory(dir);
+            // 带不带 error 是两份不同的库,文件名得分开 —— 共用一个名字的话,
+            // 后来那次会拿到前一次的库,而两者的差别正是这几条用例要看的东西。
+            var tag = error is null ? state : state + "-err";
+            var export = Path.Combine(dir, tag + IntermediateFormat.FileExtension);
+            var db = Path.Combine(dir, tag + ".db");
+
+            WriteOtherExport(export, economyState: state, economyError: error);
+            new SnapshotImporter().Import(export, db);
+            return _economyDbs[key] = db;
+        }
     }
+
+    private static readonly Dictionary<string, string> _economyDbs = [];
 
     /// <summary>
     /// 导出器 0.4.0 那一档的语料 —— **单字段上的 <c>Class=</c>**。
@@ -1499,7 +1518,7 @@ public static class Fixture
     public const string PresencePatchArg = "--fixture-presence-patch";
 
     /// <summary>指向一个不存在的配置文件 —— 测试不许读本机 config。</summary>
-    public static string NoConfigPath => Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "no-such-config.toml");
+    public static string NoConfigPath => Path.Combine(TestTemp.Root, "no-such-config.toml");
 
     private static string? _pinnedConfig;
 
@@ -1511,13 +1530,18 @@ public static class Fixture
     {
         get
         {
-            if (_pinnedConfig is not null) return _pinnedConfig;
-            var path = Path.Combine(Path.GetDirectoryName(SourcesConfigPath)!, "pinned-config.toml");
-            File.WriteAllText(path,
-                File.ReadAllText(SourcesConfigPath) +
-                "active_snapshot = '" + Path.GetFileNameWithoutExtension(Db) + "'\n",
-                new UTF8Encoding(false));
-            return _pinnedConfig = path;
+            // 走 Gate:这个哨兵在 GrammarTests 与 OutputSnapshotTests 两个 collection 里都用,
+            // 而它们是并行的 —— 不加锁就是两个线程同时 WriteAllText 同一个文件。
+            lock (Gate)
+            {
+                if (_pinnedConfig is not null && File.Exists(_pinnedConfig)) return _pinnedConfig;
+                var path = Path.Combine(Path.GetDirectoryName(SourcesConfigPath)!, "pinned-config.toml");
+                File.WriteAllText(path,
+                    File.ReadAllText(SourcesConfigPath) +
+                    "active_snapshot = '" + Path.GetFileNameWithoutExtension(Db) + "'\n",
+                    new UTF8Encoding(false));
+                return _pinnedConfig = path;
+            }
         }
     }
 
@@ -1534,7 +1558,7 @@ public static class Fixture
             lock (Gate)
             {
                 if (_sourcesConfig is not null && File.Exists(_sourcesConfig)) return _sourcesConfig;
-                var dir = Path.Combine(Path.GetTempPath(), "rimsearcher-tests");
+                var dir = TestTemp.Root;
                 Directory.CreateDirectory(dir);
                 WriteSourceTree(Path.Combine(dir, "sources"));
                 _ = Db;   // 先把两份快照造出来,snapshot_dir 才指得到东西

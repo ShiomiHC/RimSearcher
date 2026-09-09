@@ -841,7 +841,7 @@ public class OutputSnapshotTests
     [Fact]
     public void keyed层为空时说破是快照的缘故而不是查不到()
     {
-        var db = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "keyed-empty.db");
+        var db = Path.Combine(TestTemp.Root, "keyed-empty.db");
         if (File.Exists(db)) File.Delete(db);
         File.Copy(Fixture.Db, db);
         // Pooling=False:成因见 SnapshotDb.Open。这里原本靠 ClearAllPools() 把文件放开,
@@ -883,7 +883,7 @@ public class OutputSnapshotTests
     [Fact]
     public void 整层没有占位时说的是覆盖率满而不是查不到()
     {
-        var db = Path.Combine(Path.GetTempPath(), "rimsearcher-tests", "keyed-no-placeholders.db");
+        var db = Path.Combine(TestTemp.Root, "keyed-no-placeholders.db");
         if (File.Exists(db)) File.Delete(db);
         File.Copy(Fixture.Db, db);
         // Pooling=False:同上一条,成因见 SnapshotDb.Open。
