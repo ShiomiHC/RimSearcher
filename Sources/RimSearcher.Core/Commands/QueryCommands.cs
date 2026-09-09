@@ -1487,19 +1487,35 @@ public sealed class FindCommand : Command
             // --exact-path 自己把结果筛空,与「这个字段不存在」是两件事,而下面那套分流
             // 会把它说成后者 —— 它问的是「路径存在吗」,而此时那条路径确实不以整段存在。
             // 排在最前面:这条成因一旦成立,后面三条都不适用。
-            if (pq.Exact && ctx.Db.FieldPathExists(path, scope))
+            //
+            // 「不以整段存在」得**自己问一遍**(2026-09-09 补)。此前只问了「作为后缀在吗」,
+            // 于是 `where texPath zzznope --exact-path` 也进这一支 —— 而 texPath 本来就是
+            // 整条路径,空是那个值造成的。那次读者拿到的是一句假话,外加一条走不通的下一步:
+            // 真正该答他的是下面「值不在值域里」那一支。
+            if (pq.Exact && !ctx.Db.FieldPathExists(pq, scope) && ctx.Db.FieldPathExists(path, scope))
             {
                 // 列出形状而不是报个数:那批形状本身就是下一条查询,而它们带的 `[]`
                 // 原样粘回 --exact-path 就走得通。
+                //
+                // 带值查形状可能一条都不剩(路径在、没有一条带这个值)。那时不许把空表
+                // 印成一串形状 —— 此前印出来的是「Matched as a suffix instead: 」后面什么
+                // 都没有,紧跟着「Any one of those」指着一个空集。退回不带值的那批形状,
+                // 并把「值也得换」说出来:这一格的落空是两件事叠出来的,只说一件都不够。
                 var shapes = ctx.Db.FindPathShapes(path, value, exact, scope, type);
+                var valueMissedThemAll = shapes.Count == 0;
+                if (valueMissedThemAll) shapes = ctx.Db.FindPathShapes(path, null, false, scope, type);
                 var shown = shapes.Take(Limits.MaxSuggestions).ToList();
                 ctx.Report.Notice(NoticeKind.NextStep,
-                    $"No field path is exactly '{path}'. Matched as a suffix instead: " +
+                    $"No field path is exactly '{path}'" +
+                    (valueMissedThemAll
+                        ? $", and no path ending in it is set to '{value}' either. Those paths: "
+                        : ". Matched as a suffix instead: ") +
                     string.Join(", ", shown.Select(x => $"{x.Shape} ({x.Count})")) +
                     (shapes.Count > shown.Count
                         ? $", plus {Tally.Complete(shapes.Count - shown.Count).Render("path shape")} not shown"
                         : "") +
-                    ". Any one of those goes straight back into --exact-path, where '[]' stands for any index.");
+                    ". Any one of those goes straight back into --exact-path, where '[]' stands for any index" +
+                    (valueMissedThemAll ? ", but the value has to change too." : "."));
                 NoteElsewhere();
                 return 1;
             }

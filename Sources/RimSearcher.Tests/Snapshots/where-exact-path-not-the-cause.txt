@@ -1,5 +1,5 @@
 $ rimsearcher where graphicData.texPath zzznope --exact-path
 exit 1
 --- stdout ---
-No field path is exactly 'graphicData.texPath'. Matched as a suffix instead: . Any one of those goes straight back into --exact-path, where '[]' stands for any index.
+No def has 'graphicData.texPath' set to 'zzznope', out of the 2 values found under graphicData.texPath. 'rimsearcher values graphicData.texPath' lists them.
 --- stderr ---
