@@ -170,15 +170,27 @@ public static class CommonOptions
     /// 这边有,且唯一一次实测的 <c>values --path</c> 要的正是位置参数(<c>values ThingDef
     /// --path projectile.speed</c>)。同一个词在这两条命令上会指向另一个槽。
     /// </summary>
-    public static OptionSpec PathContainsBeside(string noun) => new()
+    public static OptionSpec PathContainsBeside() => new()
     {
         Name = "path-contains",
         Arity = Arity.Multi,
         Aliases = ["filter", "grep"],
         Placeholder = "<text>",
-        Help = $"Also require the field path to contain this text, on top of the path argument's suffix " +
-               $"match — the argument says how a path ends, this says what sits above. Repeat it to widen " +
-               $"the selection. With no path argument it narrows the {noun} searched. " + AnyIndexNote,
+        // 前半句与 get 那族逐字同源(「含这段文本的路径」),新增的只有与位置参数按 AND 合
+        // 那一句 —— 那是这一族独有的、推不出来的事。
+        //
+        // 不写「位置参数说结尾是什么,这个说上面有什么」。上面那段实测讲的是**人怎么用它**
+        // (八个案例里六个给的是祖先段),谓词本身不区分位置:`where compClass
+        // --path-contains compClass` 照命中 8391 条,`--path-contains filter` 也命中
+        // `fixedIngredientFilter.thingDefs[0]` —— 那段文本坐在叶子自己身上。
+        // 把用法观察印成语义,读者按它去推就会推错。
+        //
+        // 也不写「不给位置参数时它收窄搜索面」:`values` 的路径是必填位置参数,
+        // 那半句在两条命令里有一条根本到不了。同理去掉了原先那个名词参数 ——
+        // 它存在的唯一理由就是给这半句填空,而 where 填 fields、values 填 paths
+        // 说的还是同一样东西(字段路径)。
+        Help = "Only match field paths containing this text; when a path argument is given, it has to " +
+               "match as well. Repeat it to widen the selection. " + AnyIndexNote,
         Narrows = true,
     };
 

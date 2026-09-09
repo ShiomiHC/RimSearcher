@@ -1191,7 +1191,7 @@ public sealed class FindCommand : Command
                 Narrows = true,
             },
             CommonOptions.ExactPath(),
-            CommonOptions.PathContainsBeside("fields"),
+            CommonOptions.PathContainsBeside(),
             new OptionSpec
             {
                 // 「别 grep XML」拿走了一种能力,就得给回等价的一种:不知道字段叫什么时
@@ -1282,7 +1282,10 @@ public sealed class FindCommand : Command
             // 而它一条都没筛。收窄声明只要出现就得对应一次真的收窄。
             if (ctx.Args.Flag("exact-path"))
                 throw new CliUsageException(
-                    "--exact-path pins the field path given as an argument, and this call gives none. " +
+                    // 不用 "pins":段对齐落地后它全 CLI 只剩这一处,读者在 --help 上学到的
+                    // 是 "Match the field path as a whole instead of as a suffix",对不上。
+                    "--exact-path changes how the field path given as an argument is matched, and this " +
+                    "call does not give one. " +
                     "Pass the path ('rimsearcher where statBases[].stat MarketValue --exact-path'), or " +
                     "drop the switch. To narrow which paths are searched without naming one, " +
                     "--path-contains takes a fragment.");
@@ -2600,7 +2603,7 @@ public sealed class ValuesCommand : Command
         [
             CommonOptions.Limit("values"), CommonOptions.Offset("values"), CommonOptions.Scope,
             CommonOptions.Type, CommonOptions.ExactPath(),
-            CommonOptions.PathContainsBeside("paths"),
+            CommonOptions.PathContainsBeside(),
         ],
         Examples =
         [

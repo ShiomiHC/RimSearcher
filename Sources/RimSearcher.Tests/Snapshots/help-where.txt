@@ -23,7 +23,7 @@ Options:
                               Also accepted: --exact-match, --whole.
       --exact-path            Match the field path as a whole instead of as a suffix.
                               Also accepted: --whole-path, --path-exact.
-      --path-contains <text>  Also require the field path to contain this text, on top of the path argument's suffix match — the argument says how a path ends, this says what sits above. Repeat it to widen the selection. With no path argument it narrows the fields searched. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax.
+      --path-contains <text>  Only match field paths containing this text; when a path argument is given, it has to match as well. Repeat it to widen the selection. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax.
                               Also accepted: --filter, --grep.
       --value <text>          The value to look for, same as giving it as an argument. Without a field path, every indexed field is searched and the report names which paths hold it.
                               Also accepted: --any-field, --search-values, --holding.
