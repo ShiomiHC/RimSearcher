@@ -1,6 +1,6 @@
-$ rimsearcher get Apparel_ShieldBelt --all comps
+$ rimsearcher get Apparel_ShieldBelt --path-glob comps
 exit 2
 --- stdout ---
 --- stderr ---
-Unknown option '--all'. Did you mean --defaults? The name as typed is accepted by 'sources sync', but not by 'get'.
+Unknown option '--path-glob'. Did you mean --path-contains? The name as typed is accepted by 'code-search', but not by 'get'.
 Run 'rimsearcher get --help' to see what this command accepts.

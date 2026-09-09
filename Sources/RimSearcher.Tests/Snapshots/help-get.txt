@@ -26,7 +26,7 @@ Options:
       --type <DefType>        Restrict results to one def type, for example ThingDef or HediffDef. Given with no def name at all, it selects every def of that type instead, one block each in def-name order.
                               Also accepted: --def-type, --kind.
       --defaults              Also list fields whose value is the one a fresh instance of the declaring type already carries. They are left out by default. The 'xml' column on those rows says whether this def's own XML wrote the path (here), only an ancestor did (parent), neither of them did (not-written), or that the row cannot be pinned to a line inside a container the XML did write (under <container>). The table says beside it which XML that was: 'read after every patch ran' or 'read before patches ran'. A yes with xml=here is an explicit write of the default. Without the xml column, a def whose XML writes that same value and a def that never mentions the field look the same. How many were left out is always printed, and --path-contains shows a named field either way.
-                              Also accepted: --with-defaults, --all-fields.
+                              Also accepted: --with-defaults.
 
 Global options (every command takes these, written after the command):
       --snapshot <name>  Query this named snapshot instead of the one that would be picked automatically. An explicit choice always wins over auto-detection.

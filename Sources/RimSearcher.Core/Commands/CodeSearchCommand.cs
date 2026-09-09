@@ -199,7 +199,7 @@ public sealed class CodeSearchCommand : Command
         var contextSpec = ctx.Args.Value("context");
         var (before, after) = ParseContext(contextSpec, out var contextRewritten);
         var limit = ctx.Limit();
-        var maxPerFile = PositiveOrEveryOne(ctx, "max-per-file", "print every match");
+        var maxPerFile = PositiveOrEveryOne(ctx, "max-per-file");
 
         Regex regex;
         try
@@ -217,7 +217,7 @@ public sealed class CodeSearchCommand : Command
             throw new CliUsageException(NoSuchTree(sourceName, SourcesShared.TreeNames(root)));
 
         var matcher = GlobToRegex(glob);
-        var maxFiles = PositiveOrEveryOne(ctx, "max-files", "read every file");
+        var maxFiles = PositiveOrEveryOne(ctx, "max-files");
 
         var lines = new List<string>();
         var rows = new List<IReadOnlyDictionary<string, object?>>();
@@ -824,17 +824,15 @@ public sealed class CodeSearchCommand : Command
     }
 
     /// <summary>
-    /// 不给就是全部,给了只收正整数 —— 与 <c>--limit</c> 同一条规则。
-    /// <paramref name="remedy"/> 是错误里那句出路,按选项管的是印还是读各说各的。
+    /// 不给就是全部,给了只收正整数 —— 与 <c>--limit</c> 同一条规则,报错也是同一句。
     /// </summary>
-    private static int PositiveOrEveryOne(CommandContext ctx, string name, string remedy)
+    private static int PositiveOrEveryOne(CommandContext ctx, string name)
     {
         var raw = ctx.Args.Value(name);
         if (string.IsNullOrEmpty(raw)) return int.MaxValue;
         if (int.TryParse(raw, out var n) && n > 0) return n;
         throw new CliUsageException(
-            $"--{name} expects a positive whole number (got '{raw}'). " +
-            $"Leave --{name} out to {remedy}.");
+            $"--{name} expects a positive whole number (got '{raw}').");
     }
 
     /// <summary>

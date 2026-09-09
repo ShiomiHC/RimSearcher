@@ -488,8 +488,7 @@ public sealed class ParseResult(
         if (raw is null) return LimitValue.All;
         if (int.TryParse(raw, out var n) && n > 0) return LimitValue.Of(n);
         throw new CliUsageException(
-            $"--{name} expects a positive whole number (got '{raw}'). " +
-            $"Leave --{name} out to get every row.");
+            $"--{name} expects a positive whole number (got '{raw}').");
     }
 
     /// <summary>

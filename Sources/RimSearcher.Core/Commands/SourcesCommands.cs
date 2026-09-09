@@ -342,7 +342,7 @@ public sealed class SourcesSyncCommand : Command
             {
                 Name = "force",
                 Arity = Arity.Flag,
-                Aliases = ["rebuild", "all"],
+                Aliases = ["rebuild"],
                 Help = "Rebuild even the trees whose assemblies have not changed. Does not overwrite a tree that has uncommitted git changes.",
             },
             new OptionSpec

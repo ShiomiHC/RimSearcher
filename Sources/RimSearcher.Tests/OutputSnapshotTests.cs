@@ -553,11 +553,16 @@ public class OutputSnapshotTests
         // 指向了最不相干的命令,而两种消息都以 exit 2 收场,同形。
         //
         // 这一格原本钉的是 `get --path`。那个名字后来收进了 --path-contains 的别名
-        // (真实调用里打了 112 次全打空),于是改指到 --all:它在 get 上的近似候选是
-        // --defaults、在 `sources sync` 上是真选项,形状与当年的 --path 一模一样。
+        // (真实调用里打了 112 次全打空),于是改指到 --all;2026-09-09 撤掉 --all-fields
+        // 与 `sources sync --all` 两个零用量别名之后,--all 两头的属性一起没了,再换到
+        // --path-glob:它在 get 上的近似候选是 --path-contains、在 code-search 上是真别名。
         // **不是把这一格删了** —— 删了就只剩一句 "Did you mean" 的常见形状在钉,
         // 而两句话的排序纪律再没人管。
-        { "get-retired-path",      ["get", "Apparel_ShieldBelt", "--all", "comps"] },
+        //
+        // 换车时才看清那两个别名不是纯死重:`--all` 一次都没被敲过(逐字 0),但它在
+        // 声明里挂着,`get --all` 才拿得到 "Did you mean --defaults"。撤掉之后那句退成
+        // 完整选项清单 —— 代价落在提示上,不落在任何被记录过的调用上。
+        { "get-retired-path",      ["get", "Apparel_ShieldBelt", "--path-glob", "comps"] },
         // 0.8.0 那一档:译文的 path 归一到字段表文法,游戏自己认的那一串落在
         // key 列。三档各一行:把手式、下标式、把手已过期配不上任何槽位的。
         // 最后那一档必须自证 —— 游戏那边同样注入不上,而它在表上与一条正常译文同形。

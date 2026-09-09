@@ -2,4 +2,4 @@ $ rimsearcher get Apparel_ShieldBelt --limit all
 exit 2
 --- stdout ---
 --- stderr ---
---limit expects a positive whole number (got 'all'). Leave --limit out to get every row.
+--limit expects a positive whole number (got 'all').

@@ -400,7 +400,7 @@ defName is not listed as a field: the def_name line above the table is that valu
 | `--path-contains` <text> | Only show field paths containing this text. Repeat it to widen the selection. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. | `--filter`, `--grep`, `--values`, `--path` |
 | `--exact-path` <path> | The same selection as --path-contains, except the path has to match whole rather than as a substring. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. | `--whole-path`, `--path-exact` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. Given with no def name at all, it selects every def of that type instead, one block each in def-name order. | `--def-type`, `--kind` |
-| `--defaults` | Also list fields whose value is the one a fresh instance of the declaring type already carries. They are left out by default. The 'xml' column on those rows says whether this def's own XML wrote the path (here), only an ancestor did (parent), neither of them did (not-written), or that the row cannot be pinned to a line inside a container the XML did write (under <container>). The table says beside it which XML that was: 'read after every patch ran' or 'read before patches ran'. A yes with xml=here is an explicit write of the default. Without the xml column, a def whose XML writes that same value and a def that never mentions the field look the same. How many were left out is always printed, and --path-contains shows a named field either way. | `--with-defaults`, `--all-fields` |
+| `--defaults` | Also list fields whose value is the one a fresh instance of the declaring type already carries. They are left out by default. The 'xml' column on those rows says whether this def's own XML wrote the path (here), only an ancestor did (parent), neither of them did (not-written), or that the row cannot be pinned to a line inside a container the XML did write (under <container>). The table says beside it which XML that was: 'read after every patch ran' or 'read before patches ran'. A yes with xml=here is an explicit write of the default. Without the xml column, a def whose XML writes that same value and a def that never mentions the field look the same. How many were left out is always printed, and --path-contains shows a named field either way. | `--with-defaults` |
 
 `--json` keys, besides the global `notes`:
 
@@ -751,7 +751,7 @@ Page with --lines, never with a pipe. The first line of the answer says which li
 |---|---|---|
 | `--member` <name> | Read the declaration of this member. Every member of that name in the file is returned; --type narrows it to one declaring type. | `--method`, `--method-name`, `--member-name`, `--property` |
 | `--type` <name> | Read this whole type. With --member it instead says which type the member must belong to. | `--class-name`, `--type-name`, `--extract-class` |
-| `--lines` <a-b|a+n|a|all> | Read raw lines instead: '400-460' is inclusive (',' and ':' work in place of the '-'), '400+60' is sixty lines from 400, '400' starts there and runs to the end of the file, 'all' is the whole file however long it is. Whatever it asks for is printed in full unless --limit says otherwise — that is also what shortens a start-only '400'. Without it the whole file is read. | `--line`, `--range`, `--line-range` |
+| `--lines` <a-b|a+n|a> | Read raw lines instead: '400-460' is inclusive (',' and ':' work in place of the '-'), '400+60' is sixty lines from 400, '400' starts there and runs to the end of the file. Whatever it asks for is printed in full unless --limit says otherwise — that is also what shortens a start-only '400'. Without it the whole file is read. | `--line`, `--range`, `--line-range` |
 | `--start` <n> | Read from this line. With --end it is a range; on its own it runs to the end of the file, which --limit then shortens. Same read as --lines, spelled as two options. |  |
 | `--end` <n> | Read up to and including this line. On its own it starts at line 1. |  |
 | `--source` <name> | Only resolve the file name inside this source tree. 'rimsearcher sources list' names them. | `--root`, `--tree` |
@@ -1057,7 +1057,7 @@ Each tree also gets a copy of the assemblies it was built from and a table of th
 |---|---|---|
 | `--modlist` <name> | Cover the mods in this saved mod list instead of the ones in the snapshot. | `--list`, `--profile` |
 | `--only` <name> | Build just this one tree. Takes a tree name as 'sources list' prints it. | `--tree`, `--mod` |
-| `--force` | Rebuild even the trees whose assemblies have not changed. Does not overwrite a tree that has uncommitted git changes. | `--rebuild`, `--all` |
+| `--force` | Rebuild even the trees whose assemblies have not changed. Does not overwrite a tree that has uncommitted git changes. | `--rebuild` |
 | `--dry-run` | Report what would be decompiled and stop without writing anything. | `--plan` |
 
 `--json` keys, besides the global `notes`:

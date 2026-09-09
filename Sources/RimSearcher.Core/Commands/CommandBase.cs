@@ -57,9 +57,15 @@ public static class GlobalOptions
 public static class CommonOptions
 {
     /// <summary>
-    /// 真实调用方把「最多要几条」拼成 maxResults / max_results / limit 三种,且常写
-    /// <c>limit: "all"</c> —— 同义词进别名,<c>all</c> 是正式取值而不是错误。
+    /// 真实调用方把「最多要几条」拼成 maxResults / max_results / limit 三种 —— 同义词进别名。
     /// </summary>
+    /// <remarks>
+    /// <c>all</c> 不在取值里,是用法错误(d155104)。它曾占过全部调用的 65.6%
+    /// (16298 / 24862),撤掉四天后残留 0.92%(32 / 3492),没有一例落进
+    /// 「改写成一个巨大的数字」—— 而那个数字与不给逐字节相同,所以那条坑本身也不伤人。
+    /// 于是报错只说收什么、不再补一句「不给就是全部」,与隔壁 <c>Offset</c> 一致。
+    /// 产地 tools/scan-all-token.py(分代)与 tools/scan-all-rewrite.py(重写形态)。
+    /// </remarks>
     public static OptionSpec Limit(string what) => new()
     {
         Name = "limit",

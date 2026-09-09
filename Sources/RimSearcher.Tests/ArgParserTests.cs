@@ -83,21 +83,33 @@ public class ArgParserTests
 
     /// <summary>
     /// <c>all</c> / <c>none</c> / <c>0</c> / <c>-1</c> 曾经都读成「解除上限」。不给已经就是
-    /// 全部,它们再没有第二种意思可表达,于是一律退回用法错误 —— 而错误消息必须把
-    /// 「不给就是全部」这条出路写出来,否则读的人只会换一个词再猜一次。
+    /// 全部,它们再没有第二种意思可表达,于是一律退回用法错误。消息只说两件事:
+    /// 收什么、你给的是什么。
     /// </summary>
+    /// <remarks>
+    /// **这条断言此前多要一句「Leave --limit out to get every row」,那句话没被测过就写下了。**
+    /// 原注释的理由是「否则读的人只会换一个词再猜一次」,而实测的重写形态不支持它:
+    /// d155104 之后撞上这条错的 20 次可归因调用里,12 次下一句就不给 --limit、4 次照写
+    /// all(那句在场也没被读)、1 次给了个具体数字,**「改写成一个巨大的数字」零例**。
+    /// 而那个数字真被写出来也不伤人 —— <c>--limit 999999</c> 与不给的输出逐字节相同。
+    /// 剩下的那半句因此只是在复述 --help 里已有的一行。产地 tools/scan-all-rewrite.py。
+    ///
+    /// 顺带记下这句话为什么能活这么久:它一直被这道闸钉着,而闸只验证句子**在**,
+    /// 验证不了它当初该不该在。
+    /// </remarks>
     [Theory]
     [InlineData("all")]
     [InlineData("none")]
     [InlineData("0")]
     [InlineData("-1")]
     [InlineData("lots")]
-    public void limit只收正整数且落空时指出不给就是全部(string raw)
+    public void limit只收正整数且落空时回声给的那个值(string raw)
     {
         var r = Parse("shield", "--limit", raw);
         var ex = Assert.Throws<CliUsageException>(() => r.Limit());
         Assert.Contains(raw, ex.Message, StringComparison.Ordinal);
-        Assert.Contains("Leave --limit out", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("positive whole number", ex.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("Leave --limit out", ex.Message, StringComparison.Ordinal);
     }
 
     // ---- 位置参数 ----

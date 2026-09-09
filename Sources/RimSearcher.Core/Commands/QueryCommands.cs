@@ -387,7 +387,7 @@ public sealed class GetCommand : Command
             {
                 Name = "defaults",
                 Arity = Arity.Flag,
-                Aliases = ["with-defaults", "all-fields"],
+                Aliases = ["with-defaults"],
                 // 「快照判不了」从 when 从句提到主句,内容一个字没加也没减 —— 只换语法位置。
                 // 旧版把描述性的那半句(「值等于新实例已有的值」)放主句、把规定性的那半句
                 // 放从句,而实测的失败推理链正是从主句那半截推出来的:「值等于类默认 ⇒ 这个

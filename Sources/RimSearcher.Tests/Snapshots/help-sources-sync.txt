@@ -17,7 +17,7 @@ Options:
       --only <name>     Build just this one tree. Takes a tree name as 'sources list' prints it.
                         Also accepted: --tree, --mod.
       --force           Rebuild even the trees whose assemblies have not changed. Does not overwrite a tree that has uncommitted git changes.
-                        Also accepted: --rebuild, --all.
+                        Also accepted: --rebuild.
       --dry-run         Report what would be decompiled and stop without writing anything.
                         Also accepted: --plan.
 

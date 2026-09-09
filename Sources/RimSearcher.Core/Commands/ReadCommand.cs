@@ -83,12 +83,11 @@ public sealed class ReadCommand : Command
             {
                 Name = "lines",
                 Aliases = ["line", "range", "line-range"],
-                Placeholder = "<a-b|a+n|a|all>",
+                Placeholder = "<a-b|a+n|a>",
                 Help = "Read raw lines instead: '400-460' is inclusive (',' and ':' work in place of the " +
                        "'-'), '400+60' is sixty lines from 400, '400' starts there and runs to the end of " +
-                       "the file, 'all' is the whole file however long it is. Whatever it asks for is " +
-                       "printed in full unless --limit says otherwise — that is also what shortens a " +
-                       "start-only '400'. Without it the whole file is read.",
+                       "the file. Whatever it asks for is printed in full unless --limit says otherwise — " +
+                       "that is also what shortens a start-only '400'. Without it the whole file is read.",
             },
             // 同一个区间的两个数各占一个选项。这是**别处工具的通行写法**,而不是这条
             // 命令的第二种口味:真实调用里 --start 与 --end 各 64 次 / 49 份会话、完全
@@ -199,8 +198,7 @@ public sealed class ReadCommand : Command
             if (range is { Length: > 0 })
                 throw new CliUsageException(
                     "--lines and --start/--end are two spellings of the same range; pass one or the " +
-                    "other. --lines also has the forms this pair cannot write: '400+60' for a count " +
-                    "and 'all' for the whole file.");
+                    "other. --lines also has the one form this pair cannot write: '400+60' for a count.");
 
             static int Line(string? v, string name)
                 => int.TryParse(v?.Trim(), out var n) && n > 0
@@ -808,8 +806,6 @@ public sealed class ReadCommand : Command
         if (string.IsNullOrEmpty(spec)) return (1, Math.Min(total, window));
 
         var given = spec.Trim();
-        if (given is "all") return (1, Math.Max(total, 1));
-
         var normalized = Normalize(given);
         if (!Same(normalized, given.Replace(" ", ""))) rewritten = normalized;
         spec = normalized;
@@ -819,7 +815,7 @@ public sealed class ReadCommand : Command
                 ? v
                 : throw new CliUsageException(
                     $"--lines wants line numbers from 1 up; '{s.Trim()}' is not one ({what}). " +
-                    "Write it as '400-460', '400+60', '400', or 'all'.");
+                    "Write it as '400-460', '400+60', or '400'.");
 
         // 起点加个数,算在 long 上再收回来:window 可能是 int.MaxValue(没给 --limit),
         // 而 `--lines 1+2147483647` 的个数由调用方给。溢出会变成负的终点,那时

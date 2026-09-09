@@ -17,20 +17,20 @@ Arguments:
   <file>  A path under the decompiled root, a tail of one, a bare file name such as 'Pawn.cs', or a namespace-qualified type name such as 'RimWorld.Bullet'. Several files read in one call, in the order given; every row carries the file it came from, and --limit counts lines inside each file rather than across the batch. A file that cannot be resolved is reported and the others still print.
 
 Options:
-      --member <name>          Read the declaration of this member. Every member of that name in the file is returned; --type narrows it to one declaring type.
-                               Also accepted: --method, --method-name, --member-name, --property.
-      --type <name>            Read this whole type. With --member it instead says which type the member must belong to.
-                               Also accepted: --class-name, --type-name, --extract-class.
-      --lines <a-b|a+n|a|all>  Read raw lines instead: '400-460' is inclusive (',' and ':' work in place of the '-'), '400+60' is sixty lines from 400, '400' starts there and runs to the end of the file, 'all' is the whole file however long it is. Whatever it asks for is printed in full unless --limit says otherwise — that is also what shortens a start-only '400'. Without it the whole file is read.
-                               Also accepted: --line, --range, --line-range.
-      --start <n>              Read from this line. With --end it is a range; on its own it runs to the end of the file, which --limit then shortens. Same read as --lines, spelled as two options.
-      --end <n>                Read up to and including this line. On its own it starts at line 1.
-      --source <name>          Only resolve the file name inside this source tree. 'rimsearcher sources list' names them.
-                               Also accepted: --root, --tree.
-      --outline                List the file's types and members with their modifiers and line ranges instead of reading any of them. This is the cheap way to find out what to ask for.
-                               Also accepted: --members, --toc.
-  -n, --limit <n>              How many lines to print at most, and on a raw read where the read stops. Left out, nothing is capped: the read prints whatever --lines, --outline or --member asked for, and the whole file if none of them was given. On a decompiled type that runs to thousands of lines. Default: every line.
-                               Also accepted: --max-lines, --max-results, --count, --rows, --head.
+      --member <name>      Read the declaration of this member. Every member of that name in the file is returned; --type narrows it to one declaring type.
+                           Also accepted: --method, --method-name, --member-name, --property.
+      --type <name>        Read this whole type. With --member it instead says which type the member must belong to.
+                           Also accepted: --class-name, --type-name, --extract-class.
+      --lines <a-b|a+n|a>  Read raw lines instead: '400-460' is inclusive (',' and ':' work in place of the '-'), '400+60' is sixty lines from 400, '400' starts there and runs to the end of the file. Whatever it asks for is printed in full unless --limit says otherwise — that is also what shortens a start-only '400'. Without it the whole file is read.
+                           Also accepted: --line, --range, --line-range.
+      --start <n>          Read from this line. With --end it is a range; on its own it runs to the end of the file, which --limit then shortens. Same read as --lines, spelled as two options.
+      --end <n>            Read up to and including this line. On its own it starts at line 1.
+      --source <name>      Only resolve the file name inside this source tree. 'rimsearcher sources list' names them.
+                           Also accepted: --root, --tree.
+      --outline            List the file's types and members with their modifiers and line ranges instead of reading any of them. This is the cheap way to find out what to ask for.
+                           Also accepted: --members, --toc.
+  -n, --limit <n>          How many lines to print at most, and on a raw read where the read stops. Left out, nothing is capped: the read prints whatever --lines, --outline or --member asked for, and the whole file if none of them was given. On a decompiled type that runs to thousands of lines. Default: every line.
+                           Also accepted: --max-lines, --max-results, --count, --rows, --head.
 
 Global options (every command takes these, written after the command):
       --snapshot <name>  Query this named snapshot instead of the one that would be picked automatically. An explicit choice always wins over auto-detection.

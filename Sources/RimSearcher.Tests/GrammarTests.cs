@@ -1183,8 +1183,10 @@ public class GrammarTests
         Assert.Contains("all 2500 lines", huge, StringComparison.Ordinal);
         Assert.DoesNotContain("stopped it", huge, StringComparison.Ordinal);
 
-        // 说「全都要」的另外两种写法拿回同一份东西。
-        foreach (var say in new[] { new[] { "--lines", "all" }, new[] { "--lines", "1-2500" } })
+        // 说「全都要」的另外两种写法拿回同一份东西。`--lines all` 不在里面了:它与这里
+        // 的裸调用逐字节相同,而 `--lines` 收的是区间文法,`all` 是塞在同一个槽里的另一
+        // 种词。撤掉之后剩下的两种都还是区间 —— 起点 1 不给终点、以及把终点写满。
+        foreach (var say in new[] { new[] { "--lines", "1" }, new[] { "--lines", "1-2500" } })
         {
             var (same, _, _) = Fixture.Run(["read", "Huge.cs", .. say, "--config", config]);
             Assert.Equal(huge, same);
@@ -1198,8 +1200,16 @@ public class GrammarTests
         Assert.DoesNotContain("what --lines asked for", n, StringComparison.Ordinal);
 
         // 写了数字就照那个数字来,欠账也照说 —— 撤的是缺省值,不是 --limit 本身。
+        //
+        // 这一格此前写的是 `--lines all --limit 2000`。撤掉 `all` 之后要换一种写法,而
+        // 换的时候才看清这句欠账**只有说得出终点的写法才触发得了**:起点单给(`--lines 1`)
+        // 时上限就是终点本身,没有「短了多少」可算;一个 `--lines` 都不写时那句话更是在
+        // 指一个不存在的参数(下面 1200 行那格钉着它不许出现)。于是 `all` 确实带走了
+        // 一种表达 ——「我要整个文件,而且我知道 --limit 把它截了」。
+        // **代价实测为零**:53 次可归因的 `--lines all` 里,同时给数字 --limit 的是 0 次
+        // (3 次给的是 `--limit all`,那时截不着)。产地 tools/scan-all-rewrite.py。
         var (capped, _, _) = Fixture.Run(
-            "read", "Huge.cs", "--lines", "all", "--limit", "2000", "--config", config);
+            "read", "Huge.cs", "--lines", "1-2500", "--limit", "2000", "--config", config);
         Assert.Contains("lines 1-2000 of 2500", capped, StringComparison.Ordinal);
         Assert.Contains("--limit stopped it 500 lines short", capped, StringComparison.Ordinal);
 
