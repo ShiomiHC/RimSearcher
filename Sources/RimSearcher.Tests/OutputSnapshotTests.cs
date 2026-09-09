@@ -196,6 +196,25 @@ public class OutputSnapshotTests
         // 以及只给尾巴一段(部分路径)—— 后者 --exact-path 也救不了,它匹配的是整条。
         { "where-folded-path",        ["where", "costList[].thingDef", "Bloomstone"] },
         { "where-folded-path-tail",   ["where", "thingDefs[]", "Bloomstone"] },
+        // 折叠形状是这个工具**自己印出去**的写法(Shape():`statBases[7].stat` →
+        // `statBases[].stat`),而收路径的入口不止 where/values 这两个位置参数。
+        // 下面五格钉的是「同一串 `[]` 在每个入口上都得当下标通配」——
+        // 前四格各是一个吃 --path-contains 的命令(get 的行、get 筛空时那个「同类型
+        // 别的 def 有没有」探针、fields 的类型侧、inherit 的兄弟计数,四条独立的
+        // SQL 拼装),第五格是判据侧:命中之后「整段一次都没命中」那句话不许因为
+        // `[]` 比不上 `[0]` 而说假。少钉哪一格,那一格就会在别人改对时留在原地。
+        { "get-folded-path",          ["get", "Apparel_ShieldBelt", "--path-contains", "comps[].props"] },
+        { "get-folded-path-whole",    ["get", "Apparel_ShieldBelt", "--path-contains", "statBases[].stat"] },
+        { "fields-folded-path",       ["fields", "ThingDef", "--path-contains", "comps[].props"] },
+        // inherit 那格换库:默认那份里进了继承层的 def 一个带下标路径都没有,
+        // 而 ChildGun(costList[0].*,parent 是 BaseGun)只在 presence 里。
+        { "inherit-folded-path",      ["inherit", "ChildGun", "--path-contains", "costList[].count",
+                                       Fixture.PresenceArg] },
+        // 反向的洞:读者写**真下标**时,under 那句拿 Shape() 的结果(`statBases[]`)
+        // 去比,而带下标的查询词按字面比 —— 于是 `statBases[0]` 永远判不出 under,
+        // 印的是「none of those is under …」。三格摆一起,三种写法得给同一个答案。
+        { "where-dotted-tail-is-value-indexed", ["where", "statBases[0].MarketValue"] },
+        { "where-dotted-tail-is-value-folded",  ["where", "statBases[].MarketValue"] },
         // 打进 fields 的名字不是 def 类型,而反编译树里有同名类型 —— 那儿才答得出这个问题。
         // 三档摆一起:唯一一棵树命中、跨树同名(不许把一个挑选说成一个事实)、哪儿都没有
         // (那时一个字都不许多说,否则它就成了免责声明)。
