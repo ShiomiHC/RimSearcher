@@ -2391,7 +2391,12 @@ public sealed class FieldsCommand : Command
                 // "only" 不在这里:sources sync 有一个真的 --only(只同步这几棵树)。
                 // 删掉的四个(field-contains / path-filter / contains / match)在 get /
                 // inherit / fields 上逐字各 0 次,理由记在 get 那一处。
-                Aliases = ["filter", "grep"],
+                //
+                // "path" 是 2026-09-09 补的,而它此前不在这里**不是**一个决定 ——
+                // get / inherit 收了它,fields 漏了,于是三条同族命令里这一条独自
+                // 扛下全部误敲:实测 15 次 / 8 份会话,逐条读过,15 条的意图无一例外
+                // 就是这个选项。主名把「路径」和「怎么比」压进一个词,读者只说前半截。
+                Aliases = ["filter", "grep", "path"],
                 Placeholder = "<text>",
                 Help = "Only list paths containing this text. Repeat it to widen the selection. " +
                        CommonOptions.AnyIndexNote,

@@ -27,7 +27,12 @@ public sealed class DocsCommand : Command
             new OptionSpec
             {
                 Name = "out",
-                Aliases = ["output", "file", "path"],
+                // "path" 摘掉(2026-09-09):这个词在 get / inherit / fields 上指**字段路径**,
+                // 敲了 2600 多次;这里指输出文件,而 docs 带任何 flag 的调用实测 0 次。
+                // 一个词占两个概念时,让位的是没人走的那一头 —— 同 --offset 让出 "start"。
+                // 摘掉之后还有一处跟着变真:`fields --path` 的报错会说这个名字
+                // 「get / inherit 认」,而此前它把 docs 也算进去,那是另一码事。
+                Aliases = ["output", "file"],
                 Placeholder = "<path>",
                 Help = "Write to this file instead of standard output.",
             },

@@ -232,7 +232,7 @@ Maintenance command. The reference file that ships with the skill is this render
 
 | Option | Meaning | Also accepted |
 |---|---|---|
-| `--out` <path> | Write to this file instead of standard output. | `--output`, `--file`, `--path` |
+| `--out` <path> | Write to this file instead of standard output. | `--output`, `--file` |
 | `--check` | Compare with the file instead of writing it, and fail if they differ. | `--verify` |
 
 Examples:
@@ -355,7 +355,7 @@ What is listed is every path the exporter recorded a value for. When the snapsho
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n> | How many field paths to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
-| `--path-contains` <text> | Only list paths containing this text. Repeat it to widen the selection. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. | `--filter`, `--grep` |
+| `--path-contains` <text> | Only list paths containing this text. Repeat it to widen the selection. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. | `--filter`, `--grep`, `--path` |
 | `--offset` <n> | Skip this many field paths before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. |  |
 
 `--json` keys, besides the global `notes`:

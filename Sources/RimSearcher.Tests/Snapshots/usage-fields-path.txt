@@ -1,6 +1,19 @@
 $ rimsearcher fields ThingDef --path comps
-exit 2
+exit 0
 --- stdout ---
+5 field paths on ThingDef within --path-contains comps.
+Matching 'comps': 5 field paths, out of 26 field paths on ThingDef.
+
+Defs that may be missing from this answer, their export cut short — all of ThingDef, whatever --path-contains says
+def_type  defs_cut_short
+ThingDef  1
+verify: rimsearcher snapshot truncated --type ThingDef
+
+Same in every row, not repeated below: def_type=ThingDef.
+path                                defs
+comps[0].compClass                  2
+comps[1].compClass                  2
+comps[0].Class                      1
+comps[0].props.energyLossPerDamage  1
+comps[0].props.energyMax            1
 --- stderr ---
-Unknown option '--path'. Did you mean --path-contains? The name as typed is accepted by 'get', 'inherit', 'docs', but not by 'fields'.
-Run 'rimsearcher fields --help' to see what this command accepts.
