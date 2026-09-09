@@ -56,6 +56,31 @@ internal static class CodeShared
     }
 
     /// <summary>
+    /// 安静地开:开不了就回 null,不抛也不播报。
+    ///
+    /// 给**落空路径上的回查**用。那里元数据是个附加的答案来源,不是这条命令的主业:
+    /// <see cref="Open"/> 开不了会抛,而在 read 的落空路径上抛出去,会把「没找到这个
+    /// 成员」换成「没有程序集可读」—— 那是另一个问题的答案。
+    ///
+    /// 也不 <see cref="Announce"/>:那两句讲的是「你读到的正文来自哪一份 dll」,而这里
+    /// 没有正文,只借元数据回答「这个名字在谁身上」。名字这一级的答案经得起两份 dll
+    /// 的小差异,而那两句摆在一句落空提示前面会把它压掉。
+    /// </summary>
+    internal static MetadataLookup? OpenQuietly(CommandContext ctx)
+    {
+        try
+        {
+            var root = SourcesShared.Root(ctx);
+            if (!Directory.Exists(root)) return null;
+            var assemblies = AssemblyStore.ResolveAll(root, null);
+            return assemblies.Count == 0 ? null : new MetadataLookup(assemblies);
+        }
+        catch (IOException) { return null; }
+        catch (UnauthorizedAccessException) { return null; }
+        catch (CliUsageException) { return null; }
+    }
+
+    /// <summary>
     /// 这次读到的东西与落盘的 C# 是不是同一份。三种情形各有各的话,而一致时一个字不说 ——
     /// 常态发声等于每次查询都交一次上下文税。
     /// </summary>

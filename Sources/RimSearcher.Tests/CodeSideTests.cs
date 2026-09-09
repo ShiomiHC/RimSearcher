@@ -92,4 +92,53 @@ public class CodeSideTests
         Assert.Equal(code, missCode);
         Assert.Equal(Rows(a), Rows(withMiss));
     }
+
+    /// <summary>
+    /// <c>read --member</c> 落空时,持有这个名字的类型就在元数据里 —— 说出来。
+    ///
+    /// 这条路此前只走文本:印一句「花括号匹配不算证据,去 code-search」再顺着继承链
+    /// 给一条**没验证过的**命令。实测 59 次落空里 37% 当场交卷,而抽验 12 个被丢掉的
+    /// 符号有 10 个真的存在;跟着继承提示走的那 17 次里,`Need_Food.HungerMultiplier`
+    /// 那次落到 `Need.cs` 上仍是空 —— 真答案在 `HungerLevelUtility`,一个静态工具类,
+    /// 继承链上永远走不到。
+    ///
+    /// 元数据侧的 <c>il</c> 对同一个问题早就答对了(SayNoMember)。这一格钉住 read
+    /// 也接上去:CompShield 没有 Label,它的基类 ThingComp 也没有,而 Verse.Widgets 有。
+    /// </summary>
+    [Fact]
+    public void 读不到的成员要点名真正持有它的类型()
+    {
+        var (stdout, _, code) = Fixture.Run("read", "vanilla/RimWorld/CompShield.cs", "--member", "Label");
+
+        Assert.Equal(1, code);
+        Assert.Contains("Verse.Widgets", stdout);
+    }
+
+    /// <summary>
+    /// <c>members --name</c> 不给类型时问的是「谁有这个成员」,那是元数据答得出的。
+    ///
+    /// <c>&lt;type&gt;</c> 此前必填,于是跨类型找一个成员名只剩 4 秒的全文扫描一条路,
+    /// 而同一份信息在元数据里 0.3 秒可达。数据侧的 <c>where --value X [--type T]</c>
+    /// 早就是这个形状 —— 名字必给,类型是可选的收窄。
+    /// </summary>
+    [Fact]
+    public void 不给类型时按成员名跨类型找()
+    {
+        var (stdout, _, code) = Fixture.Run("members", "--name", "Label");
+
+        Assert.Equal(0, code);
+        Assert.Contains("Verse.Widgets", stdout);
+    }
+
+    /// <summary>
+    /// 两个都不给时不许变成全量转储 —— 那是把「问什么」这一步整个丢给读者。
+    /// </summary>
+    [Fact]
+    public void 类型与成员名都不给时报错而不是全印()
+    {
+        var (_, stderr, code) = Fixture.Run("members");
+
+        Assert.NotEqual(0, code);
+        Assert.Contains("--name", stderr);
+    }
 }

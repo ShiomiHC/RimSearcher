@@ -300,6 +300,66 @@ public sealed class MetadataLookup : IDisposable
         _ => "",
     };
 
+    /// <summary>
+    /// 整个程序集范围内按成员名找,方法/属性/字段都算。
+    ///
+    /// <see cref="FindMethodsAnywhere"/> 只走方法,够不着 <c>read --member</c> 落空里
+    /// 那半数问的是属性或字段的调用;而 <c>members</c> 想让 <c>&lt;type&gt;</c> 可选,
+    /// 也要的是这一条 —— 元数据里一直有这个信息,只是没有按成员名进来的入口。
+    ///
+    /// 两段式:先只比名字(读一个字符串),命中了才 <see cref="Members"/> 构造整份行 ——
+    /// 构造要读签名,给每个类型都构造一遍就是把全部程序集的签名解析一遍。
+    ///
+    /// <paramref name="substring"/> 跟着调用方的语义走:<c>members --name</c> 自陈是
+    /// contains,而落空回查问的是「就是这个名字」——后者用子串会把 <c>Tick</c> 的答案
+    /// 报成 <c>TickRare</c> 的。
+    /// </summary>
+    public IReadOnlyList<MemberRow> FindMembersAnywhere(string name, int cap, bool substring = false)
+    {
+        var result = new List<MemberRow>();
+        if (name.Length == 0) return result;
+
+        foreach (var (asm, file) in _open)
+        {
+            var md = file.Metadata;
+            foreach (var th in md.TypeDefinitions)
+            {
+                var def = md.GetTypeDefinition(th);
+                if (!DeclaresName(md, def, name, substring)) continue;
+
+                // 编译器生成的类型(状态机、闭包)带着宿主方法的名字,报出来就是一串
+                // `<Tick>d__3` —— 问的人要的是他写得出名字的那个类型。
+                var type = Describe(asm, md, th);
+                if (type is null || type.CompilerGenerated) continue;
+
+                foreach (var row in Members(type))
+                {
+                    if (!Matches(row.Name, name, substring)) continue;
+                    result.Add(row);
+                    if (result.Count >= cap) return result;
+                }
+            }
+        }
+        return result;
+    }
+
+    private static bool Matches(string have, string want, bool substring)
+        => substring
+            ? have.Contains(want, StringComparison.OrdinalIgnoreCase)
+            : string.Equals(have, want, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>这个类型声明的名字里有没有它 —— 只读名字,不构造行。</summary>
+    private static bool DeclaresName(MetadataReader md, TypeDefinition def, string name, bool substring)
+    {
+        foreach (var mh in def.GetMethods())
+            if (Matches(md.GetString(md.GetMethodDefinition(mh).Name), name, substring)) return true;
+        foreach (var ph in def.GetProperties())
+            if (Matches(md.GetString(md.GetPropertyDefinition(ph).Name), name, substring)) return true;
+        foreach (var fh in def.GetFields())
+            if (Matches(md.GetString(md.GetFieldDefinition(fh).Name), name, substring)) return true;
+        return false;
+    }
+
     /// <summary>整个程序集范围内按裸成员名找 —— 调用方只写了一个词时的那条路。</summary>
     public IReadOnlyList<MethodHit> FindMethodsAnywhere(string memberName, int cap)
     {

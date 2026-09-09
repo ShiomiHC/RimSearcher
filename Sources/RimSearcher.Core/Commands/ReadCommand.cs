@@ -633,6 +633,17 @@ public sealed class ReadCommand : Command
             "'rimsearcher code-search' searches the text itself; '--outline' lists what the same " +
             "matching does find.");
 
+        // 元数据先问一次:那份 dll 知道这个名字长在谁身上,而这里只有花括号。
+        //
+        // 实测 59 次 read --member 落空里 37% 当场交卷,抽验 12 个被丢掉的符号有 10 个
+        // 真的存在;另有 28% 跟着下面那条继承提示走 —— 而 `Need_Food.HungerMultiplier`
+        // 那次顺着走到 Need.cs 仍是空,真答案 `HungerLevelUtility` 是个静态工具类,
+        // 继承链上永远走不到。同一个问题元数据侧(`il`)早就答对了。
+        //
+        // 答出来就 return:下面那条提示是**猜**的(基类名算得出,基类有没有这个成员没查),
+        // 而这一句是查过的。两句并排时读者会先照做能粘贴的那一条,那正是走岔的那步。
+        if (member is { Length: > 0 } && SayWhoHasIt(ctx, member)) return;
+
         // 「这个文件里没有」会被读成「这个类型没有这个成员」。反编译产物**不重复父类的成员**:
         // `read MapPortal.cs --member Destroy` 落空,而 Destroy 在再上一层的 Thing 里。
         // 基类型就写在类声明那一行,算得出来就算,给一条走得到的下一步命令。
@@ -650,6 +661,43 @@ public sealed class ReadCommand : Command
                     ". The decompiler does not repeat inherited members: 'rimsearcher read " +
                     $"{bases[0].Base}.cs --member {member}' looks one level up.");
         }
+    }
+
+    /// <summary>
+    /// 元数据里谁声明了这个名字。答得出就说出来并回 <c>true</c>,答不出一个字不说。
+    ///
+    /// 纪律同 <see cref="DefTypeMiss.InSourceInstead"/>:当场算得出来才说。这里的
+    /// 「算得出」是那份 dll —— 它没同步、没配、读不了,都退回原来那两句(<see
+    /// cref="CodeShared.OpenQuietly"/> 一律回 null 而不是抛)。
+    ///
+    /// 只点名类型,不给行号:元数据可能来自比 .cs 新的一份 dll,而「这个名字长在谁身上」
+    /// 这一级经得起那点差异,行号经不起。
+    /// </summary>
+    private static bool SayWhoHasIt(CommandContext ctx, string member)
+    {
+        using var lookup = CodeShared.OpenQuietly(ctx);
+        if (lookup is null) return false;
+
+        var hits = lookup.FindMembersAnywhere(member, 32);
+        if (hits.Count == 0) return false;
+
+        var types = hits.Select(h => h.Type.FullName).Distinct(StringComparer.Ordinal).ToList();
+        var shown = types.Take(Limits.MaxSuggestions).ToList();
+
+        // 种类点出来:问的人是拿 --member 来找的,而 read --member 只切得到花括号块 ——
+        // 一个字段没有自己的块,这一句不说的话,下一步又会落回同一个空。
+        var kinds = hits.Select(h => h.Kind).Distinct(StringComparer.Ordinal).ToList();
+
+        ctx.Report.Notice(NoticeKind.NextStep,
+            $"The assemblies do have '{member}': it is declared on " +
+            NameList.Render(shown, Limits.MaxSuggestions) +
+            (types.Count > shown.Count
+                ? $", plus {Tally.Complete(types.Count - shown.Count).Render("type")} more"
+                : "") +
+            $" (as {NameList.Render(kinds, 3)}). " +
+            $"'rimsearcher members {shown[0]} --name {member}' shows the declaration, and " +
+            $"'rimsearcher read {shown[0].Split('.')[^1]}.cs --member {member}' reads it there.");
+        return true;
     }
 
     /// <summary>

@@ -580,7 +580,7 @@ rimsearcher list ThingDef --scope all,-vanilla
 List the members of a C# type, filtered by kind and by the modifiers on them.
 
 ```
-rimsearcher members <type>... [options]
+rimsearcher members [type]... [options]
 ```
 
 Members are read from the assembly, not from the decompiled C#, so the filters below are the metadata bits themselves rather than a guess at keywords in the text.
@@ -591,7 +591,7 @@ A property appears twice over: once as itself under the C# name, and once as the
 
 | Argument | Meaning |
 |---|---|
-| `<type>` | A type name: 'Verse.ThingComp', 'ThingComp', or a fragment of one. Several names go into the same table — the 'type' and 'assembly' columns say which row belongs to which — and a name that matches nothing is reported in a note while the others still print. |
+| `<type>` | A type name: 'Verse.ThingComp', 'ThingComp', or a fragment of one. Several names go into the same table — the 'type' and 'assembly' columns say which row belongs to which — and a name that matches nothing is reported in a note while the others still print. Leave it out and give --name instead to ask which types declare a member of that name. *(optional)* |
 
 | Option | Meaning | Also accepted |
 |---|---|---|

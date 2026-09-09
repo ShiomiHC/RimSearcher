@@ -32,10 +32,15 @@ public sealed class MembersCommand : Command
             {
                 Name = "type",
                 Variadic = true,
+                // 可选,但不是「什么都不给也行」:Run 里要求它与 --name 至少有一个。
+                // 必填时跨类型找一个成员名只剩 code-search 那条全文扫描,而那份信息
+                // 就在元数据里。
+                Required = false,
                 Help = "A type name: 'Verse.ThingComp', 'ThingComp', or a fragment of one. Several names go " +
                        "into the same table — the 'type' and 'assembly' columns say which row belongs to " +
                        "which — and a name that matches nothing is reported in a note while the others " +
-                       "still print.",
+                       "still print. Leave it out and give --name instead to ask which types declare a " +
+                       "member of that name.",
             },
         ],
         Options =
@@ -145,12 +150,36 @@ public sealed class MembersCommand : Command
     public override int Run(CommandContext ctx)
     {
         var asked = ctx.Args.Positionals;
-        if (asked.Count == 0)
-            throw new CliUsageException("Name a type, for example 'Verse.ThingComp'.");
+
+        // 两个都不给会变成把每个类型的每个成员印一遍 —— 那不是一个答案,是把「问什么」
+        // 整个丢回去。名字必给,类型是可选的收窄:形状同数据侧的
+        // `where --value X [--type T]`,那边早就是这样。
+        var byName = ctx.Args.Value("name");
+        if (asked.Count == 0 && byName is not { Length: > 0 })
+            throw new CliUsageException(
+                "Name a type, for example 'Verse.ThingComp' — or, to ask which types have a member of a " +
+                "given name, give --name on its own: 'rimsearcher members --name HungerMultiplier'.");
 
         ctx.Report.Promises("members");
 
         using var lookup = CodeShared.Open(ctx, out _);
+
+        // 不给类型:问的是「谁有这个成员」。元数据一直答得出,只是此前没有入口 ——
+        // 跨类型找一个成员名只剩 code-search 那条 4 秒的全文扫描,而这条 0.3 秒。
+        if (asked.Count == 0)
+        {
+            var found = lookup.FindMembersAnywhere(byName!, int.MaxValue, substring: true);
+            if (found.Count == 0)
+            {
+                ctx.Report.Notice(NoticeKind.Boundary,
+                    $"No type in the assemblies read here declares a member whose name contains '{byName}'. " +
+                    "Only what each type declares is matched — an inherited member is declared on the base " +
+                    "type and is found under that name. 'rimsearcher code-search' searches the C# text instead.");
+                ctx.Report.Table("members", Columns, []);
+                return 1;
+            }
+            return Emit(ctx, [.. found], byName!);
+        }
 
         // 几个名字并成一串类型 —— 行里带着 type 与 assembly 两列,读的人分得出哪一行
         // 属于哪个类型,所以不必按名字切块。
@@ -220,6 +249,46 @@ public sealed class MembersCommand : Command
             ctx.Report.Notice(NoticeKind.Boundary,
                 $"Declared by {types[0].FullName} itself. What it inherits is declared on its base types and " +
                 "is not repeated here — '--inherited' walks the chain and lists those as well.");
+
+        ctx.Report.Table("members", Columns, rows);
+        return 0;
+    }
+
+    /// <summary>
+    /// 不给类型那条路的输出。与按类型问的那条共用 <see cref="Filter"/> 与同一张表 ——
+    /// 分头渲染的话,同一个 --member-kind 在两条路上会长出两种行为,而调用不报错。
+    ///
+    /// 多出来的一句是**横跨了几个类型**:一个不带这个数的「12 members」读起来像某一个
+    /// 类型有 12 个,而这条路上它们分属不同类型,type 列才是承重的那一列。
+    /// </summary>
+    private static int Emit(CommandContext ctx, List<MemberRow> found, string byName)
+    {
+        var declared = found.Count;
+        var kept = Filter(ctx, found);
+
+        if (kept.Count == 0)
+        {
+            ctx.Report.Notice(NoticeKind.Boundary,
+                $"'{byName}' matches {Tally.Complete(declared).Render("member")}, and the other filters " +
+                "on this command kept none of them. Drop them to see what the name alone finds.");
+            ctx.Report.Table("members", Columns, []);
+            return 1;
+        }
+
+        var limit = ctx.Limit();
+        var rows = kept.Take(limit.Effective).Select(Row).ToList();
+
+        if (kept.Count > limit.Effective)
+            ctx.Report.TruncationNotice(Tally.Of(limit.Effective, kept.Count), "member",
+                                        "Leave --limit out to get every one");
+        else
+            ctx.Report.CountNotice(Tally.Complete(kept.Count), "member");
+
+        var types = kept.Select(r => r.Type.FullName).Distinct(StringComparer.Ordinal).Count();
+        ctx.Report.Notice(NoticeKind.Boundary,
+            $"Asked by member name across every type read here, not within one type — these sit on " +
+            $"{Tally.Complete(types).Render("type")}, named in the 'type' column. Only what each type " +
+            "declares is matched: an inherited member is declared on the base type and appears under it.");
 
         ctx.Report.Table("members", Columns, rows);
         return 0;
