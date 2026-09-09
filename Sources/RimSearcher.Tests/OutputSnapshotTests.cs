@@ -371,6 +371,26 @@ public class OutputSnapshotTests
         // 值给了两遍且不一样。位置参数与 --value 说的是同一件事,挑一个跑下去的话
         // 另一个被丢了在输出里看不出来。
         { "usage-value-twice",     ["where", "compClass", "RimWorld.CompShield", "--value", "Other"] },
+        // ── 选项面的一轮改动,先钉住改之前长什么样(2026-09-09) ────────────────
+        // 依据是真实调用里逐字数出来的伸手写法,产地 tools/scan-flag-rewrite.py 与
+        // tools/scan-alias-spelling.py。每一格都是**这一轮要翻的那一格**,不是回归护栏:
+        // 改完之后它们都会变,读 diff 就是验收。
+        //
+        // 伸手写 --values 的有 15 次 / 13 会话,实参给的全是字段路径,而紧接着的重写
+        // 十之八九是 --path-contains 同一个词。
+        { "usage-get-values",      ["get", "Apparel_ShieldBelt", "--values", "statBases"] },
+        // 反向:--field 是声明里挂着的别名,而 get / inherit / fields 三条命令上逐字
+        // 零次。这一格钉的是「今天它还通」。
+        { "usage-get-field-alias", ["get", "Apparel_ShieldBelt", "--field", "statBases"] },
+        // read 上写行区间的第一直觉:64 + 64 次 / 49 份会话,--start 与 --end 完全成对。
+        { "usage-read-start-end",  ["read", "vanilla/Verse/Outline.cs", "--start", "3", "--end", "6"] },
+        // 与上一格同批:--lines 在场时再给 --start,两种说法指同一件事。
+        { "usage-read-lines-and-start", ["read", "vanilla/Verse/Outline.cs", "--lines", "1-3", "--start", "5"] },
+        // --start 今天是 --offset 的别名(search/where/list/values/fields 五条命令),
+        // 而这个意思在全部真实调用里**一次都没被用过**。
+        { "usage-values-start-as-offset", ["values", "statBases.stat", "--start", "1"] },
+        // code-search 的位置参数就是正则,于是 29 次 / 26 会话伸手写 --regex 去断言它。
+        { "usage-code-search-regex", ["code-search", "public", "--regex"] },
         // ── def 类型打头 ──────────────────────────────────────────────────────
         // `list <defType>` 与 `fields <defType>` 把类型放在位置上,而 get / values /
         // search / where 把类型放在 --type 上。消费侧会把前者外推到后者,写成
@@ -428,6 +448,8 @@ public class OutputSnapshotTests
         // Remarks 里那段 patch 口径与 identity 块的 patch_ops 说的是同一件事,而 r14 抓到
         // 一个受测者读了输出的新句、再引这里的旧句把它降格成「通用免责措辞」驳回。
         { "help-inherit",          ["inherit", "--help"] },
+        // read 的选项面这一轮要动(--start / --end),整页钉住。
+        { "help-read",             ["read", "--help"] },
         // where 的 --limit / --offset 数的是**行**((def, 路径)对),而模板的 what 一度传的是
         // "defs" —— 这条命令是全套里唯一一行不等于一个 def 的,那个词在别处都是真话。
         { "help-where",            ["where", "--help"] },

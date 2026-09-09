@@ -1,0 +1,6 @@
+$ rimsearcher get Apparel_ShieldBelt --values statBases
+exit 2
+--- stdout ---
+--- stderr ---
+Unknown option '--values'. This command accepts: --config, --db, --defaults, --json, --limit, --path-contains, --snapshot, --type.
+Run 'rimsearcher get --help' to see what this command accepts.

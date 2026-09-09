@@ -1,0 +1,7 @@
+$ rimsearcher read vanilla/Verse/Outline.cs --start 3 --end 6
+exit 2
+--- stdout ---
+--- stderr ---
+Unknown option '--start'. This command accepts: --config, --db, --json, --limit, --lines, --member, --outline, --snapshot, --source, --type.
+Unknown option '--end'. This command accepts: --config, --db, --json, --limit, --lines, --member, --outline, --snapshot, --source, --type.
+Run 'rimsearcher read --help' to see what this command accepts.

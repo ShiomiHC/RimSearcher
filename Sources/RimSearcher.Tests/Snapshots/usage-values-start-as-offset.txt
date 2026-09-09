@@ -1,0 +1,22 @@
+$ rimsearcher values statBases.stat --start 1
+exit 0
+--- stdout ---
+2 values of 'statBases.stat', showing 1, starting at 2; that is the last page.
+Nothing sits at 'statBases.stat' as written — indexed paths carry the list index, so this ran with that index left open. The 'field' block below names the paths actually pooled, and any one of them goes back in with --exact-path.
+
+asked            statBases.stat
+matched_paths    statBases[0].stat (2), statBases[1].stat (1)
+def_types        ThingDef (2 of 9)
+defs_with_field  2
+This table's axis is the field: it lists the values 'statBases.stat' takes. Which fields hold a value you already have is the inverse question and a different command — 'rimsearcher where --value EnergyShieldRechargeRate --exact' asks it for 'EnergyShieldRechargeRate', the first row here. A value domain read here does not bound where those values occur.
+
+Defs that may be missing from this answer, their export cut short — every def type that uses this path at all
+def_type  defs_cut_short
+ThingDef  1
+verify: rimsearcher snapshot truncated --type ThingDef
+
+value                     defs  field_path
+EnergyShieldRechargeRate  1     statBases.stat
+
+The values of 'statBases.stat' come from 2 field paths pooled together, not from one field. Any path named for it above goes back in with --exact-path to pool that one alone; '[]' there stands for any index.
+--- stderr ---
