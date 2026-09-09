@@ -98,8 +98,9 @@ a different question. None of them announces itself.
 - **`where`'s path is matched from the end; every `--path-contains` filter is a substring.**
   A bare name matches the last segment whole (`where genSteps` never sees
   `extraGenSteps[N]`; `fields MapGeneratorDef --path-contains enStep` reaches both because
-  it is a substring), but a dotted one is raw text that does not stop at a `.` —
-  `where graphicData.shaderType` also collects `swimmingGraphicData.shaderType`.
+  it is a substring), and a dotted one matches whole segments the same way —
+  `where graphicData.shaderType` does not collect `swimmingGraphicData.shaderType`.
+  It is still a suffix, so it does not say what sits above those segments:
   `--exact-path` pins the whole path and drops the rows those extra shapes contributed.
   `[]` stands for any index on the positional path of `where` and `values`, and on every
   `--path-contains`: `comps[].props.energyMax` matches every `comps[N].props.energyMax`.

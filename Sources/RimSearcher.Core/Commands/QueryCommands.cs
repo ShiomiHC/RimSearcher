@@ -1147,9 +1147,13 @@ public sealed class FindCommand : Command
         Aliases = ["by-field"],
         Summary = "Find defs by the value of a field. This is the reverse lookup: from a C# class or a value back to the defs that use it.",
         Remarks =
-            "The field path is matched from the end, so 'compClass' finds 'comps[3].compClass' without you knowing " +
-            "the index. That suffix is plain text and does not stop at a '.', so 'graphicData.shaderType' also " +
-            "matches 'swimmingGraphicData.shaderType'; --exact-path pins the whole path. This replaces grepping " +
+            // 「后缀是纯文本、不停在 `.` 上,所以 graphicData.shaderType 也命中
+            // swimmingGraphicData.shaderType」这句 2026-09-09 删掉。它是判据的辩护 ——
+            // 而判据已经改成段对齐,那句现在是假的。--exact-path 那半句留着:后缀与整条
+            // 仍是两件事(compClass 命中每一条以它结尾的路径)。
+            "The field path is matched from the end and whole segments at a time, so 'compClass' finds " +
+            "'comps[3].compClass' without you knowing the index, and 'graphicData.shaderType' does not reach " +
+            "'swimmingGraphicData.shaderType'; --exact-path pins the whole path. This replaces grepping " +
             "the XML: the values here are the merged, post-patch ones, and a class reference is an exact match " +
             "rather than a text hit.",
         Positionals =

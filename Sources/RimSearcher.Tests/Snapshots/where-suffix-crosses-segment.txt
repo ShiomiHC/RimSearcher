@@ -1,18 +1,15 @@
 $ rimsearcher where graphicData.texPath
 exit 0
 --- stdout ---
-3 matches.
-  - Those 3 matches come from 2 defs: a def that matches on more than one path has a row for each, so the def_name column repeats.
-  - These rows span more than one path shape: graphicData.texPath (2), building.blueprintGraphicData.texPath (1). The suffix matched them all. Pasting one of those shapes back into this command with --exact-path keeps that one alone.
+2 defs.
 
 Defs that may be missing from this answer, their export cut short — every def type that uses this path at all
 def_type  defs_cut_short
 ThingDef  1
 verify: rimsearcher snapshot truncated --type ThingDef
 
-Same in every row, not repeated below: def_type=ThingDef, code_default=no, mod=ludeon.rimworld.
-def_name    path                                   value
-Firefoam    building.blueprintGraphicData.texPath  Things/Building/Blueprint_Nozzle
-Firefoam    graphicData.texPath                    Things/Building/Nozzle
-FoamPopper  graphicData.texPath                    Things/Building/Cannon
+Same in every row, not repeated below: def_type=ThingDef, path=graphicData.texPath, code_default=no, mod=ludeon.rimworld.
+def_name    value
+Firefoam    Things/Building/Nozzle
+FoamPopper  Things/Building/Cannon
 --- stderr ---

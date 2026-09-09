@@ -1,13 +1,13 @@
 $ rimsearcher values graphicData.texPath
 exit 0
 --- stdout ---
-3 values of 'graphicData.texPath'.
+2 values of 'graphicData.texPath'.
 
 asked            graphicData.texPath
-matched_paths    graphicData.texPath (2), building.blueprintGraphicData.texPath (1)
+matched_paths    graphicData.texPath (2)
 def_types        ThingDef (2 of 9)
 defs_with_field  2
-This table's axis is the field: it lists the values 'graphicData.texPath' takes. Which fields hold a value you already have is the inverse question and a different command — 'rimsearcher where --value Things/Building/Blueprint_Nozzle --exact' asks it for 'Things/Building/Blueprint_Nozzle', the first row here. A value domain read here does not bound where those values occur.
+This table's axis is the field: it lists the values 'graphicData.texPath' takes. Which fields hold a value you already have is the inverse question and a different command — 'rimsearcher where --value Things/Building/Cannon --exact' asks it for 'Things/Building/Cannon', the first row here. A value domain read here does not bound where those values occur.
 
 Defs that may be missing from this answer, their export cut short — every def type that uses this path at all
 def_type  defs_cut_short
@@ -16,9 +16,6 @@ verify: rimsearcher snapshot truncated --type ThingDef
 
 Same in every row, not repeated below: defs=1, field_path=graphicData.texPath.
 value
-Things/Building/Blueprint_Nozzle
 Things/Building/Cannon
 Things/Building/Nozzle
-
-The values of 'graphicData.texPath' come from 2 field paths pooled together, not from one field. Any path named for it above goes back in with --exact-path to pool that one alone; '[]' there stands for any index.
 --- stderr ---

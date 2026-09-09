@@ -115,9 +115,9 @@ public static class CommonOptions
     };
 
     /// <summary>
-    /// 后缀匹配的对侧开关。默认那条后缀是纯文本、不在 <c>.</c> 上对齐,于是
-    /// <c>graphicData.shaderType</c> 连 <c>swimmingGraphicData.shaderType</c> 一起收走 ——
-    /// 结果里那句「横跨几种路径形状」说得出这件事,而在此之前没有一条命令能把它筛掉。
+    /// 后缀匹配的对侧开关。缺省那条后缀按整段对齐,但不限它前面还有几段:
+    /// <c>compClass</c> 命中每一条以这一段结尾的路径,而这个旗把它钉成整条。
+    /// 结果里那句「横跨几种路径形状」说的就是缺省态还剩几种,粘一条回来就收窄到一种。
     ///
     /// 这一条是**旗**,因为 <c>where</c> / <c>values</c> 的路径走位置参数,它只改匹配方式。
     /// <c>get</c> / <c>inherit</c> / <c>fields</c> 的路径走选项,那边同名的是

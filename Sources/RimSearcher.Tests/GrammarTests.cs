@@ -1918,29 +1918,40 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 点路径的后缀是**纯文本**,不在 <c>.</c> 上对齐:问 <c>graphicData.texPath</c> 会把
-    /// <c>building.blueprintGraphicData.texPath</c> 一起收走,而两者是不同的字段。表干净、
-    /// 计数完整,答的是另一个问题 —— 第九轮盲测在真快照上量到 185 行里只有 130 行对得上。
+    /// 点路径的后缀在**段边界**上对齐(2026-09-09 改):问 <c>graphicData.texPath</c> 不再
+    /// 把 <c>building.blueprintGraphicData.texPath</c> 一起收走 —— 那是另一个字段,而旧判据
+    /// 给出的表干净、计数完整,答的是另一个问题(第九轮盲测在真快照上量到 185 行里只有
+    /// 130 行对得上)。
     ///
-    /// 闸盯三件事:开关真能钉住整段;<c>[]</c> 是下标通配(那句「横跨几种形状」印的就是
-    /// 带 <c>[]</c> 的形状,得能原样粘回来);以及它把结果筛空时说的是「不是整段」而不是
-    /// 「没有这个字段」。
+    /// **这一格此前钉的是相反的断言**,而它一直是绿的:判据当年承自上游 <c>find</c>,
+    /// 闸把那次取舍连同它一起固化了。改判的依据是同一个缺省下**两套判据**这件事 ——
+    /// 单段那一支走 leaf 列等值,本来就段对齐,而写出了边界的多段那一支反而更松。
+    /// 真实语料 224 种多段写法里 11 种因此换答案(72 次调用)。
+    ///
+    /// 闸盯四件事:段边界真的挡住了;后缀仍然不限前面还有几段(否则这就成了
+    /// <c>--exact-path</c> 的重复);<c>[]</c> 是下标通配(那句「横跨几种形状」印的就是
+    /// 带 <c>[]</c> 的形状,得能原样粘回来);以及开关把结果筛空时说的是「不是整段」
+    /// 而不是「没有这个字段」。
     /// </summary>
     [Fact]
-    public void 点路径的后缀不在点上对齐而exactpath钉得住()
+    public void 点路径的后缀按段对齐而exactpath再钉成整条()
     {
-        // 默认:两种形状一起收走 —— 而其中一个 def 两条路径都占,于是 3 行只有 2 个 def,
-        // 计数句自己就换了名词。这不是巧合:多收一个字段进来正是本条要说的那件事,
-        // 而「行数 ≠ def 数」是它在 line 1 上留下的第一个痕迹。
+        // 段边界挡住了跨边界那一条。旧判据下这里是「3 matches」外加一句「come from 2 defs」——
+        // 多收进来的那个字段让同一个 def 占了两行,而行数与 def 数分家正是它留下的头一个痕迹。
+        // 现在两者重合,首行的名词跟着变回 def,那句对账也就不出现了。
         var (loose, _, _) = Fixture.Run("where", "graphicData.texPath");
-        Assert.Contains("3 matches.", loose, StringComparison.Ordinal);
-        Assert.Contains("come from 2 defs", loose, StringComparison.Ordinal);
-        Assert.Contains("building.blueprintGraphicData.texPath", loose, StringComparison.Ordinal);
+        Assert.Contains("2 defs.", loose, StringComparison.Ordinal);
+        Assert.DoesNotContain("has a row for each", loose, StringComparison.Ordinal);
+        Assert.DoesNotContain("blueprintGraphicData", loose, StringComparison.Ordinal);
+        // 而它仍然是后缀不是整条 —— 单段那一支把两种形状都收进来,是同一条缺省。
+        var (leaf, _, _) = Fixture.Run("where", "texPath");
+        Assert.Contains("building.blueprintGraphicData.texPath", leaf, StringComparison.Ordinal);
+        Assert.Contains("span more than one path shape", leaf, StringComparison.Ordinal);
 
-        // 钉住整段:那条跨边界的不在了。
+        // 钉住整条:上一句印出来的形状粘回来,只剩那一种。
         var (pinned, _, _) = Fixture.Run("where", "graphicData.texPath", "--exact-path");
         Assert.Contains("2 defs", pinned, StringComparison.Ordinal);
-        Assert.DoesNotContain("blueprintGraphicData", pinned, StringComparison.Ordinal);
+        Assert.DoesNotContain("span more than one path shape", pinned, StringComparison.Ordinal);
 
         // `[]` 是下标通配:两条 statBases 都在,而写死 [0] 只留一条。
         var (anyIndex, _, _) = Fixture.Run("where", "statBases[].stat", "--exact-path");
@@ -1957,7 +1968,10 @@ public class GrammarTests
 
         // values 同一条开关、同一条成因分流。并了池就说破自己并了几条,钉住了就不说 ——
         // 否则那句话退化成每次都挂的免责声明。
-        var (pool, _, _) = Fixture.Run("values", "graphicData.texPath");
+        // 并池这一档从 `graphicData.texPath` 换成单段的 `texPath`:段对齐之后前者只剩一条路径,
+        // 并不成池了。**换的是取材,不是被测的那条纪律** —— 而这一换本身也在说事:
+        // 并池此后只发生在读者没写边界的时候。
+        var (pool, _, _) = Fixture.Run("values", "texPath");
         Assert.Contains("come from 2 field paths pooled together", pool, StringComparison.Ordinal);
         var (pooled, _, _) = Fixture.Run("values", "graphicData.texPath", "--exact-path");
         Assert.DoesNotContain("blueprintGraphicData", pooled, StringComparison.Ordinal);

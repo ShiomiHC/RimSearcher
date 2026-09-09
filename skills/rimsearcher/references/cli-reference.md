@@ -1162,7 +1162,7 @@ Find defs by the value of a field. This is the reverse lookup: from a C# class o
 rimsearcher where [fieldPath] [value] [options]
 ```
 
-The field path is matched from the end, so 'compClass' finds 'comps[3].compClass' without you knowing the index. That suffix is plain text and does not stop at a '.', so 'graphicData.shaderType' also matches 'swimmingGraphicData.shaderType'; --exact-path pins the whole path. This replaces grepping the XML: the values here are the merged, post-patch ones, and a class reference is an exact match rather than a text hit.
+The field path is matched from the end and whole segments at a time, so 'compClass' finds 'comps[3].compClass' without you knowing the index, and 'graphicData.shaderType' does not reach 'swimmingGraphicData.shaderType'; --exact-path pins the whole path. This replaces grepping the XML: the values here are the merged, post-patch ones, and a class reference is an exact match rather than a text hit.
 
 | Argument | Meaning |
 |---|---|

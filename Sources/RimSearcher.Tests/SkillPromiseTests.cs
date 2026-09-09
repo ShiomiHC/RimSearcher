@@ -218,9 +218,12 @@ public class SkillPromiseTests
         // 而「覆写了基类的什么」正是读轮廓的人最常从这里得出的结论。
         new("they point at opposite next steps",
             nameof(GrammarTests.轮廓分得出覆写与新引入并报出读的是哪个文件)),
-        // 第九轮盲测证伪了这里原来那句「whole-segment suffix」:点路径是纯文本后缀,
-        // 不在 `.` 上对齐。承诺改成实况的同时钉住新开关 —— 没有它这条说明只是个警告。
-        new("a dotted one is raw text that does not stop", nameof(GrammarTests.点路径的后缀不在点上对齐而exactpath钉得住)),
+        // 这一句改过两次,值得记全:原本写的是「whole-segment suffix」,第九轮盲测证伪了它
+        // (判据当时是纯文本后缀,不在 `.` 上对齐),于是承诺改成了实况;2026-09-09 反过来 ——
+        // **改的是判据**,多段那一支跟着单段那一支段对齐,承诺又改回来。
+        // 两次都不是措辞问题:第一次是话说得比做得满,第二次是做得与直觉不符。
+        new("a dotted one matches whole segments the same way",
+            nameof(GrammarTests.点路径的后缀按段对齐而exactpath再钉成整条)),
         // 文档批补的四条可实测口径。每条都是「不这么以为就会拿错答案」的那种句子,
         // 而文档与实现是两处产地。
         new("is case-sensitive unless you pass `-i`", nameof(GrammarTests.skill那几条可实测的默认与口径逐条对得上)),
@@ -244,7 +247,7 @@ public class SkillPromiseTests
         // 因此把它当字面量,恒空)。拆成两条,各连各的闸:前半仍是那道整条/后缀的闸,
         // 后半是新立的、逐入口敲一遍的那道。
         new("`--exact-path` pins the whole path and drops the rows those extra shapes contributed",
-            nameof(GrammarTests.点路径的后缀不在点上对齐而exactpath钉得住)),
+            nameof(GrammarTests.点路径的后缀按段对齐而exactpath再钉成整条)),
         new("`[]` stands for any index on the positional path of `where` and `values`, and on every\n  `--path-contains`",
             nameof(GrammarTests.下标通配在每个收路径的入口都认)),
         new("on a Core-only snapshot, `1 def` means one in Core",

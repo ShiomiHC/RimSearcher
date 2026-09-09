@@ -89,9 +89,12 @@ public enum ValueMatch
 /// <summary>
 /// 一个字段路径怎么比。
 ///
-/// 默认是**后缀**,而且不在 <c>.</c> 上对齐(上游 <c>find</c> 的语义):
-/// <c>graphicData.shaderType</c> 会把 <c>swimmingGraphicData.shaderType</c> 一起收走。
-/// <paramref name="Exact"/> 把它钉成整条路径。
+/// 默认是**后缀**,按整段对齐:<c>graphicData.shaderType</c> 命中每一条以这两段结尾的
+/// 路径,但够不着 <c>swimmingGraphicData.shaderType</c>。<paramref name="Exact"/> 把它
+/// 钉成整条路径 —— 两者仍是两件事,后缀不限它前面还有几段。
+///
+/// 「不在 <c>.</c> 上对齐」是 2026-09-09 之前的语义(承上游 <c>find</c>),那时单段走
+/// leaf 列等值(段对齐)而多段走裸 <c>%text</c>(不对齐),同一个缺省下两套判据。
 ///
 /// 精确态里 <c>[]</c> 是任意下标的通配 —— 「这批命中横跨几种路径形状」那句印出来的
 /// 就是带 <c>[]</c> 的形状,而它是读的人手上唯一一条现成的收窄依据,得能原样粘回来。
@@ -1066,8 +1069,19 @@ public sealed class SnapshotDb : IDisposable
             // `[]` 在这一支也是下标通配(判据在 PathLike)。两件事正交:`--exact-path`
             // 管「整条还是后缀」,`[]` 管「下标不限」—— 不写成「含 [] 就当 --exact-path」,
             // 那救不了自己写的一段尾巴(`filter.thingDefs[]` 不是整条路径,加了旗照样空)。
-            p["@path"] = "%" + PathLike(path.Text);
-            conds.Add(PathIs($"path LIKE @path ESCAPE '\\'"));
+            //
+            // 后缀在**段边界**上对齐(2026-09-09):要么整条就是它,要么它前面紧挨着一个 `.`。
+            // 此前这里是裸的 `%text`,于是 `graphicData.color` 连
+            // `alternateGraphics[0].dessicatedGraphicData.color` 一起收走 —— 49 条里只有
+            // 7 条是问的那个字段。而下面单段那一支走 leaf 列等值,**本来就是段对齐的**:
+            // 同一个缺省下两套判据,严格程度还是反的 —— 把边界写出来的那一半反而更松。
+            //
+            // 真实语料 224 种多段写法里 11 种因此换答案(折成调用 72 次)。跨段边界的纯文本
+            // 后缀就此没有了:那 11 种没有一种看得出是有意要它,形态全是「我要这一条,
+            // 结果多来了几条」。
+            p["@path"] = PathLike(path.Text);
+            p["@pathTail"] = "%." + PathLike(path.Text);
+            conds.Add(PathIs($"path LIKE @path ESCAPE '\\' OR path LIKE @pathTail ESCAPE '\\'"));
         }
         else
         {
