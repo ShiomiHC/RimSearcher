@@ -1,8 +1,7 @@
 $ rimsearcher get Apparel_ShieldBelt --path-contains comps[].props
 exit 0
 --- stdout ---
-No field path contains 'comps[].props'; the def does have 13 fields. Drop --path-contains to see them.
-This says no indexed value sits at that path — not that no such field exists. 'rimsearcher code-search "[\w<>,\[\] ]+ props;"' finds the declaration, which does say. Two things keep a field out of this index without any sign here: a value that was null on every def, and a field the game marks as an unsaved runtime cache. A third, the exporter stopping short on a def — past its field cap, past the depth cap, or partway down a list — does leave a sign: 'rimsearcher snapshot truncated' lists those defs. This snapshot (exporter 0.2.0) does not list the fields a type can have, so it cannot tell a field that is null on every def from one the type does not have. The runtime type of a nested Class="..." object is indexed as '<path>.Class' for list elements only (<li Class="...">), so 'rimsearcher where Class <ClassName>' reaches those. A single field that picks a class — GenStepDef.genStep, ThinkTreeDef.thinkRoot — is not in this snapshot at all: it was written by exporter 0.2.0, before that case entered the index, and a zero from that query is not evidence about it. Re-export to reach it.
+Matching 'comps[].props': 2 fields, out of 13 fields on the def.
 
 def_name     Apparel_ShieldBelt
 def_type     ThingDef
@@ -11,6 +10,12 @@ class        Verse.ThingDef
 mod          ludeon.rimworld
 source       Apparel_Belts.xml
 xml          not indexed (exporter 0.2.0)
-The game also prices this thing. Its market value, cost to make and work amount are computed, not stored, so no field above holds them — 'rimsearcher economy Apparel_ShieldBelt' is the only road to those numbers.
-Filtered away: 1 translation this def does have, none of whose paths contain 'comps[].props'. Their paths are the game's injection keys as written, and this snapshot predates the pass that brings them onto the field paths' grammar: where a field path has '[0]', a key has either the number or a name taken from that element's own label, and neither spelling contains the other. Ask for the field name on its own — the part before the subscript — to reach both tables, or re-export to get one grammar.
+
+Same in every row, not repeated below: code_default=no.
+path                                value
+comps[0].props.energyMax            0.5
+comps[0].props.energyLossPerDamage  0.033
+No value above with 'code_default'=no is one that most of the 9 ThingDefs in this snapshot also carry.
+  - The game also prices this thing. Its market value, cost to make and work amount are computed, not stored, so no field above holds them — 'rimsearcher economy Apparel_ShieldBelt' is the only road to those numbers.
+  - Filtered away: 1 translation this def does have, none of whose paths contain 'comps[].props'. Their paths are the game's injection keys as written, and this snapshot predates the pass that brings them onto the field paths' grammar: where a field path has '[0]', a key has either the number or a name taken from that element's own label, and neither spelling contains the other. Ask for the field name on its own — the part before the subscript — to reach both tables, or re-export to get one grammar.
 --- stderr ---

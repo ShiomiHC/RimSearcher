@@ -569,7 +569,7 @@ public sealed class SnapshotDb : IDisposable
             var ors = new List<string>();
             for (var i = 0; i < filters.Count; i++)
             {
-                p["@f" + i] = "%" + Escape(filters[i]) + "%";
+                p["@f" + i] = "%" + PathLike(filters[i]) + "%";
                 ors.Add($"{FvPath} LIKE @f{i} ESCAPE '\\'");
             }
             where += " AND (" + string.Join(" OR ", ors) + ")";
@@ -612,6 +612,21 @@ public sealed class SnapshotDb : IDisposable
     /// <summary>LIKE 的通配符转义。用户给的过滤串里出现 <c>_</c> 是常事(field_path 之类)。</summary>
     private static string Escape(string s)
         => s.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+
+    /// <summary>
+    /// 一段路径文本变成 LIKE 模式:先转义,再把 <c>[]</c> 放成下标通配。
+    /// **凡是拿路径去比的地方都走这里** —— <c>[]</c> 是 <see cref="Search.PathSegments.Shape"/>
+    /// 印出去的规范写法(<c>statBases[7].stat</c> → <c>statBases[].stat</c>),而印出去的形状
+    /// 原样粘回哪条命令都得能跑。此前只有位置参数那条路(<c>where</c> / <c>values</c>)认它,
+    /// 三条 <c>--path-contains</c> 把它当字面量,于是恒空 —— 而恒空与「这个字段不存在」同形。
+    ///
+    /// 顺序不能倒:转义在前,路径里真有的 <c>%</c> 才不会被当成通配。
+    /// 字面含 <c>[]</c> 的路径实测一条都没有(十五个库的路径字典各 0、值字典各 0、
+    /// 类型侧 <c>type_field_paths</c> 也是 0;含 <c>[</c> 的有 2.4 万~15 万),旧行为无损。
+    /// 值那一侧不走这里:<c>[]</c> 是路径文法,值里的 <c>[]</c> 该当字面量。
+    /// </summary>
+    private static string PathLike(string s)
+        => Escape(s).Replace("[]", "[%]", StringComparison.Ordinal);
 
     public (IReadOnlyList<DefRow> Rows, int Total) ListByType(
         string defType, ScopeFilter scope, int limit, int offset, string? className = null, string? nameLike = null)
@@ -880,7 +895,7 @@ public sealed class SnapshotDb : IDisposable
         var any = new List<string>();
         for (var i = 0; i < filters.Count; i++)
         {
-            p[$"@f{i}"] = "%" + Escape(filters[i]) + "%";
+            p[$"@f{i}"] = "%" + PathLike(filters[i]) + "%";
             any.Add(PathIs($"path LIKE @f{i} ESCAPE '\\'"));
         }
         var where = $"FROM field_values fv {FvJoin} JOIN defs d ON d.id = fv.def_id " +
@@ -911,7 +926,9 @@ public sealed class SnapshotDb : IDisposable
             var anyWhole = new List<string>();
             for (var i = 0; i < filters.Count; i++)
             {
-                var e = Escape(filters[i]);
+                // 下面六条整段模式全建在 e 上,所以 `[]` 的通配得在这里一次放完 ——
+                // 分两次的话「命中」与「整段命中」会按两套文法数。
+                var e = PathLike(filters[i]);
                 p[$"@f{i}"] = "%" + e + "%";
                 any.Add(PathIs($"path LIKE @f{i} ESCAPE '\\'"));
 
@@ -986,10 +1003,11 @@ public sealed class SnapshotDb : IDisposable
     {
         if (path.Exact)
         {
-            // `[]` 是下标通配。先转义再放通配 —— 反过来的话路径里真有的 % 会被当成通配。
+            // `[]` 是下标通配(判据在 PathLike)。整条相等那一支要先看有没有 `[]`:
+            // 没有就走 `=`,那条走得到索引。
             if (path.Text.Contains("[]", StringComparison.Ordinal))
             {
-                p["@path"] = Escape(path.Text).Replace("[]", "[%]", StringComparison.Ordinal);
+                p["@path"] = PathLike(path.Text);
                 conds.Add(PathIs($"path LIKE @path ESCAPE '\\' COLLATE NOCASE"));
             }
             else
@@ -1027,12 +1045,10 @@ public sealed class SnapshotDb : IDisposable
         }
         else if (path.Text.Contains('.') || path.Text.Contains('['))
         {
-            // `[]` 在这一支也是下标通配。两件事正交:`--exact-path` 管「整条还是后缀」,
-            // `[]` 管「下标不限」—— 通配此前只在前者开启时生效,于是摘要自己印的形状
-            // 原样粘回来是空的。不写成「含 [] 就当 --exact-path」,那救不了自己写的
-            // 一段尾巴(`filter.thingDefs[]` 不是整条路径,加了旗照样空)。
-            // 字面含 `[]` 的路径实测一条都没有(三份快照各 0,含 `[` 的有 34 万),旧行为无损。
-            p["@path"] = "%" + Escape(path.Text).Replace("[]", "[%]", StringComparison.Ordinal);
+            // `[]` 在这一支也是下标通配(判据在 PathLike)。两件事正交:`--exact-path`
+            // 管「整条还是后缀」,`[]` 管「下标不限」—— 不写成「含 [] 就当 --exact-path」,
+            // 那救不了自己写的一段尾巴(`filter.thingDefs[]` 不是整条路径,加了旗照样空)。
+            p["@path"] = "%" + PathLike(path.Text);
             conds.Add(PathIs($"path LIKE @path ESCAPE '\\'"));
         }
         else
@@ -2066,7 +2082,7 @@ public sealed class SnapshotDb : IDisposable
                                  (string DefName, string DefType)? exclude, Dictionary<string, object?> p)
     {
         p["@root"] = ancestorName;
-        p["@f"] = "%" + Escape(pathFilter) + "%";
+        p["@f"] = "%" + PathLike(pathFilter) + "%";
 
         // 自环与 XML 里写得出的环由 UNION(而非 UNION ALL)吃掉:去重之后递归自然收敛。
         var cte =
@@ -2506,7 +2522,7 @@ public sealed class SnapshotDb : IDisposable
             var ors = new List<string>();
             for (var i = 0; i < filters.Count; i++)
             {
-                p["@f" + i] = "%" + Escape(filters[i]) + "%";
+                p["@f" + i] = "%" + PathLike(filters[i]) + "%";
                 ors.Add($"{pathExpr} LIKE @f{i} ESCAPE '\\'");
             }
             where += " AND (" + string.Join(" OR ", ors) + ")";

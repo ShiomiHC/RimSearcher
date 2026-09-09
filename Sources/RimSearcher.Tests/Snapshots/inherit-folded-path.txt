@@ -15,11 +15,11 @@ patch_ops_label    1
 
 name     def_type  abstract  mod              source
 BaseGun  ThingDef  yes       ludeon.rimworld  Guns.xml
-'ChildGun' itself carries no field path containing 'costList[].count', so there is no value of its own to compare against; the counts below say which layers' descendants carry one at all.
+'ChildGun' carries 1 field matching 'costList[].count', all reading '75' — that is the value the counts below are compared against.
 
-layer    other_defs  with_path
-BaseGun  0           0
-Each row counts the other defs descending from that layer: how many carry a field path containing 'costList[].count'. A layer that declares a field passes it to every descendant, so a layer whose with_path falls short of other_defs is not the one declaring this field; reaching other_defs does not point back at it, because every descendant writing the field separately counts the same. The snapshot stores no 'declared here' fact — the game resolves inheritance while loading and then discards it — so these counts are what the answer has to be read off.
-  - No single value could be fixed to compare against, so the same_value column — the one that does tell those two apart — is not in this table.
-  - A descendant that overrides the field still counts in with_path, so the columns differing means overriding, not absence. And field values here are the merged, post-patch ones, so a PatchOperation that added this field to many defs is indistinguishable from a layer declaring it.
+layer    other_defs  with_path  same_value
+BaseGun  0           0          0
+Each row counts the other defs descending from that layer: how many carry a field path containing 'costList[].count', and how many of those read the same value. A layer that declares a field passes it to every descendant, so a layer whose with_path falls short of other_defs is not the one declaring this field; reaching other_defs does not point back at it, because every descendant writing the field separately counts the same. The snapshot stores no 'declared here' fact — the game resolves inheritance while loading and then discards it — so these counts are what the answer has to be read off.
+  - The same_value column is what tells the two apart — one shared value points at the layer, a spread of values points at each def writing its own.
+  - A descendant that overrides the field still counts in with_path but not in same_value, so the columns differing means overriding, not absence. And field values here are the merged, post-patch ones, so a PatchOperation that added this field to many defs is indistinguishable from a layer declaring it.
 --- stderr ---

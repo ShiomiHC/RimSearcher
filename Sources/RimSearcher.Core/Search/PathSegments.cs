@@ -40,15 +40,33 @@ public static class PathSegments
         return false;
     }
 
-    /// <summary>查询词带下标就连下标一起比,不带就把路径那一侧的下标剥掉。</summary>
+    /// <summary>
+    /// 查询词带下标就连下标一起比,不带就把路径那一侧的下标剥掉。
+    ///
+    /// 空下标 <c>[]</c> 是「下标不限,但得有下标」—— **哪一侧写都算**,与 SQL 那侧的
+    /// <c>[%]</c>(<c>SnapshotDb.PathLike</c>)同一条规矩。两侧规矩不一样就会各错一头:
+    /// 查询写 <c>comps[].props</c> 时 SQL 命中了行,这里却判成「整段一次都没命中」;
+    /// 而 <see cref="Shape"/> 的输出本身带 <c>[]</c>,拿它当路径侧比时,读者写真下标
+    /// (<c>statBases[0]</c>)就永远对不上自己那一层。
+    /// </summary>
     private static bool SameSegment(string segment, string wanted)
     {
-        if (!wanted.Contains('[', StringComparison.Ordinal))
+        var w = wanted.IndexOf('[', StringComparison.Ordinal);
+        if (w < 0)
         {
             var bracket = segment.IndexOf('[', StringComparison.Ordinal);
             if (bracket >= 0) segment = segment[..bracket];
+            return string.Equals(segment, wanted, StringComparison.OrdinalIgnoreCase);
         }
-        return string.Equals(segment, wanted, StringComparison.OrdinalIgnoreCase);
+
+        // 查询词点了下标,而这一段根本没有下标 —— 下标不能无条件剥,那样带下标的写法
+        // 永远不可能等于任何一段。
+        var s = segment.IndexOf('[', StringComparison.Ordinal);
+        if (s < 0) return false;
+
+        return segment.EndsWith("[]", StringComparison.Ordinal) || wanted.EndsWith("[]", StringComparison.Ordinal)
+            ? string.Equals(segment[..s], wanted[..w], StringComparison.OrdinalIgnoreCase)
+            : string.Equals(segment, wanted, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
