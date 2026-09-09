@@ -43,6 +43,7 @@ Global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the com
 | Which UI text is untranslated? | `rimsearcher keyed --empty-translation` with no query |
 | Where a C# type lives, and what it derives from | `rimsearcher types <Name>...` — `--derived`, `--bases`, `--transitive` |
 | What is in a type, and which members are virtual or overridden | `rimsearcher members <Type>...` — the filters are metadata bits, not keywords in the text |
+| Which types declare a member of this name | `rimsearcher members --name <Member>` with no type — reads metadata across every type, where `code-search` would scan the text of every file |
 | Which subclasses override this member | `rimsearcher types <Base> --derived --transitive --declares <Member>` |
 | Who calls this method | `rimsearcher callers <Type>.<Member>...` — `--callees` for the other direction |
 | The instructions of one method (transpilers) | `rimsearcher il <Type>.<Member>...` — `--state-machine` for an iterator or async method |
