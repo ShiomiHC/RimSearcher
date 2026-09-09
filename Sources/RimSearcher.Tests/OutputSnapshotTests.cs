@@ -354,6 +354,11 @@ public class OutputSnapshotTests
         { "list-multi-missing",    ["list", "ThingDef", "NoSuchTypeXYZ"] },
         { "list-multi-all-missing", ["list", "NoSuchTypeXYZ", "NoSuchTypeABC"] },
         { "fields-filtered",       ["fields", "ThingDef", "--path-contains", "comps"] },
+        // 打进来的文本其实是个**取值**:MarketValue 坐在 statBases[0].stat 上,不是字段名。
+        // 与 get-path-is-value 是同一件事的两半,载体也用同一个值 —— 那边早就回查值面了,
+        // 这边此前只解释「路径面为什么可能漏」,整段假定问的是个字段名。
+        // 实测同型误用 3 次(hunger / WorkSpeedGlobal / EquipDelay),全部当场交卷。
+        { "fields-path-is-value",  ["fields", "ThingDef", "--path-contains", "MarketValue"] },
         // 几个类型一次问。守三件事:每个类型各有一句带名字的计数(不带名字两句读起来
         // 像同一个类型说了两遍)、行并进同一张表且 def_type 在末列(单类型调用里它折进
         // 表头,多类型调用里它印出来)、`completeness` 只发一块(具名块发两次会撞键)。

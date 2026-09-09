@@ -2533,25 +2533,39 @@ public sealed class FieldsCommand : Command
                         "entered the value index. The type has the field; no def has a value for it.");
                     return 1;
                 }
+                // 打进来的文本是这个类型的一个**取值**时,答案就在同一个库里 —— 先算,
+                // 算出来了就不必再走下面那两条「路径面为什么可能漏」的解释。
+                var asValue = FilterIsValue(ctx, type, filters, exactPath);
+
                 if (declared is { Count: 0 })
                 {
                     // 量程跟着这句否定一起说。声明集是按递归深度收的,而类型图有环 ——
                     // 「展开完」不存在(Docs/22 第 12.2 节:471 个类型的强连通分量)。
                     // 不说深度的话,一个嵌套过深的字段与一个根本不存在的字段印出来同形。
+                    //
+                    // 量程那半句在 asValue 出声时撤掉:它解释的是「路径面可能没测到那么深」,
+                    // 而这次落空的成因已经查明是**轴选错了**。两句并排会让读者以为还得
+                    // 再往深里找一次。
                     var reach = ctx.Db.TypeDeclaredPathMaxSegments(type);
                     ctx.Report.Notice(NoticeKind.Boundary,
                         $"'{type}' has field paths, but none contains {PathFilterText.Say(filters)}, and its " +
                         "declared-path list has none either" +
-                        (reach is { } n
-                            ? $" — that list reaches {n} segments deep, so a field nested past that is outside " +
-                              "what it measured."
-                            : "."));
+                        (asValue is not null
+                            ? "."
+                            : reach is { } n
+                                ? $" — that list reaches {n} segments deep, so a field nested past that is outside " +
+                                  "what it measured."
+                                : "."));
+                    if (asValue is not null) ctx.Report.Notice(NoticeKind.NextStep, asValue);
                     return 1;
                 }
                 ctx.Report.Notice(NoticeKind.Boundary,
                     $"'{type}' has field paths, but none {(exactPath ? "is" : "contains")} {PathFilterText.Say(filters)}. " +
                     $"Drop {(exactPath ? "--exact-path" : "--path-contains")} to see them all.");
-                Completeness.NoteIndexHoldsValuesOnly(ctx, filters[0]);
+                // 同一条纪律:成因查明了就不再列那三种「字段可能在、只是没进索引」的可能。
+                // 那段免责整段假定问的是个字段名,而这次问的不是。
+                if (asValue is not null) ctx.Report.Notice(NoticeKind.NextStep, asValue);
+                else Completeness.NoteIndexHoldsValuesOnly(ctx, filters[0]);
                 return 1;
             }
             ctx.Report.Notice(NoticeKind.NextStep, DefTypeMiss.Say(type, ctx.Db.Types(ctx.Scope()).Select(t => t.Type), "fields"));
@@ -2590,6 +2604,52 @@ public sealed class FieldsCommand : Command
                 ["def_type"] = type,
             });
         return 0;
+    }
+
+    /// <summary>
+    /// 打进 <c>--path-contains</c> 的文本其实是这个类型的一个**取值**,不是字段名。
+    ///
+    /// <c>fields GeneDef --path-contains hunger</c> 这类调用问的是「这个类型跟这个词
+    /// 有没有关系」,而问的人**不知道**这个词会落在路径位还是值位 —— 那正是他要查的东西。
+    /// 路径面查空之后,现有的两句都在解释「路径面为什么可能漏」(声明集有多深 /
+    /// 字段可能没进索引),整段假定问的是个字段名,于是把读者按在「没有」上。
+    ///
+    /// 实测:三次同型调用(<c>hunger</c> / <c>WorkSpeedGlobal</c> / <c>EquipDelay</c>)
+    /// 全部当场交卷,一次都没转去值面。而后两个在值面上分别是 10 和 107 个 def。
+    /// hunger 那次值面**也是空的**,于是这里一个字都不说 —— 判据当场算得出来,
+    /// 算不出就沉默(纪律同 <see cref="DefTypeMiss.InSourceInstead"/>)。
+    ///
+    /// 限定 <paramref name="type"/> 查,不查全库:问的是「这个类型上」,而
+    /// <c>WorkSpeedGlobal</c> 在别的类型上也坐着值,不限定就会把别人的答案报成他的。
+    /// </summary>
+    /// <returns>该说的那句话,不适用就是 null。</returns>
+    private static string? FilterIsValue(CommandContext ctx, string type,
+                                         IReadOnlyList<string> filters, bool exactPath)
+    {
+        // 给了几个筛子时,「哪一个是值」本身要先答一次,而那是两可的指路。
+        if (filters.Count != 1) return null;
+        var text = filters[0];
+
+        // Identifier 而不是子串:问的是「值**就是**这个词」。子串会让 Beauty 认领
+        // BeautyOutdoors,而那是另一个答案 —— 口径同 TailIsValue。
+        var rows = ctx.Db.PathsWithValue(text, ctx.Scope(), 64, Storage.ValueMatch.Identifier, 0, type).Rows;
+        if (rows.Count == 0) return null;
+
+        var shapes = rows.Select(r => Search.PathSegments.Shape(r.Path))
+                         .Distinct(StringComparer.Ordinal)
+                         .ToList();
+        var shown = shapes.Take(Limits.MaxSuggestions).ToList();
+        var defs = rows.Sum(r => r.Defs);
+
+        return $"'{text}' is a value on '{type}', not a field name: it sits at " +
+               string.Join(" / ", shown) +
+               (shapes.Count > shown.Count
+                   ? $", plus {Tally.Complete(shapes.Count - shown.Count).Render("path shape")} more"
+                   : "") +
+               $" on {Tally.Complete(defs).Render("def")}. " +
+               // 参数填满 —— 占位的指路会先被照做一次,而那一次仍在错的轴上。
+               $"'rimsearcher where {shown[0]} --value {text} --type {type}' asks it" +
+               (exactPath ? ", and --exact-path never reaches a value." : ".");
     }
 }
 
