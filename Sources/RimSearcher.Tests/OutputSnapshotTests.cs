@@ -277,6 +277,11 @@ public class OutputSnapshotTests
         // --exact-path 不进这条救援:调用方点名了「整条路径就长这样」,替他改写等于
         // 把一个明确的否定答案换成另一个问题的肯定答案。
         { "where-dotted-missing-index-exact", ["where", "statBases.stat", "--exact-path"] },
+        // --exact-path 那条诊断此前没有「同时给了值」的闸。两格各钉一种落空成因:
+        //   value-miss     路径只作为后缀存在,而那批形状里没有一个带这个值
+        //   not-the-cause  路径本身就是整条(--exact-path 一条都没滤掉),空是值造成的
+        { "where-exact-path-value-miss",     ["where", "stat", "zzznope", "--exact-path"] },
+        { "where-exact-path-not-the-cause",  ["where", "texPath", "zzznope", "--exact-path"] },
         // 同一个缺陷在 values 上逐字同形 —— 它也按后缀匹配、也拿点分路径当参数。
         // 一条承诺得对每条到达空的路径成立,只修 where 那条等于把另一半留在原地。
         { "values-dotted-missing-index", ["values", "statBases.stat"] },

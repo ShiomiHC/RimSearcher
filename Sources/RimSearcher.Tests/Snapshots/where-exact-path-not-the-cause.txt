@@ -1,0 +1,5 @@
+$ rimsearcher where texPath zzznope --exact-path
+exit 1
+--- stdout ---
+No field path is exactly 'texPath'. Matched as a suffix instead: . Any one of those goes straight back into --exact-path, where '[]' stands for any index.
+--- stderr ---
