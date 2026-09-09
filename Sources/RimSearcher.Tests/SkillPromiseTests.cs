@@ -239,8 +239,14 @@ public class SkillPromiseTests
         // `抽象节点也给得出same_value并摆出恒真那一档的分母` 断言的正是 CLI 印出
         // `not one the node declares` 与 `The denominator for a full row` —— 读法与它解释的
         // 那张表同时到场,比在文档里等着被读到更靠谱。
-        new("`--exact-path` pins the whole path, with `[]` standing for any index",
+        // 2026-09-09:这一句原本是一条,而 `[]` 挂在 `--exact-path` 底下 —— 两件事正交,
+        // 而合着写正是「得开那个旗才用得上 `[]`」这个读法的出处(三条 --path-contains
+        // 因此把它当字面量,恒空)。拆成两条,各连各的闸:前半仍是那道整条/后缀的闸,
+        // 后半是新立的、逐入口敲一遍的那道。
+        new("`--exact-path` pins the whole path and drops the rows those extra shapes contributed",
             nameof(GrammarTests.点路径的后缀不在点上对齐而exactpath钉得住)),
+        new("`[]` stands for any index everywhere a path goes in",
+            nameof(GrammarTests.下标通配在每个收路径的入口都认)),
         new("on a Core-only snapshot, `1 def` means one in Core",
             "被scope挡住时说破是过滤器干的"),
 

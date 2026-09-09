@@ -349,7 +349,9 @@ public sealed class GetCommand : Command
                 Aliases = ["filter", "grep", "field-contains", "path-filter", "field", "field-path",
                            "path"],
                 Placeholder = "<text>",
-                Help = "Only show field paths containing this text. Repeat it to widen the selection.",
+                Help = "Only show field paths containing this text. Repeat it to widen the selection. " +
+                       "Write '[]' for any index, so a path shape this tool printed — 'comps[].props.energyMax' " +
+                       "— goes straight back in.",
                 Narrows = true,
             },
             // 同名跨 def 类型是 RimWorld 常态(PsychicSensitivity 既是 StatDef 又是 TraitDef)。
@@ -1129,7 +1131,7 @@ public sealed class FindCommand : Command
             "rather than a text hit.",
         Positionals =
         [
-            new PositionalSpec { Name = "fieldPath", Help = "A field path or just its last segment, such as compClass or defaultProjectile. Omit it to search every field instead.", Required = false },
+            new PositionalSpec { Name = "fieldPath", Help = "A field path or just its last segment, such as compClass or defaultProjectile. '[]' stands for any index, so a path shape this tool printed goes straight back in. Omit it to search every field instead.", Required = false },
             new PositionalSpec { Name = "value", Help = "The value to look for. '--value' spells out this same argument, so give it one way or the other. Omit it to list every def that has the field at all.", Required = false },
         ],
         Options =
@@ -2370,7 +2372,9 @@ public sealed class FieldsCommand : Command
                 // "only" 不在这里:sources sync 有一个真的 --only(只同步这几棵树)。
                 Aliases = ["filter", "grep", "field-contains", "path-filter", "contains", "match"],
                 Placeholder = "<text>",
-                Help = "Only list paths containing this text. Repeat it to widen the selection.",
+                Help = "Only list paths containing this text. Repeat it to widen the selection. " +
+                       "Write '[]' for any index, so a path shape this tool printed — 'comps[].props.energyMax' " +
+                       "— goes straight back in.",
                 Narrows = true,
             },
             CommonOptions.Offset("field paths"),
@@ -2532,7 +2536,8 @@ public sealed class ValuesCommand : Command
             {
                 Name = "fieldPath",
                 Variadic = true,
-                Help = "A field path or its last segment, such as compClass. Several paths go in one call; " +
+                Help = "A field path or its last segment, such as compClass. '[]' stands for any index, so a " +
+                       "path shape this tool printed goes straight back in. Several paths go in one call; " +
                        "--limit and --offset apply to each one on its own, each gets its own count line and " +
                        "its own entry in the 'field' block, and the field_path column says which one a row " +
                        "came from.",
@@ -3559,7 +3564,10 @@ internal static class Advisory
             (shapes.Count > shown.Count
                 ? $", plus {Tally.Complete(shapes.Count - shown.Count).Render("path shape")} not shown"
                 : "") +
-            ". The suffix matched them all. Pasting one of those shapes back with " +
+            // 旗名点上命令名。实证:这句话是 where 印的,而它最常见的下一步是拿着
+            // def_name 走 get —— 于是形状和旗一起搬过去,而 get 上没有这个旗
+            // (它的路径筛选叫 --path-contains)。一次真实调用为此花掉了两轮 exit 2。
+            ". The suffix matched them all. Pasting one of those shapes back into this command with " +
             "--exact-path keeps that one alone.");
     }
 

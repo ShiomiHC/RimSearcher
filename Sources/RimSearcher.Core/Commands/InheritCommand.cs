@@ -72,7 +72,7 @@ public sealed class InheritCommand : Command
                        "witness count, not a record of where the field was declared — the snapshot holds no such " +
                        "record, and the output below the table says what the count does and does not settle. " +
                        "Matching is the substring match 'get --path-contains' uses, so the same " +
-                       "word selects the same fields in both commands.",
+                       "word selects the same fields in both commands — including '[]' for any index.",
             },
         ],
         Examples =

@@ -4,7 +4,7 @@ exit 0
 3 matches.
   - Those 3 matches come from 2 defs: a def that matches on more than one path has a row for each, so the def_name column repeats.
   - Nothing here holds exactly 'Things/Building': every row has it inside a longer value — see the value column. --exact would return nothing at all.
-  - These rows span more than one path shape: graphicData.texPath (2), building.blueprintGraphicData.texPath (1). The suffix matched them all. Pasting one of those shapes back with --exact-path keeps that one alone.
+  - These rows span more than one path shape: graphicData.texPath (2), building.blueprintGraphicData.texPath (1). The suffix matched them all. Pasting one of those shapes back into this command with --exact-path keeps that one alone.
 
 Defs that may be missing from this answer, their export cut short — every def type that uses this path at all
 def_type  defs_cut_short

@@ -117,8 +117,11 @@ public static class CommonOptions
         Name = "exact-path",
         Aliases = ["whole-path", "path-exact"],
         Arity = Arity.Flag,
-        Help = "Match the field path as a whole instead of as a suffix. Write '[]' for any index, so a path " +
-               "shape such as 'lifeStages[].bodyGraphicData.shaderType' can be pasted straight back in.",
+        // `[]` 不在这句里说 —— 它是路径文法的一部分,每个收路径的入口都认(判据在
+        // SnapshotDb.PathLike)。写在这条旗底下会让人以为得开这个旗才用得上 `[]`,
+        // 而那正是它此前只在一半入口生效时留下的读法。
+        Help = "Match the field path as a whole instead of as a suffix, so " +
+               "'graphicData.shaderType' stops collecting 'swimmingGraphicData.shaderType' as well.",
         Narrows = true,
     };
 

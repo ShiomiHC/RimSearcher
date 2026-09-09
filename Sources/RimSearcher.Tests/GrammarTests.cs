@@ -1967,6 +1967,56 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// <c>[]</c> 是这个工具自己印出去的规范写法(<c>PathSegments.Shape</c>),所以每个收路径的
+    /// 入口都得认它 —— 位置参数那两条早就认,三条 <c>--path-contains</c> 曾把它当字面量,
+    /// 于是恒空,而恒空与「这个字段不存在」在输出上同形。
+    ///
+    /// 一条一条钉,因为它们是四段互不相干的 SQL 拼装(<c>Fields</c> / <c>FieldPathsForType</c> /
+    /// <c>TypeDefsWithPath</c> / <c>KinCte</c>),改对一段不蕴含别的也对。最后一段钉的是判据侧:
+    /// SQL 命中了行而 <c>SameSegment</c> 不认 <c>[]</c> 的话,「整段一次都没命中」那句会说假话 ——
+    /// 那是把一个假成因换成另一个。
+    /// </summary>
+    [Fact]
+    public void 下标通配在每个收路径的入口都认()
+    {
+        // 位置参数那两条:本来就认,一起钉住,免得别处「统一」时反把它们改窄。
+        var (whereFolded, _, _) = Fixture.Run("where", "statBases[].stat");
+        Assert.Contains("EnergyShieldRechargeRate", whereFolded, StringComparison.Ordinal);
+        var (valuesFolded, _, _) = Fixture.Run("values", "comps[].compClass");
+        Assert.Contains("RimWorld.CompShield", valuesFolded, StringComparison.Ordinal);
+
+        // get:两条 comps[0].props.* 都在,而这个 def 的 comps 有两个下标。
+        var (got, _, gotCode) = Fixture.Run("get", "Apparel_ShieldBelt", "--path-contains", "comps[].props");
+        Assert.Equal(0, gotCode);
+        Assert.Contains("comps[0].props.energyMax", got, StringComparison.Ordinal);
+        Assert.Contains("Matching 'comps[].props': 2 fields", got, StringComparison.Ordinal);
+
+        // fields:类型侧那条路,零结果时连 exit code 都不一样(1),所以两样都钉。
+        var (fields, _, fieldsCode) = Fixture.Run("fields", "ThingDef", "--path-contains", "comps[].props");
+        Assert.Equal(0, fieldsCode);
+        Assert.Contains("comps[0].props.energyMax", fields, StringComparison.Ordinal);
+
+        // inherit:自证句 + same_value 列。筛空时那一列整个不在表里,而它正是这条命令
+        // 用来回答问题的那一列 —— 于是「`[]` 没被认出来」表现成一张少了一列的完整的表。
+        var (inherited, _, _) = Fixture.Run(
+            "inherit", "ChildGun", "--path-contains", "costList[].count", Fixture.PresenceArg);
+        Assert.Contains("carries 1 field matching 'costList[].count'", inherited, StringComparison.Ordinal);
+        Assert.Contains("same_value", inherited, StringComparison.Ordinal);
+
+        // 判据侧:命中之后不许再说「整段一次都没命中」,也不许去启动「它其实是个值」那个探针。
+        var (whole, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--path-contains", "statBases[].stat");
+        Assert.Contains("statBases[1].stat", whole, StringComparison.Ordinal);
+        Assert.DoesNotContain("as a whole path segment", whole, StringComparison.Ordinal);
+        Assert.DoesNotContain("as a field's value, not in any path", whole, StringComparison.Ordinal);
+
+        // 反向:读者写**真下标**时,under 那句拿 Shape() 的结果去比,同样得对得上。
+        var (indexedHead, _, _) = Fixture.Run("where", "statBases[0].MarketValue");
+        Assert.Contains("not a field under 'statBases[0]': it sits on statBases[].stat.",
+                        indexedHead, StringComparison.Ordinal);
+        Assert.DoesNotContain("none of those is under", indexedHead, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 轮廓不印修饰符时,「覆写了基类的成员」与「自己新引入的可覆写成员」逐字同形 ——
     /// 两行都是 <c>property … n-n</c>,而它们对「接下来该去基类找什么」给出相反的答案。
     ///
