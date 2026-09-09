@@ -281,7 +281,9 @@ public class OutputSnapshotTests
         //   value-miss     路径只作为后缀存在,而那批形状里没有一个带这个值
         //   not-the-cause  路径本身就是整条(--exact-path 一条都没滤掉),空是值造成的
         { "where-exact-path-value-miss",     ["where", "stat", "zzznope", "--exact-path"] },
-        { "where-exact-path-not-the-cause",  ["where", "texPath", "zzznope", "--exact-path"] },
+        // 载体得挑「在这份 fixture 上确实是整条路径」的那个 —— `texPath` 在真快照上是
+        // (2967 个 def),在 fixture 上只作为后缀存在,拿它当载体量到的是另一支。
+        { "where-exact-path-not-the-cause",  ["where", "graphicData.texPath", "zzznope", "--exact-path"] },
         // 同一个缺陷在 values 上逐字同形 —— 它也按后缀匹配、也拿点分路径当参数。
         // 一条承诺得对每条到达空的路径成立,只修 where 那条等于把另一半留在原地。
         { "values-dotted-missing-index", ["values", "statBases.stat"] },
