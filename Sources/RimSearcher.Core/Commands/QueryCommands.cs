@@ -1187,6 +1187,7 @@ public sealed class FindCommand : Command
                 Narrows = true,
             },
             CommonOptions.ExactPath(),
+            CommonOptions.PathContainsBeside("fields"),
             new OptionSpec
             {
                 // 「别 grep XML」拿走了一种能力,就得给回等价的一种:不知道字段叫什么时
@@ -1272,6 +1273,16 @@ public sealed class FindCommand : Command
         // 空的 paths,而空数组在机器侧读作「查过了,没有」。
         if (path is null)
         {
+            // --exact-path 钉的是位置参数,而这一支没有位置参数。此前它被静默接受,
+            // 表头还照印「N field paths within --exact-path」—— 一句声称筛过了的话,
+            // 而它一条都没筛。收窄声明只要出现就得对应一次真的收窄。
+            if (ctx.Args.Flag("exact-path"))
+                throw new CliUsageException(
+                    "--exact-path pins the field path given as an argument, and this call gives none. " +
+                    "Pass the path ('rimsearcher where statBases[].stat MarketValue --exact-path'), or " +
+                    "drop the switch. To narrow which paths are searched without naming one, " +
+                    "--path-contains takes a fragment.");
+
             if (named is null)
             {
                 ctx.Report.Promises("matches");
@@ -1281,7 +1292,8 @@ public sealed class FindCommand : Command
                 return 2;
             }
             ctx.Report.Promises("paths");
-            return ByValue(ctx, named, scope, limit, ctx.Args.Flag("exact"), offset, type);
+            return ByValue(ctx, named, scope, limit, ctx.Args.Flag("exact"), offset, type,
+                           ctx.Args.Values("path-contains"));
         }
         ctx.Report.Promises("matches");
 
@@ -1295,7 +1307,7 @@ public sealed class FindCommand : Command
 
         var value = ctx.Args.Positional(1) ?? named;
         var exact = ctx.Args.Flag("exact");
-        var pq = new PathQuery(path, ctx.Args.Flag("exact-path"));
+        var pq = new PathQuery(path, ctx.Args.Flag("exact-path"), Contains: ctx.Args.Values("path-contains"));
 
         var (rows, total, defs) = ctx.Db.FindByField(pq, value, exact, scope, limit.Effective, offset, type);
 
@@ -1839,10 +1851,11 @@ public sealed class FindCommand : Command
 
     /// <summary>--value:不指名字段,直接问「哪个字段装着这段文本」。</summary>
     private static int ByValue(CommandContext ctx, string value, Snapshot.ScopeFilter scope, LimitValue limit,
-                               bool exact, int offset, string? type = null)
+                               bool exact, int offset, string? type = null,
+                               IReadOnlyList<string>? pathContains = null)
     {
         var (rows, total, exactTotal, defsTotal) = ctx.Db.PathsWithValue(value, scope, limit.Effective,
-            exact ? ValueMatch.Exact : ValueMatch.Substring, offset, type);
+            exact ? ValueMatch.Exact : ValueMatch.Substring, offset, type, pathContains);
 
         if (rows.Count == 0 && offset > 0 && total > 0)
         {
@@ -2583,6 +2596,7 @@ public sealed class ValuesCommand : Command
         [
             CommonOptions.Limit("values"), CommonOptions.Offset("values"), CommonOptions.Scope,
             CommonOptions.Type, CommonOptions.ExactPath(),
+            CommonOptions.PathContainsBeside("paths"),
         ],
         Examples =
         [
@@ -2675,7 +2689,7 @@ public sealed class ValuesCommand : Command
                                List<IReadOnlyDictionary<string, object?>> table,
                                List<(string Asked, IReadOnlyList<(string DefType, int Count)> DefTypes)> listed)
     {
-        var pq = new PathQuery(path, ctx.Args.Flag("exact-path"));
+        var pq = new PathQuery(path, ctx.Args.Flag("exact-path"), Contains: ctx.Args.Values("path-contains"));
         var (rows, total) = ctx.Db.DistinctValues(pq, scope, limit.Effective, type, offset);
 
         // 少写下标那一档,判据与 `where` 那处同源(见那边的长注释):索引里存的是

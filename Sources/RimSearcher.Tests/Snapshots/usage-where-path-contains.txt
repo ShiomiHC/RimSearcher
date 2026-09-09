@@ -1,6 +1,12 @@
 $ rimsearcher where thingDefs Bloomstone --path-contains filter
-exit 2
+exit 0
 --- stdout ---
+2 defs within --path-contains filter.
+  - 'Bloomstone' also sits on 1 path shape beyond this one, 1 of them on def types other than MoltenRecipeDef, all on AlloyPartDef: costList[].thingDef (4).
+  - These rows span more than one path shape: fixedIngredientFilter.thingDefs[] (1), ingredients[].filter.thingDefs[] (1). The suffix matched them all. Pasting one of those shapes back into this command with --exact-path keeps that one alone.
+
+Same in every row, not repeated below: def_type=MoltenRecipeDef, value=Bloomstone, code_default=no, mod=test.mod.
+def_name          path
+RecipeBloomIngot  ingredients[0].filter.thingDefs[0]
+RecipeBloomPlate  fixedIngredientFilter.thingDefs[0]
 --- stderr ---
-Unknown option '--path-contains'. This command accepts: --config, --db, --exact, --exact-path, --json, --limit, --offset, --scope, --snapshot, --type, --value.
-Run 'rimsearcher where --help' to see what this command accepts.

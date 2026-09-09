@@ -12,19 +12,21 @@ Arguments:
   <value>      The value to look for. '--value' spells out this same argument, so give it one way or the other. Omit it to list every def that has the field at all. (optional)
 
 Options:
-  -n, --limit <n>       How many matches to return, at most. Left out, every one is returned. Default: every one.
-                        Also accepted: --max-results, --count, --top, --rows, --num, --head.
-      --offset <n>      Skip this many matches before listing. The total is always reported, so you can tell when you have reached the end. Default: 0.
-      --scope <expr>    Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: all.
-                        Also accepted: --mod, --mods.
-      --type <DefType>  Restrict results to one def type, for example ThingDef or HediffDef.
-                        Also accepted: --def-type, --kind.
-      --exact           Require the whole value to match, with either a field path or --value. Without it, the value is matched as a substring.
-                        Also accepted: --exact-match, --whole.
-      --exact-path      Match the field path as a whole instead of as a suffix.
-                        Also accepted: --whole-path, --path-exact.
-      --value <text>    The value to look for, same as giving it as an argument. Without a field path, every indexed field is searched and the report names which paths hold it.
-                        Also accepted: --any-field, --search-values, --holding.
+  -n, --limit <n>             How many matches to return, at most. Left out, every one is returned. Default: every one.
+                              Also accepted: --max-results, --count, --top, --rows, --num, --head.
+      --offset <n>            Skip this many matches before listing. The total is always reported, so you can tell when you have reached the end. Default: 0.
+      --scope <expr>          Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: all.
+                              Also accepted: --mod, --mods.
+      --type <DefType>        Restrict results to one def type, for example ThingDef or HediffDef.
+                              Also accepted: --def-type, --kind.
+      --exact                 Require the whole value to match, with either a field path or --value. Without it, the value is matched as a substring.
+                              Also accepted: --exact-match, --whole.
+      --exact-path            Match the field path as a whole instead of as a suffix.
+                              Also accepted: --whole-path, --path-exact.
+      --path-contains <text>  Also require the field path to contain this text, on top of the path argument's suffix match — the argument says how a path ends, this says what sits above. Repeat it to widen the selection. With no path argument it narrows the fields searched. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax.
+                              Also accepted: --filter, --grep.
+      --value <text>          The value to look for, same as giving it as an argument. Without a field path, every indexed field is searched and the report names which paths hold it.
+                              Also accepted: --any-field, --search-values, --holding.
 
 Global options (every command takes these, written after the command):
       --snapshot <name>  Query this named snapshot instead of the one that would be picked automatically. An explicit choice always wins over auto-detection.

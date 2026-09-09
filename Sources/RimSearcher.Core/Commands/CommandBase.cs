@@ -149,6 +149,33 @@ public static class CommonOptions
     /// 于是同一个词在两族上 arity 不同,而这跟着**路径由谁携带**走:哪边携带路径,
     /// 这个词就长在哪边。两族的语义逐字相同 —— 整条匹配。
     /// </summary>
+    /// <summary>
+    /// <c>where</c> / <c>values</c> 上的 <c>--path-contains</c>。谓词与 <c>get</c> 那族
+    /// **逐字同一个**(路径含这段文本),区别只在这边它与位置参数按 AND 合。
+    ///
+    /// 补它的理由是路径轴在这两条命令上只有一个槽,而实测 11 次伸手要的是两个正交条件:
+    /// 位置参数说「结尾是什么」,这个说「上面某处有什么」。八个真实案例里六个的那段祖先
+    /// **不紧邻叶子**,而且命中形状不止一种(<c>thingDefs</c> ∧ <c>filter</c> 在 baseline
+    /// 上 13 种,中间几段各不相同),多段后缀要求把中间每一段都写对 —— 那恰是问的人
+    /// 不知道的部分。给的那段文本还常常不是完整的一段(<c>killedLeaving</c> 要命中
+    /// <c>killedLeavings[]</c> 与 <c>killedLeavingsRanges[]</c>)。
+    ///
+    /// **不收 "path" 这个别名**,而 get / inherit / fields 三条都收:那边没有位置参数,
+    /// 这边有,且唯一一次实测的 <c>values --path</c> 要的正是位置参数(<c>values ThingDef
+    /// --path projectile.speed</c>)。同一个词在这两条命令上会指向另一个槽。
+    /// </summary>
+    public static OptionSpec PathContainsBeside(string noun) => new()
+    {
+        Name = "path-contains",
+        Arity = Arity.Multi,
+        Aliases = ["filter", "grep"],
+        Placeholder = "<text>",
+        Help = $"Also require the field path to contain this text, on top of the path argument's suffix " +
+               $"match — the argument says how a path ends, this says what sits above. Repeat it to widen " +
+               $"the selection. With no path argument it narrows the {noun} searched. " + AnyIndexNote,
+        Narrows = true,
+    };
+
     public static OptionSpec ExactPathFilter() => new()
     {
         Name = "exact-path",

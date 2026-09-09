@@ -1,6 +1,16 @@
 $ rimsearcher values thingDefs --path-contains filter
-exit 2
+exit 0
 --- stdout ---
+1 value of 'thingDefs' within --path-contains filter.
+
+asked            thingDefs
+matched_paths    fixedIngredientFilter.thingDefs[0] (1), ingredients[0].filter.thingDefs[0] (1)
+def_types        MoltenRecipeDef (2 of 2)
+defs_with_field  2
+This table's axis is the field: it lists the values 'thingDefs' takes. Which fields hold a value you already have is the inverse question and a different command — 'rimsearcher where --value Bloomstone --exact' asks it for 'Bloomstone', the first row here. A value domain read here does not bound where those values occur.
+
+value       defs  field_path
+Bloomstone  2     thingDefs
+
+The values of 'thingDefs' come from 2 field paths pooled together, not from one field. Any path named for it above goes back in with --exact-path to pool that one alone; '[]' there stands for any index.
 --- stderr ---
-Unknown option '--path-contains'. This command accepts: --config, --db, --exact-path, --json, --limit, --offset, --scope, --snapshot, --type.
-Run 'rimsearcher values --help' to see what this command accepts.

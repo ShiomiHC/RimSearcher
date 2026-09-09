@@ -2,5 +2,5 @@ $ rimsearcher values statBases.stat --start 1
 exit 2
 --- stdout ---
 --- stderr ---
-Unknown option '--start'. This command accepts: --config, --db, --exact-path, --json, --limit, --offset, --scope, --snapshot, --type.
+Unknown option '--start'. This command accepts: --config, --db, --exact-path, --json, --limit, --offset, --path-contains, --scope, --snapshot, --type.
 Run 'rimsearcher values --help' to see what this command accepts.

@@ -106,7 +106,8 @@ public enum ValueMatch
 /// (见 <c>where</c> 的救援分支):无条件放开等于把后缀匹配再放宽一级,而放宽会把
 /// 原本各自成立的两条路径悄悄并成一张表。
 /// </summary>
-public readonly record struct PathQuery(string Text, bool Exact = false, bool IndexTolerant = false)
+public readonly record struct PathQuery(string Text, bool Exact = false, bool IndexTolerant = false,
+                                        IReadOnlyList<string>? Contains = null)
 {
     public static implicit operator PathQuery(string text) => new(text);
 
@@ -647,6 +648,25 @@ public sealed class SnapshotDb : IDisposable
     private static string PathFilterLike(string text, bool exact)
         => exact ? PathLike(text) : "%" + PathLike(text) + "%";
 
+    /// <summary>
+    /// <c>where</c> / <c>values</c> 的 <c>--path-contains</c> 那一条 —— 与 <c>get</c> 那族
+    /// 逐字同一个谓词(路径含这段文本),给多个是并集,措辞也是同一句
+    /// 「Repeat it to widen the selection」。
+    ///
+    /// 参数名带前缀,免得与位置参数那一支的 <c>@path</c> 撞:两者在同一条 WHERE 里共存,
+    /// 而字典里同名后写的会把先写的顶掉 —— 顶掉之后两个条件都还在,只是比的是同一段文本。
+    /// </summary>
+    private string PathContainsClause(IReadOnlyList<string> filters, Dictionary<string, object?> p)
+    {
+        var ors = new List<string>();
+        for (var i = 0; i < filters.Count; i++)
+        {
+            p[$"@pc{i}"] = PathFilterLike(filters[i], exact: false);
+            ors.Add($"path LIKE @pc{i} ESCAPE '\\'");
+        }
+        return PathIs(string.Join(" OR ", ors));
+    }
+
     public (IReadOnlyList<DefRow> Rows, int Total) ListByType(
         string defType, ScopeFilter scope, int limit, int offset, string? className = null, string? nameLike = null)
     {
@@ -1022,6 +1042,15 @@ public sealed class SnapshotDb : IDisposable
     /// </summary>
     private void PathCondition(PathQuery path, Dictionary<string, object?> p, List<string> conds)
     {
+        // 第二个槽,与位置参数按 AND 合:位置参数说「结尾是什么」,这个说「上面某处有什么」。
+        // 两个条件正交,一个槽装不下 —— `thingDefs` ∧ `filter` 在 baseline 上是 13 种形状,
+        // 中间几段各不相同,多段后缀写不出来。
+        //
+        // 挂在这里而不是各调用点:PathCondition 有六个调用方(行、计数、覆盖面、截断范围…),
+        // 只接上几处的话,「这一页几条」与「一共几条」数的就是两个集合。
+        if (path.Contains is { Count: > 0 } has)
+            conds.Add(PathContainsClause(has, p));
+
         if (path.Exact)
         {
             // `[]` 是下标通配(判据在 PathLike)。整条相等那一支要先看有没有 `[]`:
@@ -1297,10 +1326,14 @@ public sealed class SnapshotDb : IDisposable
     public (IReadOnlyList<(string Path, string DefType, int Defs, int DefsExact, string Sample)> Rows,
             int Total, int Exact, int Defs)
         PathsWithValue(string value, ScopeFilter scope, int limit, ValueMatch match = ValueMatch.Substring, int offset = 0,
-                       string? defType = null)
+                       string? defType = null, IReadOnlyList<string>? pathContains = null)
     {
         var p = new Dictionary<string, object?>();
         var where = ValueWhere(value, match, scope, p, defType);
+        // 不给字段路径那一支也得认 --path-contains。漏掉这里的话,同一个开关在
+        // `where <路径> --path-contains X` 上生效、在 `where --value Y --path-contains X`
+        // 上静默无效,而后者的输出与「筛过了,就这些」逐字同形。
+        if (pathContains is { Count: > 0 } has) where += $" AND {PathContainsClause(has, p)}";
         var join = $"FROM field_values fv {FvJoin} JOIN defs d ON d.id = fv.def_id";
 
         var total = Scalar($"SELECT COUNT(*) FROM (SELECT DISTINCT {FvPath}, d.def_type {join} {where})", p);

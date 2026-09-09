@@ -1137,6 +1137,7 @@ Answers 'what am I allowed to put here' and 'which classes are actually in use' 
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind` |
 | `--exact-path` | Match the field path as a whole instead of as a suffix. | `--whole-path`, `--path-exact` |
+| `--path-contains` <text> | Also require the field path to contain this text, on top of the path argument's suffix match — the argument says how a path ends, this says what sits above. Repeat it to widen the selection. With no path argument it narrows the paths searched. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. | `--filter`, `--grep` |
 
 `--json` keys, besides the global `notes`:
 
@@ -1177,6 +1178,7 @@ The field path is matched from the end and whole segments at a time, so 'compCla
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind` |
 | `--exact` | Require the whole value to match, with either a field path or --value. Without it, the value is matched as a substring. | `--exact-match`, `--whole` |
 | `--exact-path` | Match the field path as a whole instead of as a suffix. | `--whole-path`, `--path-exact` |
+| `--path-contains` <text> | Also require the field path to contain this text, on top of the path argument's suffix match — the argument says how a path ends, this says what sits above. Repeat it to widen the selection. With no path argument it narrows the fields searched. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. | `--filter`, `--grep` |
 | `--value` <text> | The value to look for, same as giving it as an argument. Without a field path, every indexed field is searched and the report names which paths hold it. | `--any-field`, `--search-values`, `--holding` |
 
 `--json` keys, besides the global `notes`:
