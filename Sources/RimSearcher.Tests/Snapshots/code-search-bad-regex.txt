@@ -1,0 +1,5 @@
+$ rimsearcher code-search foo(
+exit 2
+--- stdout ---
+--- stderr ---
+That is not a valid regular expression: Invalid pattern 'foo(' at offset 4. Not enough )'s.

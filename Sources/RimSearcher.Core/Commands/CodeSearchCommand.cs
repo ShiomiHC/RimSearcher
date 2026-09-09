@@ -42,7 +42,20 @@ public sealed class CodeSearchCommand : Command
             "them bites. --max-files decides how much is read, so when that one bites the count drops to a lower " +
             "bound ('at least N') and the answer says which trees it never reached. None of the three carries " +
             "a default; each option below says what happens when it is left out.",
-        Positionals = [new PositionalSpec { Name = "pattern", Help = ".NET regular expression." }],
+        // 叫 regex 不叫 pattern:这个参数的语言此前只写在下面那句描述里,而读者写命令时
+        // 看的是用法行,于是 29 次 / 26 份会话伸手加一个 `--regex` 去断言默认值(实参多带
+        // `|` 择一 —— 他们怕的是那个竖线被当字面)。名字里说出语言,断言就没有位置可站。
+        //
+        // 顺带把 --regex 接进「它是位置参数而不是选项」那一支:MatchPositional 认前缀,
+        // regex 对 regex 直接命中,不需要给 PositionalSpec 加同义名表。代价是 --pattern
+        // (2 次)反过来落回选项清单,29 换 2。
+        //
+        // 不做的那件事记在这儿,免得下轮重提:一份模式语言够用,**不必加 --literal**。
+        // 实测照字面写、含正则元字符的模式占 1.9%(100 次 / 78 会话),取其中最常用的
+        // 22 个在真源码树上原样跑 vs 把点转义,21 个逐条相同、剩下一个差 1 行 ——
+        // 「静默匹配变宽」在真实模式上几乎不发生,那对选项收益近零。
+        // 产地 tools/scan-codesearch-patterns.py(带 --verify 复跑)。
+        Positionals = [new PositionalSpec { Name = "regex", Help = ".NET regular expression." }],
         Options =
         [
             new OptionSpec
@@ -173,7 +186,7 @@ public sealed class CodeSearchCommand : Command
         // 真实调用方发过 HTML 转义形态的 pattern(&lt;defName&gt;),必然零命中,直接说破。
         if (pattern.Contains("&lt;") || pattern.Contains("&gt;") || pattern.Contains("&amp;"))
             throw new CliUsageException(
-                "The pattern contains HTML escapes (&lt; &gt; &amp;), which match those literal characters and " +
+                "What you gave contains HTML escapes (&lt; &gt; &amp;), which match those literal characters and " +
                 $"therefore never match source code. Write it as: {pattern.Replace("&lt;", "<").Replace("&gt;", ">").Replace("&amp;", "&")}");
 
         var root = ctx.Config.DecompiledDir;
@@ -197,7 +210,7 @@ public sealed class CodeSearchCommand : Command
         }
         catch (ArgumentException ex)
         {
-            throw new CliUsageException($"The pattern is not a valid regular expression: {ex.Message}");
+            throw new CliUsageException($"That is not a valid regular expression: {ex.Message}");
         }
 
         if (sourceName is { Length: > 0 } && !Directory.Exists(Path.Combine(root, sourceName)))
@@ -396,9 +409,9 @@ public sealed class CodeSearchCommand : Command
                                         partialTree, partialRead, partialTotal, unreached);
         if (timedOut.Count > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
-                $"The pattern took longer than {Limits.CodeSearchRegexTimeoutMs} ms on " +
+                $"Matching took longer than {Limits.CodeSearchRegexTimeoutMs} ms on " +
                 $"{Tally.Complete(timedOut.Count).Render("file")}, which were skipped part-way. " +
-                "A pattern with nested quantifiers is the usual cause.");
+                "Nested quantifiers are the usual cause.");
 
         if (lines.Count == 0) return 1;
 

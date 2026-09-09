@@ -1,0 +1,5 @@
+$ rimsearcher code-search &lt;defName&gt;
+exit 2
+--- stdout ---
+--- stderr ---
+What you gave contains HTML escapes (&lt; &gt; &amp;), which match those literal characters and therefore never match source code. Write it as: <defName>

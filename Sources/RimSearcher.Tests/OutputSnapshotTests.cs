@@ -480,6 +480,11 @@ public class OutputSnapshotTests
         { "code-search-context-before", ["code-search", "public", "--file-glob", "CompShield.cs", "--context", "2+0"] },
         // 写错时说清接受什么形式,不是笼统的 invalid argument。
         { "code-search-context-bad", ["code-search", "public", "--context", "nope"] },
+        // 模式本身的两条报错路径。此前一道闸都没有 —— 2026-09-09 位置参数从 <pattern>
+        // 改名 <regex> 时这三句(这两句加上超时那句)的措辞跟着改,而测试一格都没红。
+        // 超时那句进不了基线:它要一个真会跑超时的模式。
+        { "code-search-bad-regex", ["code-search", "foo("] },
+        { "code-search-html-escaped", ["code-search", "&lt;defName&gt;"] },
         // --limit 只管印几行,不许缩短扫描:总数必须仍是准数(「N of M」而非「at least N」)。
         { "code-search-limit",     ["code-search", "public", "--limit", "2"] },
         // 单文件上限:同上,过了上限的命中仍要进总数。

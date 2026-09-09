@@ -1,7 +1,7 @@
 $ rimsearcher code-search --help
 exit 0
 --- stdout ---
-Usage: rimsearcher code-search <pattern> [options]
+Usage: rimsearcher code-search <regex> [options]
 
 Search the decompiled C# with a regular expression.
 
@@ -12,7 +12,7 @@ It does not search Defs: the game's XML is not on disk in the form the game ende
 Three switches cut the answer, and they divide in two. --limit and --max-per-file decide how many matching lines are printed; neither shortens the scan, so the match count stays exact whichever of them bites. --max-files decides how much is read, so when that one bites the count drops to a lower bound ('at least N') and the answer says which trees it never reached. None of the three carries a default; each option below says what happens when it is left out.
 
 Arguments:
-  <pattern>  .NET regular expression.
+  <regex>  .NET regular expression.
 
 Options:
       --file-glob <glob>     Only search files whose path matches this glob. A glob with no '/' matches the file name alone (*.cs is every .cs file at any depth); with a '/' it matches the path relative to the decompiled root, which begins with the source tree's name even under --source, and there '*' stops at a '/' while '**' crosses it. So */Verse/* is one level down, **/Verse/** is any. Default: *.cs.

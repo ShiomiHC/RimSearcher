@@ -113,7 +113,7 @@ rimsearcher callers Verse.Pawn.Tick --callees
 Search the decompiled C# with a regular expression.
 
 ```
-rimsearcher code-search <pattern> [options]
+rimsearcher code-search <regex> [options]
 ```
 
 This is for shapes that only text can express, such as a method signature pattern across every class. For anything symbol-level this reads the text where a command reads the metadata, and the metadata answer is both faster and exact: 'types' for a type and what derives from it, 'members' for what is in one, 'callers' for who calls a method, 'read --member' for one body.
@@ -124,7 +124,7 @@ Three switches cut the answer, and they divide in two. --limit and --max-per-fil
 
 | Argument | Meaning |
 |---|---|
-| `<pattern>` | .NET regular expression. |
+| `<regex>` | .NET regular expression. |
 
 | Option | Meaning | Also accepted |
 |---|---|---|

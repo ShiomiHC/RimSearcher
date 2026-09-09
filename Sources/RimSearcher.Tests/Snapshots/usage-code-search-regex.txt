@@ -2,5 +2,5 @@ $ rimsearcher code-search public --regex
 exit 2
 --- stdout ---
 --- stderr ---
-Unknown option '--regex'. This command accepts: --config, --context, --db, --file-glob, --ignore-case, --json, --limit, --max-files, --max-per-file, --no-resolve-keys, --snapshot, --source.
+Unknown option '--regex'. On 'code-search' it is an argument rather than an option: 'rimsearcher code-search <regex>'.
 Run 'rimsearcher code-search --help' to see what this command accepts.
