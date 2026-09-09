@@ -90,6 +90,28 @@ public sealed class ReadCommand : Command
                        "printed in full unless --limit says otherwise — that is also what shortens a " +
                        "start-only '400'. Without it the whole file is read.",
             },
+            // 同一个区间的两个数各占一个选项。这是**别处工具的通行写法**,而不是这条
+            // 命令的第二种口味:真实调用里 --start 与 --end 各 64 次 / 49 份会话、完全
+            // 成对,重写十有八九落到 --lines a-b。挡在外面的话每次都要赔一轮往返,而
+            // `--start 71 --end 130` 两个各带值的选项,靠别名表达不出来。
+            // 与 --lines 同时给是用法错误,不排优先级 —— 见 Run。
+            //
+            // 翻页那句提示照旧只印 --lines 的写法(`Pass --lines 7+4 for the next page`),
+            // 不跟着读者的拼法走:下一页是「同样大小的下一段」,而这一对写不出个数。
+            // 印出去的记法粘得回来,只是换了个拼法 —— 这是一处判断,不是漏改。
+            new OptionSpec
+            {
+                Name = "start",
+                Placeholder = "<n>",
+                Help = "Read from this line. With --end it is a range; on its own it runs to the end of " +
+                       "the file, which --limit then shortens. Same read as --lines, spelled as two options.",
+            },
+            new OptionSpec
+            {
+                Name = "end",
+                Placeholder = "<n>",
+                Help = "Read up to and including this line. On its own it starts at line 1.",
+            },
             new OptionSpec
             {
                 Name = "source",
@@ -160,13 +182,57 @@ public sealed class ReadCommand : Command
         var range = ctx.Args.Value("lines");
         var outline = ctx.Args.Flag("outline");
 
+        // --start / --end 折进 --lines 的写法之后,下面一整条路只认 range 一个变量。
+        // 校验在折叠**之前**做,报错才引得出读者敲的那个选项名和那个数:折完再报,
+        // `--start 6 --end 3` 会被说成「--lines 6-3」,而那一串他没写过。
+        var startAt = ctx.Args.Value("start");
+        var endAt = ctx.Args.Value("end");
+        // 折叠之后 range 说不出自己是哪种写法拼来的,而下面与 --member/--type 那条互斥
+        // 报错要指名 —— 不带着这个标签,写 `--start 3 --member X` 的人会读到一句在说
+        // `--lines`,那个选项他没敲过。
+        var rangeSpelling = "--lines";
+        if (startAt is { Length: > 0 } || endAt is { Length: > 0 })
+        {
+            rangeSpelling = startAt is { Length: > 0 } && endAt is { Length: > 0 }
+                ? "--start/--end"
+                : startAt is { Length: > 0 } ? "--start" : "--end";
+            if (range is { Length: > 0 })
+                throw new CliUsageException(
+                    "--lines and --start/--end are two spellings of the same range; pass one or the " +
+                    "other. --lines also has the forms this pair cannot write: '400+60' for a count " +
+                    "and 'all' for the whole file.");
+
+            static int Line(string? v, string name)
+                => int.TryParse(v?.Trim(), out var n) && n > 0
+                    ? n
+                    : throw new CliUsageException(
+                        $"{name} wants a line number from 1 up; '{v?.Trim()}' is not one.");
+
+            if (startAt is { Length: > 0 } && endAt is { Length: > 0 })
+            {
+                var from = Line(startAt, "--start");
+                var to = Line(endAt, "--end");
+                if (to < from)
+                    throw new CliUsageException(
+                        $"--start {from} is past --end {to}; write the smaller line first.");
+                range = $"{from}-{to}";
+            }
+            // 各自单飞的两种写法都不猜:只给起点就读到文件尾(与 --lines '400' 同一件事),
+            // 只给终点就从第一行起。实测里这两种一次都没出现过,所以这里选的是**不发明**
+            // 语义的那个读法,而不是照某种用量定的。
+            else if (startAt is { Length: > 0 })
+                range = $"{Line(startAt, "--start")}";
+            else
+                range = $"1-{Line(endAt, "--end")}";
+        }
+
         // 「读哪一段」的三种说法互斥。不排优先级 —— 静默择一交出的是完全另一块代码,
         // 而这里当场就能说清。
         if (range is { Length: > 0 } && (member is { Length: > 0 } || type is { Length: > 0 }))
             throw new CliUsageException(
-                "--lines reads raw lines and --member/--type find a declaration; they are two different " +
-                "reads, so pass one or the other. '--outline' lists the declarations with their line ranges " +
-                "if you want to pick a range from them.");
+                $"{rangeSpelling} reads raw lines and --member/--type find a declaration; they are two " +
+                "different reads, so pass one or the other. '--outline' lists the declarations with their " +
+                "line ranges if you want to pick a range from them.");
 
         // 两张表互斥,「读哪一种」在开查之前就定了。不能交给声明层统一发
         // (见 JsonKeySpec.Rows):两个都发就等于说「另一路也查过了,没有」。

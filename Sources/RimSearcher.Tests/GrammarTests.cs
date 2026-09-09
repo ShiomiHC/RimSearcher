@@ -2601,8 +2601,12 @@ public class GrammarTests
     ///
     /// 两者面对的是同一种局面(本命令没有近似名),区别只在于这个名字碰巧在别处存在,
     /// 而那件事与读者在这条命令上想要什么没有必然关系:`export --check` 会被指去
-    /// 'docs',那条命令判的是文档文件是否最新;`read --start` 会被指去 search / where /
-    /// list,那边它是 --offset 的别名(跳过 N 条结果),而写它的人要的是行号。
+    /// 'docs',那条命令判的是文档文件是否最新;`read --offset` 会被指去 search / where /
+    /// list 等七条命令,那边它跳过的是 N 条结果,而写它的人要的是从第 N 行读起。
+    ///
+    /// 这一格原先举的是 `read --start`(那时它是 --offset 的别名)。2026-09-09 那个词
+    /// 让给了 read 自己作行号,例子跟着换到反方向 —— **测的那条决定没变**,变的只是
+    /// 哪个词还站在「别处有、这里没有」的位置上。
     ///
     /// 全史 161 次走这一支且有后续动作的调用里,顺着那句话去用被点名的命令的有 18 次
     /// (11%),**留在原命令换个写法的有 111 次(69%)** —— 而这条命令自己收什么,那句话
@@ -2618,11 +2622,12 @@ public class GrammarTests
         Assert.Contains("This command accepts:", exp, StringComparison.Ordinal);
         Assert.Contains("--dry-run", exp, StringComparison.Ordinal);
 
-        // 同上,read 上的 --start:表里有 --lines,而 'search'/'where'/'list' 那句
-        // 指向的是另一个概念。
-        var (_, rd, rdCode) = Fixture.Run("read", "Outline.cs", "--start", "196");
+        // 同上,read 上的 --offset:表里有 --start 与 --lines 两条都答得上,而
+        // 'search'/'where'/'list' 那句指向的是另一个概念(跳过 N 条结果)。
+        var (_, rd, rdCode) = Fixture.Run("read", "Outline.cs", "--offset", "196");
         Assert.Equal(2, rdCode);
         Assert.Contains("This command accepts:", rd, StringComparison.Ordinal);
+        Assert.Contains("--start", rd, StringComparison.Ordinal);
         Assert.Contains("--lines", rd, StringComparison.Ordinal);
 
         // 本命令确实没有等价物时,同一句话照样答得出来 —— 读者看完整张表就知道这里不截断。
