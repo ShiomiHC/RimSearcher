@@ -1,0 +1,13 @@
+$ rimsearcher where --value Bloomstone --exact-path
+exit 0
+--- stdout ---
+4 field paths within --exact-path.
+6 defs hold it altogether, counting each def once.
+
+Same in every row, not repeated below: defs_other=0, example_value=Bloomstone.
+path                                def_type         defs_exact
+costList[0].thingDef                AlloyPartDef     4
+costList[1].thingDef                AlloyPartDef     2
+fixedIngredientFilter.thingDefs[0]  MoltenRecipeDef  1
+ingredients[0].filter.thingDefs[0]  MoltenRecipeDef  1
+--- stderr ---

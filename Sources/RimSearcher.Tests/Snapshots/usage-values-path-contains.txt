@@ -1,0 +1,6 @@
+$ rimsearcher values thingDefs --path-contains filter
+exit 2
+--- stdout ---
+--- stderr ---
+Unknown option '--path-contains'. This command accepts: --config, --db, --exact-path, --json, --limit, --offset, --scope, --snapshot, --type.
+Run 'rimsearcher values --help' to see what this command accepts.

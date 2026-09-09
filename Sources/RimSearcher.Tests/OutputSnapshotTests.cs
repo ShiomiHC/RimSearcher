@@ -226,6 +226,14 @@ public class OutputSnapshotTests
         { "where-suffix-crosses-segment",  ["where", "graphicData.texPath"] },
         { "values-suffix-crosses-segment", ["values", "graphicData.texPath"] },
         { "where-suffix-single-segment",   ["where", "texPath"] },
+        // 路径轴的第二个槽(2026-09-09,续)。where / values 的路径轴只有位置参数一个槽,
+        // 语义写死成「后缀 / 整条」二选一,而实测 11 次伸手要的是两个**正交**的条件:
+        // 叶子是什么、上面某处有什么。八个真实案例里六个的那一段祖先**不紧邻叶子**,
+        // 且形状数不止一种(thingDefs ∧ filter 在 baseline 上是 13 种),多段后缀写不出来。
+        // 第三格是那个边角:没有位置参数时 --exact-path 无物可钉,现在静默无效。
+        { "usage-where-path-contains",   ["where", "thingDefs", "Bloomstone", "--path-contains", "filter"] },
+        { "usage-values-path-contains",  ["values", "thingDefs", "--path-contains", "filter"] },
+        { "usage-where-exact-path-alone", ["where", "--value", "Bloomstone", "--exact-path"] },
         // inherit 那格换库:默认那份里进了继承层的 def 一个带下标路径都没有,
         // 而 ChildGun(costList[0].*,parent 是 BaseGun)只在 presence 里。
         { "inherit-folded-path",      ["inherit", "ChildGun", "--path-contains", "costList[].count",
