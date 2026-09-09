@@ -15,7 +15,7 @@ Arguments:
 Options:
   -n, --limit <n>             How many children to return, at most. Left out, every one is returned. Default: every one.
                               Also accepted: --max-results, --count, --top, --rows, --num, --head.
-      --path-contains <text>  Count, for every layer in the chain, the other defs descending from it that carry a field path containing this text, and how many of those carry the same value. This is a witness count, not a record of where the field was declared — the snapshot holds no such record, and the output below the table says what the count does and does not settle. Matching is the substring match 'get --path-contains' uses, so the same word selects the same fields in both commands.
+      --path-contains <text>  Count, for every layer in the chain, the other defs descending from it that carry a field path containing this text, and how many of those carry the same value. This is a witness count, not a record of where the field was declared — the snapshot holds no such record, and the output below the table says what the count does and does not settle. Matching is the substring match 'get --path-contains' uses, so the same text selects the same fields in both commands.
                               Also accepted: --filter, --grep, --path.
 
 Global options (every command takes these, written after the command):

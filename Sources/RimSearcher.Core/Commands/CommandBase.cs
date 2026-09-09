@@ -127,8 +127,10 @@ public static class CommonOptions
         // `[]` 不在这句里说 —— 它是路径文法的一部分,每个收路径的入口都认(判据在
         // SnapshotDb.PathLike)。写在这条旗底下会让人以为得开这个旗才用得上 `[]`,
         // 而那正是它此前只在一半入口生效时留下的读法。
-        Help = "Match the field path as a whole instead of as a suffix, so " +
-               "'graphicData.shaderType' stops collecting 'swimmingGraphicData.shaderType' as well.",
+        // 后面不跟 `graphicData.shaderType` 那个例子:`where` 的 Remarks 用的就是这一对,
+        // 两句同屏。`values` 的 Remarks 确实没讲「点号不切开」这件事,但那个缺口在这条旗
+        // 收窄之前就在,补它是另一件事 —— 不靠一句在 where 上重复的话去顺带盖住。
+        Help = "Match the field path as a whole instead of as a suffix.",
         Narrows = true,
     };
 
@@ -140,9 +142,15 @@ public static class CommonOptions
     /// <c>inherit</c> 不在这五处里:它的帮助已经说「与 <c>get --path-contains</c> 是同一种匹配」,
     /// 那是一句完整的等同,再补一条「也包括 []」等于把一个全称说成部分。
     /// </summary>
+    /// <remarks>
+    /// 后半句不写「把本工具印给你的形状原样贴回来」—— 那是个**在四屏里有三屏不成立的处境**:
+    /// 印 <c>[]</c> 形状的只有 <c>where</c>(FindPathShapes 的调用点全在它里面),
+    /// <c>get</c> 印 <c>statBases[0].stat</c>、<c>fields</c> 印 <c>comps[0].props.energyMax</c>、
+    /// <c>values</c> 的 matched_paths 印 <c>equippedStatOffsets[0].value</c>,全是真下标。
+    /// 改成直接说这个写法匹配什么 —— 那句话对四屏都成立,而且不需要读者先做过别的调用。
+    /// </remarks>
     public const string AnyIndexNote =
-        "'[]' stands for any index, so a path shape this tool printed — 'comps[].props.energyMax' — " +
-        "goes straight back in.";
+        "'[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax.";
 
     public static readonly OptionSpec Type = new()
     {

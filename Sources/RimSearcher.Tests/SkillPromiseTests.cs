@@ -245,7 +245,7 @@ public class SkillPromiseTests
         // 后半是新立的、逐入口敲一遍的那道。
         new("`--exact-path` pins the whole path and drops the rows those extra shapes contributed",
             nameof(GrammarTests.点路径的后缀不在点上对齐而exactpath钉得住)),
-        new("`[]` stands for any index everywhere a path goes in",
+        new("`[]` stands for any index on the positional path of `where` and `values`, and on every\n  `--path-contains`",
             nameof(GrammarTests.下标通配在每个收路径的入口都认)),
         new("on a Core-only snapshot, `1 def` means one in Core",
             "被scope挡住时说破是过滤器干的"),

@@ -101,9 +101,8 @@ a different question. None of them announces itself.
   it is a substring), but a dotted one is raw text that does not stop at a `.` —
   `where graphicData.shaderType` also collects `swimmingGraphicData.shaderType`.
   `--exact-path` pins the whole path and drops the rows those extra shapes contributed.
-  `[]` stands for any index everywhere a path goes in — the positional path of `where` and
-  `values`, and every `--path-contains` — so a shape this tool printed
-  (`comps[].props.energyMax`) goes straight back into any of them.
+  `[]` stands for any index on the positional path of `where` and `values`, and on every
+  `--path-contains`: `comps[].props.energyMax` matches every `comps[N].props.energyMax`.
 - **`get --path-contains` and `where --value` match substrings too** — `--path-contains soundImpact`
   also returns `soundImpactDefault`, opposite meaning. On `where --value` without a field path
   the two kinds are separate columns, `defs_exact` and `defs_other`, so a row can be entirely

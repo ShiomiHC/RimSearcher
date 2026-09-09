@@ -75,8 +75,12 @@ public sealed class InheritCommand : Command
                        "record, and the output below the table says what the count does and does not settle. " +
                        // 不在这里补一句 `[]` —— 上面那句是一条完整的等同(与 get 同一种匹配),
                        // 再点名其中一项等于把全称说成部分。产地在 CommonOptions.AnyIndexNote。
+                       // 「word」换成「text」:上面那句是一条完整的等同,而 `[]` 形状
+                       // (comps[].props.energyMax)不是一个 word —— 措辞把成立的全称
+                       // 窄化成「一个词」,只读这一屏的人会把印出来的形状改写成 [0]。
+                       // 不在这里补一句「也包括 []」:那才是把全称说成部分。
                        "Matching is the substring match 'get --path-contains' uses, so the same " +
-                       "word selects the same fields in both commands.",
+                       "text selects the same fields in both commands.",
             },
         ],
         Examples =
