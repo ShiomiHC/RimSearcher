@@ -421,6 +421,14 @@ public class OutputSnapshotTests
         { "usage-values-start-as-offset", ["values", "statBases.stat", "--start", "1"] },
         // code-search 的位置参数就是正则,于是 29 次 / 26 会话伸手写 --regex 去断言它。
         { "usage-code-search-regex", ["code-search", "public", "--regex"] },
+        // ── `all` 这个取值的三条路 ────────────────────────────────────────────
+        // 此前一道闸都没有。`--limit all` 在 d155104(2026-09-05)已经是用法错误,
+        // 而它旧代占过全部调用的 65.6%(16298/24862);`--lines all` 还通,与不给
+        // `--lines`、与 `--lines 1` 三者输出逐字节相同。这三格钉的是各自今天的原话,
+        // 改完读 diff 就是验收。产地 tools/scan-all-token.py 与 tools/scan-all-rewrite.py。
+        { "usage-limit-all",       ["get", "Apparel_ShieldBelt", "--limit", "all"] },
+        { "usage-lines-all",       ["read", "vanilla/Verse/Outline.cs", "--lines", "all"] },
+        { "usage-max-per-file-all", ["code-search", "public", "--max-per-file", "all"] },
         // ── def 类型打头 ──────────────────────────────────────────────────────
         // `list <defType>` 与 `fields <defType>` 把类型放在位置上,而 get / values /
         // search / where 把类型放在 --type 上。消费侧会把前者外推到后者,写成
