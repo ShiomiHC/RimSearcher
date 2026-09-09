@@ -308,7 +308,10 @@ public class SkillPromiseTests
         // 2026-09-01:原文写的是「落空不等于类型没这个字段,去读声明类」—— 那是 type_fields
         // 之前的出路,现在 fields 自己就把两态分开了。免责收窄到 get/where,新出路连同它的
         // 版本下限一起钉住。
-        new("it keeps **the type declares it, no def has a value** apart from **the declared-path list has none either**",
+        // 2026-09-10:后半截原文是「the declared-path list has none either」—— 一个要
+        // 外部定义才读得懂的名词,而它的定义只在这一页上。换成自陈的关系从句,与代码侧
+        // members / read 的 declares 落在同一个对立面上(类型自己声明的 vs 实际到手的)。
+        new("it keeps **the type declares it, no def has a value** apart from **none of the fields the type itself declares has it either**",
             nameof(PresenceTests.新快照fields能分开全是null和没有这个字段)),
         new("A snapshot that carries no such list says so",
             nameof(PresenceTests.旧快照fields落空说清分不开)),

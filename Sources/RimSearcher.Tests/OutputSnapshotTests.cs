@@ -359,6 +359,13 @@ public class OutputSnapshotTests
         // 这边此前只解释「路径面为什么可能漏」,整段假定问的是个字段名。
         // 实测同型误用 3 次(hunger / WorkSpeedGlobal / EquipDelay),全部当场交卷。
         { "fields-path-is-value",  ["fields", "ThingDef", "--path-contains", "MarketValue"] },
+        // --exact-path 自己把结果筛空,而这个类型确实有含它的路径。此前这一支印的是
+        // 「none contains 'stat'」—— 一句**假话**(statBases[0].stat 含着它),因为那三条
+        // 分支的句子模板都写死了 contains 语义。口径同 where 那侧的 not-the-cause。
+        { "fields-exact-path-not-the-cause", ["fields", "ThingDef", "--exact-path", "stat"] },
+        // 反面:exact 落空、放宽也没有 —— 那时 contains 那句是真的,该走原路。
+        // 少了这一格,上面那格在「新诊断无条件抢答」时也是绿的。
+        { "fields-exact-path-really-absent", ["fields", "ThingDef", "--exact-path", "zzzNoSuchField"] },
         // 几个类型一次问。守三件事:每个类型各有一句带名字的计数(不带名字两句读起来
         // 像同一个类型说了两遍)、行并进同一张表且 def_type 在末列(单类型调用里它折进
         // 表头,多类型调用里它印出来)、`completeness` 只发一块(具名块发两次会撞键)。

@@ -255,11 +255,13 @@ way to state:
 - **Null-valued fields never enter the index** — absent even from `--defaults`, so on
   `get`/`where` absence is not evidence the type lacks the field. `fields <DefType>
   --path-contains <text>` is the one place that is settled for you rather than left to the
-  declaring class: it keeps **the type declares it, no def has a value** apart from **the
-  declared-path list has none either**, off a list of declared paths that does not
-  depend on any def having a value. That list is collected to a bounded nesting depth and
-  the notice says how deep it reached — a field nested past that is outside what it
-  measured. A snapshot that carries no such list says so.
+  declaring class: it keeps **the type declares it, no def has a value** apart from **none
+  of the fields the type itself declares has it either**, off a list of declared paths that
+  does not depend on any def having a value. That set is collected to a bounded nesting depth
+  and the notice says how deep it reached — a field nested past that is outside what it
+  measured. A snapshot that carries no such list says so. The same command also says when
+  the text is a **value** on that type rather than a field name, and when it found no value
+  either — so a silent answer never stands in for a checked one.
 
 ## Snapshots
 
