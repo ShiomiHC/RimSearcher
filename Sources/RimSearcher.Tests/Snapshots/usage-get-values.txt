@@ -1,6 +1,23 @@
 $ rimsearcher get Apparel_ShieldBelt --values statBases
-exit 2
+exit 0
 --- stdout ---
+Matching 'statBases': 4 fields, out of 13 fields on the def.
+
+def_name     Apparel_ShieldBelt
+def_type     ThingDef
+label        shield belt
+class        Verse.ThingDef
+mod          ludeon.rimworld
+source       Apparel_Belts.xml
+xml          not indexed (exporter 0.2.0)
+
+Same in every row, not repeated below: code_default=no.
+path                value
+statBases[0].stat   MarketValue
+statBases[0].value  120
+statBases[1].stat   EnergyShieldRechargeRate
+statBases[1].value  0.13
+No value above with 'code_default'=no is one that most of the 9 ThingDefs in this snapshot also carry.
+  - The game also prices this thing. Its market value, cost to make and work amount are computed, not stored, so no field above holds them — 'rimsearcher economy Apparel_ShieldBelt' is the only road to those numbers.
+  - Filtered away: 1 translation this def does have, none of whose paths contain 'statBases'. Their paths are the game's injection keys as written, and this snapshot predates the pass that brings them onto the field paths' grammar: where a field path has '[0]', a key has either the number or a name taken from that element's own label, and neither spelling contains the other. Ask for the field name on its own — the part before the subscript — to reach both tables, or re-export to get one grammar.
 --- stderr ---
-Unknown option '--values'. This command accepts: --config, --db, --defaults, --json, --limit, --path-contains, --snapshot, --type.
-Run 'rimsearcher get --help' to see what this command accepts.

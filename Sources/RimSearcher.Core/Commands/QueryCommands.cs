@@ -346,8 +346,28 @@ public sealed class GetCommand : Command
                 // 撞词那半仍然成立,所以它只是别名:`docs --path` 是 --out 的别名,而
                 // get / inherit 这边一个文件路径选项都没有,同一条命令里不产生歧义。
                 // "only" 不在这里:sources sync 有一个真的 --only。
-                Aliases = ["filter", "grep", "field-contains", "path-filter", "field", "field-path",
-                           "path"],
+                //
+                // `values` 同样由真实调用定:伸手写它的有 15 次 / 13 会话,实参给的全是
+                // 字段路径(statBases / workerClass / ingestible),而被拒之后的重写十之
+                // 八九就是 --path-contains 同一个词。
+                //
+                // 单数的 `--value` 不收 —— 那 14 次实参是值或 stat 名(MarketValue /
+                // MaxNutrition),与这个选项要的东西是两类。于是要问:写错单复数的人
+                // 落到哪。实测两支,别按「探针总会出声」记:
+                //   · 那个值就在这个 def 上 → 点名并指去 `where --value`
+                //     (`get AIPersonaCore --values MarketValue`)。
+                //   · 不在 → 换成「同类别的 def 有这条路径」那一支,而它可能指向一条只是
+                //     **含**这段文本的无关路径(MarketValue → race.meatMarketValue)。
+                // 两支都不给假表:开头那句「No field path contains 'X'」在哪一支下都成立。
+                // 按 Docs/12 的判据(会静默给出错答案的旧名不留作别名),第二支只是没帮上忙,
+                // 不是给了个错答案,所以这个别名收得下。
+                //
+                // 删掉的四个 —— field / field-path / path-filter / field-contains ——
+                //
+                // 删掉的四个 —— field / field-path / path-filter / field-contains ——
+                // 在 get / inherit / fields 三条命令上逐字**各 0 次**(28377 次真实调用)。
+                // 留着的代价不是零:它们进「Did you mean」的候选池,也占着帮助行。
+                Aliases = ["filter", "grep", "values", "path"],
                 Placeholder = "<text>",
                 Help = "Only show field paths containing this text. Repeat it to widen the selection. " +
                        CommonOptions.AnyIndexNote,
@@ -2369,7 +2389,9 @@ public sealed class FieldsCommand : Command
                 Name = "path-contains",
                 Arity = Arity.Multi,
                 // "only" 不在这里:sources sync 有一个真的 --only(只同步这几棵树)。
-                Aliases = ["filter", "grep", "field-contains", "path-filter", "contains", "match"],
+                // 删掉的四个(field-contains / path-filter / contains / match)在 get /
+                // inherit / fields 上逐字各 0 次,理由记在 get 那一处。
+                Aliases = ["filter", "grep"],
                 Placeholder = "<text>",
                 Help = "Only list paths containing this text. Repeat it to widen the selection. " +
                        CommonOptions.AnyIndexNote,

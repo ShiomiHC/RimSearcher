@@ -365,8 +365,10 @@ public class OutputSnapshotTests
         // 退役的旧命令名。近似候选救不了它(find 与 where 一个字母都不像),
         // 不专门接住的话,印出来的与「这个词从来就不是一条命令」逐字同形。
         { "usage-retired-command", ["find", "compClass", "RimWorld.CompShield"] },
-        // 同一个词在别的命令上是选项、在这条上是位置参数。--field 是 get / inherit / read
-        // 认的写法,搬到 find 上就落空,而「这里怎么写」是算得出来的 —— 连值一起填好。
+        // 同一个词在别的命令上是选项、在这条上是位置参数,而「这里怎么写」是算得出来的
+        // —— 连值一起填好。这一格钉的是那条**算法**,不是 --field 这个词的归属:它在
+        // read 侧早已删掉(Docs/12 的跨命令碰撞),在 get / inherit 侧也随 2026-09-09
+        // 那批零调用别名一起删了,而这句话照样成立。
         { "usage-field-is-positional", ["where", "--field", "compClass"] },
         // 值给了两遍且不一样。位置参数与 --value 说的是同一件事,挑一个跑下去的话
         // 另一个被丢了在输出里看不出来。

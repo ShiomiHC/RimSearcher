@@ -63,9 +63,11 @@ public sealed class InheritCommand : Command
                 // 兄弟 def,不是纵向追溯本 def 的来源)。那一半是操作本身要重新设计,
                 // 不在本批,所以这里只跟着改名。
                 Name = "path-contains",
-                // path 收进别名的理由在 get 那一处的注释里(真实调用 112 次全打空)。
-                Aliases = ["filter", "grep", "field-contains", "path-filter", "field", "fieldPath",
-                           "path"],
+                // path 收进别名的理由在 get 那一处的注释里(真实调用 112 次全打空);
+                // 同一处也记着为什么删掉 field / fieldPath / path-filter / field-contains
+                // (三条命令上逐字各 0 次)。`values` 不跟着收:那 15 次伸手全打在 get 上,
+                // 这里逐字 0 次,按同一条判据不该凭对称加。
+                Aliases = ["filter", "grep", "path"],
                 Placeholder = "<text>",
                 Help = "Count, for every layer in the chain, the other defs descending from it that carry a " +
                        "field path containing this text, and how many of those carry the same value. This is a " +
