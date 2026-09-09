@@ -206,6 +206,24 @@ public class OutputSnapshotTests
         { "get-folded-path",          ["get", "Apparel_ShieldBelt", "--path-contains", "comps[].props"] },
         { "get-folded-path-whole",    ["get", "Apparel_ShieldBelt", "--path-contains", "statBases[].stat"] },
         { "fields-folded-path",       ["fields", "ThingDef", "--path-contains", "comps[].props"] },
+        // 路径轴这一轮(2026-09-09)要改的三处,先各钉住现状:
+        //
+        //   1. `--path` 这个词在 get / inherit 上是 --path-contains 的别名,在 fields 上
+        //      什么都不是(实测 15 次被拒,15 条意图全是 --path-contains),而在 docs 上
+        //      是 --out 的别名 —— 一个词三种命运。docs 那一头由参数参考的闸盯着。
+        //   2. `--exact-path` 只有 where / values 认。而 get / fields 印的
+        //      「inside a longer name: N」自己承认这一句给不出出路,因为出路那个词
+        //      在这一族不存在。
+        //   3. 多段路径的后缀是纯文本,不在段边界上对齐(第三格);单段那一支走 leaf
+        //      列等值,本来就是对齐的(第四格) —— 同一个缺省下两套判据。
+        { "usage-fields-path",        ["fields", "ThingDef", "--path", "comps"] },
+        { "usage-get-exact-path",     ["get", "Apparel_ShieldBelt", "--exact-path", "statBases[].stat"] },
+        { "usage-fields-exact-path",  ["fields", "ThingDef", "--exact-path", "graphicData.texPath"] },
+        { "usage-inherit-exact-path", ["inherit", "Apparel_ShieldBelt", "--exact-path", "statBases[].stat"] },
+        { "get-path-none-whole",      ["get", "Firefoam", "--path-contains", "raphicData"] },
+        { "where-suffix-crosses-segment",  ["where", "graphicData.texPath"] },
+        { "values-suffix-crosses-segment", ["values", "graphicData.texPath"] },
+        { "where-suffix-single-segment",   ["where", "texPath"] },
         // inherit 那格换库:默认那份里进了继承层的 def 一个带下标路径都没有,
         // 而 ChildGun(costList[0].*,parent 是 BaseGun)只在 presence 里。
         { "inherit-folded-path",      ["inherit", "ChildGun", "--path-contains", "costList[].count",

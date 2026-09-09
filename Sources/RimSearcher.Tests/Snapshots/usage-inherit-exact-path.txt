@@ -1,0 +1,6 @@
+$ rimsearcher inherit Apparel_ShieldBelt --exact-path statBases[].stat
+exit 2
+--- stdout ---
+--- stderr ---
+Unknown option '--exact-path'. This command accepts: --config, --db, --json, --limit, --path-contains, --snapshot.
+Run 'rimsearcher inherit --help' to see what this command accepts.

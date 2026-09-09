@@ -1,0 +1,33 @@
+$ rimsearcher get Firefoam --path-contains raphicData
+exit 0
+--- stdout ---
+2 defs share the name 'Firefoam' across different def types; all of them are shown. Pass --type <DefType> for just one.
+What follows is 2 defs in a row, one block each. Every count, footnote and truncation warning below belongs to the block it sits in — read the def_type line at the top of a block to know which def the lines under it are about.
+
+def_name       Firefoam
+def_type       ThingDef
+label          firefoam
+class          Verse.ThingDef
+mod            ludeon.rimworld
+source         Buildings_Special.xml
+inherits_from  BaseProjectile (see 'rimsearcher inherit Firefoam')
+xml            not indexed (exporter 0.2.0)
+Matching 'raphicData' of Firefoam (ThingDef): 2 fields, out of 8 fields on the def. None of those has 'raphicData' as a whole path segment: each match contains it inside a longer name, and this line removes none of them.
+
+Same in every row, not repeated below: code_default=no.
+path                                   value
+graphicData.texPath                    Things/Building/Nozzle
+building.blueprintGraphicData.texPath  Things/Building/Blueprint_Nozzle
+No value above with 'code_default'=no is one that most of the 9 ThingDefs in this snapshot also carry.
+  - The game also prices this thing. Its market value, cost to make and work amount are computed, not stored, so no field above holds them — 'rimsearcher economy Firefoam' is the only road to those numbers.
+  - Filtered away: 2 translations this def does have, none of whose paths contain 'raphicData'. Their paths are the game's injection keys as written, and this snapshot predates the pass that brings them onto the field paths' grammar: where a field path has '[0]', a key has either the number or a name taken from that element's own label, and neither spelling contains the other. Ask for the field name on its own — the part before the subscript — to reach both tables, or re-export to get one grammar.
+
+def_name     Firefoam
+def_type     StatDef
+class        Verse.StatDef
+mod          ludeon.rimworld
+source       Stats_Basics.xml
+xml          not indexed (exporter 0.2.0)
+No field path of Firefoam (StatDef) contains 'raphicData'; the def does have 0 fields. Drop --path-contains to see them.
+This says no indexed value sits at that path — not that no such field exists. 'rimsearcher code-search "[\w<>,\[\] ]+ raphicData;"' finds the declaration, which does say. Two things keep a field out of this index without any sign here: a value that was null on every def, and a field the game marks as an unsaved runtime cache. A third, the exporter stopping short on a def — past its field cap, past the depth cap, or partway down a list — does leave a sign: 'rimsearcher snapshot truncated' lists those defs. This snapshot (exporter 0.2.0) does not list the fields a type can have, so it cannot tell a field that is null on every def from one the type does not have. The runtime type of a nested Class="..." object is indexed as '<path>.Class' for list elements only (<li Class="...">), so 'rimsearcher where Class <ClassName>' reaches those. A single field that picks a class — GenStepDef.genStep, ThinkTreeDef.thinkRoot — is not in this snapshot at all: it was written by exporter 0.2.0, before that case entered the index, and a zero from that query is not evidence about it. Re-export to reach it.
+--- stderr ---

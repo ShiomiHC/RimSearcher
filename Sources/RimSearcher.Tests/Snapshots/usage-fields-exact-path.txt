@@ -1,0 +1,6 @@
+$ rimsearcher fields ThingDef --exact-path graphicData.texPath
+exit 2
+--- stdout ---
+--- stderr ---
+Unknown option '--exact-path'. This command accepts: --config, --db, --json, --limit, --offset, --path-contains, --snapshot.
+Run 'rimsearcher fields --help' to see what this command accepts.
