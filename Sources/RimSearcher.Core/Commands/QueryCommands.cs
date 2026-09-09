@@ -350,8 +350,7 @@ public sealed class GetCommand : Command
                            "path"],
                 Placeholder = "<text>",
                 Help = "Only show field paths containing this text. Repeat it to widen the selection. " +
-                       "Write '[]' for any index, so a path shape this tool printed — 'comps[].props.energyMax' " +
-                       "— goes straight back in.",
+                       CommonOptions.AnyIndexNote,
                 Narrows = true,
             },
             // 同名跨 def 类型是 RimWorld 常态(PsychicSensitivity 既是 StatDef 又是 TraitDef)。
@@ -1131,7 +1130,7 @@ public sealed class FindCommand : Command
             "rather than a text hit.",
         Positionals =
         [
-            new PositionalSpec { Name = "fieldPath", Help = "A field path or just its last segment, such as compClass or defaultProjectile. '[]' stands for any index, so a path shape this tool printed goes straight back in. Omit it to search every field instead.", Required = false },
+            new PositionalSpec { Name = "fieldPath", Help = "A field path or just its last segment, such as compClass or defaultProjectile. " + CommonOptions.AnyIndexNote + " Omit it to search every field instead.", Required = false },
             new PositionalSpec { Name = "value", Help = "The value to look for. '--value' spells out this same argument, so give it one way or the other. Omit it to list every def that has the field at all.", Required = false },
         ],
         Options =
@@ -2373,8 +2372,7 @@ public sealed class FieldsCommand : Command
                 Aliases = ["filter", "grep", "field-contains", "path-filter", "contains", "match"],
                 Placeholder = "<text>",
                 Help = "Only list paths containing this text. Repeat it to widen the selection. " +
-                       "Write '[]' for any index, so a path shape this tool printed — 'comps[].props.energyMax' " +
-                       "— goes straight back in.",
+                       CommonOptions.AnyIndexNote,
                 Narrows = true,
             },
             CommonOptions.Offset("field paths"),
@@ -2536,8 +2534,8 @@ public sealed class ValuesCommand : Command
             {
                 Name = "fieldPath",
                 Variadic = true,
-                Help = "A field path or its last segment, such as compClass. '[]' stands for any index, so a " +
-                       "path shape this tool printed goes straight back in. Several paths go in one call; " +
+                Help = "A field path or its last segment, such as compClass. " + CommonOptions.AnyIndexNote +
+                       " Several paths go in one call; " +
                        "--limit and --offset apply to each one on its own, each gets its own count line and " +
                        "its own entry in the 'field' block, and the field_path column says which one a row " +
                        "came from.",

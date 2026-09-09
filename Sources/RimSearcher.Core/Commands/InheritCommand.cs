@@ -71,8 +71,10 @@ public sealed class InheritCommand : Command
                        "field path containing this text, and how many of those carry the same value. This is a " +
                        "witness count, not a record of where the field was declared — the snapshot holds no such " +
                        "record, and the output below the table says what the count does and does not settle. " +
+                       // 不在这里补一句 `[]` —— 上面那句是一条完整的等同(与 get 同一种匹配),
+                       // 再点名其中一项等于把全称说成部分。产地在 CommonOptions.AnyIndexNote。
                        "Matching is the substring match 'get --path-contains' uses, so the same " +
-                       "word selects the same fields in both commands — including '[]' for any index.",
+                       "word selects the same fields in both commands.",
             },
         ],
         Examples =

@@ -8,7 +8,7 @@ Find defs by the value of a field. This is the reverse lookup: from a C# class o
 The field path is matched from the end, so 'compClass' finds 'comps[3].compClass' without you knowing the index. That suffix is plain text and does not stop at a '.', so 'graphicData.shaderType' also matches 'swimmingGraphicData.shaderType'; --exact-path pins the whole path. This replaces grepping the XML: the values here are the merged, post-patch ones, and a class reference is an exact match rather than a text hit.
 
 Arguments:
-  <fieldPath>  A field path or just its last segment, such as compClass or defaultProjectile. '[]' stands for any index, so a path shape this tool printed goes straight back in. Omit it to search every field instead. (optional)
+  <fieldPath>  A field path or just its last segment, such as compClass or defaultProjectile. '[]' stands for any index, so a path shape this tool printed — 'comps[].props.energyMax' — goes straight back in. Omit it to search every field instead. (optional)
   <value>      The value to look for. '--value' spells out this same argument, so give it one way or the other. Omit it to list every def that has the field at all. (optional)
 
 Options:

@@ -125,6 +125,18 @@ public static class CommonOptions
         Narrows = true,
     };
 
+    /// <summary>
+    /// <c>[]</c> 那半句的唯一产地。每个收路径的入口都得说一遍 —— <c>--help</c> 是逐命令的,
+    /// 读 <c>get --help</c> 的人看不到 <c>where</c> 的位置参数说明 —— 但只能有一种措辞。
+    /// 五处各写各的话,同一件事会长出五个版本,而下一次改措辞只会改到其中几个。
+    ///
+    /// <c>inherit</c> 不在这五处里:它的帮助已经说「与 <c>get --path-contains</c> 是同一种匹配」,
+    /// 那是一句完整的等同,再补一条「也包括 []」等于把一个全称说成部分。
+    /// </summary>
+    public const string AnyIndexNote =
+        "'[]' stands for any index, so a path shape this tool printed — 'comps[].props.energyMax' — " +
+        "goes straight back in.";
+
     public static readonly OptionSpec Type = new()
     {
         Name = "type",
