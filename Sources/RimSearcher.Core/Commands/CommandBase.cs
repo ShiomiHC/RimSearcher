@@ -259,6 +259,12 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
     public bool Json => Args.Flag("json");
 
     /// <summary>
+    /// 这次真正开库之后的快照名(别名,或路径去扩展名)。没开过库就是 null ——
+    /// run-log 那时改从 <c>--snapshot</c> / <c>--db</c> 取。
+    /// </summary>
+    public string? SnapshotName { get; private set; }
+
+    /// <summary>
     /// 跑很久的命令用来**当场**说一句话的地方 —— <see cref="Report"/> 攒到命令结束才渲染。
     /// 走 stderr:它不是结果,不该混进 stdout 那份有字节级闸的输出。默认丢弃。
     /// </summary>
@@ -358,6 +364,7 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
 
         var report = SnapshotCatalog.Compare(db, Config);
         var name = selection.Alias ?? Path.GetFileNameWithoutExtension(selection.Path);
+        SnapshotName = name;
 
         // 「这次用了哪个快照」与「这个快照过没过期」是两件事。快照选错就是答案错,
         // 所以自动选择要说出选了哪个;只有一个快照时仍然零字节 —— 那时不存在选错。

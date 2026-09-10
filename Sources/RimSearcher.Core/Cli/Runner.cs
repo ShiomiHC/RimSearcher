@@ -163,6 +163,29 @@ public static class Runner
 
     public static int Run(IReadOnlyList<string> argv, TextWriter stdout, TextWriter stderr)
     {
+        // 用法错的消息不经 Report,由这里直接写 stderr —— run-log 只收 Report 的话,
+        // 「选项打错了」这一路在 run-log 里就只剩一个退出码、没有话。故镜像一份 stderr,
+        // 并只在退出码为「用法错」时留下:别的退出码下 stderr 上是进度行,那不是声明。
+        var mirror = new StringWriter();
+        var code = Execute(argv, stdout, new TeeWriter(stderr, mirror), out var report, out var snapshot);
+        RunLog.TryWrite(argv, code, report, snapshot, code == ExitUsage ? mirror.ToString() : null, stderr);
+        return code;
+    }
+
+    /// <summary>写两份:一份照旧去调用方给的流,一份留在内存里供 run-log 取。</summary>
+    private sealed class TeeWriter(TextWriter primary, TextWriter copy) : TextWriter
+    {
+        public override System.Text.Encoding Encoding => primary.Encoding;
+        public override void Write(char value) { primary.Write(value); copy.Write(value); }
+        public override void Write(string? value) { primary.Write(value); copy.Write(value); }
+        public override void Flush() { primary.Flush(); copy.Flush(); }
+    }
+
+    private static int Execute(IReadOnlyList<string> argv, TextWriter stdout, TextWriter stderr,
+                               out Report? report, out string? snapshot)
+    {
+        report = null;
+        snapshot = null;
         var registry = new CommandRegistry();
 
         if (argv.Count == 0)
@@ -263,6 +286,8 @@ public static class Runner
         catch (TomlError ex) { stderr.Write(OutputText.Finish(ex.Message)); return ExitUsage; }
 
         var ctx = new CommandContext(config, parsed) { Progress = stderr };
+        report = ctx.Report;
+        snapshot = SnapshotOf(parsed, ctx);
         try
         {
             // 显式点名的快照先验一遍,**不管这条命令后面用不用得上库**。寻址懒是有道理的,
@@ -282,16 +307,19 @@ public static class Runner
             var code = command.Run(ctx);
             // 位置等结果才定得下的那几条,在这里落位 —— 命令自己不必逐个记得收尾。
             ctx.Report.Settle();
+            snapshot = SnapshotOf(parsed, ctx);
             stdout.Write(ctx.Json ? JsonRenderer.Render(ctx.Report) : TextRenderer.Render(ctx.Report));
             return code;
         }
         catch (CliUsageException ex)
         {
+            snapshot = SnapshotOf(parsed, ctx);
             stderr.Write(OutputText.Finish(ex.Message));
             return ExitUsage;
         }
         catch (Exception ex) when (ex is SnapshotFormatError or SnapshotFormatException)
         {
+            snapshot = SnapshotOf(parsed, ctx);
             stderr.Write(OutputText.Finish(ex.Message));
             return ExitUsage;
         }
@@ -299,6 +327,7 @@ public static class Runner
         {
             // 兜底:调用方要分得清「我用错了」和「这工具坏了」,退出码也分开,
             // 否则脚本会把内部故障当成「没查到」。栈保留头几帧供复述缺陷。
+            snapshot = SnapshotOf(parsed, ctx);
             var frames = (ex.StackTrace ?? "").Split('\n').Take(3).Select(l => l.Trim());
             stderr.Write(OutputText.Finish(
                 $"rimsearcher {BuildInfo.Version} hit an internal error; this is a defect in the tool, " +
@@ -310,6 +339,18 @@ public static class Runner
         {
             ctx.Dispose();
         }
+    }
+
+    /// <summary>
+    /// 开过库就用库上的名字;否则退回调用方写的 <c>--snapshot</c> / <c>--db</c>。
+    /// 用法错发生在开库之前时,后一条仍能把请求里的快照名记进 run-log。
+    /// </summary>
+    private static string? SnapshotOf(ParseResult parsed, CommandContext ctx)
+    {
+        if (ctx.SnapshotName is { Length: > 0 } name) return name;
+        if (parsed.Value("snapshot") is { Length: > 0 } alias) return alias;
+        if (parsed.Value("db") is { Length: > 0 } db) return Path.GetFileNameWithoutExtension(db);
+        return null;
     }
 }
 
