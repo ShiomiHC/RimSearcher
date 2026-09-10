@@ -18,7 +18,7 @@ Every command and option is in `<command> --help` and
 [references/usage-notes.md](references/usage-notes.md). This page carries the contracts:
 what an answer means, and where a query stops being able to answer.
 
-Global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the command name.
+Global options (`--snapshot`, `--db`, `--json`, `--quiet`, `--config`) go **after** the command name.
 
 ## Pick the tool by the question
 
@@ -175,6 +175,21 @@ way to state:
   truncation warnings and footnotes; a `head` keeps the first def's and drops the rest, which
   reads as "the others had nothing to declare". Take the whole thing, in `--json` when it is
   long: the notes stay addressable there, and per-def notes name the def they belong to.
+  When the pipeline wants only the rows, `--quiet` drops the prose on purpose rather than
+  by accident — a `head` that cuts it away leaves the same stdout either way, and only one
+  of the two says which it was.
+- **`--quiet`** (alias `--data-only`): stdout carries the data blocks and nothing else —
+  no notices, no footnotes, no snapshot tag. Reach for it when a pipeline counts lines or
+  slices columns and the prose would land in the middle of that. A query that finds nothing
+  then prints no stdout at all and still exits 1: that emptiness is the prose being withheld,
+  not evidence that the thing is absent.
+- **The prose has a second home.** With `RIMSEARCHER_RUN_LOG` pointing at a path, every run
+  appends one JSON line there — every notice with its kind, its counts and the blocks on
+  either side, plus the exit code, whether `--quiet` was asked for, and the usage-error
+  message (that one never goes through the report, so it has its own key). Unset, nothing is
+  written and the run does no extra IO. What a pipe or `--quiet` keeps off stdout is still
+  addressable there; a tool that reads it can tell prose that was filtered out from prose the
+  caller asked to drop.
 - **`--json`**: root object; prose moves into `notes` as `{kind, text}`; the data key
   depends on the command but is always present, empty array and all — an empty result never
   shows up as a missing key. Keys **beside** that one can be conditional; each command's

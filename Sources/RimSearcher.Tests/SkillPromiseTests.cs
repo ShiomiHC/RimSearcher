@@ -110,7 +110,7 @@ public class SkillPromiseTests
         // 2026-08-04(14 批 C):导出期截断那条同批退役 —— `get` 在被砍过的 def 上自报
         // 「at least N fields were dropped」,`where`/`values`/`fields` 那条边界这次还从
         // 脚注区搬到了表上方。`完整性尾注指的命令要走得到它刚说的那批` 原样留着。
-        new("Global options (`--snapshot`, `--db`, `--json`, `--config`) go **after** the command name",
+        new("Global options (`--snapshot`, `--db`, `--json`, `--quiet`, `--config`) go **after** the command name",
             nameof(GrammarTests.全局参数的位置约束要写在它自己的标题上)),
         // find --value --exact 在 skill 文档里没有专属句子,兜住它的是下面那条
         // 「Unknown options are rejected rather than ignored」。不给它单独立一行:
