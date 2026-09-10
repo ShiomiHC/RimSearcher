@@ -36,14 +36,14 @@ public static class RunLog
     /// 环境变量未设则立刻返回。写出失败时往 <paramref name="stderr"/> 写一行,然后返回。
     /// </summary>
     public static void TryWrite(IReadOnlyList<string> argv, int exit, Report? report,
-                                string? snapshot, string? usageMessage, TextWriter stderr)
+                                string? snapshot, bool quiet, string? usageMessage, TextWriter stderr)
     {
         var path = Environment.GetEnvironmentVariable(EnvVar);
         if (string.IsNullOrEmpty(path)) return;
 
         try
         {
-            AppendLine(path, Format(argv, exit, report, snapshot, usageMessage));
+            AppendLine(path, Format(argv, exit, report, snapshot, quiet, usageMessage));
         }
         catch (Exception ex)
         {
@@ -54,7 +54,7 @@ public static class RunLog
 
     /// <summary>一行 JSON(无末尾换行)。测试与落盘共用这一份。</summary>
     public static string Format(IReadOnlyList<string> argv, int exit, Report? report, string? snapshot,
-                                string? usageMessage = null)
+                                bool quiet = false, string? usageMessage = null)
     {
         var notices = new List<Dictionary<string, object?>>();
         if (report is not null)
@@ -90,6 +90,9 @@ public static class RunLog
             ["argv"] = argv.ToList(),
             ["exit"] = exit,
             ["snapshot"] = snapshot,
+            // 恒有的布尔:这次是不是调用方要求只出数据。hook 靠它区分「声明被管道筛掉」
+            // 与「调用方自己不要声明」—— 缺这个键,补送会把主动省略的部分全塞回来。
+            ["quiet"] = quiet,
             // 用法错那一句不经 Report,自己一个键。null = 这次不是用法错
             ["usageMessage"] = string.IsNullOrWhiteSpace(usageMessage) ? null : usageMessage.Trim(),
             ["notices"] = notices,

@@ -176,6 +176,7 @@ public class RunLogTests
             .Table("fields", ["path"], [new Dictionary<string, object?> { ["path"] = "x" }]);
 
         using var doc = JsonDocument.Parse(RunLog.Format(["get", "A"], 0, report, "fixture"));
+        Assert.False(doc.RootElement.GetProperty("quiet").GetBoolean());
         var mid = doc.RootElement.GetProperty("notices")[1];
         Assert.Equal("Between the table and the fields.", mid.GetProperty("text").GetString());
         Assert.Equal(2, mid.GetProperty("seq").GetInt32());
@@ -208,6 +209,41 @@ public class RunLogTests
         Assert.Contains(asDir, stderr, StringComparison.Ordinal);
         Assert.Contains("Could not write the run log", stderr, StringComparison.Ordinal);
         Assert.Contains("Apparel_ShieldBelt", stdout);
+    }
+
+    [Fact]
+    public void quiet键在两种情形下取值正确且声明没有变少()
+    {
+        var offPath = UniqueLog();
+        var onPath = UniqueLog();
+        var off = RunChild(offPath, "get", "Apparel_ShieldBelt");
+        var on = RunChild(onPath, "get", "Apparel_ShieldBelt", "--quiet");
+        Assert.Equal(0, off.Code);
+        Assert.Equal(0, on.Code);
+        Assert.NotEqual(off.Stdout, on.Stdout);
+
+        var offRow = OnlyLine(offPath);
+        var onRow = OnlyLine(onPath);
+        Assert.False(offRow.GetProperty("quiet").GetBoolean());
+        Assert.True(onRow.GetProperty("quiet").GetBoolean());
+        Assert.Equal(offRow.GetProperty("notices").GetArrayLength(),
+                     onRow.GetProperty("notices").GetArrayLength());
+        Assert.True(onRow.GetProperty("notices").GetArrayLength() > 0);
+        for (var i = 0; i < offRow.GetProperty("notices").GetArrayLength(); i++)
+            Assert.Equal(offRow.GetProperty("notices")[i].GetProperty("text").GetString(),
+                         onRow.GetProperty("notices")[i].GetProperty("text").GetString());
+    }
+
+    [Fact]
+    public void Format的quiet为true时键为真且notices仍在()
+    {
+        var report = new Report()
+            .Notice(NoticeKind.Count, "2 defs.")
+            .Table("defs", ["def_name"], [new Dictionary<string, object?> { ["def_name"] = "A" }]);
+        using var doc = JsonDocument.Parse(RunLog.Format(["get", "A"], 0, report, "fixture", quiet: true));
+        Assert.True(doc.RootElement.GetProperty("quiet").GetBoolean());
+        Assert.Equal(1, doc.RootElement.GetProperty("notices").GetArrayLength());
+        Assert.Equal("2 defs.", doc.RootElement.GetProperty("notices")[0].GetProperty("text").GetString());
     }
 
 }

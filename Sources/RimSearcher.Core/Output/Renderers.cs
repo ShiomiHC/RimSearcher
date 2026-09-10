@@ -15,13 +15,14 @@ public static class TextRenderer
 {
     public const int MaxCellWidth = 72;
 
-    public static string Render(Report report)
+    public static string Render(Report report, bool quiet = false)
     {
         var sb = new StringBuilder();
 
         // 快照标签贴在第一条声明行前,贴过就清空。一条声明都没有时它自己成行 ——
-        // 那是它唯一独占一行的场合。
-        var tag = report.SnapshotTag is { Length: > 0 } t ? $"[{t}] " : "";
+        // 那是它唯一独占一行的场合。--quiet 把标签一并拿掉:它不是 Notice,但贴在声明上
+        // (没有声明时自己成行),只出数据时这两处都不该在 stdout 上。
+        var tag = quiet ? "" : report.SnapshotTag is { Length: > 0 } t ? $"[{t}] " : "";
 
         // 按 Add 的先后走,声明与数据块交错 —— 每句话就落在它所讲的那个块旁边,而调用方
         // pipe 一个 head 先拿到的是数据。位置由写命令的人决定,不由这里统一提到最前。
@@ -40,6 +41,9 @@ public static class TextRenderer
             switch (entry)
             {
                 case Notice n:
+                    // --quiet:声明一条都不印,包括后面统一收的脚注。Report 本身不动,
+                    // run-log 仍从同一份 Entries 记全。不带这个旗时下面与改前逐字同一条路。
+                    if (quiet) break;
                     // 脚注另有归处,在最后统一收。
                     if (!n.Footnote)
                     {
@@ -62,7 +66,7 @@ public static class TextRenderer
             }
         }
 
-        var footnotes = report.Notices.Where(n => n.Footnote).ToList();
+        var footnotes = quiet ? [] : report.Notices.Where(n => n.Footnote).ToList();
         if (footnotes.Count > 0)
         {
             if (sb.Length > 0) sb.Append(OutputText.Newline);
@@ -73,6 +77,9 @@ public static class TextRenderer
             }
         }
 
+        // --quiet 且没有任何数据块时,Finish 会留下一个孤零的换行;零结果那条路
+        // 本来只有声明,调用方要的是彻底空的 stdout,不是一行空白。
+        if (quiet && sb.Length == 0) return "";
         return OutputText.Finish(sb.ToString());
     }
 
@@ -269,7 +276,7 @@ public static class JsonRenderer
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    public static string Render(Report report)
+    public static string Render(Report report, bool quiet = false)
     {
         var root = new Dictionary<string, object?>();
 
@@ -277,7 +284,11 @@ public static class JsonRenderer
         // 从一句话里抠字符串是两份数据。取值与文本侧同源,逐字相同。
         if (report.SnapshotTag is { Length: > 0 } tag) root["snapshot"] = tag;
 
-        if (report.Notices.Count > 0)
+        // --quiet:键仍在,值为空数组。不带这个旗时下面的 if 与改前同一条路 ——
+        // 零条声明仍然是缺键,不是空数组,那是既有契约,动它会改所有无 notes 的 --json 基线。
+        if (quiet)
+            root["notes"] = new List<object>();
+        else if (report.Notices.Count > 0)
             root["notes"] = report.Notices
                 .Select(n =>
                 {

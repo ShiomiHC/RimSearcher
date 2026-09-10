@@ -43,6 +43,21 @@ public static class GlobalOptions
                "lower bound is known, and both keys are absent on notes that are not counts.",
     };
 
+    public static readonly OptionSpec Quiet = new()
+    {
+        Name = "quiet",
+        Aliases = ["data-only"],
+        Arity = Arity.Flag,
+        // 事实:stdout 只剩数据块;脚注与快照标签一并去掉。机制:声明仍整份进 run-log。
+        // 出路:不加这个旗,声明照旧印在 stdout。零结果那条路本来只有声明,于是 stdout
+        // 变成空的、退出码仍是 1 —— 不写明这一条,空会被读成「确实不存在」。
+        Help = "Stdout prints only data blocks. Notices, including footnotes and the snapshot tag, " +
+               "are omitted from stdout; they are still written in full to the run log. " +
+               "A query that finds nothing then prints no stdout at all, and still exits 1 — " +
+               "that emptiness is the notices being withheld, not evidence that the thing is absent. " +
+               "Leave this flag off to print the notices on stdout as well.",
+    };
+
     public static readonly OptionSpec Config = new()
     {
         Name = "config",
@@ -50,7 +65,7 @@ public static class GlobalOptions
         Help = "Use this config file instead of the default one.",
     };
 
-    public static readonly IReadOnlyList<OptionSpec> All = [Snapshot, Db, Json, Config];
+    public static readonly IReadOnlyList<OptionSpec> All = [Snapshot, Db, Json, Quiet, Config];
 }
 
 /// <summary>常用的按命令参数。声明放在这里是为了让别名与措辞只有一个产地。</summary>
@@ -257,6 +272,7 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
     public ParseResult Args { get; } = args;
     public Report Report { get; } = new() { Narrowing = args.Narrowing() };
     public bool Json => Args.Flag("json");
+    public bool Quiet => Args.Flag("quiet");
 
     /// <summary>
     /// 这次真正开库之后的快照名(别名,或路径去扩展名)。没开过库就是 null ——

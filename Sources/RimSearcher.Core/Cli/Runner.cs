@@ -167,8 +167,9 @@ public static class Runner
         // 「选项打错了」这一路在 run-log 里就只剩一个退出码、没有话。故镜像一份 stderr,
         // 并只在退出码为「用法错」时留下:别的退出码下 stderr 上是进度行,那不是声明。
         var mirror = new StringWriter();
-        var code = Execute(argv, stdout, new TeeWriter(stderr, mirror), out var report, out var snapshot);
-        RunLog.TryWrite(argv, code, report, snapshot, code == ExitUsage ? mirror.ToString() : null, stderr);
+        var code = Execute(argv, stdout, new TeeWriter(stderr, mirror), out var report, out var snapshot,
+                           out var quiet);
+        RunLog.TryWrite(argv, code, report, snapshot, quiet, code == ExitUsage ? mirror.ToString() : null, stderr);
         return code;
     }
 
@@ -182,10 +183,11 @@ public static class Runner
     }
 
     private static int Execute(IReadOnlyList<string> argv, TextWriter stdout, TextWriter stderr,
-                               out Report? report, out string? snapshot)
+                               out Report? report, out string? snapshot, out bool quiet)
     {
         report = null;
         snapshot = null;
+        quiet = false;
         var registry = new CommandRegistry();
 
         if (argv.Count == 0)
@@ -266,6 +268,7 @@ public static class Runner
         }
 
         var parsed = ArgParser.Parse(command.Spec, GlobalOptions.All, rest, registry.Specs);
+        quiet = parsed.Flag("quiet");
 
         if (parsed.WantsHelp)
         {
@@ -308,7 +311,9 @@ public static class Runner
             // 位置等结果才定得下的那几条,在这里落位 —— 命令自己不必逐个记得收尾。
             ctx.Report.Settle();
             snapshot = SnapshotOf(parsed, ctx);
-            stdout.Write(ctx.Json ? JsonRenderer.Render(ctx.Report) : TextRenderer.Render(ctx.Report));
+            stdout.Write(ctx.Json
+                ? JsonRenderer.Render(ctx.Report, ctx.Quiet)
+                : TextRenderer.Render(ctx.Report, ctx.Quiet));
             return code;
         }
         catch (CliUsageException ex)

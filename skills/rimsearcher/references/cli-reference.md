@@ -68,6 +68,7 @@ Every command takes these, and they are written **after** the command name: `rim
 | `--snapshot` <name> | Query this named snapshot instead of the one that would be picked automatically. An explicit choice always wins over auto-detection. | `--snap`, `--env` |
 | `--db` <path> | Query the snapshot database at this path directly, bypassing the registry. | `--database`, `--snapshot-path` |
 | `--json` | Emit machine-readable JSON. Anything the text output would have said in prose moves into a 'notes' array. The command's own table key is always present — an empty array when nothing matched, never a missing key. A note that reports a count also carries 'shown' and 'total' as numbers, so the figures never have to be parsed back out of its text; 'total' is null when only a lower bound is known, and both keys are absent on notes that are not counts. |  |
+| `--quiet` | Stdout prints only data blocks. Notices, including footnotes and the snapshot tag, are omitted from stdout; they are still written in full to the run log. A query that finds nothing then prints no stdout at all, and still exits 1 — that emptiness is the notices being withheld, not evidence that the thing is absent. Leave this flag off to print the notices on stdout as well. | `--data-only` |
 | `--config` <path> | Use this config file instead of the default one. |  |
 
 ## `callers`
