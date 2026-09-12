@@ -632,7 +632,7 @@ public sealed class CodeSearchCommand : Command
     /// </summary>
     private static string? BreAlternation(string pattern) =>
         BrePipe.IsMatch(pattern)
-            ? @"In a .NET regular expression '\|' is a literal '|', not 'or'; for 'or' write it bare."
+            ? @"In a .NET regular expression '\|' is a literal '|', not 'or'."
             : null;
 
     private static readonly Regex BrePipe = new(@"(?<!\\)\\\|", RegexOptions.Compiled);
