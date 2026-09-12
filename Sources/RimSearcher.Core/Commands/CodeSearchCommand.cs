@@ -629,14 +629,11 @@ public sealed class CodeSearchCommand : Command
     /// grep 的 BRE 用 <c>\|</c> 表「或」,.NET 正则里它是字面竖线,而 C# 源码里没有
     /// <c>word|word</c> 这样的文本 —— 这种模式落空与「真没有」同形,却是再扫也不会有的那种。
     /// 前面再有一个反斜杠的 <c>\\|</c> 是字面反斜杠接正当的「或」,不算。
-    /// 改法要印成能原样粘回去的整条模式,不是只说「用裸 |」。
     /// </summary>
-    private static string? BreAlternation(string pattern)
-    {
-        if (!BrePipe.IsMatch(pattern)) return null;
-        var rewritten = BrePipe.Replace(pattern, "|");
-        return $@"In a .NET regular expression '\|' is a literal '|', not 'or'; for 'or' write it bare: '{rewritten}'.";
-    }
+    private static string? BreAlternation(string pattern) =>
+        BrePipe.IsMatch(pattern)
+            ? @"In a .NET regular expression '\|' is a literal '|', not 'or'; for 'or' write it bare."
+            : null;
 
     private static readonly Regex BrePipe = new(@"(?<!\\)\\\|", RegexOptions.Compiled);
 

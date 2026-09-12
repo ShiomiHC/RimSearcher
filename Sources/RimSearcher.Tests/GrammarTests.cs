@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using System.Text.RegularExpressions;
 using RimSearcher.Cli;
 using RimSearcher.Commands;
@@ -3938,7 +3938,7 @@ public class GrammarTests
     /// <summary>
     /// grep 的 `\|` 在 .NET 正则里是字面竖线,这样的模式在 C# 源码上永远落空。它与
     /// 「真没有」「没读完」在输出上同形,而后两者给的下一步(去问 def / 抬 --max-files)
-    /// 对它一步都不对。两条零命中的路都要响,而且要给出能原样粘回去的改法;
+    /// 对它一步都不对。两条零命中的路都要响;
     /// 裸 `|` 的落空与转义过的 `\\|` 不许挂这句 —— 那两个是正当写法。
     /// </summary>
     [Fact]
@@ -3946,13 +3946,11 @@ public class GrammarTests
     {
         var (whole, _, wcode) = Fixture.Run("code-search", @"zzzznothing\|zzzzelse");
         Assert.Equal(1, wcode);
-        Assert.StartsWith(@"In a .NET regular expression '\|' is a literal '|'",whole);
-        Assert.Contains("'zzzznothing|zzzzelse'", whole, StringComparison.Ordinal);
+        Assert.StartsWith(@"In a .NET regular expression '\|' is a literal '|'", whole);
 
         var (capped, _, ccode) = Fixture.Run("code-search", @"zzzznothing\|zzzzelse", "--max-files", "2");
         Assert.Equal(1, ccode);
-        Assert.StartsWith(@"In a .NET regular expression '\|' is a literal '|'",capped);
-        Assert.Contains("'zzzznothing|zzzzelse'", capped, StringComparison.Ordinal);
+        Assert.StartsWith(@"In a .NET regular expression '\|' is a literal '|'", capped);
 
         var (bare, _, _) = Fixture.Run("code-search", "zzzznothing|zzzzelse");
         Assert.DoesNotContain(@"'\|'", bare, StringComparison.Ordinal);
