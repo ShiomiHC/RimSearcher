@@ -3946,12 +3946,12 @@ public class GrammarTests
     {
         var (whole, _, wcode) = Fixture.Run("code-search", @"zzzznothing\|zzzzelse");
         Assert.Equal(1, wcode);
-        Assert.StartsWith(@"The pattern contains '\|'", whole);
+        Assert.StartsWith(@"In a .NET regular expression '\|' is a literal '|'",whole);
         Assert.Contains("'zzzznothing|zzzzelse'", whole, StringComparison.Ordinal);
 
         var (capped, _, ccode) = Fixture.Run("code-search", @"zzzznothing\|zzzzelse", "--max-files", "2");
         Assert.Equal(1, ccode);
-        Assert.StartsWith(@"The pattern contains '\|'", capped);
+        Assert.StartsWith(@"In a .NET regular expression '\|' is a literal '|'",capped);
         Assert.Contains("'zzzznothing|zzzzelse'", capped, StringComparison.Ordinal);
 
         var (bare, _, _) = Fixture.Run("code-search", "zzzznothing|zzzzelse");

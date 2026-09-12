@@ -1,5 +1,5 @@
 $ rimsearcher code-search zzzznothing\|zzzzelse
 exit 1
 --- stdout ---
-The pattern contains '\|', which a .NET regular expression reads as a literal '|' rather than as 'or', so it can only match a line with that character in it. Alternation is a bare '|': 'zzzznothing|zzzzelse'. No line matched in 10 files under '*.cs' across 2 of 3 source trees on disk — the rest hold no file matching --file-glob '*.cs', and 'sources list' says which have never been decompiled. If you were looking for a def rather than code, 'rimsearcher search' and 'rimsearcher where' answer that from the snapshot — the XML is not searched here.
+In a .NET regular expression '\|' is a literal '|', not 'or'; for 'or' write it bare: 'zzzznothing|zzzzelse'. No line matched in 10 files under '*.cs' across 2 of 3 source trees on disk — the rest hold no file matching --file-glob '*.cs', and 'sources list' says which have never been decompiled. If you were looking for a def rather than code, 'rimsearcher search' and 'rimsearcher where' answer that from the snapshot — the XML is not searched here.
 --- stderr ---

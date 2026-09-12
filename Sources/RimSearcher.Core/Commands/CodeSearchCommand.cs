@@ -635,8 +635,7 @@ public sealed class CodeSearchCommand : Command
     {
         if (!BrePipe.IsMatch(pattern)) return null;
         var rewritten = BrePipe.Replace(pattern, "|");
-        return @"The pattern contains '\|', which a .NET regular expression reads as a literal '|' rather than " +
-               $"as 'or', so it can only match a line with that character in it. Alternation is a bare '|': '{rewritten}'.";
+        return $@"In a .NET regular expression '\|' is a literal '|', not 'or'; for 'or' write it bare: '{rewritten}'.";
     }
 
     private static readonly Regex BrePipe = new(@"(?<!\\)\\\|", RegexOptions.Compiled);
