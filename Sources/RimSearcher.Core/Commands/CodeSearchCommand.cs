@@ -368,10 +368,13 @@ public sealed class CodeSearchCommand : Command
                     " 'rimsearcher sources list' names the trees.");
             else if (incomplete)
                 ctx.Report.Notice(NoticeKind.Truncation,
+                    // 模式那句排最前:它在,下一步就不是抬闸。没读完的那句照旧,读完也不会有。
+                    (BreAlternation(ctx.Args.Positional(0)!) is { } bre ? bre + " " : "") +
                     $"No line matched in the {Tally.Complete(filesRead).Render("file")} that were read, " +
                     "but the scan did not finish, so this is not evidence that nothing matches.");
             else
                 ctx.Report.Notice(NoticeKind.NextStep,
+                    (BreAlternation(ctx.Args.Positional(0)!) is { } bre ? bre + " " : "") +
                     $"No line matched in {Tally.Complete(filesRead).Render("file")} under '{glob}'" +
                     Framing(root, sourceName, treesTotal, glob) + ". " +
                     // 「反编译时就抹掉了」排在 def 那句之前:它是唯一一种再怎么扫都不会有的成因。
@@ -622,6 +625,22 @@ public sealed class CodeSearchCommand : Command
     /// 裸标识符那一条要求模式里没有正则元字符且首字母小写:带元字符的模式是在找一种形状,
     /// 不是在找一个记得住名字的变量,对它说这句话就是每次落空都挂的免责声明。
     /// </summary>
+    /// <summary>
+    /// grep 的 BRE 用 <c>\|</c> 表「或」,.NET 正则里它是字面竖线,而 C# 源码里没有
+    /// <c>word|word</c> 这样的文本 —— 这种模式落空与「真没有」同形,却是再扫也不会有的那种。
+    /// 前面再有一个反斜杠的 <c>\\|</c> 是字面反斜杠接正当的「或」,不算。
+    /// 改法要印成能原样粘回去的整条模式,不是只说「用裸 |」。
+    /// </summary>
+    private static string? BreAlternation(string pattern)
+    {
+        if (!BrePipe.IsMatch(pattern)) return null;
+        var rewritten = BrePipe.Replace(pattern, "|");
+        return @"The pattern contains '\|', which a .NET regular expression reads as a literal '|' rather than " +
+               $"as 'or', so it can only match a line with that character in it. Alternation is a bare '|': '{rewritten}'.";
+    }
+
+    private static readonly Regex BrePipe = new(@"(?<!\\)\\\|", RegexOptions.Compiled);
+
     private static string? Erased(string pattern)
     {
         if (pattern.Contains("//", StringComparison.Ordinal) || pattern.Contains("/*", StringComparison.Ordinal))

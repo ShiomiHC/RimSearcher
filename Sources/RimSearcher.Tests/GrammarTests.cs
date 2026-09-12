@@ -3936,6 +3936,32 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// grep 的 `\|` 在 .NET 正则里是字面竖线,这样的模式在 C# 源码上永远落空。它与
+    /// 「真没有」「没读完」在输出上同形,而后两者给的下一步(去问 def / 抬 --max-files)
+    /// 对它一步都不对。两条零命中的路都要响,而且要给出能原样粘回去的改法;
+    /// 裸 `|` 的落空与转义过的 `\\|` 不许挂这句 —— 那两个是正当写法。
+    /// </summary>
+    [Fact]
+    public void 模式里的BRE竖线要在两条零命中路上都说破()
+    {
+        var (whole, _, wcode) = Fixture.Run("code-search", @"zzzznothing\|zzzzelse");
+        Assert.Equal(1, wcode);
+        Assert.StartsWith(@"The pattern contains '\|'", whole);
+        Assert.Contains("'zzzznothing|zzzzelse'", whole, StringComparison.Ordinal);
+
+        var (capped, _, ccode) = Fixture.Run("code-search", @"zzzznothing\|zzzzelse", "--max-files", "2");
+        Assert.Equal(1, ccode);
+        Assert.StartsWith(@"The pattern contains '\|'", capped);
+        Assert.Contains("'zzzznothing|zzzzelse'", capped, StringComparison.Ordinal);
+
+        var (bare, _, _) = Fixture.Run("code-search", "zzzznothing|zzzzelse");
+        Assert.DoesNotContain(@"'\|'", bare, StringComparison.Ordinal);
+
+        var (escaped, _, _) = Fixture.Run("code-search", @"zzzznothing\\|zzzzelse");
+        Assert.DoesNotContain(@"'\|'", escaped, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 反编译产物**不重复父类的成员**,于是按成员名读一个文件会落空,而它就在基类里 ——
     /// 「这文件里没有」与「这个类型没有这个成员」是两件事,读的人会读成后者。
     ///

@@ -1,0 +1,6 @@
+$ rimsearcher code-search zzzznothing\|zzzzelse --max-files 2
+exit 1
+--- stdout ---
+The pattern contains '\|', which a .NET regular expression reads as a literal '|' rather than as 'or', so it can only match a line with that character in it. Alternation is a bare '|': 'zzzznothing|zzzzelse'. No line matched in the 2 files that were read, but the scan did not finish, so this is not evidence that nothing matches.
+The scan stopped after reading 2 files, so this answer is partial rather than complete. 'vanilla' was read only in part: 2 of 8 files. Never read at all: zz.othermod — 1 source tree, 2 files. Leave --max-files out to read every file, or narrow with --source <tree> or --file-glob <glob>.
+--- stderr ---

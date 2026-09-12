@@ -551,6 +551,11 @@ public class OutputSnapshotTests
         { "code-search-capped-miss", ["code-search", "zzzznothing", "--max-files", "2"] },
         // 真零结果:扫完了确实没有。这一条才该指路去 search / find。
         { "code-search-miss",      ["code-search", "zzzznothing"] },
+        // 第五种零结果:模式里写了 grep 的 `\|`,.NET 把它读成字面竖线,再怎么扫都不会有。
+        // 2026-09-13 Vethara 会话实证:同一份模式带 --max-files 落空时,输出把成因指向了
+        // 扫描没读完,真因被盖住 —— 所以读完与没读完两支各立一条,那句都得在最前。
+        { "code-search-bre-alternation", ["code-search", @"zzzznothing\|zzzzelse"] },
+        { "code-search-bre-alternation-capped", ["code-search", @"zzzznothing\|zzzzelse", "--max-files", "2"] },
         // 第三种零结果:glob 一个文件都没打中 —— 带 '/' 的 glob 匹配的是相对**根目录**
         // 的整条路径,少写树名就全空。
         { "code-search-glob-empty", ["code-search", "public", "--file-glob", "Verse/ThingComp.cs"] },
