@@ -20,7 +20,7 @@ bare name here returns **"No matching deferred tools found"** — a zero that lo
 is absent rather than like a mistyped query.
 
 ```
-ToolSearch select:mcp__decompiler__status,mcp__decompiler__load_assembly,mcp__decompiler__find_usages,mcp__decompiler__batch_get_decompiled_source,mcp__decompiler__compare_symbols,mcp__decompiler__compare_contexts,mcp__decompiler__search_members,mcp__decompiler__get_decompiled_source
+ToolSearch select:mcp__decompiler__status,mcp__decompiler__load_assembly,mcp__decompiler__resolve_member_id,mcp__decompiler__find_usages,mcp__decompiler__batch_get_decompiled_source,mcp__decompiler__compare_symbols,mcp__decompiler__compare_contexts
 ```
 
 ```
