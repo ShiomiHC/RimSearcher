@@ -9,7 +9,7 @@ The file is named by its path relative to the decompiled root ('vanilla/Assembly
 
 --member and --type find the declaration by matching braces, not by parsing C#. That is enough for decompiled output, which is machine-formatted, but it means a name this command cannot see is not evidence the file lacks it — 'code-search' searches the text and --lines reads it raw.
 
-For who calls a method, what it overrides, and what derives from a type, the DecompilerServer MCP answers from metadata and is both faster and exact. This command answers a different question: what the decompiled file on disk actually says.
+For who calls a method, 'callers'; for what a type derives from and what derives from it, 'types'. Both read the assembly's metadata. This command answers a different question: what the decompiled file on disk actually says.
 
 Page with --lines, never with a pipe. The first line of the answer says which lines these are and how many the file has ('lines 1-150 of 330'), and a shell pipe that trims the output leaves that line untouched — so the answer keeps claiming a range it no longer contains, and nothing downstream can tell.
 

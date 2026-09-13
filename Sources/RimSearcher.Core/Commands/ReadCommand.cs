@@ -7,9 +7,8 @@ namespace RimSearcher.Commands;
 /// <summary>
 /// 从反编译树里读一段源码 —— 一个成员、一个类型,或者一段裸行。
 ///
-/// 与 DecompilerServer MCP 的分工:符号级问题(谁调用它、它覆写了谁、派生了哪些)归 MCP,
-/// 它读元数据,又快又准。这里管的是 MCP 不在场时的那条底线,以及 MCP 给不了的那件事 ——
-/// 反编译产物**落盘的那一份**逐字是什么。
+/// 符号级问题(谁调用它、派生了哪些)归 <c>callers</c> / <c>types</c>,它们读元数据。
+/// 这里答的是反编译产物**落盘的那一份**逐字是什么。
 ///
 /// 成员定位靠配平大括号,不是语法分析(<see cref="CsOutline"/> 里写着它做不到什么),
 /// 于是这条能力边界必须跟着输出走:找不到一个名字,只说明文本扫描没看见它。
@@ -37,9 +36,9 @@ public sealed class ReadCommand : Command
             "--member and --type find the declaration by matching braces, not by parsing C#. That is enough " +
             "for decompiled output, which is machine-formatted, but it means a name this command cannot see " +
             "is not evidence the file lacks it — 'code-search' searches the text and --lines reads it raw.\n\n" +
-            "For who calls a method, what it overrides, and what derives from a type, the DecompilerServer " +
-            "MCP answers from metadata and is both faster and exact. This command answers a different " +
-            "question: what the decompiled file on disk actually says.\n\n" +
+            "For who calls a method, 'callers'; for what a type derives from and what derives from it, " +
+            "'types'. Both read the assembly's metadata. This command answers a different question: what " +
+            "the decompiled file on disk actually says.\n\n" +
             // 「不要拿 head 截这条命令的输出」写在声明层,因为声明层同时渲染 --help 与
             // cli-reference.md —— 拼命令时打开的正是那一份。
             "Page with --lines, never with a pipe. The first line of the answer says which lines these are " +

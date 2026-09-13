@@ -26,12 +26,12 @@ internal static class SourcesShared
 
     /// <summary>
     /// 「没配反编译目录」这句话的**查询侧**产地。<see cref="Root"/> 那份是写侧,措辞不同:
-    /// MCP 读元数据,替不了落盘。
+    /// 元数据那几条命令读的是程序集,不经过落盘。
     /// </summary>
     internal static string NotConfiguredToRead(string verb)
         => $"No decompiled source tree is configured, so there is nothing to {verb}. " +
            "Set 'decompiled_dir' in the config file to the directory holding the decompiled C#. " +
-           "Symbol-level questions do not need it: the DecompilerServer MCP reads the assemblies directly.";
+           "Symbol-level questions do not need it: 'types', 'members', 'callers' and 'il' read the assemblies directly.";
 
     /// <summary>这个目录是不是一个 git 工作树的根。</summary>
     internal static bool IsGitRoot(string dir) => SourceGit.IsRepository(dir);

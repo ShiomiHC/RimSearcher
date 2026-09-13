@@ -10,8 +10,8 @@ namespace RimSearcher.Commands;
 /// <summary>
 /// 跨文件正则,对象是反编译落盘目录。
 ///
-/// 与 DecompilerServer 的分工:符号级的一切走 MCP;这里保留的独立价值是**任意正则匹配
-/// 方法体文本**,即 search_string_literals 覆盖不到的形状搜索。
+/// 符号级的一切归 <c>types</c> / <c>members</c> / <c>callers</c> / <c>il</c>;这里的独立价值是
+/// **任意正则匹配方法体文本**,即元数据答不了的形状搜索。
 ///
 /// **上限分两种,不许混。** <c>--limit</c> 与 <c>--max-per-file</c> 决定**印几行**,
 /// 都不缩短扫描,所以命中总数仍是准数;<c>--max-files</c> 决定**读多少**,只有它咬下去
