@@ -532,8 +532,8 @@ public sealed class InheritCommand : Command
             $"Each row counts the other defs descending from that layer: how many carry a field path {holding} " +
             $"'{pathFilter}'" + (reference is null ? "" : ", and how many of those read the same value") +
             ". A layer that declares a field passes it to every descendant, so a layer whose with_path falls " +
-            "short of other_defs is not the one declaring this field; reaching other_defs does not point back " +
-            "at it, because every descendant writing the field separately counts the same. " +
+            "short of other_defs is not the one declaring this field, and one that reaches it may still not " +
+            "be: every descendant writing the field separately counts the same. " +
             "The snapshot stores no 'declared here' " +
             "fact — the game resolves inheritance while loading and then discards it.");
 

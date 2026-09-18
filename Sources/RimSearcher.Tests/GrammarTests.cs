@@ -1809,17 +1809,14 @@ public class GrammarTests
             Assert.DoesNotContain(FossilFromVersion, help, StringComparison.Ordinal);
         }
 
-        // **否定排在主句、在「值相等」那个事实之前。** r17 抓到一个受测者复述了限定的
-        // 前半句、接着自己接上「所以是没写、用类默认」—— 前半句可独立成立时,只读前半句
-        // 反而显得更完整,后半句的免责就成了可以不读的尾巴。
+        // 曾经这里钉「否定排在『值相等』那个事实之前」(旧编号 r17 抓到受测者只读可独立成立的
+        // 前半句、自己接上「所以没写」)。2026-09-18 起否定半句「is not evidence that nothing
+        // wrote」删掉 —— 同型的 Not listed 反面半句第十六轮量到两档零边际 —— 剩下的只有
+        // 点名那对分不开的 def,没有可独立成立的前半句可排了;闸改钉那对在场。
         foreach (var text in new[] { onlyYes, hit })
         {
-            var neg = text.IndexOf("is not evidence that nothing wrote", StringComparison.Ordinal);
-            // 「那个事实」现在是被点名的那一对,不再是「值与新实例的一样」那句定义 ——
-            // 后者已随锚点一起换掉。顺序判据不变:可独立成立的那半句排在否定之后。
-            var fact = text.IndexOf("whose XML writes that same value", StringComparison.Ordinal);
-            Assert.True(neg >= 0 && fact > neg,
-                        "「值相等不构成没人写的证据」要在主句,排在「值相等」那个事实之前");
+            Assert.Contains("whose XML writes that same value", text, StringComparison.Ordinal);
+            Assert.Contains("never mentions the field both show yes here", text, StringComparison.Ordinal);
         }
     }
 
@@ -4118,7 +4115,7 @@ public class GrammarTests
         // 逆命题那半句 2026-09-05 从自己的一条 Boundary 并进了上一条(外部回读:与前一句
         // 说的是同一件事,分两条只是把同一个否定说两遍)。守的事没变 —— 表里必须自己
         // 说破「追平不能反推」和「各写各的一份数上同形」,只是句子换了承载者。
-        Assert.Contains("reaching other_defs does not point back at it", text, StringComparison.Ordinal);
+        Assert.Contains("one that reaches it may still not be", text, StringComparison.Ordinal);
         Assert.Contains("every descendant writing the field separately", text, StringComparison.Ordinal);
     }
 

@@ -3405,8 +3405,8 @@ internal static class Completeness
             ? $"what a yes leaves open is settled by the '{XmlOrigin.Column}' column on that same row: " +
               $"{XmlOrigin.Here} is an XML line writing that same " +
               $"value, {XmlOrigin.No} is the absence of such a line in the XML {readWhen}"
-            : "a yes is not evidence that nothing wrote the value — a def whose XML writes " +
-              "that same value and a def that never mentions the field both show yes here";
+            : "a def whose XML writes that same value and a def that never mentions the field both " +
+              "show yes here";
 
         // 这半句只在**本次取景里真有 yes 行**时才拼。两条被砍掉的路径各有各的毛病:
         //   不加 --defaults 时,yes 行被整批滤走、表折成 `code_default=no`,而
