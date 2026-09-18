@@ -60,8 +60,7 @@ public sealed class CallersCommand : Command
                 Name = "source",
                 Aliases = ["tree", "from-tree"],
                 Placeholder = "<tree>",
-                Help = "Only count call sites in this source tree. Both ends are still named from every " +
-                       "tree, so the answer is narrowed, not blinded.",
+                Help = "Only count call sites in this source tree. Both ends are still named from every tree.",
                 Narrows = true,
             },
             CommonOptions.Limit("callers"),

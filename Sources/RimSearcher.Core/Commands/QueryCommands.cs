@@ -302,7 +302,7 @@ public sealed class GetCommand : Command
             "from a sibling value on the same list entry, including two-level tags (things.AncientAmmoStack.chance), " +
             "and using XML lines written by this def or by an ancestor. After that join, here/parent means the " +
             "line is there, and not-written means the XML read here does not write it. The output says which XML it " +
-            "read.'read after every patch ran' is the merged XML after every PatchOperation ran, and a line " +
+            "read. 'read after every patch ran' is the merged XML after every PatchOperation ran, and a line " +
             "another mod's patch put there reads as here+patch or parent+patch: Replace still finds that node, " +
             "but your patch now depends on that mod staying loaded. 'read before patches ran' is the XML as " +
             "written on disk, so there a patched-in node reads as not-written instead, and 'rimsearcher inherit " +
