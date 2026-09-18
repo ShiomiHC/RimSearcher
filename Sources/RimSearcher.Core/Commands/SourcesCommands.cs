@@ -237,14 +237,10 @@ public sealed class SourcesListCommand : Command
             // 计划里根本没有它们的那些空目录,`sources sync` 一辈子也不会去填 —— 上面那句
             // 「sync rebuilds them」对它们是一条走不通的指路。
             if (emptyOrphan > 0)
-                // 句里不许有跟着计数变形的动词。计数进破折号后的名词短语,后面一律用 each,
-                // 单复数就不再是个问题。
+                // 事实(空、不在名单里)在 status 那一格;这里只剩出路 —— sync 对它们无计可施。
                 ctx.Report.Notice(NoticeKind.Boundary,
-                    $"'sources sync' plans no tree under those names, so it will never fill them — " +
-                    $"{Tally.Complete(emptyOrphan).Render("source tree")} out of the ones just listed. " +
-                    "Each is an empty directory left over from an earlier naming, and each is one of the " +
-                    "trees 'code-search' reports reading no file from. Removing the directory is the only " +
-                    "thing that changes this line.");
+                    $"'sources sync' plans no tree under a name marked 'empty (not in {from})': removing " +
+                    "that directory is the only thing that changes its row.");
         }
 
         if (notInstalled.Count > 0)
@@ -253,21 +249,11 @@ public sealed class SourcesListCommand : Command
                 $"{(notInstalled.Count == 1 ? "is" : "are")} not installed on this machine, so no tree can be " +
                 $"built for {(notInstalled.Count == 1 ? "it" : "them")}: {string.Join(", ", notInstalled)}.");
 
+        // 哪棵树缺副本 / 缺边表,copies 与 edges 两列自己印着;这里只剩出路。
         if (noCopies > 0 || noEdges > 0)
-        {
-            var parts = new List<string>();
-            if (noCopies > 0)
-                parts.Add("no copy of the assemblies it came from, so 'il' there reads whatever is installed " +
-                          $"now — {Tally.Complete(noCopies).Render("source tree")}");
-            if (noEdges > 0)
-                parts.Add("no call-graph table, so 'callers' does not reach into it — " +
-                          $"{Tally.Complete(noEdges).Render("source tree")}");
-
-            ctx.Report.Notice(NoticeKind.Boundary,
-                "Built before the assemblies and call sites were kept alongside the C#: " +
-                string.Join("; ", parts) +
-                ". 'rimsearcher sources sync' adds both without decompiling again.");
-        }
+            ctx.Report.Notice(NoticeKind.NextStep,
+                "'rimsearcher sources sync' adds the missing assembly copies (copies 0) and call-graph tables " +
+                "(edges none) without decompiling again.");
 
         ctx.Report.Table("trees", ["tree", "files", "assemblies", "copies", "edges", "status"], rows);
         SourcesShared.SayHowToDiff(ctx, root);

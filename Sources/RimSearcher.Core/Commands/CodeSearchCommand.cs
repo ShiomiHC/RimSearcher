@@ -202,6 +202,14 @@ public sealed class CodeSearchCommand : Command
             },
             new()
             {
+                Key = "absent",
+                Rows = true,
+                What = "one row when the --source tree exists but holds no decompiled file — layer " +
+                       "('source_tree:' + the tree), state empty, next (the sync command that fills it); " +
+                       "empty otherwise. Nothing was read in that case, so 'matches' is empty too.",
+            },
+            new()
+            {
                 Key = "ui_text",
                 What = "present only when a printed matching line calls .Translate() on a literal key that the " +
                        "snapshot can resolve — key, translated, original, one row per distinct key. Keys that " +
@@ -346,11 +354,7 @@ public sealed class CodeSearchCommand : Command
             //   没读完 —— 结论无效,该抬闸,且**不指路去别的数据源**;
             //   真读完了也没有 —— 这时才提示去 search / where 问 def。
             if (filesCandidate == 0 && sourceName is { Length: > 0 } && EmptyTree(root, sourceName))
-                ctx.Report.Notice(NoticeKind.NextStep,
-                    $"The source tree '{sourceName}' exists but holds no decompiled files at all, so the glob " +
-                    "never came into it. Its assemblies have not been decompiled (or the tree was emptied): " +
-                    "'rimsearcher sources sync' rebuilds it from what the snapshot's mods load, and " +
-                    "'rimsearcher sources list' shows which trees are in that state.");
+                ctx.Report.Absent(DataLayers.EmptySourceTreeRow(sourceName));
             else if (filesCandidate == 0)
                 ctx.Report.Notice(NoticeKind.NextStep,
                     $"No file matched --file-glob '{glob}', so nothing was read at all." +

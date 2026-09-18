@@ -51,8 +51,9 @@ public class CodeSideTests
         var (callees, _, _) = Fixture.Run("callers", "RimWorld.CompShield.PostSpawnSetup", "--callees");
 
         // 查调用者那一侧必须照报 —— 否则底下那条否定断言在「两侧都不报」时也是绿的。
-        Assert.Contains("Searched without a call-graph table", callers);
-        Assert.DoesNotContain("Searched without a call-graph table", callees);
+        // 形态是 absent 表里 call_graph:<树> 那几行(Docs/25)。
+        Assert.Contains("call_graph:", callers);
+        Assert.DoesNotContain("call_graph:", callees);
     }
 
     /// <summary>

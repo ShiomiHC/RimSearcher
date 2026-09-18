@@ -88,6 +88,9 @@ public class GateTests
             ["types.types"] = ["types", "Verse.ThingComp"],
             ["members.members"] = ["members", "Verse.ThingComp"],
             ["callers.calls"] = ["callers", "Verse.Widgets.Label"],
+            // 夹具里 vanilla 有边表、另外两棵没有 —— 查调用者那一路上这两棵各一行。
+            ["callers.absent"] = ["callers", "Verse.Widgets.Label"],
+            ["code-search.absent"] = ["code-search", "public", "--source", "zz.emptytree"],
         };
 
         var declared = new CommandRegistry().Specs

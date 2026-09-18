@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.RegularExpressions;
 using RimSearcher.Cli;
 using RimSearcher.Commands;
@@ -840,8 +840,7 @@ public class GrammarTests
         // 真因是这棵树该 sync 一遍,不是 glob 写错。
         var (bare, _, bareCode) = Fixture.Run("code-search", "public", "--source", "zz.emptytree");
         Assert.Equal(1, bareCode);
-        Assert.Contains("holds no decompiled files", bare);
-        Assert.Contains("sources sync", bare);
+        Assert.Contains("source_tree:zz.emptytree  empty  rimsearcher sources sync", bare);
         Assert.DoesNotContain("No file matched", bare);   // 不许再赖到 glob 头上
         Assert.DoesNotContain("rimsearcher search", bare);
 
@@ -4206,8 +4205,9 @@ public class GrammarTests
         Assert.Contains("holding no .cs file", stdout, StringComparison.Ordinal);
 
         // 指路要走得通:sync 计划里没有它们,那句「sync rebuilds them」对它们不成立。
-        Assert.Contains("will never fill them", stdout, StringComparison.Ordinal);
-        Assert.Contains("code-search' reports reading no file from", stdout, StringComparison.Ordinal);
+        // 2026-09-18 起事实只在 status 那一格(Docs/25),句子只剩出路。
+        Assert.Contains("'sources sync' plans no tree under a name marked 'empty (not in", stdout, StringComparison.Ordinal);
+        Assert.Contains("removing that directory is the only thing that changes its row", stdout, StringComparison.Ordinal);
     }
 
     /// <summary>

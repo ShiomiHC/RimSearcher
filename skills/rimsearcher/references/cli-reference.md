@@ -100,6 +100,7 @@ The recorded target is the method named at the call site. A callvirt names the b
 | Key | Holds |
 |---|---|
 | `calls` | one row per calling method and target pair: tree, from_assembly, from_type, from_member, to_assembly, to_type, to_member, call_sites. |
+| `absent` | one row per source tree this search was blind on — layer ('call_graph:' + the tree), state missing, next (the sync command that builds the table); empty when every tree searched had one. Looking for callers, every tree without a table is listed; looking for callees, only the tree the named method lives in. |
 
 Examples:
 
@@ -146,6 +147,7 @@ A fourth shortens over-long lines instead of dropping them: --max-line-chars. De
 | Key | Holds |
 |---|---|
 | `matches` | one row per printed line — file, line, is_match, group, text. Context lines come through with is_match false, and 'group' is the merged window they belong to, so the text form's '--' separator needs no counterpart here. 'text' is the whole line even when the text form shortened it to the neighbourhood of its matches. |
+| `absent` | one row when the --source tree exists but holds no decompiled file — layer ('source_tree:' + the tree), state empty, next (the sync command that fills it); empty otherwise. Nothing was read in that case, so 'matches' is empty too. |
 | `ui_text` | present only when a printed matching line calls .Translate() on a literal key that the snapshot can resolve — key, translated, original, one row per distinct key. Keys that resolve to nothing, and lines whose key is assembled at runtime, are reported in the notes rather than as empty rows. Suppressed entirely by --no-resolve-keys. |
 
 Examples:

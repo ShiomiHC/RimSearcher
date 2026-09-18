@@ -2,6 +2,7 @@ using System.Reflection.Metadata.Ecma335;
 using RimSearcher.Cli;
 using RimSearcher.Metadata;
 using RimSearcher.Output;
+using RimSearcher.Snapshot;
 using RimSearcher.Sources;
 
 namespace RimSearcher.Commands;
@@ -77,6 +78,15 @@ public sealed class CallersCommand : Command
                 What = "one row per calling method and target pair: tree, from_assembly, from_type, " +
                        "from_member, to_assembly, to_type, to_member, call_sites.",
             },
+            new()
+            {
+                Key = "absent",
+                Rows = true,
+                What = "one row per source tree this search was blind on — layer ('call_graph:' + the tree), " +
+                       "state missing, next (the sync command that builds the table); empty when every tree " +
+                       "searched had one. Looking for callers, every tree without a table is listed; looking " +
+                       "for callees, only the tree the named method lives in.",
+            },
         ],
     };
 
@@ -110,13 +120,11 @@ public sealed class CallersCommand : Command
 
         if (graphs.Graphs.Count == 0)
         {
-            ctx.Report.Notice(NoticeKind.Boundary,
-                (only is { Length: > 0 }
-                    ? $"The source tree '{only}' has no call-graph table, so nothing there was searched. "
-                    : "No source tree has a call-graph table, so nothing was searched. ") +
-                // 「This is not an answer about the method — it is the absence of the index」
-                // 2026-09-18 删掉:「没表 → 没搜」+ 出路已是全部事实(Docs/23 第八节)。
-                "'rimsearcher sources sync' builds one per tree.");
+            // 一棵有表的树都没有:absent 表里每棵盲树一行(点名了 --source 就只有那一棵)。
+            // 树目录本身也不在时 Without 是空的 —— 那时给 --source 那个名字一行,好让出路在场。
+            var blind = graphs.Without.Count > 0 ? graphs.Without
+                      : only is { Length: > 0 } ? [only] : [];
+            ctx.Report.Absent(DataLayers.CallGraphRows(blind));
             ctx.Report.Table("calls", Columns, []);
             return 1;
         }
@@ -198,15 +206,10 @@ public sealed class CallersCommand : Command
             ? graphs.Without.Where(t => homeTrees.Contains(t, StringComparer.OrdinalIgnoreCase)).ToList()
             : [.. graphs.Without];
 
-        if (blind.Count > 0)
-            ctx.Report.Notice(NoticeKind.Boundary,
-                "Searched without a call-graph table, and therefore not searched at all — " +
-                $"{Tally.Complete(blind.Count).Render("source tree")}: " +
-                $"{NameList.Render(blind, 6)}. " +
-                (callees
-                    ? "That is where the method named above lives, so nothing it calls is recorded anywhere. "
-                    : "A call site in one of them is missing from below. ") +
-                "'rimsearcher sources sync' builds the tables.");
+        // 盲树一棵一行(Docs/25 的 absent 表)。此前是一句散文,还按方向各带半句后果;
+        // 表行只说「这棵树没有边表」,后果由读者从方向推 —— 查调用者时它藏着调用点,
+        // 查被调用者时它正是方法住的那棵。
+        ctx.Report.Absent(DataLayers.CallGraphRows(blind));
 
         var stale = graphs.Graphs.Where(g => IsStale(root, g)).Select(g => g.Tree).ToList();
         if (stale.Count > 0)

@@ -60,6 +60,7 @@ exit 0
       "group": 0,
       "text": "\t\t{"
     }
-  ]
+  ],
+  "absent": []
 }
 --- stderr ---

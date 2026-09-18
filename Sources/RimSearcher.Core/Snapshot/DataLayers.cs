@@ -225,6 +225,34 @@ public static class DataLayers
                    "exporter before 0.13.0: defs were truncated but no cause was recorded");
     }
 
+    // ---- 源码侧:层挂在一棵树上,层名带树名(call_graph:vanilla)。状态词与快照侧同一张表。
+
+    /// <summary>层名前缀只写一次:闸拿这个字面钉「callers 在盲树上说破了」。</summary>
+    public const string CallGraphPrefix = "call_graph:";
+    public const string SourceTreePrefix = "source_tree:";
+    public const string SyncCommand = "rimsearcher sources sync";
+
+    /// <summary>
+    /// 没有边表的树,一棵一行。超过 <paramref name="cap"/> 棵时余下的折成一行 —— 查空比查到贵,
+    /// 而一次 sync 之后这张表通常是空的;全名单在 <c>sources list</c> 的 trees 表里(edges 列)。
+    /// </summary>
+    public static IReadOnlyList<LayerRow> CallGraphRows(IReadOnlyList<string> treesWithout, int cap = 6)
+    {
+        const string why = "the tree was decompiled before call sites were kept; sync adds the table without decompiling again";
+        var rows = treesWithout.Take(cap)
+            .Select(t => new LayerRow(CallGraphPrefix + t, LayerState.Missing, SyncCommand, why))
+            .ToList();
+        if (treesWithout.Count > cap)
+            rows.Add(new LayerRow(CallGraphPrefix + $"+{treesWithout.Count - cap} more trees", LayerState.Missing,
+                                  "rimsearcher sources list", why));
+        return rows;
+    }
+
+    /// <summary>树的目录在、里面一个 .cs 都没有:程序集从没反编译过,或树被清空了。</summary>
+    public static LayerRow EmptySourceTreeRow(string tree)
+        => new(SourceTreePrefix + tree, LayerState.Empty, SyncCommand,
+               "the directory exists and holds no decompiled file; sync rebuilds it from what the snapshot's mods load");
+
     private static LayerRow Bit(string layer, bool present, string next, string why)
         => present ? new(layer, LayerState.Ok, null, null) : new(layer, LayerState.PreMeasure, next, why);
 
