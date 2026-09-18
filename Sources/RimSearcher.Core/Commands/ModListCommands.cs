@@ -207,7 +207,7 @@ public sealed class ModListShowCommand : Command
         ],
         // 「装没装」不是一列,是表旁边的一句话 —— 声明里写成列名的话,按列去读的人
         // 会拿到 null 并把它读成「没装」。
-        JsonKeys = [new() { Key = "mods", Rows = true, What = "one row per mod in the list, in load order: modlist, order, package_id, name. Whether they are installed here is a note beside the table, not a column. modlist is in every row either way, so one parser handles both a named list and --find across all of them; the text table prints it only when searching all lists, where it varies." }],
+        JsonKeys = [new() { Key = "mods", Rows = true, What = "one row per mod in the list, in load order: modlist, order, package_id, name. Whether a mod is installed is not recorded here. modlist is in every row either way, so one parser handles both a named list and --find across all of them; the text table prints it only when searching all lists, where it varies." }],
     };
 
     public override int Run(CommandContext ctx)
@@ -300,9 +300,11 @@ public sealed class ModListShowCommand : Command
         if (rows.Count == 0)
         {
             ctx.Report.Notice(NoticeKind.NextStep,
+                // 只描述自己这边:搜的是保存下来的列表文件,不是 Mods 目录。「装没装」不提 ——
+                // 此前那句「says nothing about whether it is installed」是反面(Docs/23 第九节)。
                 $"No mod matching '{filter}' appears in any of the " +
-                $"{Tally.Complete(searched).Render("mod list")} on this machine. " +
-                "That says nothing about whether it is installed — only that no saved list names it.");
+                $"{Tally.Complete(searched).Render("saved mod list")} on this machine " +
+                "('rimsearcher modlist list' names them).");
             NoteSkipped();
             return 1;
         }

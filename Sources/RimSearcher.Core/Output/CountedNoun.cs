@@ -116,6 +116,7 @@ public static class NounRegistry
         ["mod"] = "mods",
         // 数的是 .rml 文件本身,与「列表里有几个 mod」不是一回事。
         ["mod list"] = "mod lists",
+        ["saved mod list"] = "saved mod lists",
         ["translation"] = "translations",
         // 界面文案那一层单独登记,不借 "translation":def 的 label 走 DefInjected、
         // keyed 走 key,两层的来源与生效规则都不同。

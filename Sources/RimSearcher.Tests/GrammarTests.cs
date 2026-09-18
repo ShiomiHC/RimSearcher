@@ -4415,10 +4415,15 @@ public class GrammarTests
         var (covered, _, _) = Fixture.Run("mods");
         Assert.DoesNotContain("test.notinsnapshot", covered, StringComparison.Ordinal);
 
-        // 一份列表都没点名时,不许把话说成「没装」。
+        // 一份列表都没点名时,只说自己这边搜了什么(保存的列表),「装没装」一个字不提 ——
+        // 这条命令没看过 Mods 目录,说「没装」是假的,说「不代表没装」是替一个假想读者
+        // 预打的反面(2026-09-18 起删,Docs/23 第九节)。
         var (miss, _, mcode) = Fixture.Run("modlist", "show", "--find", "zzznotamodanywhere");
         Assert.Equal(1, mcode);
-        Assert.Contains("says nothing about whether it is installed", miss, StringComparison.Ordinal);
+        Assert.Contains("appears in any of the", miss, StringComparison.Ordinal);
+        Assert.Contains("saved mod list", miss, StringComparison.Ordinal);
+        // 反向锚钉 create 那句(它是 Core 里唯一说「没装」的整句),元闸要求锚在产地里唯一。
+        Assert.DoesNotContain("in the list are not installed on this machine", miss, StringComparison.Ordinal);
     }
 
     /// <summary>
