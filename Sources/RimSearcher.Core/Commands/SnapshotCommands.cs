@@ -323,9 +323,8 @@ public sealed class SnapshotDiffCommand : Command
             "that comparison belongs on 'snapshot status' and its mod_list table — because mixing list changes " +
             "with content changes would make every added def look like a data change. The game build and the XML " +
             "on disk may differ; that is the point of re-exporting the same list after a mod update.\n\n" +
-            "This command has no mod filter. The 'mod' column is the packageId that declared the def, not who " +
-            "patched the value, so restricting it to the mods 'snapshot status' named as changed would drop " +
-            "vanilla defs those mods patched. Re-exporting a name keeps its previous generations as " +
+            "This command has no mod filter: restricting declared_in to the mods 'snapshot status' named as " +
+            "changed would drop vanilla defs those mods patched. Re-exporting a name keeps its previous generations as " +
             "'<name>.prev', '<name>.prev2' and so on, and each is nameable here. --limit caps the " +
             "fields table, and the two def tables if they grow past it. Each side still reports its total, " +
             "including zero.\n\n" +
@@ -348,19 +347,19 @@ public sealed class SnapshotDiffCommand : Command
             {
                 Key = "defs_added",
                 Rows = true,
-                What = "one row per def present only in the later snapshot: def_name, def_type, mod.",
+                What = "one row per def present only in the later snapshot: def_name, def_type, declared_in.",
             },
             new()
             {
                 Key = "defs_removed",
                 Rows = true,
-                What = "one row per def present only in the earlier snapshot: def_name, def_type, mod.",
+                What = "one row per def present only in the earlier snapshot: def_name, def_type, declared_in.",
             },
             new()
             {
                 Key = "fields",
                 Rows = true,
-                What = "one row per field whose value differs between the snapshots: def_name, def_type, path, old, new, mod. The mod column is the declaring packageId, not who changed the value. A missing old or new is a field that appeared or disappeared; null never enters the index.",
+                What = "one row per field whose value differs between the snapshots: def_name, def_type, path, old, new, declared_in. A missing old or new is a field that appeared or disappeared; null never enters the index.",
             },
             new()
             {
@@ -411,7 +410,7 @@ public sealed class SnapshotDiffCommand : Command
         ctx.Report.CountNotice(Tally.Of(diff.Fields.Count, diff.FieldsTotal), "field");
         if (diff.FieldsTotal > 0)
         {
-            ctx.Report.Table("fields", ["def_name", "def_type", "path", "old", "new", "mod"],
+            ctx.Report.Table("fields", ["def_name", "def_type", "path", "old", "new", "declared_in"],
                 diff.Fields.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
                 {
                     ["def_name"] = r.DefName,
@@ -419,7 +418,7 @@ public sealed class SnapshotDiffCommand : Command
                     ["path"] = r.Path,
                     ["old"] = r.Old,
                     ["new"] = r.New,
-                    ["mod"] = r.Mod,
+                    ["declared_in"] = r.Mod,
                 }).ToList());
         }
 
@@ -443,12 +442,12 @@ public sealed class SnapshotDiffCommand : Command
     private static void EmitDefs(CommandContext ctx, string key, IReadOnlyList<DiffDefRow> rows, int total)
     {
         if (total == 0) return;
-        ctx.Report.Table(key, ["def_name", "def_type", "mod"],
+        ctx.Report.Table(key, ["def_name", "def_type", "declared_in"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
                 ["def_name"] = r.DefName,
                 ["def_type"] = r.DefType,
-                ["mod"] = r.Mod,
+                ["declared_in"] = r.Mod,
             }).ToList());
     }
 

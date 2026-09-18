@@ -12,11 +12,13 @@ namespace RimSearcher.Output;
 /// 是纯噪声;有的时候它是那批行与其余行之间唯一的分界。
 ///
 /// 列名不叫 <c>source</c> 也不叫 <c>origin</c>:前者是 `get` 里那个装文件路径的字段名,
-/// 后者是译文表的列名,两个都已经指着别的东西。
+/// 后者是译文表的列名,两个都已经指着别的东西。也不再叫 <c>declared_in</c>:那个名字
+/// 给了「哪个 mod 声明了这个 def」那一列(原 <c>mod</c>,Docs/25 丁2),两列并排时
+/// 「written in xml / code」与「declared in ludeon.rimworld」各说各的。
 /// </summary>
-public static class DeclaredIn
+public static class WrittenIn
 {
-    public const string Column = "declared_in";
+    public const string Column = "written_in";
 
     /// <summary>
     /// <c>code</c> = 加载期由 C# 造出,没有 XML 节点;<c>xml</c> = 有。

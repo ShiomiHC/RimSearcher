@@ -4,7 +4,7 @@ exit 0
 3 things.
 
 Same in every row, not repeated below: category=Item, marketValueDefined=yes, costDifficultyInverted=no, producible=yes, madeFromStuff=no.
-defName             label         mod              marketValue  calcState  fallbackMarketValue  costToMake                             profit  profitRate  workToProduce  costList                                     costDifficultyVar  chainEndShare  costDeep  profitDeep  isWeapon  isApparel
+defName             label         declaredIn       marketValue  calcState  fallbackMarketValue  costToMake                             profit  profitRate  workToProduce  costList                                     costDifficultyVar  chainEndShare  costDeep  profitDeep  isWeapon  isApparel
 TestModGun          test gun      test.mod         320          recipe     298.5                141.2 (holds when classicMortars=off)  178.8   1104.94     1618           40 x Bloomstone (80), 1 x Firefoam (61.2)    classicMortars     0.57           156.4     163.6       yes       no
 Apparel_ShieldBelt  shield belt   ludeon.rimworld  480          ok         412.75               220                                    260     866.67      3000           60 x Bloomstone (120), 100 x Firefoam (100)                     1              220       260         no        yes
 Meat_Muffalo        muffalo meat  ludeon.rimworld  2.05         empty-sum  0                                                                                                                                                                             2.05      0           no        no

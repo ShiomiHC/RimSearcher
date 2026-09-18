@@ -7,7 +7,7 @@ def_name       PatchGun
 def_type       ThingDef
 label          patch gun
 class          Verse.ThingDef
-mod            ludeon.rimworld
+declared_in    ludeon.rimworld
 source         Guns.xml
 inherits_from  BasePatchGun (see 'rimsearcher inherit PatchGun')
 

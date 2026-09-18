@@ -31,7 +31,7 @@ public sealed class SearchCommand : Command
         ],
         JsonKeys =
         [
-            new() { Key = "defs", Rows = true, What = "one row per matching def: def_name, def_type, label, matched_on, mod." },
+            new() { Key = "defs", Rows = true, What = "one row per matching def: def_name, def_type, label, matched_on, declared_in." },
             EmptyCause.JsonKey,
         ],
     };
@@ -206,7 +206,7 @@ public sealed class SearchCommand : Command
 
         // 「靠什么命中的」必须在表里:命中可以来自子结构(如 TraitDef 某一档 degreeData 的
         // label),而那一行自己的 label 是空的 —— 不说清就会被归到邻行上。
-        ctx.Report.Table("defs", ["def_name", "def_type", "label", "matched_on", "mod"],
+        ctx.Report.Table("defs", ["def_name", "def_type", "label", "matched_on", "declared_in"],
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
                 ["def_name"] = r.DefName,
@@ -215,7 +215,7 @@ public sealed class SearchCommand : Command
                 ["matched_on"] = how.StartsWith("fuzzy", StringComparison.Ordinal)
                                  ? "closest spelling"
                                  : MatchedOn(ctx, r, query),
-                ["mod"] = r.SourceMod,
+                ["declared_in"] = r.SourceMod,
             }).ToList());
 
         Advisory.NoteSameLabel(ctx, rows);
@@ -292,8 +292,8 @@ public sealed class GetCommand : Command
             "says so on its source line.\n\n" +
             // source 这一列一直在印文件名,把它是什么、不是什么一次说完。
             "The 'source' line is the bare file name the game reported for that def — no directory, because " +
-            "the game does not keep one. It names the file inside that mod's Defs folder ('mod' above says " +
-            "which mod); it is not a path, and nothing here reads the file system to confirm the file is " +
+            "the game does not keep one. It names the file inside that mod's Defs folder ('declared_in' " +
+            "above says which mod); it is not a path, and nothing here reads the file system to confirm the file is " +
             "still there. Defs the game builds in code carry a placeholder there instead.\n\n" +
             "When present, the 'xml' column says whether this def's own XML wrote the path (here), only an " +
             "ancestor did (parent), or neither of them did (not-written) — the fact PatchOperationReplace " +
@@ -652,7 +652,7 @@ public sealed class GetCommand : Command
                 new("label", def.Label),
                 new("description", paths.Count > 0 ? Clip(def.Description) : def.Description),
                 new("class", def.Class),
-                new("mod", def.SourceMod),
+                new("declared_in", def.SourceMod),
                 new("source", def.Generated
                     ? $"{def.SourceFile} (created in code, not from an XML file)"
                     : def.SourceFile),
@@ -1257,10 +1257,10 @@ public sealed class FindCommand : Command
             new()
             {
                 Key = "matches",
-                What = "with a field path: one row per def that has it — def_name, def_type, value, mod. " +
-                       "'mod' is where the def was declared, not who wrote the value: a comp another mod " +
+                What = "with a field path: one row per def that has it — def_name, def_type, path, value, " +
+                       "code_default, declared_in (the mod whose XML declares the def; a comp another mod " +
                        "bolts onto a vanilla def still reads as the vanilla mod, and --scope filters that " +
-                       "same column.",
+                       "same column), plus written_in (xml / code) when a def built in code is among the rows.",
             },
             new()
             {
@@ -1566,6 +1566,7 @@ public sealed class FindCommand : Command
                     ["def_type"] = "'rimsearcher list <DefType>' lists a whole type",
                     ["deftype"] = "'rimsearcher list <DefType>' lists a whole type",
                     ["mod"] = "'--scope <packageId>' restricts any query to one mod",
+                    ["declared_in"] = "'--scope <packageId>' restricts any query to one mod",
                     ["source"] = "the source file is shown by 'rimsearcher get', but is not searchable",
                     ["parent"] = "abstract XML parents are not in a runtime snapshot at all; see 'rimsearcher get --help'",
                     ["parentname"] = "abstract XML parents are not in a runtime snapshot at all; see 'rimsearcher get --help'",
@@ -1868,8 +1869,8 @@ public sealed class FindCommand : Command
 
         ctx.Report.Table("matches",
             generated.Total > 0
-                ? ["def_name", "def_type", "path", "value", FieldDefault.Column, DeclaredIn.Column, "mod"]
-                : new[] { "def_name", "def_type", "path", "value", FieldDefault.Column, "mod" },
+                ? ["def_name", "def_type", "path", "value", FieldDefault.Column, WrittenIn.Column, "declared_in"]
+                : new[] { "def_name", "def_type", "path", "value", FieldDefault.Column, "declared_in" },
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
             {
                 ["def_name"] = r.Def.DefName,
@@ -1877,8 +1878,8 @@ public sealed class FindCommand : Command
                 ["path"] = r.Path,
                 ["value"] = r.Value,
                 [FieldDefault.Column] = FieldDefault.Render(r.Default),
-                [DeclaredIn.Column] = generated.Total > 0 ? DeclaredIn.Render(r.Def.Generated) : null,
-                ["mod"] = r.Def.SourceMod,
+                [WrittenIn.Column] = generated.Total > 0 ? WrittenIn.Render(r.Def.Generated) : null,
+                ["declared_in"] = r.Def.SourceMod,
             }).ToList());
 
         Advisory.NoteAuthoredSiblings(ctx, rows.Where(r => r.Default != Contract.DefaultState.Same)
@@ -2098,11 +2099,10 @@ public sealed class ListCommand : Command
             new()
             {
                 Key = "defs",
-                What = "with a def type: one row per def — def_name, label, mod, def_type (which of the types " +
-                       "asked for the row came from, present on a single-type call too), plus 'class' when " +
-                       "one of the buckets holds more than one def class. 'mod' is where the def was " +
-                       "declared, not who last changed it: a def another mod patched still reads as its " +
-                       "original mod, and --scope filters that same column.",
+                What = "with a def type: one row per def — def_name, label, declared_in, def_type (which of the " +
+                       "types asked for the row came from, present on a single-type call too), plus 'class' when " +
+                       "one of the buckets holds more than one def class. A def another mod patched still reads " +
+                       "as its original mod in declared_in, and --scope filters that same column.",
             },
             new()
             {
@@ -2143,8 +2143,8 @@ public sealed class ListCommand : Command
 
         ctx.Report.Table("defs",
             showClass
-                ? ["def_name", "class", "label", "mod", "def_type"]
-                : ["def_name", "label", "mod", "def_type"],
+                ? ["def_name", "class", "label", "declared_in", "def_type"]
+                : ["def_name", "label", "declared_in", "def_type"],
             table);
         return 0;
     }
@@ -2405,7 +2405,7 @@ public sealed class ListCommand : Command
                 ["def_name"] = r.DefName,
                 ["class"] = r.Class is { } c ? Tail(c) : null,
                 ["label"] = r.Label,
-                ["mod"] = r.SourceMod,
+                ["declared_in"] = r.SourceMod,
                 ["def_type"] = type,
             });
 
@@ -3616,14 +3616,12 @@ internal static class Advisory
         ctx.Report.Notice(NoticeKind.Boundary,
             // 主语固定成 it,计数全在介词短语里 —— 计数放主语位时动词得跟着单复数变,
             // 而 NounRegistry 管名词不管动词(同一条纪律在 AnnounceExcluded 上也写着)。
-            $"'{value}': 'mod' is where each def was declared, not who put this value on it. " +
-            $"It sits on defs from {Tally.Complete(mods.Count).Render("mod")}, " +
-            $"{onOfficial.Count} of them official " +
+            // 「'mod' is where each def was declared, not who put this value on it」那半句随列名
+            // 改成 declared_in 一起退场(Docs/25 丁2):列自己说了它是谁声明的。
             // 「Nothing in the snapshot records who put it there.」2026-09-01 压掉:它与
-            // 开头那半句是同一个命题的两遍(mod 列不是作者 / 快照没记作者),而它自己不给
-            // 下一步。它独挡的是「那我换个命令查作者」,可紧跟着的那句已经把唯一做得到的
-            // 事说了。三轮盲测对这一句零信息量 —— 它们测的是机制判断,而这句不参与。
-            $"({Tally.Complete(onOfficial.Sum(m => m.Defs)).Render("def")}). {settles}");
+            // 那半句是同一个命题的两遍,而它自己不给下一步。三轮盲测对这一句零信息量。
+            $"'{value}' sits on {Tally.Complete(onOfficial.Sum(m => m.Defs)).Render("def")} declared in " +
+            $"official mods. {settles}");
     }
 
     /// <summary>
@@ -3821,7 +3819,7 @@ internal static class Advisory
     /// PatchOperation,而按 defName 寻址的补丁**打不到**这批 def —— 满配文档的四个臂里
     /// 有三个照样交出了一串够不着的 `Blueprint_*`。文档在场没能挡住,所以这件事得落在输出上。
     ///
-    /// 光有这一句还不够,真正管用的是同时出现的 <see cref="DeclaredIn.Column"/> 列:
+    /// 光有这一句还不够,真正管用的是同时出现的 <see cref="WrittenIn.Column"/> 列:
     /// 出事的那次是 `--json` 进脚本,而**脚本不读 notes**。这一句是给人看的入口,
     /// 说清楚那一列是干什么的;判定要落在行上。
     ///
@@ -3843,8 +3841,8 @@ internal static class Advisory
             // 页内一个都没有时不许沉默:名字扎堆,首页排序上常常一个都碰不到,而这句话
             // 说的是整个结果集。不点破的话读的人会拿这一页当全集,而列在这里一格都不动。
             (onThisPage == 0
-                ? $"None of them are on this page; the '{DeclaredIn.Column}' column marks them where they are."
-                : $"The '{DeclaredIn.Column}' column marks which is which."));
+                ? $"None of them are on this page; the '{WrittenIn.Column}' column marks them where they are."
+                : $"The '{WrittenIn.Column}' column marks which is which."));
     }
 
     private static readonly IEqualityComparer<(string, string DefType)> TupleComparer =

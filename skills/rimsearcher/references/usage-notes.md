@@ -26,9 +26,8 @@ says so. Previous database generations (`<name>.prev`, `<name>.prev2` and so on)
 with the database. This command does not delete.
 
 **What `snapshot diff` compares.** Two already-imported snapshots, by name from
-`snapshot list`. It does not take `--scope`: the `mod` column is the declaring packageId,
-not who changed the value, and filtering it to the mods `snapshot status` named as changed
-would drop vanilla defs those mods patched. Snapshots exported with different ordered mod
+`snapshot list`. It does not take `--scope`: filtering `declared_in` to the mods
+`snapshot status` named as changed would drop vanilla defs those mods patched. Snapshots exported with different ordered mod
 lists are refused — that comparison is `snapshot status` and its `mod_list` table.
 A comparison that has any difference prints `0 defs added.` / `0 defs removed.` /
 `0 fields.` for a quiet side rather than omitting it; only an all-zero comparison
@@ -70,7 +69,7 @@ another snapshot that holds the def you asked for. No selector mutes any of this
 
 **The changed-XML line moves, so do not read only the header.** It sits at the top when the
 answer names one of the changed mods, when there is no answer at all, or when the output has
-no `mod` column to rule it out (`fields`, `values`, `code-search`). It drops *below* the
+no `declared_in` column to rule it out (`fields`, `values`, `code-search`). It drops *below* the
 table when every row provably comes from other mods. It is repositioned, never suppressed:
 a row missing because a changed mod deleted it looks exactly like a zero result, which is
 why zero results keep it at the top. The other three lines — build moved, load order

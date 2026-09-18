@@ -51,7 +51,7 @@ public sealed class EconomyCommand : Command
     /// 键集是契约,列宽是排版。
     /// </summary>
     private static readonly string[] ThingKeys =
-        ["defName", "label", "mod", "category", "marketValue", "marketValueDefined", "calcState",
+        ["defName", "label", "declaredIn", "category", "marketValue", "marketValueDefined", "calcState",
          "fallbackMarketValue", "costToMake", "profit", "profitRate", "workToProduce", "costList",
          "costDifficultyVar", "costDifficultyInverted", "chainEndShare", "costDeep", "profitDeep",
          "producible", "madeFromStuff", "isWeapon", "isApparel"];
@@ -64,7 +64,7 @@ public sealed class EconomyCommand : Command
     /// 而这条命令的常见调用是几十行一屏。单条详情那一路只有一行,印全不占地方。
     /// </summary>
     private static readonly string[] ListColumns =
-        ["defName", "label", "mod", "category", "marketValue", "calcState", "fallbackMarketValue",
+        ["defName", "label", "declaredIn", "category", "marketValue", "calcState", "fallbackMarketValue",
          "costToMake", "profit", "profitRate", "workToProduce", "costDifficultyVar", "chainEndShare",
          "costDeep", "profitDeep"];
 
@@ -434,7 +434,7 @@ public sealed class EconomyCommand : Command
         {
             ["defName"] = row.DefName,
             ["label"] = row.Label,
-            ["mod"] = row.Mod,
+            ["declaredIn"] = row.Mod,
             ["category"] = row.Category,
             ["marketValue"] = QualMarketValue(row),
             ["marketValueDefined"] = row.MarketValueDefined,

@@ -252,7 +252,7 @@ public sealed class InheritCommand : Command
                 new("def_type", node.DefType),
                 new("abstract", node.Abstract),
                 new("inherits_from", node.ParentName),
-                new("mod", node.SourceMod),
+                new("declared_in", node.SourceMod),
                 new("source", node.SourceFile),
                 // 数字每次都在场且可机读,于是 0 = 「量过、没人 patch」,与「这一格没量」分得开:
                 // 导出器对无 Name= 的节点硬写 0(计数正则只认 `@Name=`),所以那种情况印 n/a。
@@ -306,8 +306,8 @@ public sealed class InheritCommand : Command
             if (chain.Count > 0)
                 ctx.Report.Table("ancestors",
                     patchedUp.Count > 0
-                        ? ["name", "def_type", "abstract", PatchOpsName, "mod", "source"]
-                        : ["name", "def_type", "abstract", "mod", "source"],
+                        ? ["name", "def_type", "abstract", PatchOpsName, "declared_in", "source"]
+                        : ["name", "def_type", "abstract", "declared_in", "source"],
                     chain.Select(n =>
                     {
                         var row = new Dictionary<string, object?>
@@ -315,7 +315,7 @@ public sealed class InheritCommand : Command
                             ["name"] = n.Name,
                             ["def_type"] = n.DefType,
                             ["abstract"] = n.Abstract,
-                            ["mod"] = n.SourceMod,
+                            ["declared_in"] = n.SourceMod,
                             ["source"] = n.SourceFile,
                         };
                         if (patchedUp.Count > 0) row[PatchOpsName] = n.PatchOps;
@@ -350,14 +350,14 @@ public sealed class InheritCommand : Command
                 ctx.Report.CountNotice(Tally.Of(shown.Count, children.Count), "direct child");
 
                 if (shown.Count > 0)
-                    ctx.Report.Table("children", ["name", "def_name", "def_type", "abstract", "mod"],
+                    ctx.Report.Table("children", ["name", "def_name", "def_type", "abstract", "declared_in"],
                         shown.Select(n => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
                         {
                             ["name"] = n.Name,
                             ["def_name"] = n.DefName,
                             ["def_type"] = n.DefType,
                             ["abstract"] = n.Abstract,
-                            ["mod"] = n.SourceMod,
+                            ["declared_in"] = n.SourceMod,
                         }).ToList());
 
                 // 抽象节点没有自己的字段表:它写的每一条都已合并进每个子节点,且那一份是

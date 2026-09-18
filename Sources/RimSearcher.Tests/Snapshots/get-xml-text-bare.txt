@@ -7,7 +7,7 @@ def_name     BareGun
 def_type     ThingDef
 label        bare gun
 class        Verse.ThingDef
-mod          ludeon.rimworld
+declared_in  ludeon.rimworld
 source       Guns.xml
 
 path                  value   code_default  xml

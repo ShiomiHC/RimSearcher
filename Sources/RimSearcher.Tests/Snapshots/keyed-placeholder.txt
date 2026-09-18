@@ -3,8 +3,8 @@ exit 0
 --- stdout ---
 1 keyed translation for 'TodoKey'.
 
-key      translated  original            origin     placeholder  mod  source       query
-TodoKey  TODO        Not translated yet  in effect  yes               Misc.xml:34  TodoKey
+key      translated  original            origin     placeholder  declared_in  source       query
+TodoKey  TODO        Not translated yet  in effect  yes                       Misc.xml:34  TodoKey
 
 layer              state         next
 disk_translations  unconfigured  set 'mod_roots' in the config file, then rimsearcher snapshot import fixture.rsx.jsonl.gz --name fixture

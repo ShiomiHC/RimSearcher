@@ -2008,7 +2008,7 @@ public class GrammarTests
         // 混合:Meat_Muffalo 是 ImpliedDefs,同 soundDrop 值的其余几个是 XML 写的。
         var (mixed, _, code) = Fixture.Run("where", "soundDrop", "Standard_Drop");
         Assert.Equal(0, code);
-        Assert.Contains("declared_in", mixed, StringComparison.Ordinal);
+        Assert.Contains("written_in", mixed, StringComparison.Ordinal);
         Assert.Contains("created by the game in code at load time", mixed, StringComparison.Ordinal);
         Assert.Contains("Meat_Muffalo", mixed, StringComparison.Ordinal);
         Assert.Contains("PatchOperation addressed by defName cannot reach them", mixed, StringComparison.Ordinal);
@@ -2018,9 +2018,9 @@ public class GrammarTests
         using var doc = System.Text.Json.JsonDocument.Parse(json);
         var rows = doc.RootElement.GetProperty("matches").EnumerateArray().ToList();
         Assert.Contains(rows, r => r.GetProperty("def_name").GetString() == "Meat_Muffalo"
-                                   && r.GetProperty("declared_in").GetString() == "code");
+                                   && r.GetProperty("written_in").GetString() == "code");
         Assert.Contains(rows, r => r.GetProperty("def_name").GetString() != "Meat_Muffalo"
-                                   && r.GetProperty("declared_in").GetString() == "xml");
+                                   && r.GetProperty("written_in").GetString() == "xml");
 
         // 整集口径:把 Meat_Muffalo 挤出这一页,句子照样在,并且说破它不在页上。
         var (paged, _, _) = Fixture.Run("where", "soundDrop", "Standard_Drop", "--limit", "1");
@@ -2030,7 +2030,7 @@ public class GrammarTests
 
         // 一个都没有时,这一列与这句话一起消失。
         var (none, _, _) = Fixture.Run("where", "thingClass", "--scope", "test.mod");
-        Assert.DoesNotContain("declared_in", none, StringComparison.Ordinal);
+        Assert.DoesNotContain("written_in", none, StringComparison.Ordinal);
         Assert.DoesNotContain("created by the game in code at load time", none, StringComparison.Ordinal);
     }
 

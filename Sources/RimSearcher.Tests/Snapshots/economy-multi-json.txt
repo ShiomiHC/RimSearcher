@@ -30,7 +30,7 @@ exit 0
     {
       "defName": "TestModGun",
       "label": "test gun",
-      "mod": "test.mod",
+      "declaredIn": "test.mod",
       "category": "Item",
       "marketValue": 320,
       "marketValueDefined": true,
@@ -54,7 +54,7 @@ exit 0
     {
       "defName": "Apparel_ShieldBelt",
       "label": "shield belt",
-      "mod": "ludeon.rimworld",
+      "declaredIn": "ludeon.rimworld",
       "category": "Item",
       "marketValue": 480,
       "marketValueDefined": true,

@@ -4,7 +4,7 @@ exit 0
 name            BaseProjectile
 def_type        ThingDef
 abstract        yes
-mod             ludeon.rimworld
+declared_in     ludeon.rimworld
 source          Projectiles_Guns.xml
 patch_ops_name  0
 'BaseProjectile' is a node, not a def, so it carries no value of its own. The counts below are compared against the most common value under it instead: 'Standard_Drop', on 2 defs — the only value that appears there.
@@ -13,7 +13,7 @@ layer           other_defs  with_path  same_as_mode  cut_short  type_with_path  
 BaseProjectile  3           2          2             1          9               9
 3 direct children.
 
-name        def_name    def_type        abstract  mod
+name        def_name    def_type        abstract  declared_in
 BaseBullet              ThingDef        yes       ludeon.rimworld
             Firefoam    ThingDef        no        ludeon.rimworld
             VariantOne  TestVariantDef  no        test.mod

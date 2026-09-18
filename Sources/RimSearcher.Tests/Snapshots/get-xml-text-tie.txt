@@ -7,7 +7,7 @@ def_name     TwinGun
 def_type     ThingDef
 label        twin gun
 class        Verse.ThingDef
-mod          ludeon.rimworld
+declared_in  ludeon.rimworld
 source       Guns.xml
 
 Same in every row, not repeated below: code_default=no.

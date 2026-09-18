@@ -7,7 +7,7 @@ def_name       ChildGun
 def_type       ThingDef
 label          child gun
 class          Verse.ThingDef
-mod            ludeon.rimworld
+declared_in    ludeon.rimworld
 source         Guns.xml
 inherits_from  BaseGun (see 'rimsearcher inherit ChildGun')
 

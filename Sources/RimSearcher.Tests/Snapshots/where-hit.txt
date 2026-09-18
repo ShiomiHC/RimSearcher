@@ -9,7 +9,7 @@ ThingDef  1
 verify: rimsearcher snapshot truncated --type ThingDef
 
 Same in every row, not repeated below: def_type=ThingDef, path=comps[0].compClass, value=RimWorld.CompShield, code_default=yes.
-def_name            mod
+def_name            declared_in
 Apparel_ShieldBelt  ludeon.rimworld
 TestModGun          test.mod
 --- stderr ---

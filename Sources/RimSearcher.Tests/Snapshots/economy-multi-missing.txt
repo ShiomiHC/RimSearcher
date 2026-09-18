@@ -4,8 +4,8 @@ exit 0
 Not priced in this snapshot, so absent from the tables below: NoSuchThingAtAll. The rows that did come back are unaffected — this layer holds only items with a market value above 0.01 and buildings the player can build or minify.
 1 thing.
 
-defName     label     mod       category  marketValue  marketValueDefined  calcState  fallbackMarketValue  costToMake                             profit  profitRate  workToProduce  costList                                   costDifficultyVar  costDifficultyInverted  chainEndShare  costDeep  profitDeep  producible  madeFromStuff  isWeapon  isApparel
-TestModGun  test gun  test.mod  Item      320          yes                 recipe     298.5                141.2 (holds when classicMortars=off)  178.8   1104.94     1618           40 x Bloomstone (80), 1 x Firefoam (61.2)  classicMortars     no                      0.57           156.4     163.6       yes         no             yes       no
+defName     label     declaredIn  category  marketValue  marketValueDefined  calcState  fallbackMarketValue  costToMake                             profit  profitRate  workToProduce  costList                                   costDifficultyVar  costDifficultyInverted  chainEndShare  costDeep  profitDeep  producible  madeFromStuff  isWeapon  isApparel
+TestModGun  test gun  test.mod    Item      320          yes                 recipe     298.5                141.2 (holds when classicMortars=off)  178.8   1104.94     1618           40 x Bloomstone (80), 1 x Firefoam (61.2)  classicMortars     no                      0.57           156.4     163.6       yes         no             yes       no
 
 product     thingDef    count  unitValue  chainEnd
 TestModGun  Bloomstone  40     2          yes

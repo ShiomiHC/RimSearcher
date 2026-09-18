@@ -5,7 +5,7 @@ exit 0
 No def type named 'NoSuchTypeXYZ' in this snapshot. 'rimsearcher list' with no def type lists them all.
 
 Same in every row, not repeated below: def_type=ThingDef.
-def_name            label               mod
+def_name            label               declared_in
 Apparel_ShieldBelt  shield belt         ludeon.rimworld
 Bullet_Revolver     revolver bullet     ludeon.rimworld
 Firefoam            firefoam            ludeon.rimworld

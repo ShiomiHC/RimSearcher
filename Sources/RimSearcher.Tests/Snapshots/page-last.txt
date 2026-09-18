@@ -4,7 +4,7 @@ exit 0
 9 defs of type ThingDef, showing 4, starting at 6; that is the last page.
 
 Same in every row, not repeated below: def_type=ThingDef.
-def_name       label            mod
+def_name       label            declared_in
 Meat_Muffalo   muffalo meat     ludeon.rimworld
 TestModGun     test gun         test.mod
 VoidNode       void node        test.mod

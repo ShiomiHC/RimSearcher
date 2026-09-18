@@ -5,7 +5,7 @@ exit 0
   - These defs have it in the original text a translation replaced. This snapshot's language is ChineseSimplified, so the English wording survives only where a translation recorded what it was translated from.
   - 2 defs.
 
-Same in every row, not repeated below: mod=ludeon.rimworld.
+Same in every row, not repeated below: declared_in=ludeon.rimworld.
 def_name  def_type  label     matched_on
 Firefoam  ThingDef  firefoam  description
 Firefoam  StatDef             same def_name

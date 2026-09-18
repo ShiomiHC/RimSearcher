@@ -7,7 +7,7 @@ def_name     PlainOne
 def_type     TestBaseDef
 label        plain one
 class        Verse.TestBaseDef
-mod          test.mod
+declared_in  test.mod
 source       Variants.xml
 xml          not indexed (exporter 0.2.0)
 0 fields.
@@ -16,7 +16,7 @@ def_name       VariantOne
 def_type       TestBaseDef
 label          variant one
 class          Verse.TestVariantDef
-mod            test.mod
+declared_in    test.mod
 source         Variants.xml
 inherits_from  BaseProjectile (see 'rimsearcher inherit VariantOne')
 xml            not indexed (exporter 0.2.0)

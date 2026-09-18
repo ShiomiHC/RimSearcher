@@ -5,8 +5,8 @@ exit 0
   - No keyed translation matches 'NoSuchUiKey'.
   - Two things are outside this layer by construction. A def's own label or description is translated through DefInjected, not through a key: 'rimsearcher search NoSuchUiKey' covers those. And a key the code assembles at runtime ('"Stat_" + x') is in the language files by name, but appears in no source line as a literal.
 
-key               translated  original  origin     placeholder  mod  source       query
-CannotUseNoPower  没有电力    No power  in effect  no                Misc.xml:12  CannotUseNoPower
+key               translated  original  origin     placeholder  declared_in  source       query
+CannotUseNoPower  没有电力    No power  in effect  no                        Misc.xml:12  CannotUseNoPower
 
 layer              state         next
 disk_translations  unconfigured  set 'mod_roots' in the config file, then rimsearcher snapshot import fixture.rsx.jsonl.gz --name fixture

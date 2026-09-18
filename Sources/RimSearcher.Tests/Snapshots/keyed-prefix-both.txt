@@ -5,9 +5,9 @@ exit 0
 These rows do not all carry the same key, so the code search goes after whichever row is the one you meant: 'rimsearcher code-search "\"<key>\""' with the key from that row. A key assembled from parts is not written inline anywhere, so that search does not reach it.
 
 Same in every row, not repeated below: origin=in effect, placeholder=no, query=CommandSettl.
-key                translated            original                  mod  source
-CommandSettle      定居                  Settle                         GameplayCommands.xml:386
-CommandSettleDesc  在此处建立新殖民地。  Settle in this location.       GameplayCommands.xml:387
+key                translated            original                  declared_in  source
+CommandSettle      定居                  Settle                                 GameplayCommands.xml:386
+CommandSettleDesc  在此处建立新殖民地。  Settle in this location.               GameplayCommands.xml:387
 
 layer              state         next
 disk_translations  unconfigured  set 'mod_roots' in the config file, then rimsearcher snapshot import fixture.rsx.jsonl.gz --name fixture

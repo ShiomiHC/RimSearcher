@@ -4,6 +4,6 @@ exit 0
 --scope all,-test.mod (= ludeon.rimworld).
 1 def of type HediffDef within --scope all,-test.mod.
 
-def_name    label       mod              def_type
+def_name    label       declared_in      def_type
 Anesthetic  anesthetic  ludeon.rimworld  HediffDef
 --- stderr ---

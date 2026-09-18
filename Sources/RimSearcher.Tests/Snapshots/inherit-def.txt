@@ -5,12 +5,12 @@ def_name        Bullet_Revolver
 def_type        ThingDef
 abstract        no
 inherits_from   BaseBullet
-mod             ludeon.rimworld
+declared_in     ludeon.rimworld
 source          Projectiles_Guns.xml
 patch_ops_name  n/a
 2 ancestors.
 
-Same in every row, not repeated below: def_type=ThingDef, abstract=yes, mod=ludeon.rimworld, source=Projectiles_Guns.xml.
+Same in every row, not repeated below: def_type=ThingDef, abstract=yes, declared_in=ludeon.rimworld, source=Projectiles_Guns.xml.
 name            patch_ops_name
 BaseBullet      2
 BaseProjectile  0

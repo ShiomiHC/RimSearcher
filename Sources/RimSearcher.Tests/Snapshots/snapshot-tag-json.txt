@@ -17,7 +17,7 @@ exit 0
       "def_type": "ThingDef",
       "label": "shield belt",
       "matched_on": "def_name+label",
-      "mod": "ludeon.rimworld"
+      "declared_in": "ludeon.rimworld"
     }
   ],
   "empty_because": []

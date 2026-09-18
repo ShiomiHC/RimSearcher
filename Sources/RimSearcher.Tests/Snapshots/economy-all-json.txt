@@ -22,7 +22,7 @@ exit 0
     {
       "defName": "VoidNode",
       "label": "void node",
-      "mod": "test.mod",
+      "declaredIn": "test.mod",
       "category": "Item",
       "marketValue": 1200,
       "marketValueDefined": true,
@@ -46,7 +46,7 @@ exit 0
     {
       "defName": "Apparel_ShieldBelt",
       "label": "shield belt",
-      "mod": "ludeon.rimworld",
+      "declaredIn": "ludeon.rimworld",
       "category": "Item",
       "marketValue": 480,
       "marketValueDefined": true,
@@ -70,7 +70,7 @@ exit 0
     {
       "defName": "TestModGun",
       "label": "test gun",
-      "mod": "test.mod",
+      "declaredIn": "test.mod",
       "category": "Item",
       "marketValue": 320,
       "marketValueDefined": true,
@@ -94,7 +94,7 @@ exit 0
     {
       "defName": "Firefoam",
       "label": "firefoam",
-      "mod": "ludeon.rimworld",
+      "declaredIn": "ludeon.rimworld",
       "category": "Building",
       "marketValue": 18,
       "marketValueDefined": false,
@@ -118,7 +118,7 @@ exit 0
     {
       "defName": "Meat_Muffalo",
       "label": "muffalo meat",
-      "mod": "ludeon.rimworld",
+      "declaredIn": "ludeon.rimworld",
       "category": "Item",
       "marketValue": 2.05,
       "marketValueDefined": true,

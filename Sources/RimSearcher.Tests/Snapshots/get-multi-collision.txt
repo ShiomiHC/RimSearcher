@@ -8,7 +8,7 @@ def_name       Firefoam
 def_type       ThingDef
 label          firefoam
 class          Verse.ThingDef
-mod            ludeon.rimworld
+declared_in    ludeon.rimworld
 source         Buildings_Special.xml
 inherits_from  BaseProjectile (see 'rimsearcher inherit Firefoam')
 xml            not indexed (exporter 0.2.0)
@@ -36,7 +36,7 @@ label        灭火泡沫        firefoam
 def_name     Firefoam
 def_type     StatDef
 class        Verse.StatDef
-mod          ludeon.rimworld
+declared_in  ludeon.rimworld
 source       Stats_Basics.xml
 xml          not indexed (exporter 0.2.0)
 0 fields.
@@ -45,7 +45,7 @@ def_name       Bullet_Revolver
 def_type       ThingDef
 label          revolver bullet
 class          Verse.ThingDef
-mod            ludeon.rimworld
+declared_in    ludeon.rimworld
 source         Projectiles_Guns.xml
 inherits_from  BaseBullet (see 'rimsearcher inherit Bullet_Revolver')
 xml            not indexed (exporter 0.2.0)

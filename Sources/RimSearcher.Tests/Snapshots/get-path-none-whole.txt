@@ -8,7 +8,7 @@ def_name       Firefoam
 def_type       ThingDef
 label          firefoam
 class          Verse.ThingDef
-mod            ludeon.rimworld
+declared_in    ludeon.rimworld
 source         Buildings_Special.xml
 inherits_from  BaseProjectile (see 'rimsearcher inherit Firefoam')
 xml            not indexed (exporter 0.2.0)
@@ -25,7 +25,7 @@ No value above with 'code_default'=no is one that most of the 9 ThingDefs in thi
 def_name     Firefoam
 def_type     StatDef
 class        Verse.StatDef
-mod          ludeon.rimworld
+declared_in  ludeon.rimworld
 source       Stats_Basics.xml
 xml          not indexed (exporter 0.2.0)
 No field path of Firefoam (StatDef) contains 'raphicData'; the def does have 0 fields. Drop --path-contains to see them.

@@ -27,7 +27,7 @@ exit 0
       "original": "No power",
       "origin": "in effect",
       "placeholder": false,
-      "mod": null,
+      "declared_in": null,
       "source": "Misc.xml:12",
       "query": "CannotUseNoPower"
     },
@@ -37,7 +37,7 @@ exit 0
       "original": "No power",
       "origin": "in effect",
       "placeholder": false,
-      "mod": null,
+      "declared_in": null,
       "source": "Misc.xml:12",
       "query": "没有电力"
     }

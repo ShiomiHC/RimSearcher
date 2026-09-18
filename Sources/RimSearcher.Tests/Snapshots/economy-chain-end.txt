@@ -3,7 +3,7 @@ exit 0
 --- stdout ---
 1 thing.
 
-defName             label        mod              category  marketValue  marketValueDefined  calcState  fallbackMarketValue  costToMake  profit  profitRate  workToProduce  costList                                     costDifficultyVar  costDifficultyInverted  chainEndShare  costDeep  profitDeep  producible  madeFromStuff  isWeapon  isApparel
+defName             label        declaredIn       category  marketValue  marketValueDefined  calcState  fallbackMarketValue  costToMake  profit  profitRate  workToProduce  costList                                     costDifficultyVar  costDifficultyInverted  chainEndShare  costDeep  profitDeep  producible  madeFromStuff  isWeapon  isApparel
 Apparel_ShieldBelt  shield belt  ludeon.rimworld  Item      480          yes                 ok         412.75               220         260     866.67      3000           60 x Bloomstone (120), 100 x Firefoam (100)                     no                      1              220       260         yes         no             no        yes
 
 Same in every row, not repeated below: chainEnd=yes.

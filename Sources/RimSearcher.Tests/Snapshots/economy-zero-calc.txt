@@ -3,6 +3,6 @@ exit 0
 --- stdout ---
 1 thing.
 
-defName       label         mod              category  marketValue  marketValueDefined  calcState  fallbackMarketValue  costToMake  profit  profitRate  workToProduce  costList  costDifficultyVar  costDifficultyInverted  chainEndShare  costDeep  profitDeep  producible  madeFromStuff  isWeapon  isApparel
+defName       label         declaredIn       category  marketValue  marketValueDefined  calcState  fallbackMarketValue  costToMake  profit  profitRate  workToProduce  costList  costDifficultyVar  costDifficultyInverted  chainEndShare  costDeep  profitDeep  producible  madeFromStuff  isWeapon  isApparel
 Meat_Muffalo  muffalo meat  ludeon.rimworld  Item      2.05         yes                 empty-sum  0                                                                                                no                                     2.05      0           yes         no             no        no
 --- stderr ---

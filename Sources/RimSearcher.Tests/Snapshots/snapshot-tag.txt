@@ -3,6 +3,6 @@ exit 0
 --- stdout ---
 [fixture] 1 def.
 
-def_name            def_type  label        matched_on      mod
+def_name            def_type  label        matched_on      declared_in
 Apparel_ShieldBelt  ThingDef  shield belt  def_name+label  ludeon.rimworld
 --- stderr ---

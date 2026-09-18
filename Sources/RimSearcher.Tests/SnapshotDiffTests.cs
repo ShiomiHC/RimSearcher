@@ -117,11 +117,12 @@ public class SnapshotDiffTests
         var spec = new CommandRegistry().Specs.Single(s => s.Name == "snapshot diff");
         Assert.DoesNotContain(spec.Options, o => o.Name == "scope");
         Assert.Contains("no mod filter", spec.Remarks, StringComparison.Ordinal);
-        Assert.Contains("declared the def", spec.Remarks, StringComparison.Ordinal);
+        // 列名自陈(declared_in)之后,「是声明的 mod 不是改值的人」那句不再需要;留的是为什么没筛子。
+        Assert.Contains("would drop vanilla defs those mods patched", spec.Remarks, StringComparison.Ordinal);
 
         var help = Run(PairDir(), "snapshot", "diff", "--help").Stdout;
         Assert.DoesNotContain("--scope", help, StringComparison.Ordinal);
-        Assert.Contains("declaring packageId", help, StringComparison.Ordinal);
+        Assert.Contains("restricting declared_in", help, StringComparison.Ordinal);
         Assert.Contains("including zero", help, StringComparison.Ordinal);
     }
 

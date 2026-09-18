@@ -3,7 +3,7 @@ exit 0
 --- stdout ---
 2 things within --scope test.mod.
 
-Same in every row, not repeated below: mod=test.mod, category=Item.
+Same in every row, not repeated below: declaredIn=test.mod, category=Item.
 defName     label      marketValue  calcState       fallbackMarketValue  costToMake                             profit  profitRate  workToProduce  costDifficultyVar  chainEndShare  costDeep  profitDeep
 VoidNode    void node  1200         not_producible                                                                                                                                   1200      0
 TestModGun  test gun   320          recipe          298.5                141.2 (holds when classicMortars=off)  178.8   1104.94     1618           classicMortars     0.57           156.4     163.6

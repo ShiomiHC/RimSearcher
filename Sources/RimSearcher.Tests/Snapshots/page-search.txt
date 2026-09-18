@@ -3,6 +3,6 @@ exit 0
 --- stdout ---
 3 defs, showing 1, starting at 2.
 
-def_name       def_type  label            matched_on  mod
+def_name       def_type  label            matched_on  declared_in
 VoidNodeShard  ThingDef  void node shard  def_name    test.mod
 --- stderr ---

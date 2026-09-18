@@ -3,7 +3,7 @@ exit 0
 --- stdout ---
 5 things.
 
-defName             label         mod              category  marketValue                        calcState       fallbackMarketValue  costToMake                             profit  profitRate  workToProduce  costDifficultyVar  chainEndShare  costDeep  profitDeep
+defName             label         declaredIn       category  marketValue                        calcState       fallbackMarketValue  costToMake                             profit  profitRate  workToProduce  costDifficultyVar  chainEndShare  costDeep  profitDeep
 TestModGun          test gun      test.mod         Item      320                                recipe          298.5                141.2 (holds when classicMortars=off)  178.8   1104.94     1618           classicMortars     0.57           156.4     163.6
 Apparel_ShieldBelt  shield belt   ludeon.rimworld  Item      480                                ok              412.75               220                                    260     866.67      3000                              1              220       260
 Firefoam            firefoam      ludeon.rimworld  Building  18 (holds when classicMortars=on)  used                                 12.5 (holds when classicMortars=on)    5.5                                classicMortars     0.8            12.5      5.5

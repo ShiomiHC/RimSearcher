@@ -2,7 +2,7 @@ $ rimsearcher where compClass TestMod.CompBoltedOn
 exit 0
 --- stdout ---
 2 defs.
-'TestMod.CompBoltedOn': 'mod' is where each def was declared, not who put this value on it. It sits on defs from 2 mods, 1 of them official (1 def). This snapshot has no 'xml' column, so it cannot tell an XML line from C# putting it there at load; a fresh export can.
+'TestMod.CompBoltedOn' sits on 1 def declared in official mods. This snapshot has no 'xml' column, so it cannot tell an XML line from C# putting it there at load; a fresh export can.
 
 Defs that may be missing from this answer, their export cut short — every def type that uses this path at all
 def_type  defs_cut_short
@@ -10,7 +10,7 @@ ThingDef  1
 verify: rimsearcher snapshot truncated --type ThingDef
 
 Same in every row, not repeated below: def_type=ThingDef, path=comps[1].compClass, value=TestMod.CompBoltedOn, code_default=no.
-def_name            mod
+def_name            declared_in
 Apparel_ShieldBelt  ludeon.rimworld
 TestModGun          test.mod
 --- stderr ---

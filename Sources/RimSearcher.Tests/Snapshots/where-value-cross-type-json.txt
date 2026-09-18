@@ -21,8 +21,8 @@ exit 0
       "path": "ingredients[0].filter.thingDefs[0]",
       "value": "Bloomstone",
       "code_default": "no",
-      "declared_in": null,
-      "mod": "test.mod"
+      "written_in": null,
+      "declared_in": "test.mod"
     }
   ],
   "empty_because": []

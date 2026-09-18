@@ -4,12 +4,12 @@ exit 0
 name            BaseProjectile
 def_type        ThingDef
 abstract        yes
-mod             ludeon.rimworld
+declared_in     ludeon.rimworld
 source          Projectiles_Guns.xml
 patch_ops_name  0
 3 direct children.
 
-name        def_name    def_type        abstract  mod
+name        def_name    def_type        abstract  declared_in
 BaseBullet              ThingDef        yes       ludeon.rimworld
             Firefoam    ThingDef        no        ludeon.rimworld
             VariantOne  TestVariantDef  no        test.mod

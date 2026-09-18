@@ -3,7 +3,7 @@ exit 0
 --- stdout ---
 9 defs of type ThingDef, showing the first 2.
 
-Same in every row, not repeated below: mod=ludeon.rimworld, def_type=ThingDef.
+Same in every row, not repeated below: declared_in=ludeon.rimworld, def_type=ThingDef.
 def_name            label
 Apparel_ShieldBelt  shield belt
 Bullet_Revolver     revolver bullet

@@ -86,7 +86,7 @@ public sealed class KeyedCommand : Command
                 Key = "keys",
                 Rows = true,
                 What = "one row per keyed translation — key, translated, original, origin ('in effect' or " +
-                       "'on disk'), placeholder, mod, source, and query (which of the queries the row " +
+                       "'on disk'), placeholder, declared_in, source, and query (which of the queries the row " +
                        "answers, present on a single-query call too). Always an array, including when a " +
                        "single key matched exactly, so the shape does not change with the kind of match. " +
                        "The query column is the one thing that does change with the call: listing the whole " +
@@ -395,7 +395,7 @@ public sealed class KeyedCommand : Command
     }
 
     private static readonly string[] KeyColumns =
-        ["key", "translated", "original", "origin", "placeholder", "mod", "source"];
+        ["key", "translated", "original", "origin", "placeholder", "declared_in", "source"];
 
     private static Dictionary<string, object?> RowOf(Storage.KeyedRow r) => new()
     {
@@ -408,7 +408,7 @@ public sealed class KeyedCommand : Command
         // 恒在,不按有无条件出现:条件出现的列会让「量过了,不是占位」与
         // 「这一格根本没量」印出来一模一样。
         ["placeholder"] = r.Placeholder,
-        ["mod"] = r.SourceMod,
+        ["declared_in"] = r.SourceMod,
         // 一个 mod 常同时铺 1.4/ 1.5/ 1.6/ 三套 Languages,逐列全同的几行入库时折成
         // 一行。**不说破就等于把「三份同文」印成「一份」** —— 说破了,读的人也不会
         // 再去数「这句话有几种说法」。

@@ -5,7 +5,7 @@ exit 0
   - Those 6 matches come from 4 defs: a def that matches on more than one path has a row for each, so the def_name column repeats.
   - 'Bloomstone' also sits on 2 path shapes beyond this one, 2 of them on def types other than AlloyPartDef, all on MoltenRecipeDef: fixedIngredientFilter.thingDefs[] (1), ingredients[].filter.thingDefs[] (1).
 
-Same in every row, not repeated below: def_type=AlloyPartDef, value=Bloomstone, code_default=no, mod=test.mod.
+Same in every row, not repeated below: def_type=AlloyPartDef, value=Bloomstone, code_default=no, declared_in=test.mod.
 def_name      path
 PartAnvil     costList[0].thingDef
 PartAnvil     costList[1].thingDef

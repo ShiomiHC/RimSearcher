@@ -45,7 +45,7 @@ exit 0
         "def_type": "ThingDef",
         "abstract": true,
         "inherits_from": "BaseProjectile",
-        "mod": "ludeon.rimworld",
+        "declared_in": "ludeon.rimworld",
         "source": "Projectiles_Guns.xml",
         "patch_ops_name": 2
       },
@@ -54,7 +54,7 @@ exit 0
           "name": "BaseProjectile",
           "def_type": "ThingDef",
           "abstract": true,
-          "mod": "ludeon.rimworld",
+          "declared_in": "ludeon.rimworld",
           "source": "Projectiles_Guns.xml"
         }
       ],
@@ -64,7 +64,7 @@ exit 0
           "def_name": "Bullet_Revolver",
           "def_type": "ThingDef",
           "abstract": false,
-          "mod": "ludeon.rimworld"
+          "declared_in": "ludeon.rimworld"
         }
       ]
     },
@@ -75,7 +75,7 @@ exit 0
         "def_type": "ThingDef",
         "abstract": false,
         "inherits_from": "BaseBullet",
-        "mod": "ludeon.rimworld",
+        "declared_in": "ludeon.rimworld",
         "source": "Projectiles_Guns.xml",
         "patch_ops_name": "n/a"
       },
@@ -84,7 +84,7 @@ exit 0
           "name": "BaseBullet",
           "def_type": "ThingDef",
           "abstract": true,
-          "mod": "ludeon.rimworld",
+          "declared_in": "ludeon.rimworld",
           "source": "Projectiles_Guns.xml",
           "patch_ops_name": 2
         },
@@ -92,7 +92,7 @@ exit 0
           "name": "BaseProjectile",
           "def_type": "ThingDef",
           "abstract": true,
-          "mod": "ludeon.rimworld",
+          "declared_in": "ludeon.rimworld",
           "source": "Projectiles_Guns.xml",
           "patch_ops_name": 0
         }

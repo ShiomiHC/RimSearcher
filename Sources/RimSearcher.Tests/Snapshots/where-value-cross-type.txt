@@ -4,6 +4,6 @@ exit 0
 1 def within --exact.
 'Bloomstone' also sits on 2 path shapes beyond this one, 1 of them on def types other than MoltenRecipeDef: costList[].thingDef (4, AlloyPartDef), fixedIngredientFilter.thingDefs[] (1, MoltenRecipeDef).
 
-def_name          def_type         path                                value       code_default  mod
+def_name          def_type         path                                value       code_default  declared_in
 RecipeBloomIngot  MoltenRecipeDef  ingredients[0].filter.thingDefs[0]  Bloomstone  no            test.mod
 --- stderr ---

@@ -215,8 +215,11 @@ public sealed class Report
             _entries[at] = d.Notice with { Footnote = false };
     }
 
-    /// <summary>结果里的 mod 这一维,叫这个名字。</summary>
-    private const string ModKey = "mod";
+    /// <summary>
+    /// 结果里的 mod 这一维,叫这个名字(原 <c>mod</c>,Docs/25 丁2:列名说破它是声明 def 的
+    /// mod,不是改值的人)。economy 的键集按游戏字段名走驼峰,同一维在那里叫 declaredIn。
+    /// </summary>
+    private static readonly string[] ModKeys = ["declared_in", "declaredIn"];
 
     /// <summary>
     /// 「这次的答案与那几个 mod 无关」证得出来吗 —— 证不出就提回表头。
@@ -246,10 +249,10 @@ public sealed class Report
     /// <summary>这个块的 mod 列/键有哪些取值。<c>null</c> = 它根本没有这一维。</summary>
     private static IReadOnlyList<string>? ModCells(Block block) => block switch
     {
-        TableBlock t when t.Rows.Count > 0 && t.Columns.Contains(ModKey, StringComparer.Ordinal) =>
-            [.. t.Rows.Select(r => r.GetValueOrDefault(ModKey)?.ToString() ?? "")],
-        DetailBlock d when d.Pairs.Any(p => p.Key == ModKey) =>
-            [.. d.Pairs.Where(p => p.Key == ModKey).Select(p => p.Value?.ToString() ?? "")],
+        TableBlock t when t.Rows.Count > 0 && t.Columns.Any(c => ModKeys.Contains(c, StringComparer.Ordinal)) =>
+            [.. t.Rows.Select(r => ModKeys.Select(k => r.GetValueOrDefault(k)).FirstOrDefault(v => v is not null)?.ToString() ?? "")],
+        DetailBlock d when d.Pairs.Any(p => ModKeys.Contains(p.Key, StringComparer.Ordinal)) =>
+            [.. d.Pairs.Where(p => ModKeys.Contains(p.Key, StringComparer.Ordinal)).Select(p => p.Value?.ToString() ?? "")],
         _ => null,
     };
 

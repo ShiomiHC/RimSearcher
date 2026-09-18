@@ -4,8 +4,8 @@ exit 0
 1 key for '没有电力'.
 To find the code that prints it, search for the key as a literal: 'rimsearcher code-search "\"CannotUseNoPower\""'. A key assembled from parts is not written inline anywhere, so that search does not reach it.
 
-key               translated  original  origin     placeholder  mod  source       query
-CannotUseNoPower  没有电力    No power  in effect  no                Misc.xml:12  没有电力
+key               translated  original  origin     placeholder  declared_in  source       query
+CannotUseNoPower  没有电力    No power  in effect  no                        Misc.xml:12  没有电力
 
 layer              state         next
 disk_translations  unconfigured  set 'mod_roots' in the config file, then rimsearcher snapshot import fixture.rsx.jsonl.gz --name fixture

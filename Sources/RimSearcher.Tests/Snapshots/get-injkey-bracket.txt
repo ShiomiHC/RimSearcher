@@ -7,7 +7,7 @@ def_name     ObservedLayingCorpse
 def_type     HediffDef
 label        observed laying corpse
 class        Verse.HediffDef
-mod          ludeon.rimworld
+declared_in  ludeon.rimworld
 source       Thoughts_Memory.xml
 
 path             value            code_default  xml

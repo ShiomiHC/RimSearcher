@@ -21,91 +21,91 @@ exit 0
       "def_name": "Apparel_ShieldBelt",
       "class": "ThingDef",
       "label": "shield belt",
-      "mod": "ludeon.rimworld",
+      "declared_in": "ludeon.rimworld",
       "def_type": "ThingDef"
     },
     {
       "def_name": "Bullet_Revolver",
       "class": "ThingDef",
       "label": "revolver bullet",
-      "mod": "ludeon.rimworld",
+      "declared_in": "ludeon.rimworld",
       "def_type": "ThingDef"
     },
     {
       "def_name": "Firefoam",
       "class": "ThingDef",
       "label": "firefoam",
-      "mod": "ludeon.rimworld",
+      "declared_in": "ludeon.rimworld",
       "def_type": "ThingDef"
     },
     {
       "def_name": "FoamPopper",
       "class": "ThingDef",
       "label": "firefoam",
-      "mod": "ludeon.rimworld",
+      "declared_in": "ludeon.rimworld",
       "def_type": "ThingDef"
     },
     {
       "def_name": "GleamingVoidNode",
       "class": "ThingDef",
       "label": "gleaming void node",
-      "mod": "test.mod",
+      "declared_in": "test.mod",
       "def_type": "ThingDef"
     },
     {
       "def_name": "Meat_Muffalo",
       "class": "ThingDef",
       "label": "muffalo meat",
-      "mod": "ludeon.rimworld",
+      "declared_in": "ludeon.rimworld",
       "def_type": "ThingDef"
     },
     {
       "def_name": "TestModGun",
       "class": "ThingDef",
       "label": "test gun",
-      "mod": "test.mod",
+      "declared_in": "test.mod",
       "def_type": "ThingDef"
     },
     {
       "def_name": "VoidNode",
       "class": "ThingDef",
       "label": "void node",
-      "mod": "test.mod",
+      "declared_in": "test.mod",
       "def_type": "ThingDef"
     },
     {
       "def_name": "VoidNodeShard",
       "class": "ThingDef",
       "label": "void node shard",
-      "mod": "test.mod",
+      "declared_in": "test.mod",
       "def_type": "ThingDef"
     },
     {
       "def_name": "PartAnvil",
       "class": "AlloyPartDef",
       "label": "",
-      "mod": "test.mod",
+      "declared_in": "test.mod",
       "def_type": "AlloyPartDef"
     },
     {
       "def_name": "PartCrucible",
       "class": "AlloyPartDef",
       "label": "",
-      "mod": "test.mod",
+      "declared_in": "test.mod",
       "def_type": "AlloyPartDef"
     },
     {
       "def_name": "PartLadle",
       "class": "AlloyPartDef",
       "label": "",
-      "mod": "test.mod",
+      "declared_in": "test.mod",
       "def_type": "AlloyPartDef"
     },
     {
       "def_name": "PartTongs",
       "class": "AlloyPartDef",
       "label": "",
-      "mod": "test.mod",
+      "declared_in": "test.mod",
       "def_type": "AlloyPartDef"
     }
   ],

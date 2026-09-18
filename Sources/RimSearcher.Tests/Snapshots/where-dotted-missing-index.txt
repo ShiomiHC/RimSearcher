@@ -10,7 +10,7 @@ def_type  defs_cut_short
 ThingDef  1
 verify: rimsearcher snapshot truncated --type ThingDef
 
-Same in every row, not repeated below: def_type=ThingDef, code_default=no, mod=ludeon.rimworld.
+Same in every row, not repeated below: def_type=ThingDef, code_default=no, declared_in=ludeon.rimworld.
 def_name            path               value
 Apparel_ShieldBelt  statBases[0].stat  MarketValue
 Apparel_ShieldBelt  statBases[1].stat  EnergyShieldRechargeRate

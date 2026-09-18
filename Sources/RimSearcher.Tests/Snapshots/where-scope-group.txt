@@ -9,6 +9,6 @@ def_type  defs_cut_short
 ThingDef  1
 verify: rimsearcher snapshot truncated --type ThingDef
 
-def_name         def_type  path        value            code_default  mod
+def_name         def_type  path        value            code_default  declared_in
 Bullet_Revolver  ThingDef  thingClass  RimWorld.Bullet  no            ludeon.rimworld
 --- stderr ---

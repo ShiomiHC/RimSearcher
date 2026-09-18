@@ -5,9 +5,9 @@ exit 0
 These rows do not all carry the same key, so the code search goes after whichever row is the one you meant: 'rimsearcher code-search "\"<key>\""' with the key from that row. A key assembled from parts is not written inline anywhere, so that search does not reach it.
 
 Same in every row, not repeated below: translated=转至此处, origin=in effect, placeholder=no, query=转至此处.
-key             original          mod  source
-ClickToJump     Click to jump          Alerts.xml:5
-JumpToLocation  Jump to location       Letters.xml:6
+key             original          declared_in  source
+ClickToJump     Click to jump                  Alerts.xml:5
+JumpToLocation  Jump to location               Letters.xml:6
 
 layer              state         next
 disk_translations  unconfigured  set 'mod_roots' in the config file, then rimsearcher snapshot import fixture.rsx.jsonl.gz --name fixture

@@ -284,7 +284,7 @@ A number printed as '635 (holds when classicMortars=on)' depends on a difficulty
 
 | Key | Holds |
 |---|---|
-| `things` | one row per priced thing — defName, label, mod, category, marketValue, marketValueDefined, calcState, fallbackMarketValue, costToMake, profit, profitRate, workToProduce, costList, costDifficultyVar, costDifficultyInverted, chainEndShare, costDeep, profitDeep, producible, madeFromStuff, isWeapon, isApparel. marketValue is the price the game actually uses. fallbackMarketValue is the ingredient-and-work figure it falls back to only when no MarketValue is declared, so it is non-empty only as the counterfactual beside a declared value, and empty when it already is the marketValue. Any other null means the game cannot work that number out; it is never a stand-in for zero. Always an array, including when one defName matched exactly, so the shape does not change with the kind of match. Every key above is present either way; when listing the layer the text table leaves out marketValueDefined, costList, costDifficultyInverted, producible, madeFromStuff, isWeapon and isApparel, and the JSON never does. The text output tags cost numbers whose def declares a difficulty variant; here the numbers stay bare and costDifficultyVar/costDifficultyInverted carry that instead, so a number never arrives as a string. |
+| `things` | one row per priced thing — defName, label, declaredIn, category, marketValue, marketValueDefined, calcState, fallbackMarketValue, costToMake, profit, profitRate, workToProduce, costList, costDifficultyVar, costDifficultyInverted, chainEndShare, costDeep, profitDeep, producible, madeFromStuff, isWeapon, isApparel. marketValue is the price the game actually uses. fallbackMarketValue is the ingredient-and-work figure it falls back to only when no MarketValue is declared, so it is non-empty only as the counterfactual beside a declared value, and empty when it already is the marketValue. Any other null means the game cannot work that number out; it is never a stand-in for zero. Always an array, including when one defName matched exactly, so the shape does not change with the kind of match. Every key above is present either way; when listing the layer the text table leaves out marketValueDefined, costList, costDifficultyInverted, producible, madeFromStuff, isWeapon and isApparel, and the JSON never does. The text output tags cost numbers whose def declares a difficulty variant; here the numbers stay bare and costDifficultyVar/costDifficultyInverted carry that instead, so a number never arrives as a string. |
 | `costChain` | with defNames: one row per ingredient — product, thingDef, count, unitValue, chainEnd. product is the priced thing this row is an ingredient of, in every row even when only one name was given. chainEnd marks an ingredient with no recipe of its own, where the cost recursion stops and falls back to that ingredient's hand-written market value. |
 | `recipes` | with defNames: every recipe that produces each named thing — product, defName, productCount, workAmount, selfReferential. product carries which thing the recipe makes, in every row even when only one name was given. More than one row for the same product means that thing's fallback market value depends on def load order. |
 | `absent` | only when the economy layer is short in this snapshot: one row — layer, state, next. state is pre-measure (exported before prices were measured), skipped (--no-economy) or unavailable (the exporter could not measure on that game build); next is the command that fills it. 'things' is then an empty array. Empty when the layer is complete. |
@@ -392,7 +392,7 @@ rimsearcher get [defName]... [options]
 
 Field paths are the merged, post-patch shape the game actually had in memory when the snapshot was taken, so PatchOperations and inheritance are already applied. A def created in code rather than XML says so on its source line.
 
-The 'source' line is the bare file name the game reported for that def — no directory, because the game does not keep one. It names the file inside that mod's Defs folder ('mod' above says which mod); it is not a path, and nothing here reads the file system to confirm the file is still there. Defs the game builds in code carry a placeholder there instead.
+The 'source' line is the bare file name the game reported for that def — no directory, because the game does not keep one. It names the file inside that mod's Defs folder ('declared_in' above says which mod); it is not a path, and nothing here reads the file system to confirm the file is still there. Defs the game builds in code carry a placeholder there instead.
 
 When present, the 'xml' column says whether this def's own XML wrote the path (here), only an ancestor did (parent), or neither of them did (not-written) — the fact PatchOperationReplace vs Add turns on. Index paths such as costList[0].thingDef are joined back to def-name tags such as costList.Steel from a sibling value on the same list entry, including two-level tags (things.AncientAmmoStack.chance), and using XML lines written by this def or by an ancestor. After that join, here/parent means the line is there, and not-written means the XML read here does not write it. The output says which XML it read.'read after every patch ran' is the merged XML after every PatchOperation ran, and a line another mod's patch put there reads as here+patch or parent+patch: Replace still finds that node, but your patch now depends on that mod staying loaded. 'read before patches ran' is the XML as written on disk, so there a patched-in node reads as not-written instead, and 'rimsearcher inherit <defName>' reports how many patch xpaths name this def. A further value, 'under <container>', means the XML wrote that container but this row still cannot be pinned to a line in it: the entry did not join, or it joined to a short-form tag such as <Steel>75</Steel> whose inline text matches none of the remaining fields, or more than one of them — or the snapshot did not record that text. Neither answer is available there. A snapshot without the column says so.
 
@@ -537,7 +537,7 @@ Rows are marked 'in effect' or 'on disk'. Only 'in effect' is what the game disp
 
 | Key | Holds |
 |---|---|
-| `keys` | one row per keyed translation — key, translated, original, origin ('in effect' or 'on disk'), placeholder, mod, source, and query (which of the queries the row answers, present on a single-query call too). Always an array, including when a single key matched exactly, so the shape does not change with the kind of match. The query column is the one thing that does change with the call: listing the whole layer takes no query, so there the rows have no such column. |
+| `keys` | one row per keyed translation — key, translated, original, origin ('in effect' or 'on disk'), placeholder, declared_in, source, and query (which of the queries the row answers, present on a single-query call too). Always an array, including when a single key matched exactly, so the shape does not change with the kind of match. The query column is the one thing that does change with the call: listing the whole layer takes no query, so there the rows have no such column. |
 | `absent` | one row per layer this query needed that this snapshot does not hold — layer, state, next; empty when both are there. 'keyed' with state empty when the snapshot has no keyed translations at all (then 'keys' is empty too); 'disk_translations' (skipped / unconfigured / unmeasured) when the language files on disk were not scanned, so the 'origin' column holds only 'in effect' rows. next is the command that fills the layer. |
 | `empty_because` | one row per option given on this call that, alone, emptied the result: filter (the option as written), hidden (how many keys come back with just that option dropped), next (the same call without it, ready to paste). Empty when the result was not empty, or when no single option accounts for it. |
 
@@ -574,7 +574,7 @@ rimsearcher list [defType]... [options]
 
 | Key | Holds |
 |---|---|
-| `defs` | with a def type: one row per def — def_name, label, mod, def_type (which of the types asked for the row came from, present on a single-type call too), plus 'class' when one of the buckets holds more than one def class. 'mod' is where the def was declared, not who last changed it: a def another mod patched still reads as its original mod, and --scope filters that same column. |
+| `defs` | with a def type: one row per def — def_name, label, declared_in, def_type (which of the types asked for the row came from, present on a single-type call too), plus 'class' when one of the buckets holds more than one def class. A def another mod patched still reads as its original mod in declared_in, and --scope filters that same column. |
 | `types` | without one: one row per def type — def_type, defs. Which of the two keys is present follows the def type, so a caller that passed one never has to guess. |
 | `empty_because` | one row per option given on this call that, alone, emptied the result: filter (the option as written), hidden (how many rows come back with just that option dropped), next (the same call without it, ready to paste). Empty when the result was not empty, or when no single option accounts for it. |
 
@@ -817,7 +817,7 @@ Matching runs in stages and stops at the first one that finds anything: full-tex
 
 | Key | Holds |
 |---|---|
-| `defs` | one row per matching def: def_name, def_type, label, matched_on, mod. |
+| `defs` | one row per matching def: def_name, def_type, label, matched_on, declared_in. |
 | `empty_because` | one row per option given on this call that, alone, emptied the result: filter (the option as written), hidden (how many defs come back with just that option dropped), next (the same call without it, ready to paste). Empty when the result was not empty, or when no single option accounts for it. |
 
 Examples:
@@ -840,7 +840,7 @@ The two names are from 'snapshot list'. This command never opens the live snapsh
 
 The snapshots must have been exported with the same ordered mod list. A different list is refused — that comparison belongs on 'snapshot status' and its mod_list table — because mixing list changes with content changes would make every added def look like a data change. The game build and the XML on disk may differ; that is the point of re-exporting the same list after a mod update.
 
-This command has no mod filter. The 'mod' column is the packageId that declared the def, not who patched the value, so restricting it to the mods 'snapshot status' named as changed would drop vanilla defs those mods patched. Re-exporting a name keeps its previous generations as '<name>.prev', '<name>.prev2' and so on, and each is nameable here. --limit caps the fields table, and the two def tables if they grow past it. Each side still reports its total, including zero.
+This command has no mod filter: restricting declared_in to the mods 'snapshot status' named as changed would drop vanilla defs those mods patched. Re-exporting a name keeps its previous generations as '<name>.prev', '<name>.prev2' and so on, and each is nameable here. --limit caps the fields table, and the two def tables if they grow past it. Each side still reports its total, including zero.
 
 A 'truncation' block counts defs whose export stopped short on both sides. defs_with_paths_dropped: a field that looks unchanged may have been one of the ones they lost. defs_with_values_cut: every field path is there, but both sides were cut at the same length, so a value that looks unchanged may still differ past the cut. When either side was exported before those were told apart there is one figure, defs_with_fields_dropped: something that looks unchanged on those may differ past what was exported.
 
@@ -857,9 +857,9 @@ A 'truncation' block counts defs whose export stopped short on both sides. defs_
 
 | Key | Holds |
 |---|---|
-| `defs_added` | one row per def present only in the later snapshot: def_name, def_type, mod. |
-| `defs_removed` | one row per def present only in the earlier snapshot: def_name, def_type, mod. |
-| `fields` | one row per field whose value differs between the snapshots: def_name, def_type, path, old, new, mod. The mod column is the declaring packageId, not who changed the value. A missing old or new is a field that appeared or disappeared; null never enters the index. |
+| `defs_added` | one row per def present only in the later snapshot: def_name, def_type, declared_in. |
+| `defs_removed` | one row per def present only in the earlier snapshot: def_name, def_type, declared_in. |
+| `fields` | one row per field whose value differs between the snapshots: def_name, def_type, path, old, new, declared_in. A missing old or new is a field that appeared or disappeared; null never enters the index. |
 | `truncation` | an object, present only when some def on both sides had its export stopped short: defs_with_paths_dropped and defs_with_values_cut, or defs_with_fields_dropped when either side predates telling those apart. |
 
 Examples:
@@ -1214,7 +1214,7 @@ The field path is matched from the end, a segment at a time, so 'compClass' find
 
 | Key | Holds |
 |---|---|
-| `matches` | with a field path: one row per def that has it — def_name, def_type, value, mod. 'mod' is where the def was declared, not who wrote the value: a comp another mod bolts onto a vanilla def still reads as the vanilla mod, and --scope filters that same column. |
+| `matches` | with a field path: one row per def that has it — def_name, def_type, path, value, code_default, declared_in (the mod whose XML declares the def; a comp another mod bolts onto a vanilla def still reads as the vanilla mod, and --scope filters that same column), plus written_in (xml / code) when a def built in code is among the rows. |
 | `paths` | without a field path: one row per field path that holds the value — path, def_type, example_value, and the def count split in two: defs_exact (the value is exactly the one asked for) and defs_other (it is inside a longer value). With --exact there is one meaning, so the column is a single 'defs'. This is the key that question produces; 'matches' is absent then. |
 | `empty_because` | one row per option given on this call that, alone, emptied the result: filter (the option as written), hidden (how many defs come back with just that option dropped), next (the same call without it, ready to paste). Empty when the result was not empty, or when no single option accounts for it. |
 | `completeness` | an object, present only when some def in scope had its export cut short: scope (which def types this covers, in words), defs_cut_short (how many), types (one row per def type with its own count), verify (a ready command that lists them). Absent means no def in that scope lost fields at export. |

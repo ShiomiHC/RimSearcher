@@ -5,16 +5,16 @@ name            BaseBullet
 def_type        ThingDef
 abstract        yes
 inherits_from   BaseProjectile
-mod             ludeon.rimworld
+declared_in     ludeon.rimworld
 source          Projectiles_Guns.xml
 patch_ops_name  2
 1 ancestor.
 
-name            def_type  abstract  mod              source
+name            def_type  abstract  declared_in      source
 BaseProjectile  ThingDef  yes       ludeon.rimworld  Projectiles_Guns.xml
 1 direct child.
 
-name  def_name         def_type  abstract  mod
+name  def_name         def_type  abstract  declared_in
       Bullet_Revolver  ThingDef  no        ludeon.rimworld
 An abstract node has no fields of its own in a snapshot. Everything it declares is already merged, post-patch, into each child: 'rimsearcher get Bullet_Revolver'.
 
@@ -22,12 +22,12 @@ def_name        Bullet_Revolver
 def_type        ThingDef
 abstract        no
 inherits_from   BaseBullet
-mod             ludeon.rimworld
+declared_in     ludeon.rimworld
 source          Projectiles_Guns.xml
 patch_ops_name  n/a
 2 ancestors.
 
-Same in every row, not repeated below: def_type=ThingDef, abstract=yes, mod=ludeon.rimworld, source=Projectiles_Guns.xml.
+Same in every row, not repeated below: def_type=ThingDef, abstract=yes, declared_in=ludeon.rimworld, source=Projectiles_Guns.xml.
 name            patch_ops_name
 BaseBullet      2
 BaseProjectile  0

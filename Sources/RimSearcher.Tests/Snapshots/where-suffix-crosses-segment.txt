@@ -8,7 +8,7 @@ def_type  defs_cut_short
 ThingDef  1
 verify: rimsearcher snapshot truncated --type ThingDef
 
-Same in every row, not repeated below: def_type=ThingDef, path=graphicData.texPath, code_default=no, mod=ludeon.rimworld.
+Same in every row, not repeated below: def_type=ThingDef, path=graphicData.texPath, code_default=no, declared_in=ludeon.rimworld.
 def_name    value
 Firefoam    Things/Building/Nozzle
 FoamPopper  Things/Building/Cannon

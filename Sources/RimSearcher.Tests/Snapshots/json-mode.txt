@@ -43,7 +43,7 @@ exit 0
         "label": "shield belt",
         "description": "",
         "class": "Verse.ThingDef",
-        "mod": "ludeon.rimworld",
+        "declared_in": "ludeon.rimworld",
         "source": "Apparel_Belts.xml",
         "xml": "not indexed (exporter 0.2.0)"
       },

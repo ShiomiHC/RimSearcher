@@ -8,7 +8,7 @@ def_name     Apparel_ShieldBelt
 def_type     ThingDef
 label        shield belt
 class        Verse.ThingDef
-mod          ludeon.rimworld
+declared_in  ludeon.rimworld
 source       Apparel_Belts.xml
 xml          not indexed (exporter 0.2.0)
 12 fields.
@@ -39,7 +39,7 @@ def_name       Bullet_Revolver
 def_type       ThingDef
 label          revolver bullet
 class          Verse.ThingDef
-mod            ludeon.rimworld
+declared_in    ludeon.rimworld
 source         Projectiles_Guns.xml
 inherits_from  BaseBullet (see 'rimsearcher inherit Bullet_Revolver')
 xml            not indexed (exporter 0.2.0)

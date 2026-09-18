@@ -3,8 +3,8 @@ exit 0
 --- stdout ---
 1 keyed translation for 'CannotUseNoPower'.
 
-key               translated  original  origin     placeholder  mod  source       query
-CannotUseNoPower  没有电力    No power  in effect  no                Misc.xml:12  CannotUseNoPower
+key               translated  original  origin     placeholder  declared_in  source       query
+CannotUseNoPower  没有电力    No power  in effect  no                        Misc.xml:12  CannotUseNoPower
 
 layer              state         next
 disk_translations  unconfigured  set 'mod_roots' in the config file, then rimsearcher snapshot import fixture.rsx.jsonl.gz --name fixture

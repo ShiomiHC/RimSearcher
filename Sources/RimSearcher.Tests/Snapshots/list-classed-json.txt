@@ -15,14 +15,14 @@ exit 0
       "def_name": "Apparel_ShieldBelt",
       "class": "ThingDef",
       "label": "shield belt",
-      "mod": "ludeon.rimworld",
+      "declared_in": "ludeon.rimworld",
       "def_type": "ThingDef"
     },
     {
       "def_name": "Bullet_Revolver",
       "class": "ThingDef",
       "label": "revolver bullet",
-      "mod": "ludeon.rimworld",
+      "declared_in": "ludeon.rimworld",
       "def_type": "ThingDef"
     }
   ],

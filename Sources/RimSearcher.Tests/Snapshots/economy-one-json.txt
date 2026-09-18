@@ -26,7 +26,7 @@ exit 0
     {
       "defName": "TestModGun",
       "label": "test gun",
-      "mod": "test.mod",
+      "declaredIn": "test.mod",
       "category": "Item",
       "marketValue": 320,
       "marketValueDefined": true,

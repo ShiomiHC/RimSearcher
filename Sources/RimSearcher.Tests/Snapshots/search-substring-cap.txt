@@ -3,7 +3,7 @@ exit 0
 --- stdout ---
 3 defs, showing the first 2.
 
-Same in every row, not repeated below: def_type=ThingDef, matched_on=def_name, mod=test.mod.
+Same in every row, not repeated below: def_type=ThingDef, matched_on=def_name, declared_in=test.mod.
 def_name       label
 VoidNode       void node
 VoidNodeShard  void node shard

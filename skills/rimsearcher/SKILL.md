@@ -146,7 +146,7 @@ way to state:
   — the value is real either way; `compClass`/`thingClass`/`workerClass` are usually
   constructor-assigned, so a `yes` there is **no signal in either direction** — and a `no`
   beside it is just as ordinary, reached by more than one route. Neither value says who
-  mounted the comp; the `mod` column and the block's `Class` row do. `yes` rows hide by
+  mounted the comp; the `declared_in` column and the block's `Class` row do. `yes` rows hide by
   default (a line says how many); `--defaults` shows them; `--path-contains` always shows a
   named field.
 - **A value most defs of the type also carry is inherited or engine-filled far more often

@@ -4,7 +4,7 @@ exit 0
 3 defs.
 That includes 1 def found by scanning names for 'VoidNode' as a substring; full-text matching alone splits names at word starts, so it misses the query in the middle of a compound name.
 
-Same in every row, not repeated below: def_type=ThingDef, matched_on=def_name, mod=test.mod.
+Same in every row, not repeated below: def_type=ThingDef, matched_on=def_name, declared_in=test.mod.
 def_name          label
 VoidNode          void node
 VoidNodeShard     void node shard
