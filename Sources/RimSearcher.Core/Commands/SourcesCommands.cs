@@ -55,15 +55,14 @@ internal static class SourcesShared
         {
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"What changed is a question for git: run 'git -C \"{root}\" diff' for the working diff, " +
-                "'git log -p -- <file>' for one file's history. This command does not compare versions itself.");
+                "'git log -p -- <file>' for one file's history.");
             return;
         }
 
         ctx.Report.Notice(NoticeKind.NextStep,
             $"'{root}' is not a git repository, so there is nothing to compare this against. " +
-            "Run 'git init' in it and commit once; from then on every sync shows up as a diff, with rename " +
-            "detection and per-file history. Keep it local — this is decompiled game code, so do not add a " +
-            "remote or publish it.");
+            "Run 'git init' in it and commit once; from then on every sync shows up as a diff. Keep it " +
+            "local: this is decompiled game code, do not publish it.");
     }
 
     /// <summary>快照里的 mod 列表,或 <c>--modlist</c> 指名的那一份。</summary>
@@ -231,8 +230,7 @@ public sealed class SourcesListCommand : Command
 
             ctx.Report.Notice(NoticeKind.Staleness,
                 "Not current: " + string.Join("; ", parts) +
-                ". 'rimsearcher sources sync' rebuilds the ones it plans; until then anything those trees " +
-                "say about code is from the older build.");
+                ". 'rimsearcher sources sync' rebuilds the ones it plans.");
 
             // 计划里根本没有它们的那些空目录,`sources sync` 一辈子也不会去填 —— 上面那句
             // 「sync rebuilds them」对它们是一条走不通的指路。
@@ -442,17 +440,16 @@ public sealed class SourcesSyncCommand : Command
             ctx.Report.Notice(NoticeKind.Boundary,
                 $"{Tally.Complete(blocked.Count).Render("directory")} under '{root}' " +
                 $"{(blocked.Count == 1 ? "is" : "are")} not empty and carry no RimSearcher manifest, so " +
-                $"{(blocked.Count == 1 ? "it was" : "they were")} left untouched rather than overwritten: " +
+                $"{(blocked.Count == 1 ? "it was" : "they were")} left untouched: " +
                 $"{string.Join(", ", blocked)}. Move the directory aside if you want it rebuilt.");
 
         if (dirty.Count > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
                 $"{Tally.Complete(dirty.Count).Render("source tree")} " +
                 $"{(dirty.Count == 1 ? "has" : "have")} uncommitted changes in git, so " +
-                $"{(dirty.Count == 1 ? "it was" : "they were")} left untouched rather than overwritten: " +
+                $"{(dirty.Count == 1 ? "it was" : "they were")} left untouched: " +
                 $"{string.Join(", ", dirty)}. Commit or restore " +
-                $"{(dirty.Count == 1 ? "it" : "them")}, then run this again. --force does not override this — " +
-                "that flag only rebuilds trees whose assemblies have not changed.");
+                $"{(dirty.Count == 1 ? "it" : "them")}, then run this again; --force does not override this.");
 
         if (notInstalled.Count > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
@@ -466,7 +463,7 @@ public sealed class SourcesSyncCommand : Command
             ctx.Report.Notice(NoticeKind.Boundary,
                 "Already current, and given the assembly copies and the call-graph table without being " +
                 $"decompiled again — {Tally.Complete(filled.Count).Render("source tree")}: " +
-                $"{NameList.Render(filled, 6)}. The C# in each was already built from those same dlls.");
+                $"{NameList.Render(filled, 6)}.");
         }
 
         if (work.Count == 0)
@@ -585,9 +582,8 @@ public sealed class SourcesSyncCommand : Command
 
         if (failures.Count > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
-                $"{Tally.Complete(failures.Count).Render("assembly")} failed to decompile, and each one's whole " +
-                "tree was rolled back rather than left half-written — the previous source for those trees is " +
-                $"still in place: {string.Join("; ", failures)}");
+                $"{Tally.Complete(failures.Count).Render("assembly")} failed to decompile; their trees were " +
+                $"rolled back and the previous source is still in place: {string.Join("; ", failures)}");
 
         if (rows.Count == 0)
         {

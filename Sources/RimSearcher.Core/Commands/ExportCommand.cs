@@ -367,10 +367,9 @@ public sealed class ExportCommand : Command
         // 清理(它接管已存在的联接)。
         using var exporterLink = DataModLink.Attach(ctx.Config);
         if (exporterLink.WasAlreadyThere && exporterLink.State == DataModLink.LinkState.Attached)
+            // 「上一次 export 被杀了 / 手工接的」是猜成因,2026-09-18 删(Docs/25 §19)。
             ctx.Report.Notice(NoticeKind.Advisory,
-                "The exporter was already attached before this run — either an earlier export was killed before it " +
-                "could detach, or it was attached by hand. It has been re-attached and will be detached when this " +
-                "command finishes.");
+                "The exporter was already attached before this run; it will be detached when this command finishes.");
 
         // 启动前验证:缺一个 mod 就失败并报候选,不烧一轮游戏启动。
         var installed = InstalledMods.Scan(ctx.Config);
@@ -550,12 +549,21 @@ public sealed class ExportCommand : Command
         // 指纹自校 —— 请求的 ids 序列必须等于产出 meta 的 ids 序列。
         //
         // 比的是**发射用的**列表,不是原始列表:导出器与补全的依赖是这一轮临时加进去的。
+        // 差在哪几个 id 是算得出的,就点名;只给两个数时「快照描述的是实际加载的」「通常是某个
+        // mod 自检没过」两句都是在替读者猜(Docs/25 §19)。两边都齐、只是次序不同,也说破。
         var produced = stats.Meta.Mods.Select(m => m.PackageId).ToList();
         if (ExportMeta.ComputeModlistFingerprint(launchIds) != ExportMeta.ComputeModlistFingerprint(produced))
+        {
+            var notLoaded = launchIds.Except(produced, StringComparer.OrdinalIgnoreCase).ToList();
+            var unasked = produced.Except(launchIds, StringComparer.OrdinalIgnoreCase).ToList();
+            var parts = new List<string>();
+            if (notLoaded.Count > 0) parts.Add($"not loaded: {NameList.Render(notLoaded, 6)}");
+            if (unasked.Count > 0) parts.Add($"loaded without being asked: {NameList.Render(unasked, 6)}");
+            if (parts.Count == 0) parts.Add("the same mods in a different load order");
             ctx.Report.Notice(NoticeKind.Staleness,
-                $"The game reported a different mod list than the one it was given: asked for {launchIds.Count}, " +
-                $"got {produced.Count}. The snapshot describes what the game actually loaded, not what was requested. " +
-                "A mod that fails its own load check is the usual cause.");
+                $"The game loaded a different mod list than it was given ({launchIds.Count} asked, " +
+                $"{produced.Count} loaded): {string.Join("; ", parts)}.");
+        }
 
         ctx.Report.Detail("exported",
         [

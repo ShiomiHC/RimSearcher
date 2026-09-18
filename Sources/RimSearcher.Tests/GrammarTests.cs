@@ -4456,11 +4456,11 @@ public class GrammarTests
         Assert.Contains("could not be read and so was not searched", miss, StringComparison.Ordinal);
         Assert.Contains("fixture-damaged", miss, StringComparison.Ordinal);
 
-        // 有命中那一支同样要说破 —— 命中了不等于搜全了。
+        // 有命中那一支同样要说破 —— 命中了不等于搜全了。「A match could be sitting in there」
+        // 是「没搜」的反面半句,2026-09-18 删(Docs/25 §19):没搜到的名单已经点了名。
         var (found, _, fcode) = Fixture.Run("modlist", "show", "--find", "test.notinsnapshot");
         Assert.Equal(0, fcode);
         Assert.Contains("could not be read and so was not searched", found, StringComparison.Ordinal);
-        Assert.Contains("A match could be sitting in there.", found, StringComparison.Ordinal);
 
         // 名字是条走得通的路:直接问它,答的是坏在哪,不是「没有这份列表」。
         var (show, showErr, scode) = Fixture.Run("modlist", "show", "fixture-damaged");

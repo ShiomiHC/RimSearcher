@@ -165,8 +165,7 @@ public sealed class ModListListCommand : Command
         var bad = lists.Count(e => e.List is null);
         if (bad > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
-                $"{Tally.Complete(bad).Render("mod list")} below could not be read; the mods column says " +
-                "'unreadable' there. Each such file exists and fails to parse. " +
+                $"{Tally.Complete(bad).Render("mod list")} below could not be parsed (mods = unreadable): " +
                 $"'{CommandRegistry.ExeName} modlist show <name>' says what is wrong with one.");
 
         ctx.Report.Table("modlists", ["name", "mods", "game_version", "path"],
@@ -293,7 +292,7 @@ public sealed class ModListShowCommand : Command
             if (skipped.Count == 0) return;
             ctx.Report.Notice(NoticeKind.Boundary,
                 $"{Tally.Complete(skipped.Count).Render("mod list")} could not be read and so was not searched " +
-                $"({NameList.Render(skipped, 5)}). A match could be sitting in there.");
+                $"({NameList.Render(skipped, 5)}).");
         }
 
         if (rows.Count == 0)
@@ -381,8 +380,7 @@ public sealed class ModListSaveCommand : Command
         if (missing.Count > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
                 $"{Tally.Complete(missing.Count).Render("mod")} in the list are not installed on this machine " +
-                $"({NameList.Render(missing, 5)}). " +
-                "The file is written as asked; 'export' will refuse to start the game until they are present.");
+                $"({NameList.Render(missing, 5)}); 'export' will refuse to start the game until they are present.");
         return 0;
     }
 }

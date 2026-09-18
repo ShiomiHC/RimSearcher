@@ -108,8 +108,7 @@ internal static class CodeShared
         if (gone.Count > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
                 "No longer installed, so only the copy kept with the source tree can still be read — " +
-                $"{Tally.Complete(gone.Count).Render("assembly")}: {Trees(gone)}. Each was removed or moved " +
-                "after the copy was taken.");
+                $"{Tally.Complete(gone.Count).Render("assembly")}: {Trees(gone)}.");
 
         if (lookup.Unreadable.Count > 0)
             ctx.Report.Notice(NoticeKind.Boundary,

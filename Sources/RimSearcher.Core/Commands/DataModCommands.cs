@@ -33,7 +33,6 @@ public sealed class DataModAttachCommand : Command
         {
             ctx.Report.Notice(NoticeKind.Boundary,
                 $"A real folder is already installed at {DataModLink.Path(ctx.Config)}, so nothing was attached. " +
-                "That copy is yours to manage: the game sees the exporter whether or not anything is attached. " +
                 "Delete it if you want this command to take over.");
             return 0;
         }
@@ -54,7 +53,7 @@ public sealed class DataModAttachCommand : Command
         ]);
         ctx.Report.Notice(NoticeKind.NextStep,
             "The game will list the exporter until 'rimsearcher datamod detach' runs, or until the next 'export' " +
-            "finishes — that command always leaves it detached.");
+            "finishes.");
         return 0;
     }
 }
