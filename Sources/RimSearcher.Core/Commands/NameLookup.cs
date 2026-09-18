@@ -195,12 +195,20 @@ internal static class NameLookup
             var best = holdingPaths[0];
             // 不在这里报 def 数:PathsWithValue 按 (path, def_type) 分组,而 comps[2] 与
             // comps[5] 是两组,报出来的「1 def」会被读成「全快照只有一个」。计数交给 where,
-            // 它数的是对的那个东西。下一步不点名路径:`where --value` 覆盖到哪条路径由它
+            // 它数的是对的那个东西。
+            //
+            // 下一步:拿到的三条路径都以同一段收尾、而且三条就是全部时,给 `where <末段> <名字>` ——
+            // 它直接列 def 名,而 `where --value` 列的是路径,拿名字还得再敲一条(r19b:B 臂常见档
+            // 3/3 多走这一跳,弱档 2/3)。末段不齐或路径不止三条时仍给 `--value`,覆盖到哪条由它
             // 自己按当次数据说,推荐侧不替它担保。
+            var leaves = holdingPaths.Select(h => NoiseFilter.Leaf(h.Path)).Distinct(StringComparer.Ordinal).ToList();
+            var next = holdingTotal <= holdingPaths.Count && leaves.Count == 1
+                ? $"{exe} where {leaves[0]} {QuoteArg(name)}"
+                : $"{exe} where --value {QuoteArg(name)}";
             return new Sighting(Where.FieldValue, name, "field value",
                                 $"{best.Path} = {best.Sample}" +
                                 (holdingTotal > 1 ? $", {holdingTotal} path and def-type pairs in all" : ""),
-                                $"{exe} where --value {QuoteArg(name)}");
+                                next);
         }
 
         // (8) mod,报的是外号(输入 `Milira`,packageId 是 Ancot.MiliraRace)。

@@ -874,7 +874,7 @@ public class GrammarTests
             // 算得出落点就不许退回猜。
             ("TestVariantDef",    "--class TestVariantDef",         "lists what kinds of def this snapshot holds"),
             // 字段取值(comps[N].compClass 那一类)
-            ("CompShield",        "rimsearcher where --value CompShield", "no class"),
+            ("CompShield",        "rimsearcher where compClass CompShield", "no class"),
             // 快照覆盖的 mod
             ("ludeon.rimworld",   "mod in this snapshot",           "lists what kinds of def this snapshot holds"),
         ];
@@ -3362,13 +3362,13 @@ public class GrammarTests
 
         foreach (var argv in new[]
                  {
-                     new[] { "search", "CompShield" },                                        // NameLookup
+                     new[] { "search", "CompShield" },                                        // NameLookup(r19b 后:末段齐时推荐 where <末段> <值>)
                      new[] { "where", "CompShield" },                                          // 同一句的另一条入口
                      new[] { "get", "Apparel_ShieldBelt", "--path-contains", "MarketValue" },  // QueryCommands
                  })
         {
             var (rec, _, _) = Fixture.Run(argv);
-            Assert.Contains("rimsearcher where --value", rec, StringComparison.Ordinal);
+            Assert.Contains("rimsearcher where ", rec, StringComparison.Ordinal);
             // 钉「这个能力被说成完整的」,不逐字钉某个词 —— 判据与 --outline 那条共用。
             foreach (var absolute in new[] { "every path", "all paths", "covers every", "names every" })
                 Assert.DoesNotContain(absolute, rec, StringComparison.Ordinal);
@@ -4264,7 +4264,7 @@ public class GrammarTests
         // 它是字段取值 —— 指路要把参数填好,而不是给一个 <text> 占位。
         var (asValue, _, _) = Fixture.Run("where", "CompShield");
         Assert.Contains("field value", asValue, StringComparison.Ordinal);
-        Assert.Contains("rimsearcher where --value CompShield", asValue, StringComparison.Ordinal);
+        Assert.Contains("rimsearcher where compClass CompShield", asValue, StringComparison.Ordinal);
         Assert.DoesNotContain("--value <text>", asValue, StringComparison.Ordinal);
 
         // 它是 def 名 —— 一行 is = def,带它是哪一类、哪个 mod 的。

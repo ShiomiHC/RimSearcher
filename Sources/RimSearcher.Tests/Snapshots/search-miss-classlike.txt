@@ -5,5 +5,5 @@ Nothing matched 'CompShield' in this snapshot.
 
 Where the name does turn up:
 name        is           in                                        next
-CompShield  field value  comps[0].compClass = RimWorld.CompShield  rimsearcher where --value CompShield
+CompShield  field value  comps[0].compClass = RimWorld.CompShield  rimsearcher where compClass CompShield
 --- stderr ---
