@@ -3,14 +3,13 @@ exit 0
 --- stdout ---
 No XML node answers to NoSuchNode, so nothing below is about it. The blocks that did come back are unaffected.
 
-name           BaseBullet
-def_type       ThingDef
-abstract       yes
-inherits_from  BaseProjectile
-mod            ludeon.rimworld
-source         Projectiles_Guns.xml
-patch_ops      2
-'BaseBullet' is targeted by name by 2 patch operations in this snapshot. This layer is the XML before patches, so what the game finally used differs from it by whatever those operations did. This snapshot (exporter 0.2.0) only counted @Name=; re-export to also count xpaths by defName= and by label=.
+name            BaseBullet
+def_type        ThingDef
+abstract        yes
+inherits_from   BaseProjectile
+mod             ludeon.rimworld
+source          Projectiles_Guns.xml
+patch_ops_name  2
 1 ancestor.
 
 name            def_type  abstract  mod              source
@@ -20,4 +19,7 @@ BaseProjectile  ThingDef  yes       ludeon.rimworld  Projectiles_Guns.xml
 name  def_name         def_type  abstract  mod
       Bullet_Revolver  ThingDef  no        ludeon.rimworld
 An abstract node has no fields of its own in a snapshot. Everything it declares is already merged, post-patch, into each child: 'rimsearcher get Bullet_Revolver'.
+
+layer                    state        next
+patch_ops_defname_label  pre-measure  rimsearcher export --modlist fixture
 --- stderr ---

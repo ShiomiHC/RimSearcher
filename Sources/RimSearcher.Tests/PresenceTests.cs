@@ -1,4 +1,5 @@
-﻿using RimSearcher.Output;
+﻿using RimSearcher.Commands;
+using RimSearcher.Output;
 using RimSearcher.Storage;
 
 namespace RimSearcher.Tests;
@@ -34,30 +35,27 @@ public class PresenceTests
         var (json, _, _) = Fixture.Run("inherit", "ChildGun", "--json", "--db", Fixture.PresenceDb);
         using var doc = System.Text.Json.JsonDocument.Parse(json);
         var node = doc.RootElement.GetProperty("nodes")[0].GetProperty("node");
-        Assert.Equal("n/a", node.GetProperty("patch_ops").GetString());
+        Assert.Equal("n/a", node.GetProperty(InheritCommand.PatchOpsName).GetString());
         Assert.Equal(2, node.GetProperty("patch_ops_defname").GetInt32());
         Assert.Equal(1, node.GetProperty("patch_ops_label").GetInt32());
     }
 
     [Fact]
-    public void 新快照免责不再把defName和label说成没数()
+    public void 新快照三格并排_不出absent表()
     {
         var (text, _, _) = Fixture.Run("inherit", "BaseGun", "--db", Fixture.PresenceDb);
         Assert.Contains("patch_ops_defname", text, StringComparison.Ordinal);
-        Assert.Contains("by thingClass", text, StringComparison.Ordinal);
-        Assert.Contains("by a wildcard", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("by defName, by label", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("does not count xpaths by defName", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("patch_ops_defname_label", text, StringComparison.Ordinal);
     }
 
     [Fact]
     public void 旧快照不把没数过的defName计数印成零()
     {
+        // 老库上后两格不在,absent 表一行说破并给出路(重导);此前是一句「only counted @Name=;
+        // re-export to also count…」。
         var (text, _, _) = Fixture.Run("inherit", "BaseProjectile");
-        Assert.Contains("only counted @Name=", text, StringComparison.Ordinal);
-        // 措辞从「a newer export also counts…」压成祈使句(外部回读:情景假设,读者要的是
-        // 「重导会补上」这条出路,不是两代对照表)。守的事没变:老库上这句必须在。
-        Assert.Contains("re-export to also count xpaths by defName=", text, StringComparison.Ordinal);
+        Assert.Contains("patch_ops_defname_label  pre-measure  rimsearcher export --modlist ", text,
+                        StringComparison.Ordinal);
         var (json, _, _) = Fixture.Run("inherit", "BaseProjectile", "--json");
         using var doc = System.Text.Json.JsonDocument.Parse(json);
         var node = doc.RootElement.GetProperty("nodes")[0].GetProperty("node");

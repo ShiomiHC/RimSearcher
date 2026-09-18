@@ -62,6 +62,8 @@ public class GateTests
             ["values.values"] = ["values", "thingClass"],
             ["mods.mods"] = ["mods"],
             ["inherit.nodes"] = ["inherit", "BaseBullet"],
+            // 主 fixture 是旧口径(只数 @Name=),缺 defName / label 两格 —— 那一行在这里。
+            ["inherit.absent"] = ["inherit", "BaseBullet"],
             ["keyed.keys"] = ["keyed", "CannotUseNoPower"],
             // 语料库是没配 mod_roots 建的,这一行在共享夹具上就有。
             ["keyed.absent"] = ["keyed", "CannotUseNoPower"],
@@ -713,8 +715,8 @@ public class GateTests
             {
                 if (line.Length == 0) { blockHasName = false; continue; }
                 if (line.StartsWith("name ", StringComparison.Ordinal)) blockHasName = true;
-                if (!line.StartsWith("patch_ops ", StringComparison.Ordinal)) continue;
-                var cell = line["patch_ops ".Length..].Trim();
+                if (!line.StartsWith(InheritCommand.PatchOpsName + " ", StringComparison.Ordinal)) continue;
+                var cell = line[(InheritCommand.PatchOpsName + " ").Length..].Trim();
                 if (cell.Length > 0 && char.IsAsciiDigit(cell[0]) && !blockHasName)
                     unmeasured.Add($"{Path.GetFileName(file)}: '{line.Trim()}' on a node with no Name=");
             }

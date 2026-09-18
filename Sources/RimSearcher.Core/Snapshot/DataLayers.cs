@@ -78,7 +78,7 @@ public static class DataLayers
     public const string PostPatchXml = "post_patch_xml";
     public const string TypeFields = "type_fields";
     public const string NestedClass = "nested_class";
-    public const string PatchOpsByName = "patch_ops_by_name";
+    public const string PatchOpsDefNameLabel = "patch_ops_defname_label";
     public const string TruncationCauses = "truncation_causes";
     public const string ExportTimings = "export_timings";
     public const string ImportTimings = "import_timings";
@@ -106,8 +106,7 @@ public static class DataLayers
             PostPatchXmlRow(db, snapshotName),
             Bit(TypeFields, m.IndexesTypeFields, export, "exporter before 0.5.0: no per-type field path set"),
             NestedClassRow(db, snapshotName),
-            Bit(PatchOpsByName, m.IndexesPatchOpsByDefNameLabel, export,
-                "exporter before 0.5.0: patch_ops counts @Name= targets only"),
+            PatchOpsDefNameLabelRow(db, snapshotName),
             TruncationCausesRow(db, snapshotName),
             Bit(ExportTimings, db.ExportTimings is { Count: > 0 }, export, "exporter before 0.11.0: no per-layer timing"),
             Bit(ImportTimings, db.ImportTimings is { Count: > 0 }, import, "imported before per-stage timing was kept"),
@@ -187,6 +186,15 @@ public static class DataLayers
     public static LayerRow InjectionKeysRow(SnapshotDb db, string snapshotName)
         => Bit(InjectionKeys, db.InjectionKeysIndexed, ExportCommand(snapshotName),
                "exporter before 0.9.0: translation paths stored as raw injection keys, no 'key' column");
+
+    /// <summary>
+    /// 补丁计数的两列 patch_ops_defname / patch_ops_label(0.5.0 起):xpath 按 defName= 与 label=
+    /// 点名的次数。没这一层时 inherit 的 identity 块只有 patch_ops_name 一格,按 defName 定位的
+    /// 补丁在那份库上哪一格都不留痕。
+    /// </summary>
+    public static LayerRow PatchOpsDefNameLabelRow(SnapshotDb db, string snapshotName)
+        => Bit(PatchOpsDefNameLabel, db.Meta.IndexesPatchOpsByDefNameLabel, ExportCommand(snapshotName),
+               "exporter before 0.5.0: only xpaths naming a node by @Name= were counted");
 
     public static LayerRow PostPatchXmlRow(SnapshotDb db, string snapshotName)
     {

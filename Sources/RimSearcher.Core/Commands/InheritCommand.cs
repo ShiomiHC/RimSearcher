@@ -1,5 +1,6 @@
 ﻿using RimSearcher.Cli;
 using RimSearcher.Output;
+using RimSearcher.Snapshot;
 using RimSearcher.Search;
 using RimSearcher.Storage;
 
@@ -21,6 +22,12 @@ public sealed class InheritCommand : Command
     public const string SameValue = "same_value";
     public const string SameAsMode = "same_as_mode";
 
+    /// <summary>
+    /// identity 块与祖先表里「有几条 xpath 按 @Name= 点名这个节点」那一格。名字里带 name 是与
+    /// patch_ops_defname / patch_ops_label 并排:三格各数一种点名方式,列名自陈(Docs/25 丁2)。
+    /// </summary>
+    public const string PatchOpsName = "patch_ops_name";
+
     public override CommandSpec Spec => new()
     {
         Name = "inherit",
@@ -37,13 +44,13 @@ public sealed class InheritCommand : Command
             // 的正则只认 @Name=,漏的是所有其他定位方式(852e863 已在输出侧修掉);
             // ③ 只把 unanswered 给了无 Name= 的节点 —— 那正好暗示有 Name= 的是 answered,
             // 而那是受测者驳回新句时踩的那级台阶。
-            "What is shown is the XML before PatchOperations are applied. patch_ops counts xpaths that name the " +
-            "node with @Name=; patch_ops_defname and patch_ops_label count xpaths that name it by defName= and " +
-            "by label=, and a snapshot exported before those were measured has neither column. " +
-            "An xpath that reaches a node by thingClass or by a wildcard is counted nowhere in this layer, " +
-            "so a 0 is not evidence that the node reached the game unpatched. A node without a Name= reports " +
-            "patch_ops as 'n/a' rather than 0 because that count was never taken; the defName and label counts are " +
-            "still taken. " +
+            "What is shown is the XML before PatchOperations are applied. patch_ops_name counts xpaths that name " +
+            "the node with @Name=; patch_ops_defname and patch_ops_label count xpaths that name it by defName= " +
+            "and by label=, and a snapshot exported before those were measured has neither column (its 'absent' " +
+            "table says so). An xpath that reaches a node by thingClass or by a wildcard is counted nowhere in " +
+            "this layer, so a 0 is not evidence that the node reached the game unpatched. A node without a Name= " +
+            "reports patch_ops_name as 'n/a' rather than 0 because that count was never taken; the defName and " +
+            "label counts are still taken. " +
             "For the merged, post-patch values, read any concrete child with 'get' — everything a parent " +
             "contributes is already in each of its children.",
         Positionals =
@@ -109,6 +116,14 @@ public sealed class InheritCommand : Command
                        "or --exact-path is given. " +
                        "With several names the objects come in the order the names were given; a name that " +
                        "matched nothing has no object here and one note in 'notes' that quotes it.",
+            },
+            new()
+            {
+                Key = "absent",
+                Rows = true,
+                What = "one row when this snapshot was exported before xpaths were counted by defName= and " +
+                       "label= — layer 'patch_ops_defname_label', state pre-measure, next (the export command " +
+                       "that measures them); empty when the identity blocks carry all three counts.",
             },
         ],
     };
@@ -226,7 +241,7 @@ public sealed class InheritCommand : Command
                 // 数字每次都在场且可机读,于是 0 = 「量过、没人 patch」,与「这一格没量」分得开:
                 // 导出器对无 Name= 的节点硬写 0(计数正则只认 `@Name=`),所以那种情况印 n/a。
                 // 印 n/a 而不是留空 —— 留空会让整行在文本面消失(Renderers 跳过空值)。
-                new("patch_ops", named ? node.PatchOps : "n/a"),
+                new(PatchOpsName, named ? node.PatchOps : "n/a"),
             };
             if (countedExtra)
             {
@@ -235,51 +250,12 @@ public sealed class InheritCommand : Command
             }
             ctx.Report.Detail("node", identity);
 
-            // 紧跟着 identity 块 —— 这两句解释的就是它上面那一行 patch_ops。此前它们排在
-            // 全部块之后,离所解释的那一格隔着两张表。
-            //
-            // 逐条申报,不是一句总的免责声明。计数恒在 identity 块的 patch_ops 上,
-            // 三支各说一件不同的事,**包括 0 那一支**:此前这里写着「0 就是游戏读到的原样,
-            // 不需要解释」,而 Human 是这句的反例 —— 它声明了 Name=、patch_ops 是 0,
-            // 同时被 HAR 换掉了 class、插进两个 comp,那些补丁按 defName 定位,不点 Name=。
-            // 一个沉默的 0 于是断言了一件假事,而这一支覆盖的是 named 节点里的多数。
-            //
-            // 说破它省不掉下游那次双快照 diff —— 「这个 def 被 patch 改过没有」在单快照里
-            // 本就不可判定(存的是 pre-patch 的节点身份 + post-patch 的字段值,没有 pre-patch
-            // 的值可比)。省掉的是另一件事:不必先把 0 当答案用一遍,再从别处撞见反证。
-            var oldLayer = countedExtra
-                ? ""
-                : $" This snapshot (exporter {ctx.Db.Meta.ExporterVersion}) only counted @Name=; " +
-                  "re-export to also count xpaths by defName= and by label=.";
-            if (!named)
-                ctx.Report.Notice(NoticeKind.Boundary,
-                    countedExtra
-                        ? $"'{label}' declares no Name=, so patch_ops is not measured for it. " +
-                          "patch_ops_defname and patch_ops_label above count xpaths that name it by defName= " +
-                          "and by label=; an xpath that reaches it by thingClass or by a wildcard still " +
-                          "leaves no trace here."
-                        : $"'{label}' declares no Name=, so patch_ops is not measured for it: only xpaths naming a " +
-                          "node with @Name= are counted, and a patch that reaches this def by defName leaves no " +
-                          "trace here." + oldLayer);
-            else if (node.PatchOps > 0)
-                ctx.Report.Notice(NoticeKind.Boundary,
-                    $"'{label}' is targeted by name by " +
-                    $"{Tally.Complete(node.PatchOps).Render("patch operation")} in this snapshot. " +
-                    "This layer is the XML before patches, so what the game finally used differs from it " +
-                    "by whatever those operations did." + oldLayer);
-            else if (countedExtra)
-                ctx.Report.Notice(NoticeKind.Boundary,
-                    $"No patch operation's xpath names '{label}' with @Name= in this snapshot — that is " +
-                    "what patch_ops=0 counts. patch_ops_defname and patch_ops_label count xpaths that name " +
-                    "it by defName= and by label=. An xpath that reaches it by thingClass or by a wildcard " +
-                    // 「so a 0 is not evidence that the game read this node unpatched」2026-09-18 删掉:
-                    // 0 数的是什么、什么留不下痕迹,上面两句已经是全部机制(Docs/23 第八节)。
-                    "leaves no trace here.");
-            else
-                ctx.Report.Notice(NoticeKind.Boundary,
-                    $"No patch operation's xpath names '{label}' with @Name= in this snapshot — that is " +
-                    "what the 0 counts. An xpath that reaches it any other way — by defName, by label, " +
-                    "by thingClass, by a wildcard — leaves no trace here." + oldLayer);
+            // 此前紧跟着 identity 块的三支散文(无 Name= / 被点名 N 次 / 0 数的是什么)2026-09-18
+            // 删掉(Docs/25 丁2):三格的列名各自说了数的是哪种点名(patch_ops_name /
+            // patch_ops_defname / patch_ops_label),n/a 说了没量,thingClass 与通配符哪一格都不算
+            // 是这一层的口径、住在 --help。Human 那个反例(Name= 下 0、按 defName 被改)在三格
+            // 并排时读得出来;只有旧库缺后两格 —— 那是一层缺席,absent 表一行说破。
+            // (那一行在全部块之后印一次:层是整份库的,不是某个节点的 —— 见 EndItems 后。)
 
             // 往上走到根。带环保护是必要的:XML 里写得出环,游戏在这一层之后才检出来,
             // 快照存的正是检出之前的原文。
@@ -314,7 +290,7 @@ public sealed class InheritCommand : Command
             if (chain.Count > 0)
                 ctx.Report.Table("ancestors",
                     patchedUp.Count > 0
-                        ? ["name", "def_type", "abstract", "patch_ops", "mod", "source"]
+                        ? ["name", "def_type", "abstract", PatchOpsName, "mod", "source"]
                         : ["name", "def_type", "abstract", "mod", "source"],
                     chain.Select(n =>
                     {
@@ -326,7 +302,7 @@ public sealed class InheritCommand : Command
                             ["mod"] = n.SourceMod,
                             ["source"] = n.SourceFile,
                         };
-                        if (patchedUp.Count > 0) row["patch_ops"] = n.PatchOps;
+                        if (patchedUp.Count > 0) row[PatchOpsName] = n.PatchOps;
                         return (IReadOnlyDictionary<string, object?>)row;
                     }).ToList());
 
@@ -335,8 +311,8 @@ public sealed class InheritCommand : Command
             if (patchedUp.Count > 0)
                 ctx.Report.Notice(NoticeKind.Boundary,
                     $"A def inherits its ancestors' fields, so a patch that rewrites an ancestor changes " +
-                    $"what the game read for '{label}' as well — and the patch_ops on '{label}' itself " +
-                    $"does not count that. Above, patch_ops is not zero for " +
+                    $"what the game read for '{label}' as well — and the {PatchOpsName} on '{label}' itself " +
+                    $"does not count that. Above, {PatchOpsName} is not zero for " +
                     $"{Tally.Complete(patchedUp.Count).Render("ancestor")}.");
 
             // 断链要说破:ParentName 指着一个本快照里没有的名字,意思是那个 mod 没启用,
@@ -382,6 +358,10 @@ public sealed class InheritCommand : Command
         }
 
         ctx.Report.EndItems();
+
+        // 旧库缺 patch_ops_defname / patch_ops_label 两格:一层缺席,absent 表一行(Docs/25 甲)。
+        if (nodes.Count > 0 && !ctx.Db.Meta.IndexesPatchOpsByDefNameLabel)
+            ctx.Report.Absent(DataLayers.PatchOpsDefNameLabelRow(ctx.Db, ctx.SnapshotName ?? ""));
 
         // 「几个节点答应同一个名字」是按**名字**说的话。几个名字一起给时,块总数大于 1
         // 是理所当然的,而它与「这一个名字底下有两个节点」是两件事 —— 合起来数会把前者

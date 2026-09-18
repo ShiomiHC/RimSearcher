@@ -392,7 +392,7 @@ public class GrammarTests
         {
             var doc = System.Text.Json.JsonDocument.Parse(json);
             return doc.RootElement.GetProperty("nodes")[0].GetProperty("node")
-                      .GetProperty("patch_ops").Clone();
+                      .GetProperty(InheritCommand.PatchOpsName).Clone();
         }
 
         Assert.Equal(2, PatchOps(patched).GetInt32());
@@ -403,15 +403,12 @@ public class GrammarTests
         Assert.Equal(System.Text.Json.JsonValueKind.String, unmeasured.ValueKind);
         Assert.Equal("n/a", unmeasured.GetString());
 
-        // 后果那句散文只在非零时说 —— 真的 0 不需要解释。
-        // 无名那一条要的是另一句话:说破口径,不是说后果。
+        // 三支散文(被点名 N 次 / 0 数的是什么 / 无名没量)2026-09-18 起不印:列名自陈
+        // (Docs/25 丁2)。文本面钉的只剩那一格的拼法与取值。
         var (patchedText, _, _) = Fixture.Run("inherit", "BaseBullet");
-        var (cleanText, _, _) = Fixture.Run("inherit", "BaseProjectile");
         var (unnamedText, _, _) = Fixture.Run("inherit", "Bullet_Revolver");
-        Assert.Contains("is targeted by name by", patchedText);
-        Assert.DoesNotContain("is targeted by name by", cleanText);
-        Assert.DoesNotContain("patch_ops is not measured", cleanText);
-        Assert.Contains("patch_ops is not measured", unnamedText);
+        Assert.Contains(InheritCommand.PatchOpsName + "  2", patchedText);
+        Assert.Contains(InheritCommand.PatchOpsName + "  n/a", unnamedText);
     }
 
     /// <summary>

@@ -1,13 +1,12 @@
 $ rimsearcher inherit BaseProjectile
 exit 0
 --- stdout ---
-name           BaseProjectile
-def_type       ThingDef
-abstract       yes
-mod            ludeon.rimworld
-source         Projectiles_Guns.xml
-patch_ops      0
-No patch operation's xpath names 'BaseProjectile' with @Name= in this snapshot — that is what the 0 counts. An xpath that reaches it any other way — by defName, by label, by thingClass, by a wildcard — leaves no trace here. This snapshot (exporter 0.2.0) only counted @Name=; re-export to also count xpaths by defName= and by label=.
+name            BaseProjectile
+def_type        ThingDef
+abstract        yes
+mod             ludeon.rimworld
+source          Projectiles_Guns.xml
+patch_ops_name  0
 3 direct children.
 
 name        def_name    def_type        abstract  mod
@@ -15,4 +14,7 @@ BaseBullet              ThingDef        yes       ludeon.rimworld
             Firefoam    ThingDef        no        ludeon.rimworld
             VariantOne  TestVariantDef  no        test.mod
 An abstract node has no fields of its own in a snapshot. Everything it declares is already merged, post-patch, into each child: 'rimsearcher get Firefoam'.
+
+layer                    state        next
+patch_ops_defname_label  pre-measure  rimsearcher export --modlist fixture
 --- stderr ---

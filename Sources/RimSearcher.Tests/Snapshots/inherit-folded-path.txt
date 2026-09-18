@@ -7,10 +7,9 @@ abstract           no
 inherits_from      BaseGun
 mod                ludeon.rimworld
 source             Guns.xml
-patch_ops          n/a
+patch_ops_name     n/a
 patch_ops_defname  2
 patch_ops_label    1
-'ChildGun' declares no Name=, so patch_ops is not measured for it. patch_ops_defname and patch_ops_label above count xpaths that name it by defName= and by label=; an xpath that reaches it by thingClass or by a wildcard still leaves no trace here.
 1 ancestor.
 
 name     def_type  abstract  mod              source

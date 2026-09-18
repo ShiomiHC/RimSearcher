@@ -1,14 +1,13 @@
 $ rimsearcher inherit BaseBullet Bullet_Revolver
 exit 0
 --- stdout ---
-name           BaseBullet
-def_type       ThingDef
-abstract       yes
-inherits_from  BaseProjectile
-mod            ludeon.rimworld
-source         Projectiles_Guns.xml
-patch_ops      2
-'BaseBullet' is targeted by name by 2 patch operations in this snapshot. This layer is the XML before patches, so what the game finally used differs from it by whatever those operations did. This snapshot (exporter 0.2.0) only counted @Name=; re-export to also count xpaths by defName= and by label=.
+name            BaseBullet
+def_type        ThingDef
+abstract        yes
+inherits_from   BaseProjectile
+mod             ludeon.rimworld
+source          Projectiles_Guns.xml
+patch_ops_name  2
 1 ancestor.
 
 name            def_type  abstract  mod              source
@@ -19,19 +18,21 @@ name  def_name         def_type  abstract  mod
       Bullet_Revolver  ThingDef  no        ludeon.rimworld
 An abstract node has no fields of its own in a snapshot. Everything it declares is already merged, post-patch, into each child: 'rimsearcher get Bullet_Revolver'.
 
-def_name       Bullet_Revolver
-def_type       ThingDef
-abstract       no
-inherits_from  BaseBullet
-mod            ludeon.rimworld
-source         Projectiles_Guns.xml
-patch_ops      n/a
-'Bullet_Revolver' declares no Name=, so patch_ops is not measured for it: only xpaths naming a node with @Name= are counted, and a patch that reaches this def by defName leaves no trace here. This snapshot (exporter 0.2.0) only counted @Name=; re-export to also count xpaths by defName= and by label=.
+def_name        Bullet_Revolver
+def_type        ThingDef
+abstract        no
+inherits_from   BaseBullet
+mod             ludeon.rimworld
+source          Projectiles_Guns.xml
+patch_ops_name  n/a
 2 ancestors.
 
 Same in every row, not repeated below: def_type=ThingDef, abstract=yes, mod=ludeon.rimworld, source=Projectiles_Guns.xml.
-name            patch_ops
+name            patch_ops_name
 BaseBullet      2
 BaseProjectile  0
-A def inherits its ancestors' fields, so a patch that rewrites an ancestor changes what the game read for 'Bullet_Revolver' as well — and the patch_ops on 'Bullet_Revolver' itself does not count that. Above, patch_ops is not zero for 1 ancestor.
+A def inherits its ancestors' fields, so a patch that rewrites an ancestor changes what the game read for 'Bullet_Revolver' as well — and the patch_ops_name on 'Bullet_Revolver' itself does not count that. Above, patch_ops_name is not zero for 1 ancestor.
+
+layer                    state        next
+patch_ops_defname_label  pre-measure  rimsearcher export --modlist fixture
 --- stderr ---

@@ -1,3 +1,4 @@
+using RimSearcher.Commands;
 using System.Text.Json;
 
 namespace RimSearcher.Tests;
@@ -38,76 +39,47 @@ public class InheritanceTests
     }
 
     /// <summary>
-    /// patch 差异逐条申报,三支各说一件不同的事 —— **包括 0 那一支**。
-    ///
-    /// 此前这里钉的是「没被点名的一个字都不说」,理由是「恒在的免责声明不提供信息」。
-    /// 那条理由建立在「0 = 没什么可说的」上,而 <c>Human</c> 是反例:它声明了 Name=、
-    /// patch_ops 是 0,同时被 HAR 换掉 class、插进两个 comp —— 那些补丁按 defName 定位,
-    /// 不点 Name=。沉默的 0 于是断言了一件假事,而旧断言里那个变量就叫 clean。
-    ///
-    /// **这条改动与原纪律是真冲突,待盲测裁决**:反方的顾虑(这一支覆盖 named 节点里的
-    /// 多数,效果上接近恒在,会淹掉真正有据的那几条)没有被证伪,只是被「那个 0 是假话」
-    /// 压过。裁决判据是**绕道率**不是答对率 —— 实测里所有运行都不信任这个 0、一致改用
-    /// 双快照全字段 diff,而这句话省不掉那次 diff(单快照里这件事本就不可判定),
-    /// 它省的是「先把 0 当答案用一遍」。
+    /// 补丁计数的口径由列名自陈,不再靠句子(Docs/25 丁2,2026-09-18)。此前 identity 块后跟三支
+    /// 散文(被点名 N 次 / 0 数的是什么 / 无名没量),来历是 <c>Human</c> 那个反例:它声明了 Name=、
+    /// 那一格是 0,同时被 HAR 按 defName 换掉 class —— 沉默的 0 断言了一件假事。现在三格并排
+    /// (patch_ops_name / patch_ops_defname / patch_ops_label),0 / 2 / 1 自己读得出来;
+    /// 只在旧库缺后两格时才出声,形态是 absent 表一行(层 patch_ops_defname_label,pre-measure,
+    /// 出路重导)。thingClass 与通配符哪一格都不算,是这一层的口径,住在 --help。
     /// </summary>
     [Fact]
-    public void patch差异按条申报三支各说各的()
+    public void patch计数三格并排_旧库缺两格时absent表说破()
     {
-        // BaseBullet 有 2 条 xpath 点名 —— 该说,并且要说出数字。
-        var patched = Text("inherit", "BaseBullet");
-        Assert.Contains("targeted by name by 2 patch operations", patched, StringComparison.Ordinal);
-
-        // BaseProjectile 一条都没有:说破这个 0 数的是什么,而不是沉默。
+        // 主 fixture 是旧口径(只数 @Name=):有 Name= 的节点一行 absent,不再有任何解释句。
         var unpatched = Text("inherit", "BaseProjectile");
-        Assert.Contains("that is what the 0 counts", unpatched, StringComparison.Ordinal);
-        Assert.Contains("with @Name= in this snapshot", unpatched, StringComparison.Ordinal);
-        // 这两半此前是连着的一句;举例列表(by defName / by label / …)插进了中间,
-        // 于是只能分开钉。钉的仍是同一件事:总述在,「不留痕」也在。
-        Assert.Contains("any other way", unpatched, StringComparison.Ordinal);
-        Assert.Contains("leaves no trace", unpatched, StringComparison.Ordinal);
-        // 举例不许只有 defName 一条:这一支的对象可以是抽象节点,而它没有 defName,
-        // 单举它读者就把整个遗漏面排除掉了。上限由 patch计数的口径… 那条闸一并管。
-        Assert.True(new[] { "by label", "by thingClass", "by a wildcard" }
-                        .Count(o => unpatched.Contains(o, StringComparison.Ordinal)) >= 2,
-                    "举了 defName 就不能只举它:抽象节点会据此排除掉整个遗漏面。");
-        // 不许串到 ops>0 那一支的话上:那句说的是「这一层与游戏最终读到的不同」,
-        // 而这里没有任何已知的补丁让它不同 —— 只是这个计数看不见另一类。
-        Assert.DoesNotContain("before patches", unpatched, StringComparison.Ordinal);
+        Assert.Contains("patch_ops_defname_label  pre-measure  rimsearcher export --modlist ", unpatched,
+                        StringComparison.Ordinal);
+        Assert.Contains(InheritCommand.PatchOpsName + "  0", unpatched, StringComparison.Ordinal);
+        Assert.DoesNotContain("@Name=", unpatched, StringComparison.Ordinal);
+        Assert.DoesNotContain("leaves no trace", unpatched, StringComparison.Ordinal);
+
+        // 新口径的库:三格都在,absent 表不出。
+        var counted = Text("inherit", "BaseGun", "--db", Fixture.PresenceDb);
+        Assert.DoesNotContain("patch_ops_defname_label", counted, StringComparison.Ordinal);
+        Assert.Contains("patch_ops_defname", counted, StringComparison.Ordinal);
+        Assert.Contains("patch_ops_label", counted, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// patch 计数的口径在**两处**出声:identity 块那三支,与 <c>inherit --help</c> 的 Remarks。
-    /// 两处必须同形 —— r14 抓到一个受测者读了输出的新句、再引 help 的旧句把它降格成
-    /// 「通用免责措辞」驳回,而 help 那句还多带一句更强的正面断言(「0 就是游戏读到的原样」)。
-    /// 一句话在两个信道上强度不同时,读者取强的那个。
-    ///
-    /// 钉的三件事各是那次失效的一级台阶:遗漏面不许举 defName 当代表(抽象节点根本没有
-    /// defName,举它等于说「这个漏检面对我不存在」)、口径半句 @Name= 两处都要在、
-    /// 「0 = 原样」这类正面断言不许回来。
+    /// patch 计数的口径只在 <c>inherit --help</c> 的 Remarks 里出声(输出面 2026-09-18 起只有列名
+    /// 与 absent 表)。r14 抓到一个受测者读了输出的新句、再引 help 的旧句把它降格成「通用免责
+    /// 措辞」驳回 —— 两处不再各说一遍,help 就是唯一那一处,它得把三格与遗漏面都说全:
+    /// 遗漏面不许举 defName 当代表(抽象节点根本没有 defName)、「0 = 原样」这类正面断言不许回来。
     /// </summary>
     [Fact]
-    public void patch计数的口径在输出与help两处同形()
+    public void patch计数的口径只住help且说全三格与遗漏面()
     {
         var help = Text("inherit", "--help");
-        var oldSnap = Text("inherit", "BaseProjectile");
-
-        foreach (var text in new[] { help, oldSnap })
-        {
-            Assert.Contains("@Name=", text, StringComparison.Ordinal);
-            Assert.Contains("by thingClass", text, StringComparison.Ordinal);
-            Assert.Contains("by a wildcard", text, StringComparison.Ordinal);
-        }
-
-        // help 描述当前导出器:defName / label 已经计入,遗漏面只剩类名和通配符。
-        // 旧快照上那两格没量过,输出仍把它们列进「any other way」—— 对那份快照是实话,
-        // 并另起一句叫人重导。两处同形的是「0 ≠ 没被改过」和 @Name= 那一格的口径,
-        // 不是把旧快照上还没数的两种假装已经数了。
+        Assert.Contains("@Name=", help, StringComparison.Ordinal);
+        Assert.Contains("by thingClass", help, StringComparison.Ordinal);
+        Assert.Contains("by a wildcard", help, StringComparison.Ordinal);
+        Assert.Contains(InheritCommand.PatchOpsName, help, StringComparison.Ordinal);
         Assert.Contains("patch_ops_defname", help, StringComparison.Ordinal);
-        Assert.Contains("any other way", oldSnap, StringComparison.Ordinal);
-        Assert.Contains("by defName", oldSnap, StringComparison.Ordinal);
-        Assert.Contains("by label", oldSnap, StringComparison.Ordinal);
-
+        Assert.Contains("patch_ops_label", help, StringComparison.Ordinal);
         Assert.DoesNotContain("exactly what the game read", help, StringComparison.Ordinal);
     }
 
@@ -195,12 +167,11 @@ public class InheritanceTests
         Assert.DoesNotContain("inherits_from", Text("get", "Meat_Muffalo"), StringComparison.Ordinal);
     }
 
-    /// <summary>声明区的 kind 分类要对得上:计数是 count,patch 差异是 boundary。</summary>
+    /// <summary>声明区的 kind 分类要对得上:计数是 count。(patch 差异那句 boundary 2026-09-18 退成列名。)</summary>
     [Fact]
     public void 声明区分类正确()
     {
         var kinds = Kinds("inherit", "BaseBullet");
         Assert.Contains("count", kinds);
-        Assert.Contains("boundary", kinds);
     }
 }

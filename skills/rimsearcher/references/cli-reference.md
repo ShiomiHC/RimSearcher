@@ -477,7 +477,7 @@ rimsearcher inherit <name>... [options]
 
 This is the one part of a snapshot that is read from the mods' XML rather than from the objects the game had in memory, because the game resolves inheritance while loading and then discards it. Abstract parents exist only here: they never become defs, so 'get' will not find them.
 
-What is shown is the XML before PatchOperations are applied. patch_ops counts xpaths that name the node with @Name=; patch_ops_defname and patch_ops_label count xpaths that name it by defName= and by label=, and a snapshot exported before those were measured has neither column. An xpath that reaches a node by thingClass or by a wildcard is counted nowhere in this layer, so a 0 is not evidence that the node reached the game unpatched. A node without a Name= reports patch_ops as 'n/a' rather than 0 because that count was never taken; the defName and label counts are still taken. For the merged, post-patch values, read any concrete child with 'get' — everything a parent contributes is already in each of its children.
+What is shown is the XML before PatchOperations are applied. patch_ops_name counts xpaths that name the node with @Name=; patch_ops_defname and patch_ops_label count xpaths that name it by defName= and by label=, and a snapshot exported before those were measured has neither column (its 'absent' table says so). An xpath that reaches a node by thingClass or by a wildcard is counted nowhere in this layer, so a 0 is not evidence that the node reached the game unpatched. A node without a Name= reports patch_ops_name as 'n/a' rather than 0 because that count was never taken; the defName and label counts are still taken. For the merged, post-patch values, read any concrete child with 'get' — everything a parent contributes is already in each of its children.
 
 | Argument | Meaning |
 |---|---|
@@ -494,6 +494,7 @@ What is shown is the XML before PatchOperations are applied. patch_ops counts xp
 | Key | Holds |
 |---|---|
 | `nodes` | one object per XML node answering to the names — each with 'node' (identity and patch count), 'ancestors', 'children' when it has any, and 'witnesses' when --path-contains or --exact-path is given. With several names the objects come in the order the names were given; a name that matched nothing has no object here and one note in 'notes' that quotes it. |
+| `absent` | one row when this snapshot was exported before xpaths were counted by defName= and label= — layer 'patch_ops_defname_label', state pre-measure, next (the export command that measures them); empty when the identity blocks carry all three counts. |
 
 Examples:
 

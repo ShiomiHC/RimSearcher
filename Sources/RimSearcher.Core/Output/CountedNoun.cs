@@ -130,7 +130,6 @@ public static class NounRegistry
         ["direct child"] = "direct children",
         // 往上那条链数的是层数,与 "direct child"(往下一层的宽度)不是一回事。
         ["ancestor"] = "ancestors",
-        ["patch operation"] = "patch operations",
         ["assembly"] = "assemblies",
         // C# 侧的类型。与 "def type"(快照里那一层的桶名)分开登记 —— 一个 def type
         // 背后可能有好几个 C# 类型,数它们的地方不是同一个地方。
