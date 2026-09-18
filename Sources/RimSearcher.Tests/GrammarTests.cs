@@ -4891,6 +4891,40 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// calcState 是 ok 而推算价是 0:那是**算不出**(四个加数全空),不是「值零」。此前靠一句散文
+    /// 说破(「Read that as 'the game could not work it out'」);现在取值自陈 —— 这一格印
+    /// <c>empty-sum</c>,句子删掉(Docs/25 丁2)。导出器仍写 ok,分岔在查询面。
+    /// <c>--calc-state</c> 跟着分:ok 只剩真算出来的,empty-sum 单挑那些。
+    /// </summary>
+    [Fact]
+    public void 推算价为零的ok自陈为empty_sum()
+    {
+        var (row, _, _) = Fixture.Run("economy", "Meat_Muffalo");
+        Assert.Contains("  empty-sum  ", row);
+
+        var json = System.Text.Json.JsonDocument.Parse(Fixture.Run("economy", "Meat_Muffalo", "--json").Stdout).RootElement;
+        var thing = json.GetProperty("things")[0];
+        Assert.Equal(EconomyCommand.CalcEmptySum, thing.GetProperty("calcState").GetString());
+        Assert.Equal(0, thing.GetProperty("fallbackMarketValue").GetDouble());
+
+        // 真算出来的那一行照旧是 ok。
+        var (belt, _, _) = Fixture.Run("economy", "Apparel_ShieldBelt", "--json");
+        var beltState = System.Text.Json.JsonDocument.Parse(belt).RootElement.GetProperty("things")[0]
+            .GetProperty("calcState").GetString();
+        Assert.Equal(IntermediateFormat.EconomyCalcOk, beltState);
+
+        // 筛子按印出来的词分:ok 与 empty-sum 各挑各的,没有一行同时落在两边。
+        static string[] Names(string json) =>
+            System.Text.Json.JsonDocument.Parse(json).RootElement.GetProperty("things").EnumerateArray()
+                .Select(t => t.GetProperty("defName").GetString()!).ToArray();
+        var ok = Names(Fixture.Run("economy", "--calc-state", "ok", "--json").Stdout);
+        var empty = Names(Fixture.Run("economy", "--calc-state", "empty-sum", "--json").Stdout);
+        Assert.Contains("Apparel_ShieldBelt", ok);
+        Assert.Contains("Meat_Muffalo", empty);
+        Assert.Empty(ok.Intersect(empty));
+    }
+
+    /// <summary>
     /// 没量过经济面的库上,<c>get</c> 那条指路**不许沉默**。
     ///
     /// 头一版按「这个 def 在经济表里有没有行」判在场,于是降级过的库上它整句消失 ——

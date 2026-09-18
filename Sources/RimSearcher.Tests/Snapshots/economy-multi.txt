@@ -7,7 +7,7 @@ Same in every row, not repeated below: category=Item, marketValueDefined=yes, co
 defName             label         mod              marketValue  calcState  fallbackMarketValue  costToMake                             profit  profitRate  workToProduce  costList                                     costDifficultyVar  chainEndShare  costDeep  profitDeep  isWeapon  isApparel
 TestModGun          test gun      test.mod         320          recipe     298.5                141.2 (holds when classicMortars=off)  178.8   1104.94     1618           40 x Bloomstone (80), 1 x Firefoam (61.2)    classicMortars     0.57           156.4     163.6       yes       no
 Apparel_ShieldBelt  shield belt   ludeon.rimworld  480          ok         412.75               220                                    260     866.67      3000           60 x Bloomstone (120), 100 x Firefoam (100)                     1              220       260         no        yes
-Meat_Muffalo        muffalo meat  ludeon.rimworld  2.05         ok         0                                                                                                                                                                             2.05      0           no        no
+Meat_Muffalo        muffalo meat  ludeon.rimworld  2.05         empty-sum  0                                                                                                                                                                             2.05      0           no        no
 
 product             thingDef    count  unitValue  chainEnd
 TestModGun          Bloomstone  40     2          yes
@@ -20,7 +20,6 @@ TestModGun          Make_TestModGun          1             1618        no
 TestModGun          Make_TestModGunBulk      4             4200        yes
 Apparel_ShieldBelt  Make_Apparel_ShieldBelt  1             3000        no
 chainEndShare is 1 for 1 row above, which means the whole cost came from ingredients that have no recipe of their own. For those rows 'profit' is the market value minus a few other hand-written market values, not minus what producing the thing actually consumes.
-  - fallbackMarketValue is 0 on 1 row above whose calcState is 'ok'. Read that as 'the game could not work it out', not as a price of zero: calcState only says the thing is producible and declares a market value, and the sum underneath can still come out empty. Vanilla does this a lot — Steel and Bioferrite among them.
   - A tag like '(holds when classicMortars=on)' above names the difficulty setting a number depends on, and the position it holds under. Put the setting the other way and the def swaps in a second cost list, which the tagged number is not from. An export cannot tell which way a given game has it: the setting is read off the storyteller, and no storyteller exists while the game is loading. 'rimsearcher get <defName> --path-contains costListForDifficulty' shows the other list.
   - 2 recipes can produce TestModGun, so that thing's fallbackMarketValue depends on def load order: the game takes whichever of them comes first in the database. A bulk recipe usually scales its ingredients but not its work amount, so which one wins changes the number.
   - A recipe above accepts TestModGun as one of its own ingredients, so that thing's fallback market value has its own hand-written price folded into it.

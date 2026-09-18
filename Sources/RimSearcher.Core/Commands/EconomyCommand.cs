@@ -129,13 +129,14 @@ public sealed class EconomyCommand : Command
             {
                 Name = "calc-state",
                 Aliases = ["state"],
-                Placeholder = "<ok|recipe|used|not_producible>",
+                Placeholder = "<ok|empty-sum|recipe|used|not_producible>",
                 Help = "Keep only rows whose fallback market value came about a particular way. " +
                        "'ok' and 'recipe' both mean the thing declares its own market value, so the " +
                        "fallback is only the counterfactual — 'recipe' derives it from a recipe, 'ok' " +
-                       "from the cost list. 'used' means nothing is declared, so the fallback is the " +
-                       "market value itself. 'not_producible' means nothing produces the thing, so " +
-                       "there is no fallback at all.",
+                       "from the cost list. 'empty-sum' is 'ok' whose cost list summed to nothing: the " +
+                       "fallback prints as 0 and is not a price, the game could not work one out. 'used' " +
+                       "means nothing is declared, so the fallback is the market value itself. " +
+                       "'not_producible' means nothing produces the thing, so there is no fallback at all.",
                 Narrows = true,
             },
             new OptionSpec
@@ -413,6 +414,18 @@ public sealed class EconomyCommand : Command
         => row.MarketValueDefined ? row.MarketValue : Qual(row.MarketValue, row);
 
     /// <summary>
+    /// 查询面上 calcState 的第五个取值:导出器写的是 ok(可生产 + 声明了 MarketValue),而四个
+    /// 加数全为零时推算价是 0 —— 那是**算不出**,不是「值零」。vanilla 自己大量如此(Steel /
+    /// Bioferrite 都是),读成一个数就会被当成极便宜的东西统计进分布。此前靠一句散文说破,
+    /// 现在取值自陈(Docs/25 丁2);库里仍是 ok,分岔只在这里与 <c>--calc-state</c> 的筛子上。
+    /// </summary>
+    public const string CalcEmptySum = "empty-sum";
+
+    private static string CalcStateShown(EconomyRow row)
+        => row.CalcState == IntermediateFormat.EconomyCalcOk && row.CalculatedMarketValue is <= 0
+            ? CalcEmptySum : row.CalcState;
+
+    /// <summary>
     /// 一行 <c>things</c>。**两条路唯一的产地** —— 键与值都在这里定,调用方只挑印哪几列。
     /// </summary>
     private static IReadOnlyDictionary<string, object?> ThingRow(EconomyRow row) =>
@@ -424,7 +437,7 @@ public sealed class EconomyCommand : Command
             ["category"] = row.Category,
             ["marketValue"] = QualMarketValue(row),
             ["marketValueDefined"] = row.MarketValueDefined,
-            ["calcState"] = row.CalcState,
+            ["calcState"] = CalcStateShown(row),
             // 输出键与存储键(calculated_market_value)有意不同:fallback 点破这个数的身份 ——
             // 只在没声明 MarketValue 时才被采用,而那时它已经折进 marketValue、这一格反而不印。
             ["fallbackMarketValue"] = row.CalculatedMarketValue,
@@ -530,17 +543,8 @@ public sealed class EconomyCommand : Command
                 "'profit' is the market value minus a few other hand-written market values, not minus what " +
                 "producing the thing actually consumes.");
 
-        // 2. ok 且推算价为零 = **算不出**,不是「推算价是零」。calc_state 只反映「可生产 +
-        //    声明了 MarketValue」,四个加数全为零时它照样是 ok。vanilla 自己大量如此
-        //    (Steel / Bioferrite 都是),读成一个数就会被当成极便宜的东西统计进分布。
-        var zeroCalc = shown.Count(r => r.CalcState == IntermediateFormat.EconomyCalcOk
-                                        && r.CalculatedMarketValue is <= 0);
-        if (zeroCalc > 0)
-            ctx.Report.Notice(NoticeKind.Boundary,
-                $"fallbackMarketValue is 0 on {Tally.Complete(zeroCalc).Render("row")} above whose calcState " +
-                "is 'ok'. Read that as 'the game could not work it out', not as a price of zero: calcState " +
-                "only says the thing is producible and declares a market value, and the sum underneath can " +
-                "still come out empty. Vanilla does this a lot — Steel and Bioferrite among them.");
+        // 2. ok 且推算价为零 = 算不出:2026-09-18 起那一格自陈 empty-sum(CalcStateShown),
+        //    此前这里有一句「Read that as 'the game could not work it out'」。
 
         // 3. 成本表有难度变体 —— 而导出那一刻判不了那个条件。这条的严重度分两档,
         //    因为 invert 决定了导出取到的是常见的那一支还是罕见的那一支,而后者印出来的数

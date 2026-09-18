@@ -1,4 +1,5 @@
 ﻿using Microsoft.Data.Sqlite;
+using RimSearcher.Contract;
 using RimSearcher.Snapshot;
 
 namespace RimSearcher.Storage;
@@ -2003,7 +2004,20 @@ public sealed class SnapshotDb : IDisposable
         // 正是这一层的主要用法,自建一个 --mod 会让同一个词在两条命令里选中不同的集合。
         if (scope.SqlPredicate("mod", p) is { } modWhere) conds.Add(modWhere);
         if (category is not null) { conds.Add("category = @cat COLLATE NOCASE"); p["@cat"] = category; }
-        if (calcState is not null) { conds.Add("calc_state = @cs COLLATE NOCASE"); p["@cs"] = calcState; }
+        // ok 在查询面分成两个词:推算价 > 0 的才是 ok,为零(或没有)的印成 empty-sum
+        // (EconomyCommand.CalcStateShown)。筛子按印出来的词分,不然 --calc-state ok 会挑进
+        // 表里自称 empty-sum 的行。库里的取值仍是导出器写的 ok。
+        if (string.Equals(calcState, Commands.EconomyCommand.CalcEmptySum, StringComparison.OrdinalIgnoreCase))
+        {
+            conds.Add("calc_state = @cs COLLATE NOCASE AND COALESCE(calculated_market_value, 0) <= 0");
+            p["@cs"] = IntermediateFormat.EconomyCalcOk;
+        }
+        else if (string.Equals(calcState, IntermediateFormat.EconomyCalcOk, StringComparison.OrdinalIgnoreCase))
+        {
+            conds.Add("calc_state = @cs COLLATE NOCASE AND calculated_market_value > 0");
+            p["@cs"] = calcState;
+        }
+        else if (calcState is not null) { conds.Add("calc_state = @cs COLLATE NOCASE"); p["@cs"] = calcState; }
         if (producibleOnly) conds.Add("producible = 1");
         var where = conds.Count == 0 ? "" : " WHERE " + string.Join(" AND ", conds);
 

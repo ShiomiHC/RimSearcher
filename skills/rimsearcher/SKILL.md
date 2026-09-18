@@ -239,9 +239,9 @@ way to state:
 - **Prices are computed, not stored** — `economy` is the only road to them. A market value
   can be derived from a recipe and a cost is a cost list expanded recursively, so none of
   these numbers is a def field and `get` returns nothing for them. Read a blank cell as *the
-  game cannot work this out*, never as zero: `calcState` keeps the four reasons apart, and a
-  `fallbackMarketValue` of `0` under `calcState=ok` means the sum came out empty, not that
-  the thing is free. `chainEndShare` of 1 means that row's `profit` is one hand-written
+  game cannot work this out*, never as zero: `calcState` keeps the reasons apart, and
+  `calcState=empty-sum` is the one whose `fallbackMarketValue` prints as `0` — the cost list
+  summed to nothing, the thing is not free. `chainEndShare` of 1 means that row's `profit` is one hand-written
   number minus a few others. A snapshot may not hold this layer at all — `economy` then says
   which of three things happened instead of answering, and **there is no way around it**: the
   indexed `marketValue` is the XML base value, not the computed price, and no field holds cost

@@ -15,10 +15,6 @@ exit 0
     },
     {
       "kind": "boundary",
-      "text": "fallbackMarketValue is 0 on 1 row above whose calcState is 'ok'. Read that as 'the game could not work it out', not as a price of zero: calcState only says the thing is producible and declares a market value, and the sum underneath can still come out empty. Vanilla does this a lot — Steel and Bioferrite among them."
-    },
-    {
-      "kind": "boundary",
       "text": "A tag like '(holds when classicMortars=on)' above names the difficulty setting a number depends on, and the position it holds under. Put the setting the other way and the def swaps in a second cost list, which the tagged number is not from. An export cannot tell which way a given game has it: the setting is read off the storyteller, and no storyteller exists while the game is loading. 'rimsearcher get <defName> --path-contains costListForDifficulty' shows the other list."
     }
   ],
@@ -126,7 +122,7 @@ exit 0
       "category": "Item",
       "marketValue": 2.05,
       "marketValueDefined": true,
-      "calcState": "ok",
+      "calcState": "empty-sum",
       "fallbackMarketValue": 0,
       "costToMake": null,
       "profit": null,
