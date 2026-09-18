@@ -145,7 +145,9 @@ public sealed class CodeSearchCommand : Command
                 // "scope" 不在这里 —— 见 CommandBase.Scope 的别名注释。
                 Aliases = ["root", "tree"],
                 Placeholder = "<name>",
-                Help = "Which decompiled source tree to search. Omit to search them all.",
+                Help = "Which decompiled source tree to search. Omit to search them all. This is the only " +
+                       "switch that picks where the C# is read from: snapshots hold defs and translations, so " +
+                       "--snapshot does not narrow a code search.",
                 Narrows = true,
             },
             new OptionSpec
@@ -428,9 +430,8 @@ public sealed class CodeSearchCommand : Command
         // 而一条路径不会被当成树名。
         if (ctx.Args.Has("snapshot"))
             ctx.Report.Notice(NoticeKind.Boundary,
-                $"--snapshot {ctx.Args.Value("snapshot")} did not narrow this search. A snapshot holds the " +
-                "game's defs and translations; the C# read here comes from the decompiled trees on disk, and " +
-                "--source is what picks among those. 'rimsearcher sources list' names them.");
+                $"--snapshot {ctx.Args.Value("snapshot")} did not narrow this search; --source is what picks " +
+                "among the decompiled trees, and 'rimsearcher sources list' names them.");
 
         // 不带 '/' 也不带 '.' 的 glob 是**按命名空间取景**的写法落到了文件名上。
         // 盲测里六份里六份把「只搜 Verse 命名空间」写成 --file-glob '*Verse*',而它挑出的
@@ -439,11 +440,10 @@ public sealed class CodeSearchCommand : Command
         // 带扩展名的写法(*.cs / *Comp*.cs)不报:那种写法本身就在说文件名,没有这层歧义。
         if (filesCandidate > 0 && !glob.Contains('/') && !glob.Contains('.'))
             ctx.Report.Notice(NoticeKind.NextStep,
-                $"'{glob}' carries no '/', so it selected by file name alone and ignored case: the files read " +
-                $"are the ones whose name matches, not the ones inside a directory called " +
+                $"'{glob}' has no '/', so it selected by file name alone, ignoring case. " +
                 // 建议必须给 '**':'*' 不跨 '/',而路径是 <tree>/<assembly>/<namespace>/<file>.cs
                 // 四段起,'*/Verse/*' 一个文件都挑不出来。给一条敲了没用的命令比不给更坏。
-                $"'{glob.Trim('*')}'. For a directory write '**/{glob.Trim('*')}/**'.");
+                $"For the directory '{glob.Trim('*')}' write '**/{glob.Trim('*')}/**'.");
 
         // 三个旋钮各自申报,因为被截的原因不同,该拧的也不同。
         // 两句都以旋钮自己作主语、计数放进从句:动词没有登记处,主谓一致只能靠句子结构避开。

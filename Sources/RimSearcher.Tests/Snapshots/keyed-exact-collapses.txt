@@ -2,7 +2,7 @@ $ rimsearcher keyed CommandSettle
 exit 0
 --- stdout ---
 1 keyed translation for 'CommandSettle'.
-'CommandSettle' is itself a key, so the answer above is that one key — matching stopped being a prefix search. Beyond it, 1 key in this layer starts with it (CommandSettleDesc); shorten the query to see them together.
+'CommandSettle' is itself a key, so the answer above is that one key. 1 more key in this layer starts with it (CommandSettleDesc); shorten the query to see them together.
 
 key            translated  original  origin     placeholder  declared_in  source                    query
 CommandSettle  定居        Settle    in effect  no                        GameplayCommands.xml:386  CommandSettle

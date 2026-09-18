@@ -485,8 +485,7 @@ public sealed class ReadCommand : Command
                 string.Join(", ", picked.Select(d => $"{d.Qualified} (line {d.StartLine})")) + ". " +
                 (typeCanHelp
                     ? "'--type <name>' narrows it to one."
-                    : "They differ by more than the name, so --type cannot pick between them — " +
-                      "read one alone with --lines " +
+                    : "--type cannot pick between them; read one alone with --lines " +
                       string.Join(" or --lines ", picked.Select(d => $"{d.StartLine}-{d.EndLine}")) + "."));
         }
 
@@ -795,9 +794,8 @@ public sealed class ReadCommand : Command
         // 重名不替调用方选:mod 的覆盖版被当成 vanilla 原版读下去,输出里逐字看不出区别,
         // 而选错的代价是整条结论作废。
         ctx.Report.Notice(NoticeKind.NextStep,
-            $"'{wanted}' matches {Tally.Complete(hits.Count).Render("file")}, and reading the wrong one gives " +
-            "an answer that looks right: " + NameList.Render(hits, Limits.AmbiguousFiles) +
-            ". Name one of those paths, or narrow with --source.");
+            $"'{wanted}' matches {Tally.Complete(hits.Count).Render("file")}: " +
+            NameList.Render(hits, Limits.AmbiguousFiles) + ". Name one of those paths, or narrow with --source.");
     }
 
     // ---- 零件 ----

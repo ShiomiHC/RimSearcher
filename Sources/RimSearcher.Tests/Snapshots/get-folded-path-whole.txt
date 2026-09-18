@@ -16,8 +16,14 @@ path               value
 statBases[0].stat  MarketValue
 statBases[1].stat  EnergyShieldRechargeRate
 No value above with 'code_default'=no is one that most of the 9 ThingDefs in this snapshot also carry.
-  - Market value, cost to make and work amount are not fields: 'rimsearcher economy Apparel_ShieldBelt' has them.
-  - Filtered away: 1 translation this def does have, none of whose paths contain 'statBases[].stat'. Their paths are the game's injection keys as written, and this snapshot predates the pass that brings them onto the field paths' grammar: where a field path has '[0]', a key has either the number or a name taken from that element's own label, and neither spelling contains the other. Ask for the field name on its own — the part before the subscript — to reach both tables, or re-export to get one grammar.
+Market value, cost to make and work amount are not fields: 'rimsearcher economy Apparel_ShieldBelt' has them.
+
+0 rows. Dropping any one option below brings back this many translations:
+filter                            hidden  next
+--path-contains statBases[].stat  1       rimsearcher get Apparel_ShieldBelt
+
+layer           state        next
+injection_keys  pre-measure  rimsearcher export --modlist fixture
 
 Set by hand in the same block as the rows above: value. Fields in one statBases[0] entry bind and override each other, and this table shows only the one asked for. 'rimsearcher get Apparel_ShieldBelt --path-contains statBases[0]' lists the whole block.
 --- stderr ---

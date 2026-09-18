@@ -1,13 +1,5 @@
 $ rimsearcher search ''
-exit 0
+exit 2
 --- stdout ---
-'' holds no letter or digit, and only those take part in full-text matching, so the index was never asked about it: whatever appears below came from scanning text for '' as a plain substring. An empty query is a substring of every row, so any count below is the size of what was scanned rather than an answer. 'rimsearcher list <DefType>' enumerates on purpose.
-  - These defs have it in the original text a translation replaced. This snapshot's language is ChineseSimplified, so the English wording survives only where a translation recorded what it was translated from.
-  - 3 defs.
-
-Same in every row, not repeated below: declared_in=ludeon.rimworld.
-def_name            def_type  label        matched_on
-Firefoam            ThingDef  firefoam     def_name+label
-Firefoam            StatDef                def_name
-Apparel_ShieldBelt  ThingDef  shield belt  def_name+label
 --- stderr ---
+'search' needs a query with a letter or digit in it. 'rimsearcher list <DefType>' enumerates a type.

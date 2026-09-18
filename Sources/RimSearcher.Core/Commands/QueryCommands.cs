@@ -14,10 +14,13 @@ public sealed class SearchCommand : Command
         Aliases = ["find-def", "s"],
         Summary = "Find defs by name, label, description, or translated text.",
         Remarks =
-            "Matching runs in stages and stops at the first one that finds anything: full-text search, a " +
-            "substring pass over names, the pre-translation original text of translations, then fuzzy " +
-            "identifier matching that tolerates typos and CamelCase initials. You never need to add '*' " +
-            "yourself. Translated text is in the full-text index, so a Chinese label finds the def; the " +
+            "Matching runs in stages and stops at the first one that finds anything: full-text search, " +
+            "which sees only letters and digits and splits a name at its word starts; a substring pass " +
+            "over names, which reaches a query sitting in the middle of a compound name; the " +
+            "pre-translation original text of translations; then fuzzy identifier matching that tolerates " +
+            "typos and CamelCase initials. You never need to add '*' yourself; a query with no letter or " +
+            "digit in it skips the full-text stage. Translated text is in the full-text index, so a " +
+            "Chinese label finds the def; the " +
             "English wording it replaced is not, and is reached only by that later pass — which is why an " +
             "English query against a translated snapshot can come back with rows whose label column is not " +
             "English. Each result says in 'matched_on' which of these it was.\n\n" + NameLookup.Help,
@@ -83,18 +86,17 @@ public sealed class SearchCommand : Command
         // 不先说破的话,下面那条兜底会拿着这个零去断言「什么都没匹配到」,再用
         // `LIKE '%<原串>%'` 去扫 —— 空串是每一行的子串,于是 `search ''` 顶着一句
         // 「没有」印出装机库上的 9963 条。零结果与「问都没问」在这里必须不同形。
+        //
+        // 空串单独一档:它是每一行的子串,扫出来的是整张表,而那不是一个结果 —— 用法错。
+        // 别的标点(`.`)只是命中得宽,不是必然命中全体,照常扫。
+        if (query.Length == 0)
+            throw new CliUsageException(
+                "'search' needs a query with a letter or digit in it. 'rimsearcher list <DefType>' enumerates a type.");
         var nothingToMatch = FtsText.HasNothingToMatch(query);
         if (nothingToMatch)
             ctx.Report.Notice(NoticeKind.Boundary,
-                $"'{query}' holds no letter or digit, and only those take part in full-text matching, so the " +
-                "index was never asked about it: whatever appears below came from scanning text for " +
-                $"'{query}' as a plain substring." +
-                // 空串这一档单说:它是每一行的子串,那个计数是被扫的那张表的大小,
-                // 不是一个结果。别的标点(`.`)只是命中得宽,不是必然命中全体。
-                (query.Length == 0
-                    ? " An empty query is a substring of every row, so any count below is the size of what was " +
-                      "scanned rather than an answer. 'rimsearcher list <DefType>' enumerates on purpose."
-                    : ""));
+                $"'{query}' holds no letter or digit, so the rows below come from scanning text for it as a " +
+                "plain substring.");
 
         // 译文原文那一侧的兜底:FTS 只索引 translated,中文快照上英文原名一个也搜不到。
         // **必须排在模糊回退之前** —— 否则英文查询会先被一批拼写相近的中文名挤掉真答案。
@@ -111,9 +113,7 @@ public sealed class SearchCommand : Command
                     (nothingToMatch
                         ? "These defs have it "
                         : $"No name, label or translated text in this snapshot contains '{query}'; these defs have it ") +
-                    "in the original text a translation replaced. This snapshot's language is " +
-                    $"{ctx.Db.Meta.Language}, so the English wording survives only where a translation " +
-                    "recorded what it was translated from.");
+                    "in the original text a translation replaced.");
             }
         }
 
@@ -143,8 +143,7 @@ public sealed class SearchCommand : Command
             if (addedBySubstring > 0)
                 ctx.Report.Notice(NoticeKind.Boundary,
                     $"That includes {Tally.Complete(addedBySubstring).Render("def")} found by scanning names for " +
-                    $"'{query}' as a substring; full-text matching alone splits names at word starts, so it misses " +
-                    "the query in the middle of a compound name.");
+                    $"'{query}' as a substring.");
         }
         if (rows.Count == 0 && offset > 0)
         {
@@ -391,6 +390,8 @@ public sealed class GetCommand : Command
                 Aliases = ["filter", "grep", "values", "path"],
                 Placeholder = "<text>",
                 Help = "Only show field paths containing this text. Repeat it to widen the selection. " +
+                       "The translation table is filtered by it too, on the path and on the key alike, with a " +
+                       "list subscript tried in both spellings ('[0]' and '.0.'). " +
                        CommonOptions.AnyIndexNote,
                 Narrows = true,
             },
@@ -459,7 +460,8 @@ public sealed class GetCommand : Command
                        "names were given, and with --type alone in def-name order; a name that matched " +
                        "nothing has no object here and one note in 'notes' that quotes it. With a path " +
                        "filter that matched nothing on that def, the object also carries 'index_gap' (asked, " +
-                       "state, next) when the cause could be told — see the fields command for the states.",
+                       "state, next) when the cause could be told — see the fields command for the states — " +
+                       "and, when the filter emptied the translation table, 'empty_because' for that table.",
             },
             new()
             {
@@ -1031,25 +1033,17 @@ public sealed class GetCommand : Command
                     "translation",
                     alone ? "" : $"this is {def.DefName} ({def.DefType}).");
 
-            // 筛空的那一次要说破。否定那半两档一个字不差 —— 变的只是出路:
-            // 归一过的快照里两张表同坐标,所以「没匹配上」就是真没有;没归一的老快照里
-            // 译文那栏是**注入键**原样(`stages.0.label` 或 `stages.observed_corpse.label`),
-            // 拿字段表的 `stages[0].label` 贴回来一条都不会中,而那与「没有译文」同形。
+            // 筛空的那一次是这个 def 的 empty_because 一行(筛子 / 拿掉它回来几条 / 同一条命令)。
+            // 两种拼法都试过是机制,住 --path-contains 的 help;没归一的老快照里译文那栏是
+            // **注入键**原样(`stages.0.label` 或 `stages.observed_corpse.label`),拿字段表的
+            // `stages[0].label` 贴回来一条都不会中 —— 那是缺层,absent 表给它一行。
             if (paths.Count > 0 && translations.Count == 0 && beforePathFilter > 0)
             {
-                var denial = $"Filtered away: {Tally.Complete(beforePathFilter).Render("translation")} " +
-                             "this def does have, none of whose paths contain " +
-                             $"{string.Join(" or ", paths.Select(p => $"'{p}'"))}.";
-                ctx.Report.Notice(NoticeKind.Filter, ctx.Db.Meta.IndexesInjectionKeys
-                    ? denial + " Their paths are written in the same grammar as the field paths above, and " +
-                               "this filter also tried both spellings a language file uses — the number as " +
-                               "'.0.' and the element's own handle — against the path and the key alike."
-                    : denial + " Their paths are the game's injection keys as written, and this snapshot " +
-                               "predates the pass that brings them onto the field paths' grammar: where a " +
-                               "field path has '[0]', a key has either the number or a name taken from that " +
-                               "element's own label, and neither spelling contains the other. Ask for the " +
-                               "field name on its own — the part before the subscript — to reach both " +
-                               "tables, or re-export to get one grammar.");
+                ctx.Report.EmptyBecause(
+                    new EmptyCause(ctx.FilterAsGiven("path-contains"), beforePathFilter, ctx.Without("path-contains")),
+                    "translation");
+                if (!ctx.Db.Meta.IndexesInjectionKeys)
+                    Short(DataLayers.InjectionKeysRow(ctx.Db, ctx.SnapshotName ?? ""));
             }
 
             // 表恒在场,空着也在场。--json 的自述契约是「表键恒在,没命中就是空数组」,而

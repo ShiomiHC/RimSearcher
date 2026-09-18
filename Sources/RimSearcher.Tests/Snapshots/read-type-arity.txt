@@ -2,7 +2,7 @@ $ rimsearcher read vanilla/Verse/Pair.cs --type Pair
 exit 0
 --- stdout ---
 2 declarations in vanilla/Verse/Pair.cs, 6 lines.
-'Pair' is declared more than once here: Pair (line 3), Pair<T> (line 7). They differ by more than the name, so --type cannot pick between them — read one alone with --lines 3-5 or --lines 7-9.
+'Pair' is declared more than once here: Pair (line 3), Pair<T> (line 7). --type cannot pick between them; read one alone with --lines 3-5 or --lines 7-9.
 
 vanilla/Verse/Pair.cs:3-5  class Pair
      3  	internal class Pair

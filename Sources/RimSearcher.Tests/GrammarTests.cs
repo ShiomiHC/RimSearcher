@@ -1909,23 +1909,29 @@ public class GrammarTests
     /// <c>CommandSettle*</c> 回同一批、零警告 —— 只有再敲一个 <c>Settle*Command</c> 拿到零
     /// 才知道 <c>*</c> 只是被删了;而 <c>CE_</c> 实际按 <c>CE</c> 匹配,计数是一个更宽集合的数。
     ///
-    /// 闸盯两头:改过就说破,一字没改时不许多话。
+    /// 闸盯两头:改过就说跑的是什么,一字没改时不许多话。机制(只有字母数字参与)住 help,
+    /// 输出只剩查询回显(Docs/25 己族)。
     /// </summary>
     [Fact]
     public void keyed说破查询词被规范化成了什么()
     {
         var (starred, _, _) = Fixture.Run("keyed", "Command*Settle");
-        Assert.Contains("was not matched as typed", starred, StringComparison.Ordinal);
-        Assert.Contains("CommandSettle", starred, StringComparison.Ordinal);
+        Assert.Contains("'Command*Settle' ran as CommandSettle.", starred, StringComparison.Ordinal);
         Assert.Contains("'*' is not a wildcard", starred, StringComparison.Ordinal);
 
         // 下划线不是我们剥的,是分词器切的 —— 两道都要说破,否则计数无从解释。
         var (underscore, _, _) = Fixture.Run("keyed", "CommandSettle_");
-        Assert.Contains("was not matched as typed", underscore, StringComparison.Ordinal);
+        Assert.Contains("'CommandSettle_' ran as CommandSettle.", underscore, StringComparison.Ordinal);
 
         // 一字没改:这句话不许出场,否则它退化成每次都挂的免责声明。
         var (plain, _, _) = Fixture.Run("keyed", "CommandSettle");
-        Assert.DoesNotContain("was not matched as typed", plain, StringComparison.Ordinal);
+        Assert.DoesNotContain(" ran as ", plain, StringComparison.Ordinal);
+
+        // 一个字母数字都没有:没有东西可查,是用法错,不是零结果;出路是裸调用。
+        var (_, err, code) = Fixture.Run("keyed", "*");
+        Assert.Equal(2, code);
+        Assert.Contains("'*' holds no letter or digit", err, StringComparison.Ordinal);
+        Assert.Contains("'rimsearcher keyed' with no argument lists all", err, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -3182,20 +3188,22 @@ public class GrammarTests
         var (collapsed, _, code) = Fixture.Run("keyed", "CommandSettle");
         Assert.Equal(0, code);
         Assert.Contains("CommandSettleDesc", collapsed, StringComparison.Ordinal);
-        // 说破的是「匹配方式变了」,不只是「还有别的」—— 后者读起来像一条可选的建议。
-        Assert.Contains("prefix", collapsed, StringComparison.Ordinal);
+        // 说破的是「答的就是这一个 key」,不只是「还有别的」—— 后者读起来像一条可选的建议。
+        // 「前缀匹配被关掉」这个机制住 query 的 help(Docs/25 己族),输出只剩事实与出路。
+        Assert.Contains("'CommandSettle' is itself a key, so the answer above is that one key.", collapsed, StringComparison.Ordinal);
+        Assert.Contains("shorten the query to see them together", collapsed, StringComparison.Ordinal);
 
         // 没有兄弟的精确命中:一个字都不许多说。
         var (lone, _, loneCode) = Fixture.Run("keyed", "CannotUseNoPower");
         Assert.Equal(0, loneCode);
-        Assert.DoesNotContain("prefix", lone, StringComparison.Ordinal);
+        Assert.DoesNotContain("is itself a key", lone, StringComparison.Ordinal);
 
         // 前缀那一路本来就两条都在,这句话在那里同样是噪音。
         var (prefix, _, prefixCode) = Fixture.Run("keyed", "CommandSettl");
         Assert.Equal(0, prefixCode);
         Assert.Contains("CommandSettle", prefix, StringComparison.Ordinal);
         Assert.Contains("CommandSettleDesc", prefix, StringComparison.Ordinal);
-        Assert.DoesNotContain("matching stopped being", prefix, StringComparison.Ordinal);
+        Assert.DoesNotContain("is itself a key", prefix, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -4821,7 +4829,7 @@ public class GrammarTests
             var (text, _, _) = Fixture.Run(argv);
             Assert.Contains(denial, text, StringComparison.Ordinal);
             // 出路要指到真正的那个旋钮上,否则说破了也无处可去。
-            Assert.Contains("--source is what picks among those", text, StringComparison.Ordinal);
+            Assert.Contains("--source is what picks among the decompiled trees", text, StringComparison.Ordinal);
         }
 
         // 没给 --snapshot 就一个字都不说 —— 恒真的横幅读到第五遍会把整个声明区训练成盲区。

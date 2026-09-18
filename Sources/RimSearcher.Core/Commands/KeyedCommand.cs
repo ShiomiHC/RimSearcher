@@ -46,6 +46,9 @@ public sealed class KeyedCommand : Command
                 Required = false,
                 Variadic = true,
                 Help = "A translation key, or a phrase from the interface in any language the snapshot has. " +
+                       "A query that is exactly a key shows that key alone; anything else is matched as a key " +
+                       "prefix and as display text. Only letters and digits take part: punctuation, '*' " +
+                       "included, is dropped, and the answer says what ran whenever that changed the query. " +
                        "Several go in one call; --limit and --offset apply to each on its own, each gets its " +
                        "own count line, and the query column says which one a row answers. Leave them all " +
                        "out to list the layer itself — every keyed translation, or with --empty-translation " +
@@ -138,6 +141,17 @@ public sealed class KeyedCommand : Command
         if (query is null)
             return RunAll(ctx, limit, offset, placeholdersOnly);
 
+        // 一个字母数字都没有的查询词没有东西可查,是用法错 —— 几条一起给时先验完再跑,
+        // 否则前几条的结果会陪着一条错参数一起作废。
+        // **不许说「跑了一个空查询」**:这条命令的 help 写着「把参数去掉就列整层」,空查询在
+        // 它的口径里等于全部。`*` 单说:它看着像通配符,而它只是被删了。
+        foreach (var q in asked)
+            if (FtsText.HasNothingToMatch(q))
+                throw new CliUsageException(
+                    $"'{q}' holds no letter or digit, and only those take part in matching." +
+                    (q.Contains('*', StringComparison.Ordinal) ? " '*' is not a wildcard here." : "") +
+                    $" 'rimsearcher keyed' with no argument lists all {Tally.Complete(total).Render("keyed translation")}.");
+
         var table = new List<IReadOnlyDictionary<string, object?>>();
         var answered = 0;
         var anyPlaceholder = false;
@@ -183,33 +197,15 @@ public sealed class KeyedCommand : Command
             //
             // 只在这条路上说:精确 key 那一路走的是 SQL 等值比较,规范化碰不到它,
             // 在那儿说就是错话。
+            // 一个字母数字都不剩的在 Run 里已经拒掉(用法错);这里只剩「剥掉了几个字符」那一档:
+            // 跑的是什么,一句事实。机制(只有字母数字参与)住 query 的 help。
             var terms = FtsText.EffectiveTerms(query);
-            if (terms.Count == 0)
-                // 一个字母数字都不剩,与「剥掉了几个字符」是两种病,分开说。
-                //
-                // **不许说「跑了一个空查询」** —— 这条命令自己的 help 写着「把参数去掉就列
-                // 整层」,空查询在它的口径里等于全部。原先那句让「空」在同一屏里既指全体
-                // 又指零,而读的人手上正好有一个零。
-                //
-                // 触发判据也从「归一化改动过原串」换成 terms.Count:空串两边恰好相等,
-                // 于是这条解释以前正好在最该说的那个输入上不发(见 FtsText.HasNothingToMatch)。
+            if (!string.Equals(string.Join(" ", terms), query.Trim(), StringComparison.Ordinal))
                 ctx.Report.Notice(NoticeKind.Boundary,
-                    $"'{query}' holds no letter or digit, and only those take part in matching, so there was " +
-                    "nothing left to look up. " +
-                    (query.Contains('*', StringComparison.Ordinal)
-                        ? "'*' is not a wildcard here: it is dropped like any other punctuation. "
-                        : "") +
-                    "Leaving the argument out is a different call, not an empty one: 'rimsearcher keyed' " +
-                    $"lists all {Tally.Complete(total).Render("keyed translation")}.");
-            else if (!string.Equals(string.Join(" ", terms), query.Trim(), StringComparison.Ordinal))
-                ctx.Report.Notice(NoticeKind.Boundary,
-                    $"'{query}' was not matched as typed: only letters and digits take part, so what ran was " +
-                    $"{NameList.Render(terms, Limits.MaxSuggestions)}." +
+                    $"'{query}' ran as {NameList.Render(terms, Limits.MaxSuggestions)}." +
                     // 只在查询词里真有 `*` 时讲它 —— 否则这句话是答非所问,而下划线那种
-                    // 剥离与通配符无关。与上面那支逐字同句。
-                    (query.Contains('*', StringComparison.Ordinal)
-                        ? " '*' is not a wildcard here: it is dropped like any other punctuation."
-                        : ""));
+                    // 剥离与通配符无关。
+                    (query.Contains('*', StringComparison.Ordinal) ? " '*' is not a wildcard here." : ""));
         }
         else if (placeholdersOnly)
         {
@@ -307,8 +303,8 @@ public sealed class KeyedCommand : Command
             var (siblings, siblingTotal) = ctx.Db.KeyedPrefixSiblings(query, Limits.MaxSuggestions);
             if (siblingTotal > 0)
                 ctx.Report.Notice(NoticeKind.Boundary,
-                    $"'{query}' is itself a key, so the answer above is that one key — matching stopped being " +
-                    $"a prefix search. Beyond it, {Tally.Complete(siblingTotal).Render("key")} in this layer " +
+                    $"'{query}' is itself a key, so the answer above is that one key. " +
+                    $"{siblingTotal} more {NounRegistry.Form("key", siblingTotal)} in this layer " +
                     $"{(siblingTotal == 1 ? "starts" : "start")} with it " +
                     $"({NameList.Render(siblings, Limits.MaxSuggestions)}); shorten the query to see them together.");
         }

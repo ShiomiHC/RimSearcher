@@ -12,5 +12,11 @@ declared_in  ludeon.rimworld
 source       Apparel_Belts.xml
 xml          not indexed (exporter 0.2.0)
 Market value, cost to make and work amount are not fields: 'rimsearcher economy Apparel_ShieldBelt' has them.
-Filtered away: 1 translation this def does have, none of whose paths contain 'zzzz'. Their paths are the game's injection keys as written, and this snapshot predates the pass that brings them onto the field paths' grammar: where a field path has '[0]', a key has either the number or a name taken from that element's own label, and neither spelling contains the other. Ask for the field name on its own — the part before the subscript — to reach both tables, or re-export to get one grammar.
+
+0 rows. Dropping any one option below brings back this many translations:
+filter                hidden  next
+--path-contains zzzz  1       rimsearcher get Apparel_ShieldBelt
+
+layer           state        next
+injection_keys  pre-measure  rimsearcher export --modlist fixture
 --- stderr ---

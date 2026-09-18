@@ -1,7 +1,7 @@
 $ rimsearcher keyed Apparel_ShieldBelt
 exit 4
 --- stdout ---
-'Apparel_ShieldBelt' was not matched as typed: only letters and digits take part, so what ran was Apparel, ShieldBelt.
+'Apparel_ShieldBelt' ran as Apparel, ShieldBelt.
 No keyed translation matches 'Apparel_ShieldBelt'.
 
 Where the name does turn up:

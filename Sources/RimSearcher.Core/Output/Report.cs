@@ -446,18 +446,11 @@ public sealed class Report
                              ["next"] = c.Next,
                          }).ToList();
         if (rows.Count == 0) return false;
-        // 同一次输出里只有一张:JSON 面同名块后写的覆盖先写的,所以第二次调用是往第一张里加行。
-        var at = _entries.FindIndex(e => e is TableBlock { Name: EmptyBecauseTable, Collection: null });
-        if (at >= 0)
-        {
-            var t = (TableBlock)_entries[at];
-            _entries[at] = t with { Rows = [.. t.Rows, .. rows] };
-            return true;
-        }
+        // 同一层里只有一张,第二次调用是往第一张里加行;正在集合项里(get 的某个 def 块)时
+        // 归那一项 —— 那时空的是这个 def 自己的一张子表。
         // 标题只在文本面(JSON 里表名自己在说);它是这张表的事实句:行数是零,而下面每一行
         // 是一个自己给的、单独拿掉就有行回来的筛子。
-        Table(EmptyBecauseTable, ["filter", "hidden", "next"], rows,
-              caption: EmptyBecauseCaption(unit), unclipped: true);
+        AppendRows(EmptyBecauseTable, ["filter", "hidden", "next"], rows, caption: EmptyBecauseCaption(unit));
         return true;
     }
 

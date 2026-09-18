@@ -2,7 +2,7 @@ $ rimsearcher search VoidNode
 exit 0
 --- stdout ---
 3 defs.
-That includes 1 def found by scanning names for 'VoidNode' as a substring; full-text matching alone splits names at word starts, so it misses the query in the middle of a compound name.
+That includes 1 def found by scanning names for 'VoidNode' as a substring.
 
 Same in every row, not repeated below: def_type=ThingDef, matched_on=def_name, declared_in=test.mod.
 def_name          label

@@ -1,6 +1,5 @@
 $ rimsearcher keyed ''
-exit 1
+exit 2
 --- stdout ---
-'' holds no letter or digit, and only those take part in matching, so there was nothing left to look up. Leaving the argument out is a different call, not an empty one: 'rimsearcher keyed' lists all 2107 keyed translations.
-No keyed translation matches ''.
 --- stderr ---
+'' holds no letter or digit, and only those take part in matching. 'rimsearcher keyed' with no argument lists all 2107 keyed translations.
