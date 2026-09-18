@@ -4878,17 +4878,14 @@ public class GrammarTests
         foreach (var other in new[] { notMeasured, skipped, unavailable })
             Assert.NotEqual(other, measuredEmpty);
 
-        // ⑥ 答不了的那三种还得说破**绕路**那件事。第十五轮第三轮实证:被拒之后并不停下,
-        //    而是转去 'values marketValue' 排个序当成「最赚钱的」交卷 —— 那条路上没有任何
-        //    错误信号,因为那个字段是真的、那条命令是对的,只是量不是同一个。
+        // ⑥ 答不了的那三种还得说一句数据的机制:索引里的 marketValue 是 XML 基值,不是游戏
+        //    算出的价。此前还跟着一句情景假设(「Ranking defs by that field answers a different
+        //    question …」),第十七轮(Docs/24)三个配置 30 份:带与不带在每一格都相同,删了。
         //    第四种不发这句:那一路量过了,没有要绕的路。
         foreach (var (what, text) in new[] { ("not measured", notMeasured), ("skipped", skipped),
                                              ("unavailable", unavailable) })
-        {
             Assert.Contains("not the price the game computes", text, StringComparison.Ordinal);
-            Assert.Contains("different question", text, StringComparison.Ordinal);
-        }
-        Assert.DoesNotContain("different question", measuredEmpty, StringComparison.Ordinal);
+        Assert.DoesNotContain("not the price the game computes", measuredEmpty, StringComparison.Ordinal);
     }
 
     /// <summary>

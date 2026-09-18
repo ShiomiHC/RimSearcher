@@ -263,18 +263,18 @@ public sealed class EconomyCommand : Command
     }
 
     /// <summary>
-    /// 拒绝之后还得说一句邻居的事。实测:被拒之后并不停下,而是转去
-    /// 'values marketValue' 取 statBases 里那个数,把它排个序当成「最赚钱的」交卷 ——
-    /// 那一步没读到任何错误,因为那个数是真的、那条命令是对的,只是它回答的不是这个问题。
+    /// 拒绝之后说一句数据的机制:索引里的 marketValue 是 XML 基值,不是游戏算出的价。
     ///
-    /// 所以这句话不能写成「这份快照上按价格排序的结论都不成立」:能排,排出来也没算错。
-    /// 要说破的是**排的不是同一个量**。
+    /// 此前还带一句情景假设「Ranking defs by that field answers a different question, and its
+    /// output does not say so」。第十七轮(Docs/24)三个配置 30 份:带与不带在每一格都相同,删。
+    /// 同一轮量到的是,常见档把这句机制读成规格 —— 告诉它算法不同,它就把算法复现一遍交卷;
+    /// 挡得住的是 SKILL.md 里的禁令「there is no way around it」,不是输出里的任何一句。
     /// </summary>
     private static void NoteTheDetour(CommandContext ctx)
         => ctx.Report.Notice(NoticeKind.Boundary,
             "Fields called marketValue are still in this snapshot, but that is the base value written in " +
             "XML, not the price the game computes from it, and no field anywhere holds cost to make or " +
-            "profit. Ranking defs by that field answers a different question, and its output does not say so.");
+            "profit.");
 
     /// <summary>
     /// 一个或几个名字。几个名字**不各出一块**,而是并进同一张 things / costChain / recipes ——
