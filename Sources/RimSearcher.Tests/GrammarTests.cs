@@ -933,7 +933,8 @@ public class GrammarTests
         var (scoped, _, code) = Fixture.Run(
             "where", "thingClass", "RimWorld.Bullet", "--scope", "test.mod");
         Assert.Equal(1, code);
-        Assert.Contains("--scope test.mod is what emptied this", scoped, StringComparison.Ordinal);
+        // 成因是 empty_because 表的一行:筛子 / 拿掉它能回来几个 def / 拿掉它的同一条命令。
+        Assert.Contains("--scope test.mod  1       rimsearcher where thingClass RimWorld.Bullet", scoped, StringComparison.Ordinal);
         // 算出来的成因在场时,那句未经验证的猜测不许并排摆着。
         Assert.DoesNotContain("abstract base", scoped, StringComparison.Ordinal);
     }
@@ -2121,7 +2122,8 @@ public class GrammarTests
         Assert.DoesNotContain("blueprintGraphicData", pooled, StringComparison.Ordinal);
         Assert.DoesNotContain("pooled together", pooled, StringComparison.Ordinal);
         var (none, _, _) = Fixture.Run("values", "blueprintGraphicData.texPath", "--exact-path");
-        Assert.Contains("Drop --exact-path", none, StringComparison.Ordinal);
+        Assert.Contains(Report.EmptyBecauseCaption, none, StringComparison.Ordinal);
+        Assert.Contains("--exact-path  1       rimsearcher values blueprintGraphicData.texPath", none, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -2425,13 +2427,13 @@ public class GrammarTests
     [Fact]
     public void 路径只在作用域外时两条命令说同一句()
     {
-        const string said = "'workerClass' exists in this snapshot but no def has it within --scope ludeon.rimworld.";
-
+        // 同一个状态在两条命令上是同一行 empty_because:--scope / 拿掉它能回来的 def 数 /
+        // 拿掉它的同一条命令(各是自己那条)。
         var (v, _, _) = Fixture.Run("values", "workerClass", "--scope", "ludeon.rimworld");
-        Assert.Contains(said, v, StringComparison.Ordinal);
+        Assert.Contains("--scope ludeon.rimworld  1       rimsearcher values workerClass", v, StringComparison.Ordinal);
 
         var (w, _, _) = Fixture.Run("where", "workerClass", "SomeValue", "--scope", "ludeon.rimworld");
-        Assert.Contains(said, w, StringComparison.Ordinal);
+        Assert.Contains("--scope ludeon.rimworld  1       rimsearcher where workerClass SomeValue", w, StringComparison.Ordinal);
         // 「快照里没有这条路径」是另一个状态,不许再说。
         Assert.DoesNotContain("has a field path ending in 'workerClass'", w, StringComparison.Ordinal);
         // 那段「两种成因让字段不进索引」在这里整段不适用 —— 字段就在索引里,86 行摆着。

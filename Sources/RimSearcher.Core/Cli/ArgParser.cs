@@ -459,11 +459,15 @@ public sealed class ParseResult(
     /// 这一次真给了的**收窄参数**,按声明层的 <see cref="OptionSpec.Narrows"/> 认,
     /// 渲染成可以原样贴回命令行的一串(<c>--type MentalStateDef --exact</c>)。
     /// </summary>
-    public string Narrowing()
+    public string Narrowing() => Narrowing(except: null);
+
+    /// <summary>同上,跳过 <paramref name="except"/> 点名的那一个 —— 「拿掉这个筛子的同一条命令」用它拼。</summary>
+    public string Narrowing(string? except)
     {
         var parts = new List<string>();
         foreach (var o in Spec.Options.Where(o => o.Narrows))
         {
+            if (except is not null && string.Equals(o.Name, except, StringComparison.Ordinal)) continue;
             if (!values.TryGetValue(o.Name, out var given) || given.Count == 0) continue;
             if (o.Arity == Arity.Flag) { parts.Add($"--{o.Name}"); continue; }
             parts.AddRange(given.Select(v => $"--{o.Name} {v}"));

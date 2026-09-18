@@ -275,6 +275,34 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
     public bool Quiet => Args.Flag("quiet");
 
     /// <summary>
+    /// 这一次的命令行,拿掉 <paramref name="option"/> 那个筛子之后的样子 —— 原样可贴。
+    /// 位置参数照给,收窄参数按声明层重排(<see cref="ParseResult.Narrowing(string)"/>),
+    /// --snapshot 跟着走;--db 不带(它是调用方自己选的寻址,与别处的回显同一口径),
+    /// --json / --limit 这类不改答案集合的也不带。
+    /// </summary>
+    public string Without(string option)
+    {
+        var parts = new List<string> { CommandRegistry.ExeName, Args.Spec.Name };
+        parts.AddRange(Args.Positionals.Select(QuoteArg));
+        var narrowing = Args.Narrowing(except: option);
+        if (narrowing.Length > 0) parts.Add(narrowing);
+        if (Args.Value("snapshot") is { Length: > 0 } snap) parts.Add($"--snapshot {QuoteArg(snap)}");
+        return string.Join(" ", parts);
+    }
+
+    /// <summary>筛子那一格的写法:<c>--type ThingDef</c> / <c>--exact-path</c>,与 Narrowing 同一套拼法。</summary>
+    public string FilterAsGiven(string option)
+    {
+        // 无值开关内部存的是 "true",那不是命令行上写的样子。
+        if (Args.Spec.Options.FirstOrDefault(o => string.Equals(o.Name, option, StringComparison.Ordinal))?.Arity == Arity.Flag)
+            return $"--{option}";
+        var given = Args.Values(option);
+        return given.Count == 0 ? $"--{option}" : string.Join(" ", given.Select(v => $"--{option} {QuoteArg(v)}"));
+    }
+
+    private static string QuoteArg(string v) => v.Length == 0 || v.Any(char.IsWhiteSpace) ? $"\"{v}\"" : v;
+
+    /// <summary>
     /// 这次真正开库之后的快照名(别名,或路径去扩展名)。没开过库就是 null ——
     /// run-log 那时改从 <c>--snapshot</c> / <c>--db</c> 取。
     /// </summary>

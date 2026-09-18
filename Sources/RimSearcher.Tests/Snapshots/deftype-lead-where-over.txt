@@ -2,5 +2,8 @@ $ rimsearcher where ThingDef costList[0].thingDef Bloomstone
 exit 1
 --- stdout ---
 Read 'ThingDef' as --type ThingDef, not as <fieldPath>: on 'where' the def type is an option. Written out, this call is 'rimsearcher where costList[0].thingDef Bloomstone --type ThingDef'.
---type ThingDef is what emptied this: 4 defs in this snapshot have 'costList[0].thingDef' set to 'Bloomstone', on other def types. Drop --type to see them, and read the def_type column there.
+
+0 rows. Dropping any one option below brings back this many defs:
+filter           hidden  next
+--type ThingDef  4       rimsearcher where costList[0].thingDef Bloomstone
 --- stderr ---

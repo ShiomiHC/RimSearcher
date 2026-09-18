@@ -1157,6 +1157,7 @@ Answers 'what am I allowed to put here' and 'which classes are actually in use' 
 |---|---|
 | `values` | one row per distinct value: value, defs, field_path (which of the paths asked for the row was counted under — present on a single-path call too). |
 | `field` | an array with one entry per field path asked for, in the order given; each entry holds a 'field' object (field[0].field), the same nesting 'get' uses for defs[]. That object says which path was asked for and which full paths and def types its values came from: asked, matched_paths, def_types, defs_with_field. A bare name matches by suffix, so this says what was actually pooled. Always an array, including when one path was asked for. Always present: on an empty result that object's three members are empty and defs_with_field is 0, so a missing key never has to be told apart from nothing matching. |
+| `empty_because` | one row per option given on this call that, alone, emptied the result: filter (the option as written), hidden (how many defs come back with just that option dropped), next (the same call without it, ready to paste). Empty when the result was not empty, or when no single option accounts for it. |
 | `completeness` | an object, present only when some def in scope had its export cut short: scope (which def types this covers, in words), defs_cut_short (how many), types (one row per def type with its own count), verify (a ready command that lists them). Absent means no def in that scope lost fields at export. |
 
 Examples:
@@ -1199,6 +1200,7 @@ The field path is matched from the end, a segment at a time, so 'compClass' find
 |---|---|
 | `matches` | with a field path: one row per def that has it — def_name, def_type, value, mod. 'mod' is where the def was declared, not who wrote the value: a comp another mod bolts onto a vanilla def still reads as the vanilla mod, and --scope filters that same column. |
 | `paths` | without a field path: one row per field path that holds the value — path, def_type, example_value, and the def count split in two: defs_exact (the value is exactly the one asked for) and defs_other (it is inside a longer value). With --exact there is one meaning, so the column is a single 'defs'. This is the key that question produces; 'matches' is absent then. |
+| `empty_because` | one row per option given on this call that, alone, emptied the result: filter (the option as written), hidden (how many defs come back with just that option dropped), next (the same call without it, ready to paste). Empty when the result was not empty, or when no single option accounts for it. |
 | `completeness` | an object, present only when some def in scope had its export cut short: scope (which def types this covers, in words), defs_cut_short (how many), types (one row per def type with its own count), verify (a ready command that lists them). Absent means no def in that scope lost fields at export. |
 
 Examples:

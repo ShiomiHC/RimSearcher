@@ -1,0 +1,7 @@
+$ rimsearcher values workerClass --scope ludeon.rimworld
+exit 1
+--- stdout ---
+0 rows. Dropping any one option below brings back this many defs:
+filter                   hidden  next
+--scope ludeon.rimworld  1       rimsearcher values workerClass
+--- stderr ---

@@ -1,0 +1,7 @@
+$ rimsearcher values workerClass --type ThingDef
+exit 1
+--- stdout ---
+0 rows. Dropping any one option below brings back this many defs:
+filter           hidden  next
+--type ThingDef  1       rimsearcher values workerClass
+--- stderr ---

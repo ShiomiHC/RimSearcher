@@ -1,0 +1,7 @@
+$ rimsearcher values blueprintGraphicData.texPath --exact-path
+exit 1
+--- stdout ---
+0 rows. Dropping any one option below brings back this many defs:
+filter        hidden  next
+--exact-path  1       rimsearcher values blueprintGraphicData.texPath
+--- stderr ---

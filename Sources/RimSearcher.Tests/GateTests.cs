@@ -56,10 +56,13 @@ public class GateTests
             ["get.absent"] = ["get", "OnlyInOtherSnapshot", "--db", Fixture.OtherDb],
             ["list.defs"] = ["list", "ThingDef"],
             ["list.types"] = ["list"],
-            ["find.matches"] = ["where", "thingClass", "RimWorld.Bullet"],
-            ["find.paths"] = ["where", "--value", "RimWorld.Bullet"],
+            ["where.matches"] = ["where", "thingClass", "RimWorld.Bullet"],
+            ["where.paths"] = ["where", "--value", "RimWorld.Bullet"],
+            // 零行成因表只在自己给的筛子确实挡掉了东西时有行 —— 拿 --scope 圈空的那条探。
+            ["where.empty_because"] = ["where", "thingClass", "RimWorld.Bullet", "--scope", "test.mod"],
             ["fields.fields"] = ["fields", "ThingDef"],
             ["values.values"] = ["values", "thingClass"],
+            ["values.empty_because"] = ["values", "workerClass", "--scope", "ludeon.rimworld"],
             ["mods.mods"] = ["mods"],
             ["inherit.nodes"] = ["inherit", "BaseBullet"],
             // 主 fixture 是旧口径(只数 @Name=),缺 defName / label 两格 —— 那一行在这里。

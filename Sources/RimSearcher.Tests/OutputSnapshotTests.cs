@@ -41,6 +41,11 @@ public class OutputSnapshotTests
         // 落空的成因里,自己施加的过滤排在猜测之前 —— 两份摆一起:被 scope 滤空的那次
         // 不许再猜抽象基类,真零那次两种成因并列。
         { "where-value-scoped-empty", ["where", "thingClass", "RimWorld.Bullet", "--scope", "test.mod"] },
+        // values 的三种自己给的筛子各是 empty_because 的一行(Docs/25 乙1):--exact-path 钉死了
+        // 整段、--scope 圈掉了唯一那个 mod。--type 那一档见 values-type-filtered-empty。
+        { "values-exact-path-empty",  ["values", "blueprintGraphicData.texPath", "--exact-path"] },
+        { "values-scope-empty",       ["values", "workerClass", "--scope", "ludeon.rimworld"] },
+        { "values-type-filtered-empty", ["values", "workerClass", "--type", "ThingDef"] },
         { "where-value-class-miss",   ["where", "compClass", "RimWorld.CompNoSuchThing"] },
         // scope 展开在**有结果时**也要说:组名那份必须带展开句,写死 packageId 那份不多说一个字。
         { "where-scope-group",      ["where", "thingClass", "RimWorld.Bullet", "--scope", "vanilla"] },

@@ -395,6 +395,31 @@ public sealed class Report
 
     public const string AbsentTable = "absent";
 
+    /// <summary>
+    /// 「这次是自己给的哪个筛子把结果筛空的」—— 一张 <c>empty_because</c> 表,三列
+    /// filter / hidden / next,每个确实挡掉了东西的筛子一行;一个都没挡就一个字不印。
+    /// 行的形状见 <see cref="EmptyCause"/>。
+    /// </summary>
+    public bool EmptyBecause(params IReadOnlyList<EmptyCause> causes)
+    {
+        var rows = causes.Where(c => c.Hidden > 0).ToList();
+        if (rows.Count == 0) return false;
+        // 标题只在文本面(JSON 里表名自己在说);它是这张表的事实句:行数是零,而下面每一行
+        // 是一个自己给的、单独拿掉就有行回来的筛子。
+        Table(EmptyBecauseTable, ["filter", "hidden", "next"],
+              rows.Select(c => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+              {
+                  ["filter"] = c.Filter,
+                  ["hidden"] = c.Hidden,
+                  ["next"] = c.Next,
+              }).ToList(),
+              caption: EmptyBecauseCaption, unclipped: true);
+        return true;
+    }
+
+    public const string EmptyBecauseTable = "empty_because";
+    public const string EmptyBecauseCaption = "0 rows. Dropping any one option below brings back this many defs:";
+
     public Report Text(string name, IReadOnlyList<string> lines,
                        IReadOnlyList<IReadOnlyDictionary<string, object?>>? rows = null)
         => Add(new TextBlock(name, lines, rows));

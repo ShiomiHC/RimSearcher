@@ -1246,6 +1246,7 @@ public sealed class FindCommand : Command
                        "meaning, so the column is a single 'defs'. This is the key that question produces; " +
                        "'matches' is absent then.",
             },
+            EmptyCause.JsonKey,
             Completeness.JsonKey,
         ],
     };
@@ -1476,16 +1477,12 @@ public sealed class FindCommand : Command
 
                 // 取 Defs 不取 Total,理由同 --scope 那处:这句的谓语是「有 N 个 def 把它
                 // 设成了这个」,而 Total 数的是(def, 路径)行。
+                // 成因是一行 empty_because(筛子 / 它挡掉的 def 数 / 拿掉它的同一条命令),
+                // 此前是一句「--type X is what emptied this: N defs … Drop --type」(Docs/25 乙1)。
                 var hiddenByType = ctx.Db.FindByField(pq, value, exact, scope, 0, 0).Defs;
                 if (hiddenByType > 0)
                 {
-                    ctx.Report.Notice(NoticeKind.Filter,
-                        $"--type {type} is what emptied this: " +
-                        $"{Tally.Complete(hiddenByType).Render("def")} in this snapshot " +
-                        $"{(hiddenByType == 1 ? "has" : "have")} '{path}'" +
-                        (value is null ? "" : $" set to {(exact ? "exactly " : "")}'{value}'") +
-                        $", on other def types. Drop --type to see {(hiddenByType == 1 ? "it" : "them")}, " +
-                        "and read the def_type column there.");
+                    ctx.Report.EmptyBecause(new EmptyCause(ctx.FilterAsGiven("type"), hiddenByType, ctx.Without("type")));
                     NoteElsewhere();
                     return 1;
                 }
@@ -1558,7 +1555,7 @@ public sealed class FindCommand : Command
                 if (!identity.ContainsKey(path) && !scope.IsAll &&
                     ctx.Db.FieldPathExists(pq, ctx.Unscoped()))
                 {
-                    ctx.Report.Notice(NoticeKind.NextStep, OutsideScope.Say(path, scope));
+                    OutsideScope.Say(ctx, pq, type);
                     NoteElsewhere();
                     return 1;
                 }
@@ -1617,9 +1614,7 @@ public sealed class FindCommand : Command
 
             if (value is null)
             {
-                ctx.Report.Notice(NoticeKind.NextStep,
-                    $"'{path}' exists in this snapshot but no def has it within --scope {scope.Expression}. " +
-                    "Widen the scope, or pass a value to look for.");
+                OutsideScope.Say(ctx, pq, type);
                 NoteElsewhere();
                 return 1;
             }
@@ -1677,13 +1672,6 @@ public sealed class FindCommand : Command
                 : ctx.Db.FindByField(pq, value, exact,
                                      Snapshot.ScopeFilter.Parse("all", ctx.Db.PackageIds(), ctx.Config),
                                      0, 0, type).Defs;
-            if (hiddenByScope > 0)
-                ctx.Report.Notice(NoticeKind.Filter,
-                    $"--scope {scope.Expression} is what emptied this: " +
-                    $"{Tally.Complete(hiddenByScope).Render("def")} in this snapshot " +
-                    $"{(hiddenByScope == 1 ? "has" : "have")} '{path}' set to " +
-                    $"{(exact ? "exactly " : "")}'{value}'. Drop --scope to see {(hiddenByScope == 1 ? "it" : "them")}.");
-
             ctx.Report.Notice(NoticeKind.NextStep,
                 // 落空句自己要带上收窄条件,否则它与上面那句「--scope 把 N 行滤掉了」
                 // 并排摆着就是一对矛盾话。措辞与 search 的落空句同源。
@@ -1713,6 +1701,11 @@ public sealed class FindCommand : Command
                             "them), or no def drives it at all and C# constructs it directly " +
                             $"('rimsearcher code-search \"{ClassNameShape.Tail(value)}\"' shows who does)."
                           : "")));
+
+            // 成因是一行 empty_because,排在落空句后面;此前是「--scope X is what emptied this:
+            // N defs … Drop --scope」(Docs/25 乙1)。
+            if (hiddenByScope > 0)
+                ctx.Report.EmptyBecause(new EmptyCause(ctx.FilterAsGiven("scope"), hiddenByScope, ctx.Without("scope")));
 
             // 边界排在建议**之后**:它限定的是上面那整段,而不是其中某一条。
             //
@@ -2766,6 +2759,7 @@ public sealed class ValuesCommand : Command
                        "present: on an empty result that object's three members are empty and " +
                        "defs_with_field is 0, so a missing key never has to be told apart from nothing matching.",
             },
+            EmptyCause.JsonKey,
             Completeness.JsonKey,
         ],
     };
@@ -2898,16 +2892,19 @@ public sealed class ValuesCommand : Command
             var deeper = !withoutType && !outsideScope && !loosely
                 ? Completeness.ValuesLiveDeeper(ctx, path, scope) : null;
 
-            ctx.Report.Notice(NoticeKind.NextStep,
-                loosely
-                    ? $"No field path is exactly '{path}', though some path ends in it. Drop --exact-path " +
-                      $"to pool them, and read matched_paths for the real shapes — one of those pasted back " +
-                      "with --exact-path is the narrow query."
-                    : withoutType
-                        ? $"'{path}' exists in this snapshot but not on any {type}. Drop --type to see which def types have it."
-                        : outsideScope
-                            ? OutsideScope.Say(path, scope)
-                            : $"No def in this snapshot has a field path ending in '{path}'" +
+            // 三种自己给的筛子各是一行 empty_because(Docs/25 乙1);此前各是一句「Drop --exact-path /
+            // --type / Widen the scope」。--exact-path 那一行的 hidden 是放开整段之后能回来的 def 数。
+            if (loosely)
+                ctx.Report.EmptyBecause(new EmptyCause(ctx.FilterAsGiven("exact-path"),
+                    ctx.Db.FindByField(pq with { Exact = false }, null, false, scope, 0, 0, type).Defs, ctx.Without("exact-path")));
+            else if (withoutType)
+                ctx.Report.EmptyBecause(new EmptyCause(ctx.FilterAsGiven("type"),
+                    ctx.Db.FindByField(pq, null, false, scope, 0, 0).Defs, ctx.Without("type")));
+            else if (outsideScope)
+                OutsideScope.Say(ctx, pq, type);
+            else
+                ctx.Report.Notice(NoticeKind.NextStep,
+                              $"No def in this snapshot has a field path ending in '{path}'" +
                               (scope.IsAll ? "" : $" (nor anywhere outside --scope {scope.Expression})") + "." +
                               // 尾巴撤掉时那个句点后面不许留空格 —— 基线闸按行尾空白判红。
                               (deeper is not null
@@ -3092,9 +3089,16 @@ internal static class PathFilterText
 /// </summary>
 internal static class OutsideScope
 {
-    public static string Say(string path, Snapshot.ScopeFilter scope)
-        => $"'{path}' exists in this snapshot but no def has it within --scope {scope.Expression}. " +
-           "Widen the scope, or run 'rimsearcher mods' to see what this scope could have matched.";
+    /// <summary>
+    /// 「这条路径在快照里有,只是不在这个 --scope 里」:一行 empty_because(--scope / 拿掉它能回来几个 def /
+    /// 拿掉它的同一条命令)。此前 where 与 values 共用一句「'{path}' exists in this snapshot but no def
+    /// has it within --scope X. Widen the scope…」(Docs/25 乙1)。
+    /// </summary>
+    public static void Say(CommandContext ctx, PathQuery pq, string? type)
+    {
+        var hidden = ctx.Db.FindByField(pq, null, false, ctx.Unscoped(), 0, 0, type).Defs;
+        ctx.Report.EmptyBecause(new EmptyCause(ctx.FilterAsGiven("scope"), hidden, ctx.Without("scope")));
+    }
 }
 
 /// <summary>

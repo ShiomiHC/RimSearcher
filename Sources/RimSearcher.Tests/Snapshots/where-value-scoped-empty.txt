@@ -1,7 +1,10 @@
 $ rimsearcher where thingClass RimWorld.Bullet --scope test.mod
 exit 1
 --- stdout ---
---scope test.mod is what emptied this: 1 def in this snapshot has 'thingClass' set to 'RimWorld.Bullet'. Drop --scope to see it.
-  - No def within --scope test.mod has 'thingClass' set to 'RimWorld.Bullet', out of the 1 value found under thingClass. 'rimsearcher values thingClass' lists them.
-  - Another registered snapshot does have it — 'presence': 2 defs, 'presence-text': 5 defs. Add '--snapshot presence' to ask there; that check ignored --scope.
+No def within --scope test.mod has 'thingClass' set to 'RimWorld.Bullet', out of the 1 value found under thingClass. 'rimsearcher values thingClass' lists them.
+
+0 rows. Dropping any one option below brings back this many defs:
+filter            hidden  next
+--scope test.mod  1       rimsearcher where thingClass RimWorld.Bullet
+Another registered snapshot does have it — 'presence': 2 defs, 'presence-text': 5 defs. Add '--snapshot presence' to ask there; that check ignored --scope.
 --- stderr ---
