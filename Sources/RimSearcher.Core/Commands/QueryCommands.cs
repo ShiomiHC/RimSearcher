@@ -2781,12 +2781,13 @@ public sealed class ValuesCommand : Command
             CommonOptions.Type,
             new OptionSpec
             {
-                // 同 where 的 --field:`values ThingDef --field statBases` 是同一个「类型在前、字段用选项」的形状。
+                // 同 where 的 --field:`values ThingDef --field techLevel` 是同一个「类型在前、字段用选项」的形状。
+                // 示例用叶子字段:statBases 是容器,索引里没有它自己的取值,照抄示例会得到一张空表。
                 Name = "field",
                 Placeholder = "<path>",
                 Arity = Arity.Multi,
-                Help = "A field path, same as giving it as an argument. 'rimsearcher values ThingDef --field statBases' " +
-                       "is 'rimsearcher values statBases --type ThingDef'.",
+                Help = "A field path, same as giving it as an argument. 'rimsearcher values ThingDef --field techLevel' " +
+                       "is 'rimsearcher values techLevel --type ThingDef'.",
             },
             CommonOptions.ExactPath(),
             CommonOptions.PathContainsBeside(),

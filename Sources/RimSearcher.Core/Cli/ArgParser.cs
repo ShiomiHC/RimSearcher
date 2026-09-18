@@ -71,6 +71,40 @@ public static class ArgParser
             list.Add(v);
         }
 
+        // 有意不收的拼法先整条扫一遍:那句边界话要把读者写的**每个**值都填回去(正则填 <regex>,
+        // -C 12 填 <n>,文件填 <file>),而主循环走到第一个被拒的词时后面的还没读到。
+        // 「第一个位置参数」按形状猜:不以 - 开头、前一个词也不以 - 开头(否则它是某个选项的值)。
+        var refusedFills = new Dictionary<string, string>(StringComparer.Ordinal);
+        string? refusedFile = null;
+        bool PrecededByFlag(string prev)
+        {
+            var b = prev.StartsWith("--", StringComparison.Ordinal) ? prev[2..] : prev[1..];
+            if (b.Length == 1 && byShort.TryGetValue(b[0], out var so)) return so.Arity == Arity.Flag;
+            return byKey.TryGetValue(Normalize(b), out var lo) && lo.Arity == Arity.Flag;
+        }
+        if (spec.Refused.Length > 0)
+        {
+            for (var i = 0; i < argv.Count; i++)
+            {
+                var a = argv[i];
+                if (a.Length >= 2 && a[0] == '-' && a != "-" && !NegativeNumber.IsMatch(a))
+                {
+                    var b = a.StartsWith("--", StringComparison.Ordinal) ? a[2..] : a[1..];
+                    string? inl = null;
+                    var e = b.IndexOf('=');
+                    if (e >= 0) { inl = b[(e + 1)..]; b = b[..e]; }
+                    var nb = Normalize(b);
+                    var r = spec.Refused.FirstOrDefault(r => Normalize(r.Name) == nb || r.Aliases.Any(al => Normalize(al) == nb));
+                    var v = inl ?? (i + 1 < argv.Count && !argv[i + 1].StartsWith('-') ? argv[i + 1] : null);
+                    if (r?.ValuePlaceholder is { } ph && v is not null && !refusedFills.ContainsKey(ph))
+                        refusedFills[ph] = Pasteable(v);
+                }
+                else if (refusedFile is null && (i == 0 || !argv[i - 1].StartsWith('-') || PrecededByFlag(argv[i - 1])))
+                    refusedFile = a;
+            }
+        }
+        var refusedSaid = false;
+
         var noMoreOptions = false;
         var sawDoubleDash = false;
         for (var i = 0; i < argv.Count; i++)
@@ -104,7 +138,16 @@ public static class ArgParser
                     // 正确的写法里,而不是让人对着 <占位符> 自己再拼一遍。
                     var attached = inlineValue ??
                         (i + 1 < argv.Count && !argv[i + 1].StartsWith('-') ? argv[i + 1] : null);
-                    errors.Add(UnknownOptionMessage(arg, body, options, spec, siblings, attached, positionals));
+                    // 有意不收的拼法一次只说一句:`--grep X -C 12` 两个都被拒,而那句边界话
+                    // 把两个值都填进同一条 code-search 了,再来一句只会让人挑该粘哪句。
+                    var refusedSay = RefusedMessage(arg, body, spec, refusedFills, refusedFile);
+                    if (refusedSay is not null)
+                    {
+                        if (!refusedSaid) errors.Add(refusedSay);
+                        refusedSaid = true;
+                    }
+                    else
+                        errors.Add(UnknownOptionMessage(arg, body, options, spec, siblings, attached, positionals));
                     // 未知 flag 后面若跟着一个非 flag 的词,大概率是它的取值,一并跳过,
                     // 免得那个词又被当成位置参数引出第二条无关报错。
                     if (inlineValue is null && i + 1 < argv.Count && !argv[i + 1].StartsWith('-')) i++;
@@ -190,10 +233,15 @@ public static class ArgParser
             // 静默接受,但不静默 —— 不说的话下次还是这么写,而「within --type X」那句
             // 只说得出「筛过了」,说不出「你写的那个词是从哪一格挪过去的」。
             // 选项拼法在场时裸词列表装不下这一格(`--field X` 不在里面),把它按选项形态补回去。
-            // 不照 argv 整条抄:--db / --config 这类管道选项会跟进来,而那句是给人粘的。
+            // 这条命令自己的其他选项(--value / --limit)也抄:句子说的是「this call」,漏了 --value
+            // 粘回去就是另一条查询。不抄的只有全局选项:--db / --config 这类管道选项是给机器的。
             var spelledOut = declared.Where((_, i) => spelled[i] is not null)
                                      .Select((d, i) => $"--{d.Option} {string.Join($" --{d.Option} ", spelled[Array.IndexOf(declared, d)]!)}");
-            var written = string.Join(" ", positionals.Concat(spelledOut));
+            var slotOptions = declared.Select(d => d.Option).OfType<string>().ToHashSet(StringComparer.Ordinal);
+            var otherOptions = spec.Options
+                .Where(o => o.Name != typeOpt.Name && !slotOptions.Contains(o.Name) && values.TryGetValue(o.Name, out var got) && got.Count > 0)
+                .Select(o => o.Arity == Arity.Flag ? $"--{o.Name}" : string.Join(" ", values[o.Name].Select(v => $"--{o.Name} {Pasteable(v)}")));
+            var written = string.Join(" ", positionals.Concat(spelledOut).Concat(otherOptions));
             notes.Add($"Read '{lead}' as --type {lead}, not as <{declared[0].Name}>: on '{spec.Name}' the def " +
                       $"type is an option. Written out, this call is '{CommandRegistry.ExeName} {spec.Name} " +
                       written + $" --type {lead}'.");
@@ -299,30 +347,44 @@ public static class ArgParser
         return new ParseResult(spec, positionals, values, errors, wantsHelp, notes);
     }
 
+    /// <summary>
+    /// 有意不收的拼法(<see cref="CommandSpec.Refused"/>)撞上时的那句话;不是这一类就回 null,
+    /// 交给近似候选。它排在近似候选之前:那句说的是边界(这件事住在哪条命令里),近似候选与
+    /// 「别的命令认它」在这一档都是往错处指 —— `grep` 恰好是 list --find 的别名,实测那句
+    /// 「It is accepted by 'get', 'list', 'inherit', and 2 more」把人指向了三条无关命令。
+    ///
+    /// 读者已经写下的词填回那句话里:每个被拒拼法后面的值进它的 ValuePlaceholder(整条 argv
+    /// 预扫的结果,不只是当前这个词的),第一个位置参数进 <c>&lt;file&gt;</c> 这类第一格的占位符。
+    /// 于是给出去的是整条能粘的命令。<c>&lt;file&gt;</c> 带目录时前面补 <c>**/</c>:read 收任何
+    /// 尾路径,而 code-search 含 '/' 的 glob 要从树名起整条匹配,原样填回去粘出来是一次空扫描。
+    /// </summary>
+    private static string? RefusedMessage(string raw, string body, CommandSpec spec,
+                                          IReadOnlyDictionary<string, string> fills, string? firstPositional)
+    {
+        var n0 = Normalize(body);
+        var refused = spec.Refused.FirstOrDefault(r => Normalize(r.Name) == n0 || r.Aliases.Any(a => Normalize(a) == n0));
+        if (refused is null) return null;
+        var where = refused.Where;
+        foreach (var (ph, v) in fills) where = where.Replace(ph, v);
+        if (firstPositional is not null && spec.Positionals.Length > 0)
+        {
+            var file = firstPositional.Replace('\\', '/');
+            if (file.Contains('/') && !file.StartsWith("**/", StringComparison.Ordinal)) file = "**/" + file;
+            where = where.Replace($"<{spec.Positionals[0].Name}>", Pasteable(file));
+        }
+        return $"Unknown option '{raw}'. {where}";
+    }
+
+    /// <summary>值带着 shell 会吃的字符(<c>smelt|Smelt</c>)就加引号 —— 这些句子是给人粘的。</summary>
+    private static string Pasteable(string value) =>
+        System.Text.RegularExpressions.Regex.IsMatch(value, @"^[\w./-]+$")
+            ? value
+            : "\"" + value.Replace("\"", "\\\"") + "\"";
+
     private static string UnknownOptionMessage(string raw, string body, IReadOnlyList<OptionSpec> options,
                                                CommandSpec spec, IReadOnlyList<CommandSpec>? siblings,
                                                string? attachedValue = null, IReadOnlyList<string>? positionals = null)
     {
-        // 有意不收的拼法排在最前:那句话说的是边界(这件事住在哪条命令里),近似候选与
-        // 「别的命令认它」在这一档都是往错处指 —— `grep` 恰好是 list --find 的别名,实测
-        // 那句「It is accepted by 'get', 'list', 'inherit', and 2 more」把人指向了三条无关命令。
-        // 读者已经写下的词填回那句话里:跟在后面的值进 ValuePlaceholder,第一个位置参数
-        // (read 的 <file>)进 <file>,于是给出去的是整条能粘的命令,不是占位符。
-        var n0 = Normalize(body);
-        var refused = spec.Refused.FirstOrDefault(r => Normalize(r.Name) == n0 || r.Aliases.Any(a => Normalize(a) == n0));
-        if (refused is not null)
-        {
-            var where = refused.Where;
-            // 值带着 shell 会吃的字符(`smelt|Smelt`)就加引号 —— 这句是给人粘的。
-            if (attachedValue is not null && refused.ValuePlaceholder is { } ph)
-                where = where.Replace(ph, System.Text.RegularExpressions.Regex.IsMatch(attachedValue, @"^[\w./-]+$")
-                    ? attachedValue
-                    : "\"" + attachedValue.Replace("\"", "\\\"") + "\"");
-            if (positionals is { Count: > 0 } && spec.Positionals.Length > 0)
-                where = where.Replace($"<{spec.Positionals[0].Name}>", positionals[0]);
-            return $"Unknown option '{raw}'. {where}";
-        }
-
         var scored = Scored(body, options);
         var candidates = Ranked(scored);
 

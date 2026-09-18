@@ -1039,7 +1039,10 @@ public sealed class CodeSearchCommand : Command
             var c = glob[i];
             if (c == '*')
             {
-                if (i + 1 < glob.Length && glob[i + 1] == '*') { sb.Append(".*"); i++; }
+                // `**/` 是零段或多段目录:`**/RimWorld/Ability.cs` 也得认根下就是 RimWorld 的路径
+                // (read 的被拒句把读者写的尾路径填成这个形状,他写的可能已经是从树名起的整条)。
+                if (i + 2 < glob.Length && glob[i + 1] == '*' && glob[i + 2] == '/') { sb.Append("(?:.*/)?"); i += 2; }
+                else if (i + 1 < glob.Length && glob[i + 1] == '*') { sb.Append(".*"); i++; }
                 else sb.Append("[^/]*");
             }
             else if (c == '?') sb.Append('.');

@@ -21,7 +21,7 @@ None of this is needed to answer a question about def data.
 | Which subclasses override this member | `rimsearcher types <Base> --derived --transitive --declares <Member>` |
 | What is in this type | `rimsearcher members <Type>` — `--member-kind`, `--static`, `--virtual`, `--abstract`, `--overrides`, `--access` |
 | Where does an inherited member come from | `rimsearcher members <Type> --inherited` — rows say which type declares each |
-| The body of one member | `rimsearcher read <File>.cs --member <name>` |
+| The body of a member, or of several | `rimsearcher read <File>.cs --member <name> --member <other>` — blocks come out in the order given |
 | The instructions of one method | `rimsearcher il <Type>.<Member>` — `--state-machine` for an iterator or async method |
 | Who calls this method | `rimsearcher callers <Type>.<Member>` |
 | What does this method call | `rimsearcher callers <Type>.<Member> --callees` |
@@ -43,9 +43,9 @@ environment.
 - **Usages of a field or a type**, as opposed to calls to a method. The call table records
   method calls only, so `where is this field read` has no exact answer here —
   `code-search` matches the name as text.
-- **Reading several differently-named members in one call.** `batch_get_decompiled_source`
-  takes a list of members; `read` takes several *files* per run but one `--member` name,
-  which it then matches in each of them.
+- **Reading members spread across many files in one call.** `batch_get_decompiled_source`
+  takes a list of member ids and finds the files itself; `read` takes several files and
+  several `--member` names per run, but every name is looked for in every file given.
 - **Comparing two versions of an assembly.** Nothing on this side loads two builds at once.
 
 ## Traps

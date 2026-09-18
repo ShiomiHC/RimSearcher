@@ -4784,10 +4784,22 @@ public class GrammarTests
         var (_, quoted, _) = Fixture.Run("read", "Thing.cs", "--grep", "smelt|Smelt");
         Assert.Contains("code-search \"smelt|Smelt\" --file-glob Thing.cs", quoted, StringComparison.Ordinal);
 
+        // 两个被拒拼法一起给:一句话,两个值都填进去 —— 两句各填一半会让人挑该粘哪句。
         var (_, ctx, _) = Fixture.Run("read", "Thing.cs", "--grep", "Destroy", "-C", "12");
-        Assert.Contains("Unknown option '-C'. Context lines belong with a pattern", ctx, StringComparison.Ordinal);
-        Assert.Contains("--file-glob Thing.cs -C 12'", ctx, StringComparison.Ordinal);
+        Assert.Contains("code-search Destroy --file-glob Thing.cs' (add -C 12 for context lines)", ctx, StringComparison.Ordinal);
+        Assert.Equal(1, System.Text.RegularExpressions.Regex.Matches(ctx, "Unknown option").Count);
         Assert.DoesNotContain("Did you mean", ctx, StringComparison.Ordinal);
+        // 只给 -C:它自己那句,<n> 填了、<regex> 留着。
+        var (_, onlyC, _) = Fixture.Run("read", "Thing.cs", "-C", "12");
+        Assert.Contains("Unknown option '-C'. Context lines belong with a pattern", onlyC, StringComparison.Ordinal);
+        Assert.Contains("code-search <regex> --file-glob Thing.cs -C 12'", onlyC, StringComparison.Ordinal);
+
+        // read 收任何尾路径,而 code-search 含 '/' 的 glob 从树名起整条匹配:填回去时补 **/ 并加引号,
+        // 文件写在被拒的词后面也认。
+        var (_, tail, _) = Fixture.Run("read", "Verse/Thing.cs", "--grep", "x");
+        Assert.Contains("code-search x --file-glob \"**/Verse/Thing.cs\"", tail, StringComparison.Ordinal);
+        var (_, after, _) = Fixture.Run("read", "--grep", "x", "Thing.cs");
+        Assert.Contains("code-search x --file-glob Thing.cs", after, StringComparison.Ordinal);
 
         // 没写文件名时占位符留着,不凭空捏。
         var (_, bare, _) = Fixture.Run("read", "--grep", "x");
@@ -4797,6 +4809,14 @@ public class GrammarTests
         var (help, _, _) = Fixture.Run("read", "--help");
         Assert.Contains("Not options here:", help, StringComparison.Ordinal);
         Assert.Contains("--grep", help, StringComparison.Ordinal);
+
+        // 填回去的 **/<尾路径> 得真能粘:`**/` 是零段或多段目录,读者写的已经是从树名起的整条时也命中。
+        var (tailHit, _, c1) = Fixture.Run("code-search", "Shared", "--file-glob", "**/Verse/Outline.cs", "--limit", "1");
+        var (fullHit, _, c2) = Fixture.Run("code-search", "Shared", "--file-glob", "**/vanilla/Verse/Outline.cs", "--limit", "1");
+        Assert.Equal(0, c1);
+        Assert.Equal(0, c2);
+        Assert.Contains("Outline.cs", tailHit, StringComparison.Ordinal);
+        Assert.Contains("Outline.cs", fullHit, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -4855,8 +4875,10 @@ public class GrammarTests
         var (plain, _, _) = Fixture.Run("where", "compClass", "RimWorld.CompShield", "--type", "ThingDef", "--json");
         Assert.Equal(0, c3);
         Assert.Contains("Read 'ThingDef' as --type ThingDef, not as <fieldPath>", typed, StringComparison.Ordinal);
-        // 「写出来是」那句得装下这一格,选项拼法不许从里面掉出去。
-        Assert.Contains("'rimsearcher where --field compClass --type ThingDef'", typed, StringComparison.Ordinal);
+        // 「写出来是」那句得装下这一格,选项拼法不许从里面掉出去;本命令的其他选项(--value)也在 ——
+        // 漏了它粘回去就是另一条查询。全局的 --json 不在:那句是给人粘的。
+        var call = typed[(typed.IndexOf("Written out, this call is ", StringComparison.Ordinal) + "Written out, this call is ".Length)..];
+        Assert.Equal("'rimsearcher where --field compClass --value RimWorld.CompShield --type ThingDef'", call[..(call.IndexOf("'.", StringComparison.Ordinal) + 1)]);
         Assert.Equal(Json(plain), AfterNote(typed));
 
         // 没有 --value、只有类型 + 字段:38/60 那个形状,列出该类型里带这个字段的每个 def。

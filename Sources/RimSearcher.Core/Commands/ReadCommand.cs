@@ -162,7 +162,7 @@ public sealed class ReadCommand : Command
                 ValuePlaceholder = "<regex>",
                 Where = "'read' shows a stretch of a file by address: --lines, --member, or --outline. " +
                         "Lines matching a pattern are 'rimsearcher code-search <regex> --file-glob <file>' " +
-                        "(-C <n> adds context); a member's whole declaration is '--member <name>'.",
+                        "(add -C <n> for context lines); a member's whole declaration is '--member <name>'.",
             },
             new()
             {
@@ -177,7 +177,7 @@ public sealed class ReadCommand : Command
         [
             "rimsearcher read Pawn.cs --outline",
             "rimsearcher read CompShield.cs --member CompTick",
-            "rimsearcher read Ability.cs --member CanCast --member Activate",
+            "rimsearcher read RimWorld/Ability.cs --member CanCast --member Activate",
             "rimsearcher read RimWorld.CompShield",
             "rimsearcher read vanilla/Assembly-CSharp/Verse/ThingComp.cs --lines 1-40",
         ],

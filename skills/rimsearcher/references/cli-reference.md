@@ -809,7 +809,7 @@ Not options here:
 
 | Spelling | Where that lives |
 |---|---|
-| `--grep` | 'read' shows a stretch of a file by address: --lines, --member, or --outline. Lines matching a pattern are 'rimsearcher code-search <regex> --file-glob <file>' (-C <n> adds context); a member's whole declaration is '--member <name>'. |
+| `--grep` | 'read' shows a stretch of a file by address: --lines, --member, or --outline. Lines matching a pattern are 'rimsearcher code-search <regex> --file-glob <file>' (add -C <n> for context lines); a member's whole declaration is '--member <name>'. |
 | `--context` | Context lines belong with a pattern, and that is 'rimsearcher code-search <regex> --file-glob <file> -C <n>'. Here --member reads the whole declaration and --lines a range. |
 
 `--json` keys, besides the global `notes`:
@@ -825,7 +825,7 @@ Examples:
 ```
 rimsearcher read Pawn.cs --outline
 rimsearcher read CompShield.cs --member CompTick
-rimsearcher read Ability.cs --member CanCast --member Activate
+rimsearcher read RimWorld/Ability.cs --member CanCast --member Activate
 rimsearcher read RimWorld.CompShield
 rimsearcher read vanilla/Assembly-CSharp/Verse/ThingComp.cs --lines 1-40
 ```
@@ -1209,7 +1209,7 @@ Answers 'what am I allowed to put here' and 'which classes are actually in use' 
 | `--offset` <n> | Skip this many values before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. |  |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind` |
-| `--field` <path> | A field path, same as giving it as an argument. 'rimsearcher values ThingDef --field statBases' is 'rimsearcher values statBases --type ThingDef'. |  |
+| `--field` <path> | A field path, same as giving it as an argument. 'rimsearcher values ThingDef --field techLevel' is 'rimsearcher values techLevel --type ThingDef'. |  |
 | `--exact-path` | Match the field path given as an argument end to end. | `--whole-path`, `--path-exact` |
 | `--path-contains` <text> | Only match field paths containing this text; when a path argument is given, it has to match as well. Repeat it to widen the selection. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. | `--filter`, `--grep` |
 

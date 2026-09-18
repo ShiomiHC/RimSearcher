@@ -4,7 +4,7 @@ A separate program that reads the game's compiled assemblies directly. rimsearch
 ships it nor depends on it; whether it is installed is a fact about the environment.
 
 Reach for it only for the three things [code-side.md](code-side.md) names — usages of a
-field or a type, reading many members in one call, and comparing two builds. Everything
+field or a type, reading members from many files in one call, and comparing two builds. Everything
 else on the code side is answered by `types` / `members` / `il` / `callers` / `read` /
 `code-search`, which read one build and cost no setup.
 
@@ -37,7 +37,7 @@ the CLI, which reads every synced tree in one run.
 ## The three
 
 - **`find_usages`** — where a field or a type is used, not just where a method is called.
-- **`batch_get_decompiled_source`** — several members in one call. It reports
+- **`batch_get_decompiled_source`** — members from several files in one call, by member id. It reports
   `truncated: false` at the top level even when a slice inside it stopped short of its
   method; check `endLine` against `totalLines` per slice.
 - **`compare_symbols` / `compare_contexts`** — differences between two loaded versions.

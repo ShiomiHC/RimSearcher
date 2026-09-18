@@ -48,7 +48,7 @@ Global options (`--snapshot`, `--db`, `--json`, `--quiet`, `--config`) go **afte
 | Who calls this method | `rimsearcher callers <Type>.<Member>...` — `--callees` for the other direction |
 | The instructions of one method (transpilers) | `rimsearcher il <Type>.<Member>...` — `--state-machine` for an iterator or async method |
 | A code *shape* across all files | `rimsearcher code-search <regex>` |
-| The text of one file, member, or line range | `rimsearcher read <file>... --member <name>` |
+| The text of a file, some of its members, or a line range | `rimsearcher read <file>... --member <name>` (repeat `--member` for several) |
 
 **Anything you look up by name takes several names in one call** — `get`, `economy`,
 `inherit`, `types`, `members`, `il`, `callers`, `read`, `list`, `fields`, `values`, `keyed`:
@@ -63,7 +63,7 @@ name.**
 The code side has its own page — which command answers what, plus the traps — in
 [references/code-side.md](references/code-side.md). Three questions need the
 DecompilerServer MCP, a separate program: usages of a *field or type* rather than calls to a
-method, reading many members in one call, and comparing two builds. Those are in
+method, reading members from many files in one call, and comparing two builds. Those are in
 [references/decompiler-mcp.md](references/decompiler-mcp.md); nothing else is.
 
 ## If your instinct is to grep the XML, stop
@@ -128,8 +128,9 @@ a different question. None of them announces itself.
   commands take it.
 - **The code side narrows by source tree, not by scope** —
   `rimsearcher code-search <regex> --source <tree>`, and `rimsearcher sources list` names
-  the trees. The two narrowing options mean different things and neither accepts the
-  other's name, so a spelling carried over from the other side is rejected, not reused.
+  the trees. Both sides accept `--mod`, but for different things: on the def side it is a
+  package id or a config group (`--mod vethara`), on the code side a single tree name from
+  `sources list`. The code side does not take `--scope`.
 
 ## What the output cannot tell you
 
