@@ -445,4 +445,29 @@ public class TranslationLayerTests
                     "译文表被筛空后整个键消失了 —— 与「这个 def 一条译文都没有」同形。");
         Assert.Equal(0, trans.GetArrayLength());
     }
+
+    /// <summary>
+    /// 快照外 mod(装着、没启用)的语言文件收割进来只够召回,游戏没注它。此前 get 的 origin 格写
+    /// 「outside this snapshot」再挂一句脚注解释这四个字;search 则在表外数「N 个 def 也命中了
+    /// 未启用 mod 的语言文件」。2026-09-18 起取值自陈(Docs/25 丁2):origin 写 not enabled,
+    /// search 的 matched_on 在命中的正是那条译文时带同一个标注,两句散文都不印。
+    /// </summary>
+    [Fact]
+    public void 快照外mod的译文在格里自陈not_enabled_不再挂脚注()
+    {
+        var body = Injected("Apparel_ShieldBelt", "description", "护盾腰带的说明");
+        using var db = ImportWithModTree("outsideenabled",
+            ($"1.6/Languages/{Fixture.Language}/DefInjected/ThingDef/Apparel.xml", body));
+        var row = db.Translations("Apparel_ShieldBelt").Single(t => t.Origin != TranslationOrigin.Runtime);
+        Assert.Equal(TranslationOrigin.HarvestedOutside, row.Origin);
+
+        var (get, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--path-contains", "description", "--db", db.Path);
+        Assert.Contains("file (test.langmod, not enabled)", get, StringComparison.Ordinal);
+        Assert.DoesNotContain("outside this snapshot", get, StringComparison.Ordinal);
+        Assert.DoesNotContain("not enabled when the snapshot was taken", get, StringComparison.Ordinal);
+
+        var (search, _, _) = Fixture.Run("search", "护盾腰带的说明", "--db", db.Path);
+        Assert.Contains("description (file, not enabled)", search, StringComparison.Ordinal);
+        Assert.DoesNotContain("also matched language files", search, StringComparison.Ordinal);
+    }
 }

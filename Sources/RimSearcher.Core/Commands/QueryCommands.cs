@@ -200,7 +200,6 @@ public sealed class SearchCommand : Command
                 ["mod"] = r.SourceMod,
             }).ToList());
 
-        Advisory.NoteOutsideTranslations(ctx, rows.Select(r => r.DefName));
         Advisory.NoteSameLabel(ctx, rows);
         return rows.Count == 0 ? 1 : 0;
     }
@@ -242,7 +241,10 @@ public sealed class SearchCommand : Command
         var all = ctx.Db.Translations(r.DefName);
         var t = all.Where(x => x.DefType is null || DefTypes.Same(x.DefType, r.DefType))
                    .FirstOrDefault(x => Has(x.Translated) || Has(x.Original));
-        if (t is not null) return t.Path;
+        // 命中的是没启用的 mod 的语言文件时,这一格自己说(与 get 的 origin 格同一个词);
+        // 此前是表外一句「N 个 def 也命中了未启用 mod 的语言文件」,而它数的是有没有那种译文,
+        // 不是命中的是不是那一条。
+        if (t is not null) return GetCommand.OutsideSnapshot(t) ? $"{t.Path} (file{GetCommand.NotEnabled})" : t.Path;
 
         // 命中来自**另一个同名 def** 的译文 —— 上一句的 def_type 过滤刚把它挡掉。这一行
         // 自己没有任何东西含查询词,说成 "indexed text" 就是给它一个它验证不了的解释,
@@ -1085,11 +1087,8 @@ public sealed class GetCommand : Command
                         "marks as not translatable, so the translation sits in the file and never applies. " +
                         "The key is not the problem; nothing written under it would apply either.");
 
-                if (translations.Any(t => t.Origin == TranslationOrigin.HarvestedOutside))
-                    ctx.Report.Notice(NoticeKind.Advisory,
-                        "Rows marked 'outside this snapshot' come from language files of mods that were installed " +
-                        "but not enabled when the snapshot was taken. They are searchable, but the game did not " +
-                        "apply them.", footnote: true);
+                // 「Rows marked 'outside this snapshot' come from language files of mods … not enabled」
+                // 那句脚注 2026-09-18 删掉:origin 格自己写 not enabled(OriginCell),Docs/25 丁2。
 
                 if (byNameOnly && namesakes > 1)
                     ctx.Report.Notice(NoticeKind.Boundary,
@@ -1126,10 +1125,13 @@ public sealed class GetCommand : Command
         // 不许写成 in effect(那是替游戏担保一件没测过的事)。
         if (t.Origin == TranslationOrigin.Runtime)
             return t.Applied switch { true => "in effect", false => "in pack, not applied", _ => "in pack" };
-        var outside = t.Origin != TranslationOrigin.Harvested ? ", outside this snapshot" : "";
+        // 装着、没启用的 mod 的文件:游戏没注它,只够召回。取值自陈,不另挂脚注解释。
         var files = t.SourceFileCount is > 1 ? $", {t.SourceFileCount} files" : "";
-        return $"file ({t.SourceMod}{outside}{files})";
+        return $"file ({t.SourceMod}{(OutsideSnapshot(t) ? NotEnabled : "")}{files})";
     }
+
+    public const string NotEnabled = ", not enabled";
+    public static bool OutsideSnapshot(TranslationRow t) => t.Origin == TranslationOrigin.HarvestedOutside;
 
     /// <summary>--path-contains 在场时把 description 压成一行:它不是被要的东西,却最占地方。</summary>
     private static string? Clip(string? text)
@@ -3843,21 +3845,6 @@ internal static class Advisory
             (clashes.Count > shown.Count ? $", and {clashes.Count - shown.Count} more such labels" : "") +
             ". The defName is the only column that tells them apart; the description, which is not in this " +
             "table, says which is which — 'rimsearcher get <defName> --path-contains description'.",
-            footnote: true);
-    }
-
-    /// <summary>
-    /// 环境外翻译的聚合尾注:逐条标注聚合成一行,不是每行挂一句。
-    /// </summary>
-    public static void NoteOutsideTranslations(CommandContext ctx, IEnumerable<string> defNames)
-    {
-        var n = ctx.Db.CountTranslationsOutside(defNames);
-        if (n == 0) return;
-        ctx.Report.Notice(NoticeKind.Advisory,
-            // 尾句砍掉:`get <defName>` 那个占位符贴不回去 —— 要敲它得先知道是上面哪几个 def,
-            // 而这句话正是那个不知道。它是指路的形状,不是指路。
-            $"{Tally.Complete(n).Render("def")} above also matched language files from mods that are installed " +
-            "but were not enabled in this snapshot; those translations are searchable but were not in effect.",
             footnote: true);
     }
 

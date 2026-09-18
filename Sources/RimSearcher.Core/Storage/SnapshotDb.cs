@@ -1731,16 +1731,6 @@ public sealed class SnapshotDb : IDisposable
         return rows;
     }
 
-    public int CountTranslationsOutside(IEnumerable<string> defNames)
-    {
-        var names = defNames.ToList();
-        if (names.Count == 0) return 0;
-        var p = new Dictionary<string, object?> { ["@o"] = TranslationOrigin.HarvestedOutside };
-        var keys = new List<string>();
-        for (var i = 0; i < names.Count; i++) { p["@n" + i] = names[i]; keys.Add("@n" + i); }
-        return Scalar($"SELECT COUNT(DISTINCT def_name) FROM translations WHERE origin = @o AND def_name IN ({string.Join(",", keys)})", p);
-    }
-
     // ---------- Keyed(界面文案)----------
 
     /// <summary>
