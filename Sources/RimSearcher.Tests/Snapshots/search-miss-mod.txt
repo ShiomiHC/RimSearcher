@@ -2,5 +2,8 @@ $ rimsearcher search ludeon.rimworld
 exit 1
 --- stdout ---
 Nothing matched 'ludeon.rimworld' in this snapshot.
-'ludeon.rimworld' is a mod this snapshot covers, not a def. '--scope ludeon.rimworld' restricts any query to it; 'rimsearcher mods' lists them all.
+
+Where the name does turn up:
+name             is                    in               next
+ludeon.rimworld  mod in this snapshot  ludeon.rimworld  rimsearcher list --scope ludeon.rimworld
 --- stderr ---

@@ -432,6 +432,24 @@ public sealed class Report
     }
 
     public const string EmptyBecauseTable = "empty_because";
+
+    /// <summary>
+    /// 往同名的表里加行,没有就建一张。同一次输出里只有一张:JSON 面同名块后写的覆盖先写的。
+    /// empty_because / found_as 这类「一行一个成因」的表都走这里。
+    /// </summary>
+    public void AppendRows(string name, IReadOnlyList<string> columns,
+                           IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, string? caption = null)
+    {
+        if (rows.Count == 0) return;
+        var at = _entries.FindIndex(e => e is TableBlock { Collection: null } t && t.Name == name);
+        if (at >= 0)
+        {
+            var t = (TableBlock)_entries[at];
+            _entries[at] = t with { Rows = [.. t.Rows, .. rows] };
+            return;
+        }
+        Table(name, columns, rows, caption: caption, unclipped: true);
+    }
     public static string EmptyBecauseCaption(string unit)
         => $"0 rows. Dropping any one option below brings back this many {NounRegistry.Form(unit, 2)}:";
 

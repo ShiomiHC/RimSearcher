@@ -21,7 +21,9 @@ Answers questions about RimWorld's defs and C# from a snapshot of what the game 
 | `il` | Disassemble a method to IL. |
 | `inherit` | Show what an XML node inherits from and what inherits from it, including abstract parents. |
 | `keyed` | Look up the UI text behind a translation key, or find the key behind a piece of UI text. |
-| `list` | List every def of one type — or, with no type given, every def type in the snapshot. |
+| `list` | List every def of one type — or, with no type given, every def type in the snapshot.
+
+When a name asked for is not what this command looks up, a found_as table says what it is instead and gives the command that reaches it. An xml node is an inheritance-layer entry (Name=, ParentName= or Abstract=) and never becomes a def, so only 'inherit' reaches it; interface text lives in keyed translations that belong to no def, so only 'keyed' finds it; a field value is what some defs set a field to (comps[N].compClass and the like), so 'where --value' lists them; a def outside --scope is in this snapshot but excluded by the --scope given; a mod is a --scope, not a def. |
 | `members` | List the members of a C# type, filtered by kind and by the modifiers on them. |
 | `modlist list` | List the mod lists available on this machine. |
 | `modlist save` | Capture the mods currently enabled in the game as a named list. |
@@ -417,6 +419,7 @@ defName is not listed as a field: the def_name line above the table is that valu
 | `defs` | one object per def carrying the name — each with 'def' (identity), 'fields' (path/value/code_default rows, plus 'xml' when the snapshot recorded which XML lines were written) and 'translations'. Both inner tables are always there, empty array and all. 'defs' stays an array even for a single def, because a name can belong to several def types at once. With several names the objects come in the order the names were given, and with --type alone in def-name order; a name that matched nothing has no object here and one note in 'notes' that quotes it. |
 | `absent` | one row per layer these defs would draw on that is short in this snapshot — layer, state, next; empty when every such layer is complete. Today that is 'economy' on a ThingDef when prices were not measured (state pre-measure / skipped / unavailable), 'disk_translations' when the import did not scan the language files on disk (skipped / unconfigured / unmeasured), and 'injection_keys' with --path-contains on a snapshot whose translation table has no 'key' column (pre-measure); next is the command that fills the layer. |
 | `empty_because` | one row per option given on this call that, alone, emptied the result: filter (the option as written), hidden (how many defs come back with just that option dropped), next (the same call without it, ready to paste). Empty when the result was not empty, or when no single option accounts for it. |
+| `found_as` | one row per name asked for that turns up as something other than what this command looks up: name, is (def / def outside --scope / xml node / abstract xml node / def type / class / interface text / mod in this snapshot / mod not in this snapshot / field value / def in another snapshot / xml node in another snapshot), in (where exactly), next (a command that reaches it, ready to paste). Empty when the name was found here, or turns up nowhere. |
 
 Examples:
 
@@ -483,6 +486,8 @@ What is shown is the XML before PatchOperations are applied. patch_ops_name coun
 
 With --path-contains or --exact-path each node also gets a 'witnesses' table, one row per layer of its chain: other_defs (the other defs descending from that layer), with_path (how many of them carry a matching field path) and, when there is a reference value, same_value (how many of those read the asked def's own value) or same_as_mode (the most common value under an abstract node). A layer that declares a field passes it to every descendant, so with_path short of other_defs rules that layer out; with_path equal to other_defs does not rule it in — every descendant writing the field separately counts the same, and the snapshot stores no 'declared here' fact. same_value is what tells those apart: one shared value points at the layer, a spread of values at each def writing its own; a descendant that overrides the field still counts in with_path but not there. type_with_path / type_defs is the same fraction over the whole def type, layer or no layer, so a full row is evidence only to the extent that fraction is smaller. cut_short, when the column is there, counts defs in other_defs whose field list was cut at export; any of those can miss with_path for that reason alone. Field values are the merged, post-patch ones, so a PatchOperation that added the field to many defs is indistinguishable from a layer declaring it.
 
+When a name asked for is not what this command looks up, a found_as table says what it is instead and gives the command that reaches it. An xml node is an inheritance-layer entry (Name=, ParentName= or Abstract=) and never becomes a def, so only 'inherit' reaches it; interface text lives in keyed translations that belong to no def, so only 'keyed' finds it; a field value is what some defs set a field to (comps[N].compClass and the like), so 'where --value' lists them; a def outside --scope is in this snapshot but excluded by the --scope given; a mod is a --scope, not a def.
+
 | Argument | Meaning |
 |---|---|
 | `<name>` | A Name= of an XML node, or the defName of a def. Both are looked up. Several names print one block each, in the order given; a name that matches nothing is reported in a note and the others still print. |
@@ -499,6 +504,7 @@ With --path-contains or --exact-path each node also gets a 'witnesses' table, on
 |---|---|
 | `nodes` | one object per XML node answering to the names — each with 'node' (identity and patch count), 'ancestors', 'children' when it has any, and 'witnesses' when --path-contains or --exact-path is given. With several names the objects come in the order the names were given; a name that matched nothing has no object here and one note in 'notes' that quotes it. |
 | `absent` | one row when this snapshot was exported before xpaths were counted by defName= and label= — layer 'patch_ops_defname_label', state pre-measure, next (the export command that measures them); empty when the identity blocks carry all three counts. |
+| `found_as` | one row per name asked for that turns up as something other than what this command looks up: name, is (def / def outside --scope / xml node / abstract xml node / def type / class / interface text / mod in this snapshot / mod not in this snapshot / field value / def in another snapshot / xml node in another snapshot), in (where exactly), next (a command that reaches it, ready to paste). Empty when the name was found here, or turns up nowhere. |
 
 Examples:
 
@@ -523,6 +529,8 @@ It works in both directions. Given a key it shows what the game displays for it;
 
 Rows are marked 'in effect' or 'on disk'. Only 'in effect' is what the game displays: keyed translations override each other by mod load order and the snapshot keeps the winner, so an 'on disk' row is a translation that exists in some mod's language files without necessarily being the one that wins.
 
+When a name asked for is not what this command looks up, a found_as table says what it is instead and gives the command that reaches it. An xml node is an inheritance-layer entry (Name=, ParentName= or Abstract=) and never becomes a def, so only 'inherit' reaches it; interface text lives in keyed translations that belong to no def, so only 'keyed' finds it; a field value is what some defs set a field to (comps[N].compClass and the like), so 'where --value' lists them; a def outside --scope is in this snapshot but excluded by the --scope given; a mod is a --scope, not a def.
+
 | Argument | Meaning |
 |---|---|
 | `<query>` | A translation key, or a phrase from the interface in any language the snapshot has. Several go in one call; --limit and --offset apply to each on its own, each gets its own count line, and the query column says which one a row answers. Leave them all out to list the layer itself — every keyed translation, or with --empty-translation only the untranslated ones. *(optional)* |
@@ -540,6 +548,7 @@ Rows are marked 'in effect' or 'on disk'. Only 'in effect' is what the game disp
 | `keys` | one row per keyed translation — key, translated, original, origin ('in effect' or 'on disk'), placeholder, declared_in, source, and query (which of the queries the row answers, present on a single-query call too). Always an array, including when a single key matched exactly, so the shape does not change with the kind of match. The query column is the one thing that does change with the call: listing the whole layer takes no query, so there the rows have no such column. |
 | `absent` | one row per layer this query needed that this snapshot does not hold — layer, state, next; empty when both are there. 'keyed' with state empty when the snapshot has no keyed translations at all (then 'keys' is empty too); 'disk_translations' (skipped / unconfigured / unmeasured) when the language files on disk were not scanned, so the 'origin' column holds only 'in effect' rows. next is the command that fills the layer. |
 | `empty_because` | one row per option given on this call that, alone, emptied the result: filter (the option as written), hidden (how many keys come back with just that option dropped), next (the same call without it, ready to paste). Empty when the result was not empty, or when no single option accounts for it. |
+| `found_as` | one row per name asked for that turns up as something other than what this command looks up: name, is (def / def outside --scope / xml node / abstract xml node / def type / class / interface text / mod in this snapshot / mod not in this snapshot / field value / def in another snapshot / xml node in another snapshot), in (where exactly), next (a command that reaches it, ready to paste). Empty when the name was found here, or turns up nowhere. |
 
 Examples:
 
@@ -553,6 +562,8 @@ rimsearcher keyed --empty-translation
 ## `list`
 
 List every def of one type — or, with no type given, every def type in the snapshot.
+
+When a name asked for is not what this command looks up, a found_as table says what it is instead and gives the command that reaches it. An xml node is an inheritance-layer entry (Name=, ParentName= or Abstract=) and never becomes a def, so only 'inherit' reaches it; interface text lives in keyed translations that belong to no def, so only 'keyed' finds it; a field value is what some defs set a field to (comps[N].compClass and the like), so 'where --value' lists them; a def outside --scope is in this snapshot but excluded by the --scope given; a mod is a --scope, not a def.
 
 ```
 rimsearcher list [defType]... [options]
@@ -802,6 +813,8 @@ rimsearcher search <query> [options]
 
 Matching runs in stages and stops at the first one that finds anything: full-text search, a substring pass over names, the pre-translation original text of translations, then fuzzy identifier matching that tolerates typos and CamelCase initials. You never need to add '*' yourself. Translated text is in the full-text index, so a Chinese label finds the def; the English wording it replaced is not, and is reached only by that later pass — which is why an English query against a translated snapshot can come back with rows whose label column is not English. Each result says in 'matched_on' which of these it was.
 
+When a name asked for is not what this command looks up, a found_as table says what it is instead and gives the command that reaches it. An xml node is an inheritance-layer entry (Name=, ParentName= or Abstract=) and never becomes a def, so only 'inherit' reaches it; interface text lives in keyed translations that belong to no def, so only 'keyed' finds it; a field value is what some defs set a field to (comps[N].compClass and the like), so 'where --value' lists them; a def outside --scope is in this snapshot but excluded by the --scope given; a mod is a --scope, not a def.
+
 | Argument | Meaning |
 |---|---|
 | `<query>` | Words, a def name, or part of one. |
@@ -819,6 +832,7 @@ Matching runs in stages and stops at the first one that finds anything: full-tex
 |---|---|
 | `defs` | one row per matching def: def_name, def_type, label, matched_on, declared_in. |
 | `empty_because` | one row per option given on this call that, alone, emptied the result: filter (the option as written), hidden (how many defs come back with just that option dropped), next (the same call without it, ready to paste). Empty when the result was not empty, or when no single option accounts for it. |
+| `found_as` | one row per name asked for that turns up as something other than what this command looks up: name, is (def / def outside --scope / xml node / abstract xml node / def type / class / interface text / mod in this snapshot / mod not in this snapshot / field value / def in another snapshot / xml node in another snapshot), in (where exactly), next (a command that reaches it, ready to paste). Empty when the name was found here, or turns up nowhere. |
 
 Examples:
 
@@ -1196,6 +1210,8 @@ The field path is matched from the end, a segment at a time, so 'compClass' find
 
 When the rows include defs the game builds in code at load time (Blueprint_*, Frame_*, meat, corpses, and the like) a written_in column says which (code / xml). A def written in code has no XML node, so a PatchOperation addressed by its defName has nothing to match; the column is absent when no such def is among the rows.
 
+When a name asked for is not what this command looks up, a found_as table says what it is instead and gives the command that reaches it. An xml node is an inheritance-layer entry (Name=, ParentName= or Abstract=) and never becomes a def, so only 'inherit' reaches it; interface text lives in keyed translations that belong to no def, so only 'keyed' finds it; a field value is what some defs set a field to (comps[N].compClass and the like), so 'where --value' lists them; a def outside --scope is in this snapshot but excluded by the --scope given; a mod is a --scope, not a def.
+
 | Argument | Meaning |
 |---|---|
 | `<fieldPath>` | A field path or just its last segment, such as compClass or defaultProjectile. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. Omit it to search every field instead. *(optional)* |
@@ -1219,6 +1235,7 @@ When the rows include defs the game builds in code at load time (Blueprint_*, Fr
 | `matches` | with a field path: one row per def that has it — def_name, def_type, path, value, code_default, declared_in (the mod whose XML declares the def; a comp another mod bolts onto a vanilla def still reads as the vanilla mod, and --scope filters that same column), plus written_in (xml / code) when a def built in code is among the rows. |
 | `paths` | without a field path: one row per field path that holds the value — path, def_type, example_value, and the def count split in two: defs_exact (the value is exactly the one asked for) and defs_other (it is inside a longer value). With --exact there is one meaning, so the column is a single 'defs'. This is the key that question produces; 'matches' is absent then. |
 | `empty_because` | one row per option given on this call that, alone, emptied the result: filter (the option as written), hidden (how many defs come back with just that option dropped), next (the same call without it, ready to paste). Empty when the result was not empty, or when no single option accounts for it. |
+| `found_as` | one row per name asked for that turns up as something other than what this command looks up: name, is (def / def outside --scope / xml node / abstract xml node / def type / class / interface text / mod in this snapshot / mod not in this snapshot / field value / def in another snapshot / xml node in another snapshot), in (where exactly), next (a command that reaches it, ready to paste). Empty when the name was found here, or turns up nowhere. |
 | `completeness` | an object, present only when some def in scope had its export cut short: scope (which def types this covers, in words), defs_cut_short (how many), types (one row per def type with its own count), verify (a ready command that lists them). Absent means no def in that scope lost fields at export. |
 
 Examples:

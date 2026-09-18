@@ -869,14 +869,14 @@ public class GrammarTests
             // 继承层里的抽象 Name= —— 不许再说「像个类名」
             ("BaseBullet",        "rimsearcher inherit BaseBullet", "where compClass"),
             // 存储桶的名字,不是一个 def
-            ("ThingDef",          "is a def type in this snapshot", "where compClass"),
+            ("ThingDef",          "def type",                       "where compClass"),
             // def 自己的运行时 class。MustNot 锚在那句**兜底话自己**的措辞上 ——
             // 算得出落点就不许退回猜。
             ("TestVariantDef",    "--class TestVariantDef",         "lists what kinds of def this snapshot holds"),
             // 字段取值(comps[N].compClass 那一类)
-            ("CompShield",        "rimsearcher where compClass CompShield", "no class"),
+            ("CompShield",        "rimsearcher where --value CompShield", "no class"),
             // 快照覆盖的 mod
-            ("ludeon.rimworld",   "is a mod this snapshot covers",  "lists what kinds of def this snapshot holds"),
+            ("ludeon.rimworld",   "mod in this snapshot",           "lists what kinds of def this snapshot holds"),
         ];
 
         foreach (var (query, must, mustNot) in cases)
@@ -985,7 +985,7 @@ public class GrammarTests
     public void 被scope挡住时说破是过滤器干的()
     {
         var (stdout, _, _) = Fixture.Run("search", "TestModGun", "--scope", "ludeon.rimworld");
-        Assert.Contains("is in this snapshot after all", stdout, StringComparison.Ordinal);
+        Assert.Contains("def outside --scope", stdout, StringComparison.Ordinal);
         Assert.Contains("test.mod", stdout, StringComparison.Ordinal);
     }
 
@@ -2521,7 +2521,7 @@ public class GrammarTests
         var (fanout, _, code) = Fixture.Run("get", "OnlyInPrevGeneration");
         Assert.Equal(1, code);
         Assert.DoesNotContain("other.prev", fanout, StringComparison.Ordinal);
-        Assert.DoesNotContain("is not in the snapshot this query used", fanout, StringComparison.Ordinal);
+        Assert.DoesNotContain("in another snapshot", fanout, StringComparison.Ordinal);
 
         // 显式点名那条路不受影响 —— 旧代仍是一份能查的库。
         var (explicitly, _, ok) = Fixture.Run("get", "OnlyInPrevGeneration", "--db", Fixture.PrevDb);
@@ -4255,37 +4255,38 @@ public class GrammarTests
     /// 「从一个类名或一个值反查 def」,而 `where CompShield` 曾经落在「没有这个字段路径」上死掉,
     /// 同一份快照里 `where --value CompShield` 却当场有答案。
     ///
-    /// 落点分流借 search 那一份产地,但 **def 名那一档要自己说**:借来的措辞是
-    /// 「'X' is not a def name」,而这里它就是 def 名,照借等于把一句假话摆在输出位置。
+    /// 落点分流借 search 那一份产地,但 **def 名那一档要自己说**:借来的那几档从不产
+    /// 「is = def」(它们的调用方本来就在查 def),而 where 的读者敲的正是一个 def 名。
     /// </summary>
     [Fact]
     public void find给一个词落空时要说破那个词其实是什么()
     {
         // 它是字段取值 —— 指路要把参数填好,而不是给一个 <text> 占位。
         var (asValue, _, _) = Fixture.Run("where", "CompShield");
-        Assert.Contains("it appears as a field value", asValue, StringComparison.Ordinal);
-        Assert.Contains("'rimsearcher where --value CompShield'", asValue, StringComparison.Ordinal);
+        Assert.Contains("field value", asValue, StringComparison.Ordinal);
+        Assert.Contains("rimsearcher where --value CompShield", asValue, StringComparison.Ordinal);
         Assert.DoesNotContain("--value <text>", asValue, StringComparison.Ordinal);
 
-        // 它是 def 名 —— 借来的那句在这里是假话,一个字都不许出现。
+        // 它是 def 名 —— 一行 is = def,带它是哪一类、哪个 mod 的。
         var (asDef, _, _) = Fixture.Run("where", "Bullet_Revolver");
-        Assert.DoesNotContain("is not a def name", asDef, StringComparison.Ordinal);
-        Assert.Contains("is a def name in this snapshot, not a field path", asDef, StringComparison.Ordinal);
+        Assert.Contains("ThingDef in ludeon.rimworld", asDef, StringComparison.Ordinal);
+        Assert.Contains("rimsearcher get Bullet_Revolver", asDef, StringComparison.Ordinal);
 
         // 指出去的那条路要走得通,否则这句话只是把死路换了个说法。
         var (points, _, code) = Fixture.Run("where", "--value", "Bullet_Revolver");
         Assert.Equal(0, code);
         Assert.Contains("verbs[0].defaultProjectile", points, StringComparison.Ordinal);
 
-        // 反面:没人引用的 def 名不许指向那条空手而归的命令,而要把「没人引用」说出来。
+        // 反面:没人引用的 def 名只有 def 那一行,不许多出一行指向那条空手而归的命令。
         var (unreferenced, _, _) = Fixture.Run("where", "Firefoam");
-        Assert.Contains("no indexed field value points at it", unreferenced, StringComparison.Ordinal);
-        Assert.DoesNotContain("'rimsearcher where --value Firefoam'", unreferenced, StringComparison.Ordinal);
+        Assert.Contains("rimsearcher get Firefoam", unreferenced, StringComparison.Ordinal);
+        Assert.DoesNotContain("field value", unreferenced, StringComparison.Ordinal);
+        Assert.DoesNotContain("where --value Firefoam", unreferenced, StringComparison.Ordinal);
 
-        // 哪儿都不是的那一档:算不出来就退回带占位的通用指路,不许硬编一句猜测。
+        // 哪儿都不是的那一档:算不出来就退回带占位的通用指路,不许硬编一行猜测。
         var (nowhere, _, _) = Fixture.Run("where", "noSuchField");
         Assert.Contains("'rimsearcher where --value <text>'", nowhere, StringComparison.Ordinal);
-        Assert.DoesNotContain("is not a def name", nowhere, StringComparison.Ordinal);
+        Assert.DoesNotContain("Where the name does turn up", nowhere, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -5232,7 +5233,7 @@ public class GrammarTests
             ("other.prev", "fixture 数据:旧代快照的文件名,产地只按 SnapshotRetention 的规则识别形状"),
             ("<block>", "占位符禁令:help 里的占位符不许漏进数据输出"),
             ("\\\"kind\\\": \\\"next_step\\\"", "JSON 合同:产地按键名分开写,整段拼出来的形态搜不到"),
-            ("'rimsearcher where --value Firefoam'", "插值:产地是 $\"…--value {name}'\""),
+            ("where --value Firefoam", "插值:产地是 $\"…where --value {name}\""),
             ("No def in this snapshot has a field path ending in 'defName'.", "插值:同一模板,值来自查询"),
             ("within --type", "插值:产地按参数名拼"),
             ("Def def", "生成器语法病:禁的是生成出来的坏 C#,不是一句输出"),

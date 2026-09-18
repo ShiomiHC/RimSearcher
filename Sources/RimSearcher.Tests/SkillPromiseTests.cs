@@ -549,8 +549,8 @@ public class SkillPromiseTests
         Assert.Equal(1, classCode);
         Assert.DoesNotContain("Apparel_ShieldBelt", byClass, StringComparison.Ordinal);
         // 只说「没有」不够:得把该去哪儿问说出来,而且要带本次的查询词 ——
-        // 一句 'find compClass <Class>' 的占位符版本帮不到拿着零结果的人。
-        Assert.Contains("where compClass CompShield", byClass, StringComparison.Ordinal);
+        // 一句 'where --value <text>' 的占位符版本帮不到拿着零结果的人。
+        Assert.Contains("where --value CompShield", byClass, StringComparison.Ordinal);
         // 点的是它真正待着的那一层:作为字段值,不是作为 def。
         Assert.Contains("field value", byClass, StringComparison.Ordinal);
 

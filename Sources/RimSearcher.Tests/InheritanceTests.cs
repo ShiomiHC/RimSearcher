@@ -153,7 +153,7 @@ public class InheritanceTests
 
         // 真是具名节点时才点名说,并且指出去哪一层看。
         var node = Text("get", "BaseBullet");
-        Assert.Contains("never becomes a def", node, StringComparison.Ordinal);
+        Assert.Contains("abstract xml node", node, StringComparison.Ordinal);
         Assert.Contains("rimsearcher inherit BaseBullet", node, StringComparison.Ordinal);
     }
 

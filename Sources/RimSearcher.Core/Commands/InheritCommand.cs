@@ -68,7 +68,7 @@ public sealed class InheritCommand : Command
             "is smaller. cut_short, when the column is there, counts defs in other_defs whose field list was " +
             "cut at export; any of those can miss with_path for that reason alone. Field values are the " +
             "merged, post-patch ones, so a PatchOperation that added the field to many defs is " +
-            "indistinguishable from a layer declaring it.",
+            "indistinguishable from a layer declaring it.\n\n" + NameLookup.Help,
         Positionals =
         [
             new PositionalSpec
@@ -141,6 +141,7 @@ public sealed class InheritCommand : Command
                        "label= — layer 'patch_ops_defname_label', state pre-measure, next (the export command " +
                        "that measures them); empty when the identity blocks carry all three counts.",
             },
+            NameLookup.JsonKey,
         ],
     };
 
@@ -183,7 +184,7 @@ public sealed class InheritCommand : Command
                   "that inherits from nothing never shows up here: 'rimsearcher get " + name + "' looks it " +
                   "up as a def, and 'rimsearcher search' matches on labels and translations too."
                 : ""));
-        if (sighting is not null) ctx.Report.Notice(NoticeKind.NextStep, sighting.Sentence);
+        if (sighting is not null) NameLookup.Say(ctx, sighting);
         return 1;
     }
 
@@ -217,7 +218,7 @@ public sealed class InheritCommand : Command
                 "inherits from nothing never shows up here; 'rimsearcher get <defName>' looks one up as a def.");
             foreach (var n in missing)
                 if (NameLookup.Locate(ctx, n) is { } sighting)
-                    ctx.Report.Notice(NoticeKind.NextStep, sighting.Sentence);
+                    NameLookup.Say(ctx, sighting);
             return 1;
         }
 
@@ -231,7 +232,7 @@ public sealed class InheritCommand : Command
             // 与「你把类型写在了名字格上」是两件事。库在这一层,判得出来。
             foreach (var n in missing)
                 if (NameLookup.Locate(ctx, n) is { } sighting)
-                    ctx.Report.Notice(NoticeKind.NextStep, sighting.Sentence);
+                    NameLookup.Say(ctx, sighting);
         }
 
         var limit = ctx.Limit();

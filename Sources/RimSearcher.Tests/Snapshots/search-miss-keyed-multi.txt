@@ -2,5 +2,8 @@ $ rimsearcher search 转至此处
 exit 1
 --- stdout ---
 Nothing matched '转至此处' in this snapshot.
-'转至此处' is interface text rather than a def name: this snapshot holds 2 keyed translations matching it. Keyed translations belong to no def at all, which is why a def search reaches none of them. Those words appear in the text of more than one key, so which key is the one you are after is not decided here: 'rimsearcher keyed 转至此处' lists them with the key each belongs to, and the code search goes after whichever of those you meant.
+
+Where the name does turn up:
+name      is              in                                       next
+转至此处  interface text  2 keyed translations, more than one key  rimsearcher keyed 转至此处
 --- stderr ---

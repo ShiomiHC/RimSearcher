@@ -2,5 +2,8 @@ $ rimsearcher search ThingDef
 exit 1
 --- stdout ---
 Nothing matched 'ThingDef' in this snapshot.
-'ThingDef' is a def type in this snapshot, not a def: it holds 9 defs. 'rimsearcher list ThingDef' lists them and 'rimsearcher fields ThingDef' shows what fields they can have.
+
+Where the name does turn up:
+name      is        in      next
+ThingDef  def type  9 defs  rimsearcher list ThingDef
 --- stderr ---

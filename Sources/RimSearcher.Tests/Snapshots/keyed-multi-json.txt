@@ -49,6 +49,7 @@ exit 0
       "next": "set 'mod_roots' in the config file, then rimsearcher snapshot import fixture.rsx.jsonl.gz --name fixture"
     }
   ],
-  "empty_because": []
+  "empty_because": [],
+  "found_as": []
 }
 --- stderr ---

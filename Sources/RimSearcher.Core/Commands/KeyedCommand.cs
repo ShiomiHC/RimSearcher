@@ -35,7 +35,7 @@ public sealed class KeyedCommand : Command
             "Rows are marked 'in effect' or 'on disk'. Only 'in effect' is what the game displays: keyed " +
             "translations override each other by mod load order and the snapshot keeps the winner, so an " +
             "'on disk' row is a translation that exists in some mod's language files without necessarily " +
-            "being the one that wins.",
+            "being the one that wins.\n\n" + NameLookup.Help,
         Positionals =
         [
             new PositionalSpec
@@ -103,6 +103,7 @@ public sealed class KeyedCommand : Command
                        "'origin' column holds only 'in effect' rows. next is the command that fills the layer.",
             },
             EmptyCause.JsonKeyCounting("key"),
+            NameLookup.JsonKey,
         ],
     };
 
@@ -252,21 +253,19 @@ public sealed class KeyedCommand : Command
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"No keyed translation matches '{query}'." + Suggestion.Say(close));
 
-            // 「问的其实是个 def 名」是这条命令最常见的落空成因。NameLookup 不管这一档 ——
-            // 它的调用方(search / inherit)本来就在查 def,「这是个 def」对它们不是新消息。
+            // 「问的其实是个 def 名」是这条命令最常见的落空成因。Locate 不产这一档 ——
+            // 它的调用方(search / inherit)本来就在查 def;这里是 found_as 的一行(is = def),
+            // 「def 的 label 走 DefInjected 不走 key」是机制,住 help。
             var defs = ctx.Db.GetDefsNamed(query);
             if (defs.Count > 0)
             {
-                ctx.Report.Notice(NoticeKind.NextStep,
-                    $"'{query}' is a def in this snapshot, and a def's label and description are translated " +
-                    $"through DefInjected rather than through a key: 'rimsearcher get {query}' shows them with " +
-                    "the translation table attached, and 'rimsearcher search' matches on translated text too.");
+                NameLookup.Say(ctx, NameLookup.AsDef(query, defs));
                 return 1;
             }
 
             var sighting = NameLookup.Locate(ctx, query);
             if (sighting is not null)
-                ctx.Report.Notice(NoticeKind.NextStep, sighting.Sentence);
+                NameLookup.Say(ctx, sighting);
             // 「这句话还可能住在别处」对一个没有内容的查询词无话可说,而照直填进去的
             // `rimsearcher search ''` 跑不了、`rimsearcher search *` 正好走进同一个坑 ——
             // 递出去的下一步必须是敲得动的。上面那支已经把该说的说完了。

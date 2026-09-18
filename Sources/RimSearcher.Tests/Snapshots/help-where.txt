@@ -9,6 +9,8 @@ The field path is matched from the end, a segment at a time, so 'compClass' find
 
 When the rows include defs the game builds in code at load time (Blueprint_*, Frame_*, meat, corpses, and the like) a written_in column says which (code / xml). A def written in code has no XML node, so a PatchOperation addressed by its defName has nothing to match; the column is absent when no such def is among the rows.
 
+When a name asked for is not what this command looks up, a found_as table says what it is instead and gives the command that reaches it. An xml node is an inheritance-layer entry (Name=, ParentName= or Abstract=) and never becomes a def, so only 'inherit' reaches it; interface text lives in keyed translations that belong to no def, so only 'keyed' finds it; a field value is what some defs set a field to (comps[N].compClass and the like), so 'where --value' lists them; a def outside --scope is in this snapshot but excluded by the --scope given; a mod is a --scope, not a def.
+
 Arguments:
   <fieldPath>  A field path or just its last segment, such as compClass or defaultProjectile. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. Omit it to search every field instead. (optional)
   <value>      The value to look for. '--value' spells out this same argument, so give it one way or the other. Omit it to list every def that has the field at all. (optional)
@@ -44,6 +46,7 @@ Global options (every command takes these, written after the command):
   matches        with a field path: one row per def that has it — def_name, def_type, path, value, code_default, declared_in (the mod whose XML declares the def; a comp another mod bolts onto a vanilla def still reads as the vanilla mod, and --scope filters that same column), plus written_in (xml / code) when a def built in code is among the rows.
   paths          without a field path: one row per field path that holds the value — path, def_type, example_value, and the def count split in two: defs_exact (the value is exactly the one asked for) and defs_other (it is inside a longer value). With --exact there is one meaning, so the column is a single 'defs'. This is the key that question produces; 'matches' is absent then.
   empty_because  one row per option given on this call that, alone, emptied the result: filter (the option as written), hidden (how many defs come back with just that option dropped), next (the same call without it, ready to paste). Empty when the result was not empty, or when no single option accounts for it.
+  found_as       one row per name asked for that turns up as something other than what this command looks up: name, is (def / def outside --scope / xml node / abstract xml node / def type / class / interface text / mod in this snapshot / mod not in this snapshot / field value / def in another snapshot / xml node in another snapshot), in (where exactly), next (a command that reaches it, ready to paste). Empty when the name was found here, or turns up nowhere.
   completeness   an object, present only when some def in scope had its export cut short: scope (which def types this covers, in words), defs_cut_short (how many), types (one row per def type with its own count), verify (a ready command that lists them). Absent means no def in that scope lost fields at export.
 
 Examples:

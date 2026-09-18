@@ -20,6 +20,7 @@ exit 0
       "declared_in": "ludeon.rimworld"
     }
   ],
-  "empty_because": []
+  "empty_because": [],
+  "found_as": []
 }
 --- stderr ---

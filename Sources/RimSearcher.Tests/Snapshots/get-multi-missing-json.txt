@@ -197,6 +197,7 @@ exit 0
       "translations": []
     }
   ],
-  "empty_because": []
+  "empty_because": [],
+  "found_as": []
 }
 --- stderr ---

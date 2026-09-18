@@ -20,7 +20,7 @@ public sealed class SearchCommand : Command
             "yourself. Translated text is in the full-text index, so a Chinese label finds the def; the " +
             "English wording it replaced is not, and is reached only by that later pass — which is why an " +
             "English query against a translated snapshot can come back with rows whose label column is not " +
-            "English. Each result says in 'matched_on' which of these it was.",
+            "English. Each result says in 'matched_on' which of these it was.\n\n" + NameLookup.Help,
         Positionals = [new PositionalSpec { Name = "query", Help = "Words, a def name, or part of one." }],
         Options = [CommonOptions.Limit("defs"), CommonOptions.Offset("defs"), CommonOptions.Scope, CommonOptions.Type],
         Examples =
@@ -33,6 +33,7 @@ public sealed class SearchCommand : Command
         [
             new() { Key = "defs", Rows = true, What = "one row per matching def: def_name, def_type, label, matched_on, declared_in." },
             EmptyCause.JsonKey,
+            NameLookup.JsonKey,
         ],
     };
 
@@ -179,12 +180,12 @@ public sealed class SearchCommand : Command
                 ctx.Report.EmptyBecause(causes);
             }
 
-            // 名字的真实落点当场算得出来:算得出就说算出来的那一条,算不出才退回按形状猜。
+            // 名字的真实落点当场算得出来:算得出就印 found_as 的一行,算不出才退回按形状猜。
             var sighting = NameLookup.Locate(ctx, query, scope);
             var looksLikeClass = ClassNameShape.Looks(query);
-            ctx.Report.Notice(NoticeKind.NextStep,
-                sighting?.Sentence
-                ?? (looksLikeClass
+            if (sighting is not null) NameLookup.Say(ctx, sighting);
+            else ctx.Report.Notice(NoticeKind.NextStep,
+                (looksLikeClass
                     // 嵌套 `Class=` **是**被索引的(导出器 0.2.0 起),所以不许说「索引不到」——
                     // 那句话会把 `where Class` 的零判成「工具看不见」,而不是「确实没有」。
                     // 覆盖到哪一层随快照的导出器版本变,所以念 NestedClassLine 那个唯一产地,
@@ -471,6 +472,7 @@ public sealed class GetCommand : Command
                        "command that fills the layer.",
             },
             EmptyCause.JsonKey,
+            NameLookup.JsonKey,
         ],
     };
 
@@ -558,7 +560,7 @@ public sealed class GetCommand : Command
                 var sighting = NameLookup.Locate(ctx, name);
                 if (sighting is not null)
                 {
-                    ctx.Report.Notice(NoticeKind.NextStep, sighting.Sentence);
+                    NameLookup.Say(ctx, sighting);
                     if (single) return 1;
                     continue;
                 }
@@ -1195,7 +1197,7 @@ public sealed class FindCommand : Command
             "When the rows include defs the game builds in code at load time (Blueprint_*, Frame_*, meat, " +
             "corpses, and the like) a written_in column says which (code / xml). A def written in code has " +
             "no XML node, so a PatchOperation addressed by its defName has nothing to match; the column is " +
-            "absent when no such def is among the rows.",
+            "absent when no such def is among the rows.\n\n" + NameLookup.Help,
         Positionals =
         [
             new PositionalSpec { Name = "fieldPath", Help = "A field path or just its last segment, such as compClass or defaultProjectile. " + CommonOptions.AnyIndexNote + " Omit it to search every field instead.", Required = false },
@@ -1276,6 +1278,7 @@ public sealed class FindCommand : Command
                        "'matches' is absent then.",
             },
             EmptyCause.JsonKey,
+            NameLookup.JsonKey,
             Completeness.JsonKey,
         ],
     };
@@ -1624,7 +1627,7 @@ public sealed class FindCommand : Command
 
                 // 算得出来的结论排在索引边界那句之前;边界那句照旧挂 —— 「它是个值」并不
                 // 证明「它不同时是一个没进索引的字段」,两件事正交,叠加不替换。
-                if (placed is not null) ctx.Report.Notice(NoticeKind.NextStep, placed);
+                if (placed is not null) NameLookup.Say(ctx, placed);
                 // 同一格上的另一档:整串不是名字,但**末段**是个取值。理由与 placed 同源 ——
                 // 算得出来的结论排在索引边界那句之前,而边界那句照旧挂:「末段是取值」并不
                 // 证明「它不同时是一个没进索引的字段」。
@@ -1810,9 +1813,12 @@ public sealed class FindCommand : Command
                    $". The query that asks it is 'rimsearcher where {shown[0]} --value {tail}'.";
         }
 
-        static string? Placed(CommandContext ctx, string name, Snapshot.ScopeFilter scope)
+        // 名字落在别处时给出 found_as 的行;落不到就 null,调用方接着按形状猜。
+        static NameLookup.Sighting[]? Placed(CommandContext ctx, string name, Snapshot.ScopeFilter scope)
         {
-            if (ctx.Db.GetDefsNamed(name).Count == 0) return NameLookup.Locate(ctx, name, scope)?.Sentence;
+            var named = ctx.Db.GetDefsNamed(name);
+            if (named.Count == 0)
+                return NameLookup.Locate(ctx, name, scope) is { } sighting ? [sighting] : null;
 
             // 指向 --value 之前先探一次,判据与那条命令自己的默认完全一致(子串)——
             // 一个字段都没指向它时那句话是死路,而「没有谁按名字引用它」本身就是个答案。
@@ -1820,11 +1826,13 @@ public sealed class FindCommand : Command
             var referenced = ctx.Db.PathsWithValue(name, scope, Limits.MaxSuggestions).Rows
                                 .Any(r => !string.Equals(r.Path, "defName", StringComparison.Ordinal));
 
-            return $"'{name}' is a def name in this snapshot, not a field path. 'rimsearcher get {name}' shows " +
-                   "what is in it" +
-                   (referenced
-                       ? $", and 'rimsearcher where --value {name}' names the fields that point at it."
-                       : ", and no indexed field value points at it.");
+            // 是个 def 名:一行 is = def;有字段指着它时再一行 is = field value(那才是敲
+            // `where <defName>` 的人多半在问的事)。此前是一句「is a def name, not a field path …」。
+            var asDef = NameLookup.AsDef(name, named);
+            return referenced
+                ? [asDef, new NameLookup.Sighting(NameLookup.Where.FieldValue, name, "field value",
+                                                  "fields that point at it", $"{CommandRegistry.ExeName} where --value {name}")]
+                : [asDef];
         }
 
         // 这里不像 get 那样把默认值行滤掉:调用方点名了一个字段与一个值,「哪些 def 取到过它」
@@ -2036,7 +2044,7 @@ public sealed class ListCommand : Command
         // 3786 次 rimsearcher 中,`list` 119 次、`types` 1 次 —— 而那个词在 C# 侧指的是
         // 类型本身,两义并存会让 `types ThingComp` 体面地回答另一个问题。
         Aliases = ["ls", "def-types"],
-        Summary = "List every def of one type — or, with no type given, every def type in the snapshot.",
+        Summary = "List every def of one type — or, with no type given, every def type in the snapshot.\n\n" + NameLookup.Help,
         Positionals =
         [
             new PositionalSpec

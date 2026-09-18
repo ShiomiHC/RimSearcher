@@ -6,5 +6,8 @@ Nothing matched 'TestModGun' in this snapshot within --scope ludeon.rimworld.
 0 rows. Dropping any one option below brings back this many defs:
 filter                   hidden  next
 --scope ludeon.rimworld  1       rimsearcher search TestModGun
-'TestModGun' is in this snapshot after all — it comes from test.mod, which --scope ludeon.rimworld excludes. Drop --scope, or name that mod in it.
+
+Where the name does turn up:
+name        is                   in        next
+TestModGun  def outside --scope  test.mod  rimsearcher search TestModGun
 --- stderr ---

@@ -25,6 +25,7 @@ exit 0
       "declared_in": "test.mod"
     }
   ],
-  "empty_because": []
+  "empty_because": [],
+  "found_as": []
 }
 --- stderr ---

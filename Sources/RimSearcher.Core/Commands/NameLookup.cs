@@ -14,12 +14,20 @@ namespace RimSearcher.Commands;
 /// 最后才是换环境。每条都只在**当场算得出来**时才出现 —— 算不出来就一个字都不说,
 /// 免得变成免责声明。只出现在嵌套 <c>&lt;li Class="…"&gt;</c> 里的类不进快照,
 /// 九档全落空之后交回调用方,由它说出这条边界。
+///
+/// 每一档是 <c>found_as</c> 表的一行(name / is / in / next),不再是一句散文(Docs/25 乙2):
+/// 「它是什么」是封闭词表,「在哪」是算出来的落点,「下一步」是填好的命令。每档为什么
+/// 落不到 def 面(抽象父永远不成 def、keyed 不属于任何 def、补丁打不到代码造的 def)
+/// 是机制,住 <see cref="Help"/>,各命令的 Remarks 引它。
 /// </summary>
 internal static class NameLookup
 {
     /// <summary>一个名字可能的落点。顺序即结论强度,<see cref="Locate"/> 按此依次判定。</summary>
     internal enum Where
     {
+        /// <summary>是本快照里的 def。<see cref="Locate"/> 不产这一档 —— 它的调用方本来就在查 def;
+        /// 查别的东西的命令(keyed / where 的字段格)撞上 def 名时用 <see cref="AsDef"/>。</summary>
+        Def,
         /// <summary>是本快照里的 def,只是被 --scope 挡住了。</summary>
         DefOutsideScope,
         /// <summary>是继承层里的 XML 节点(多半是抽象父),永远不会成为 def。</summary>
@@ -40,7 +48,52 @@ internal static class NameLookup
         OtherSnapshot,
     }
 
-    internal sealed record Sighting(Where Where, string Sentence);
+    /// <summary>一行:问的名字、它是什么(封闭词表)、在哪、够得着它的命令。</summary>
+    internal sealed record Sighting(Where Where, string Name, string Is, string In, string Next);
+
+    public const string Table = "found_as";
+    public static readonly string[] Columns = ["name", "is", "in", "next"];
+    public const string Caption = "Where the name does turn up:";
+
+    public static readonly JsonKeySpec JsonKey = new()
+    {
+        Key = Table,
+        Rows = true,
+        What = "one row per name asked for that turns up as something other than what this command " +
+               "looks up: name, is (def / def outside --scope / xml node / abstract xml node / def type / " +
+               "class / interface text / mod in this snapshot / mod not in this snapshot / field value / " +
+               "def in another snapshot / xml node in another snapshot), in (where exactly), next (a " +
+               "command that reaches it, ready to paste). Empty when the name was found here, or turns up nowhere.",
+    };
+
+    /// <summary>
+    /// 各档为什么落不到这条命令的答案上 —— 机制,住 help。每条会印 <c>found_as</c> 的命令
+    /// 把它接在自己的 Remarks 后面。
+    /// </summary>
+    public const string Help =
+        "When a name asked for is not what this command looks up, a found_as table says what it is instead " +
+        "and gives the command that reaches it. An xml node is an inheritance-layer entry (Name=, ParentName= " +
+        "or Abstract=) and never becomes a def, so only 'inherit' reaches it; interface text lives in keyed " +
+        "translations that belong to no def, so only 'keyed' finds it; a field value is what some defs set a " +
+        "field to (comps[N].compClass and the like), so 'where --value' lists them; a def outside --scope is " +
+        "in this snapshot but excluded by the --scope given; a mod is a --scope, not a def.";
+
+    /// <summary>把一行(或几行)印进 <c>found_as</c>;同一次输出里只有一张,后来的往里加行。</summary>
+    public static void Say(CommandContext ctx, params Sighting[] sightings)
+    {
+        var rows = sightings.Select(s => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+        {
+            ["name"] = s.Name, ["is"] = s.Is, ["in"] = s.In, ["next"] = s.Next,
+        }).ToList();
+        if (rows.Count == 0) return;
+        ctx.Report.AppendRows(Table, Columns, rows, Caption);
+    }
+
+    /// <summary>这条命令查的不是 def,而名字是个 def:keyed / where 的字段格撞上 def 名时用。</summary>
+    public static Sighting AsDef(string name, IReadOnlyList<DefRow> defs)
+        => new(Where.Def, name, "def",
+               string.Join(", ", defs.Select(d => $"{d.DefType} in {d.SourceMod}").Distinct(StringComparer.Ordinal)),
+               $"{CommandRegistry.ExeName} get {name}");
 
     /// <summary>
     /// 名字在哪儿。返回 null 表示**当场算不出来**,那时调用方照旧说自己的话。
@@ -51,6 +104,7 @@ internal static class NameLookup
     public static Sighting? Locate(CommandContext ctx, string name, ScopeFilter? scope = null)
     {
         if (name.Length == 0) return null;
+        var exe = CommandRegistry.ExeName;
 
         // (1) 它就在这份快照里,只是被 --scope 挡住了。放第一位:把「过滤掉了」说成
         //     「没有」是最贵的那种错。
@@ -61,9 +115,8 @@ internal static class NameLookup
             if (visible.Count == 0)
             {
                 var mods = defs.Select(d => d.SourceMod).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-                return new Sighting(Where.DefOutsideScope,
-                    $"'{name}' is in this snapshot after all — it comes from {string.Join(", ", mods)}, " +
-                    $"which --scope {scope.Expression} excludes. Drop --scope, or name that mod in it.");
+                return new Sighting(Where.DefOutsideScope, name, "def outside --scope",
+                                    string.Join(", ", mods), ctx.Without("scope"));
             }
         }
 
@@ -71,22 +124,16 @@ internal static class NameLookup
         //     只有 inherit 走的那张表里有。
         var node = ctx.Db.NodesNamed(name).FirstOrDefault();
         if (node is not null)
-            return new Sighting(Where.XmlNode,
-                $"'{name}' is an XML node in {node.SourceMod} ({node.SourceFile}) but never becomes a def" +
-                (node.Abstract ? " — it is Abstract=\"True\"" : "") +
-                $". 'rimsearcher inherit {name}' shows what it inherits from, what inherits from it, " +
-                "and which concrete child carries the merged values.");
+            return new Sighting(Where.XmlNode, name, node.Abstract ? "abstract xml node" : "xml node",
+                                $"{node.SourceMod} ({node.SourceFile})", $"{exe} inherit {name}");
 
         // (3) def 类型(存储桶)。名字长得跟 def 名一模一样,而问法完全不同。
         var unscoped = ctx.Unscoped();
         var type = ctx.Db.Types(unscoped)
                          .FirstOrDefault(t => string.Equals(t.Type, name, StringComparison.OrdinalIgnoreCase));
         if (type.Type is not null)
-            return new Sighting(Where.DefType,
-                $"'{type.Type}' is a def type in this snapshot, not a def: it holds " +
-                $"{Output.Tally.Complete(type.Count).Render("def")}. " +
-                $"'rimsearcher list {type.Type}' lists them and 'rimsearcher fields {type.Type}' " +
-                "shows what fields they can have.");
+            return new Sighting(Where.DefType, name, "def type",
+                                Output.Tally.Complete(type.Count).Render("def"), exe + " list " + type.Type);
 
         // (4) 运行时 class。这一条要在 mod 之前:类名与 mod 名撞车的可能性远小于反过来。
         var holders = ctx.Db.TypesHoldingClass(name, unscoped);
@@ -94,15 +141,12 @@ internal static class NameLookup
         {
             var total = holders.Sum(h => h.Count);
             var where = string.Join(", ", holders.Take(3).Select(h => h.DefType));
-            // 计数放句尾从句,主句不带随数变形的动词,末句不带回指代词:名词的数有
-            // Tally 兜着,动词与代词没有。
-            return new Sighting(Where.Class,
-                $"'{name}' is a class rather than a def name. This snapshot holds " +
-                $"{Output.Tally.Complete(total).Render("def")} of that class, filed under {where}" +
-                (holders.Count > 3
-                    ? $" and {Output.Tally.Complete(holders.Count - 3).Render("def type")} more"
-                    : "") +
-                $"; the query is 'rimsearcher list {holders[0].DefType} --class {name}'.");
+            return new Sighting(Where.Class, name, "class",
+                                $"{Output.Tally.Complete(total).Render("def")} under {where}" +
+                                (holders.Count > 3
+                                    ? $" and {Output.Tally.Complete(holders.Count - 3).Render("def type")} more"
+                                    : ""),
+                                exe + " list " + holders[0].DefType + " --class " + name);
         }
 
         // (5) 界面文案。上面每一档判的是「这个**名字**是什么」,这一档判的是「这句**话**
@@ -117,32 +161,17 @@ internal static class NameLookup
             // 取一批而不是一条:同一句界面文案由**几个 key 各自承载**是常态(「转至事件
             // 发生地点」同时是 JumpToLocation 与 ClickToJumpToProblem),只取一条就得挑一个
             // 证不了的赢家。取满 25 条,distinct 在总数 ≤ 25 时是准数;超了只知下界,
-            // 措辞退到不指定唯一的那一支。
+            // 那时不点名 key —— FTS 是分词匹配,命中的几行未必整句相等。
             const int probe = 25;
             var (keyedRows, keyedTotal, _) = ctx.Db.KeyedSearch(name, probe);
             if (keyedRows.Count > 0)
             {
                 var distinct = keyedRows.Select(r => r.Key).Distinct(StringComparer.Ordinal).ToList();
                 var oneKeyForSure = distinct.Count == 1 && keyedTotal <= probe;
-
-                // 主语固定单数(this snapshot),计数进宾语,末句不带回指代词:名词的数有
-                // Tally 兜着,主谓一致与「them / one」这类回指没有。
-                var head = $"'{name}' is interface text rather than a def name: this snapshot holds " +
-                           $"{Output.Tally.Complete(keyedTotal).Render("keyed translation")} matching it" +
-                           (oneKeyForSure ? $", under the key '{distinct[0]}'" : "") +
-                           ". Keyed translations belong to no def at all, which is why a def search reaches " +
-                           "none of them. ";
-                return new Sighting(Where.Keyed, head +
-                    (oneKeyForSure
-                        ? $"'rimsearcher keyed {name}' shows the full row, and " +
-                          $"'rimsearcher code-search \"\\\"{distinct[0]}\\\"\"' finds the code that prints " +
-                          "that key."
-                        // 不说「同一句话来自多个 key」:FTS 是**分词**匹配,命中的几行未必
-                        // 整句相等(`keyed Milira --empty-translation` 命中的两行是 menu 与 button
-                        // 两句不同的话)。说得住的只有「这些词出现在几个 key 的文案里」。
-                        : $"Those words appear in the text of more than one key, so which key is the one you " +
-                          $"are after is not decided here: 'rimsearcher keyed {name}' lists them with the key " +
-                          "each belongs to, and the code search goes after whichever of those you meant."));
+                return new Sighting(Where.Keyed, name, "interface text",
+                                    $"{Output.Tally.Complete(keyedTotal).Render("keyed translation")}" +
+                                    (oneKeyForSure ? $", key {distinct[0]}" : ", more than one key"),
+                                    $"{exe} keyed {QuoteArg(name)}");
             }
         }
 
@@ -164,26 +193,14 @@ internal static class NameLookup
         if (holdingPaths.Count > 0)
         {
             var best = holdingPaths[0];
-            var tail = best.Path.Contains('.') ? best.Path[(best.Path.LastIndexOf('.') + 1)..] : best.Path;
-            return new Sighting(Where.FieldValue,
-                // 不在这里报 def 数:PathsWithValue 按 (path, def_type) 分组,而 comps[2] 与
-                // comps[5] 是两组,报出来的「1 def」会被读成「全快照只有一个」。计数交给 where,
-                // 它数的是对的那个东西。
-                $"'{name}' is not a def name, but it appears as a field value: '{best.Path}' holds " +
-                $"'{best.Sample}'" +
-                (holdingTotal > 1
-                    ? $", and it turns up under {holdingTotal} path and def-type combinations in all"
-                    : "") +
-                // 「covers every path at once」是**对答案**的全称担保,而被推荐的那条命令
-                // 自己跑起来会说「导出被砍短的 def 可能不在这个答案里」—— 同一个能力,
-                // 自述处诚实、推荐处全称,而读者先读的是这一句。改成只说它**怎么问**
-                // (不必先点名一条路径),完整性交给那条命令自己按当次数据讲。
-                // 不在这里把那个数算出来印上:推荐侧要另跑一次截断查询,而被推荐命令自己
-                // 就印同一个数 —— 两处各算各的,口径迟早会岔。
-                // 「use it」对子串匹配是假的:`keyed .` 会推荐 `where description .`,而那一条
-                // 回来的是几百条描述里带句号的行。说「值里含有它」才是那条命令真做的事。
-                $". 'rimsearcher where {tail} {name}' lists the defs whose value contains it, and " +
-                $"'rimsearcher where --value {name}' asks the same without naming a path.");
+            // 不在这里报 def 数:PathsWithValue 按 (path, def_type) 分组,而 comps[2] 与
+            // comps[5] 是两组,报出来的「1 def」会被读成「全快照只有一个」。计数交给 where,
+            // 它数的是对的那个东西。下一步不点名路径:`where --value` 覆盖到哪条路径由它
+            // 自己按当次数据说,推荐侧不替它担保。
+            return new Sighting(Where.FieldValue, name, "field value",
+                                $"{best.Path} = {best.Sample}" +
+                                (holdingTotal > 1 ? $", {holdingTotal} path and def-type pairs in all" : ""),
+                                $"{exe} where --value {QuoteArg(name)}");
         }
 
         // (8) mod,报的是外号(输入 `Milira`,packageId 是 Ancot.MiliraRace)。
@@ -192,6 +209,9 @@ internal static class NameLookup
         // (9) 别的快照。
         return InOtherSnapshot(ctx, name);
     }
+
+    private static string QuoteArg(string v)
+        => v.Length > 0 && v.All(c => !char.IsWhiteSpace(c) && c != '"' && c != '\'') ? v : "\"" + v.Replace("\"", "\\\"") + "\"";
 
     /// <summary>
     /// 「别的快照里有没有」这类补充信息的公共遍历面。<paramref name="probe"/> 回 null 表示
@@ -239,19 +259,17 @@ internal static class NameLookup
     private static Sighting? Mod(
         CommandContext ctx, string name, Lazy<Dictionary<string, InstalledMod>?> installed, bool fuzzy)
     {
+        var exe = CommandRegistry.ExeName;
         var inSnapshot = ctx.Db.Mods.FirstOrDefault(m => SameMod(m.PackageId, m.Name, name, fuzzy));
         if (inSnapshot is not null)
-            return new Sighting(Where.ModInSnapshot,
-                $"'{name}' is a mod this snapshot covers{Spell(name, inSnapshot.PackageId)}, not a def. " +
-                $"'--scope {inSnapshot.PackageId}' restricts any query to it; 'rimsearcher mods' lists them all.");
+            return new Sighting(Where.ModInSnapshot, name, "mod in this snapshot", inSnapshot.PackageId,
+                                exe + " list --scope " + inSnapshot.PackageId);
 
         var offSnapshot = installed.Value?.Values.FirstOrDefault(m => SameMod(m.PackageId, m.Name, name, fuzzy));
         if (offSnapshot is null) return null;
 
-        return new Sighting(Where.ModNotInSnapshot,
-            $"'{name}' is a mod installed on this machine{Spell(name, offSnapshot.PackageId)} that this snapshot " +
-            "does not cover, so nothing from it can be found here. 'rimsearcher snapshot status' compares " +
-            "the two, and re-exporting with that mod enabled is what brings it in.");
+        return new Sighting(Where.ModNotInSnapshot, name, "mod not in this snapshot",
+                            $"{offSnapshot.PackageId}, installed", $"{exe} snapshot status");
     }
 
     /// <summary>
@@ -283,16 +301,18 @@ internal static class NameLookup
         var found = Fanout(ctx, other =>
         {
             var defs = other.GetDefsNamed(name);
-            if (defs.Count > 0) return $"a {defs[0].DefType} from {defs[0].SourceMod}";
-            return other.NodesNamed(name).Count > 0 ? "an XML node in its inheritance layer" : null;
-        }).Select(f => (f.Alias, What: (string)f.What)).ToList();
+            if (defs.Count > 0) return (Is: "def in another snapshot", What: $"{defs[0].DefType} from {defs[0].SourceMod}");
+            return other.NodesNamed(name).Count > 0 ? (Is: "xml node in another snapshot", What: "") : null;
+        }).Select(f => (f.Alias, Hit: ((string Is, string What))f.What)).ToList();
 
         if (found.Count == 0) return null;
 
-        return new Sighting(Where.OtherSnapshot,
-            $"'{name}' is not in the snapshot this query used, but it is in " +
-            string.Join(", ", found.Select(f => $"'{f.Alias}' ({f.What})")) +
-            $". Add '--snapshot {found[0].Alias}' to ask there instead.");
+        // 同一件东西在八份库里各一份是常态(官方 def 在每份快照里都是同一个 mod 的同一类型):
+        // 按「是什么」分组,别名并排,不把同一句重复八遍。
+        var groups = found.GroupBy(f => f.Hit.What, StringComparer.Ordinal)
+                          .Select(g => string.Join(", ", g.Select(f => $"'{f.Alias}'")) + (g.Key.Length > 0 ? $": {g.Key}" : ""));
+        return new Sighting(Where.OtherSnapshot, name, found[0].Hit.Is, string.Join("; ", groups),
+                            $"{ctx.Without("snapshot")} --snapshot {found[0].Alias}");
     }
 
     /// <summary>

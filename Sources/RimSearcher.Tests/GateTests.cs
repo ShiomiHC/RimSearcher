@@ -56,6 +56,12 @@ public class GateTests
             ["get.defs"] = ["get", "Apparel_ShieldBelt"],
             ["get.empty_because"] = ["get", "Apparel_ShieldBelt", "--type", "HediffDef"],
             ["get.absent"] = ["get", "OnlyInOtherSnapshot", "--db", Fixture.OtherDb],
+            // 名字落在别处那张表:五条命令各探一档(抽象节点 / def / 字段值 / def 类型)。
+            ["search.found_as"] = ["search", "BaseBullet"],
+            ["get.found_as"] = ["get", "BaseBullet"],
+            ["where.found_as"] = ["where", "CompShield"],
+            ["inherit.found_as"] = ["inherit", "ThingDef"],
+            ["keyed.found_as"] = ["keyed", "Bullet_Revolver"],
             ["list.defs"] = ["list", "ThingDef"],
             ["list.types"] = ["list"],
             ["list.empty_because"] = ["list", "ThingDef", "--find", "zzznothing"],

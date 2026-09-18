@@ -1,5 +1,7 @@
 $ rimsearcher get OnlyInOtherSnapshot
 exit 1
 --- stdout ---
-'OnlyInOtherSnapshot' is not in the snapshot this query used, but it is in 'other' (a ThingDef from other.mod). Add '--snapshot other' to ask there instead.
+Where the name does turn up:
+name                 is                       in                                next
+OnlyInOtherSnapshot  def in another snapshot  'other': ThingDef from other.mod  rimsearcher get OnlyInOtherSnapshot --snapshot other
 --- stderr ---

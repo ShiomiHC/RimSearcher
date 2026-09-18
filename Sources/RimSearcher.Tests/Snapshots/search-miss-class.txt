@@ -2,5 +2,8 @@ $ rimsearcher search TestVariantDef
 exit 1
 --- stdout ---
 Nothing matched 'TestVariantDef' in this snapshot.
-'TestVariantDef' is a class rather than a def name. This snapshot holds 1 def of that class, filed under TestBaseDef; the query is 'rimsearcher list TestBaseDef --class TestVariantDef'.
+
+Where the name does turn up:
+name            is     in                       next
+TestVariantDef  class  1 def under TestBaseDef  rimsearcher list TestBaseDef --class TestVariantDef
 --- stderr ---
