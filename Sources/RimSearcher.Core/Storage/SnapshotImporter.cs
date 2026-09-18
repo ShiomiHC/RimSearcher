@@ -35,6 +35,12 @@ public sealed class SnapshotImporter
     public IReadOnlyList<string> ModRoots { get; init; } = [];
 
     /// <summary>
+    /// 调用方**想不想**收割。<see cref="ModRoots"/> 为空时这一位把「关了」与「没地方扫」分开
+    /// 记进库(<see cref="SnapshotSchema.MetaKeyTranslationsHarvest"/>),出路各不相同。
+    /// </summary>
+    public bool HarvestRequested { get; init; } = true;
+
+    /// <summary>
     /// 参考侧 XML 指纹要用的环境。<c>null</c> 就不记那一层 —— 于是建出来的库对
     /// 「mod 的 Defs 后来改没改」不作答(<see cref="SnapshotSchema.MetaKeyContent"/>)。
     ///
@@ -774,6 +780,10 @@ public sealed class SnapshotImporter
                 Put(SnapshotSchema.MetaKeyDefCount, defs.ToString());
                 Put(SnapshotSchema.MetaKeySourcePath, Path.GetFileName(exportPath));
                 Put(SnapshotSchema.MetaKeyHarvestedRoots, ModRoots.Count.ToString());
+                Put(SnapshotSchema.MetaKeyTranslationsHarvest,
+                    ModRoots.Count > 0 ? SnapshotSchema.TranslationsHarvestOn
+                    : HarvestRequested ? SnapshotSchema.TranslationsHarvestNoRoots
+                    : SnapshotSchema.TranslationsHarvestOff);
 
                 // 尾行没这个字段就一个字也不写 —— **缺席是有意义的一态**(这份导出建于经济面
                 // 之前),和 content_fingerprint 同一道缝。写个 "unknown" 进去会把「没资格回答」

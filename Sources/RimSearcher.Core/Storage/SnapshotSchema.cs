@@ -54,6 +54,17 @@ public static class SnapshotSchema
     public const string MetaKeyHarvestedRoots = "harvested_roots";
 
     /// <summary>
+    /// <see cref="MetaKeyHarvestedRoots"/> 为 0 时的**成因**:<see cref="TranslationsHarvestOff"/>(导入时
+    /// 明确关掉)/ <see cref="TranslationsHarvestNoRoots"/>(想扫、没配 <c>mod_roots</c>)/
+    /// <see cref="TranslationsHarvestOn"/>。根数存不下成因,而两种成因的出路不同(收回开关 / 去配根);
+    /// 老库没这个键,那时只能按现机配置猜。
+    /// </summary>
+    public const string MetaKeyTranslationsHarvest = "translations_harvest";
+    public const string TranslationsHarvestOn = "on";
+    public const string TranslationsHarvestOff = "off";
+    public const string TranslationsHarvestNoRoots = "no-roots";
+
+    /// <summary>
     /// 导出那一刻各 mod 的 Defs/Patches 指纹(<see cref="Snapshot.ContentScan"/> 的 JSON)。
     ///
     /// **缺席是有意义的一态**,不是坏库:这个键是后加的,先前建的库里没有它,

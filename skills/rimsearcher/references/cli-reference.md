@@ -953,6 +953,7 @@ Ordinary queries stay quiet when the snapshot matches the game, and say one line
 | `snapshot` | an object, not an array: the chosen snapshot compared with the installed game. |
 | `xml` | one row per snapshot mod whose Defs or Patches XML moved or cannot be found: package_id, state. Empty when none. |
 | `mod_list` | one row per packageId that is enabled in the game but missing from this snapshot, or in this snapshot but no longer enabled: package_id, state. Empty when the lists match. |
+| `layers` | one row per data layer this snapshot could hold: layer, state, next, why. 'state' is 'ok' or one of pre-measure / skipped / unavailable / unmeasured / unconfigured / partial / empty; 'next' is the command that fills the layer (null on 'ok' rows). Queries print the same row shape as 'absent' for a layer they needed and found short — without 'why'. |
 
 Examples:
 

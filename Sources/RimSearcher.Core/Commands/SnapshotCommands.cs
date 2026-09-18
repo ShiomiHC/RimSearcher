@@ -95,6 +95,15 @@ public sealed class SnapshotStatusCommand : Command
                 Rows = true,
                 What = "one row per packageId that is enabled in the game but missing from this snapshot, or in this snapshot but no longer enabled: package_id, state. Empty when the lists match.",
             },
+            new()
+            {
+                Key = "layers",
+                Rows = true,
+                What = "one row per data layer this snapshot could hold: layer, state, next, why. 'state' is 'ok' " +
+                       "or one of pre-measure / skipped / unavailable / unmeasured / unconfigured / partial / empty; " +
+                       "'next' is the command that fills the layer (null on 'ok' rows). Queries print the same " +
+                       "row shape as 'absent' for a layer they needed and found short — without 'why'.",
+            },
         ],
     };
 
@@ -114,9 +123,10 @@ public sealed class SnapshotStatusCommand : Command
             _ => "",
         };
 
+        var name = selection.Alias ?? Path.GetFileNameWithoutExtension(selection.Path);
         ctx.Report.Detail("snapshot",
         [
-            new("name", selection.Alias ?? Path.GetFileNameWithoutExtension(selection.Path)),
+            new("name", name),
             new("chosen_because", why),
             new("path", selection.Path),
             new("game_version", db.Meta.GameVersion),
@@ -132,6 +142,11 @@ public sealed class SnapshotStatusCommand : Command
                 ? $"{Tally.Complete(c.Files).Render("file")} across {Tally.Complete(c.Mods.Count).Render("mod")}"
                 : "not recorded (exported before this was measured)"),
         ]);
+
+        // 整张层账只在这里印:每一层在不在、不在的成因、出路。查询面碰到缺层只印它需要的那几行
+        // (`absent` 表,不带 why)—— 查空比查到贵,全账不许上查询路径。
+        ctx.Report.Table("layers", ["layer", "state", "next", "why"],
+            DataLayers.Rows(DataLayers.Ledger(db, ctx.Config, name), withWhy: true));
 
         // 一次导出到底慢在哪 —— 两侧各一张分层耗时表。此前两侧都不记耗时,于是「哪一层慢」
         // 只能按行数猜;实测游戏那侧两分多钟出文件、建库这侧十几分钟,猜错的正是这一刀。
@@ -708,6 +723,14 @@ public sealed class SnapshotImportCommand : Command
                 ?? throw new CliUsageException($"No '*{IntermediateFormat.FileExtension}' file in the configured export directory.");
         }
 
+        // 裸文件名先去导出目录找:重导入的指路命令(`DataLayers.ImportCommand`)填的是建库时记下的
+        // 文件名,不带目录 —— 读者照抄就该能跑,不必先 cd 到导出目录。
+        if (!File.Exists(file) && Path.GetFileName(file) == file)
+        {
+            var inExports = Path.Combine(ctx.Config.ResolveExportDir(), file);
+            if (File.Exists(inExports)) file = inExports;
+        }
+
         if (!File.Exists(file))
             throw new CliUsageException($"No export file at '{file}'.");
 
@@ -726,6 +749,7 @@ public sealed class SnapshotImportCommand : Command
         var importer = new SnapshotImporter
         {
             ModRoots = harvest ? ctx.Config.ModRoots : [],
+            HarvestRequested = harvest,
             Environment = ctx.Config,
         };
         var incoming = SnapshotRetention.IncomingPath(dbPath);

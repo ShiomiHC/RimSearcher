@@ -219,6 +219,15 @@ public sealed class SnapshotDb : IDisposable
     public bool Harvested { get; }
 
     /// <summary>
+    /// <see cref="Harvested"/> 为假时的成因(<see cref="SnapshotSchema.MetaKeyTranslationsHarvest"/> 的三个值);
+    /// <c>null</c> = 老库没记,那时成因只能按现机配置猜。
+    /// </summary>
+    public string? TranslationsHarvest { get; }
+
+    /// <summary>建库时读的导出文件名(不带目录);<c>null</c> = 别的工具写的库。重导入的命令拿它填参数。</summary>
+    public string? SourceFile { get; }
+
+    /// <summary>
     /// 导出那一刻各 mod 的 Defs/Patches 指纹。<c>null</c> = **这份快照没量过** ——
     /// 见 <see cref="SnapshotSchema.MetaKeyContent"/>,那是一条判据的缺席,不是「没变」。
     /// </summary>
@@ -249,11 +258,13 @@ public sealed class SnapshotDb : IDisposable
     public IReadOnlyDictionary<string, long>? ImportTimings { get; }
 
     private SnapshotDb(SqliteConnection db, string path, ExportMeta meta, IReadOnlyList<ModRef> mods,
-                       bool harvested, ContentScan? content, string? economyState, string? economyError,
+                       bool harvested, string? translationsHarvest, string? sourceFile,
+                       ContentScan? content, string? economyState, string? economyError,
                        IReadOnlyDictionary<string, long>? exportTimings,
                        IReadOnlyDictionary<string, long>? importTimings)
     {
-        _db = db; Path = path; Meta = meta; Mods = mods; Harvested = harvested; Content = content;
+        _db = db; Path = path; Meta = meta; Mods = mods; Harvested = harvested;
+        TranslationsHarvest = translationsHarvest; SourceFile = sourceFile; Content = content;
         EconomyState = economyState; EconomyError = economyError; ExportTimings = exportTimings;
         ImportTimings = importTimings;
     }
@@ -351,6 +362,8 @@ public sealed class SnapshotDb : IDisposable
         // 版本闸在上面,这一格必然写过 —— 读不出来只可能是别的工具伪造的库。
         var harvested = meta.TryGetValue(SnapshotSchema.MetaKeyHarvestedRoots, out var hr) &&
                         int.TryParse(hr, out var roots) && roots > 0;
+        meta.TryGetValue(SnapshotSchema.MetaKeyTranslationsHarvest, out var translationsHarvest);
+        meta.TryGetValue(SnapshotSchema.MetaKeySourcePath, out var sourceFile);
 
         var content = meta.TryGetValue(SnapshotSchema.MetaKeyContent, out var cf)
             ? ContentScan.FromJson(cf)
@@ -375,7 +388,7 @@ public sealed class SnapshotDb : IDisposable
             catch (System.Text.Json.JsonException) { return null; }
         }
 
-        return new SnapshotDb(db, path, exportMeta, mods, harvested, content, econState, econError,
+        return new SnapshotDb(db, path, exportMeta, mods, harvested, translationsHarvest, sourceFile, content, econState, econError,
                               ReadTimings(SnapshotSchema.MetaKeyExportTimings),
                               ReadTimings(SnapshotSchema.MetaKeyImportTimings));
     }
@@ -2458,6 +2471,9 @@ public sealed class SnapshotDb : IDisposable
     /// </summary>
     private bool TranslationsHaveKey => _trKey ??= HasColumn("translations", "key_state");
     private bool? _trKey;
+
+    /// <summary>注入键层在场:版本位到了**且**表长成那个形状(0.8.0 有表却答不出它要答的问题)。</summary>
+    public bool InjectionKeysIndexed => Meta.IndexesInjectionKeys && HasInjectionKeys;
 
     private bool HasInjectionKeys => _ik ??= HasColumn("injection_keys", "suggested_path")
                                           || InjectionKeysAreDictionary;

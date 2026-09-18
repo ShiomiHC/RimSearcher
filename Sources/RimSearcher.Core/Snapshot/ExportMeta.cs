@@ -103,6 +103,9 @@ public sealed record ExportMeta(
     /// </summary>
     public bool RecordsInjectionApplied => AtLeast(ExporterVersion, 0, 10);
 
+    /// <summary>版本位的通用形态,给 <see cref="DataLayers"/> 分「没到那一版」与「到了却没量成」用。</summary>
+    public bool ExporterAtLeast(int major, int minor) => AtLeast(ExporterVersion, major, minor);
+
     private static bool AtLeast(string version, int major, int minor)
     {
         var parts = (version ?? "").Split('.');

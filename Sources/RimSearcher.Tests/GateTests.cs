@@ -70,6 +70,7 @@ public class GateTests
             ["snapshot list.snapshots"] = ["snapshot", "list"],
             ["snapshot status.xml"] = ["snapshot", "status"],
             ["snapshot status.mod_list"] = ["snapshot", "status"],
+            ["snapshot status.layers"] = ["snapshot", "status"],
             ["snapshot truncated.truncated"] = ["snapshot", "truncated"],
             ["snapshot diff.defs_added"] = ["snapshot", "diff"],
             ["snapshot diff.defs_removed"] = ["snapshot", "diff"],
