@@ -18,10 +18,6 @@ exit 0
     {
       "kind": "next_step",
       "text": "To find the code that prints it, search for the key as a literal: 'rimsearcher code-search \"\\\"CannotUseNoPower\\\"\"'. A key assembled from parts is not written inline anywhere, so that search does not reach it."
-    },
-    {
-      "kind": "boundary",
-      "text": "This snapshot never scanned the language files on disk, so every row here is one the game actually had and no 'on disk' row could appear. No 'mod_roots' is configured on this machine, so there is nowhere to scan: set it in the config file and import again to measure that layer."
     }
   ],
   "keys": [
@@ -44,6 +40,13 @@ exit 0
       "mod": null,
       "source": "Misc.xml:12",
       "query": "没有电力"
+    }
+  ],
+  "absent": [
+    {
+      "layer": "disk_translations",
+      "state": "unconfigured",
+      "next": "set 'mod_roots' in the config file, then rimsearcher snapshot import fixture.rsx.jsonl.gz --name fixture"
     }
   ]
 }

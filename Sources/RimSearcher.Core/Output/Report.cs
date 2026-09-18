@@ -76,9 +76,13 @@ public abstract record Block : ReportEntry
 }
 
 /// <summary>表格块。列名即 JSON 键(snake_case),文本与 JSON 两个渲染器共用同一份行数据。</summary>
+/// <param name="Unclipped">
+/// 文本面不按 <see cref="TextRenderer.MaxCellWidth"/> 切格。给装着**可照抄的命令**的表用:
+/// 一条被切成 <c>…</c> 的命令不是一条短一点的命令,是一条跑不起来的命令。
+/// </param>
 public sealed record TableBlock(string Name, IReadOnlyList<string> Columns,
                                 IReadOnlyList<IReadOnlyDictionary<string, object?>> Rows,
-                                string? Caption = null) : Block;
+                                string? Caption = null, bool Unclipped = false) : Block;
 
 /// <summary>键值明细块(get 这类单对象输出)。</summary>
 public sealed record DetailBlock(string Name, IReadOnlyList<KeyValuePair<string, object?>> Pairs) : Block;
@@ -365,8 +369,9 @@ public sealed class Report
     }
 
     public Report Table(string name, IReadOnlyList<string> columns,
-                        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, string? caption = null)
-        => Add(new TableBlock(name, columns, rows, caption));
+                        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows, string? caption = null,
+                        bool unclipped = false)
+        => Add(new TableBlock(name, columns, rows, caption, unclipped));
 
     public Report Detail(string name, IReadOnlyList<KeyValuePair<string, object?>> pairs)
         => Add(new DetailBlock(name, pairs));
@@ -383,7 +388,8 @@ public sealed class Report
     {
         var missing = rows.Where(r => !r.Complete).ToList();
         if (missing.Count == 0) return false;
-        Table(AbsentTable, ["layer", "state", "next"], Snapshot.DataLayers.Rows(missing, withWhy: false));
+        Table(AbsentTable, ["layer", "state", "next"], Snapshot.DataLayers.Rows(missing, withWhy: false),
+              unclipped: true);
         return true;
     }
 

@@ -3212,13 +3212,14 @@ public class GrammarTests
         var config = Path.Combine(dir, "config.toml");
         File.WriteAllText(config, "mod_roots = ['" + modRoot.Replace("\\", "\\\\") + "']\n");
 
-        const string Says = "never scanned the language files on disk";
-
-        // 语料库是不带 mod_roots 造的,所以它就是一份没量过的库。
+        // 形态是 absent 表的一行(Docs/25):层名 + 状态词 + 填好参数的导入命令。
+        // 语料库是不带 mod_roots 造的,所以它就是一份没量过的库 —— 状态读建库时记下的成因。
+        const string Says = "disk_translations  unconfigured  ";
+        const string Import = "rimsearcher snapshot import fixture.rsx.jsonl.gz --name fixture";
         var (keyed, _, _) = Fixture.Run("keyed", "CannotUseNoPower", "--config", config);
-        Assert.Contains(Says, keyed, StringComparison.Ordinal);
+        Assert.Contains(Says + Import, keyed, StringComparison.Ordinal);
         var (get, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--config", config);
-        Assert.Contains(Says, get, StringComparison.Ordinal);
+        Assert.Contains(Says + Import, get, StringComparison.Ordinal);
 
         // 没配 mod_roots 时**照说**,只换出路。此前这一支是闭嘴的,理由写的是
         // 「这台机器上没有第二层可漏」—— 那句话把「本机没配扫描目录」当成了
@@ -3227,14 +3228,12 @@ public class GrammarTests
         // 「That is a gap in this snapshot, not evidence about the mods on this machine」——
         // 两处产地矛盾时,闭嘴的那处是假话。
         var (noRoots, _, _) = Fixture.Run("keyed", "CannotUseNoPower");
-        Assert.Contains(Says, noRoots, StringComparison.Ordinal);
-        Assert.Contains("No 'mod_roots' is configured", noRoots, StringComparison.Ordinal);
+        Assert.Contains(Says + "set 'mod_roots' in the config file, then " + Import, noRoots, StringComparison.Ordinal);
         // 配了的那支出路不许跟着变 —— 那边重导一次就够,不用先去改配置。
-        Assert.DoesNotContain("No 'mod_roots' is configured", keyed, StringComparison.Ordinal);
-        Assert.Contains("Re-import to measure that layer", keyed, StringComparison.Ordinal);
+        Assert.DoesNotContain("set 'mod_roots' in the config file, then ", keyed, StringComparison.Ordinal);
 
         // 量过的库两支都闭嘴 —— 这条边界本身不在场。
-        Assert.DoesNotContain(Says, Fixture.Run("snapshot", "list").Stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain("disk_translations", Fixture.Run("snapshot", "list").Stdout, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -3268,7 +3267,7 @@ public class GrammarTests
         Assert.Equal(0, code);
         using var db = SnapshotDb.Open(Path.Combine(dir, "harvestdefault.db"));
         Assert.True(db.Harvested, "不给开关的一次导入没有去扫 mod_roots —— 收割不是默认行为了。");
-        Assert.DoesNotContain("never scanned", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("disk_translations", json, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -3813,19 +3812,14 @@ public class GrammarTests
         var qA = Fixture.Run("keyed", "CannotUseNoPower", "--config", cfgA, "--db", dbA).Stdout;
         var qB = Fixture.Run("keyed", "CannotUseNoPower", "--config", cfgB, "--db", dbB).Stdout;
 
-        // ① 四份输出都得说破**测量没发生**。措辞不钉,只钉这个事实在场。
-        // 2026-09-18 之前钉的是否定标记(`not evidence` / `cannot answer`):r16(Docs/23)
-        // 量到那截反面在两档读者上都零边际,查询侧那句改成只说事实 ——「没扫过盘上的
-        // 语言文件,于是不可能出现 on disk 行」。挡住「所以盘上也没有」的是「没扫」这个
-        // 事实本身,三种说法都是它:never scanned / never looked / nowhere to scan。
-        // (放宽标记集之前先按实质判过一遍 —— 否则就成了「照着实现写闸」,而那正是
-        // 这条闸要绕开的东西。)
-        static bool Unmeasured(string s) => s.Contains("never scanned", StringComparison.Ordinal)
-                                         || s.Contains("never looked", StringComparison.Ordinal)
-                                         || s.Contains("nowhere to scan", StringComparison.Ordinal);
-        foreach (var (what, text) in new[] { ("import A", impA), ("import B", impB),
-                                             ("query A", qA), ("query B", qB) })
-            Assert.True(Unmeasured(text), $"{what} 报了结果却没说破磁盘那一层没量过");
+        // ① 四份输出都得说破**测量没发生**。形态是 absent 表里 disk_translations 那一行;
+        //    状态词读建库时记下的成因 —— A 是被开关关掉的(skipped),B 是没地方扫(unconfigured)。
+        //    2026-09-18 之前是一句散文,钉的是否定标记;r16(Docs/23)量到反面零边际,
+        //    Docs/25 又把散文换成了表:弱档只读表,而状态词就是「没扫」这个事实本身。
+        Assert.Contains("disk_translations  skipped  ", impA, StringComparison.Ordinal);
+        Assert.Contains("disk_translations  skipped  ", qA, StringComparison.Ordinal);
+        Assert.Contains("disk_translations  unconfigured  ", impB, StringComparison.Ordinal);
+        Assert.Contains("disk_translations  unconfigured  ", qB, StringComparison.Ordinal);
 
         // ② mod_roots 两侧同进同出:B 是「没地方扫」,出路只能是去配它;A 有地方扫,
         //    出路是收回那个开关 —— 提了 mod_roots 反而把人支去改一个已经对的配置。

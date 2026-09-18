@@ -95,8 +95,7 @@ public static class DataLayers
             EconomyRow(db, snapshotName),
             KeyedRow(db, snapshotName),
             DiskTranslationsRow(db, config, snapshotName),
-            Bit(InjectionKeys, db.InjectionKeysIndexed, export,
-                "exporter before 0.9.0: translation paths stored as raw injection keys"),
+            InjectionKeysRow(db, snapshotName),
             Bit(InjectionApplied, m.RecordsInjectionApplied, export,
                 "exporter before 0.10.0: every language-pack row counted as in effect"),
             new(XmlFingerprint, db.Content is null ? LayerState.Unmeasured : LayerState.Ok,
@@ -157,29 +156,37 @@ public static class DataLayers
                   "no keyed rows: exported before this layer, or from a game whose language data was not loaded");
 
     /// <summary>
-    /// 磁盘语言文件那一层。成因优先读建库时记下的(<see cref="SnapshotDb.TranslationsHarvest"/>);
-    /// 老库没记,只能按**现机**的 <c>mod_roots</c> 猜 —— 库是 <c>--no-harvest</c> 建的时候会指错方向,
-    /// 所以 why 里写明是猜的。
+    /// 磁盘语言文件那一层。**状态读建库时记下的成因**(<see cref="SnapshotDb.TranslationsHarvest"/>:
+    /// 导入时关了 → skipped,想扫没根 → unconfigured,老库没记 → unmeasured),**出路看现机**:
+    /// 现在配了 <c>mod_roots</c> 就是重导入一次,没配就先配再导入。两者分开取,是因为
+    /// 库建于没根的机器而现在配了根的时候,成因是「没地方扫」而出路只剩「导一次」。
     /// </summary>
     public static LayerRow DiskTranslationsRow(SnapshotDb db, RimConfig config, string snapshotName)
     {
         if (db.Harvested) return new(DiskTranslations, LayerState.Ok, null, null);
         var import = ImportCommand(db, snapshotName);
+        var next = config.ModRoots.Count > 0 ? import : ConfigureModRootsThen + import;
         return db.TranslationsHarvest switch
         {
-            SnapshotSchema.TranslationsHarvestOff => new(DiskTranslations, LayerState.Unmeasured, import,
+            SnapshotSchema.TranslationsHarvestOff => new(DiskTranslations, LayerState.Skipped, next,
                 "imported with --no-harvest-translations"),
-            SnapshotSchema.TranslationsHarvestNoRoots => new(DiskTranslations, LayerState.Unconfigured,
-                "set 'mod_roots' in the config file, then " + import,
+            SnapshotSchema.TranslationsHarvestNoRoots => new(DiskTranslations, LayerState.Unconfigured, next,
                 "imported with no 'mod_roots' configured, so there was nowhere to scan"),
-            _ => config.ModRoots.Count > 0
-                ? new(DiskTranslations, LayerState.Unmeasured, import,
-                      "imported before the reason was recorded; 'mod_roots' is configured now")
-                : new(DiskTranslations, LayerState.Unconfigured,
-                      "set 'mod_roots' in the config file, then " + import,
-                      "imported before the reason was recorded; no 'mod_roots' is configured now"),
+            _ => new(DiskTranslations, LayerState.Unmeasured, next,
+                "imported before the reason was recorded"),
         };
     }
+
+    /// <summary>出路的前半截,产地唯一 —— 闸按这个字面钉「没配根时出路先去配根」。</summary>
+    public const string ConfigureModRootsThen = "set 'mod_roots' in the config file, then ";
+
+    /// <summary>
+    /// 注入键层:0.9.0 起译文的键归一、与字段路径同一套文法。没这一层时 get 的译文表没有 key 列,
+    /// 而 path 那一列写的是游戏的注入键原文 —— 与字段表的路径文法不同,按坐标找的人会两边都对不上。
+    /// </summary>
+    public static LayerRow InjectionKeysRow(SnapshotDb db, string snapshotName)
+        => Bit(InjectionKeys, db.InjectionKeysIndexed, ExportCommand(snapshotName),
+               "exporter before 0.9.0: translation paths stored as raw injection keys, no 'key' column");
 
     public static LayerRow PostPatchXmlRow(SnapshotDb db, string snapshotName)
     {

@@ -7,5 +7,6 @@ exit 0
 key            translated  original  origin     placeholder  mod  source                    query
 CommandSettle  定居        Settle    in effect  no                GameplayCommands.xml:386  CommandSettle
 
-This snapshot never scanned the language files on disk, so every row here is one the game actually had and no 'on disk' row could appear. No 'mod_roots' is configured on this machine, so there is nowhere to scan: set it in the config file and import again to measure that layer.
+layer              state         next
+disk_translations  unconfigured  set 'mod_roots' in the config file, then rimsearcher snapshot import fixture.rsx.jsonl.gz --name fixture
 --- stderr ---

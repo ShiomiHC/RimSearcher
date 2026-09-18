@@ -184,8 +184,10 @@ public static class TextRenderer
         {
             cells[r] = new string[t.Columns.Count];
             for (var c = 0; c < t.Columns.Count; c++)
-                cells[r][c] = OutputText.Truncate(
-                    OutputText.Cell(t.Rows[r].GetValueOrDefault(t.Columns[c])), MaxCellWidth);
+            {
+                var cell = OutputText.Cell(t.Rows[r].GetValueOrDefault(t.Columns[c]));
+                cells[r][c] = t.Unclipped ? cell : OutputText.Truncate(cell, MaxCellWidth);
+            }
         }
 
         var (columns, rows, folded) = Fold(t.Columns, cells);

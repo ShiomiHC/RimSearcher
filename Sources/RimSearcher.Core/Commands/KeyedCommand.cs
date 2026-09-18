@@ -1,6 +1,7 @@
 using RimSearcher.Cli;
 using RimSearcher.Output;
 using RimSearcher.Search;
+using RimSearcher.Snapshot;
 using RimSearcher.Storage;
 
 namespace RimSearcher.Commands;
@@ -91,6 +92,16 @@ public sealed class KeyedCommand : Command
                        "The query column is the one thing that does change with the call: listing the whole " +
                        "layer takes no query, so there the rows have no such column.",
             },
+            new()
+            {
+                Key = "absent",
+                Rows = true,
+                What = "one row per layer this query needed that this snapshot does not hold — layer, state, " +
+                       "next; empty when both are there. 'keyed' with state empty when the snapshot has no " +
+                       "keyed translations at all (then 'keys' is empty too); 'disk_translations' (skipped / " +
+                       "unconfigured / unmeasured) when the language files on disk were not scanned, so the " +
+                       "'origin' column holds only 'in effect' rows. next is the command that fills the layer.",
+            },
         ],
     };
 
@@ -107,16 +118,13 @@ public sealed class KeyedCommand : Command
 
         // 这一层整个是空的,与「这个 key 不在里面」是两件事,而它们的输出会长成一样。
         // 先问一次,好让下面每一条落空的话都能带上正确的成因。
+        // 整层空是 absent 表的一行(keyed / empty / 重导的命令)。两种成因(层未量 / 语言数据
+        // 没加载)在位上分不开,导出器没写态 —— 账上如实 empty,那对同形的导出写在
+        // snapshot status 的 why 里,查询面不印机制(Docs/25)。
         var total = ctx.Db.KeyedCount();
         if (total == 0)
         {
-            ctx.Report.Notice(NoticeKind.Boundary,
-                // 「that is a property of the snapshot, not evidence about …」2026-09-18 删掉:
-                // 「这份库没有这一层」+ 点名那对分不开的导出 + 出路,是全部事实。
-                "This snapshot has no keyed translations at all. Two exports look like this and " +
-                "this line cannot tell them apart: one written before this layer was measured at all, and one " +
-                "written from a game whose language data was not loaded. The fix is the same either way — export " +
-                "again; 'rimsearcher snapshot status' names the snapshot in use.");
+            ctx.Report.Absent(DataLayers.KeyedRow(ctx.Db, ctx.SnapshotName ?? ""));
             return 1;
         }
 
@@ -404,8 +412,8 @@ public sealed class KeyedCommand : Command
     private static void AfterTable(CommandContext ctx, bool anyPlaceholder)
     {
         // origin 那一列印着「in effect」,读的人自然读出「另有 on disk 的没印出来」。
-        // 这份库要是没量过磁盘,那个对照根本不存在 —— 说破它。
-        DiskLayer.NoteIfUnmeasured(ctx);
+        // 这份库要是没量过磁盘,那个对照根本不存在 —— absent 表里给它一行。
+        ctx.Report.Absent(DataLayers.DiskTranslationsRow(ctx.Db, ctx.Config, ctx.SnapshotName ?? ""));
 
         // 占位译文实际显示的是英文 —— 表里它与真译文同形,所以点名说破。
         //

@@ -34,9 +34,7 @@ public class DataLayerTests
             else
             {
                 Assert.False(string.IsNullOrWhiteSpace(r.Why), $"{r.Layer}: a short row must say why");
-                // unavailable 的出路不在命令行上;其余每一态都有一条填好参数的命令。
-                if (r.State != LayerState.Unavailable)
-                    Assert.Contains("rimsearcher ", r.Next);
+                Assert.False(string.IsNullOrWhiteSpace(r.Next), $"{r.Layer}: a short row must say what next");
             }
         }
     }
@@ -46,16 +44,17 @@ public class DataLayerTests
     /// unconfigured 而不是 unmeasured,出路先配根再导入,导入命令填的是建库时记下的文件名。
     /// </summary>
     [Fact]
-    public void 磁盘语言层_成因读建库时记下的位_不按现机猜()
+    public void 磁盘语言层_状态读建库时记下的成因_出路看现机()
     {
         var row = FixtureLedger().Single(r => r.Layer == DataLayers.DiskTranslations);
         Assert.Equal(LayerState.Unconfigured, row.State);
-        Assert.StartsWith("set 'mod_roots' in the config file, then rimsearcher snapshot import fixture.rsx.jsonl.gz --name fixture", row.Next);
+        Assert.Equal("set 'mod_roots' in the config file, then rimsearcher snapshot import fixture.rsx.jsonl.gz --name fixture", row.Next);
 
-        // 现机配了根也不改判:库是没根的时候建的,那一次确实没地方扫。
+        // 现机配了根:状态不改(库是没根的时候建的,那一次确实没地方扫),出路只剩导一次。
         using var db = SnapshotDb.Open(Fixture.Db);
         var withRoots = DataLayers.DiskTranslationsRow(db, new RimConfig { ModRoots = ["S:/nowhere"] }, "fixture");
         Assert.Equal(LayerState.Unconfigured, withRoots.State);
+        Assert.Equal("rimsearcher snapshot import fixture.rsx.jsonl.gz --name fixture", withRoots.Next);
         Assert.Equal(SnapshotSchema.TranslationsHarvestNoRoots, db.TranslationsHarvest);
     }
 

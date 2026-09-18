@@ -36,10 +36,6 @@ exit 0
       "total": 1
     },
     {
-      "kind": "boundary",
-      "text": "This snapshot never scanned the language files on disk, so every row here is one the game actually had and no 'on disk' row could appear. No 'mod_roots' is configured on this machine, so there is nowhere to scan: set it in the config file and import again to measure that layer."
-    },
-    {
       "kind": "count",
       "text": "7 fields.",
       "shown": 7,
@@ -56,6 +52,13 @@ exit 0
     {
       "kind": "advisory",
       "text": "Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_default' is not this def having made a choice — the count in brackets: soundDrop (9), soundImpactDefault (9), soundPickup (9), soundInteract (8)."
+    }
+  ],
+  "absent": [
+    {
+      "layer": "disk_translations",
+      "state": "unconfigured",
+      "next": "set 'mod_roots' in the config file, then rimsearcher snapshot import fixture.rsx.jsonl.gz --name fixture"
     }
   ],
   "defs": [
@@ -193,7 +196,6 @@ exit 0
       ],
       "translations": []
     }
-  ],
-  "absent": []
+  ]
 }
 --- stderr ---

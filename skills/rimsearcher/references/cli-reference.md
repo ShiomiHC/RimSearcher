@@ -412,7 +412,7 @@ defName is not listed as a field: the def_name line above the table is that valu
 | Key | Holds |
 |---|---|
 | `defs` | one object per def carrying the name — each with 'def' (identity), 'fields' (path/value/code_default rows, plus 'xml' when the snapshot recorded which XML lines were written) and 'translations'. Both inner tables are always there, empty array and all. 'defs' stays an array even for a single def, because a name can belong to several def types at once. With several names the objects come in the order the names were given, and with --type alone in def-name order; a name that matched nothing has no object here and one note in 'notes' that quotes it. |
-| `absent` | one row per layer these defs would draw on that is short in this snapshot — layer, state, next; empty when every such layer is complete. Today that is 'economy' on a ThingDef when prices were not measured (state pre-measure / skipped / unavailable) and 'disk_translations' when the import did not scan the language files on disk (unmeasured / unconfigured); next is the command that fills the layer. |
+| `absent` | one row per layer these defs would draw on that is short in this snapshot — layer, state, next; empty when every such layer is complete. Today that is 'economy' on a ThingDef when prices were not measured (state pre-measure / skipped / unavailable), 'disk_translations' when the import did not scan the language files on disk (skipped / unconfigured / unmeasured), and 'injection_keys' with --path-contains on a snapshot whose translation table has no 'key' column (pre-measure); next is the command that fills the layer. |
 
 Examples:
 
@@ -531,6 +531,7 @@ Rows are marked 'in effect' or 'on disk'. Only 'in effect' is what the game disp
 | Key | Holds |
 |---|---|
 | `keys` | one row per keyed translation — key, translated, original, origin ('in effect' or 'on disk'), placeholder, mod, source, and query (which of the queries the row answers, present on a single-query call too). Always an array, including when a single key matched exactly, so the shape does not change with the kind of match. The query column is the one thing that does change with the call: listing the whole layer takes no query, so there the rows have no such column. |
+| `absent` | one row per layer this query needed that this snapshot does not hold — layer, state, next; empty when both are there. 'keyed' with state empty when the snapshot has no keyed translations at all (then 'keys' is empty too); 'disk_translations' (skipped / unconfigured / unmeasured) when the language files on disk were not scanned, so the 'origin' column holds only 'in effect' rows. next is the command that fills the layer. |
 
 Examples:
 
@@ -879,6 +880,7 @@ The export file is refused rather than half-imported if it lacks the end marker 
 | Key | Holds |
 |---|---|
 | `imported` | an object: the snapshot that was written, and what went into it. |
+| `absent` | when the snapshot just written is short on a layer: one row per such layer — layer, state, next — the same table the queries print. Today that is 'disk_translations' when the language files on disk were not scanned. |
 
 Examples:
 

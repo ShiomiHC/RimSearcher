@@ -26,10 +26,13 @@ exit 0
       "text": "1 translation.",
       "shown": 1,
       "total": 1
-    },
+    }
+  ],
+  "absent": [
     {
-      "kind": "boundary",
-      "text": "This snapshot never scanned the language files on disk, so every row here is one the game actually had and no 'on disk' row could appear. No 'mod_roots' is configured on this machine, so there is nowhere to scan: set it in the config file and import again to measure that layer."
+      "layer": "disk_translations",
+      "state": "unconfigured",
+      "next": "set 'mod_roots' in the config file, then rimsearcher snapshot import fixture.rsx.jsonl.gz --name fixture"
     }
   ],
   "defs": [
@@ -66,7 +69,6 @@ exit 0
         }
       ]
     }
-  ],
-  "absent": []
+  ]
 }
 --- stderr ---

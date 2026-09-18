@@ -445,8 +445,10 @@ public sealed class GetCommand : Command
                 What = "one row per layer these defs would draw on that is short in this snapshot — layer, " +
                        "state, next; empty when every such layer is complete. Today that is " +
                        "'economy' on a ThingDef when prices were not measured (state pre-measure / skipped / " +
-                       "unavailable) and 'disk_translations' when the import did not scan the language files " +
-                       "on disk (unmeasured / unconfigured); next is the command that fills the layer.",
+                       "unavailable), 'disk_translations' when the import did not scan the language files " +
+                       "on disk (skipped / unconfigured / unmeasured), and 'injection_keys' with --path-contains " +
+                       "on a snapshot whose translation table has no 'key' column (pre-measure); next is the " +
+                       "command that fills the layer.",
             },
         ],
     };
@@ -1048,7 +1050,9 @@ public sealed class GetCommand : Command
 
             if (translations.Count > 0)
             {
-                DiskLayer.NoteIfUnmeasured(ctx);
+                // origin 那一列印着「in effect」,读的人自然读出「另有 on disk 的没印出来」;
+                // 这份库要是没量过磁盘,那个对照根本不存在 —— absent 表里给它一行。
+                Short(DataLayers.DiskTranslationsRow(ctx.Db, ctx.Config, ctx.SnapshotName ?? ""));
 
                 // 缺层要宣布:老快照上 `key` 那一列压根不摆,而不说破就与「这些译文没有
                 // 另一个键」同形。**只宣布缺层,不预言选不中** —— 这条脚注此前还带一句
@@ -1060,11 +1064,7 @@ public sealed class GetCommand : Command
                 // 干净的一次普通查询要求声明区零字节,而两套文法这件事只在按坐标找东西的人
                 // 身上兑现 —— 不按坐标找的人拿到的是「每条命令 6 行」里少掉的一行。
                 if (!normalized && paths.Count > 0)
-                    ctx.Report.Notice(NoticeKind.Boundary,
-                        $"This snapshot (exporter {ctx.Db.Meta.ExporterVersion}) stores translation paths as " +
-                        "the game's injection keys, unconverted, so there is no 'key' column here and these " +
-                        "paths are not written in the grammar the field paths use. Re-export to put both " +
-                        "tables on one grammar.", footnote: true);
+                    Short(DataLayers.InjectionKeysRow(ctx.Db, ctx.SnapshotName ?? ""));
 
                 // 配不上任何槽位的译文。**游戏那边同样注入不上** —— 所以这不是查询侧的缺陷,
                 // 是数据里真实存在的一种坏译文,而不说破它就与一条正常译文同形地印在表上。
@@ -2179,6 +2179,7 @@ public sealed class ListCommand : Command
         if (all.Count == 0)
         {
             if (scope.IsAll)
+                // 整份库空这一态没有夹具,所以 absent 那张表在 list 上没有探针可守;这一句留作散文。
                 ctx.Report.Notice(NoticeKind.NextStep,
                     "This snapshot holds no defs at all. 'rimsearcher snapshot list' shows when it was taken, " +
                     "and 'rimsearcher export' rebuilds it.");

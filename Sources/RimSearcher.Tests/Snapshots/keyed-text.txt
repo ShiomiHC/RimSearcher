@@ -7,5 +7,6 @@ To find the code that prints it, search for the key as a literal: 'rimsearcher c
 key               translated  original  origin     placeholder  mod  source       query
 CannotUseNoPower  没有电力    No power  in effect  no                Misc.xml:12  没有电力
 
-This snapshot never scanned the language files on disk, so every row here is one the game actually had and no 'on disk' row could appear. No 'mod_roots' is configured on this machine, so there is nowhere to scan: set it in the config file and import again to measure that layer.
+layer              state         next
+disk_translations  unconfigured  set 'mod_roots' in the config file, then rimsearcher snapshot import fixture.rsx.jsonl.gz --name fixture
 --- stderr ---

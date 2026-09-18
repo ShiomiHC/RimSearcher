@@ -146,7 +146,7 @@ public sealed class SnapshotStatusCommand : Command
         // 整张层账只在这里印:每一层在不在、不在的成因、出路。查询面碰到缺层只印它需要的那几行
         // (`absent` 表,不带 why)—— 查空比查到贵,全账不许上查询路径。
         ctx.Report.Table("layers", ["layer", "state", "next", "why"],
-            DataLayers.Rows(DataLayers.Ledger(db, ctx.Config, name), withWhy: true));
+            DataLayers.Rows(DataLayers.Ledger(db, ctx.Config, name), withWhy: true), unclipped: true);
 
         // 一次导出到底慢在哪 —— 两侧各一张分层耗时表。此前两侧都不记耗时,于是「哪一层慢」
         // 只能按行数猜;实测游戏那侧两分多钟出文件、建库这侧十几分钟,猜错的正是这一刀。
@@ -705,7 +705,17 @@ public sealed class SnapshotImportCommand : Command
             "rimsearcher snapshot import",
             "rimsearcher snapshot import exports/vanilla.rsx.jsonl.gz --name vanilla --no-harvest-translations",
         ],
-        JsonKeys = [new() { Key = "imported", What = "an object: the snapshot that was written, and what went into it." }],
+        JsonKeys =
+        [
+            new() { Key = "imported", What = "an object: the snapshot that was written, and what went into it." },
+            new()
+            {
+                Key = "absent",
+                What = "when the snapshot just written is short on a layer: one row per such layer — layer, " +
+                       "state, next — the same table the queries print. Today that is 'disk_translations' " +
+                       "when the language files on disk were not scanned.",
+            },
+        ],
     };
 
     public override int Run(CommandContext ctx)
@@ -793,17 +803,10 @@ public sealed class SnapshotImportCommand : Command
                     "On those, what 'get' prints is not the whole def."));
         }
 
-        // 没收割要说破,两个成因分开说 —— 补救不一样(收回参数 / 去配 mod_roots)。
-        if (!harvest)
-            ctx.Report.Notice(NoticeKind.Boundary,
-                "--no-harvest-translations: only the translations the game actually had are indexed, so this " +
-                "snapshot cannot answer whether a string exists in some installed mod's language files — it never " +
-                "looked. Re-import without the flag to measure that layer.");
-        else if (ctx.Config.ModRoots.Count == 0)
-            ctx.Report.Notice(NoticeKind.Boundary,
-                "No 'mod_roots' is configured, so there was nowhere to scan for language files and only the " +
-                "translations the game actually had are indexed. Set 'mod_roots' in the config file and " +
-                "import again to index them.");
+        // 没收割要说破:刚建好的库在哪一层短了,与查询面同一张 absent 表 —— 成因(收回参数 /
+        // 去配 mod_roots)在 state 与 next 里,产地 DataLayers。
+        using (var built = SnapshotDb.Open(dbPath))
+            ctx.Report.Absent(DataLayers.DiskTranslationsRow(built, ctx.Config, name));
 
         return 0;
     }

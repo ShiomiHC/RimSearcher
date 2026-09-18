@@ -237,7 +237,7 @@ public class DeclarationTests
         (string Fragment, string Origin, int Expected)[] soleOrigins =
         [
             ("No def type named", "DefTypeMiss.Say", 1),
-            ("never scanned the language files", "DiskLayer.NoteIfUnmeasured", 1),
+            ("imported with --no-harvest-translations", "DataLayers.DiskTranslationsRow", 1),
             ("changed on disk", "ContentDrift.Sentence", 1),
             ("share the name", "NameCollision.Say", 1),
             ("is past the end", "Report.PastEnd", 1),

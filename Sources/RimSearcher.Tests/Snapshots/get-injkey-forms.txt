@@ -29,5 +29,6 @@ stages[0].minSeverity          stages.0.minSeverity          不许译的那一�
 1 row above has a key that is on no injectable slot of this def, usually a handle taken from a label that has since been edited: the game does not apply that translation either. Its 'path' cell is that key rewritten, so it lines up with nothing in the field table above.
 1 row above names a real slot that the game marks as not translatable, so the translation sits in the file and never applies. The key is not the problem; nothing written under it would apply either.
 
-This snapshot never scanned the language files on disk, so every row here is one the game actually had and no 'on disk' row could appear. No 'mod_roots' is configured on this machine, so there is nowhere to scan: set it in the config file and import again to measure that layer.
+layer              state         next
+disk_translations  unconfigured  set 'mod_roots' in the config file, then rimsearcher snapshot import injkey.rsx.jsonl.gz --name injkey
 --- stderr ---

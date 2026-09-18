@@ -63,6 +63,8 @@ public class GateTests
             ["mods.mods"] = ["mods"],
             ["inherit.nodes"] = ["inherit", "BaseBullet"],
             ["keyed.keys"] = ["keyed", "CannotUseNoPower"],
+            // 语料库是没配 mod_roots 建的,这一行在共享夹具上就有。
+            ["keyed.absent"] = ["keyed", "CannotUseNoPower"],
             ["economy.things"] = ["economy"],
             // 缺层那张表只在缺层的库上有行 —— 拿建于经济面之前的那份夹具探。
             ["economy.absent"] = ["economy", "--db", Fixture.OtherDb],

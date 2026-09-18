@@ -867,24 +867,24 @@ public class OutputSnapshotTests
             cmd.ExecuteNonQuery();
         }
 
+        // 成因归到快照身上,而不是归到问的那个 key 身上:absent 表里 keyed 那一行,状态 empty
+        // (量过了、一行没有 —— 那对分不开的导出写在 snapshot status 的 why 里),出路是重导。
+        // 2026-09-18 之前是一句散文,还带「that is a property of the snapshot, not evidence about …」。
+        const string Row = "keyed  empty  rimsearcher export --modlist keyed-empty";
         var (empty, _, code) = Fixture.Run("keyed", "CannotUseNoPower", "--db", db);
         Assert.Equal(1, code);
-        Assert.Contains("no keyed translations at all", empty);
-        // 成因归到快照身上,而不是归到问的那个 key 身上:点名那对分不开的导出。
-        // 2026-09-18 起不再带「that is a property of the snapshot, not evidence about …」那截。
-        Assert.Contains("Two exports look like this", empty);
+        Assert.Contains(Row, empty);
         Assert.DoesNotContain("No keyed translation matches", empty);
 
-        // 反面:库里有这一层、只是没这个 key 时,上面那句话一个字都不许出现。
+        // 反面:库里有这一层、只是没这个 key 时,那一行一个字都不许出现。
         var (missing, _, _) = Fixture.Run("keyed", "NoSuchUiKey");
-        Assert.DoesNotContain("no keyed translations at all", missing);
+        Assert.DoesNotContain("keyed  empty", missing);
         Assert.Contains("No keyed translation matches", missing);
 
         // 不给查询词那一路也要说快照,不能拿一个不存在的 query 拼进句子。
         var (bare, _, bareCode) = Fixture.Run("keyed", "--db", db);
         Assert.Equal(1, bareCode);
-        Assert.Contains("no keyed translations at all", bare);
-        Assert.Contains("Two exports look like this", bare);
+        Assert.Contains(Row, bare);
     }
 
     /// <summary>
