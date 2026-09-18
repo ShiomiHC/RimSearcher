@@ -316,7 +316,7 @@ public sealed class GetCommand : Command
             // 那边的计数时差一行没人解释。
             "defName is not listed as a field: the def_name line above the table is that value, and the " +
             "counts here leave it out. --path-contains naming it brings that row back; 'where' and 'values' " +
-            "see it as a path either way.",
+            "see it as a path either way.\n\n" + IndexGap.Help,
         // 一个名字与一批名字走同一条路:多名只是把「撞名连印」那套块格式的入口从
         // 「同名跨类型」放宽到「调用方点了几个名字」。不给名字、只给 --type 是第三个入口,
         // 同一套块。三个入口一份渲染,单名那条路的输出一个字节不动 —— 下游脚本与 skill
@@ -457,7 +457,9 @@ public sealed class GetCommand : Command
                        "and all. 'defs' stays an array even for a single def, because a name can belong to " +
                        "several def types at once. With several names the objects come in the order the " +
                        "names were given, and with --type alone in def-name order; a name that matched " +
-                       "nothing has no object here and one note in 'notes' that quotes it.",
+                       "nothing has no object here and one note in 'notes' that quotes it. With a path " +
+                       "filter that matched nothing on that def, the object also carries 'index_gap' (asked, " +
+                       "state, next) when the cause could be told — see the fields command for the states.",
             },
             new()
             {
@@ -722,22 +724,21 @@ public sealed class GetCommand : Command
                         ? (0, 0)
                         : ctx.Db.TypeDefsWithPath(def.DefType, fieldPaths, exactPath);
 
+                    // 成因算出来的两档各是 index_gap 的一行(Docs/25 §20):状态词 + 填好的命令。
+                    // 「null 不进索引」是机制,住 IndexGap.Help。句子里只剩数。
                     ctx.Report.Notice(NoticeKind.Boundary,
                         $"No field path{whose} {(exactPath ? "is exactly" : "contains")} {PathFilterText.Say(paths)}; the def does have " +
                         $"{Tally.Complete(total).Render("field")}. Drop {pathSpelling} to see them." +
-                        // 动词不进登记处:冒号在前、名单在后,主句就没有随数量变形的成分。
-                        (asValue.Count > 0
-                            ? " Found on this def as a field's value rather than anywhere in a path: " +
-                              // 「names every path」同 NameLookup 那处:被推荐的命令自己
-                              // 声明会漏,推荐句不许替它担保全集。去掉全称,内容一点没少。
-                              $"{PathFilterText.Say(asValue)}. 'rimsearcher where --value {asValue[0]}' names the paths holding it."
-                            : "") +
                         (kin > 0
                             ? $" Other defs of this type do have it: {Tally.Complete(kin).Render("def")} across " +
-                              $"{Tally.Complete(kinPaths).Render("field path")}; a field that is null on a def " +
-                              "never entered the index. " +
-                              $"'rimsearcher fields {def.DefType} {pathSpelling} {paths[0]}' names those paths."
+                              $"{Tally.Complete(kinPaths).Render("field path")}."
                             : ""));
+                    foreach (var t in asValue)
+                        IndexGap.Say(ctx, t, IndexGap.ValueNotPath, $"{CommandRegistry.ExeName} where --value {t}");
+                    if (kin > 0)
+                        IndexGap.Say(ctx, string.Join(", ", paths), IndexGap.NullOnThisDef,
+                            $"{CommandRegistry.ExeName} fields {def.DefType} " +
+                            string.Join(" ", paths.Select(p => $"{pathSpelling} {p}")));
 
                     // 一个同类都没有,而那段文本也不是个值:此时「索引里没有」与「字段不存在」
                     // 真的分不开,得由那段话去分。上面两支各自已经解释过了,不再挂一遍。
@@ -762,15 +763,15 @@ public sealed class GetCommand : Command
                         ? paths.Where(t => ctx.Db.ValueHits(def.Id, t) > 0).ToList()
                         : [];
 
+                    // 名值对的机制住 IndexGap.Help;这里一句事实 + 一行 index_gap。
                     ctx.Report.Notice(NoticeKind.Filter,
                         PathFilterSummary.Say(paths, "on the def", "field", matched, total, whole, whose) +
                         (alsoValue.Count > 0
                             ? " This def also carries " +
-                              $"{PathFilterText.Say(alsoValue)} as a field's value, not in any path. " +
-                              "A name/value pair puts the field's own name in the value column " +
-                              "(statBases[N].stat = MarketValue), where --path-contains cannot reach it — " +
-                              $"'rimsearcher where --value {alsoValue[0]}' goes at it from that side."
+                              $"{PathFilterText.Say(alsoValue)} as a field's value, not in any path."
                             : ""));
+                    foreach (var t in alsoValue)
+                        IndexGap.Say(ctx, t, IndexGap.ValueNotPath, $"{CommandRegistry.ExeName} where --value {t}");
                     if (fields.Count < matched)
                         // 同 ReadCommand 那处:自己拼句子,于是没跟上 ece5f54 换的文法。
                         // "Showing" 前缀跟着去掉 —— 新文法里 "showing" 已经在句中了。
@@ -2345,9 +2346,10 @@ public sealed class ListCommand : Command
                     // 不在这里再讲一遍;这句只留本次的事实与填好参数的转向。
                     ctx.Report.Notice(NoticeKind.NextStep,
                         $"Every one of the {Tally.Complete(present[0].Count).Render("def")} of type {type} has the " +
-                        $"same class, {present[0].Class}, so --class cannot tell them apart. " +
-                        "The behaviour lives on a nested field instead: " +
+                        $"same class, {present[0].Class}, so --class cannot tell them apart: " +
                         $"'rimsearcher where Class {wantClass}'.");
+                    // 与下面「类型里有几种 class、没有你要的那种」那支同一条纪律:--class 单独拿掉能回来多少。
+                    ctx.Report.EmptyBecause(new EmptyCause(ctx.FilterAsGiven("class"), present[0].Count, ctx.Without("class")));
                     // 量全了的快照上这一条只会把上面那句用占位符再说一遍。留着的是它另外两档
                     // 携带的免责:那条转向在这份快照上会回一个**假零**,不说破就是个闭环。
                     if (!ctx.Db.Meta.IndexesAllNestedClass)
@@ -2440,9 +2442,11 @@ public sealed class FieldsCommand : Command
             "path is universal for the type or only present on a handful of defs.\n\n" +
             "What is listed is every path the exporter recorded a value for. When the snapshot has the type's " +
             "declared field set, a miss that is in that set means the field exists and is null on every def; a " +
-            "miss that is not means the type has no such field. A snapshot without that set says so, and there a " +
-            "path missing here is not evidence that the field does not exist — for the shape of a nested object, " +
-            "read its class with 'code-search' and 'read'.",
+            "miss that is not means the type has no such field. That set is walked to a bounded nesting depth, " +
+            "and the answer says how deep it reached: a field nested past that is outside what it measured. A " +
+            "snapshot without that set says so, and there a path missing here is not evidence that the field does " +
+            "not exist — for the shape of a nested object, read its class with 'code-search' and 'read'.\n\n" +
+            IndexGap.Help,
         Positionals =
         [
             new PositionalSpec
@@ -2497,6 +2501,7 @@ public sealed class FieldsCommand : Command
                        "row was counted under — present on a single-type call too).",
             },
             Completeness.JsonKey,
+            IndexGap.JsonKey,
         ],
     };
 
@@ -2587,10 +2592,12 @@ public sealed class FieldsCommand : Command
                 var declared = ctx.Db.TypeDeclaredPaths(type, filters, exactPath);
                 if (declared is { Count: > 0 })
                 {
+                    // 事实句 + index_gap 一行;「没进值索引」「类型有、def 没有」是同一件事的反面与重述。
                     ctx.Report.Notice(NoticeKind.Boundary,
                         $"'{type}' declares {Tally.Complete(declared.Count).Render("field path")} matching " +
-                        $"{PathFilterText.Say(filters)}, but every def of the type has them as null — they never " +
-                        "entered the value index. The type has the field; no def has a value for it.");
+                        $"{PathFilterText.Say(filters)}; every def of the type has them as null.");
+                    IndexGap.Say(ctx, string.Join(", ", filters), IndexGap.NullOnType,
+                                 Completeness.DeclarationSearch(filters[0]));
                     return 1;
                 }
                 // 打进来的文本是这个类型的一个**取值**时,答案就在同一个库里 —— 先算,
@@ -2618,16 +2625,14 @@ public sealed class FieldsCommand : Command
                         // 只在 SKILL 里。换成自陈的关系从句:与前半句「有值的那些路径」
                         // 正好成对照,也与代码侧 members / read 的 declares 同一个对立面
                         // (类型自己声明的 vs 实际到手的),同一个词在两侧不再需要各学一遍。
+                        // 量程是数,留在句里;「嵌套过深就在量程外」是机制,住 Remarks。
                         $"'{type}' has field paths, but none contains {PathFilterText.Say(filters)}, and " +
                         "none of the fields the type itself declares has it either" +
-                        (asValue is not null
-                            ? "."
-                            : reach is { } n
-                                ? $" — that declared set reaches {n} segments deep, so a field nested past that " +
-                                  "is outside what it measured."
-                                : ".") +
+                        (asValue is null && reach is { } n ? $" (that declared set reaches {n} segments deep)." : ".") +
                         notAValue);
-                    if (asValue is not null) ctx.Report.Notice(NoticeKind.NextStep, asValue);
+                    if (asValue is not null) SayValueNotPath(ctx, type, filters[0], asValue);
+                    else IndexGap.Say(ctx, string.Join(", ", filters), IndexGap.Undeclared,
+                                      Completeness.DeclarationSearch(filters[0]));
                     return 1;
                 }
                 ctx.Report.Notice(NoticeKind.Boundary,
@@ -2636,7 +2641,7 @@ public sealed class FieldsCommand : Command
                     $" Drop {(exactPath ? "--exact-path" : "--path-contains")} to see them all.");
                 // 同一条纪律:成因查明了就不再列那三种「字段可能在、只是没进索引」的可能。
                 // 那段免责整段假定问的是个字段名,而这次问的不是。
-                if (asValue is not null) ctx.Report.Notice(NoticeKind.NextStep, asValue);
+                if (asValue is not null) SayValueNotPath(ctx, type, filters[0], asValue);
                 else Completeness.NoteIndexHoldsValuesOnly(ctx, filters[0]);
                 return 1;
             }
@@ -2724,11 +2729,17 @@ public sealed class FieldsCommand : Command
                (shapes.Count > shown.Count
                    ? $", plus {Tally.Complete(shapes.Count - shown.Count).Render("path shape")} more"
                    : "") +
-               $" on {Tally.Complete(defs).Render("def")}. " +
-               // 命令里**不填路径**:路径不止一条时,填第一条就把答案窄成了它的一支,
-               // 而那一支与整个答案印出来同形。不给路径的那个形态一次覆盖全部。
-               $"'rimsearcher where --value {text} --type {type}' asks it" +
-               (exactPath ? ", and --exact-path never reaches a value." : "."));
+               $" on {Tally.Complete(defs).Render("def")}.");
+    }
+
+    /// <summary>
+    /// 「那段文本是个值」的事实句 + index_gap 一行。next 里**不填路径**:路径不止一条时,
+    /// 填第一条就把答案窄成了它的一支,而那一支与整个答案印出来同形。
+    /// </summary>
+    private static void SayValueNotPath(CommandContext ctx, string type, string text, string fact)
+    {
+        ctx.Report.Notice(NoticeKind.NextStep, fact);
+        IndexGap.Say(ctx, text, IndexGap.ValueNotPath, $"{CommandRegistry.ExeName} where --value {text} --type {type}");
     }
 }
 
@@ -3307,7 +3318,7 @@ internal static class Completeness
         var leaf = Leaf(path);
         var how = leaf is null
             ? "'rimsearcher code-search' reads the class declaration, which does say."
-            : $"'rimsearcher code-search \"[\\w<>,\\[\\] ]+ {leaf};\"' finds the declaration, which does say.";
+            : $"'{DeclarationSearch(path)}' finds the declaration, which does say.";
 
         ctx.Report.Notice(NoticeKind.Boundary,
             $"No indexed value sits at that path. {how} " +
@@ -3375,6 +3386,12 @@ internal static class Completeness
     /// <c>statBases[3].stat</c> → <c>stat</c>)。拿不出一个纯标识符就返回 null ——
     /// 那时宁可不给命令,也不给一条敲了会报错的。
     /// </summary>
+    /// <summary>找这条路径末段那个字段的声明行的 code-search 命令;末段不像标识符时退回裸 code-search。</summary>
+    public static string DeclarationSearch(string? path)
+        => Leaf(path) is { } leaf
+            ? $"{CommandRegistry.ExeName} code-search \"[\\w<>,\\[\\] ]+ {leaf};\""
+            : $"{CommandRegistry.ExeName} code-search";
+
     private static string? Leaf(string? path)
     {
         if (string.IsNullOrWhiteSpace(path)) return null;

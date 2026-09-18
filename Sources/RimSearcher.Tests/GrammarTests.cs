@@ -1587,7 +1587,8 @@ public class GrammarTests
 
     /// <summary>
     /// <c>--path-contains</c> 筛空的两种成因不许同形:def 真没有这条路径,与**给进来的文本是个值**
-    /// (stat 名装在 <c>statBases[N].stat</c> 里,按它筛路径必空)。
+    /// (stat 名装在 <c>statBases[N].stat</c> 里,按它筛路径必空)。后者是 <c>index_gap</c> 的一行
+    /// (state = value-not-path,next 是 where --value),不再是一句散文(Docs/25 §20)。
     /// </summary>
     [Fact]
     public void 把值当成路径筛时说破它是个值()
@@ -1595,13 +1596,12 @@ public class GrammarTests
         var (asValue, _, code) = Fixture.Run("get", "Apparel_ShieldBelt", "--path-contains", "MarketValue");
         Assert.Equal(0, code);
         Assert.Contains("No field path", asValue, StringComparison.Ordinal);
-        Assert.Contains("as a field's value", asValue, StringComparison.Ordinal);
-        Assert.Contains("where --value MarketValue", asValue, StringComparison.Ordinal);
+        Assert.Matches(@"MarketValue\s+value-not-path\s+rimsearcher where --value MarketValue", asValue);
 
         // 反向:真的哪儿都没有时,不许无中生有地指路去 find --value。
         var (nowhere, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--path-contains", "zzzznothing");
         Assert.Contains("No field path", nowhere, StringComparison.Ordinal);
-        Assert.DoesNotContain("as a field's value", nowhere, StringComparison.Ordinal);
+        Assert.DoesNotContain(IndexGap.ValueNotPath, nowhere, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1618,8 +1618,8 @@ public class GrammarTests
         var (kin, _, code) = Fixture.Run("get", "Apparel_ShieldBelt", "--path-contains", "ingestible");
         Assert.Equal(0, code);
         Assert.Contains("Other defs of this type do have it: 1 def", kin, StringComparison.Ordinal);
-        Assert.Contains("a field that is null on a def never entered the index", kin, StringComparison.Ordinal);
-        Assert.Contains("fields ThingDef --path-contains ingestible", kin, StringComparison.Ordinal);
+        // 成因是 index_gap 的一行:状态词 + 填好的命令;「null 不进索引」是机制,住 help。
+        Assert.Matches(@"ingestible\s+null-on-this-def\s+rimsearcher fields ThingDef --path-contains ingestible", kin);
 
         // 真的哪儿都没有时:换成「索引里没有值不等于字段不存在」那段,而不是报一个 0。
         var (nowhere, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--path-contains", "zzzznothing");
@@ -4491,6 +4491,9 @@ public class GrammarTests
         Assert.DoesNotContain("No def of type", miss, StringComparison.Ordinal);
         // 转向要指到真正能查到多态的那条路上。
         Assert.Contains("where Class RimWorld.GenStep_Nothing", miss, StringComparison.Ordinal);
+        // --class 单独拿掉能回来多少,与「类不止一种」那支同一张 empty_because(文本面印的是标题句)。
+        Assert.Contains("--class RimWorld.GenStep_Nothing  2", miss, StringComparison.Ordinal);
+        Assert.Contains(Report.EmptyBecauseCaption("def"), miss, StringComparison.Ordinal);
 
         // 类不止一种时,原来那句照旧 —— 它在那里是准的。
         var (multi, _, mcode) = Fixture.Run("list", "TestBaseDef", "--class", "NoSuchClass");

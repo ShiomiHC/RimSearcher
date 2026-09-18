@@ -361,7 +361,9 @@ rimsearcher fields <defType>... [options]
 
 Use this before 'where' when you are not sure what a field is called. The counts tell you whether a path is universal for the type or only present on a handful of defs.
 
-What is listed is every path the exporter recorded a value for. When the snapshot has the type's declared field set, a miss that is in that set means the field exists and is null on every def; a miss that is not means the type has no such field. A snapshot without that set says so, and there a path missing here is not evidence that the field does not exist — for the shape of a nested object, read its class with 'code-search' and 'read'.
+What is listed is every path the exporter recorded a value for. When the snapshot has the type's declared field set, a miss that is in that set means the field exists and is null on every def; a miss that is not means the type has no such field. That set is walked to a bounded nesting depth, and the answer says how deep it reached: a field nested past that is outside what it measured. A snapshot without that set says so, and there a path missing here is not evidence that the field does not exist — for the shape of a nested object, read its class with 'code-search' and 'read'.
+
+A path that the value index has nothing under prints an index_gap row when the cause can be told. A value that is null on a def never enters the index, and neither does a field the game marks as an unsaved runtime cache, so a path missing on one def (null-on-this-def) is not a path missing from the type (null-on-type), and neither is a field the type never declares (undeclared). A name/value pair such as statBases[N].stat = MarketValue puts the field's own name in the value column, where a path filter cannot reach it (value-not-path); 'where --value' reads that column.
 
 | Argument | Meaning |
 |---|---|
@@ -380,6 +382,7 @@ What is listed is every path the exporter recorded a value for. When the snapsho
 |---|---|
 | `fields` | one row per field path: path, defs (how many defs use it), def_type (which type the row was counted under — present on a single-type call too). |
 | `completeness` | an object, present only when some def in scope had its export cut short: scope (which def types this covers, in words), defs_cut_short (how many), types (one row per def type with its own count), verify (a ready command that lists them). Absent means no def in that scope lost fields at export. |
+| `index_gap` | one row per path text asked for that the value index has nothing under, when the cause could be told: asked (the text as given), state (null-on-this-def: other defs of the type carry the path, this def has it null / null-on-type: the type declares it, no def has a value / undeclared: no field of the type is called that / value-not-path: the text is a value some field holds, not a path), next (a command that reaches what there is, ready to paste). Empty when the paths matched, or when the cause could not be told. |
 
 Examples:
 
@@ -405,6 +408,8 @@ When present, the 'xml' column says whether this def's own XML wrote the path (h
 
 defName is not listed as a field: the def_name line above the table is that value, and the counts here leave it out. --path-contains naming it brings that row back; 'where' and 'values' see it as a path either way.
 
+A path that the value index has nothing under prints an index_gap row when the cause can be told. A value that is null on a def never enters the index, and neither does a field the game marks as an unsaved runtime cache, so a path missing on one def (null-on-this-def) is not a path missing from the type (null-on-type), and neither is a field the type never declares (undeclared). A name/value pair such as statBases[N].stat = MarketValue puts the field's own name in the value column, where a path filter cannot reach it (value-not-path); 'where --value' reads that column.
+
 | Argument | Meaning |
 |---|---|
 | `<defName>` | The exact def name. 'search' finds it if you only know part of it. Several names print one block each, in the order given; a name that matches nothing is reported in a note and the others still print. Leave the names out and give --type to print every def of that type. *(optional)* |
@@ -421,7 +426,7 @@ defName is not listed as a field: the def_name line above the table is that valu
 
 | Key | Holds |
 |---|---|
-| `defs` | one object per def carrying the name — each with 'def' (identity), 'fields' (path/value/code_default rows, plus 'xml' when the snapshot recorded which XML lines were written) and 'translations'. Both inner tables are always there, empty array and all. 'defs' stays an array even for a single def, because a name can belong to several def types at once. With several names the objects come in the order the names were given, and with --type alone in def-name order; a name that matched nothing has no object here and one note in 'notes' that quotes it. |
+| `defs` | one object per def carrying the name — each with 'def' (identity), 'fields' (path/value/code_default rows, plus 'xml' when the snapshot recorded which XML lines were written) and 'translations'. Both inner tables are always there, empty array and all. 'defs' stays an array even for a single def, because a name can belong to several def types at once. With several names the objects come in the order the names were given, and with --type alone in def-name order; a name that matched nothing has no object here and one note in 'notes' that quotes it. With a path filter that matched nothing on that def, the object also carries 'index_gap' (asked, state, next) when the cause could be told — see the fields command for the states. |
 | `absent` | one row per layer these defs would draw on that is short in this snapshot — layer, state, next; empty when every such layer is complete. Today that is 'economy' on a ThingDef when prices were not measured (state pre-measure / skipped / unavailable), 'disk_translations' when the import did not scan the language files on disk (skipped / unconfigured / unmeasured), and 'injection_keys' with --path-contains on a snapshot whose translation table has no 'key' column (pre-measure); next is the command that fills the layer. |
 | `empty_because` | one row per option given on this call that, alone, emptied the result: filter (the option as written), hidden (how many defs come back with just that option dropped), next (the same call without it, ready to paste). Empty when the result was not empty, or when no single option accounts for it. |
 | `found_as` | one row per name asked for that turns up as something other than what this command looks up: name, is (def / def outside --scope / xml node / abstract xml node / def type / class / interface text / mod in this snapshot / mod not in this snapshot / field value / def in another snapshot / xml node in another snapshot), in (where exactly), next (a command that reaches it, ready to paste). Empty when the name was found here, or turns up nowhere. |

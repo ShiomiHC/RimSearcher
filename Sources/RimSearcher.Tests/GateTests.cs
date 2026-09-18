@@ -55,6 +55,9 @@ public class GateTests
             ["search.empty_because"] = ["search", "shield", "--scope", "test.mod"],
             ["get.defs"] = ["get", "Apparel_ShieldBelt"],
             ["get.empty_because"] = ["get", "Apparel_ShieldBelt", "--type", "HediffDef"],
+            // 值索引底下没有、成因算得出来的那张表。get 的那张住 defs[i] 里(归它所属的 def),
+            // 不是根键,这里探不到;fields 的在根上,拿声明层探。
+            ["fields.index_gap"] = ["fields", "ThingDef", "--path-contains", "neverSet", "--db", Fixture.PresenceDb],
             ["get.absent"] = ["get", "OnlyInOtherSnapshot", "--db", Fixture.OtherDb],
             // 名字落在别处那张表:五条命令各探一档(抽象节点 / def / 字段值 / def 类型)。
             ["search.found_as"] = ["search", "BaseBullet"],

@@ -1,7 +1,10 @@
 $ rimsearcher get Apparel_ShieldBelt --path-contains ingestible
 exit 0
 --- stdout ---
-No field path contains 'ingestible'; the def does have 13 fields. Drop --path-contains to see them. Other defs of this type do have it: 1 def across 2 field paths; a field that is null on a def never entered the index. 'rimsearcher fields ThingDef --path-contains ingestible' names those paths.
+No field path contains 'ingestible'; the def does have 13 fields. Drop --path-contains to see them. Other defs of this type do have it: 1 def across 2 field paths.
+
+asked       state             next
+ingestible  null-on-this-def  rimsearcher fields ThingDef --path-contains ingestible
 
 def_name     Apparel_ShieldBelt
 def_type     ThingDef

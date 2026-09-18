@@ -192,13 +192,15 @@ public class PresenceTests
                                                "--db", Fixture.PresenceDb);
         Assert.Equal(1, nullCode);
         Assert.Contains("every def of the type has them as null", nulls, StringComparison.Ordinal);
-        Assert.Contains("The type has the field", nulls, StringComparison.Ordinal);
+        // 两态各是 index_gap 的一行,状态词分得开(Docs/25 §20)。
+        Assert.Matches(@"neverSet\s+null-on-type\s+rimsearcher code-search", nulls);
 
         var (missing, _, missCode) = Fixture.Run("fields", "ThingDef", "--path-contains", "noSuchFieldXYZ",
                                                  "--db", Fixture.PresenceDb);
         Assert.Equal(1, missCode);
         Assert.Contains("none of the fields the type itself declares has it either", missing, StringComparison.Ordinal);
-        Assert.DoesNotContain("every def of the type has them as null", missing, StringComparison.Ordinal);
+        Assert.Matches(@"noSuchFieldXYZ\s+undeclared\s+rimsearcher code-search", missing);
+        Assert.DoesNotContain(IndexGap.NullOnType, missing, StringComparison.Ordinal);
 
         // 这个否定的依据是一张**有深度上限**的表:类型图里有一个 471 个类型的强连通分量,
         // 摊平成路径不存在「展开完」这回事(Docs/22 第 12 节)。所以它得把自己的量程说出来 ——

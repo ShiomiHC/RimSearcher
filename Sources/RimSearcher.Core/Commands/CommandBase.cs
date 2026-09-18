@@ -304,7 +304,7 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
         return given.Count == 0 ? $"--{option}" : string.Join(" ", given.Select(v => $"--{option} {QuoteArg(v)}"));
     }
 
-    private static string QuoteArg(string v) => v.Length == 0 || v.Any(char.IsWhiteSpace) ? $"\"{v}\"" : v;
+    internal static string QuoteArg(string v) => v.Length == 0 || v.Any(char.IsWhiteSpace) ? $"\"{v}\"" : v;
 
     /// <summary>
     /// 这次真正开库之后的快照名(别名,或路径去扩展名)。没开过库就是 null ——
