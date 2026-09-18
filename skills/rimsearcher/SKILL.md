@@ -57,7 +57,7 @@ Global options (`--snapshot`, `--db`, `--json`, `--quiet`, `--config`) go **afte
 and `--offset` apply to each one separately rather than to the batch. The rows land in one
 table, with a column naming which argument each row answers (`get` is the exception: it
 prints a block per def, as it does for one name). A name that misses does not sink the
-others — the call still exits 0, and only an all-miss exits 1. **Do not run one process per
+others — the call still exits 0, and only an all-miss exits non-zero. **Do not run one process per
 name.**
 
 The code side has its own page — which command answers what, plus the traps — in
@@ -162,11 +162,14 @@ way to state:
   `--max-line-chars` (240) prints such a line as the neighbourhood of its matches with `…` for
   the rest. That is width, not rows — `--max-line-chars 0` prints them whole, and `--json`
   carries the whole line either way.
-- **Exit codes**: `0` ran, `1` zero rows, `2` usage error, `70` tool defect. **Chain with `;`,
-  never `&&`** — an informative zero otherwise drops what you queued after it. A `;` chain reports only the last code, so read the output.
+- **Exit codes**: `0` rows, `1` zero rows and measured, `3` zero rows because a layer is
+  absent (an `absent` table names it), `4` zero rows because the name is something else (a
+  `found_as` table says what and where), `2` usage error, `70` tool defect. Only `1` means
+  "nothing in this snapshot has that"; `3` and `4` come with the command to run next. **Chain
+  with `;`, never `&&`** — an informative non-zero otherwise drops what you queued after it. A `;` chain reports only the last code, so read the output.
   With several names on one `get`, `0` means at least one of them printed, not that all did:
   a name that matched nothing has its own note and no object in `defs`, so check the array
-  against the names you asked for rather than the code. All of them missing is `1`.
+  against the names you asked for rather than the code. All of them missing is non-zero.
   **Everything lands on stdout except a usage error** — the reasoning behind a zero
   included. `2` is the exception: its message is on stderr with stdout empty, so
   `2>/dev/null` turns a mistyped option into a silent empty result.
@@ -181,8 +184,8 @@ way to state:
 - **`--quiet`** (alias `--data-only`): stdout carries the data blocks and nothing else —
   no notices, no footnotes, no snapshot tag. Reach for it when a pipeline counts lines or
   slices columns and the prose would land in the middle of that. A query that finds nothing
-  then prints no stdout at all and still exits 1: that emptiness is the prose being withheld,
-  not evidence that the thing is absent.
+  then prints no stdout at all and exits 1; `absent` and `found_as` are data blocks, so a `3`
+  or `4` still prints its table.
 - **The prose has a second home.** With `RIMSEARCHER_RUN_LOG` pointing at a path, every run
   appends one JSON line there — every notice with its kind, its counts and the blocks on
   either side, plus the exit code, whether `--quiet` was asked for, and the usage-error

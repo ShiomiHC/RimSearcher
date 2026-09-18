@@ -1,5 +1,5 @@
 $ rimsearcher search TestVariantDef
-exit 1
+exit 4
 --- stdout ---
 Nothing matched 'TestVariantDef' in this snapshot.
 

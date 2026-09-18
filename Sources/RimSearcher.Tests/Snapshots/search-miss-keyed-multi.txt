@@ -1,5 +1,5 @@
 $ rimsearcher search 转至此处
-exit 1
+exit 4
 --- stdout ---
 Nothing matched '转至此处' in this snapshot.
 

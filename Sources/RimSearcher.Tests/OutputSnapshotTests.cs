@@ -1,3 +1,4 @@
+using RimSearcher.Cli;
 ﻿using System.Text;
 
 namespace RimSearcher.Tests;
@@ -888,7 +889,7 @@ public class OutputSnapshotTests
         // 2026-09-18 之前是一句散文,还带「that is a property of the snapshot, not evidence about …」。
         const string Row = "keyed  empty  rimsearcher export --modlist keyed-empty";
         var (empty, _, code) = Fixture.Run("keyed", "CannotUseNoPower", "--db", db);
-        Assert.Equal(1, code);
+        Assert.Equal(Runner.ExitLayerAbsent, code);   // absent:这一层没量
         Assert.Contains(Row, empty);
         Assert.DoesNotContain("No keyed translation matches", empty);
 
@@ -899,7 +900,7 @@ public class OutputSnapshotTests
 
         // 不给查询词那一路也要说快照,不能拿一个不存在的 query 拼进句子。
         var (bare, _, bareCode) = Fixture.Run("keyed", "--db", db);
-        Assert.Equal(1, bareCode);
+        Assert.Equal(Runner.ExitLayerAbsent, bareCode);
         Assert.Contains(Row, bare);
     }
 
@@ -929,7 +930,6 @@ public class OutputSnapshotTests
         Assert.Contains("carry a real translation", text);
         // 分母是整层的行数,不是「筛剩下的零」。
         Assert.Contains("2107 keyed translations", text);
-        Assert.Contains("The exit code is 1 only because no rows were printed", text);
         // 「没找到」的措辞一个字都不许出现:那会把「译全了」说成「查不到」。
         Assert.DoesNotContain("No keyed translation matches", text);
     }

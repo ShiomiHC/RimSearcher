@@ -1,3 +1,4 @@
+using RimSearcher.Cli;
 using RimSearcher.Commands;
 using System.Text.Json;
 
@@ -32,7 +33,7 @@ public class InheritanceTests
     public void 抽象节点不在defs里但在继承层里()
     {
         var (_, _, getCode) = Fixture.Run("get", "BaseBullet");
-        Assert.Equal(1, getCode);
+        Assert.Equal(Runner.ExitFoundElsewhere, getCode);   // found_as:它是 xml node
 
         var (_, _, inheritCode) = Fixture.Run("inherit", "BaseBullet");
         Assert.Equal(0, inheritCode);

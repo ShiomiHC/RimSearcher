@@ -124,10 +124,30 @@ public static class Runner
 {
     /// <summary>用法错误。</summary>
     public const int ExitUsage = 2;
-    /// <summary>命令跑通了,但没有结果。</summary>
+    /// <summary>命令跑通了,量过了,没有结果 —— 零行是量出来的。</summary>
     public const int ExitNoResults = 1;
+    /// <summary>零行,而这个答案需要的某一层不在快照里(absent 表在场):零不是量出来的。</summary>
+    public const int ExitLayerAbsent = 3;
+    /// <summary>零行,而问的名字在别处以别的身份出现(found_as 表在场):该换命令,不是没有。</summary>
+    public const int ExitFoundElsewhere = 4;
     /// <summary>工具自己的缺陷。与「用法错」「没结果」分开,脚本才不会把故障当空集。</summary>
     public const int ExitInternal = 70;
+
+    /// <summary>
+    /// 零行那个码按印出的表细分。命令照旧回 1,这里按表改码 —— 码由表决定,两者说不出两样话;
+    /// 此前下游得读 notes 的原文才分得开「量了是空」与「查错了维度」(Docs/25 丙)。
+    /// 两张表都在时缺层优先:没量过的零,说它在别处也不成立。
+    /// </summary>
+    public static int Refine(int code, Report report)
+    {
+        if (code != ExitNoResults) return code;
+        if (Printed(report, Report.AbsentTable)) return ExitLayerAbsent;
+        if (Printed(report, NameLookup.Table)) return ExitFoundElsewhere;
+        return code;
+    }
+
+    private static bool Printed(Report report, string table)
+        => report.Entries.OfType<TableBlock>().Any(t => t.Name == table && t.Collection is null && t.Rows.Count > 0);
 
     /// <summary>
     /// <paramref name="argv"/> 的第 1 位之后,去掉全局选项(及其取值)还剩下什么。
@@ -307,7 +327,7 @@ public static class Runner
             foreach (var note in parsed.Notes)
                 ctx.Report.Notice(NoticeKind.Filter, note);
 
-            var code = command.Run(ctx);
+            var code = Refine(command.Run(ctx), ctx.Report);
             // 位置等结果才定得下的那几条,在这里落位 —— 命令自己不必逐个记得收尾。
             ctx.Report.Settle();
             snapshot = SnapshotOf(parsed, ctx);

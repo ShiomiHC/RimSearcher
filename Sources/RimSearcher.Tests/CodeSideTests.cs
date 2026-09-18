@@ -1,3 +1,5 @@
+using RimSearcher.Cli;
+
 namespace RimSearcher.Tests;
 
 /// <summary>
@@ -32,7 +34,7 @@ public class CodeSideTests
     {
         var (stdout, _, code) = Fixture.Run("callers", "RimWorld.CompShield.PostSpawnSetup");
 
-        Assert.Equal(1, code);
+        Assert.Equal(Runner.ExitLayerAbsent, code);   // absent:有树没有边表,零不是量出来的
         Assert.Contains("Verse.ThingComp", stdout);
         Assert.Contains("overrides", stdout);
     }

@@ -1,5 +1,5 @@
 $ rimsearcher search 没有电力
-exit 1
+exit 4
 --- stdout ---
 Nothing matched '没有电力' in this snapshot.
 

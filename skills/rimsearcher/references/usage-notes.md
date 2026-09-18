@@ -160,8 +160,7 @@ snapshot — `keyed` says that in those words instead of reporting your key abse
 `rimsearcher keyed --empty-translation` is "list every untranslated string"; given a
 query it narrows that result set instead. Leaving the query out *without* the switch
 enumerates the layer itself. When nothing is a placeholder the
-answer is a coverage statement over the whole layer; the exit code is `1` because no rows
-were printed — the same zero-row contract as any other listing.
+answer is a coverage statement over the whole layer, with exit `1`.
 
 Going from code to screen text needs no second step: `code-search` resolves the literal keys
 passed to `.Translate()` on the lines it prints and appends a `ui_text` table beside the hits

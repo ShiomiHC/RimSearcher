@@ -78,10 +78,11 @@ public class ProcessTests
         Assert.DoesNotContain("???", stdout);
     }
 
-    /// <summary>三个退出码要真的传给 shell,脚本才分得清「用错了」「没结果」「成功」。</summary>
+    /// <summary>退出码要真的传给 shell,脚本才分得清「用错了」「量了是空」「没量」「在别处」「成功」。</summary>
     [Theory]
     [InlineData(new[] { "where", "compClass", "RimWorld.CompShield" }, 0)]
     [InlineData(new[] { "get", "NoSuchDefAtAll" }, Runner.ExitNoResults)]
+    [InlineData(new[] { "get", "BaseBullet" }, Runner.ExitFoundElsewhere)]
     [InlineData(new[] { "search", "shield", "--nonsense" }, Runner.ExitUsage)]
     [InlineData(new[] { "no-such-command" }, Runner.ExitUsage)]
     public void 退出码如实传给shell(string[] argv, int expected)

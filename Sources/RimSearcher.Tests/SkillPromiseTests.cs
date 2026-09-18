@@ -186,8 +186,10 @@ public class SkillPromiseTests
             "json的数据键零行时是空数组而不是整个消失"),
         new("`get`'s `source` line is a bare, unverified file name",
             "source列印的是没有目录的裸文件名"),
-        new("`0` ran, `1` zero rows, `2` usage error, `70` tool defect",
+        new("`0` rows, `1` zero rows and measured, `3` zero rows because a layer is",
             "退出码如实传给shell"),
+        new("`4` zero rows because the name is something else",
+            nameof(ExitCodeTests.零行的退出码由印出的表决定)),
         new("Unknown options are rejected rather than ignored, with the nearest accepted spelling — or, when nothing is close, everything this command does take",
             nameof(未知选项的报错给出这条命令自己收什么)),
         // 播报判据是「展开与你输入的字面不同」,不是「多于一个 mod」——
@@ -546,7 +548,7 @@ public class SkillPromiseTests
 
         // 语料里 comps[0].compClass = RimWorld.CompShield,而 search 照样查不到它。
         var (byClass, _, classCode) = Fixture.Run("search", "CompShield");
-        Assert.Equal(1, classCode);
+        Assert.Equal(Runner.ExitFoundElsewhere, classCode);   // found_as:它是 class / 字段值
         Assert.DoesNotContain("Apparel_ShieldBelt", byClass, StringComparison.Ordinal);
         // 只说「没有」不够:得把该去哪儿问说出来,而且要带本次的查询词 ——
         // 一句 'where <path> <text>' 的占位符版本帮不到拿着零结果的人。
@@ -556,7 +558,7 @@ public class SkillPromiseTests
 
         // UI 文案那一层同样点名,而不是笼统说「search 不覆盖它」。
         var (byKeyed, _, keyedCode) = Fixture.Run("search", "没有电力");
-        Assert.Equal(1, keyedCode);
+        Assert.Equal(Runner.ExitFoundElsewhere, keyedCode);
         Assert.Contains("rimsearcher keyed 没有电力", byKeyed, StringComparison.Ordinal);
 
         // 三处都不许把值域清单复读一遍 —— 那是 SKILL.md 的份内事。
@@ -579,7 +581,7 @@ public class SkillPromiseTests
     {
         // 语料里 CannotUseNoPower 的译文是「没有电力」,而它不是任何 def 的 label。
         var (bySearch, _, searchCode) = Fixture.Run("search", "没有电力");
-        Assert.Equal(1, searchCode);
+        Assert.Equal(Runner.ExitFoundElsewhere, searchCode);   // found_as:它是界面文案
         // 落空的那一句必须把落点算出来,而不是停在「不覆盖」。
         Assert.Contains("rimsearcher keyed", bySearch, StringComparison.Ordinal);
         Assert.Contains("interface text", bySearch, StringComparison.Ordinal);

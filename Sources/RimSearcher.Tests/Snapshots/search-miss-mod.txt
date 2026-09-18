@@ -1,5 +1,5 @@
 $ rimsearcher search ludeon.rimworld
-exit 1
+exit 4
 --- stdout ---
 Nothing matched 'ludeon.rimworld' in this snapshot.
 

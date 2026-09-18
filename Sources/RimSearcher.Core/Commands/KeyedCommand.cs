@@ -360,11 +360,11 @@ public sealed class KeyedCommand : Command
                 return 1;
             }
 
-            // 整层非空而枚举又空,只剩一种成因:一条占位都没有。零行照约定仍走 exit 1,
-            // 读退出码的脚本会读成失败,所以退出码的成因要自己说。
+            // 整层非空而枚举又空,只剩一种成因:一条占位都没有。exit 1 自己就说「量了是空」
+            // (没量过的是 3),这里不再解释退出码。
             ctx.Report.Notice(NoticeKind.Filter,
                 $"All {Tally.Complete(layerTotal).Render("keyed translation")} in this snapshot carry a real " +
-                "translation; none is a placeholder. The exit code is 1 only because no rows were printed. " +
+                "translation; none is a placeholder. " +
                 "Coverage of a def's own label and description is a different layer: those " +
                 "are injected through DefInjected, and 'rimsearcher get <defName>' shows them.");
             return 1;

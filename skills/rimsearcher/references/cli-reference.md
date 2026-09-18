@@ -48,12 +48,14 @@ When a name asked for is not what this command looks up, a found_as table says w
 
 | Code | Meaning |
 |---|---|
-| `0` | The command ran. |
-| `1` | This query returned no rows. |
+| `0` | The command ran and printed rows. |
+| `1` | Zero rows, measured: the snapshot was searched and nothing matched. |
+| `3` | Zero rows, not measured: a layer this answer needs is absent from the snapshot. The `absent` table names the layer and the command that fills it. |
+| `4` | Zero rows, and the name asked for turns up as something else. The `found_as` table says what it is and gives the command that reaches it. |
 | `2` | Usage error: unknown command, unknown option, bad value. |
 | `70` | A defect in the tool itself, not in what you asked for. |
 
-A `1` is an answer rather than a failure: "nothing in this snapshot has that value" is information, and the reasoning behind it goes to stdout either way. Chain commands with `;` rather than `&&`, or a `1` on a query that answered your question will silently drop whatever you queued after it.
+`1`, `3` and `4` are answers rather than failures, and the reasoning behind each goes to stdout. Only `1` means "nothing in this snapshot has that"; `3` and `4` come with a table that says where to go next. Chain commands with `;` rather than `&&`, or a non-zero code on a query that answered your question will silently drop whatever you queued after it.
 
 ## `--json`
 
@@ -70,7 +72,7 @@ Every command takes these, and they are written **after** the command name: `rim
 | `--snapshot` <name> | Query this named snapshot instead of the one that would be picked automatically. An explicit choice always wins over auto-detection. | `--snap`, `--env` |
 | `--db` <path> | Query the snapshot database at this path directly, bypassing the registry. | `--database`, `--snapshot-path` |
 | `--json` | Emit machine-readable JSON. Anything the text output would have said in prose moves into a 'notes' array. The command's own table key is always present — an empty array when nothing matched, never a missing key. A note that reports a count also carries 'shown' and 'total' as numbers, so the figures never have to be parsed back out of its text; 'total' is null when only a lower bound is known, and both keys are absent on notes that are not counts. |  |
-| `--quiet` | Stdout prints only data blocks. Notices, including footnotes and the snapshot tag, are omitted from stdout; they are still written in full to the run log. A query that finds nothing then prints no stdout at all, and still exits 1 — that emptiness is the notices being withheld, not evidence that the thing is absent. Leave this flag off to print the notices on stdout as well. | `--data-only` |
+| `--quiet` | Stdout prints only data blocks. Notices, including footnotes and the snapshot tag, are omitted from stdout; they are still written in full to the run log. A query that finds nothing then prints no stdout at all and exits 1; the absent and found_as tables are data blocks, so an exit 3 or 4 still prints its table. Leave this flag off to print the notices on stdout as well. | `--data-only` |
 | `--config` <path> | Use this config file instead of the default one. |  |
 
 ## `callers`

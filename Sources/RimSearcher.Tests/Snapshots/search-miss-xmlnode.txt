@@ -1,5 +1,5 @@
 $ rimsearcher search BaseBullet
-exit 1
+exit 4
 --- stdout ---
 Nothing matched 'BaseBullet' in this snapshot.
 

@@ -1,5 +1,5 @@
 $ rimsearcher search ThingDef
-exit 1
+exit 4
 --- stdout ---
 Nothing matched 'ThingDef' in this snapshot.
 

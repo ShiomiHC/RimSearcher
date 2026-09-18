@@ -1,5 +1,5 @@
 $ rimsearcher where Firefoam
-exit 1
+exit 4
 --- stdout ---
 No def in this snapshot has a field path ending in 'Firefoam'. 'rimsearcher fields <DefType> --path-contains <text>' lists the paths that a def type actually has.
 

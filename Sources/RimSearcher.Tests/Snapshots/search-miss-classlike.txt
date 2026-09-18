@@ -1,5 +1,5 @@
 $ rimsearcher search CompShield
-exit 1
+exit 4
 --- stdout ---
 Nothing matched 'CompShield' in this snapshot.
 

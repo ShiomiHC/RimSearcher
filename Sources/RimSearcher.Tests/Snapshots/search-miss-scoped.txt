@@ -1,5 +1,5 @@
 $ rimsearcher search TestModGun --scope ludeon.rimworld
-exit 1
+exit 4
 --- stdout ---
 Nothing matched 'TestModGun' in this snapshot within --scope ludeon.rimworld.
 

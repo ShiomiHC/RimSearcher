@@ -1,5 +1,5 @@
 $ rimsearcher inherit OnlyInOtherSnapshot
-exit 1
+exit 4
 --- stdout ---
 No XML node named 'OnlyInOtherSnapshot' is in this snapshot.
 

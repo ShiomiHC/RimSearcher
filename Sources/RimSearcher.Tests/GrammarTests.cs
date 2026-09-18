@@ -836,7 +836,7 @@ public class GrammarTests
         // 第四种成因:树在名单里、目录也在磁盘上,里面一个文件都没有(从没反编译过)——
         // 真因是这棵树该 sync 一遍,不是 glob 写错。
         var (bare, _, bareCode) = Fixture.Run("code-search", "public", "--source", "zz.emptytree");
-        Assert.Equal(1, bareCode);
+        Assert.Equal(Runner.ExitLayerAbsent, bareCode);   // absent:这棵树没量
         Assert.Contains("source_tree:zz.emptytree  empty  rimsearcher sources sync", bare);
         Assert.DoesNotContain("No file matched", bare);   // 不许再赖到 glob 头上
         Assert.DoesNotContain("rimsearcher search", bare);
@@ -882,7 +882,7 @@ public class GrammarTests
         foreach (var (query, must, mustNot) in cases)
         {
             var (stdout, _, code) = Fixture.Run("search", query);
-            Assert.Equal(1, code);
+            Assert.Equal(Runner.ExitFoundElsewhere, code);   // 每档都是 found_as 的一行
             Assert.Contains(must, stdout, StringComparison.Ordinal);
             Assert.DoesNotContain(mustNot, stdout, StringComparison.Ordinal);
         }
@@ -1005,7 +1005,7 @@ public class GrammarTests
         foreach (var argv in paths)
         {
             var (stdout, _, code) = Fixture.Run(argv);
-            Assert.Equal(1, code);
+            Assert.Equal(Runner.ExitFoundElsewhere, code);   // found_as:在别的快照里
             Assert.Contains("--snapshot other", stdout, StringComparison.Ordinal);
         }
 

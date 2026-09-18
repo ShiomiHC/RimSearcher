@@ -11,7 +11,7 @@ namespace RimSearcher.Tests;
 [Collection(OutputSnapshotTests.Collection)]
 public class GateTests
 {
-    private static string ReferencePath =>
+    internal static string ReferencePath =>
         Path.Combine(DeclarationTests.RepoRoot(), "skills", "rimsearcher", "references", "cli-reference.md");
 
     // ---- 参数参考(声明区产地唯一)----

@@ -510,12 +510,11 @@ public sealed class EconomyCommand : Command
                 return 1;
             }
 
-            // 整层为零而 state 是 ok:量过了,这个 mod 列表下确实没有可生产物。
-            // 零行照约定仍走 exit 1,读退出码的脚本会读成失败,所以退出码的成因要自己说。
+            // 整层为零而 state 是 ok:量过了,这个 mod 列表下确实没有可生产物。exit 1 自己就说
+            // 「量了是空」(没量过的是 3),这里不再解释退出码。
             ctx.Report.Notice(NoticeKind.Boundary,
                 "The economy layer was measured for this snapshot and came out empty: nothing in these mods " +
-                "is an item with a market value or a building the player can build. The exit code is 1 only " +
-                "because no rows were printed.");
+                "is an item with a market value or a building the player can build.");
             return 1;
         }
 

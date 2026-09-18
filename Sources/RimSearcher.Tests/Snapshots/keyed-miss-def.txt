@@ -1,5 +1,5 @@
 $ rimsearcher keyed Apparel_ShieldBelt
-exit 1
+exit 4
 --- stdout ---
 'Apparel_ShieldBelt' was not matched as typed: only letters and digits take part, so what ran was Apparel, ShieldBelt.
 No keyed translation matches 'Apparel_ShieldBelt'.

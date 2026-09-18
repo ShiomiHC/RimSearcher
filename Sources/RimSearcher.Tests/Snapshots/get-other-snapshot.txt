@@ -1,5 +1,5 @@
 $ rimsearcher get OnlyInOtherSnapshot
-exit 1
+exit 4
 --- stdout ---
 Where the name does turn up:
 name                 is                       in                                next

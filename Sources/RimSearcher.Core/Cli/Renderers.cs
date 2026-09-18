@@ -141,18 +141,22 @@ public static class MarkdownRenderer
         sb.Append(OutputText.Newline);
 
         // 退出码要写进参考页:exit 1 是「查到了但没有」而不是失败,不写下来会被当失败读。
+        // 3 / 4 是零行按印出的表细分(Runner.Refine):码与表由同一处决定。
         sb.Append("## Exit codes").Append(OutputText.Newline).Append(OutputText.Newline);
         sb.Append("| Code | Meaning |").Append(OutputText.Newline);
         sb.Append("|---|---|").Append(OutputText.Newline);
-        sb.Append("| `0` | The command ran. |").Append(OutputText.Newline);
-        sb.Append("| `1` | This query returned no rows. |").Append(OutputText.Newline);
+        sb.Append("| `0` | The command ran and printed rows. |").Append(OutputText.Newline);
+        sb.Append("| `1` | Zero rows, measured: the snapshot was searched and nothing matched. |").Append(OutputText.Newline);
+        sb.Append("| `3` | Zero rows, not measured: a layer this answer needs is absent from the snapshot. The `absent` table names the layer and the command that fills it. |").Append(OutputText.Newline);
+        sb.Append("| `4` | Zero rows, and the name asked for turns up as something else. The `found_as` table says what it is and gives the command that reaches it. |").Append(OutputText.Newline);
         sb.Append("| `2` | Usage error: unknown command, unknown option, bad value. |").Append(OutputText.Newline);
         sb.Append("| `70` | A defect in the tool itself, not in what you asked for. |").Append(OutputText.Newline);
         sb.Append(OutputText.Newline);
-        sb.Append("A `1` is an answer rather than a failure: \"nothing in this snapshot has that value\" ")
-          .Append("is information, and the reasoning behind it goes to stdout either way. Chain commands with ")
-          .Append("`;` rather than `&&`, or a `1` on a query that answered your question will silently drop ")
-          .Append("whatever you queued after it.").Append(OutputText.Newline).Append(OutputText.Newline);
+        sb.Append("`1`, `3` and `4` are answers rather than failures, and the reasoning behind each goes to stdout. ")
+          .Append("Only `1` means \"nothing in this snapshot has that\"; `3` and `4` come with a table that says ")
+          .Append("where to go next. Chain commands with `;` rather than `&&`, or a non-zero code on a query that ")
+          .Append("answered your question will silently drop whatever you queued after it.")
+          .Append(OutputText.Newline).Append(OutputText.Newline);
 
         // 数据键名同样要写出来:猜错读到的 null 与「查到了但确实没有」在下游同形。
         sb.Append("## `--json`").Append(OutputText.Newline).Append(OutputText.Newline);

@@ -50,11 +50,12 @@ public static class GlobalOptions
         Arity = Arity.Flag,
         // 事实:stdout 只剩数据块;脚注与快照标签一并去掉。机制:声明仍整份进 run-log。
         // 出路:不加这个旗,声明照旧印在 stdout。零结果那条路本来只有声明,于是 stdout
-        // 变成空的、退出码仍是 1 —— 不写明这一条,空会被读成「确实不存在」。
+        // 变成空的 —— 那时退出码自己说是哪种零:1 量了是空;3 / 4 带着 absent / found_as 表,
+        // 表是数据块,照印。
         Help = "Stdout prints only data blocks. Notices, including footnotes and the snapshot tag, " +
                "are omitted from stdout; they are still written in full to the run log. " +
-               "A query that finds nothing then prints no stdout at all, and still exits 1 — " +
-               "that emptiness is the notices being withheld, not evidence that the thing is absent. " +
+               "A query that finds nothing then prints no stdout at all and exits 1; the absent and " +
+               "found_as tables are data blocks, so an exit 3 or 4 still prints its table. " +
                "Leave this flag off to print the notices on stdout as well.",
     };
 

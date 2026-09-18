@@ -1,5 +1,5 @@
 $ rimsearcher code-search public --source zz.emptytree
-exit 1
+exit 3
 --- stdout ---
 layer                     state  next
 source_tree:zz.emptytree  empty  rimsearcher sources sync
