@@ -15,7 +15,10 @@ name            patch_ops_name
 BaseBullet      2
 BaseProjectile  0
 A def inherits its ancestors' fields, so a patch that rewrites an ancestor changes what the game read for 'Bullet_Revolver' as well — and the patch_ops_name on 'Bullet_Revolver' itself does not count that. Above, patch_ops_name is not zero for 1 ancestor.
-'Bullet_Revolver' carries 1 field matching 'projectile.damageAmountBase', all reading '12' — that is the value the counts below are compared against.
+
+reference       12
+reference_from  Bullet_Revolver itself
+self_fields     1
 
 Same in every row, not repeated below: with_path=0, same_value=0, type_with_path=1, type_defs=9.
 layer           other_defs

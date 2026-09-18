@@ -2052,8 +2052,9 @@ public class GrammarTests
         // 口径不同由列名自陈(Docs/25 丁2):众数口径的列叫 same_as_mode,不叫 same_value;
         // 此前靠一句脚注「the node itself declares nothing」说破。
         Assert.Contains("  " + InheritCommand.SameAsMode, byMode, StringComparison.Ordinal);
-        Assert.Contains("is a node, not a def, so it carries no value of its own", byMode, StringComparison.Ordinal);
-        Assert.Contains("'Standard_Drop'", byMode, StringComparison.Ordinal);
+        // 参照值从哪来是 reference 块的两行,不是一句散文(Docs/25 丁1)。
+        Assert.Contains("reference_from   most common value under BaseProjectile", byMode, StringComparison.Ordinal);
+        Assert.Contains("reference        Standard_Drop", byMode, StringComparison.Ordinal);
         // 这条降级出路已经不存在,它指的那个动作也不再有意义。
         Assert.DoesNotContain(FossilGiveADef, byMode, StringComparison.Ordinal);
 
@@ -2164,7 +2165,7 @@ public class GrammarTests
         // 用来回答问题的那一列 —— 于是「`[]` 没被认出来」表现成一张少了一列的完整的表。
         var (inherited, _, _) = Fixture.Run(
             "inherit", "ChildGun", "--path-contains", "costList[].count", Fixture.PresenceArg);
-        Assert.Contains("carries 1 field matching 'costList[].count'", inherited, StringComparison.Ordinal);
+        Assert.Contains("self_fields     1", inherited, StringComparison.Ordinal);
         Assert.Contains("same_value", inherited, StringComparison.Ordinal);
 
         // 判据侧:命中之后不许再说「整段一次都没命中」,也不许去启动「它其实是个值」那个探针。
@@ -2644,15 +2645,14 @@ public class GrammarTests
     /// <summary>
     /// 收窄之后的零结果与「整份快照都没有」不是一回事:
     /// 「counts over field paths are complete for it」在收窄时只查了其中一小块。
+    /// 拿掉那个筛子能回来几个,是 empty_because 的一行(Docs/25 丁1)。
     /// </summary>
     [Fact]
     public void 收窄之后的零结果不许担保整份快照()
     {
         var (narrow, _, _) = Fixture.Run("snapshot", "truncated", "--def", "Anesthetic");
-        Assert.Contains("--def Anesthetic", narrow, StringComparison.Ordinal);
-        Assert.Contains("for that much", narrow, StringComparison.Ordinal);
-        // 全库那个数要一起给出来,否则「这里没有」读起来就是「哪儿都没有」。
-        Assert.Matches(@"Snapshot-wide the figure is \d+ defs?\.", narrow);
+        Assert.Contains("under the filters given", narrow, StringComparison.Ordinal);
+        Assert.Matches(@"--def Anesthetic +\d+ +rimsearcher snapshot truncated", narrow);
     }
 
     /// <summary>

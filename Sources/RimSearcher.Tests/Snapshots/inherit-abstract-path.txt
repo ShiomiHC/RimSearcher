@@ -7,7 +7,11 @@ abstract        yes
 declared_in     ludeon.rimworld
 source          Projectiles_Guns.xml
 patch_ops_name  0
-'BaseProjectile' is a node, not a def, so it carries no value of its own. The counts below are compared against the most common value under it instead: 'Standard_Drop', on 2 defs — the only value that appears there.
+
+reference        Standard_Drop
+reference_from   most common value under BaseProjectile
+mode_defs        2
+distinct_values  1
 
 layer           other_defs  with_path  same_as_mode  cut_short  type_with_path  type_defs
 BaseProjectile  3           2          2             1          9               9

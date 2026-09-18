@@ -205,7 +205,7 @@ way to state:
   failures produce plausible values rather than an error.
 - **The same key name is not the same row shape.** Every command's key holds flat rows
   except two: `get`'s `defs` is one nested object per def (`{def, fields, translations}`)
-  and `inherit`'s `nodes` is one per XML node (`{node, ancestors, children?, witnesses?}`).
+  and `inherit`'s `nodes` is one per XML node (`{node, ancestors, children?, reference?, witnesses?}`).
   So `search` and `get` both answer under `defs` while nesting differently, and a def's
   field table is `defs[i].fields`, never a `fields` key at the root. Take the shape from the
   command's own `--help`, and

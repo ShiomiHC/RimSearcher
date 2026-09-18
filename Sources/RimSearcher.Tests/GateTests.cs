@@ -94,6 +94,7 @@ public class GateTests
             ["snapshot status.mod_list"] = ["snapshot", "status"],
             ["snapshot status.layers"] = ["snapshot", "status"],
             ["snapshot truncated.truncated"] = ["snapshot", "truncated"],
+            ["snapshot truncated.empty_because"] = ["snapshot", "truncated", "--def", "Anesthetic"],
             ["snapshot diff.defs_added"] = ["snapshot", "diff"],
             ["snapshot diff.defs_removed"] = ["snapshot", "diff"],
             ["snapshot diff.fields"] = ["snapshot", "diff"],
@@ -134,7 +135,7 @@ public class GateTests
             {
                 "snapshot status" => StalenessTests.StatusJsonFor(key),
                 "snapshot diff" => SnapshotDiffTests.DiffJsonFor(key),
-                "snapshot truncated" => TruncationCauseTests.TruncatedJsonFor(),
+                "snapshot truncated" when key == "truncated" => TruncationCauseTests.TruncatedJsonFor(),
                 _ => Fixture.Run([.. probes[$"{command}.{key}"], "--json"]).Stdout,
             };
             var root = System.Text.Json.JsonDocument.Parse(json).RootElement;

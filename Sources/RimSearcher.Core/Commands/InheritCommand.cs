@@ -58,7 +58,11 @@ public sealed class InheritCommand : Command
             "of its chain: other_defs (the other defs descending from that layer), with_path (how many of " +
             "them carry a matching field path) and, when there is a reference value, same_value (how many " +
             "of those read the asked def's own value) or same_as_mode (the most common value under an " +
-            "abstract node). A layer that declares a field passes it to every descendant, so with_path short " +
+            "abstract node). The 'reference' block above the table says which value that is and where it " +
+            "came from: the asked def itself (self_fields is how many of its fields matched), or the most " +
+            "common value under an abstract node (mode_defs carry it, out of distinct_values seen there). " +
+            "reference none means the def carries no matching field, or several with different values " +
+            "(self_values lists them and next narrows to one) — then neither same_ column is printed. A layer that declares a field passes it to every descendant, so with_path short " +
             "of other_defs rules that layer out; with_path equal to other_defs does not rule it in — every " +
             "descendant writing the field separately counts the same, and the snapshot stores no 'declared " +
             "here' fact. same_value is what tells those apart: one shared value points at the layer, a " +
@@ -128,8 +132,8 @@ public sealed class InheritCommand : Command
                        // 本轮把 --exact-path 补到 inherit 之后这句就少说了一个开关 ——
                        // 两个都出见证表。只写 --path-contains 的话,要整条路径的读者会
                        // 以为那个键拿不到,改敲子串。
-                       "count), 'ancestors', 'children' when it has any, and 'witnesses' when --path-contains " +
-                       "or --exact-path is given. " +
+                       "count), 'ancestors', 'children' when it has any, and 'reference' plus 'witnesses' when " +
+                       "--path-contains or --exact-path is given. " +
                        "With several names the objects come in the order the names were given; a name that " +
                        "matched nothing has no object here and one note in 'notes' that quotes it.",
             },
@@ -445,8 +449,13 @@ public sealed class InheritCommand : Command
 
         // 参照值 —— 问的那个 def 自己在这条路径上装着什么。没有参照值时 same_value 这一列
         // 整个不出:印一列恒为 0 的数比不印更坏,它看起来像「一个兄弟都不同意」。
+        //
+        // 参照值是哪儿来的、有几条字段在算它,进 `reference` 块(Docs/25 丁1):此前是四句散文
+        // 各带一个数。没有参照值那两档(自己不带这条路径 / 带着几个不同的值)也在同一块里,
+        // 「怎么读」住 help;几个值时 next 给收窄到第一条路径的同一条命令。
         string? reference = null;
         (string DefName, string DefType)? exclude = null;
+        var about = new List<KeyValuePair<string, object?>>();
         if (node.DefName is { Length: > 0 })
         {
             var self = ctx.Db.GetDefsNamed(node.DefName)
@@ -457,27 +466,15 @@ public sealed class InheritCommand : Command
                 var fields = ctx.Db.Fields(self.Id, int.MaxValue, [pathFilter], exactPath: exactPath);
                 var values = fields.Rows.Select(r => r.Value ?? "").Distinct(StringComparer.Ordinal).ToList();
 
-                if (values.Count == 1)
+                if (values.Count == 1) reference = values[0];
+                about.Add(new(ReferenceKey, reference ?? "none"));
+                about.Add(new("reference_from", self.DefName + " itself"));
+                about.Add(new("self_fields", fields.Rows.Count));
+                if (values.Count > 1)
                 {
-                    reference = values[0];
-                    ctx.Report.Notice(NoticeKind.Filter,
-                        $"'{self.DefName}' carries {Tally.Complete(fields.Rows.Count).Render("field")} matching " +
-                        $"'{pathFilter}', all reading {Quote(reference)} — that is the value the counts below " +
-                        "are compared against.");
-                }
-                else if (values.Count == 0)
-                {
-                    ctx.Report.Notice(NoticeKind.Boundary,
-                        $"'{self.DefName}' itself carries no field path {holding} '{pathFilter}', so there is no " +
-                        "value of its own to compare against; the counts below say which layers' descendants " +
-                        "carry one at all.");
-                }
-                else
-                {
-                    ctx.Report.Notice(NoticeKind.Boundary,
-                        $"'{self.DefName}' carries {Tally.Complete(values.Count).Render("value")} matching " +
-                        $"'{pathFilter}' ({NameList.Render(values.Select(Quote).ToList(), 4)}), so there is no " +
-                        "single value to compare against. Narrow the path filter until one is left.");
+                    about.Add(new("distinct_values", values.Count));
+                    about.Add(new("self_values", NameList.Render(values.Select(Quote).ToList(), 4)));
+                    about.Add(new("next", $"{ctx.Without("path-contains", "exact-path")} --exact-path {fields.Rows[0].Path}"));
                 }
             }
         }
@@ -496,15 +493,13 @@ public sealed class InheritCommand : Command
             {
                 reference = dom.Value;
                 byMode = true;
-                ctx.Report.Notice(NoticeKind.Filter,
-                    $"'{node.Name}' is a node, not a def, so it carries no value of its own. The counts below " +
-                    $"are compared against the most common value under it instead: {Quote(dom.Value)}, on " +
-                    $"{Tally.Complete(dom.Defs).Render("def")}" +
-                    (dom.Distinct > 1
-                        ? $", out of {Tally.Complete(dom.Distinct).Render("value")} that appear there."
-                        : " — the only value that appears there."));
+                about.Add(new(ReferenceKey, reference));
+                about.Add(new("reference_from", "most common value under " + node.Name));
+                about.Add(new("mode_defs", dom.Defs));
+                about.Add(new("distinct_values", dom.Distinct));
             }
         }
+        if (about.Count > 0) ctx.Report.Detail(ReferenceKey, about);
 
         // 列名自陈参照值的产地(Docs/25 丁2):问的 def 自己的值 → same_value,子树众数 → same_as_mode。
         // 此前两种口径共用一个列名,靠一句脚注说破「这一列比的是众数,节点自己什么都没声明」。
@@ -556,6 +551,9 @@ public sealed class InheritCommand : Command
 
     /// <summary>见证表里「这一行的 other_defs 里有几个 def 的字段表在导出时被截」那一列;只在有的时候出。</summary>
     public const string CutShort = "cut_short";
+
+    /// <summary>见证表上方那一块:参照值是什么、从哪来、几条字段 / 几个 def 在算它。</summary>
+    public const string ReferenceKey = "reference";
 
     private static string Quote(string v) => v.Length == 0 ? "an empty value" : $"'{v}'";
 }

@@ -100,7 +100,7 @@ data sits under a key that depends on the command. `<command> --help` lists each
 | `search` / `get` / `where` / `inherit` / `keyed` | plus `found_as` — one row per name asked for that is not what the command looks up but turns up as something else — columns name, is (def / def outside --scope / xml node / abstract xml node / def type / class / interface text / mod in this snapshot / mod not in this snapshot / field value / def in another snapshot / xml node in another snapshot), in (where exactly), next (a command that reaches it, ready to paste). Always present; empty when the name was found or turns up nowhere |
 | `where` / `values` / `fields` | plus `completeness` when some def in scope had its export cut short: `scope` (which def types this covers, in words), `defs_cut_short`, `types` (one row per def type with its own count), `verify` (a ready command listing them). The key is absent when no def in scope lost fields |
 | `mods` | `mods` |
-| `inherit` | `nodes` — **not rows**: one nested object per XML node, each `{node, ancestors, children?, witnesses?}` |
+| `inherit` | `nodes` — **not rows**: one nested object per XML node, each `{node, ancestors, children?, reference?, witnesses?}` |
 | `keyed` | `keys` |
 | `code-search` | `matches`, plus `ui_text` when a printed matching line calls `.Translate()` on a literal key the snapshot can resolve |
 | `read` | `source`, or `declarations` with `--outline` — never both |

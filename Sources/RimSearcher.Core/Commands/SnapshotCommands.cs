@@ -629,6 +629,7 @@ public sealed class SnapshotTruncatedCommand : Command
                        "is a lower bound: the exporter stopped, it did not finish counting. A snapshot exported " +
                        "before the causes were told apart has one column, fields_dropped, instead of the four.",
             },
+            EmptyCause.JsonKey,
         ],
     };
 
@@ -642,25 +643,21 @@ public sealed class SnapshotTruncatedCommand : Command
 
         if (rows.Count == 0)
         {
-            // 收窄之后的零结果与「整份快照都没有」不是一回事:收窄了就把条件念回去,
-            // 并把全库那个数一起给出。
-            var narrowed = types.Count > 0 || defName is { Length: > 0 };
-            var parts = new List<string>();
-            if (types.Count > 0) parts.Add("--type " + string.Join(" --type ", types));
-            if (defName is { Length: > 0 }) parts.Add($"--def {defName}");
-            if (!scope.IsAll) parts.Add($"--scope {scope.Expression}");
-
+            // 收窄之后的零结果与「整份快照都没有」不是一回事:自己给的每个筛子各算一次
+            // 「单独拿掉能回来几个」,进 empty_because(Docs/25 丁1;此前是一句「Snapshot-wide
+            // the figure is N」,把三个筛子压成一个数)。一行都没有 = 整份快照真的没有。
             ctx.Report.Notice(NoticeKind.Count,
-                narrowed
-                    ? $"No def matching {string.Join(" ", parts)} lost fields at export time, so counts over " +
-                      $"field paths are complete for that much. Snapshot-wide the figure is " +
-                      $"{Tally.Complete(ctx.Db.TruncatedDefCount()).Render("def")}."
-                    : "No def in this snapshot lost fields at export time" +
-                      (scope.IsAll ? "" : $" within --scope {scope.Expression}") +
-                      ", so counts over field paths are complete for it.");
-            // 零结果这一支最该说:上面刚担保「计数是完整的」,而排除掉的那半边有截断的话,
-            // 那句担保只对你留下的那半边成立。
-            ctx.AnnounceExcluded(scope, rest => ctx.Db.TruncatedDefs(rest, 0, types, defName).Total, "def");
+                types.Count > 0 || defName is { Length: > 0 } || !scope.IsAll
+                    ? "No def under the filters given lost fields at export time, so counts over their field paths are complete."
+                    : "No def in this snapshot lost fields at export time, so counts over field paths are complete for it.");
+            var causes = new List<EmptyCause>();
+            if (!scope.IsAll)
+                causes.Add(new(ctx.FilterAsGiven("scope"), ctx.Db.TruncatedDefs(ctx.Unscoped(), 0, types, defName).Total, ctx.Without("scope")));
+            if (types.Count > 0)
+                causes.Add(new(ctx.FilterAsGiven("type"), ctx.Db.TruncatedDefs(scope, 0, [], defName).Total, ctx.Without("type")));
+            if (defName is { Length: > 0 })
+                causes.Add(new(ctx.FilterAsGiven("def"), ctx.Db.TruncatedDefs(scope, 0, types, null).Total, ctx.Without("def")));
+            ctx.Report.EmptyBecause(causes);
             return 0;
         }
 

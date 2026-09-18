@@ -14,7 +14,10 @@ patch_ops_label    1
 
 name     def_type  abstract  declared_in      source
 BaseGun  ThingDef  yes       ludeon.rimworld  Guns.xml
-'ChildGun' carries 1 field matching 'costList[].count', all reading '75' — that is the value the counts below are compared against.
+
+reference       75
+reference_from  ChildGun itself
+self_fields     1
 
 layer    other_defs  with_path  same_value  type_with_path  type_defs
 BaseGun  0           0          0           1               2
