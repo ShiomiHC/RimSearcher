@@ -2787,7 +2787,7 @@ public sealed class ValuesCommand : Command
                        "matches by suffix, so this says what was actually pooled. Always an array, including " +
                        "when one path was asked for. Always " +
                        "present: on an empty result that object's three members are empty and " +
-                       "defs_with_field is 0, so a missing key never has to be told apart from nothing matching.",
+                       "defs_with_field is 0.",
             },
             EmptyCause.JsonKey,
             Completeness.JsonKey,

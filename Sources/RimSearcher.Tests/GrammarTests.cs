@@ -630,12 +630,11 @@ public class GrammarTests
         Assert.Contains("hungerRateFactor", longLine, StringComparison.Ordinal);
         Assert.True(longLine.Length < 320, $"裁过的行仍有 {longLine.Length} 字符:\n{longLine}");
 
-        // 说破:这一刀砍的是宽度不是条数。承重的是**名词**与**取法**两处 —— "printed line"
-        // 而不是 "line"(后者与「又少了 N 行」同形),以及「你看到的是哪一截」。这句挂在
-        // truncation 上、紧挨着 --limit 那条真·少了行的申报,所以两处都不许退化。
+        // 说破:这一刀砍的是宽度不是条数。承重的是**名词** —— "printed line" 而不是 "line"
+        // (后者与「又少了 N 行」同形)。这句挂在 truncation 上、紧挨着 --limit 那条真·少了行
+        // 的申报,所以不许退化。取法不在这句里(住 --max-line-chars 的 help)。
         Assert.Contains("--max-line-chars", stdout, StringComparison.Ordinal);
         Assert.Contains("printed line ran past", stdout, StringComparison.Ordinal);
-        Assert.Contains("What you see of it is the neighbourhood", stdout, StringComparison.Ordinal);
 
         // 出路真的通:抬到 0 就是整行,且那句申报随之消失。
         var (whole, _, wholeCode) = Fixture.Run("code-search", "hungerRate", "--max-line-chars", "0");
@@ -677,36 +676,37 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 横向裁剪的两种取法各自说话。上下文行没有匹配可对中,印的是**行首那一截** ——
-    /// 而 2026-09-09 那版把两种行合成一句「what you see is the neighbourhood of the matches」,
-    /// 于是上下文行被裁的每一次那句话都是假的:读者照它去找命中,眼前那一截里根本没有。
+    /// 横向裁剪的截断句只说数与出路,不说取法。取法(命中行对着匹配、上下文行从行首)住
+    /// --max-line-chars 的 help —— 2026-09-09 那版把两种行合成一句「what you see is the
+    /// neighbourhood of the matches」,对上下文行是假的;之后按三态各写一句,而三句都是机制。
+    /// 输出里一句取法都不说,就没有一支能变假(2026-09-18,Docs/25 §20)。
     ///
-    /// 三态各一个落点,因为错的方式不同:只裁命中行、只裁上下文行、两者同时。
+    /// 三态都跑一遍:只裁命中行、只裁上下文行、两者同时。行为(上下文行印的是行首那一截)
+    /// 与措辞分开钉。
     /// </summary>
     [Fact]
-    public void 横向裁剪按行的种类说话()
+    public void 横向裁剪只说数与出路不说取法()
     {
         // 只有命中行被裁(第 8 行超长且命中)。
         var (hit, _, _) = Fixture.Run("code-search", "hungerRateFactor", "--max-line-chars", "80");
-        Assert.Contains("What you see of it is the neighbourhood", hit, StringComparison.Ordinal);
-        // 混合那支的锚要带上分号 —— 不带的话选项说明里那句同形,闸会在那儿找到它照绿。
-        Assert.DoesNotContain("; a context line has no match to centre on", hit, StringComparison.Ordinal);
-        Assert.DoesNotContain("so what you see is the start of the line", hit, StringComparison.Ordinal);
+        Assert.Contains("ran past --max-line-chars 80", hit, StringComparison.Ordinal);
+        // 「characters.」之后紧接出路:中间放不下一句取法。锚钉的是相邻,不是缺席。
+        Assert.Contains("characters. '--max-line-chars 0' prints them whole; --json carries the whole line.",
+                        hit, StringComparison.Ordinal);
 
         // 只有上下文行被裁:命中的是第 7 行那句短的,超长的两行都是 -C 邻居。
         var (ctx, _, _) = Fixture.Run(
             "code-search", "float hungerRate", "--context", "2", "--max-line-chars", "60");
-        Assert.Contains("so what you see is the start of the line", ctx, StringComparison.Ordinal);
-        Assert.DoesNotContain("What you see of them is the neighbourhood", ctx, StringComparison.Ordinal);
-        Assert.DoesNotContain("A matching line shows the neighbourhood", ctx, StringComparison.Ordinal);
+        Assert.Contains("ran past --max-line-chars 60", ctx, StringComparison.Ordinal);
+        Assert.Contains("characters. '--max-line-chars 0' prints them whole", ctx, StringComparison.Ordinal);
         // 印出来的那一截真的是行首 —— 措辞对不对与做的是不是这件事得分开问。
         Assert.Contains("8- \t\t\tMakeTable(rows", ctx, StringComparison.Ordinal);
 
         // 两者同时:命中第 8 行(长),第 9 行(长)是它的 -C 邻居。
         var (both, _, _) = Fixture.Run(
             "code-search", "hungerRateFactor", "--context", "1", "--max-line-chars", "80");
-        Assert.Contains("A matching line shows the neighbourhood of its matches", both, StringComparison.Ordinal);
-        Assert.Contains("a context line has no match to centre on", both, StringComparison.Ordinal);
+        Assert.Contains("ran past --max-line-chars 80", both, StringComparison.Ordinal);
+        Assert.Contains("characters. '--max-line-chars 0' prints them whole", both, StringComparison.Ordinal);
     }
 
     /// <summary>

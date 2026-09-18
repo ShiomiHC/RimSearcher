@@ -68,7 +68,13 @@ public sealed class CodeSearchCommand : Command
         // 22 个在真源码树上原样跑 vs 把点转义,21 个逐条相同、剩下一个差 1 行 ——
         // 「静默匹配变宽」在真实模式上几乎不发生,那对选项收益近零。
         // 产地 tools/scan-codesearch-patterns.py(带 --verify 复跑)。
-        Positionals = [new PositionalSpec { Name = "regex", Help = ".NET regular expression." }],
+        Positionals = [new PositionalSpec
+        {
+            Name = "regex",
+            Help = ".NET regular expression. Matching gives up on a file after " +
+                   $"{Limits.CodeSearchRegexTimeoutMs} ms and the answer names the files it skipped; " +
+                   "nested quantifiers are the usual cause.",
+        }],
         Options =
         [
             new OptionSpec
@@ -451,32 +457,22 @@ public sealed class CodeSearchCommand : Command
             ctx.Report.Notice(NoticeKind.Truncation,
                 $"--max-per-file allows {Tally.Complete(maxPerFile).Render("match")} from any one file, and " +
                 $"{Tally.Complete(perFileCapped).Render("file")} had more than that. Raise it to see the rest.");
-        // 横向那一刀自己申报。名词是 printed line 而不是 line,措辞是「你看到的是哪一截」——
-        // 这两处一起挡住「又少了 N 行」那个读法,不必再补一句「一行都没少」。
-        //
-        // 两种行分开说:命中行对着匹配裁,上下文行没有落点可对中、只能从行首留一截。
-        // 合成一句就得挑一个取法去讲两种行,而另一种当场变成假话。
+        // 横向那一刀自己申报。名词是 printed line 而不是 line:「又少了 N 行」那个读法
+        // 站不住。哪一截(命中行对着匹配、上下文行从行首)是取法,住 --max-line-chars 的
+        // help;这里只留数与出路(2026-09-18,Docs/25 §20)。
         if (elision.Lines > 0)
             ctx.Report.Notice(NoticeKind.Truncation,
                 $"{Tally.Complete(elision.Lines).Render("printed line")} ran past --max-line-chars " +
                 $"{lineChars}, with '{Gap}' for what was left out; the longest is {elision.Longest} " +
-                "characters. " +
-                (elision.MatchLines > 0 && elision.ContextLines > 0
-                    ? "A matching line shows the neighbourhood of its matches; a context line has no " +
-                      "match to centre on, so it shows the start of the line. "
-                    : elision.MatchLines > 0
-                        ? $"What you see of {(elision.Lines == 1 ? "it" : "them")} is the neighbourhood " +
-                          "of the matches. "
-                        : $"{(elision.Lines == 1 ? "It is a context line, which has" : "They are context lines, which have")} " +
-                          "no match to centre on, so what you see is the start of the line. ") +
-                "'--max-line-chars 0' prints them whole; --json carries the whole line.");
+                "characters. '--max-line-chars 0' prints them whole; --json carries the whole line.");
         if (filesCapped) SayFilesCapped(ctx, sourceName, glob, filesRead,
                                         partialTree, partialRead, partialTotal, unreached);
+        // 点名被跳过的文件;成因(嵌套量词)是机制,住 regex 那个位置参数的 help。
         if (timedOut.Count > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
                 $"Matching took longer than {Limits.CodeSearchRegexTimeoutMs} ms on " +
-                $"{Tally.Complete(timedOut.Count).Render("file")}, which were skipped part-way. " +
-                "Nested quantifiers are the usual cause.");
+                $"{Tally.Complete(timedOut.Count).Render("file")}, which were skipped part-way: " +
+                $"{NameList.Render(timedOut, 6)}.");
 
         if (lines.Count == 0) return 1;
 

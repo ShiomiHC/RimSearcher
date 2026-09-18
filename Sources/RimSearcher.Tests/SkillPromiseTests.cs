@@ -182,7 +182,7 @@ public class SkillPromiseTests
         // 措辞 2026-09-05 收窄:旧句是「a missing key means you asked the wrong key,
         // never an empty result」,那对**主表键之外**的键是假的(values 的 field 此前
         // 空结果上就整个不见)。现在主表那半仍是全称,条件键那半交给各命令的 --help。
-        new("always present, empty array and all — an empty result never",
+        new("always present, an empty array when nothing matched",
             "json的数据键零行时是空数组而不是整个消失"),
         new("`get`'s `source` line is a bare, unverified file name",
             "source列印的是没有目录的裸文件名"),

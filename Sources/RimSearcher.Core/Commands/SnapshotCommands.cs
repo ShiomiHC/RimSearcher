@@ -526,7 +526,7 @@ public sealed class SnapshotRenameCommand : Command
                 Key = "renamed",
                 What = "an object: from, to, snapshot, modlist, export, pin. snapshot / modlist / export " +
                        "each say whether that file was moved or that it was not present in the place this " +
-                       "command looks — absence is never a missing key. pin says whether 'snapshot use' followed.",
+                       "command looks. pin says whether 'snapshot use' followed.",
             },
         ],
     };

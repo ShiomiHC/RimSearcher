@@ -147,8 +147,7 @@ public sealed class IlCommand : Command
                 ctx.Report.Notice(NoticeKind.Truncation,
                     $"Showing IL_{listing.ShownFrom:x4} to IL_{listing.ShownTo:x4} of {method.SourceName}; the " +
                     $"body runs from IL_{listing.FirstOffset:x4} to IL_{listing.LastOffset:x4}. " +
-                    $"'--from 0x{listing.ShownTo:x}' picks up at the last instruction shown here, so the two " +
-                    "pages overlap by one rather than risk a gap.");
+                    $"'--from 0x{listing.ShownTo:x}' picks up at the last instruction shown here.");
 
             if (!follow && found.StateMachine is { } sm)
                 ctx.Report.Notice(NoticeKind.Boundary,

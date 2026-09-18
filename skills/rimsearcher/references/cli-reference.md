@@ -71,7 +71,7 @@ Every command takes these, and they are written **after** the command name: `rim
 |---|---|---|
 | `--snapshot` <name> | Query this named snapshot instead of the one that would be picked automatically. An explicit choice always wins over auto-detection. | `--snap`, `--env` |
 | `--db` <path> | Query the snapshot database at this path directly, bypassing the registry. | `--database`, `--snapshot-path` |
-| `--json` | Emit machine-readable JSON. Anything the text output would have said in prose moves into a 'notes' array. The command's own table key is always present — an empty array when nothing matched, never a missing key. A note that reports a count also carries 'shown' and 'total' as numbers, so the figures never have to be parsed back out of its text; 'total' is null when only a lower bound is known, and both keys are absent on notes that are not counts. |  |
+| `--json` | Emit machine-readable JSON. Anything the text output would have said in prose moves into a 'notes' array. The command's own table key is always present: an empty array when nothing matched. A note that reports a count also carries 'shown' and 'total' as numbers, so the figures never have to be parsed back out of its text; 'total' is null when only a lower bound is known, and both keys are absent on notes that are not counts. |  |
 | `--quiet` | Stdout prints only data blocks. Notices, including footnotes and the snapshot tag, are omitted from stdout; they are still written in full to the run log. A query that finds nothing then prints no stdout at all and exits 1; the absent and found_as tables are data blocks, so an exit 3 or 4 still prints its table. Leave this flag off to print the notices on stdout as well. | `--data-only` |
 | `--config` <path> | Use this config file instead of the default one. |  |
 
@@ -132,7 +132,7 @@ A fourth shortens over-long lines instead of dropping them: --max-line-chars. De
 
 | Argument | Meaning |
 |---|---|
-| `<regex>` | .NET regular expression. |
+| `<regex>` | .NET regular expression. Matching gives up on a file after 2000 ms and the answer names the files it skipped; nested quantifiers are the usual cause. |
 
 | Option | Meaning | Also accepted |
 |---|---|---|
@@ -967,7 +967,7 @@ A failure after some files have moved is rolled back; if the rollback itself fai
 
 | Key | Holds |
 |---|---|
-| `renamed` | an object: from, to, snapshot, modlist, export, pin. snapshot / modlist / export each say whether that file was moved or that it was not present in the place this command looks — absence is never a missing key. pin says whether 'snapshot use' followed. |
+| `renamed` | an object: from, to, snapshot, modlist, export, pin. snapshot / modlist / export each say whether that file was moved or that it was not present in the place this command looks. pin says whether 'snapshot use' followed. |
 
 Examples:
 
@@ -1194,7 +1194,7 @@ Answers 'what am I allowed to put here' and 'which classes are actually in use' 
 | Key | Holds |
 |---|---|
 | `values` | one row per distinct value: value, defs, field_path (which of the paths asked for the row was counted under — present on a single-path call too). |
-| `field` | an array with one entry per field path asked for, in the order given; each entry holds a 'field' object (field[0].field), the same nesting 'get' uses for defs[]. That object says which path was asked for and which full paths and def types its values came from: asked, matched_paths, def_types, defs_with_field. A bare name matches by suffix, so this says what was actually pooled. Always an array, including when one path was asked for. Always present: on an empty result that object's three members are empty and defs_with_field is 0, so a missing key never has to be told apart from nothing matching. |
+| `field` | an array with one entry per field path asked for, in the order given; each entry holds a 'field' object (field[0].field), the same nesting 'get' uses for defs[]. That object says which path was asked for and which full paths and def types its values came from: asked, matched_paths, def_types, defs_with_field. A bare name matches by suffix, so this says what was actually pooled. Always an array, including when one path was asked for. Always present: on an empty result that object's three members are empty and defs_with_field is 0. |
 | `empty_because` | one row per option given on this call that, alone, emptied the result: filter (the option as written), hidden (how many defs come back with just that option dropped), next (the same call without it, ready to paste). Empty when the result was not empty, or when no single option accounts for it. |
 | `completeness` | an object, present only when some def in scope had its export cut short: scope (which def types this covers, in words), defs_cut_short (how many), types (one row per def type with its own count), verify (a ready command that lists them). Absent means no def in that scope lost fields at export. |
 

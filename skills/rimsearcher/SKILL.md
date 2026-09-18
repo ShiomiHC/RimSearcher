@@ -194,8 +194,8 @@ way to state:
   addressable there; a tool that reads it can tell prose that was filtered out from prose the
   caller asked to drop.
 - **`--json`**: root object; prose moves into `notes` as `{kind, text}`; the data key
-  depends on the command but is always present, empty array and all — an empty result never
-  shows up as a missing key. Keys **beside** that one can be conditional; each command's
+  depends on the command but is always present, an empty array when nothing matched. Keys
+  **beside** that one can be conditional; each command's
   `--help` says when. Key map: usage-notes. `where`, `values` and `fields` add
   `completeness` when some def in scope had its export cut short — it carries the scope in
   words, the count, one row per def type, and a ready command to list them. Its absence
