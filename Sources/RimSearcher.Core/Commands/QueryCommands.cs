@@ -2437,8 +2437,8 @@ public sealed class FieldsCommand : Command
             "declared field set, a miss that is in that set means the field exists and is null on every def; a " +
             "miss that is not means the type has no such field. That set is walked to a bounded nesting depth, " +
             "and the answer says how deep it reached: a field nested past that is outside what it measured. A " +
-            "snapshot without that set says so, and there a path missing here is not evidence that the field does " +
-            "not exist — for the shape of a nested object, read its class with 'code-search' and 'read'.\n\n" +
+            "snapshot without that set says so. The shape of a nested object is in its class: 'code-search' and " +
+            "'read'.\n\n" +
             IndexGap.Help,
         Positionals =
         [

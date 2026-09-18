@@ -34,8 +34,8 @@ public sealed class ReadCommand : Command
             "there falls back to the bare name and says so; when a bare name matches several files, the " +
             "answer lists them instead of picking one.\n\n" +
             "--member and --type find the declaration by matching braces, not by parsing C#. That is enough " +
-            "for decompiled output, which is machine-formatted, but it means a name this command cannot see " +
-            "is not evidence the file lacks it — 'code-search' searches the text and --lines reads it raw.\n\n" +
+            "for decompiled output, which is machine-formatted; 'code-search' searches the text and --lines " +
+            "reads it raw.\n\n" +
             "For who calls a method, 'callers'; for what a type derives from, what derives from it, and " +
             "which of those override a member, 'types'. Both read the assembly's metadata. This command " +
             "answers a different question: what the decompiled file on disk actually says.\n\n" +

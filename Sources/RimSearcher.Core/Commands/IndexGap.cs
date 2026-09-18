@@ -41,10 +41,10 @@ public static class IndexGap
     public const string Help =
         "A path that the value index has nothing under prints an index_gap row when the cause can be told. " +
         "A value that is null on a def never enters the index, and neither does a field the game marks as an " +
-        "unsaved runtime cache, so a path missing on one def (null-on-this-def) is not a path missing from the " +
-        "type (null-on-type), and neither is a field the type never declares (undeclared). A name/value pair " +
-        "such as statBases[N].stat = MarketValue puts the field's own name in the value column, where a path " +
-        "filter cannot reach it (value-not-path); 'where --value' reads that column.";
+        "unsaved runtime cache. null-on-this-def: other defs of the type carry the path. null-on-type: the type " +
+        "declares it and no def carries a value. undeclared: no field of the type is called that. " +
+        "value-not-path: a name/value pair such as statBases[N].stat = MarketValue puts the field's own name in " +
+        "the value column, where a path filter cannot reach it; 'where --value' reads that column.";
 
     /// <summary>next 是另一条命令;调用方点了 --snapshot 的话跟着走,不然贴回去查的是别的快照。</summary>
     public static void Say(CommandContext ctx, string asked, string state, string? next)

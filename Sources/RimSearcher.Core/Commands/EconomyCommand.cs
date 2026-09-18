@@ -76,8 +76,7 @@ public sealed class EconomyCommand : Command
         Remarks =
             "These numbers are not def fields — none of them is written in any XML. The game computes them " +
             "in its own Debug Output 'Economy' table: a market value can be derived from a recipe, and a " +
-            "cost is a cost list expanded recursively. Asking 'get' for a cost therefore returns nothing, " +
-            "and that nothing looks exactly like a thing having no cost.\n\n" +
+            "cost is a cost list expanded recursively; 'get' has no field for any of them.\n\n" +
             "The rows are the same set the game's own table covers: items with a market value above 0.01, " +
             "plus buildings the player can build or minify. Nothing else in the snapshot is priced.\n\n" +
             "marketValue is the price the game actually uses. fallbackMarketValue is the ingredient-and-work " +

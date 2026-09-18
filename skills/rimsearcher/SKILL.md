@@ -252,7 +252,7 @@ way to state:
   number minus a few others. A snapshot may not hold this layer at all — `economy` then says
   which of three things happened instead of answering, and **there is no way around it**: the
   indexed `marketValue` is the XML base value, not the computed price, and no field holds cost
-  or profit, so ranking by it answers a different question with nothing to say so.
+  or profit.
 - **Abstract parents are not defs**: `get` cannot reach them — it names `inherit` instead.
   `inherit` answers four things off the XML layer: who inherits from whom, which nodes are
   abstract, which layers carry a field (`--path-contains`), and how many patches target a
@@ -266,16 +266,14 @@ way to state:
   Class` territory, not `--class`**.
 - **`where Class`** reaches that nested runtime type, but only where it **differs from the
   declared type** — a field running exactly what its C# declares is not indexed under
-  `Class` at all, and a snapshot may hold only part of this dimension (the zero says which). So a zero is about
-  the index, never "no def runs it": confirm with `code-search "class <Name>\b"`. The same
-  holds for a class no def drives at all — code `new`s it directly, and the construction
-  site is the answer.
+  `Class` at all, and a snapshot may hold only part of this dimension (the zero says which).
+  `code-search "class <Name>\b"` finds the class whichever way it is reached, including one
+  no def drives at all — code `new`s it directly, and the construction site is the answer.
 - **`values <field>` already answers "which def types have this field"** — its `def_types`
   row names them, each with how many defs of that type hold a value at the path out of how
   many defs that type has. `fields <DefType>` goes the other way and needs
   the type up front.
-- **Null-valued fields never enter the index** — absent even from `--defaults`, so on
-  `get`/`where` absence is not evidence the type lacks the field. When the cause can be told,
+- **Null-valued fields never enter the index** — absent even from `--defaults`. When the cause can be told,
   `get --path-contains` and `fields --path-contains` print an **`index_gap` table** (asked /
   state / next) instead of leaving it to the declaring class: state is `null-on-this-def`
   (other defs of the type carry the path), `null-on-type` (the type declares it, no def has

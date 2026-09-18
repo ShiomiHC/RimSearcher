@@ -51,7 +51,7 @@ public sealed class InheritCommand : Command
             "the node with @Name=; patch_ops_defname and patch_ops_label count xpaths that name it by defName= " +
             "and by label=, and a snapshot exported before those were measured has neither column (its 'absent' " +
             "table says so). An xpath that reaches a node by thingClass or by a wildcard is counted nowhere in " +
-            "this layer, so a 0 is not evidence that the node reached the game unpatched. A node without a Name= " +
+            "this layer. A node without a Name= " +
             "reports patch_ops_name as 'n/a' rather than 0 because that count was never taken; the defName and " +
             "label counts are still taken. " +
             "For the merged, post-patch values, read any concrete child with 'get' — everything a parent " +

@@ -49,8 +49,8 @@ identical bytes reads as a change, and an edit that preserves both is the one ca
 game version does not load — that last exclusion
 the output never mentions. A snapshot without the fingerprint shows
 `xml_fingerprint` as `not recorded (exported before this was measured)`, and — when that
-snapshot matches the game on everything else compared — says in words that the line reading
-"matches" is not evidence about those files. Re-export, or re-run
+snapshot matches the game on everything else compared — prints that the files inside those
+mods are not compared. Re-export, or re-run
 `rimsearcher snapshot import` on the export file, to start recording that layer.
 
 **Where the game version comes from.** `Assembly-CSharp.dll` when `game_dir` is configured.
@@ -205,10 +205,8 @@ only rebuilds trees whose assemblies have not changed. Commit or restore, then s
 **Why you never guess a class from a defName.** Most `GenStepDef`s run a class whose name is
 not `GenStep_<defName>` — `rimsearcher where genStep.Class --type GenStepDef --scope vanilla`
 lists every one of them beside its defName, and counting the pairs that disagree takes one
-read of that table. Some do agree, which is the trap: a guess that lands looks exactly like
-one that does not, and
-`code-search "class GenStep_<defName>"` returning nothing is evidence about the name you
-invented, not about the def. Class names come out of `get`'s `*Class` rows: the `class` line
+read of that table. Some do agree, so `code-search "class GenStep_<defName>"` landing or not
+says nothing about the def. Class names come out of `get`'s `*Class` rows: the `class` line
 in the identity block is the def's **own** type — the same for every def of that type
 unless the XML picked a subclass on the def's own tag, and `list <DefType>` says how many
 classes the bucket holds — while `*.Class` and `*Class` rows — `genStep.Class`, `comps[0].compClass`,
