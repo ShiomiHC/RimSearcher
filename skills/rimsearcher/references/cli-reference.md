@@ -842,6 +842,8 @@ The snapshots must have been exported with the same ordered mod list. A differen
 
 This command has no mod filter. The 'mod' column is the packageId that declared the def, not who patched the value, so restricting it to the mods 'snapshot status' named as changed would drop vanilla defs those mods patched. Re-exporting a name keeps its previous generations as '<name>.prev', '<name>.prev2' and so on, and each is nameable here. --limit caps the fields table, and the two def tables if they grow past it. Each side still reports its total, including zero.
 
+A 'truncation' block counts defs whose export stopped short on both sides. defs_with_paths_dropped: a field that looks unchanged may have been one of the ones they lost. defs_with_values_cut: every field path is there, but both sides were cut at the same length, so a value that looks unchanged may still differ past the cut. When either side was exported before those were told apart there is one figure, defs_with_fields_dropped: something that looks unchanged on those may differ past what was exported.
+
 | Argument | Meaning |
 |---|---|
 | `<old>` | The earlier snapshot. A name from 'snapshot list'. |
@@ -858,6 +860,7 @@ This command has no mod filter. The 'mod' column is the packageId that declared 
 | `defs_added` | one row per def present only in the later snapshot: def_name, def_type, mod. |
 | `defs_removed` | one row per def present only in the earlier snapshot: def_name, def_type, mod. |
 | `fields` | one row per field whose value differs between the snapshots: def_name, def_type, path, old, new, mod. The mod column is the declaring packageId, not who changed the value. A missing old or new is a field that appeared or disappeared; null never enters the index. |
+| `truncation` | an object, present only when some def on both sides had its export stopped short: defs_with_paths_dropped and defs_with_values_cut, or defs_with_fields_dropped when either side predates telling those apart. |
 
 Examples:
 
@@ -892,6 +895,7 @@ The export file is refused rather than half-imported if it lacks the end marker 
 | Key | Holds |
 |---|---|
 | `imported` | an object: the snapshot that was written, and what went into it. |
+| `truncation` | an object, present only when some def's export stopped short: defs_with_paths_dropped and defs_with_values_cut, or defs_with_fields_dropped when the export predates telling those apart. 'snapshot status --help' says how each reads. |
 | `absent` | when the snapshot just written is short on a layer: one row per such layer — layer, state, next — the same table the queries print. Today that is 'disk_translations' when the language files on disk were not scanned. |
 
 Examples:
@@ -962,11 +966,13 @@ rimsearcher snapshot status
 
 Ordinary queries stay quiet when the snapshot matches the game, and say one line when it does not, naming at most three mods. This command is where the full comparison lives: every packageId whose Defs or Patches XML moved or cannot be found, and every packageId only on one side of the mod list, each as a row.
 
+defs_with_paths_dropped counts defs whose export stopped short — past a field cap, past the depth cap, or partway down a list; on those, 'get' lists fewer field paths than the def has. defs_with_values_cut counts defs that kept every field path and only had values cut to the length cap; no field path is missing on those, the rows just show the front of their value. A snapshot exported before those were told apart has one figure, defs_with_fields_dropped, covering both; on those, what 'get' prints is not the whole def. 'snapshot truncated' lists the defs. In the timing tables a layer whose name ends in '_emit' is the part of the layer named in part_of that this tool spends on building and writing lines; the rest of that layer is the game's own traversal, so the _emit row is counted inside its parent and has no share. 'export_timings' is the exporter's own layers inside the game; 'import_timings' is building this database from the file it wrote. The game's startup before the exporter runs — reading XML, resolving defs, applying patches — is in neither table: it is the gap between the two totals and how long 'rimsearcher export' actually took.
+
 `--json` keys, besides the global `notes`:
 
 | Key | Holds |
 |---|---|
-| `snapshot` | an object, not an array: the chosen snapshot compared with the installed game. |
+| `snapshot` | an object, not an array: the chosen snapshot compared with the installed game, including defs_with_paths_dropped and defs_with_values_cut (a snapshot exported before those were told apart has defs_with_fields_dropped instead). |
 | `xml` | one row per snapshot mod whose Defs or Patches XML moved or cannot be found: package_id, state. Empty when none. |
 | `mod_list` | one row per packageId that is enabled in the game but missing from this snapshot, or in this snapshot but no longer enabled: package_id, state. Empty when the lists match. |
 | `layers` | one row per data layer this snapshot could hold: layer, state, next, why. 'state' is 'ok' or one of pre-measure / skipped / unavailable / unmeasured / unconfigured / partial / empty; 'next' is the command that fills the layer (null on 'ok' rows). Queries print the same row shape as 'absent' for a layer they needed and found short — without 'why'. |
@@ -998,7 +1004,7 @@ Every count this tool reports over field paths — 'where', 'values', 'fields' �
 
 | Key | Holds |
 |---|---|
-| `truncated` | one row per def that lost fields at export time: def_name, def_type, fields_dropped. The count is a lower bound — the exporter stopped, it did not finish counting. |
+| `truncated` | one row per def whose export stopped short: def_name, def_type, past_field_cap (fields dropped once the def hit its field cap), values_cut (values cut to the length cap — the path is there, the value is not whole), past_depth_cap (nested objects left unwalked, one per subtree), lists_cut (lists stopped at the item cap, one per list). Every count is a lower bound: the exporter stopped, it did not finish counting. A snapshot exported before the causes were told apart has one column, fields_dropped, instead of the four. |
 
 Examples:
 

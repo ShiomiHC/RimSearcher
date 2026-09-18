@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using RimSearcher.Cli;
+using RimSearcher.Commands;
 using RimSearcher.Contract;
 using RimSearcher.Storage;
 
@@ -38,7 +39,8 @@ public class SnapshotDiffTests
         Assert.Contains("20", stdout, StringComparison.Ordinal);
         Assert.Contains("GunC", stdout, StringComparison.Ordinal);
         Assert.Contains("GunB", stdout, StringComparison.Ordinal);
-        Assert.Contains("dropped at export time for depth or size", stdout, StringComparison.Ordinal);
+        // 两侧都没分过类:截断账是一格总数。
+        Assert.Contains(ExportCap.DefsWithFieldsDropped + "  1", stdout, StringComparison.Ordinal);
         Assert.Contains("1 def added.", stdout, StringComparison.Ordinal);
         Assert.Contains("1 def removed.", stdout, StringComparison.Ordinal);
 
@@ -156,44 +158,40 @@ public class SnapshotDiffTests
     }
 
     /// <summary>
-    /// 两侧都分过类时,那句截断提示分成两拨,各带各的读法:少了行的那拨看不见的是行,
-    /// 只切了值的那拨行两边都在,而两侧切在同一处,切口之后的差异会印成「没变」。
+    /// 两侧都分过类时,截断账是两格各数各的(truncation 块);读法住 help:少了行的那拨看不见
+    /// 的是行,只切了值的那拨行两边都在,而两侧切在同一处,切口之后的差异会印成「没变」。
+    /// 此前是一句两拨分开说的散文(Docs/25 丁1)。
     /// </summary>
     [Fact]
-    public void 两侧都分过类时截断那句分开说()
+    public void 两侧都分过类时截断账两格各数各的()
     {
         var dir = PairDir();
-        var (stdout, _, code) = Run(dir, "snapshot", "diff", "classA", "classB");
+        var (stdout, _, code) = Run(dir, "snapshot", "diff", "classA", "classB", "--json");
         Assert.Equal(0, code);
-        Assert.Contains("1 def on both sides of this comparison lost field paths at export time",
-                        stdout, StringComparison.Ordinal);
-        Assert.Contains("A field that looks unchanged may have been one of the ones they lost.",
-                        stdout, StringComparison.Ordinal);
-        Assert.Contains("Another 1 def kept every field path and had only values cut to the length cap.",
-                        stdout, StringComparison.Ordinal);
-        Assert.Contains("A value that looks unchanged there may still differ past the cut.",
-                        stdout, StringComparison.Ordinal);
-        Assert.DoesNotContain("for depth or size", stdout, StringComparison.Ordinal);
+        var block = System.Text.Json.JsonDocument.Parse(stdout).RootElement.GetProperty("truncation");
+        Assert.Equal(1, block.GetProperty(ExportCap.DefsWithPathsDropped).GetInt32());
+        Assert.Equal(1, block.GetProperty(ExportCap.DefsWithValuesCut).GetInt32());
+        Assert.False(block.TryGetProperty(ExportCap.DefsWithFieldsDropped, out _));
+        var (help, _, _) = Run(dir, "snapshot", "diff", "--help");
+        Assert.Contains("may have been one of the ones they lost", help, StringComparison.Ordinal);
+        Assert.Contains("may still differ past the cut", help, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// 一侧没分过类就整句退回含糊的总数。**这是常态不是意外**:`--keep` 留下的 `.prev`
+    /// 一侧没分过类就只有一格总数。**这是常态不是意外**:`--keep` 留下的 `.prev`
     /// 全是旧代,而 diff 的正主就是拿旧代比新库。把没分过类的那侧算成「只切了值」,
-    /// 等于把它丢掉的行说成没丢。
+    /// 等于把它丢掉的行说成没丢 —— 所以那两格不许印成零,而是整个不在。
     /// </summary>
     [Fact]
-    public void 一侧没分过类时退回含糊那句()
+    public void 一侧没分过类时只有一格总数()
     {
         var dir = PairDir();
-        var (stdout, _, code) = Run(dir, "snapshot", "diff", "classLegacy", "classA");
+        var (stdout, _, code) = Run(dir, "snapshot", "diff", "classLegacy", "classA", "--json");
         Assert.Equal(0, code);
-        Assert.Contains("dropped at export time for depth or size", stdout, StringComparison.Ordinal);
-        // 后果句同样退回对两拨都真的那句,不许挂「少了行」那拨专用的读法。
-        Assert.Contains("Something that looks unchanged on those may differ past what was exported.",
-                        stdout, StringComparison.Ordinal);
-        Assert.DoesNotContain("one of the ones they lost", stdout, StringComparison.Ordinal);
-        Assert.DoesNotContain("kept every field path", stdout, StringComparison.Ordinal);
-        Assert.DoesNotContain("lost field paths", stdout, StringComparison.Ordinal);
+        var block = System.Text.Json.JsonDocument.Parse(stdout).RootElement.GetProperty("truncation");
+        Assert.True(block.GetProperty(ExportCap.DefsWithFieldsDropped).GetInt32() > 0);
+        Assert.False(block.TryGetProperty(ExportCap.DefsWithPathsDropped, out _));
+        Assert.False(block.TryGetProperty(ExportCap.DefsWithValuesCut, out _));
     }
 
     private static string PairDir()

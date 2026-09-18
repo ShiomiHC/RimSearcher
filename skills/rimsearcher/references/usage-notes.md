@@ -345,15 +345,18 @@ Every truncation report is a count, never a list of what was dropped, so asking 
 `statBases` itself cut on this def?" has no direct answer. But `get` does say **which cap**
 stopped the exporter, and the four caps have different consequences — read that first:
 
-| What `get` says | What is actually missing |
-|---|---|
-| *N values were cut to the length cap* | **No path at all.** Those rows are in the table; only the tail of their text is gone. |
-| *N lists stopped at the item cap* | Entries past the cap of N lists, and everything under them. |
-| *N nested objects were left unwalked past the depth cap* | N whole subtrees, of unknown size. |
-| *N fields were dropped past this def's field cap* | N paths, anywhere on the def. |
+| What `get` says | `snapshot truncated` column | What is actually missing |
+|---|---|---|
+| *N values were cut to the length cap* | values_cut | **No path at all.** Those rows are in the table; only the tail of their text is gone. |
+| *N lists stopped at the item cap* | lists_cut | Entries past the cap of N lists, and everything under them. |
+| *N nested objects were left unwalked past the depth cap* | past_depth_cap | N whole subtrees, of unknown size. |
+| *N fields were dropped past this def's field cap* | past_field_cap | N paths, anywhere on the def. |
 
 A def whose only line is the first row has nothing missing, and `get` says so. It is still
-listed by `snapshot truncated`, which counts every cut alike. The other three each drop a
+listed by `snapshot truncated`, with the same four counts as columns (a snapshot exported
+before the causes were told apart has one column, fields_dropped). `snapshot status` sums
+the same split over the whole snapshot as defs_with_paths_dropped / defs_with_values_cut.
+The other three each drop a
 different kind of thing, which is
 why the count is a lower bound rather than a total: a stopped list or an unwalked subtree
 counts once no matter how much sits under it.

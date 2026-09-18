@@ -742,7 +742,7 @@ public sealed class SnapshotDb : IDisposable
     }
 
     /// <summary>导出时被砍过字段的 def —— 「完整集」这个结论的唯一交叉验证入口。</summary>
-    public (IReadOnlyList<(string DefName, string DefType, int Dropped)> Rows, int Total)
+    public (IReadOnlyList<(string DefName, string DefType, int Dropped, TruncationCauses? Causes)> Rows, int Total)
         TruncatedDefs(ScopeFilter scope, int limit,
                       IReadOnlyList<string>? defTypes = null, string? defName = null)
     {
@@ -758,11 +758,19 @@ public sealed class SnapshotDb : IDisposable
         if (defName is { Length: > 0 }) { p["@dn"] = defName; conds.Add("d.def_name = @dn COLLATE NOCASE"); }
         var where = "WHERE " + string.Join(" AND ", conds);
         var total = Scalar($"SELECT COUNT(*) FROM defs d {where}", p);
-        var rows = new List<(string, string, int)>();
+        var rows = new List<(string, string, int, TruncationCauses?)>();
+        // 成因四列只在库真量过时带(TruncationCausesMeasured):旧文件进新库时四列全是 DEFAULT 0,
+        // 那不是「四类都为零」,是没分过类。
+        var causes = TruncationCausesMeasured
+            ? ", d.truncated_by_cap, d.truncated_by_length, d.truncated_by_depth, d.truncated_by_items" : "";
         using var rd = Query(
-            $"SELECT d.def_name, d.def_type, d.fields_truncated FROM defs d {where} " +
+            $"SELECT d.def_name, d.def_type, d.fields_truncated{causes} FROM defs d {where} " +
             $"ORDER BY d.fields_truncated DESC, d.def_name LIMIT {limit}", p);
-        while (rd.Read()) rows.Add((rd.GetString(0), rd.GetString(1), rd.GetInt32(2)));
+        while (rd.Read())
+            rows.Add((rd.GetString(0), rd.GetString(1), rd.GetInt32(2),
+                      causes.Length > 0
+                          ? new TruncationCauses(rd.GetInt32(3), rd.GetInt32(4), rd.GetInt32(5), rd.GetInt32(6))
+                          : null));
         return (rows, total);
     }
 

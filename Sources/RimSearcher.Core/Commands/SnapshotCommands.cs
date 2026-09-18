@@ -77,12 +77,32 @@ public sealed class SnapshotStatusCommand : Command
             "Ordinary queries stay quiet when the snapshot matches the game, and say one line when it does not, " +
             "naming at most three mods. This command is where the full comparison lives: every packageId whose " +
             "Defs or Patches XML moved or cannot be found, and every packageId only on one side of the mod list, " +
-            "each as a row.",
+            "each as a row.\n\n" +
+            // 两拨的读法住这里;输出里只有两格数(Docs/25 丁1)。
+            "defs_with_paths_dropped counts defs whose export stopped short — past a field cap, past the depth " +
+            "cap, or partway down a list; on those, 'get' lists fewer field paths than the def has. " +
+            "defs_with_values_cut counts defs that kept every field path and only had values cut to the " +
+            "length cap; no field path is missing on those, the rows just show the front of their value. " +
+            "A snapshot exported before those were told apart has one figure, defs_with_fields_dropped, " +
+            "covering both; on those, what 'get' prints is not the whole def. 'snapshot truncated' lists " +
+            "the defs. In the timing tables a layer whose name ends in '_emit' is the part of the layer " +
+            "named in part_of that this tool spends on building and writing lines; the rest of that layer " +
+            "is the game's own traversal, so the _emit row is counted inside its parent and has no share. " +
+            "'export_timings' is the exporter's own layers inside the game; 'import_timings' is building " +
+            "this database from the file it wrote. The game's startup before the exporter runs — reading " +
+            "XML, resolving defs, applying patches — is in neither table: it is the gap between the two " +
+            "totals and how long 'rimsearcher export' actually took.",
         Options = [],
         Examples = ["rimsearcher snapshot status"],
         JsonKeys =
         [
-            new() { Key = "snapshot", What = "an object, not an array: the chosen snapshot compared with the installed game." },
+            new()
+            {
+                Key = "snapshot",
+                What = "an object, not an array: the chosen snapshot compared with the installed game, including " +
+                       "defs_with_paths_dropped and defs_with_values_cut (a snapshot exported before those were " +
+                       "told apart has defs_with_fields_dropped instead).",
+            },
             new()
             {
                 Key = "xml",
@@ -141,6 +161,8 @@ public sealed class SnapshotStatusCommand : Command
             new("xml_fingerprint", db.Content is { } c
                 ? $"{Tally.Complete(c.Files).Render("file")} across {Tally.Complete(c.Mods.Count).Render("mod")}"
                 : "not recorded (exported before this was measured)"),
+            // 被截过的 def 数分两格(没分过类的库一格);此前是表下一句两拨分开说的散文(Docs/25 丁1)。
+            .. ExportCap.DroppedDefs(db.TruncatedDefSpread(), db.TruncatedDefCount()),
         ]);
 
         // 整张层账只在这里印:每一层在不在、不在的成因、出路。查询面碰到缺层只印它需要的那几行
@@ -154,52 +176,41 @@ public sealed class SnapshotStatusCommand : Command
         void TimingTable(string name, IReadOnlyDictionary<string, long> t)
         {
             var total = t.TryGetValue(IntermediateFormat.TimingKeys.Total, out var tt) && tt > 0 ? tt : 0;
-            ctx.Report.Table(name, ["layer", "seconds", "share"],
-                t.Where(kv => kv.Key != IntermediateFormat.TimingKeys.Total)
-                 .OrderByDescending(kv => kv.Value)
-                 .Concat(total > 0
-                     ? [new KeyValuePair<string, long>(IntermediateFormat.TimingKeys.Total, total)]
-                     : [])
-                 .Select(kv => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+            static string? Parent(string key)
+                => key.EndsWith("_emit", StringComparison.Ordinal) ? key[..^"_emit".Length] : null;
+            // 子集行(_emit)紧跟在它的父层下面,part_of 一列说破它长在谁里面;此前是表下一句
+            // 「A layer whose name ends in '_emit' is the part of the layer above it …」(Docs/25 丁1)。
+            var ordered = t.Where(kv => kv.Key != IntermediateFormat.TimingKeys.Total && Parent(kv.Key) is null)
+                           .OrderByDescending(kv => kv.Value)
+                           .SelectMany(kv => new[] { kv }.Concat(
+                               t.Where(e => string.Equals(Parent(e.Key), kv.Key, StringComparison.Ordinal))))
+                           .Concat(total > 0
+                               ? [new KeyValuePair<string, long>(IntermediateFormat.TimingKeys.Total, total)]
+                               : [])
+                           .ToList();
+            var hasPart = ordered.Any(kv => Parent(kv.Key) is not null);
+            ctx.Report.Table(name, hasPart ? ["layer", "seconds", "share", "part_of"] : ["layer", "seconds", "share"],
+                ordered.Select(kv =>
                  {
-                     ["layer"] = kv.Key,
-                     ["seconds"] = (kv.Value / 1000.0).ToString("0.0"),
-                     // total 那一行的份额留空:它与自己比恒是 100%,印出来只占一格。
-                     // 子集行(_emit)的也留空:它长在别的行**里面**,给它一个百分比会让
-                     // 这一列加起来超过 100%,而读者是按「各行互斥」读这一列的。
-                     ["share"] = total > 0 && kv.Key != IntermediateFormat.TimingKeys.Total
-                                           && !kv.Key.EndsWith("_emit", StringComparison.Ordinal)
-                         ? $"{100.0 * kv.Value / total:0}%" : null,
+                     var row = new Dictionary<string, object?>
+                     {
+                         ["layer"] = kv.Key,
+                         ["seconds"] = (kv.Value / 1000.0).ToString("0.0"),
+                         // total 那一行的份额留空:它与自己比恒是 100%,印出来只占一格。
+                         // 子集行(_emit)的也留空:它长在别的行**里面**,给它一个百分比会让
+                         // 这一列加起来超过 100%,而读者是按「各行互斥」读这一列的。
+                         ["share"] = total > 0 && kv.Key != IntermediateFormat.TimingKeys.Total
+                                               && Parent(kv.Key) is null
+                             ? $"{100.0 * kv.Value / total:0}%" : null,
+                     };
+                     if (hasPart) row["part_of"] = Parent(kv.Key);
+                     return (IReadOnlyDictionary<string, object?>)row;
                  }).ToList());
-
-            // 名字带 _emit 的那一行是上一行的一部分,不是它旁边的一段。这句话只在真有
-            // 这种行时说 —— 没有子集行的表上它是一句空话。
-            if (t.Keys.Any(k => k.EndsWith("_emit", StringComparison.Ordinal)))
-                ctx.Report.Notice(NoticeKind.Boundary,
-                    "A layer whose name ends in '_emit' is the part of the layer above it that this tool " +
-                    "spends on building and writing lines; the rest of that layer is the game's own " +
-                    "traversal. It is counted inside its parent, not beside it, which is why it has no share.");
         }
 
         if (db.ExportTimings is { Count: > 0 } exportTimings) TimingTable("export_timings", exportTimings);
         if (db.ImportTimings is { Count: > 0 } importTimings) TimingTable("import_timings", importTimings);
-
-        // 两张表各自盖住哪一段,以及**哪一段谁也没盖**。这句话的用处全在最后半句:
-        // 游戏从启动到把控制权交给导出器(读 XML、解析 def、跑 patch)两张表都不含。
-        if (db.ExportTimings is { Count: > 0 } || db.ImportTimings is { Count: > 0 })
-            ctx.Report.Notice(NoticeKind.Boundary,
-                "'export_timings' is the exporter's own layers inside the game; 'import_timings' is building " +
-                "this database from the file it wrote. The game's startup before the exporter runs — reading " +
-                "XML, resolving defs, applying patches — is in neither table: it is the gap between the two " +
-                "totals and how long 'rimsearcher export' actually took.");
-
-        var truncated = db.TruncatedDefCount();
-        if (truncated > 0)
-            ctx.Report.Notice(NoticeKind.Boundary,
-                ExportCap.OverDefs(db.TruncatedDefSpread(), truncated, " in this snapshot",
-                    "On those, 'get' lists fewer field paths than the def has.",
-                    "No field path is missing on those; the rows just show the front of their value.",
-                    "On those, what 'get' prints is not the whole def."));
+        // 两张表各自盖住哪一段、哪一段谁也没盖,住 help(Remarks)—— 机制不在查询面。
 
         // 集合差在**这里**逐条列出 packageId,而每次查询一个字都不说(成因见
         // EnvironmentReport.AddedMods)—— 于是「为什么查询不提这件事」的答案得在这一句里,
@@ -317,7 +328,13 @@ public sealed class SnapshotDiffCommand : Command
             "vanilla defs those mods patched. Re-exporting a name keeps its previous generations as " +
             "'<name>.prev', '<name>.prev2' and so on, and each is nameable here. --limit caps the " +
             "fields table, and the two def tables if they grow past it. Each side still reports its total, " +
-            "including zero.",
+            "including zero.\n\n" +
+            "A 'truncation' block counts defs whose export stopped short on both sides. " +
+            "defs_with_paths_dropped: a field that looks unchanged may have been one of the ones they lost. " +
+            "defs_with_values_cut: every field path is there, but both sides were cut at the same length, so " +
+            "a value that looks unchanged may still differ past the cut. When either side was exported " +
+            "before those were told apart there is one figure, defs_with_fields_dropped: something that " +
+            "looks unchanged on those may differ past what was exported.",
         Positionals =
         [
             new PositionalSpec { Name = "old", Help = "The earlier snapshot. A name from 'snapshot list'." },
@@ -344,6 +361,13 @@ public sealed class SnapshotDiffCommand : Command
                 Key = "fields",
                 Rows = true,
                 What = "one row per field whose value differs between the snapshots: def_name, def_type, path, old, new, mod. The mod column is the declaring packageId, not who changed the value. A missing old or new is a field that appeared or disappeared; null never enters the index.",
+            },
+            new()
+            {
+                Key = "truncation",
+                What = "an object, present only when some def on both sides had its export stopped short: " +
+                       "defs_with_paths_dropped and defs_with_values_cut, or defs_with_fields_dropped when " +
+                       "either side predates telling those apart.",
             },
         ],
     };
@@ -429,17 +453,14 @@ public sealed class SnapshotDiffCommand : Command
     }
 
     /// <summary>
-    /// 两拨各带自己的读法:少了路径的那拨,看不见的是**行**;只切了值的那拨,行两边都在,
-    /// 两侧又都切在同一处,于是切口之后的差异逐字同形地印成「没变」。
+    /// 两侧都被截过的 def 数,两格(两侧至少一侧没分过类时一格)。读法住 Remarks:少了路径的
+    /// 那拨,看不见的是**行**;只切了值的那拨,行两边都在,两侧又都切在同一处,于是切口之后的
+    /// 差异逐字同形地印成「没变」。此前是表下一句散文(Docs/25 丁1)。
     /// </summary>
     private static void NoteTruncation(CommandContext ctx, SnapshotDiffResult diff)
     {
         if (diff.TruncatedDefs == 0) return;
-        ctx.Report.Notice(NoticeKind.Boundary,
-            ExportCap.OverDefs(diff.TruncatedSpread, diff.TruncatedDefs, " on both sides of this comparison",
-                "A field that looks unchanged may have been one of the ones they lost.",
-                "A value that looks unchanged there may still differ past the cut.",
-                "Something that looks unchanged on those may differ past what was exported."));
+        ctx.Report.Detail("truncation", ExportCap.DroppedDefs(diff.TruncatedSpread, diff.TruncatedDefs));
     }
 }
 
@@ -596,7 +617,20 @@ public sealed class SnapshotTruncatedCommand : Command
             "rimsearcher snapshot truncated --type ThingDef",
             "rimsearcher snapshot truncated --def Bullet_Revolver",
         ],
-        JsonKeys = [new() { Key = "truncated", Rows = true, What = "one row per def that lost fields at export time: def_name, def_type, fields_dropped. The count is a lower bound — the exporter stopped, it did not finish counting." }],
+        JsonKeys =
+        [
+            new()
+            {
+                Key = "truncated",
+                Rows = true,
+                What = "one row per def whose export stopped short: def_name, def_type, past_field_cap (fields " +
+                       "dropped once the def hit its field cap), values_cut (values cut to the length cap — the " +
+                       "path is there, the value is not whole), past_depth_cap (nested objects left unwalked, " +
+                       "one per subtree), lists_cut (lists stopped at the item cap, one per list). Every count " +
+                       "is a lower bound: the exporter stopped, it did not finish counting. A snapshot exported " +
+                       "before the causes were told apart has one column, fields_dropped, instead of the four.",
+            },
+        ],
     };
 
     public override int Run(CommandContext ctx)
@@ -636,15 +670,27 @@ public sealed class SnapshotTruncatedCommand : Command
         // 表上方,与「计数在它数的那张表上方」同一条纪律:这句说的是「这张表全不全」。
         ctx.AnnounceExcluded(scope, rest => ctx.Db.TruncatedDefs(rest, 0, types, defName).Total, "def");
 
-        ctx.Report.Table("truncated", ["def_name", "def_type", "fields_dropped"],
-            rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
-            {
-                ["def_name"] = r.DefName,
-                ["def_type"] = r.DefType,
-                ["fields_dropped"] = r.Dropped,
-            }).ToList());
-        ctx.Report.Notice(NoticeKind.Boundary,
-            "The count is a lower bound per def: the exporter stopped, it did not finish counting.");
+        // 四种成因各一列,列名带单元(Docs/25 丁1);没分过类的库只有那一个总数。每个数都是下界,
+        // 那句住 help。
+        if (rows.All(r => r.Causes is not null))
+            ctx.Report.Table("truncated", ["def_name", "def_type", "past_field_cap", "values_cut", "past_depth_cap", "lists_cut"],
+                rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+                {
+                    ["def_name"] = r.DefName,
+                    ["def_type"] = r.DefType,
+                    ["past_field_cap"] = r.Causes!.Cap,
+                    ["values_cut"] = r.Causes.Length,
+                    ["past_depth_cap"] = r.Causes.Depth,
+                    ["lists_cut"] = r.Causes.Items,
+                }).ToList());
+        else
+            ctx.Report.Table("truncated", ["def_name", "def_type", "fields_dropped"],
+                rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+                {
+                    ["def_name"] = r.DefName,
+                    ["def_type"] = r.DefType,
+                    ["fields_dropped"] = r.Dropped,
+                }).ToList());
         return 0;
     }
 }
@@ -708,6 +754,13 @@ public sealed class SnapshotImportCommand : Command
         JsonKeys =
         [
             new() { Key = "imported", What = "an object: the snapshot that was written, and what went into it." },
+            new()
+            {
+                Key = "truncation",
+                What = "an object, present only when some def's export stopped short: defs_with_paths_dropped " +
+                       "and defs_with_values_cut, or defs_with_fields_dropped when the export predates telling " +
+                       "those apart. 'snapshot status --help' says how each reads.",
+            },
             new()
             {
                 Key = "absent",
@@ -794,13 +847,9 @@ public sealed class SnapshotImportCommand : Command
         {
             // 分拨去问刚装好的那份库,而不是在导入循环里另数一遍:两处各数各的时,
             // 判据一改就只改得动其中一处,而两个数印在一起看不出哪个陈了。
+            // 与 snapshot status 同一组格(ExportCap.DroppedDefs)—— 同一件事不许两种说法。
             using var imported = SnapshotDb.Open(dbPath);
-            ctx.Report.Notice(NoticeKind.Boundary,
-                // 与 snapshot status 那处逐字同句 —— 同一件事不许两种说法。
-                ExportCap.OverDefs(imported.TruncatedDefSpread(), stats.TruncatedDefs, "",
-                    "On those, 'get' lists fewer field paths than the def has.",
-                    "No field path is missing on those; the rows just show the front of their value.",
-                    "On those, what 'get' prints is not the whole def."));
+            ctx.Report.Detail("truncation", ExportCap.DroppedDefs(imported.TruncatedDefSpread(), stats.TruncatedDefs));
         }
 
         // 没收割要说破:刚建好的库在哪一层短了,与查询面同一张 absent 表 —— 成因(收回参数 /

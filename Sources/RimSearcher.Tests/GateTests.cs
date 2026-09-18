@@ -122,11 +122,13 @@ public class GateTests
             if (named.Count == 0) continue;
 
             // snapshot status 的两张表在共享 fixture 上经常是空的(那正是「一致」);
-            // snapshot diff 不能走 Fixture.Run(它会塞 --db)。列名得拿到真有行的环境里验。
+            // snapshot diff 不能走 Fixture.Run(它会塞 --db);snapshot truncated 的四个成因列
+            // 只在分过类的库上有,共享夹具没分过类。列名得拿到真有行的环境里验。
             var json = command switch
             {
                 "snapshot status" => StalenessTests.StatusJsonFor(key),
                 "snapshot diff" => SnapshotDiffTests.DiffJsonFor(key),
+                "snapshot truncated" => TruncationCauseTests.TruncatedJsonFor(),
                 _ => Fixture.Run([.. probes[$"{command}.{key}"], "--json"]).Stdout,
             };
             var root = System.Text.Json.JsonDocument.Parse(json).RootElement;

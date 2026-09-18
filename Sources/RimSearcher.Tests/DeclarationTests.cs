@@ -241,9 +241,8 @@ public class DeclarationTests
             ("changed on disk", "ContentDrift.Sentence", 1),
             ("share the name", "NameCollision.Say", 1),
             ("is past the end", "Report.PastEnd", 1),
-            // 两个:按 def 数的与按字段数的,都在 ExportCap 里。片段到「for depth or size」为止 ——
-            // 按字段数那句的谓语从 0.13.0 起跟着数走(1 条时是 was),前半截不再逐字相同。
-            ("for depth or size", "ExportCap", 2),
+            // 只剩按字段数那句(get 的);整份库那句成了 defs_with_* 的格(Docs/25 丁1)。
+            ("for depth or size", "ExportCap", 1),
             // 三档快照三句话,都在 NestedClassLine 这一个方法里。
             ("The runtime type of a nested Class", "Completeness.NestedClassLine", 3),
         ];

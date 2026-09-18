@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Text;
+using RimSearcher.Commands;
 using RimSearcher.Contract;
 using RimSearcher.Storage;
 
@@ -253,60 +254,96 @@ public class TruncationCauseTests
 
     // ---- 一整批 def 那一句 ----
 
-    /// <summary>整份库那句截断提示。<c>snapshot status</c> 与 <c>snapshot import</c> 共用它。</summary>
-    private static string StatusLine(string db)
+    /// <summary>
+    /// 分过类的库上 <c>snapshot truncated</c> 的 JSON —— 给 GateTests 验四个成因列用:
+    /// 共享夹具没分过类,那上面只有 fields_dropped 一列。
+    /// </summary>
+    internal static string TruncatedJsonFor()
     {
-        var (stdout, _, code) = Fixture.Run("snapshot", "status", "--db", db);
-        Assert.Equal(0, code);
-        // 三种形态(分开说 / 只切值 / 未分类回退)共用的锚是句首的「N def(s) in this snapshot」;
-        // mod 名单那句里也有「in this snapshot」,但不在句首。
-        return stdout.Split('\n').Single(l =>
-            System.Text.RegularExpressions.Regex.IsMatch(l, @"^\s*-\s+\d+ defs? in this snapshot "));
+        var db = Build("gate-truncated", new MiniDef("Lost", 2, (1, 0, 1, 0)), new MiniDef("Cut", 3, (0, 3, 0, 0)));
+        return Fixture.Run("snapshot", "truncated", "--db", db, "--json").Stdout;
     }
 
     /// <summary>
-    /// 被截过的 def 里一条路径都没少时,整份库那句不许说「缺了路径」。
+    /// 分过类的库上每个 def 的四种成因各一列;没分过类的库上只有那一个总数,四列不许印成零。
+    /// 此前只有 fields_dropped 一列加一句「下界」散文(Docs/25 丁1)。
+    /// </summary>
+    [Fact]
+    public void 每个def的成因四列各数各的()
+    {
+        var rows = System.Text.Json.JsonDocument.Parse(TruncatedJsonFor()).RootElement.GetProperty("truncated");
+        var byName = rows.EnumerateArray().ToDictionary(r => r.GetProperty("def_name").GetString()!);
+        Assert.Equal(1, byName["Lost"].GetProperty("past_field_cap").GetInt32());
+        Assert.Equal(1, byName["Lost"].GetProperty("past_depth_cap").GetInt32());
+        Assert.Equal(0, byName["Lost"].GetProperty("values_cut").GetInt32());
+        Assert.Equal(3, byName["Cut"].GetProperty("values_cut").GetInt32());
+        Assert.Equal(0, byName["Cut"].GetProperty("lists_cut").GetInt32());
+        Assert.False(byName["Cut"].TryGetProperty("fields_dropped", out _));
+
+        var legacy = Build("trunc-legacy", new MiniDef("Legacy", 3, null));
+        var (stdout, _, code) = Fixture.Run("snapshot", "truncated", "--db", legacy, "--json");
+        Assert.Equal(0, code);
+        var row = System.Text.Json.JsonDocument.Parse(stdout).RootElement.GetProperty("truncated")[0];
+        Assert.Equal(3, row.GetProperty("fields_dropped").GetInt32());
+        Assert.False(row.TryGetProperty("past_field_cap", out _));
+
+        // 「每个数都是下界」住 help,不在表下。
+        var (help, _, _) = Fixture.Run("snapshot", "truncated", "--help");
+        Assert.Contains("lower bound", help, StringComparison.Ordinal);
+        Assert.DoesNotContain("lower bound", stdout, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 整份库的截断账:<c>snapshot status</c> 的 snapshot 块里那两格(没分过类的库一格)。
+    /// <c>snapshot import</c> 与 <c>snapshot diff</c> 走同一组格(ExportCap.DroppedDefs)。
+    /// 此前是表下一句两拨分开说的散文,读法现在住 help(Docs/25 丁1)。
+    /// </summary>
+    private static System.Text.Json.JsonElement StatusBlock(string db)
+    {
+        var (stdout, _, code) = Fixture.Run("snapshot", "status", "--db", db, "--json");
+        Assert.Equal(0, code);
+        return System.Text.Json.JsonDocument.Parse(stdout).RootElement.GetProperty("snapshot").Clone();
+    }
+
+    /// <summary>
+    /// 被截过的 def 里一条路径都没少时,「缺了路径」那一格是 0,数落在「只切了值」那一格。
     ///
     /// 这不是边角:七个官方快照上这一拨占 27 个里的 22 个,而此前那句按总数发,
     /// 对那 22 个整句是假的。
     /// </summary>
     [Fact]
-    public void 整份库那句在只切了值时不说缺路径()
+    public void 整份库的账在只切了值时缺路径那格是零()
     {
-        var said = StatusLine(Build("agg-len", new MiniDef("Cut", 4, (0, 4, 0, 0))));
-        Assert.Contains("1 def in this snapshot kept every field path and had only values cut to the "
-                        + "length cap.", said);
-        Assert.DoesNotContain("lost field paths", said);
-        Assert.DoesNotContain("lists fewer field paths than the def has", said);
+        var block = StatusBlock(Build("agg-len", new MiniDef("Cut", 4, (0, 4, 0, 0))));
+        Assert.Equal(0, block.GetProperty(ExportCap.DefsWithPathsDropped).GetInt32());
+        Assert.Equal(1, block.GetProperty(ExportCap.DefsWithValuesCut).GetInt32());
+        Assert.False(block.TryGetProperty(ExportCap.DefsWithFieldsDropped, out _));
     }
 
-    /// <summary>两拨都有时分成两句,各带各的读法,而且两个数加起来是那个总数。</summary>
+    /// <summary>两拨都有时两格各数各的,而且两个数加起来是那个总数;没被截的不进任何一拨。</summary>
     [Fact]
-    public void 整份库那句两拨都有时分开说()
+    public void 整份库的账两拨都有时两格各数各的()
     {
-        var said = StatusLine(Build("agg-both",
+        var block = StatusBlock(Build("agg-both",
             new MiniDef("Lost", 2, (1, 0, 1, 0)),
             new MiniDef("LostToo", 1, (0, 0, 0, 1)),
             new MiniDef("Cut", 3, (0, 3, 0, 0)),
             new MiniDef("Clean", 0, (0, 0, 0, 0))));
-        Assert.Contains("2 defs in this snapshot lost field paths at export time", said);
-        Assert.Contains("On those, 'get' lists fewer field paths than the def has.", said);
-        Assert.Contains("Another 1 def kept every field path and had only values cut to the length cap.",
-                        said);
-        // 没被截的那个不许进任何一拨。
-        Assert.DoesNotContain("4 def", said);
+        Assert.Equal(2, block.GetProperty(ExportCap.DefsWithPathsDropped).GetInt32());
+        Assert.Equal(1, block.GetProperty(ExportCap.DefsWithValuesCut).GetInt32());
     }
 
-    /// <summary>没分过类的库上退回那句含糊的总数 —— 两拨一个都不许猜。</summary>
+    /// <summary>没分过类的库上只有一格总数 —— 两拨一个都不许猜,那两格不许印成零。</summary>
     [Fact]
-    public void 整份库那句在没分过类的库上退回含糊那句()
+    public void 整份库的账在没分过类的库上只有一格总数()
     {
-        var said = StatusLine(Build("agg-legacy", new MiniDef("Legacy", 3, null)));
-        Assert.Contains("1 def in this snapshot had fields " + Vague + ".", said);
-        // 后果句也得是对两拨都真的那句:没分类就不知道这个 def 是少了路径还是只切了值,
-        // 「列的路径比 def 有的少」对只切了值的那拨(七个库上 27 里的 22)是假的。
-        Assert.Contains("On those, what 'get' prints is not the whole def.", said);
-        Assert.DoesNotContain("lists fewer field paths", said);
-        Assert.DoesNotContain("kept every field path", said);
+        var block = StatusBlock(Build("agg-legacy", new MiniDef("Legacy", 3, null)));
+        Assert.Equal(1, block.GetProperty(ExportCap.DefsWithFieldsDropped).GetInt32());
+        Assert.False(block.TryGetProperty(ExportCap.DefsWithPathsDropped, out _));
+        Assert.False(block.TryGetProperty(ExportCap.DefsWithValuesCut, out _));
+        // 读法住 help:两拨的后果各是哪句,没分类那一格的后果是对两拨都真的那句。
+        var (help, _, _) = Fixture.Run("snapshot", "status", "--help");
+        Assert.Contains("on those, what 'get' prints is not the whole def", help, StringComparison.Ordinal);
+        Assert.Contains("'get' lists fewer field paths than the def has", help, StringComparison.Ordinal);
     }
 }

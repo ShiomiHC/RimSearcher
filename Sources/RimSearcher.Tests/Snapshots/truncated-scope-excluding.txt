@@ -6,5 +6,4 @@ exit 0
 
 def_name         def_type  fields_dropped
 Bullet_Revolver  ThingDef  3
-The count is a lower bound per def: the exporter stopped, it did not finish counting.
 --- stderr ---

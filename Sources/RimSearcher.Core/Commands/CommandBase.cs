@@ -545,7 +545,7 @@ public static class ContentDrift
 /// (「下面这张表」),一个还没查任何 def(「以后 get 的时候」),一个刚导完(「工具将来会提醒你」)。
 /// 把后果也压成一句,三处就都得说得含糊,而后果恰恰是这条声明存在的理由。
 /// </summary>
-internal static class ExportCap
+public static class ExportCap
 {
     /// <summary>
     /// 某一个 def 上丢了几个字段。数是**下界** —— 导出器是停下来了,不是数完了
@@ -598,39 +598,25 @@ internal static class ExportCap
         };
     }
 
-    /// <summary>一批 def 里有几个被截过。<paramref name="among"/> 是插在计数与谓语之间的定语。</summary>
-    public static string OverDefs(int defs, string among = "")
-        => $"{Tally.Complete(defs).Render("def")}{among} had fields dropped at export time for depth or size";
-
     /// <summary>
-    /// 同上,但把被截过的那批分成两拨说。<paramref name="spread"/> 为 null = 这份库没分类过,
-    /// 退回上面那句含糊的总数。
+    /// 整份库(或一次比较的两侧)里被截过的 def 数,分成两格:真少了路径的,与一条路径没少、
+    /// 只是值不全的。<paramref name="spread"/> 为 null = 这份库没分类过,那时只有一格总数。
     ///
-    /// 分开说是因为那个总数**盖着两件相反的事**:少了路径的那拨,与一条路径没少、
-    /// 只是值不全的那拨。七个官方快照上后者占 27 个里的 22 个,而按总数发出去的
-    /// 「这些 def 缺了路径」对那 22 个是假的 —— 读者据此去找的行本来就在表里。
-    ///
-    /// 两句各带自己的后果(<paramref name="lostMeans"/> / <paramref name="cutMeans"/>):
-    /// 少了路径与值被切在每条命令上的读法都不一样,合成一句就得挑一个说,而挑哪个都错一半。
-    /// 没分类的回退句挂的是 <paramref name="eitherMeans"/> —— 对两拨都真的那句;
-    /// 此前挂 <paramref name="lostMeans"/>,对只切了值的那拨(多数)是假的。
+    /// 分开是因为那个总数**盖着两件相反的事**:七个官方快照上「只切了值」占 27 个里的 22 个,
+    /// 而按总数说出去的「这些 def 缺了路径」对那 22 个是假的 —— 读者据此去找的行本来就在表里。
+    /// 两拨在每条命令上的读法不一样,读法住各命令的 help;这里只有数(Docs/25 丁1)。
+    /// 此前是一句「N defs … lost field paths … Another M kept every field path …」,三处各拼。
     /// </summary>
-    public static string OverDefs(SnapshotDb.TruncationSpread? spread, int defs, string among,
-                                  string lostMeans, string cutMeans, string eitherMeans)
-    {
-        if (spread is not { } s) return $"{OverDefs(defs, among)}. {eitherMeans}";
+    public static IReadOnlyList<KeyValuePair<string, object?>> DroppedDefs(SnapshotDb.TruncationSpread? spread, int defs)
+        => defs == 0 ? []   // 一个都没截过就一格也不出:分过类的库上 0 与「没分过类」同形,不许印成后者
+         : spread is { } s
+            ? [new(DefsWithPathsDropped, s.LostPaths), new(DefsWithValuesCut, s.ValuesOnly)]
+            : [new(DefsWithFieldsDropped, defs)];
 
-        var said = new List<string>();
-        if (s.LostPaths > 0)
-            said.Add($"{Tally.Complete(s.LostPaths).Render("def")}{among} lost field paths at export time — " +
-                     $"past a field cap, past the depth cap, or partway down a list. {lostMeans}");
-        if (s.ValuesOnly > 0)
-            said.Add((said.Count > 0
-                          ? $"Another {Tally.Complete(s.ValuesOnly).Render("def")}"
-                          : $"{Tally.Complete(s.ValuesOnly).Render("def")}{among}") +
-                     $" kept every field path and had only values cut to the length cap. {cutMeans}");
-        return string.Join(" ", said);
-    }
+    public const string DefsWithPathsDropped = "defs_with_paths_dropped";
+    public const string DefsWithValuesCut = "defs_with_values_cut";
+    /// <summary>没分过类的库上那一格:两拨合在一个数里,分不开。</summary>
+    public const string DefsWithFieldsDropped = "defs_with_fields_dropped";
 }
 
 public abstract class Command
