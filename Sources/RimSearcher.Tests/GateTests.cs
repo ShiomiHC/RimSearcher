@@ -70,6 +70,8 @@ public class GateTests
             ["list.defs"] = ["list", "ThingDef"],
             ["list.types"] = ["list"],
             ["list.empty_because"] = ["list", "ThingDef", "--find", "zzznothing"],
+            // 名字是 class 不是 def 类型 → found_as 一行(is = class)。
+            ["list.found_as"] = ["list", "TestVariantDef"],
             ["where.matches"] = ["where", "thingClass", "RimWorld.Bullet"],
             ["where.paths"] = ["where", "--value", "RimWorld.Bullet"],
             // 零行成因表只在自己给的筛子确实挡掉了东西时有行 —— 拿 --scope 圈空的那条探。

@@ -113,9 +113,13 @@ a different question. None of them announces itself.
   `HospitalBed` is both a ThingDef and a ResearchProjectDef. Under `--json` that is a
   `defs[]` of more than one entry in **no guaranteed order**, so `defs[0].fields` reads
   *another def's* fields and shows up as "this def has no such field", never as an error.
-  Pick the entry by its `defs[].def.def_type`, or pin it with `--type <DefType>` — which exits `1`
-  naming the types it does have, rather than handing back a different def. A `boundary`
-  note announces the collision every time, including under `--type`.
+  Pick the entry by its `defs[].def.def_type`, or pin it with `--type <DefType>`. A wrong
+  `--type` never hands back a different def: one name exits `1` with an `empty_because` row
+  (filter = the `--type` given, next = the same `get` without it); several names print a line
+  naming the type the name does have. A `boundary` note announces the collision every time,
+  including under `--type`. A name that is a runtime class rather than a def type (`get --type
+  <Class>`, `list <Class>`) exits `4` with a `found_as` row whose `is` is `class`; paste its
+  `next` (`list <DefType> --class <Class>`) rather than reading it as "no such def".
 - **Reverse-look-up field names, never guess.** `where --value <value>` reports which paths
   hold the value. A guessed field name that happens to exist returns a clean,
   complete-looking table for the wrong field — the most expensive failure here.

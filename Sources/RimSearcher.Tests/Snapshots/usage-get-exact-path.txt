@@ -19,8 +19,8 @@ No value above with 'code_default'=no is one that most of the 9 ThingDefs in thi
 Market value, cost to make and work amount are not fields: 'rimsearcher economy Apparel_ShieldBelt' has them.
 
 0 rows. Dropping any one option below brings back this many translations:
-filter           hidden  next
---path-contains  1       rimsearcher get Apparel_ShieldBelt --exact-path statBases[].stat
+filter                         hidden  next
+--exact-path statBases[].stat  1       rimsearcher get Apparel_ShieldBelt
 
 layer           state        next
 injection_keys  pre-measure  rimsearcher export --modlist fixture

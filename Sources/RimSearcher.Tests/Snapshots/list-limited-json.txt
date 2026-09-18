@@ -26,6 +26,7 @@ exit 0
       "def_type": "ThingDef"
     }
   ],
-  "empty_because": []
+  "empty_because": [],
+  "found_as": []
 }
 --- stderr ---

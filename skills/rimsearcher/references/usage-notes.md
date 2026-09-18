@@ -98,8 +98,8 @@ data sits under a key that depends on the command. `<command> --help` lists each
 | `where --value` with no field path | `paths`. The def count per row is split in two: `defs_exact` (the value is exactly what was asked for) and `defs_other` (it sits inside a longer value). A row can have both non-zero. With `--exact` there is only one meaning, so the column is a single `defs` |
 | `values` | `values`, plus `field` — an array with one entry per path asked for, in the order given, each entry `{field: {asked, matched_paths, def_types, defs_with_field}}`, saying which full paths and def types that path's value space was drawn from. Both keys are always present, and `field` is an array even for one path; on an empty result that entry's members are empty or zero rather than the key being gone |
 | `fields` | `fields` |
-| `search` / `get` / `list` / `where` / `values` / `keyed` / `types` / `members` / `economy` / `read` | plus `empty_because` — one row per option given on that call that, alone, emptied the result — columns filter (the option as written), hidden (how many rows' worth — defs, keys, members, whatever the command counts — come back with just that option dropped), next (the same call without it, ready to paste). Always present; empty when the result was not empty or no single option accounts for it. `get` prints a second one inside `defs[i]` when `--path-contains` emptied that def's translation table, and only then |
-| `search` / `get` / `where` / `inherit` / `keyed` | plus `found_as` — one row per name asked for that is not what the command looks up but turns up as something else — columns name, is (def / def outside --scope / xml node / abstract xml node / def type / class / interface text / mod in this snapshot / mod not in this snapshot / field value / def in another snapshot / xml node in another snapshot), in (where exactly), next (a command that reaches it, ready to paste). Always present; empty when the name was found or turns up nowhere |
+| `search` / `get` / `list` / `where` / `values` / `keyed` / `types` / `members` / `economy` / `read` | plus `empty_because` — one row per option given on that call that, alone, emptied the result — columns filter (the option as written), hidden (how many rows' worth — defs, keys, members, whatever the command counts — come back with just that option dropped), next (the same call without it, ready to paste). Always present; empty when the result was not empty or no single option accounts for it. `get` prints a second one inside `defs[i]` when a path filter (`--path-contains` or `--exact-path`) emptied that def's translation table, and only then |
+| `search` / `get` / `list` / `where` / `inherit` / `keyed` / `economy` | plus `found_as` — one row per name asked for that is not what the command looks up but turns up as something else — columns name, is (def / def outside --scope / xml node / abstract xml node / def type / class / interface text / mod in this snapshot / mod not in this snapshot / field value / def in another snapshot / xml node in another snapshot), in (where exactly), next (a command that reaches it, ready to paste). Always present; empty when the name was found or turns up nowhere |
 | `fields` | plus `index_gap` — one row per path text asked for that the value index has nothing under, when the cause can be told — columns asked (the text as given), state (null-on-this-def / null-on-type / undeclared / value-not-path), next (a command that reaches what there is, ready to paste). Always present; empty when the paths matched or the cause could not be told. `get` prints the same table inside `defs[i]` when a path filter matched nothing on that def, and only then |
 | `where` / `values` / `fields` | plus `completeness` when some def in scope had its export cut short: `scope` (which def types this covers, in words), `defs_cut_short`, `types` (one row per def type with its own count), `verify` (a ready command listing them). The key is absent when no def in scope lost fields |
 | `mods` | `mods` |
@@ -121,9 +121,13 @@ layer it prints `absent` — columns layer, state, next — one row per short la
 all when every layer it needed is there. The state is one closed word: pre-measure (exported
 before that layer existed), skipped (the export was told to leave it out), unavailable (the
 exporter could not measure it on that game build), unmeasured or unconfigured (the import did
-not scan it — switched off, or nothing to scan), partial, empty. The next column is the
-command that fills the layer, ready to run. Why a layer is short lives only in
-`snapshot status`, whose `layers` table is the full ledger.
+not scan it — switched off, or nothing to scan), partial, empty, missing (nothing on disk to
+read: a source tree's `call_graph:<tree>` table, or `assembly_copy:<tree>/<dll>` when the tree
+keeps no copy of that assembly and its metadata was read from the installed dll instead —
+next is `sources sync` for both). The layer xml_written stands behind the `xml` column; a
+snapshot exported before it existed prints that row wherever a question needs the column.
+The next column is the command that fills the layer, ready to run. Why a layer is short
+lives only in `snapshot status`, whose `layers` table is the full ledger.
 
 Code output is rows too, so nothing is parsed back out of `path:line:text`:
 `code-search` rows are `{file, line, is_match, group, text}`, `read` rows are
@@ -154,8 +158,8 @@ those. Such a row still carries an origin of `in effect` or `on disk`.
 
 The `on disk` layer is scanned at import time whenever `mod_roots` is configured, so a key
 that only some unenabled mod translates is still findable by its text. A snapshot built
-without that scan says so beside the table rather than letting the missing layer read as an
-empty one. And if the
+without that scan prints an `absent` row for `disk_translations`, and the `origin` column then
+holds only `in effect`. And if the
 exporting game had no language data loaded at all, there are no keyed translations in the
 snapshot — `keyed` says that in those words instead of reporting your key absent.
 

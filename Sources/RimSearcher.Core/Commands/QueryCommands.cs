@@ -323,7 +323,9 @@ public sealed class GetCommand : Command
             "so it lines up with nothing in the field table — or '(slot not translatable)' when the slot is " +
             "real but the game marks it as not translatable. 'in pack' alone is a snapshot that predates the " +
             "game's verdict. 'file (<mod>)' was read from that mod's language files on disk, ', not enabled' " +
-            "when the mod is installed but not enabled, so the game never read it. Rows that carry no def " +
+            "when the mod is installed but not enabled, so the game never read it, ', N files' when the same " +
+            "key sits in more than one of its files. The two slot suffixes attach to a file row the same " +
+            "way. Rows that carry no def " +
             "type come from language files, whose keys are '<defName>.<field>'; the game injects those by " +
             "name, so on a name shared by several defs they are listed under each.\n\n" +
             Advisory.SiblingHelp + "\n\n" + IndexGap.Help,
@@ -630,6 +632,7 @@ public sealed class GetCommand : Command
         var (paths, exactPath) = ctx.Args.PathFilters();
         // 报错句里点的旗必须是读者自己敲的那个 —— 同 read 的 --lines / --start。
         var pathSpelling = exactPath ? "--exact-path" : "--path-contains";
+        var pathOption = exactPath ? "exact-path" : "path-contains";
         // 字段索引存的是方括号式(stages[0].label),而拿语言文件来查的人手上是点下标式
         // (stages.0.label)—— 后者在字段表里一条都不中,且那与「这个字段不存在」同形。
         // 只把**查询**归一;所有报错句仍引读者自己敲的那一串。
@@ -1043,7 +1046,7 @@ public sealed class GetCommand : Command
             if (paths.Count > 0 && translations.Count == 0 && beforePathFilter > 0)
             {
                 ctx.Report.EmptyBecause(
-                    new EmptyCause(ctx.FilterAsGiven("path-contains"), beforePathFilter, ctx.Without("path-contains")),
+                    new EmptyCause(ctx.FilterAsGiven(pathOption), beforePathFilter, ctx.Without(pathOption)),
                     "translation");
                 if (!ctx.Db.Meta.IndexesInjectionKeys)
                     Short(DataLayers.InjectionKeysRow(ctx.Db, ctx.SnapshotName ?? ""));
@@ -2116,6 +2119,7 @@ public sealed class ListCommand : Command
                        "present follows the def type, so a caller that passed one never has to guess.",
             },
             EmptyCause.JsonKeyCounting("row"),
+            NameLookup.JsonKey,
         ],
     };
 
