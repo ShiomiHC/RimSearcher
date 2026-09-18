@@ -807,8 +807,11 @@ public sealed class GetCommand : Command
                 var missing = by is null || by.Total == 0 ? def.FieldsTruncated : by.Missing;
                 ctx.Report.Notice(NoticeKind.Boundary,
                     missing > 0
-                        ? "The exporter stopped short on this def: " + said +
-                          ", so a path missing from the list below is not evidence that the def lacks it. " +
+                        // 「so a path missing from the list below is not evidence that the def lacks it」
+                        // 2026-09-18 删掉(Docs/23 第十六轮):带它与不带它,弱档 0/4 对 0/4 都把
+                        // 下界当确答,常见档 4/4 对 4/4 都说破了截断 —— 说破靠的是前半句那个数
+                        // 与 snapshot truncated,不是这半句。
+                        ? "The exporter stopped short on this def: " + said + ". " +
                           // 主语自带,不靠上文:--path-contains 那一支的上文说的是「matching N, out of
                           // M on the def」,而这一句在两支下逐字相同。
                           $"Added to the {total} paths that did get indexed, that is " +
