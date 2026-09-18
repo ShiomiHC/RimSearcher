@@ -438,6 +438,16 @@ public sealed class GetCommand : Command
                        "names were given, and with --type alone in def-name order; a name that matched " +
                        "nothing has no object here and one note in 'notes' that quotes it.",
             },
+            new()
+            {
+                Key = "absent",
+                Rows = true,
+                What = "one row per layer these defs would draw on that is short in this snapshot — layer, " +
+                       "state, next; empty when every such layer is complete. Today that is " +
+                       "'economy' on a ThingDef when prices were not measured (state pre-measure / skipped / " +
+                       "unavailable) and 'disk_translations' when the import did not scan the language files " +
+                       "on disk (unmeasured / unconfigured); next is the command that fills the layer.",
+            },
         ],
     };
 
@@ -587,6 +597,14 @@ public sealed class GetCommand : Command
 
         // 下面凡是「只有一块才这么说 / 排」的判断都看 alone,不看某个名字命中了几个。
         var alone = blocks.Count == 1;
+
+        // 这些 def 会用到、而这份库里不完整的层,攒到最后印成一张 absent 表(层 / 状态 / 出路)。
+        // 层是库的性质,不是 def 的,所以一次输出只印一张、挂在根上;各块只决定哪些层与自己有关。
+        var shortLayers = new List<LayerRow>();
+        void Short(LayerRow row)
+        {
+            if (!row.Complete && shortLayers.All(r => r.Layer != row.Layer)) shortLayers.Add(row);
+        }
 
         foreach (var def in blocks)
         {
@@ -937,12 +955,9 @@ public sealed class GetCommand : Command
                         $"'rimsearcher economy {def.DefName}' is the only road to those numbers.");
             }
             else if (DefTypes.Same(def.DefType, "ThingDef"))
-                ctx.Report.Notice(NoticeKind.Boundary,
-                    "The game also prices things like this — market value, cost to make, work amount — and " +
-                    "those are computed, not stored, so no field above holds them. " +
-                    // 「either way」「so it cannot say whether this def is one of the priced ones」
-                    // 2026-09-18 删掉:没量过 + 出路就是全部事实。
-                    $"This snapshot never measured them: 'rimsearcher economy {def.DefName}' says why and what to re-export.");
+                // 三态(没到那版 / 跳过 / 量不成)各是一个状态词,与 economy 自己拒绝时印的是同一张表 ——
+                // 此前这里把三态一律说成「从未量过」,与 economy 那边的 skipped / unavailable 矛盾。
+                Short(DataLayers.EconomyRow(ctx.Db, ctx.SnapshotName ?? ""));
 
             // --limit 与 --path-contains 同样管译文表:不管的话,`get Muffalo --limit 5` 会吐出八十行,
             // 而字段表刚报的「一个都没匹配上」会被一批译文块淹掉。
@@ -1087,6 +1102,7 @@ public sealed class GetCommand : Command
         }
 
         ctx.Report.EndItems();
+        ctx.Report.Absent(shortLayers);
 
         return 0;
     }

@@ -371,6 +371,24 @@ public sealed class Report
     public Report Detail(string name, IReadOnlyList<KeyValuePair<string, object?>> pairs)
         => Add(new DetailBlock(name, pairs));
 
+    /// <summary>
+    /// 「这次需要的层里,不完整的那几层」—— 一张 <c>absent</c> 表,三列 layer / state / next,
+    /// 每层一行;全都在场就一个字不印(沉默 = 完整,与 completeness 尾注同一纪律)。
+    ///
+    /// 此前每条命令各写一句「没这一层,因为 X,出路 Y」(21 处,Docs/25)。改成表是因为
+    /// 弱档只读表不读句子,而机制句会被常见档读成规格 —— 成因(why)只进
+    /// <c>snapshot status</c> 的全账。行的产地是 <see cref="Snapshot.DataLayers"/>。
+    /// </summary>
+    public bool Absent(params IReadOnlyList<Snapshot.LayerRow> rows)
+    {
+        var missing = rows.Where(r => !r.Complete).ToList();
+        if (missing.Count == 0) return false;
+        Table(AbsentTable, ["layer", "state", "next"], Snapshot.DataLayers.Rows(missing, withWhy: false));
+        return true;
+    }
+
+    public const string AbsentTable = "absent";
+
     public Report Text(string name, IReadOnlyList<string> lines,
                        IReadOnlyList<IReadOnlyDictionary<string, object?>>? rows = null)
         => Add(new TextBlock(name, lines, rows));

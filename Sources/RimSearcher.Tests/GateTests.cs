@@ -53,6 +53,7 @@ public class GateTests
         {
             ["search.defs"] = ["search", "shield"],
             ["get.defs"] = ["get", "Apparel_ShieldBelt"],
+            ["get.absent"] = ["get", "OnlyInOtherSnapshot", "--db", Fixture.OtherDb],
             ["list.defs"] = ["list", "ThingDef"],
             ["list.types"] = ["list"],
             ["find.matches"] = ["where", "thingClass", "RimWorld.Bullet"],
@@ -63,6 +64,8 @@ public class GateTests
             ["inherit.nodes"] = ["inherit", "BaseBullet"],
             ["keyed.keys"] = ["keyed", "CannotUseNoPower"],
             ["economy.things"] = ["economy"],
+            // 缺层那张表只在缺层的库上有行 —— 拿建于经济面之前的那份夹具探。
+            ["economy.absent"] = ["economy", "--db", Fixture.OtherDb],
             ["code-search.matches"] = ["code-search", "Translate"],
             ["code-search.ui_text"] = ["code-search", "Translate"],
             ["read.source"] = ["read", "CompShield.cs", "--lines", "1-5"],

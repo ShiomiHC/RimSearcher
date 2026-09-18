@@ -39,7 +39,8 @@ Global options (every command takes these, written after the command):
       --config <path>    Use this config file instead of the default one.
 
 --json keys (besides 'notes'):
-  defs  one object per def carrying the name — each with 'def' (identity), 'fields' (path/value/code_default rows, plus 'xml' when the snapshot recorded which XML lines were written) and 'translations'. Both inner tables are always there, empty array and all. 'defs' stays an array even for a single def, because a name can belong to several def types at once. With several names the objects come in the order the names were given, and with --type alone in def-name order; a name that matched nothing has no object here and one note in 'notes' that quotes it.
+  defs    one object per def carrying the name — each with 'def' (identity), 'fields' (path/value/code_default rows, plus 'xml' when the snapshot recorded which XML lines were written) and 'translations'. Both inner tables are always there, empty array and all. 'defs' stays an array even for a single def, because a name can belong to several def types at once. With several names the objects come in the order the names were given, and with --type alone in def-name order; a name that matched nothing has no object here and one note in 'notes' that quotes it.
+  absent  one row per layer these defs would draw on that is short in this snapshot — layer, state, next; empty when every such layer is complete. Today that is 'economy' on a ThingDef when prices were not measured (state pre-measure / skipped / unavailable) and 'disk_translations' when the import did not scan the language files on disk (unmeasured / unconfigured); next is the command that fills the layer.
 
 Examples:
   rimsearcher get Apparel_ShieldBelt

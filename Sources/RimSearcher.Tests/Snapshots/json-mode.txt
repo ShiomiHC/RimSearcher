@@ -66,6 +66,7 @@ exit 0
         }
       ]
     }
-  ]
+  ],
+  "absent": []
 }
 --- stderr ---

@@ -2,6 +2,7 @@ using RimSearcher.Cli;
 using RimSearcher.Contract;
 using RimSearcher.Output;
 using RimSearcher.Search;
+using RimSearcher.Snapshot;
 using RimSearcher.Storage;
 
 namespace RimSearcher.Commands;
@@ -206,6 +207,16 @@ public sealed class EconomyCommand : Command
                        "makes, in every row even when only one name was given. More than one row for the " +
                        "same product means that thing's fallback market value depends on def load order.",
             },
+            new()
+            {
+                Key = "absent",
+                Rows = true,
+                What = "only when the economy layer is short in this snapshot: one row — layer, state, next. " +
+                       "state is pre-measure (exported before prices were measured), skipped (--no-economy) " +
+                       "or unavailable (the exporter could not measure on that game build); next is the " +
+                       "command that fills it. 'things' is then an empty array. Empty when the layer is " +
+                       "complete.",
+            },
         ],
     };
 
@@ -222,58 +233,22 @@ public sealed class EconomyCommand : Command
     /// <summary>
     /// 四态里的三种「答不了」。返回 true 表示已经说完话了,调用方直接收场。
     ///
-    /// 分开说而不是合成一句「这份快照没有经济数据」:三种的下一步各不相同,而合并之后
-    /// 最刺眼的那种(vanilla 签名对不上,得去看源码)会被读成最无害的那种(重导出就行)。
+    /// 说的方式是一张 <c>absent</c> 表(层 / 状态 / 出路),三种缺席各是一个状态词,
+    /// 出路各不相同 —— 合成一句「这份快照没有经济数据」会让最刺眼的那种(签名对不上,
+    /// 得去看源码)被读成最无害的那种(重导出就行)。判据在 <see cref="DataLayers.EconomyRow"/>。
+    ///
+    /// 此前每态一句散文,拒绝后还带一句机制(marketValue 是 XML 基值)。第十七轮(Docs/24)
+    /// 量到常见档把机制句读成规格 —— 告诉它算法不同,它就把算法复现一遍交卷;挡得住的是
+    /// SKILL.md 里的禁令,不是输出里的任何一句。机制于是只住 --help 与 SKILL。
     /// </summary>
     private static bool Absent(CommandContext ctx)
     {
-        switch (ctx.Db.EconomyState)
-        {
-            case IntermediateFormat.EconomyStateOk:
-                return false;
-
-            case null:
-                ctx.Report.Notice(NoticeKind.Boundary,
-                    "This snapshot was built before this tool measured prices at all, so it has no answer " +
-                    "here. Export again " +
-                    "('rimsearcher export'); 'rimsearcher snapshot status' names the snapshot in use.");
-                NoteTheDetour(ctx);
-                return true;
-
-            case IntermediateFormat.EconomyStateSkipped:
-                ctx.Report.Notice(NoticeKind.Boundary,
-                    "The export that produced this snapshot was told to skip the economy layer, so nothing " +
-                    "here was measured. Export again without that switch; every other layer in this " +
-                    "snapshot is complete.");
-                NoteTheDetour(ctx);
-                return true;
-
-            default:
-                // 点名的那句原样端出,不概括 —— 它是唯一的下一步,而这一层不回退到自写实现:
-                // 回退能让命令继续出数,但出的是与游戏内表格不一致的数,且没有任何迹象说明
-                // 口径已经换了一套。
-                ctx.Report.Notice(NoticeKind.Boundary,
-                    "The economy layer could not be measured when this snapshot was exported, so there are " +
-                    "no prices in it. Everything else in the snapshot is complete and usable — the export " +
-                    "did not fail. " +
-                    (ctx.Db.EconomyError ?? "The export recorded no reason, which should not happen."));
-                NoteTheDetour(ctx);
-                return true;
-        }
+        var economy = DataLayers.EconomyRow(ctx.Db, ctx.SnapshotName ?? "");
+        if (economy.Complete) return false;
+        // things 不用在这里认领:行式键由 Runner 在开查前统一认领,拒绝时它是一个空数组。
+        ctx.Report.Absent(economy);
+        return true;
     }
-
-    /// <summary>
-    /// 拒绝之后只说一句数据的机制:索引里的 marketValue 是 XML 基值,不是游戏算出的价。
-    /// 「没有成本与利润字段」不再说 —— 拒绝句已经说了这份库里没有价格。
-    ///
-    /// 此前还带一句情景假设「Ranking defs by that field answers a different question, and its
-    /// output does not say so」。第十七轮(Docs/24)三个配置 30 份:带与不带在每一格都相同,删。
-    /// 同一轮量到的是,常见档把这句机制读成规格 —— 告诉它算法不同,它就把算法复现一遍交卷;
-    /// 挡得住的是 SKILL.md 里的禁令「there is no way around it」,不是输出里的任何一句。
-    /// </summary>
-    private static void NoteTheDetour(CommandContext ctx)
-        => ctx.Report.Notice(NoticeKind.Boundary,
-            "The marketValue fields in this snapshot are XML base values, not computed prices.");
 
     /// <summary>
     /// 一个或几个名字。几个名字**不各出一块**,而是并进同一张 things / costChain / recipes ——

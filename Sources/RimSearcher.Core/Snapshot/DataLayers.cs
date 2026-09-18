@@ -140,9 +140,11 @@ public static class DataLayers
                     "exported before prices were measured"),
         IntermediateFormat.EconomyStateSkipped => new(Economy, LayerState.Skipped,
                     ExportCommand(snapshotName), "export ran with --no-economy"),
-        // 点名的那句原样端出,不概括 —— 它是唯一的线索,而这一层不回退到自写实现。
-        _ => new(Economy, LayerState.Unavailable, null,
-                 db.EconomyError ?? "the export recorded no reason, which should not happen"),
+        // 导出器点名的那句原样进 next,不概括 —— 它是唯一的下一步(去比 vanilla 现在的签名),
+        // 而这一层不回退到自写实现:回退能出数,出的却是与游戏内表格不一致的数。
+        _ => new(Economy, LayerState.Unavailable,
+                 db.EconomyError ?? "the export recorded no reason, which should not happen",
+                 "the exporter could not measure prices on this game build; every other layer is complete"),
     };
 
     /// <summary>

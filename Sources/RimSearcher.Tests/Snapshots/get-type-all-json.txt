@@ -25,6 +25,7 @@ exit 0
       "fields": [],
       "translations": []
     }
-  ]
+  ],
+  "absent": []
 }
 --- stderr ---

@@ -4829,7 +4829,9 @@ public class GrammarTests
     ///   签名对不上 → 去看 vanilla 的 DebugOutputsEconomy 现在长什么样
     ///   量过了没有 → 没有下一步,这是**完整的肯定回答**
     ///
-    /// 合成一句「这份快照没有经济数据」的话,最刺眼的第三种会被读成最无害的第一种。
+    /// 形态是一张 <c>absent</c> 表(层 / 状态 / 出路),三种缺席各是一个状态词。此前是三句散文
+    /// 外加一句机制(marketValue 是 XML 基值);第十七轮量到常见档把机制句读成规格,机制于是
+    /// 只住 --help 与 SKILL,查询面不印(Docs/25 第五节)。
     /// </summary>
     [Fact]
     public void 经济面四态各说各的()
@@ -4843,45 +4845,55 @@ public class GrammarTests
             Fixture.EconomyStateDb(Contract.IntermediateFormat.EconomyStateUnavailable,
                                    "Missing: " + signature + ". Compare the declarations."));
 
-        // ① 三句两两不同。逐字相同的两句等于这一格从没被分开过。
-        foreach (var (a, b) in new[] { (notMeasured, skipped), (notMeasured, unavailable),
-                                       (skipped, unavailable) })
-            Assert.NotEqual(a, b);
+        // ① 三态各是自己的状态词,而且是同一张表的同一列 —— 逐字相同的两份等于这一格从没被分开过。
+        static System.Text.Json.JsonElement AbsentRow(string db)
+        {
+            var json = Fixture.Run("economy", "--db", db, "--json").Stdout;
+            var root = System.Text.Json.JsonDocument.Parse(json).RootElement;
+            var absent = root.GetProperty("absent");
+            Assert.Equal(1, absent.GetArrayLength());
+            // 数据键恒在:拒绝时 things 是空数组,不是缺键。
+            Assert.Equal(0, root.GetProperty("things").GetArrayLength());
+            return absent[0];
+        }
+        var rowNotMeasured = AbsentRow(Fixture.OtherDb);
+        var rowSkipped = AbsentRow(Fixture.EconomyStateDb(Contract.IntermediateFormat.EconomyStateSkipped));
+        var rowUnavailable = AbsentRow(Fixture.EconomyStateDb(Contract.IntermediateFormat.EconomyStateUnavailable,
+                                       "Missing: " + signature + ". Compare the declarations."));
+        foreach (var r in new[] { rowNotMeasured, rowSkipped, rowUnavailable })
+            Assert.Equal("economy", r.GetProperty("layer").GetString());
+        Assert.Equal("pre-measure", rowNotMeasured.GetProperty("state").GetString());
+        Assert.Equal("skipped", rowSkipped.GetProperty("state").GetString());
+        Assert.Equal("unavailable", rowUnavailable.GetProperty("state").GetString());
 
-        // ② 点名的那个签名原样在场 —— 概括掉它,「去看哪个方法」就无处可查,而这一层
-        //    刻意不回退到自写实现,那句话是唯一的下一步。
+        // ② 出路各是填好参数的命令;签名对不上的那一态,出路就是导出器点名的那句 —— 概括掉它,
+        //    「去看哪个方法」就无处可查,而这一层刻意不回退到自写实现。
+        Assert.StartsWith("rimsearcher export --modlist ", rowNotMeasured.GetProperty("next").GetString());
+        Assert.StartsWith("rimsearcher export --modlist ", rowSkipped.GetProperty("next").GetString());
+        Assert.Contains(signature, rowUnavailable.GetProperty("next").GetString(), StringComparison.Ordinal);
         Assert.Contains(signature, unavailable, StringComparison.Ordinal);
         Assert.DoesNotContain(signature, notMeasured, StringComparison.Ordinal);
         Assert.DoesNotContain(signature, skipped, StringComparison.Ordinal);
 
-        // ③ 三句都得挡住「所以游戏里这些东西没有价格」这个推论 —— 缺席是这份库的性质,
-        //    不是关于游戏的事实。
-        foreach (var (what, text) in new[] { ("not measured", notMeasured), ("skipped", skipped),
-                                             ("unavailable", unavailable) })
-            Assert.True(text.Contains("before this tool measured prices", StringComparison.Ordinal)
-                     || text.Contains("was measured", StringComparison.Ordinal)
-                     || text.Contains("could not be measured", StringComparison.Ordinal),
-                $"'{what}' 报了零却没挡住「所以游戏里没有价格」这个推论");
+        // ③ 文本面同样是三行各不相同的表行,而不是一句能被读成「游戏里没有价格」的散文。
+        foreach (var (a, b) in new[] { (notMeasured, skipped), (notMeasured, unavailable),
+                                       (skipped, unavailable) })
+            Assert.NotEqual(a, b);
+        foreach (var text in new[] { notMeasured, skipped, unavailable })
+        {
+            Assert.Contains("layer", text, StringComparison.Ordinal);
+            Assert.Contains("economy", text, StringComparison.Ordinal);
+        }
 
-        // ④ 失败那一句必须同时说清爆炸半径:def 导出照常完成了。不说的话,一次 RimWorld
-        //    更新会被读成整个快照坏了。
-        Assert.Contains("did not fail", unavailable, StringComparison.Ordinal);
-
-        // ⑤ 第四种(量过了确实没有)与上面三种分得开,且自称是完整回答而非一次落空 ——
-        //    它照约定仍走 exit 1,读退出码的脚本会读成失败。
+        // ④ 第四种(量过了确实没有)与上面三种分得开,且自称是完整回答而非一次落空 ——
+        //    它照约定仍走 exit 1,读退出码的脚本会读成失败。它不印 absent 表:那一路量过了。
         var (measuredEmpty, _, code) = Fixture.Run("economy", "--scope", "-all");
         Assert.Equal(1, code);
         foreach (var other in new[] { notMeasured, skipped, unavailable })
             Assert.NotEqual(other, measuredEmpty);
-
-        // ⑥ 答不了的那三种还得说一句数据的机制:索引里的 marketValue 是 XML 基值,不是游戏
-        //    算出的价。此前还跟着一句情景假设(「Ranking defs by that field answers a different
-        //    question …」),第十七轮(Docs/24)三个配置 30 份:带与不带在每一格都相同,删了。
-        //    第四种不发这句:那一路量过了,没有要绕的路。
-        foreach (var (what, text) in new[] { ("not measured", notMeasured), ("skipped", skipped),
-                                             ("unavailable", unavailable) })
-            Assert.Contains("XML base values, not computed prices", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("XML base values, not computed prices", measuredEmpty, StringComparison.Ordinal);
+        var measuredEmptyJson = System.Text.Json.JsonDocument.Parse(
+            Fixture.Run("economy", "--scope", "-all", "--json").Stdout).RootElement;
+        Assert.Equal(0, measuredEmptyJson.GetProperty("absent").GetArrayLength());
     }
 
     /// <summary>
@@ -4913,13 +4925,12 @@ public class GrammarTests
 
         // ③ 没量过:不许沉默,而且不许说成 ②。这两者的差别正是本仓的立命之处 ——
         //    ② 的沉默背后有一次测量,③ 的沉默背后什么都没有,而它们印出来同形。
-        Assert.Contains("rimsearcher economy OnlyInOtherSnapshot", unmeasured, StringComparison.Ordinal);
-        Assert.Contains("never measured", unmeasured, StringComparison.Ordinal);
+        //    形态是 absent 表的一行:层名、状态词(这份库是 --no-economy 建的 → skipped,
+        //    不是笼统的「没量过」)、填好参数的出路。
+        Assert.Contains("economy  skipped  rimsearcher export --modlist ", unmeasured, StringComparison.Ordinal);
 
         // ④ 而它也不许滑到 ① 去:降级库压根不知道这东西是不是被定价的,
         //    断言它「被定价了」是拿没量过的东西冒充量过的结论。
-        //    2026-09-18:「so it cannot say whether this def is one of the priced ones」删掉,
-        //    ③ 的「never measured」+ 出路已是全部事实;「不滑到 ①」只钉 ① 那句不在。
         Assert.DoesNotContain(priced, unmeasured, StringComparison.Ordinal);
     }
 

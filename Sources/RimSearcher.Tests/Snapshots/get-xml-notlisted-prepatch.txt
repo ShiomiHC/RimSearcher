@@ -26,6 +26,8 @@ things[0].def                 Widget                here
 things[0].chance              0.25                  here
 descriptionHyperlinks[0].def  ChildGun              under descriptionHyperlinks
 No value above with 'code_default'=no is one that most of the 2 ThingDefs in this snapshot also carry.
-  - 3 patch xpaths name this def. The 'xml' column above reads the XML as written on disk, before any PatchOperation ran, so a line one of those patches added reads not-written there — 'rimsearcher inherit ChildGun' breaks the count down by how each xpath names it.
-  - The game also prices things like this — market value, cost to make, work amount — and those are computed, not stored, so no field above holds them. This snapshot never measured them: 'rimsearcher economy ChildGun' says why and what to re-export.
+3 patch xpaths name this def. The 'xml' column above reads the XML as written on disk, before any PatchOperation ran, so a line one of those patches added reads not-written there — 'rimsearcher inherit ChildGun' breaks the count down by how each xpath names it.
+
+layer    state        next
+economy  pre-measure  rimsearcher export --modlist presence
 --- stderr ---

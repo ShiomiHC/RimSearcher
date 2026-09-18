@@ -189,6 +189,7 @@ exit 0
       ],
       "translations": []
     }
-  ]
+  ],
+  "absent": []
 }
 --- stderr ---

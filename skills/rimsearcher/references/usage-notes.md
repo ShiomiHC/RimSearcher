@@ -91,7 +91,7 @@ data sits under a key that depends on the command. `<command> --help` lists each
 | Command | Data key(s) |
 |---|---|
 | `search` | `defs` — one flat row per def |
-| `get` | `defs` — **not rows**: one nested object per def, each `{def, fields, translations}`. A def's field table is `defs[i].fields`; there is no `fields` key at the root. It stays an array for a single def because a name can belong to several def types. Several names put the objects in the order the names were given; `--type` with no name puts every def of that type in def-name order. A name that matched nothing is a note, not an object, so match `defs[i].def.def_name` against what you asked for. |
+| `get` | `defs` — **not rows**: one nested object per def, each `{def, fields, translations}`. A def's field table is `defs[i].fields`; there is no `fields` key at the root. It stays an array for a single def because a name can belong to several def types. Several names put the objects in the order the names were given; `--type` with no name puts every def of that type in def-name order. A name that matched nothing is a note, not an object, so match `defs[i].def.def_name` against what you asked for. Plus `absent` at the root: the data layers these defs would draw on that this snapshot does not hold, one row each; empty when every such layer is complete (see below) |
 | `list` | `defs` (with a def type) or `types` (without) — never both; flat rows either way |
 | `where` with a field path | `matches` — including when `--value` is given as well |
 | `where --value` with no field path | `paths`. The def count per row is split in two: `defs_exact` (the value is exactly what was asked for) and `defs_other` (it sits inside a longer value). A row can have both non-zero. With `--exact` there is only one meaning, so the column is a single `defs` |
@@ -107,9 +107,19 @@ data sits under a key that depends on the command. `<command> --help` lists each
 | `members` | `members` |
 | `il` | `il` — one row per disassembled method; the instructions themselves are a text block, not a column |
 | `callers` | `calls` — one key for both directions, with `from_*` and `to_*` naming the two ends |
-| `snapshot status` | `snapshot` (object), plus `xml` and `mod_list` — one row per packageId; both arrays are present and empty when nothing differs |
+| `economy` | `things`, plus `costChain` and `recipes` with defNames; `absent` — one row when the economy layer is short in this snapshot (`things` is then empty), empty otherwise |
+| `snapshot status` | `snapshot` (object), plus `xml` and `mod_list` — one row per packageId; both arrays are present and empty when nothing differs; `layers` — the full ledger of data layers, one row each (layer, state, next, why), including the rows whose state is ok |
 | `snapshot diff` | `defs_added`, `defs_removed`, `fields` — all three present and empty when nothing differs |
 | `snapshot rename` | `renamed` (object): from, to, snapshot, modlist, export, pin. snapshot / modlist / export are present even when that file was not there |
+
+A layer this snapshot does not hold is a table, not a sentence. Where a query needed such a
+layer it prints `absent` — columns layer, state, next — one row per short layer, nothing at
+all when every layer it needed is there. The state is one closed word: pre-measure (exported
+before that layer existed), skipped (the export was told to leave it out), unavailable (the
+exporter could not measure it on that game build), unmeasured or unconfigured (the import did
+not scan it — switched off, or nothing to scan), partial, empty. The next column is the
+command that fills the layer, ready to run. Why a layer is short lives only in
+`snapshot status`, whose `layers` table is the full ledger.
 
 Code output is rows too, so nothing is parsed back out of `path:line:text`:
 `code-search` rows are `{file, line, is_match, group, text}`, `read` rows are

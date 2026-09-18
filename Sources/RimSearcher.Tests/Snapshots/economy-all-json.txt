@@ -143,6 +143,7 @@ exit 0
       "isWeapon": false,
       "isApparel": false
     }
-  ]
+  ],
+  "absent": []
 }
 --- stderr ---

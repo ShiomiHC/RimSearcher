@@ -79,6 +79,7 @@ exit 0
       "workAmount": 4200,
       "selfReferential": true
     }
-  ]
+  ],
+  "absent": []
 }
 --- stderr ---

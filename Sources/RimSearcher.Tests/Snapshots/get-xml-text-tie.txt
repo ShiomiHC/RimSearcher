@@ -16,5 +16,7 @@ costList[0].thingDef  Steel  here
 costList[0].count     75     under costList
 costList[0].quality   75     under costList
 No value above with 'code_default'=no is one that most of the 5 ThingDefs in this snapshot also carry.
-The game also prices things like this — market value, cost to make, work amount — and those are computed, not stored, so no field above holds them. This snapshot never measured them: 'rimsearcher economy TwinGun' says why and what to re-export.
+
+layer    state        next
+economy  pre-measure  rimsearcher export --modlist presence-text
 --- stderr ---
