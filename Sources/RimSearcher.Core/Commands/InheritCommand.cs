@@ -161,35 +161,23 @@ public sealed class InheritCommand : Command
 
         // 三种互斥成因分清楚:名字错了 / 这个 def 不参与继承 / 它根本不在快照里。
         // 报成同一句「没有」会让前两种被读成第三种,而第三种是最强的那个结论。
-        var isDef = ctx.Db.GetDefsNamed(name).Count > 0;
-        if (isDef)
-        {
-            ctx.Report.Notice(NoticeKind.NextStep,
-                $"'{name}' is a def in this snapshot but its XML declares no Name=, ParentName= or " +
-                "Abstract=, so it takes part in no inheritance. 'rimsearcher get " + name + "' shows it.");
-            // 「有没有 mod 用 PatchOperation 改过这个 def」是另一个问题:本命令别处报的
-            // patch 计数只盖得住声明了 Name= 的节点。不说破,这一格空着而看起来像填了。
-            ctx.Report.Notice(NoticeKind.Boundary,
-                "Whether a PatchOperation edits it is a separate question this snapshot does not answer: " +
-                "the patch counts reported elsewhere here cover only nodes that declare Name=.");
-            return 1;
-        }
-
-        // 第三种成因:别的已注册快照里有没有它、它是不是个 def 类型 / class / mod,
-        // 都是当场问得出的。
-        var sighting = NameLookup.Locate(ctx, name);
+        // 「是个 def,只是不在这一层」是 found_as 的一行(is = def,next = get),与 keyed 撞上
+        // def 名同形;2026-09-18 之前是两句散文,其中「有没有 PatchOperation 改过它」那句是
+        // 情景假设(Docs/25 §16 / §18)。这一层为什么装不下普通 def 是机制,住 help。
         ctx.Report.Notice(NoticeKind.NextStep,
-            $"No XML node named '{name}' is in this snapshot." +
-            Suggestion.Say(close) +
-            // 继承层只装带 Name=/ParentName=/Abstract= 的节点,**普通 def 不在里面** ——
-            // 这是敲 inherit 落空最常见的成因。
-            (sighting is null
-                ? " Only nodes that declare Name=, ParentName= or Abstract= are in this layer, so a def " +
-                  "that inherits from nothing never shows up here: 'rimsearcher get " + name + "' looks it " +
-                  "up as a def, and 'rimsearcher search' matches on labels and translations too."
-                : ""));
+            $"No XML node named '{name}' is in this snapshot." + Suggestion.Say(close));
+        var sighting = Sighting(ctx, name);
         if (sighting is not null) NameLookup.Say(ctx, sighting);
+        else ctx.Report.Notice(NoticeKind.NextStep,
+            "'rimsearcher search " + name + "' matches on labels and translations as well as defNames.");
         return 1;
+    }
+
+    /// <summary>名字不是节点时它是什么:先问是不是 def(这条命令最常见的落空),再走九档。</summary>
+    private static NameLookup.Sighting? Sighting(CommandContext ctx, string name)
+    {
+        var defs = ctx.Db.GetDefsNamed(name);
+        return defs.Count > 0 ? NameLookup.AsDef(name, defs) : NameLookup.Locate(ctx, name);
     }
 
     public override int Run(CommandContext ctx)
@@ -217,12 +205,13 @@ public sealed class InheritCommand : Command
         if (nodes.Count == 0)
         {
             ctx.Report.Notice(NoticeKind.NextStep,
-                $"No XML node answers to any of these: {NameList.Render(missing, Limits.MaxSuggestions)}. " +
-                "Only nodes that declare Name=, ParentName= or Abstract= are in this layer, so a def that " +
-                "inherits from nothing never shows up here; 'rimsearcher get <defName>' looks one up as a def.");
+                $"No XML node answers to any of these: {NameList.Render(missing, Limits.MaxSuggestions)}.");
+            var any = false;
             foreach (var n in missing)
-                if (NameLookup.Locate(ctx, n) is { } sighting)
-                    NameLookup.Say(ctx, sighting);
+                if (Sighting(ctx, n) is { } sighting) { NameLookup.Say(ctx, sighting); any = true; }
+            if (!any)
+                ctx.Report.Notice(NoticeKind.NextStep,
+                    "'rimsearcher search <name>' matches on labels and translations as well as defNames.");
             return 1;
         }
 
@@ -230,12 +219,12 @@ public sealed class InheritCommand : Command
         {
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"No XML node answers to {NameList.Render(missing, Limits.MaxSuggestions)}, so nothing below " +
-                "is about it. The blocks that did come back are unaffected.");
-            // 落空的名字里那些**在快照里另有落点**的,各自说一句。`inherit ThingDef
+                "is about it.");
+            // 落空的名字里那些**在快照里另有落点**的,各自一行。`inherit ThingDef
             // Bullet_Revolver` 里的 `ThingDef` 落在名字格上,是个查不到的名字,而「查不到」
             // 与「你把类型写在了名字格上」是两件事。库在这一层,判得出来。
             foreach (var n in missing)
-                if (NameLookup.Locate(ctx, n) is { } sighting)
+                if (Sighting(ctx, n) is { } sighting)
                     NameLookup.Say(ctx, sighting);
         }
 

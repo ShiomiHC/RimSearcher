@@ -76,7 +76,10 @@ internal static class NameLookup
         "or Abstract=) and never becomes a def, so only 'inherit' reaches it; interface text lives in keyed " +
         "translations that belong to no def, so only 'keyed' finds it; a field value is what some defs set a " +
         "field to (comps[N].compClass and the like), so 'where --value' lists them; a def outside --scope is " +
-        "in this snapshot but excluded by the --scope given; a mod is a --scope, not a def.";
+        "in this snapshot but excluded by the --scope given; a mod is a --scope, not a def. A def turns up " +
+        "when the name is a def but this command reads something narrower: 'inherit' reads only nodes that " +
+        "declare Name=, ParentName= or Abstract=, 'keyed' reads interface text, 'economy' reads priced " +
+        "things; 'get' reaches the def itself.";
 
     /// <summary>把一行(或几行)印进 <c>found_as</c>;同一次输出里只有一张,后来的往里加行。</summary>
     public static void Say(CommandContext ctx, params Sighting[] sightings)

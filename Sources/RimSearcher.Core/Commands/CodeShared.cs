@@ -114,8 +114,7 @@ internal static class CodeShared
         if (lookup.Unreadable.Count > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
                 "Could not be opened at all, and therefore not searched — " +
-                $"{Tally.Complete(lookup.Unreadable.Count).Render("assembly")}: {Trees(lookup.Unreadable)}. " +
-                "Nothing below rules out a match inside them.");
+                $"{Tally.Complete(lookup.Unreadable.Count).Render("assembly")}: {Trees(lookup.Unreadable)}.");
     }
 
     private static string Trees(IReadOnlyList<ResolvedAssembly> items)
@@ -135,8 +134,7 @@ internal static class CodeShared
             $"No type named '{symbol.TypeName}' is in the {Tally.Complete(lookup.AssemblyCount).Render("assembly")} " +
             "read here" +
             (near.Count > 0 ? $". Names containing it: {NameList.Render(near, 6)}" : "") +
-            ". A type only shows up here if the mod that defines it is in the snapshot and its tree has been " +
-            "synced — 'rimsearcher sources list' says which trees those are.");
+            ". 'rimsearcher sources list' names the trees that were read.");
     }
 
     /// <summary>成员落空。类型找到了,成员没有 —— 这时候能说的比上一条多。</summary>

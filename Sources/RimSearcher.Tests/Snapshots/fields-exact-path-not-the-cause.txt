@@ -1,5 +1,5 @@
 $ rimsearcher fields ThingDef --exact-path stat
 exit 1
 --- stdout ---
-No field path on 'ThingDef' is exactly 'stat'. Matched as a substring instead: statBases[0].stat, statBases[0].value, statBases[1].stat, plus 2 field paths not shown. --exact-path is what emptied this, not the type: any one of those goes straight back into it, or drop the flag to see them all.
+No field path on 'ThingDef' is exactly 'stat'. Matched as a substring instead: statBases[0].stat, statBases[0].value, statBases[1].stat, plus 2 field paths not shown. Any one of those goes straight back into --exact-path, or drop the flag to see them all.
 --- stderr ---

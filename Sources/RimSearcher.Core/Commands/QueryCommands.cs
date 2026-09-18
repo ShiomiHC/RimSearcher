@@ -192,10 +192,10 @@ public sealed class SearchCommand : Command
                     // 不在这里另写一句会过时的。
                     ? $"Nothing in this snapshot is called that under any other guise either — no def type, " +
                       $"no class, no mod. " + Completeness.NestedClassLine(ctx) +
-                      // 反方向那半:类可以完全不经过 def 被使用,那时候两条查询都该是零。
-                      $" A zero from that one too means no def names '{query}' — the class can still exist and " +
-                      $"be constructed in C#: 'rimsearcher code-search \"class {ClassNameShape.Tail(query)}\\b\"' " +
-                      "settles whether it exists, and a bare 'rimsearcher code-search' on the name shows who uses it."
+                      // 两条出路各标自己列出什么;「类可以不经过 def 被 C# 直接 new」那半是情景假设,
+                      // 2026-09-18 删(Docs/25 §16 / §18)—— 出路的标签已经把两种落点分开。
+                      $" 'rimsearcher code-search \"class {ClassNameShape.Tail(query)}\\b\"' finds the class " +
+                      $"declaration; 'rimsearcher code-search \"{ClassNameShape.Tail(query)}\"' lists who uses it."
                     : "'rimsearcher list' with no def type lists what kinds of def this snapshot holds, " +
                       "and 'rimsearcher mods' lists which mods it covers."));
         }
@@ -1101,9 +1101,8 @@ public sealed class GetCommand : Command
                 if (noSlot > 0)
                     ctx.Report.Notice(NoticeKind.Boundary,
                         $"{Tally.Complete(noSlot).Render("row")} above has a key that is on no injectable " +
-                        "slot of this def, usually a handle taken from a label that has since been edited: " +
-                        "the game does not apply that translation either. Its 'path' cell is that key " +
-                        "rewritten, so it lines up with nothing in the field table above.");
+                        "slot of this def: the game does not apply that translation either. Its 'path' cell " +
+                        "is that key rewritten, so it lines up with nothing in the field table above.");
 
                 // 「不许译」与「键写错了」出路不同 —— 那一档改键能救,这一档改了也没用。
                 // 合成一条就得让否定那半跟着出路分支,而那正是本项目数过五次的形态。
@@ -1111,8 +1110,7 @@ public sealed class GetCommand : Command
                 if (refused > 0)
                     ctx.Report.Notice(NoticeKind.Boundary,
                         $"{Tally.Complete(refused).Render("row")} above names a real slot that the game " +
-                        "marks as not translatable, so the translation sits in the file and never applies. " +
-                        "The key is not the problem; nothing written under it would apply either.");
+                        "marks as not translatable, so the translation sits in the file and never applies.");
 
                 // 「Rows marked 'outside this snapshot' come from language files of mods … not enabled」
                 // 那句脚注 2026-09-18 删掉:origin 格自己写 not enabled(OriginCell),Docs/25 丁2。
@@ -1723,16 +1721,14 @@ public sealed class FindCommand : Command
                     // new 出来的**具体类**,而那句话把人推去查一批不存在的子类,第九轮盲测 S1
                     // 正是这么走完全程的。
                     //
-                    // 现在这句是修完的样子,不是那句猜测:主语是**这个零**(两种情况长得一样),
-                    // 不是那个类;两种成因并列,各配一条参数填好、能当场证实或证伪它的
-                    // code-search。判据也从严(ClassNameShape 把 `True`、`.ogg`、`1.5` 挡在外面)。
+                    // 之后写成「这个零有两种成因并列」,2026-09-18 再压成两条出路(Docs/25 §18):
+                    // 每条出路的标签就是它列出什么(派生类 / 使用者),两种落点靠标签分开,
+                    // 不再把成因当情景写在前面。判据从严(ClassNameShape 把 `True`、`.ogg`、`1.5` 挡在外面)。
                     : $" 'rimsearcher values {path}' lists them." +
                       (ClassNameShape.Looks(value) && !indexGap && hiddenByScope == 0
-                          ? $" Two things look like this zero when '{value}' is a class: it is an abstract base " +
-                            "and defs name its subclasses instead " +
-                            $"('rimsearcher code-search \"class \\w+ : {ClassNameShape.Tail(value)}\\b\"' names " +
-                            "them), or no def drives it at all and C# constructs it directly " +
-                            $"('rimsearcher code-search \"{ClassNameShape.Tail(value)}\"' shows who does)."
+                          ? $" 'rimsearcher code-search \"class \\w+ : {ClassNameShape.Tail(value)}\\b\"' lists " +
+                            $"the classes deriving from '{ClassNameShape.Tail(value)}'; " +
+                            $"'rimsearcher code-search \"{ClassNameShape.Tail(value)}\"' lists who constructs it."
                           : "")));
 
             // 成因是一行 empty_because,排在落空句后面;此前是「--scope X is what emptied this:
@@ -2581,8 +2577,8 @@ public sealed class FieldsCommand : Command
                             (relaxed.Total > shown.Count
                                 ? $", plus {Tally.Complete(relaxed.Total - shown.Count).Render("field path")} not shown"
                                 : "") +
-                            ". --exact-path is what emptied this, not the type: any one of those goes " +
-                            "straight back into it, or drop the flag to see them all.");
+                            ". Any one of those goes straight back into --exact-path, or drop the flag to " +
+                            "see them all.");
                         return 1;
                     }
                 }

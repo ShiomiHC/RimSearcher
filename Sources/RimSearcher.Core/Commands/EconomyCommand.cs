@@ -96,7 +96,8 @@ public sealed class EconomyCommand : Command
             "nothing anywhere holds cost or profit.\n\n" +
             "A number printed as '635 (holds when classicMortars=on)' depends on a difficulty setting that " +
             "an export cannot read: the setting lives on the storyteller, and no storyteller exists while " +
-            "the game is loading. The tag names the setting and the position the printed number holds under.",
+            "the game is loading. The tag names the setting and the position the printed number holds under.\n\n" +
+            NameLookup.Help,
         Positionals =
         [
             new PositionalSpec
@@ -219,6 +220,7 @@ public sealed class EconomyCommand : Command
                        "complete.",
             },
             EmptyCause.JsonKeyCounting("thing"),
+            NameLookup.JsonKey,
         ],
     };
 
@@ -324,19 +326,24 @@ public sealed class EconomyCommand : Command
         if (rows.Count == 0)
         {
             if (!single)
+            {
                 ctx.Report.Notice(NoticeKind.NextStep,
-                    $"None of these is priced in this snapshot: {NameList.Render(missing, Limits.MaxSuggestions)}. " +
-                    "The economy layer holds only items with a market value above 0.01 and buildings the " +
-                    "player can build or minify; 'rimsearcher get <defName>' shows what a def does have.");
+                    $"None of these is priced in this snapshot: {NameList.Render(missing, Limits.MaxSuggestions)}.");
+                if (!SayWhereElse(ctx, missing))
+                    ctx.Report.Notice(NoticeKind.NextStep,
+                        "'rimsearcher search <name>' matches on labels and translated text as well as defNames.");
+            }
             return 1;
         }
 
+        // 这一层收什么是机制,住 help;「回来的行不受影响」是情景假设,2026-09-18 删(Docs/25 §18)。
         if (missing.Count > 0)
+        {
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"Not priced in this snapshot, so absent from the tables below: " +
-                $"{NameList.Render(missing, Limits.MaxSuggestions)}. The rows that did come back are " +
-                "unaffected — this layer holds only items with a market value above 0.01 and buildings " +
-                "the player can build or minify.");
+                $"{NameList.Render(missing, Limits.MaxSuggestions)}.");
+            SayWhereElse(ctx, missing);
+        }
 
         ctx.Report.PageNotice("thing", rows.Count, 0, rows.Count);
         ctx.Report.Table("things", ThingKeys, rows.Select(ThingRow).ToList());
@@ -361,19 +368,31 @@ public sealed class EconomyCommand : Command
             $"Nothing named '{defName}' is priced in this snapshot." + Suggestion.Say(close));
 
         // 「它是个 def,只是不在这一层里」是这条命令最常见的落空成因,而它与打错名字
-        // 的下一步完全不同。这一层只收 ThingDef,且只收有市场价的物与可建的建筑。
-        var defs = ctx.Db.GetDefsNamed(defName);
-        ctx.Report.Notice(NoticeKind.Boundary, defs.Count > 0
-            ? $"'{defName}' is a def in this snapshot: the game " +
-              "prices only items with a market value above 0.01 and buildings the player can build " +
-              $"or minify. 'rimsearcher get {defName}' shows what it does have."
-            // 名字在快照里根本不存在,而这条命令的候选池只有几千个被定价的物 ——
-            // 「这一层没有」与「这个快照没有」是两件事,两支各说自己那件。
-            : $"No def is named '{defName}' either. " +
-              $"'rimsearcher search {defName}' matches on labels and translated text as " +
-              "well as defNames, which is the way in when you have the in-game name rather than the " +
-              "defName.");
+        // 的下一步完全不同 —— found_as 的一行(is = def,next = get),与 inherit / keyed 撞上
+        // def 名同形。这一层收什么是机制,住 help。名字在快照里根本不存在时走九档;
+        // 九档也落空才给 search 那条出路。
+        var sighting = WhereElse(ctx, defName);
+        if (sighting is not null) NameLookup.Say(ctx, sighting);
+        else ctx.Report.Notice(NoticeKind.NextStep,
+            $"No def is named '{defName}' either. 'rimsearcher search {defName}' matches on labels and " +
+            "translated text as well as defNames.");
         return true;
+    }
+
+    /// <summary>名字不在这一层时它是什么:先问是不是 def,再走九档。</summary>
+    private static NameLookup.Sighting? WhereElse(CommandContext ctx, string name)
+    {
+        var defs = ctx.Db.GetDefsNamed(name);
+        return defs.Count > 0 ? NameLookup.AsDef(name, defs) : NameLookup.Locate(ctx, name);
+    }
+
+    /// <summary>落空的名字各自一行 found_as;一行都没有回 false,调用方才给 search 那条出路。</summary>
+    private static bool SayWhereElse(CommandContext ctx, IReadOnlyList<string> names)
+    {
+        var any = false;
+        foreach (var n in names)
+            if (WhereElse(ctx, n) is { } sighting) { NameLookup.Say(ctx, sighting); any = true; }
+        return any;
     }
 
     /// <summary>

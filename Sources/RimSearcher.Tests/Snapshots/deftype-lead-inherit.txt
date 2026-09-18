@@ -1,7 +1,7 @@
 $ rimsearcher inherit ThingDef Bullet_Revolver
 exit 0
 --- stdout ---
-No XML node answers to ThingDef, so nothing below is about it. The blocks that did come back are unaffected.
+No XML node answers to ThingDef, so nothing below is about it.
 
 Where the name does turn up:
 name      is        in      next

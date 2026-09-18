@@ -134,9 +134,12 @@ public class InheritanceTests
     [Fact]
     public void 不参与继承与不存在分得开()
     {
+        // 「是个 def,只是不在这一层」是 found_as 的一行(is = def,next = get);2026-09-18 之前是
+        // 一句「takes part in no inheritance」加一句 PatchOperation 的情景假设。
         var notInLayer = Text("inherit", "Apparel_ShieldBelt");
-        Assert.Contains("takes part in no inheritance", notInLayer, StringComparison.Ordinal);
-        Assert.DoesNotContain("No XML node named", notInLayer, StringComparison.Ordinal);
+        Assert.Contains("No XML node named 'Apparel_ShieldBelt'", notInLayer, StringComparison.Ordinal);
+        Assert.Contains("Apparel_ShieldBelt  def  ThingDef in ", notInLayer, StringComparison.Ordinal);
+        Assert.Contains("rimsearcher get Apparel_ShieldBelt", notInLayer, StringComparison.Ordinal);
 
         var absent = Text("inherit", "NoSuchNode");
         Assert.Contains("No XML node named", absent, StringComparison.Ordinal);

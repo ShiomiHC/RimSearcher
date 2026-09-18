@@ -439,8 +439,7 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
             Report.Notice(NoticeKind.Boundary,
                 $"'{name}' is both this snapshot's name and a --scope group name, and the two cover " +
                 $"different things. This snapshot holds {Tally.Complete(ids.Count).Render("mod")}: " +
-                $"{NameList.Render(ids, 6)}. Anything outside them — another mod, or a DLC this export " +
-                $"did not have enabled — is absent from every answer below, not reported as missing.");
+                $"{NameList.Render(ids, 6)}.");
         }
 
         // 「游戏现在多开/少开了哪些 mod」这一层**每次查询都不说**(成因见

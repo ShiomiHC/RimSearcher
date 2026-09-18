@@ -2,5 +2,5 @@ $ rimsearcher economy NoSuchThingAtAll
 exit 1
 --- stdout ---
 Nothing named 'NoSuchThingAtAll' is priced in this snapshot.
-No def is named 'NoSuchThingAtAll' either. 'rimsearcher search NoSuchThingAtAll' matches on labels and translated text as well as defNames, which is the way in when you have the in-game name rather than the defName.
+No def is named 'NoSuchThingAtAll' either. 'rimsearcher search NoSuchThingAtAll' matches on labels and translated text as well as defNames.
 --- stderr ---

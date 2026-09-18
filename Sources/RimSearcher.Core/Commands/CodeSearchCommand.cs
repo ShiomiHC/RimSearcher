@@ -384,8 +384,7 @@ public sealed class CodeSearchCommand : Command
                     Framing(root, sourceName, treesTotal, glob) + ". " +
                     // 「反编译时就抹掉了」排在 def 那句之前:它是唯一一种再怎么扫都不会有的成因。
                     (Erased(ctx.Args.Positional(0)!) is { } erased ? erased + " " : "") +
-                    "If you were looking for a def rather than code, 'rimsearcher search' and 'rimsearcher where' " +
-                    "answer that from the snapshot — the XML is not searched here.");
+                    "The XML is not searched here: 'rimsearcher search' and 'rimsearcher where' answer from the snapshot.");
         }
         else
         {

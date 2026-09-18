@@ -84,6 +84,7 @@ public class GateTests
             ["economy.empty_because"] = ["economy", "--calc-state", "not_producible", "--category", "Building"],
             // 缺层那张表只在缺层的库上有行 —— 拿建于经济面之前的那份夹具探。
             ["economy.absent"] = ["economy", "--db", Fixture.OtherDb],
+            ["economy.found_as"] = ["economy", "BaseBullet"],
             ["code-search.matches"] = ["code-search", "Translate"],
             ["code-search.ui_text"] = ["code-search", "Translate"],
             ["read.source"] = ["read", "CompShield.cs", "--lines", "1-5"],

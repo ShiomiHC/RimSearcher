@@ -1,6 +1,9 @@
 $ rimsearcher economy Bullet_Revolver
-exit 1
+exit 4
 --- stdout ---
 Nothing named 'Bullet_Revolver' is priced in this snapshot.
-'Bullet_Revolver' is a def in this snapshot: the game prices only items with a market value above 0.01 and buildings the player can build or minify. 'rimsearcher get Bullet_Revolver' shows what it does have.
+
+Where the name does turn up:
+name             is   in                           next
+Bullet_Revolver  def  ThingDef in ludeon.rimworld  rimsearcher get Bullet_Revolver
 --- stderr ---

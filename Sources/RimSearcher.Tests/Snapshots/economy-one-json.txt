@@ -81,6 +81,7 @@ exit 0
     }
   ],
   "absent": [],
-  "empty_because": []
+  "empty_because": [],
+  "found_as": []
 }
 --- stderr ---

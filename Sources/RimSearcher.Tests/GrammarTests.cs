@@ -935,8 +935,8 @@ public class GrammarTests
         Assert.Equal(1, code);
         // 成因是 empty_because 表的一行:筛子 / 拿掉它能回来几个 def / 拿掉它的同一条命令。
         Assert.Contains("--scope test.mod  1       rimsearcher where thingClass RimWorld.Bullet", scoped, StringComparison.Ordinal);
-        // 算出来的成因在场时,那句未经验证的猜测不许并排摆着。
-        Assert.DoesNotContain("abstract base", scoped, StringComparison.Ordinal);
+        // 算出来的成因在场时,类名那两条 code-search 出路不许并排摆着。
+        Assert.DoesNotContain("lists who constructs it", scoped, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -973,9 +973,9 @@ public class GrammarTests
         // 于是猜测本来就该退场(那是另一条纪律,由 indexGap 守)。
         var (stdout, _, code) = Fixture.Run("where", "compClass", "RimWorld.CompNoSuchThing");
         Assert.Equal(1, code);
-        Assert.Contains("abstract base", stdout, StringComparison.Ordinal);
-        // 反方向那一半:没有 def 驱动它,而类照样存在。
-        Assert.Contains("no def drives it at all", stdout, StringComparison.Ordinal);
+        // 2026-09-18 起两种成因不再写成情景,只剩两条出路,各标自己列出什么(Docs/25 §18)。
+        Assert.Contains("code-search \"class \\w+ : CompNoSuchThing\\b\"' lists the classes deriving from", stdout, StringComparison.Ordinal);
+        Assert.Contains("code-search \"CompNoSuchThing\"' lists who constructs it", stdout, StringComparison.Ordinal);
     }
 
     /// <summary>
