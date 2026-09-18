@@ -123,8 +123,8 @@ public sealed class IlCommand : Command
             {
                 ctx.Report.Notice(NoticeKind.Boundary,
                     $"{method.Type.FullName}.{method.SourceName} has no method body — it is abstract, extern, " +
-                    "or implemented by the runtime itself. There is no IL to show; that is a fact about the " +
-                    "method, not an empty result. Its overriding implementations do have one: " +
+                    "or implemented by the runtime itself. There is no IL to show. Its overriding " +
+                    "implementations do have one: " +
                     $"'rimsearcher types {method.Type.FullName} --derived'.");
                 rows.Add(Row(method, null));
                 continue;

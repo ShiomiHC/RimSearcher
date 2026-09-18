@@ -534,8 +534,8 @@ public sealed class GetCommand : Command
                     $"No def is named '{name}' in this snapshot, and it is not a def type, a class, a mod, " +
                     "an abstract XML parent, or a name held by any other registered snapshot." +
                     Suggestion.Say(close, " 'rimsearcher search' matches on labels and translations too.") +
-                    " All of that is the def side; C# type names that no def references live only in the " +
-                    $"decompiled trees, which this lookup never reads: 'rimsearcher code-search \"class {name}\"'.");
+                    " C# type names that no def references live only in the decompiled trees: " +
+                    $"'rimsearcher code-search \"class {name}\"'.");
                 if (single) return 1;
                 continue;
             }
@@ -685,8 +685,8 @@ public sealed class GetCommand : Command
                             : "") +
                         (kin > 0
                             ? $" Other defs of this type do have it: {Tally.Complete(kin).Render("def")} across " +
-                              $"{Tally.Complete(kinPaths).Render("field path")}. So it is missing from this def, " +
-                              $"not from {def.DefType} — a field that is null on a def never entered the index. " +
+                              $"{Tally.Complete(kinPaths).Render("field path")}; a field that is null on a def " +
+                              "never entered the index. " +
                               $"'rimsearcher fields {def.DefType} {pathSpelling} {paths[0]}' names those paths."
                             : ""));
 
@@ -995,8 +995,7 @@ public sealed class GetCommand : Command
                 ctx.Report.Notice(NoticeKind.Filter, ctx.Db.Meta.IndexesInjectionKeys
                     ? denial + " Their paths are written in the same grammar as the field paths above, and " +
                                "this filter also tried both spellings a language file uses — the number as " +
-                               "'.0.' and the element's own handle — against the path and the key alike. " +
-                               "Nothing here is hidden behind a second spelling."
+                               "'.0.' and the element's own handle — against the path and the key alike."
                     : denial + " Their paths are the game's injection keys as written, and this snapshot " +
                                "predates the pass that brings them onto the field paths' grammar: where a " +
                                "field path has '[0]', a key has either the number or a name taken from that " +
@@ -1694,8 +1693,7 @@ public sealed class FindCommand : Command
                             "and defs name its subclasses instead " +
                             $"('rimsearcher code-search \"class \\w+ : {ClassNameShape.Tail(value)}\\b\"' names " +
                             "them), or no def drives it at all and C# constructs it directly " +
-                            $"('rimsearcher code-search \"{ClassNameShape.Tail(value)}\"' shows who does). " +
-                            "Neither is evidence that the class itself does not exist."
+                            $"('rimsearcher code-search \"{ClassNameShape.Tail(value)}\"' shows who does)."
                           : "")));
 
             // 边界排在建议**之后**:它限定的是上面那整段,而不是其中某一条。
@@ -2304,8 +2302,8 @@ public sealed class ListCommand : Command
                     // 不在这里再讲一遍;这句只留本次的事实与填好参数的转向。
                     ctx.Report.Notice(NoticeKind.NextStep,
                         $"Every one of the {Tally.Complete(present[0].Count).Render("def")} of type {type} has the " +
-                        $"same class, {present[0].Class}, so --own-class cannot tell them apart and this is not " +
-                        $"evidence about '{wantClass}'. The behaviour lives on a nested field instead: " +
+                        $"same class, {present[0].Class}, so --own-class cannot tell them apart. " +
+                        "The behaviour lives on a nested field instead: " +
                         $"'rimsearcher where Class {wantClass}'.");
                     // 量全了的快照上这一条只会把上面那句用占位符再说一遍。留着的是它另外两档
                     // 携带的免责:那条转向在这份快照上会回一个**假零**,不说破就是个闭环。
@@ -2964,7 +2962,7 @@ public sealed class ValuesCommand : Command
                 ". Which fields hold a " +
                 "value you already have is the inverse question and a different command — " +
                 $"'rimsearcher where --value {Advisory.Quote(top)} --exact' asks it for '{top}', the first " +
-                "row here. A value domain read here does not bound where those values occur.");
+                "row here.");
 
         // 截断声明不在这儿发:它自成一块,几条路径合成一块由 Run 在说明区之后、表之前发。
         listed.Add((path, cov.DefTypes));
@@ -3257,7 +3255,7 @@ internal static class Completeness
             : $"'rimsearcher code-search \"[\\w<>,\\[\\] ]+ {leaf};\"' finds the declaration, which does say.";
 
         ctx.Report.Notice(NoticeKind.Boundary,
-            $"This says no indexed value sits at that path — not that no such field exists. {how} " +
+            $"No indexed value sits at that path. {how} " +
             "Two things keep a field out of this index without any sign here: a value that was null " +
             "on every def, and a field the game marks as an unsaved runtime cache. " +
             // 第三种成因点的是「导出器在那个 def 上停下来了」,不是四种上限里的某一种 ——

@@ -9,7 +9,7 @@ matched_paths    soundDrop (5)
 def_types        ThingDef (5 of 5)
 defs_with_field  5
 What --scope all,-test.mod left out is not empty for this query: with --scope test.mod instead, it finds 1 value of 'soundDrop'.
-This table's axis is the field: it lists the values 'soundDrop' takes. Which fields hold a value you already have is the inverse question and a different command — 'rimsearcher where --value Standard_Drop --exact' asks it for 'Standard_Drop', the first row here. A value domain read here does not bound where those values occur.
+This table's axis is the field: it lists the values 'soundDrop' takes. Which fields hold a value you already have is the inverse question and a different command — 'rimsearcher where --value Standard_Drop --exact' asks it for 'Standard_Drop', the first row here.
 
 Defs that may be missing from this answer, their export cut short — every def type that uses this path at all
 def_type  defs_cut_short

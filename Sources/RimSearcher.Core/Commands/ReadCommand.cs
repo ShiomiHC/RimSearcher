@@ -589,7 +589,7 @@ public sealed class ReadCommand : Command
     private static void SayBraceMatched(CommandContext ctx)
         => ctx.Report.Notice(NoticeKind.Boundary,
             "Found by matching braces, not by parsing C#: a declaration this scan does not recognise " +
-            "and one that is not in the file look the same here — both are simply absent. A local " +
+            "and one that is not in the file look the same here. A local " +
             "function declared inside a method body is one kind it does not recognise.",
             footnote: true);
 

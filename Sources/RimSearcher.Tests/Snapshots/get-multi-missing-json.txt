@@ -5,7 +5,7 @@ exit 0
   "notes": [
     {
       "kind": "next_step",
-      "text": "No def is named 'NoSuchDef' in this snapshot, and it is not a def type, a class, a mod, an abstract XML parent, or a name held by any other registered snapshot. 'rimsearcher search' matches on labels and translations too. All of that is the def side; C# type names that no def references live only in the decompiled trees, which this lookup never reads: 'rimsearcher code-search \"class NoSuchDef\"'."
+      "text": "No def is named 'NoSuchDef' in this snapshot, and it is not a def type, a class, a mod, an abstract XML parent, or a name held by any other registered snapshot. 'rimsearcher search' matches on labels and translations too. C# type names that no def references live only in the decompiled trees: 'rimsearcher code-search \"class NoSuchDef\"'."
     },
     {
       "kind": "boundary",

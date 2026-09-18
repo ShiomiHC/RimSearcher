@@ -913,7 +913,7 @@ public class OutputSnapshotTests
         Assert.Contains("carry a real translation", text);
         // 分母是整层的行数,不是「筛剩下的零」。
         Assert.Contains("2107 keyed translations", text);
-        Assert.Contains("the exit code is still non-zero", text);
+        Assert.Contains("The exit code is 1 only because no rows were printed", text);
         // 「没找到」的措辞一个字都不许出现:那会把「译全了」说成「查不到」。
         Assert.DoesNotContain("No keyed translation matches", text);
     }

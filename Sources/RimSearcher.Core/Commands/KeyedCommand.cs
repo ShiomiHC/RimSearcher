@@ -113,8 +113,7 @@ public sealed class KeyedCommand : Command
             ctx.Report.Notice(NoticeKind.Boundary,
                 // 「that is a property of the snapshot, not evidence about …」2026-09-18 删掉:
                 // 「这份库没有这一层」+ 点名那对分不开的导出 + 出路,是全部事实。
-                "This snapshot has no keyed translations at all, so nothing here can be looked up. " +
-                "Two exports look like this and " +
+                "This snapshot has no keyed translations at all. Two exports look like this and " +
                 "this line cannot tell them apart: one written before this layer was measured at all, and one " +
                 "written from a game whose language data was not loaded. The fix is the same either way — export " +
                 "again; 'rimsearcher snapshot status' names the snapshot in use.");
@@ -183,7 +182,7 @@ public sealed class KeyedCommand : Command
                 // 于是这条解释以前正好在最该说的那个输入上不发(见 FtsText.HasNothingToMatch)。
                 ctx.Report.Notice(NoticeKind.Boundary,
                     $"'{query}' holds no letter or digit, and only those take part in matching, so there was " +
-                    "nothing left to look up — the zero below is about the query, not about this layer. " +
+                    "nothing left to look up. " +
                     (query.Contains('*', StringComparison.Ordinal)
                         ? "'*' is not a wildcard here: it is dropped like any other punctuation. "
                         : "") +
@@ -197,9 +196,7 @@ public sealed class KeyedCommand : Command
                     // 剥离与通配符无关。与上面那支逐字同句。
                     (query.Contains('*', StringComparison.Ordinal)
                         ? " '*' is not a wildcard here: it is dropped like any other punctuation."
-                        : "") +
-                    // 零结果时下面没有计数可指 —— 方位词只在真有东西可指时才用。
-                    (hits.Count > 0 ? " The count below is for what ran, not for what you typed." : ""));
+                        : ""));
         }
         else if (placeholdersOnly)
         {
@@ -348,14 +345,12 @@ public sealed class KeyedCommand : Command
                 return 1;
             }
 
-            // 整层非空而枚举又空,只剩一种成因:一条占位都没有。这是**完整的肯定回答**,
-            // 但零行照约定仍走 exit 1,所以句子必须自己说清 —— 读退出码的脚本会读成失败。
+            // 整层非空而枚举又空,只剩一种成因:一条占位都没有。零行照约定仍走 exit 1,
+            // 读退出码的脚本会读成失败,所以退出码的成因要自己说。
             ctx.Report.Notice(NoticeKind.Filter,
-                "No keyed translation in this snapshot is a placeholder: all " +
-                $"{Tally.Complete(layerTotal).Render("keyed translation")} carry a real translation, so nothing " +
-                "in this layer is left for the game to fall back to English on. That is a complete answer about " +
-                "coverage rather than a lookup that came up empty — the exit code is still non-zero because no " +
-                "rows were printed. Coverage of a def's own label and description is a different layer: those " +
+                $"All {Tally.Complete(layerTotal).Render("keyed translation")} in this snapshot carry a real " +
+                "translation; none is a placeholder. The exit code is 1 only because no rows were printed. " +
+                "Coverage of a def's own label and description is a different layer: those " +
                 "are injected through DefInjected, and 'rimsearcher get <defName>' shows them.");
             return 1;
         }

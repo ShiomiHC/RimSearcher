@@ -2,7 +2,7 @@ $ rimsearcher get ObservedLayingCorpse --path stages.observed_corpse.label --fix
 exit 0
 --- stdout ---
 No field path contains 'stages.observed_corpse.label'; the def does have 4 fields. Drop --path-contains to see them.
-This says no indexed value sits at that path — not that no such field exists. 'rimsearcher code-search "[\w<>,\[\] ]+ label;"' finds the declaration, which does say. Two things keep a field out of this index without any sign here: a value that was null on every def, and a field the game marks as an unsaved runtime cache.
+No indexed value sits at that path. 'rimsearcher code-search "[\w<>,\[\] ]+ label;"' finds the declaration, which does say. Two things keep a field out of this index without any sign here: a value that was null on every def, and a field the game marks as an unsaved runtime cache.
 
 def_name     ObservedLayingCorpse
 def_type     HediffDef

@@ -7,7 +7,7 @@ asked            compClass
 matched_paths    comps[0].compClass (3), comps[1].compClass (2)
 def_types        ThingDef (2 of 9), HediffDef (1 of 1)
 defs_with_field  3
-This table's axis is the field: it lists the values 'compClass' takes. Which fields hold a value you already have is the inverse question and a different command — 'rimsearcher where --value RimWorld.CompShield --exact' asks it for 'RimWorld.CompShield', the first row here. A value domain read here does not bound where those values occur.
+This table's axis is the field: it lists the values 'compClass' takes. Which fields hold a value you already have is the inverse question and a different command — 'rimsearcher where --value RimWorld.CompShield --exact' asks it for 'RimWorld.CompShield', the first row here.
 
 Defs that may be missing from this answer, their export cut short — every def type that uses this path at all
 def_type  defs_cut_short

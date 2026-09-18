@@ -387,13 +387,13 @@ public sealed class EconomyCommand : Command
         // 的下一步完全不同。这一层只收 ThingDef,且只收有市场价的物与可建的建筑。
         var defs = ctx.Db.GetDefsNamed(defName);
         ctx.Report.Notice(NoticeKind.Boundary, defs.Count > 0
-            ? $"'{defName}' is a def in this snapshot, so this is not a spelling problem: the game " +
+            ? $"'{defName}' is a def in this snapshot: the game " +
               "prices only items with a market value above 0.01 and buildings the player can build " +
               $"or minify. 'rimsearcher get {defName}' shows what it does have."
             // 名字在快照里根本不存在,而这条命令的候选池只有几千个被定价的物 ——
-            // 「这一层没有」与「这个快照没有」是两件事,不说破就会被读成后者。
-            : $"No def is named '{defName}' either, so this is not just a thing the game leaves " +
-              $"unpriced. 'rimsearcher search {defName}' matches on labels and translated text as " +
+            // 「这一层没有」与「这个快照没有」是两件事,两支各说自己那件。
+            : $"No def is named '{defName}' either. " +
+              $"'rimsearcher search {defName}' matches on labels and translated text as " +
               "well as defNames, which is the way in when you have the in-game name rather than the " +
               "defName.");
         return true;
@@ -514,13 +514,11 @@ public sealed class EconomyCommand : Command
             }
 
             // 整层为零而 state 是 ok:量过了,这个 mod 列表下确实没有可生产物。
-            // **这是完整的肯定回答**,不是一次落空 —— 零行照约定仍走 exit 1,所以句子必须
-            // 自己说清,读退出码的脚本会读成失败。
+            // 零行照约定仍走 exit 1,读退出码的脚本会读成失败,所以退出码的成因要自己说。
             ctx.Report.Notice(NoticeKind.Boundary,
                 "The economy layer was measured for this snapshot and came out empty: nothing in these mods " +
-                "is an item with a market value or a building the player can build. That is a complete " +
-                "answer rather than a lookup that came up short — the exit code is still non-zero because " +
-                "no rows were printed.");
+                "is an item with a market value or a building the player can build. The exit code is 1 only " +
+                "because no rows were printed.");
             return 1;
         }
 
@@ -607,6 +605,6 @@ public sealed class EconomyCommand : Command
             ctx.Report.Notice(NoticeKind.Boundary,
                 $"A recipe above accepts {NameList.Render(selfFed, Limits.MaxSuggestions)} as one of its own " +
                 "ingredients, so that thing's fallback market value has its own hand-written price folded " +
-                "into it — which is the opposite of deriving a price from ingredients.");
+                "into it.");
     }
 }

@@ -166,8 +166,8 @@ public sealed class ModListListCommand : Command
         if (bad > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
                 $"{Tally.Complete(bad).Render("mod list")} below could not be read; the mods column says " +
-                "'unreadable' there. Each such file exists and merely fails to parse — that is not a list with " +
-                $"no mods in it. '{CommandRegistry.ExeName} modlist show <name>' says what is wrong with one.");
+                "'unreadable' there. Each such file exists and fails to parse. " +
+                $"'{CommandRegistry.ExeName} modlist show <name>' says what is wrong with one.");
 
         ctx.Report.Table("modlists", ["name", "mods", "game_version", "path"],
             lists.Select(m => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>

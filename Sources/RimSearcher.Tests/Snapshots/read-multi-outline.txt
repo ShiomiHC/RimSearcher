@@ -17,5 +17,5 @@ class     public                   Outer            29     5-33   vanilla/Verse/
 class     internal                 Pair             3      3-5    vanilla/Verse/Pair.cs
 class     internal                 Pair<T>          3      7-9    vanilla/Verse/Pair.cs
 
-Found by matching braces, not by parsing C#: a declaration this scan does not recognise and one that is not in the file look the same here — both are simply absent. A local function declared inside a method body is one kind it does not recognise.
+Found by matching braces, not by parsing C#: a declaration this scan does not recognise and one that is not in the file look the same here. A local function declared inside a method body is one kind it does not recognise.
 --- stderr ---

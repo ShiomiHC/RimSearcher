@@ -15,7 +15,7 @@ exit 0
     },
     {
       "kind": "boundary",
-      "text": "This table's axis is the field: it lists the values 'compClass' takes. Which fields hold a value you already have is the inverse question and a different command — 'rimsearcher where --value RimWorld.CompShield --exact' asks it for 'RimWorld.CompShield', the first row here. A value domain read here does not bound where those values occur."
+      "text": "This table's axis is the field: it lists the values 'compClass' takes. Which fields hold a value you already have is the inverse question and a different command — 'rimsearcher where --value RimWorld.CompShield --exact' asks it for 'RimWorld.CompShield', the first row here."
     },
     {
       "kind": "count",
@@ -25,7 +25,7 @@ exit 0
     },
     {
       "kind": "boundary",
-      "text": "This table's axis is the field: it lists the values 'thingClass' takes. Which fields hold a value you already have is the inverse question and a different command — 'rimsearcher where --value RimWorld.Apparel --exact' asks it for 'RimWorld.Apparel', the first row here. A value domain read here does not bound where those values occur."
+      "text": "This table's axis is the field: it lists the values 'thingClass' takes. Which fields hold a value you already have is the inverse question and a different command — 'rimsearcher where --value RimWorld.Apparel --exact' asks it for 'RimWorld.Apparel', the first row here."
     }
   ],
   "completeness": {

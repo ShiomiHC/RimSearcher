@@ -979,7 +979,6 @@ public class GrammarTests
         Assert.Contains("abstract base", stdout, StringComparison.Ordinal);
         // 反方向那一半:没有 def 驱动它,而类照样存在。
         Assert.Contains("no def drives it at all", stdout, StringComparison.Ordinal);
-        Assert.Contains("does not exist", stdout, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1620,17 +1619,17 @@ public class GrammarTests
         var (kin, _, code) = Fixture.Run("get", "Apparel_ShieldBelt", "--path-contains", "ingestible");
         Assert.Equal(0, code);
         Assert.Contains("Other defs of this type do have it: 1 def", kin, StringComparison.Ordinal);
-        Assert.Contains("missing from this def, not from ThingDef", kin, StringComparison.Ordinal);
+        Assert.Contains("a field that is null on a def never entered the index", kin, StringComparison.Ordinal);
         Assert.Contains("fields ThingDef --path-contains ingestible", kin, StringComparison.Ordinal);
 
         // 真的哪儿都没有时:换成「索引里没有值不等于字段不存在」那段,而不是报一个 0。
         var (nowhere, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--path-contains", "zzzznothing");
         Assert.DoesNotContain("Other defs of this type", nowhere, StringComparison.Ordinal);
-        Assert.Contains("no indexed value sits at that path", nowhere, StringComparison.Ordinal);
+        Assert.Contains("No indexed value sits at that path", nowhere, StringComparison.Ordinal);
 
         // 文本其实是个值的那一支已经解释过了,不许再挂一遍长段落。
         var (asValue2, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--path-contains", "MarketValue");
-        Assert.DoesNotContain("no indexed value sits at that path", asValue2, StringComparison.Ordinal);
+        Assert.DoesNotContain("No indexed value sits at that path", asValue2, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -2056,8 +2055,8 @@ public class GrammarTests
         Assert.Contains("'Standard_Drop'", byMode, StringComparison.Ordinal);
         // 这条降级出路已经不存在,它指的那个动作也不再有意义。
         Assert.DoesNotContain(FossilGiveADef, byMode, StringComparison.Ordinal);
-        // 口径不同就得说破:这一列比的是众数,不是节点声明的值。
-        Assert.Contains("not one the node declares", byMode, StringComparison.Ordinal);
+        // 口径不同就得说破:这一列比的是众数,节点自己什么都没声明。
+        Assert.Contains("the node itself declares nothing", byMode, StringComparison.Ordinal);
 
         // 追平的那一行要带着全类型分母,否则它读起来就是铁证。
         var (full, _, _) = Fixture.Run("inherit", "BaseBullet", "--path-contains", "soundDrop");
@@ -2443,7 +2442,7 @@ public class GrammarTests
         // 「快照里没有这条路径」是另一个状态,不许再说。
         Assert.DoesNotContain("has a field path ending in 'workerClass'", w, StringComparison.Ordinal);
         // 那段「两种成因让字段不进索引」在这里整段不适用 —— 字段就在索引里,86 行摆着。
-        Assert.DoesNotContain("not that no such field exists", w, StringComparison.Ordinal);
+        Assert.DoesNotContain("No indexed value sits at that path", w, StringComparison.Ordinal);
 
         // 快照里真没有的路径走另一支,而那一支的限定语也得两条命令同形:走到那里就是
         // **域外也没有**,说成 `within --scope X` 会被读成「放宽也许有」。
@@ -4484,7 +4483,7 @@ public class GrammarTests
                                           "--db", Fixture.ModernDb);
         Assert.Equal(1, code);
         Assert.Contains("--own-class cannot tell them apart", miss, StringComparison.Ordinal);
-        Assert.Contains("is not evidence about", miss, StringComparison.Ordinal);
+        Assert.DoesNotContain("No def of type", miss, StringComparison.Ordinal);
         // 转向要指到真正能查到多态的那条路上。
         Assert.Contains("where Class RimWorld.GenStep_Nothing", miss, StringComparison.Ordinal);
 

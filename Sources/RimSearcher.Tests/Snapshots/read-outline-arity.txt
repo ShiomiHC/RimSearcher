@@ -8,5 +8,5 @@ kind   name     in  at
 class  Pair         3-5
 class  Pair<T>      7-9
 
-Found by matching braces, not by parsing C#: a declaration this scan does not recognise and one that is not in the file look the same here — both are simply absent. A local function declared inside a method body is one kind it does not recognise.
+Found by matching braces, not by parsing C#: a declaration this scan does not recognise and one that is not in the file look the same here. A local function declared inside a method body is one kind it does not recognise.
 --- stderr ---

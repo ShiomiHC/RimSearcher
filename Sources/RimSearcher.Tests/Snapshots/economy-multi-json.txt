@@ -23,7 +23,7 @@ exit 0
     },
     {
       "kind": "boundary",
-      "text": "A recipe above accepts TestModGun as one of its own ingredients, so that thing's fallback market value has its own hand-written price folded into it — which is the opposite of deriving a price from ingredients."
+      "text": "A recipe above accepts TestModGun as one of its own ingredients, so that thing's fallback market value has its own hand-written price folded into it."
     }
   ],
   "things": [

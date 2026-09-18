@@ -535,8 +535,7 @@ public sealed class InheritCommand : Command
             "short of other_defs is not the one declaring this field; reaching other_defs does not point back " +
             "at it, because every descendant writing the field separately counts the same. " +
             "The snapshot stores no 'declared here' " +
-            "fact — the game resolves inheritance while loading and then discards it — so these counts are what " +
-            "the answer has to be read off.");
+            "fact — the game resolves inheritance while loading and then discards it.");
 
         // 逆命题那半句已经并进上一条(「追平不能反推」),这里只剩「靠哪一列分」。
         ctx.Report.Notice(NoticeKind.Boundary,
@@ -546,8 +545,7 @@ public sealed class InheritCommand : Command
                 : "The same_value column is what tells the two apart — one shared value points at the layer, " +
                   "a spread of values points at each def writing its own." +
                   (byMode
-                      ? " It is the most common value under this node, not one the node declares: the node " +
-                        "declares nothing, and a majority is what stands in for it."
+                      ? " It is the most common value under this node — the node itself declares nothing."
                       : "")));
 
         ctx.Report.Notice(NoticeKind.Boundary,

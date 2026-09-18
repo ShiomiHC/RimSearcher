@@ -15,5 +15,5 @@ TestModGun  Make_TestModGun      1             1618        no
 TestModGun  Make_TestModGunBulk  4             4200        yes
 A tag like '(holds when classicMortars=on)' above names the difficulty setting a number depends on, and the position it holds under. Put the setting the other way and the def swaps in a second cost list, which the tagged number is not from. An export cannot tell which way a given game has it: the setting is read off the storyteller, and no storyteller exists while the game is loading. 'rimsearcher get <defName> --path-contains costListForDifficulty' shows the other list.
   - 2 recipes can produce TestModGun, so that thing's fallbackMarketValue depends on def load order: the game takes whichever of them comes first in the database. A bulk recipe usually scales its ingredients but not its work amount, so which one wins changes the number.
-  - A recipe above accepts TestModGun as one of its own ingredients, so that thing's fallback market value has its own hand-written price folded into it — which is the opposite of deriving a price from ingredients.
+  - A recipe above accepts TestModGun as one of its own ingredients, so that thing's fallback market value has its own hand-written price folded into it.
 --- stderr ---

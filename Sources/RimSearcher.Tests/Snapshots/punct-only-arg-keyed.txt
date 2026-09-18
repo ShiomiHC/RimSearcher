@@ -1,6 +1,6 @@
 $ rimsearcher keyed *
 exit 1
 --- stdout ---
-'*' holds no letter or digit, and only those take part in matching, so there was nothing left to look up — the zero below is about the query, not about this layer. '*' is not a wildcard here: it is dropped like any other punctuation. Leaving the argument out is a different call, not an empty one: 'rimsearcher keyed' lists all 2107 keyed translations.
+'*' holds no letter or digit, and only those take part in matching, so there was nothing left to look up. '*' is not a wildcard here: it is dropped like any other punctuation. Leaving the argument out is a different call, not an empty one: 'rimsearcher keyed' lists all 2107 keyed translations.
 No keyed translation matches '*'.
 --- stderr ---

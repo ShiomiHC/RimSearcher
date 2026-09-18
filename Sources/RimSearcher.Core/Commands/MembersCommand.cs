@@ -363,8 +363,7 @@ public sealed class MembersCommand : Command
         ctx.Report.Notice(NoticeKind.Filter,
             $"{type.FullName} declares {Tally.Complete(declared).Render("member")}" +
             (inherited ? " counting its base types" : "") +
-            ", and none of them passed the filters given here. That is a fact about the filters, not about " +
-            "the type — dropping one of them shows what is there.");
+            ", and none of them passed the filters given here. Dropping one of them shows what is there.");
     }
 
     private static readonly string[] Kinds = ["method", "constructor", "property", "field", "event"];

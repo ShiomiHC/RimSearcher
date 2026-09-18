@@ -7,7 +7,7 @@ asked            thingDefs
 matched_paths    fixedIngredientFilter.thingDefs[0] (1), ingredients[0].filter.thingDefs[0] (1)
 def_types        MoltenRecipeDef (2 of 2)
 defs_with_field  2
-This table's axis is the field: it lists the values 'thingDefs' takes. Which fields hold a value you already have is the inverse question and a different command — 'rimsearcher where --value Bloomstone --exact' asks it for 'Bloomstone', the first row here. A value domain read here does not bound where those values occur.
+This table's axis is the field: it lists the values 'thingDefs' takes. Which fields hold a value you already have is the inverse question and a different command — 'rimsearcher where --value Bloomstone --exact' asks it for 'Bloomstone', the first row here.
 
 value       defs  field_path
 Bloomstone  2     thingDefs

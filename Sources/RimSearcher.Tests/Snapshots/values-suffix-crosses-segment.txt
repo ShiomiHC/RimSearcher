@@ -7,7 +7,7 @@ asked            graphicData.texPath
 matched_paths    graphicData.texPath (2)
 def_types        ThingDef (2 of 9)
 defs_with_field  2
-This table's axis is the field: it lists the values 'graphicData.texPath' takes. Which fields hold a value you already have is the inverse question and a different command — 'rimsearcher where --value Things/Building/Cannon --exact' asks it for 'Things/Building/Cannon', the first row here. A value domain read here does not bound where those values occur.
+This table's axis is the field: it lists the values 'graphicData.texPath' takes. Which fields hold a value you already have is the inverse question and a different command — 'rimsearcher where --value Things/Building/Cannon --exact' asks it for 'Things/Building/Cannon', the first row here.
 
 Defs that may be missing from this answer, their export cut short — every def type that uses this path at all
 def_type  defs_cut_short
