@@ -454,6 +454,9 @@ public class OutputSnapshotTests
         { "usage-get-field-alias", ["get", "Apparel_ShieldBelt", "--field", "statBases"] },
         // read 上写行区间的第一直觉:64 + 64 次 / 49 份会话,--start 与 --end 完全成对。
         { "usage-read-start-end",  ["read", "vanilla/Verse/Outline.cs", "--start", "3", "--end", "6"] },
+        // 有意不收的拼法(CommandSpec.Refused):说的是边界(按模式找行住在 code-search),
+        // 读者已写的 regex 与文件名填进去,-C 12 同一档。不走近似候选,不印选项表。
+        { "usage-read-grep",       ["read", "HediffSet.cs", "--grep", "smelt|Smelt", "-C", "12"] },
         // 与上一格同批:--lines 在场时再给 --start,两种说法指同一件事。
         { "usage-read-lines-and-start", ["read", "vanilla/Verse/Outline.cs", "--lines", "1-3", "--start", "5"] },
         // --start 今天是 --offset 的别名(search/where/list/values/fields 五条命令),
@@ -722,6 +725,8 @@ public class OutputSnapshotTests
         { "read-outline-truncated", ["read", "Outline.cs", "--source", "vanilla", "--outline", "--limit", "2"] },
         // 同名成员分属两个类型:不带 --type 全给并说破归属,带 --type 只给一份。
         { "read-member",           ["read", "vanilla/Verse/Outline.cs", "--member", "Shared"] },
+        // 几个成员一次读:块序 = 给的顺序;落空的那个各说各的,找到的照印,exit 0。
+        { "read-member-several",   ["read", "vanilla/Verse/Outline.cs", "--member", "Verbatim", "--member", "Shared", "--member", "Nope"] },
         { "read-member-typed",     ["read", "vanilla/Verse/Outline.cs", "--member", "Shared", "--type", "Inner"] },
         // 「有这个成员但不在那个类型里」与「整个文件都没有」是两句不同的话。
         { "read-member-wrong-type", ["read", "vanilla/Verse/Outline.cs", "--member", "Shared", "--type", "Nope"] },

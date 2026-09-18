@@ -1,0 +1,7 @@
+$ rimsearcher read HediffSet.cs --grep smelt|Smelt -C 12
+exit 2
+--- stdout ---
+--- stderr ---
+Unknown option '--grep'. 'read' shows a stretch of a file by address: --lines, --member, or --outline. Lines matching a pattern are 'rimsearcher code-search "smelt|Smelt" --file-glob HediffSet.cs' (-C <n> adds context); a member's whole declaration is '--member <name>'.
+Unknown option '-C'. Context lines belong with a pattern, and that is 'rimsearcher code-search <regex> --file-glob HediffSet.cs -C 12'. Here --member reads the whole declaration and --lines a range.
+Run 'rimsearcher read --help' to see what this command accepts.

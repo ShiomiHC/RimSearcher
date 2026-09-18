@@ -796,7 +796,7 @@ Page with --lines, never with a pipe. The first line of the answer says which li
 
 | Option | Meaning | Also accepted |
 |---|---|---|
-| `--member` <name> | Read the declaration of this member. Every member of that name in the file is returned; --type narrows it to one declaring type. | `--method`, `--method-name`, `--member-name`, `--property` |
+| `--member` <name> | Read the declaration of this member. Give it more than once to read several in one call, in the order given. Every member of that name in the file is returned; --type narrows it to one declaring type. | `--method`, `--method-name`, `--member-name`, `--property` |
 | `--type` <name> | Read this whole type. With --member it instead says which type the member must belong to. | `--class-name`, `--type-name`, `--extract-class` |
 | `--lines` <a-b|a+n|a> | Read raw lines instead: '400-460' is inclusive (',' and ':' work in place of the '-'), '400+60' is sixty lines from 400, '400' starts there and runs to the end of the file. Without --lines the whole file is read. Whatever --lines asks for is printed in full unless --limit says otherwise — that is also what shortens a start-only '400'. | `--line`, `--range`, `--line-range` |
 | `--start` <n> | Read from this line. With --end it is a range; on its own it runs to the end of the file, which --limit then shortens. Same read as --lines, spelled as two options. |  |
@@ -804,6 +804,13 @@ Page with --lines, never with a pipe. The first line of the answer says which li
 | `--source` <name> | Only resolve the file name inside this source tree. 'rimsearcher sources list' names them. | `--root`, `--tree`, `--mod`, `--mods` |
 | `--outline` | List the file's types and members with their modifiers and line ranges instead of reading any of them. This is the cheap way to find out what to ask for. | `--members`, `--toc` |
 | `-n`, `--limit` <n> | How many lines to print at most, and on a raw read where the read stops. Left out, nothing is capped: the read prints whatever --lines, --outline or --member asked for, and the whole file if none of them was given. On a decompiled type that runs to thousands of lines. Default: `every line`. | `--max-lines`, `--max-results`, `--count`, `--rows`, `--head` |
+
+Not options here:
+
+| Spelling | Where that lives |
+|---|---|
+| `--grep` | 'read' shows a stretch of a file by address: --lines, --member, or --outline. Lines matching a pattern are 'rimsearcher code-search <regex> --file-glob <file>' (-C <n> adds context); a member's whole declaration is '--member <name>'. |
+| `--context` | Context lines belong with a pattern, and that is 'rimsearcher code-search <regex> --file-glob <file> -C <n>'. Here --member reads the whole declaration and --lines a range. |
 
 `--json` keys, besides the global `notes`:
 
@@ -818,6 +825,7 @@ Examples:
 ```
 rimsearcher read Pawn.cs --outline
 rimsearcher read CompShield.cs --member CompTick
+rimsearcher read Ability.cs --member CanCast --member Activate
 rimsearcher read RimWorld.CompShield
 rimsearcher read vanilla/Assembly-CSharp/Verse/ThingComp.cs --lines 1-40
 ```

@@ -4764,6 +4764,66 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// 有意不收的拼法(<see cref="CommandSpec.Refused"/>)说的是边界,不是拼错:`read --grep` 被拒
+    /// 六周每周仍出现,12 个事件里 8 个要的是成员正文、4 个是文件内找用法,两件事各有自己的家
+    /// (Docs/26 §6.3–6.4)。这一档 (a) 排在近似候选与「别的命令认它」之前 —— `grep` 是 list --find
+    /// 的别名,那句曾把人指向三条无关命令;(b) 读者已写的 regex 与文件名填进能粘的整条命令;
+    /// (c) 带 shell 会吃的字符时加引号;(d) `-C` 一族同一档,不再被指去 --config。
+    /// </summary>
+    [Fact]
+    public void 有意不收的拼法说边界并把读者写的词填回去()
+    {
+        var (_, err, code) = Fixture.Run("read", "HediffSet.cs", "--grep", "DirtyCache");
+        Assert.Equal(2, code);
+        Assert.Contains("'rimsearcher code-search DirtyCache --file-glob HediffSet.cs'", err, StringComparison.Ordinal);
+        Assert.Contains("'--member <name>'", err, StringComparison.Ordinal);
+        Assert.DoesNotContain("Did you mean", err, StringComparison.Ordinal);
+        Assert.DoesNotContain("This command accepts:", err, StringComparison.Ordinal);
+        Assert.DoesNotContain("The name as typed is accepted by", err, StringComparison.Ordinal);
+
+        var (_, quoted, _) = Fixture.Run("read", "Thing.cs", "--grep", "smelt|Smelt");
+        Assert.Contains("code-search \"smelt|Smelt\" --file-glob Thing.cs", quoted, StringComparison.Ordinal);
+
+        var (_, ctx, _) = Fixture.Run("read", "Thing.cs", "--grep", "Destroy", "-C", "12");
+        Assert.Contains("Unknown option '-C'. Context lines belong with a pattern", ctx, StringComparison.Ordinal);
+        Assert.Contains("--file-glob Thing.cs -C 12'", ctx, StringComparison.Ordinal);
+        Assert.DoesNotContain("Did you mean", ctx, StringComparison.Ordinal);
+
+        // 没写文件名时占位符留着,不凭空捏。
+        var (_, bare, _) = Fixture.Run("read", "--grep", "x");
+        Assert.Contains("code-search x --file-glob <file>", bare, StringComparison.Ordinal);
+
+        // help 里同一段:常见档先读 help 再拼命令,边界要在他敲下去之前就在。
+        var (help, _, _) = Fixture.Run("read", "--help");
+        Assert.Contains("Not options here:", help, StringComparison.Ordinal);
+        Assert.Contains("--grep", help, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// `--member` 可重复:块序 = 给的顺序,落空的那个各说各的、找到的照印,同名多份的提示按名字各判。
+    /// 12 个 `read --grep` 事件里两个是「几个成员名用 | 串起来」,被拒后手拆成三到五条 --member。
+    /// </summary>
+    [Fact]
+    public void read的member可以给几个()
+    {
+        var (out_, _, code) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--member", "Shared", "--member", "Verbatim", "--member", "Nope");
+        Assert.Equal(0, code);
+        var shared = out_.IndexOf("method Outer.Shared", StringComparison.Ordinal);
+        var verbatim = out_.IndexOf("property Outer.Verbatim", StringComparison.Ordinal);
+        Assert.True(shared >= 0 && verbatim > shared, "块序要跟给的顺序");
+        Assert.Contains("3 declarations in vanilla/Verse/Outline.cs", out_, StringComparison.Ordinal);
+        Assert.Contains("No member named 'Nope'", out_, StringComparison.Ordinal);
+        // 同名多份只说 Shared,不把 Verbatim 算进去。
+        Assert.Contains("'Shared' is declared more than once here: Outer.Shared (line 15), Inner.Shared (line 25)", out_, StringComparison.Ordinal);
+        Assert.Equal(1, out_.Split("is declared more than once here").Length - 1);
+
+        // 单名那条路一个字节不变:与只给一次逐字相同。
+        var (once, _, _) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--member", "Shared");
+        var (twice, _, _) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--member", "Shared", "--member", "Shared");
+        Assert.Equal(once, twice);
+    }
+
+    /// <summary>
     /// 位置参数的选项拼法(<see cref="PositionalSpec.Option"/>):`--field` 在 where / values 上
     /// 被拒六周、每周仍出现,而报错句 08-01 起就给了改正后的整条命令 —— 按 Docs/26 §1,
     /// 报错句压不住的是形状问题。60 条历史样本里 38 条是 `where ThingDef --field X`:

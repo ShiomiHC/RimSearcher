@@ -1,0 +1,26 @@
+$ rimsearcher read vanilla/Verse/Outline.cs --member Verbatim --member Shared --member Nope
+exit 0
+--- stdout ---
+No member named 'Nope' was found in vanilla/Verse/Outline.cs (34 lines, 9 declarations). Closest by spelling: Open. The match runs on braces, not C# parsing; 'rimsearcher code-search' searches the text itself, and '--outline' lists what brace matching does find.
+  - 3 declarations in vanilla/Verse/Outline.cs, 11 lines.
+  - 'Shared' is declared more than once here: Outer.Shared (line 15), Inner.Shared (line 25). '--type <name>' narrows it to one.
+
+vanilla/Verse/Outline.cs:13-13  property Outer.Verbatim
+    13  		public string Verbatim => @"he said ""} "" and left";
+--
+vanilla/Verse/Outline.cs:15-21  method Outer.Shared
+    15  		public void Shared(int n)
+    16  		{
+    17  			if (n > 0)
+    18  			{
+    19  				Console.WriteLine(Marker);
+    20  			}
+    21  		}
+--
+vanilla/Verse/Outline.cs:25-27  method Inner.Shared
+    25  			public void Shared(int n)
+    26  			{
+    27  			}
+
+Found by matching braces, not by parsing C#: a declaration this scan does not recognise and one that is not in the file look the same here. A local function declared inside a method body is one kind it does not recognise.
+--- stderr ---

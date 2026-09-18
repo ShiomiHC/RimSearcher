@@ -140,6 +140,33 @@ public class DeclarationTests
                 Assert.False(string.IsNullOrWhiteSpace(o.Help), $"--{o.Name} of '{spec.Name}' has no help.");
                 Assert.EndsWith(".", o.Help.TrimEnd());
             }
+
+            foreach (var r in spec.Refused)
+            {
+                Assert.False(string.IsNullOrWhiteSpace(r.Where), $"refused --{r.Name} of '{spec.Name}' says nothing about where it lives.");
+                Assert.EndsWith(".", r.Where.TrimEnd());
+            }
+        }
+    }
+
+    /// <summary>
+    /// 有意不收的拼法不许同时也是这条命令收的:两边都声明了,解析器先撞上哪个就信哪个,
+    /// 而 help 里一段说「不在这里」、另一段列着它。ValuePlaceholder 也得真在那句话里,否则读者写的值悄悄丢掉。
+    /// </summary>
+    [Fact]
+    public void 有意不收的拼法不与本命令收的撞名()
+    {
+        foreach (var spec in Registry.Specs)
+        {
+            var options = spec.UsesGlobals ? spec.Options.Concat(GlobalOptions.All) : spec.Options;
+            var taken = options.SelectMany(o => new[] { o.Name }.Concat(o.Aliases)).Select(ArgParser.Normalize).ToHashSet();
+            foreach (var r in spec.Refused)
+            {
+                foreach (var w in new[] { r.Name }.Concat(r.Aliases))
+                    Assert.False(taken.Contains(ArgParser.Normalize(w)), $"'{spec.Name}' both refuses and accepts '{w}'.");
+                if (r.ValuePlaceholder is { } ph)
+                    Assert.Contains(ph, r.Where, StringComparison.Ordinal);
+            }
         }
     }
 

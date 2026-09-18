@@ -104,7 +104,7 @@ public static class ArgParser
                     // 正确的写法里,而不是让人对着 <占位符> 自己再拼一遍。
                     var attached = inlineValue ??
                         (i + 1 < argv.Count && !argv[i + 1].StartsWith('-') ? argv[i + 1] : null);
-                    errors.Add(UnknownOptionMessage(arg, body, options, spec, siblings, attached));
+                    errors.Add(UnknownOptionMessage(arg, body, options, spec, siblings, attached, positionals));
                     // 未知 flag 后面若跟着一个非 flag 的词,大概率是它的取值,一并跳过,
                     // 免得那个词又被当成位置参数引出第二条无关报错。
                     if (inlineValue is null && i + 1 < argv.Count && !argv[i + 1].StartsWith('-')) i++;
@@ -301,8 +301,28 @@ public static class ArgParser
 
     private static string UnknownOptionMessage(string raw, string body, IReadOnlyList<OptionSpec> options,
                                                CommandSpec spec, IReadOnlyList<CommandSpec>? siblings,
-                                               string? attachedValue = null)
+                                               string? attachedValue = null, IReadOnlyList<string>? positionals = null)
     {
+        // 有意不收的拼法排在最前:那句话说的是边界(这件事住在哪条命令里),近似候选与
+        // 「别的命令认它」在这一档都是往错处指 —— `grep` 恰好是 list --find 的别名,实测
+        // 那句「It is accepted by 'get', 'list', 'inherit', and 2 more」把人指向了三条无关命令。
+        // 读者已经写下的词填回那句话里:跟在后面的值进 ValuePlaceholder,第一个位置参数
+        // (read 的 <file>)进 <file>,于是给出去的是整条能粘的命令,不是占位符。
+        var n0 = Normalize(body);
+        var refused = spec.Refused.FirstOrDefault(r => Normalize(r.Name) == n0 || r.Aliases.Any(a => Normalize(a) == n0));
+        if (refused is not null)
+        {
+            var where = refused.Where;
+            // 值带着 shell 会吃的字符(`smelt|Smelt`)就加引号 —— 这句是给人粘的。
+            if (attachedValue is not null && refused.ValuePlaceholder is { } ph)
+                where = where.Replace(ph, System.Text.RegularExpressions.Regex.IsMatch(attachedValue, @"^[\w./-]+$")
+                    ? attachedValue
+                    : "\"" + attachedValue.Replace("\"", "\\\"") + "\"");
+            if (positionals is { Count: > 0 } && spec.Positionals.Length > 0)
+                where = where.Replace($"<{spec.Positionals[0].Name}>", positionals[0]);
+            return $"Unknown option '{raw}'. {where}";
+        }
+
         var scored = Scored(body, options);
         var candidates = Ranked(scored);
 

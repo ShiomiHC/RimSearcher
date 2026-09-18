@@ -123,4 +123,27 @@ public sealed record CommandSpec
 
     /// <summary>是否吃全局参数(--snapshot/--db/--json 等)。维护型命令可以关掉。</summary>
     public bool UsesGlobals { get; init; } = true;
+
+    /// <summary>
+    /// 这条命令**有意不收**、而且说得出为什么的拼法。它是声明层的一部分:进 <c>--help</c> 与
+    /// cli-reference,解析器撞上时印它的那句话而不是近似候选。
+    ///
+    /// 只放**边界**上的词 —— 那件事住在别的命令里、而读者在这条命令的框里伸手去拿的
+    /// (<c>read --grep</c>:按模式找行是 code-search 的事)。拼错的词不进来,那是近似候选的活。
+    /// </summary>
+    public RefusedSpec[] Refused { get; init; } = [];
+}
+
+/// <summary>一个有意不收的拼法,以及那件事住在哪(见 <see cref="CommandSpec.Refused"/>)。</summary>
+public sealed record RefusedSpec
+{
+    public required string Name { get; init; }
+    public string[] Aliases { get; init; } = [];
+    /// <summary>
+    /// 那句话。写成能粘的整条命令;里面的 <c>&lt;第一个位置参数名&gt;</c> 与
+    /// <see cref="ValuePlaceholder"/> 由解析器在读者已经写了那个词时替换成他写的。
+    /// </summary>
+    public required string Where { get; init; }
+    /// <summary>读者跟在这个拼法后面给的值,该填进 <see cref="Where"/> 的哪个占位符。</summary>
+    public string? ValuePlaceholder { get; init; }
 }

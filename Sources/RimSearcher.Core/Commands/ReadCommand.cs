@@ -66,8 +66,12 @@ public sealed class ReadCommand : Command
                 // 不收 "field":那个词在 get/inherit 上指 def 的字段路径,是另一个概念。
                 Aliases = ["method", "method-name", "member-name", "property"],
                 Placeholder = "<name>",
-                Help = "Read the declaration of this member. Every member of that name in the file is " +
-                       "returned; --type narrows it to one declaring type.",
+                // 可重复(2026-09-19):`read --grep "bool CanCast|bool Activate|OnCooldown|…"` 被拒之后
+                // 读者手拆成三到五条 --member,12 个事件里两个是这种成串的形状(Docs/26 §6.4)。
+                Arity = Arity.Multi,
+                Help = "Read the declaration of this member. Give it more than once to read several in one " +
+                       "call, in the order given. Every member of that name in the file is returned; --type " +
+                       "narrows it to one declaring type.",
             },
             new OptionSpec
             {
@@ -144,10 +148,36 @@ public sealed class ReadCommand : Command
                 Default = "every line",
             },
         ],
+        // 有意不收的两个词,都是 code-search 的事。read 按**地址**给一段(行号 / 成员名 / 轮廓),
+        // 按**模式**找行是 code-search 的轴;5717 次 code-search 里 229 次的 --file-glob 就是一个具体
+        // 文件名,同一意图走 read --grep 的只有 17 次 —— 边界是站住的,缺的是读者在 read 的框里
+        // 不知道交界地带归谁。12 个 read --grep 事件里 8 个要的其实是成员正文(--member 一次到位),
+        // 4 个是文件内找用法(3 个绕路猜成员)。产地 Docs/26 §6.3–6.4。
+        Refused =
+        [
+            new()
+            {
+                Name = "grep",
+                Aliases = ["regex", "pattern", "search", "find", "match"],
+                ValuePlaceholder = "<regex>",
+                Where = "'read' shows a stretch of a file by address: --lines, --member, or --outline. " +
+                        "Lines matching a pattern are 'rimsearcher code-search <regex> --file-glob <file>' " +
+                        "(-C <n> adds context); a member's whole declaration is '--member <name>'.",
+            },
+            new()
+            {
+                Name = "context",
+                Aliases = ["C", "A", "B", "after", "before", "context-lines", "around"],
+                ValuePlaceholder = "<n>",
+                Where = "Context lines belong with a pattern, and that is 'rimsearcher code-search <regex> " +
+                        "--file-glob <file> -C <n>'. Here --member reads the whole declaration and --lines a range.",
+            },
+        ],
         Examples =
         [
             "rimsearcher read Pawn.cs --outline",
             "rimsearcher read CompShield.cs --member CompTick",
+            "rimsearcher read Ability.cs --member CanCast --member Activate",
             "rimsearcher read RimWorld.CompShield",
             "rimsearcher read vanilla/Assembly-CSharp/Verse/ThingComp.cs --lines 1-40",
         ],
@@ -181,7 +211,7 @@ public sealed class ReadCommand : Command
                 SourcesShared.NotConfiguredToRead("read"));
 
         var asked = ctx.Args.Positionals;
-        var member = ctx.Args.Value("member");
+        var members = ctx.Args.Values("member");
         var type = ctx.Args.Value("type");
         var range = ctx.Args.Value("lines");
         var outline = ctx.Args.Flag("outline");
@@ -231,7 +261,7 @@ public sealed class ReadCommand : Command
 
         // 「读哪一段」的三种说法互斥。不排优先级 —— 静默择一交出的是完全另一块代码,
         // 而这里当场就能说清。
-        if (range is { Length: > 0 } && (member is { Length: > 0 } || type is { Length: > 0 }))
+        if (range is { Length: > 0 } && (members.Count > 0 || type is { Length: > 0 }))
             throw new CliUsageException(
                 $"{rangeSpelling} reads raw lines and --member/--type find a declaration; they are two " +
                 "different reads, so pass one or the other. '--outline' lists the declarations with their " +
@@ -255,7 +285,7 @@ public sealed class ReadCommand : Command
 
         foreach (var wanted in asked)
         {
-            var status = ReadOne(ctx, root, wanted, sourceName, member, type, range, outline,
+            var status = ReadOne(ctx, root, wanted, sourceName, members, type, range, outline,
                                  asked.Count > 1, lines, rows, ref braceMatched);
             if (status == 0) read++; else failed++;
         }
@@ -273,7 +303,7 @@ public sealed class ReadCommand : Command
     /// 返回 0 表示读到了东西;非 0 时话已经说完(哪一句取决于是哪一种落空)。
     /// </summary>
     private static int ReadOne(CommandContext ctx, string root, string wanted, string? sourceName,
-                               string? member, string? type, string? range, bool outline, bool batch,
+                               IReadOnlyList<string> members, string? type, string? range, bool outline, bool batch,
                                List<string> lines, List<IReadOnlyDictionary<string, object?>> rows,
                                ref bool braceMatched)
     {
@@ -342,9 +372,9 @@ public sealed class ReadCommand : Command
             return status;
         }
 
-        if (member is { Length: > 0 } || type is { Length: > 0 })
+        if (members.Count > 0 || type is { Length: > 0 })
         {
-            var status = Declaration(ctx, rel, text, member, type, cap, lines, rows);
+            var status = Declaration(ctx, rel, text, members, type, cap, lines, rows);
             if (status == 0) braceMatched = true;
             return status;
         }
@@ -416,19 +446,30 @@ public sealed class ReadCommand : Command
         return 0;
     }
 
-    /// <summary>按名字读一段声明。同名的全给,每段自带来源行。</summary>
+    /// <summary>
+    /// 按名字读一段声明。同名的全给,每段自带来源行。几个成员名按给的顺序出块;落空的
+    /// 各说各的(同一条 SayNoDeclaration),找到的照印 —— 五个名字里一个拼错,不该让另四个陪着空。
+    /// </summary>
     private static int Declaration(CommandContext ctx, string rel, string[] text,
-                                   string? member, string? type, int cap,
+                                   IReadOnlyList<string> members, string? type, int cap,
                                    List<string> lines, List<IReadOnlyDictionary<string, object?>> rows)
     {
         var decls = DeclarationsIn(text);
 
-        var picked = member is { Length: > 0 }
-            ? decls.Where(d => Same(d.Name, member) &&
-                               (type is not { Length: > 0 } || Same(d.Owner ?? "", type))).ToList()
-            : decls.Where(d => CsOutlineIsType(d.Kind) && Same(d.Name, type!)).ToList();
+        // (名字, 命中) —— --type 那条路上名字是 type 自己,只有一组。
+        var groups = new List<(string Name, List<CsDecl> Hits)>();
+        if (members.Count > 0)
+            foreach (var m in members.Distinct(StringComparer.Ordinal))
+                groups.Add((m, decls.Where(d => Same(d.Name, m) &&
+                                                (type is not { Length: > 0 } || Same(d.Owner ?? "", type))).ToList()));
+        else
+            groups.Add((type!, decls.Where(d => CsOutlineIsType(d.Kind) && Same(d.Name, type!)).ToList()));
 
-        if (picked.Count == 0) { SayNoDeclaration(ctx, rel, text, decls, member, type); return 1; }
+        foreach (var (name, hits) in groups)
+            if (hits.Count == 0)
+                SayNoDeclaration(ctx, rel, text, decls, members.Count > 0 ? name : null, type);
+        var picked = groups.SelectMany(g => g.Hits).ToList();
+        if (picked.Count == 0) return 1;
 
         // 结构化侧不重复文本侧的排版件(分隔符、标题行):每一行自带它属于哪个声明,
         // 免得消费方从 "rel:12-40  method Foo.Bar" 里反解一遍。
@@ -474,20 +515,19 @@ public sealed class ReadCommand : Command
         // 判据是「--type 还能不能收敛」,不是「--type 在不在场」:vanilla 里
         // ThingOwner<T> 与 ThingOwner 同住一个文件、Count 的归属逐字相同,--type 写什么
         // 都同时命中两条 —— 收敛不了就得换一条走得通的下一步,而不是把警告收掉。
-        if (picked.Count > 1)
+        // 几个名字各判各的:CanCast 一份、Activate 三份,说的是 Activate。
+        foreach (var (what, same) in groups.Where(g => g.Hits.Count > 1))
         {
-            var ownersDiffer = picked.Select(d => d.Owner ?? "")
-                                     .Distinct(StringComparer.Ordinal).Count() > 1;
+            var ownersDiffer = same.Select(d => d.Owner ?? "")
+                                   .Distinct(StringComparer.Ordinal).Count() > 1;
             var typeCanHelp = ownersDiffer && type is not { Length: > 0 };
-            // --type 那条路上 member 是 null。
-            var what = member is { Length: > 0 } ? member : type;
             ctx.Report.Notice(NoticeKind.Filter,
                 $"'{what}' is declared more than once here: " +
-                string.Join(", ", picked.Select(d => $"{d.Qualified} (line {d.StartLine})")) + ". " +
+                string.Join(", ", same.Select(d => $"{d.Qualified} (line {d.StartLine})")) + ". " +
                 (typeCanHelp
                     ? "'--type <name>' narrows it to one."
                     : "--type cannot pick between them; read one alone with --lines " +
-                      string.Join(" or --lines ", picked.Select(d => $"{d.StartLine}-{d.EndLine}")) + "."));
+                      string.Join(" or --lines ", same.Select(d => $"{d.StartLine}-{d.EndLine}")) + "."));
         }
 
 

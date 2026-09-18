@@ -71,6 +71,15 @@ public static class HelpRenderer
             AppendOptions(sb, globals);
         }
 
+        // 有意不收的拼法与它们住在哪。常见档先读 help 再拼命令,这一段在他敲下去之前就把边界说了。
+        if (spec.Refused.Length > 0)
+        {
+            sb.Append(OutputText.Newline).Append("Not options here:").Append(OutputText.Newline);
+            var w = spec.Refused.Max(r => r.Name.Length + 2);
+            foreach (var r in spec.Refused)
+                sb.Append("  ").Append(("--" + r.Name).PadRight(w)).Append("  ").Append(r.Where).Append(OutputText.Newline);
+        }
+
         // 键名要写出来:猜错读到的 null 与「查到了但确实没有」在下游同形。
         if (spec.JsonKeys.Length > 0)
         {
@@ -202,6 +211,17 @@ public static class MarkdownRenderer
             }
 
             if (c.Options.Length > 0) AppendOptionTable(sb, c.Options);
+
+            if (c.Refused.Length > 0)
+            {
+                sb.Append("Not options here:").Append(OutputText.Newline).Append(OutputText.Newline);
+                sb.Append("| Spelling | Where that lives |").Append(OutputText.Newline);
+                sb.Append("|---|---|").Append(OutputText.Newline);
+                foreach (var r in c.Refused)
+                    sb.Append("| `--").Append(r.Name).Append("` | ").Append(Escape(r.Where)).Append(" |")
+                      .Append(OutputText.Newline);
+                sb.Append(OutputText.Newline);
+            }
 
             if (c.JsonKeys.Length > 0)
             {
