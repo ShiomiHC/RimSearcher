@@ -96,7 +96,7 @@ The recorded target is the method named at the call site. A callvirt names the b
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `--callees` | List what this method calls instead of what calls it. | `--calls`, `--outgoing`, `--reverse` |
-| `--source` <tree> | Only count call sites in this source tree. Both ends are still named from every tree. | `--tree`, `--from-tree` |
+| `--source` <tree> | Only count call sites in this source tree. Both ends are still named from every tree. | `--tree`, `--from-tree`, `--mod`, `--mods` |
 | `-n`, `--limit` <n> | How many callers to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 
 `--json` keys, besides the global `notes`:
@@ -136,11 +136,11 @@ A fourth shortens over-long lines instead of dropping them: --max-line-chars. De
 
 | Option | Meaning | Also accepted |
 |---|---|---|
-| `--file-glob` <glob> | Only search files whose path matches this glob. A glob with no '/' matches the file name alone (*.cs is every .cs file at any depth); with a '/' it matches the path relative to the decompiled root, which begins with the source tree's name even under --source, and there '*' stops at a '/' while '**' crosses it. So */Verse/* is one level down, **/Verse/** is any. Default: `*.cs`. | `--path-glob`, `--files`, `--file-filter`, `--glob`, `--file-pattern`, `--file-extension`, `--file-type`, `--path-filter`, `--include` |
-| `--max-files` <n> | How many files the scan may read before it stops, counted after --file-glob has filtered. Left out, every file the glob selects is read. This is the only switch that can make the answer partial: pass it a number and the match count drops to a lower bound. Default: `every file`. | `--file-limit`, `--scan-limit`, `--max-scan` |
-| `--max-per-file` <n> | How many matching lines to print from any one file, at most. Left out, every one is printed — there is no cap to lift. Matches past it are still counted, so the total stays exact. Default: `every one`. | `--per-file`, `--matches-per-file`, `--max-matches-per-file`, `--file-preview` |
+| `--file-glob` <glob> | Only search files whose path matches this glob. A glob with no '/' matches the file name alone (*.cs is every .cs file at any depth); with a '/' it matches the path relative to the decompiled root, which begins with the source tree's name even under --source, and there '*' stops at a '/' while '**' crosses it. So */Verse/* is one level down, **/Verse/** is any. Default: `*.cs`. | `--file`, `--path-glob`, `--files`, `--file-filter`, `--glob`, `--file-pattern`, `--file-extension`, `--file-type`, `--path-filter`, `--include` |
+| `--max-files` <n> | How many files the scan may read before it stops, counted after --file-glob has filtered. Left out, every file the glob selects is read. This is the only switch that can make the answer partial: pass it a number and the match count drops to a lower bound. Default: `every file`. | `--scan-limit`, `--max-scan` |
+| `--max-per-file` <n> | How many matching lines to print from any one file, at most. Left out, every one is printed — there is no cap to lift. Matches past it are still counted, so the total stays exact. Default: `every one`. | `--per-file`, `--matches-per-file`, `--max-matches-per-file` |
 | `--max-line-chars` <n> | A line longer than this prints as the neighbourhood of its matches, with '…' for the characters left out. A context line has no match to centre on, so it shows the start of the line instead. Pass 0 to print every line whole. It does not touch --json: the text there is always the whole line. Default: `240`. | `--max-columns`, `--max-line-length`, `--max-chars-per-line` |
-| `--source` <name> | Which decompiled source tree to search. Omit to search them all. This is the only switch that picks where the C# is read from: snapshots hold defs and translations, so --snapshot does not narrow a code search. | `--root`, `--tree` |
+| `--source` <name> | Which decompiled source tree to search. Omit to search them all. This is the only switch that picks where the C# is read from: snapshots hold defs and translations, so --snapshot does not narrow a code search. | `--root`, `--tree`, `--mod`, `--mods` |
 | `-C`, `--context` <n|a-b|a+n> | Show lines around each match. A number N is N above and N below; '0-20' is 0 above and 20 below, '10+4' is 10 above and 4 below. Windows that overlap or touch are merged, so no line is printed twice. Default: `0`. | `--context-lines`, `--around` |
 | `-n`, `--limit` <n> | How many matching lines to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `-i`, `--ignore-case` | Match without regard to letter case. | `--case-insensitive` |
@@ -468,7 +468,7 @@ Page with --from/--to, which are IL offsets, not line numbers. The bodyless colu
 
 | Option | Meaning | Also accepted |
 |---|---|---|
-| `--source` <tree> | Which decompiled source tree to read. Omit to read them all. | `--tree`, `--from-tree` |
+| `--source` <tree> | Which decompiled source tree to read. Omit to read them all. | `--tree`, `--from-tree`, `--mod`, `--mods` |
 | `--from` <offset> | Start at this IL offset. Decimal, or hex with an 0x prefix. The method header is always shown — instructions cannot be read without knowing the locals. | `--start-offset`, `--offset-from` |
 | `--to` <offset> | Stop after this IL offset. | `--end-offset`, `--offset-to` |
 | `--state-machine` | Go straight to the state machine's MoveNext when the named method is an iterator or an async method. Without it the method itself is shown and the state machine is named. | `--movenext`, `--follow` |
@@ -637,7 +637,7 @@ A property appears twice over: once as itself under the C# name, and once as the
 
 | Option | Meaning | Also accepted |
 |---|---|---|
-| `--source` <tree> | Which decompiled source tree to read. Omit to read them all. | `--tree`, `--from-tree` |
+| `--source` <tree> | Which decompiled source tree to read. Omit to read them all. | `--tree`, `--from-tree`, `--mod`, `--mods` |
 | `--name` <text> | Only members whose name contains this text. | `--contains`, `--member-name` |
 | `--member-kind` <kind> | Only one kind: method, constructor, property, field, or event. Comma-separated for several. | `--kinds`, `--of-kind` |
 | `--static` | Only static members. | `--statics` |
@@ -801,7 +801,7 @@ Page with --lines, never with a pipe. The first line of the answer says which li
 | `--lines` <a-b|a+n|a> | Read raw lines instead: '400-460' is inclusive (',' and ':' work in place of the '-'), '400+60' is sixty lines from 400, '400' starts there and runs to the end of the file. Without --lines the whole file is read. Whatever --lines asks for is printed in full unless --limit says otherwise — that is also what shortens a start-only '400'. | `--line`, `--range`, `--line-range` |
 | `--start` <n> | Read from this line. With --end it is a range; on its own it runs to the end of the file, which --limit then shortens. Same read as --lines, spelled as two options. |  |
 | `--end` <n> | Read up to and including this line. On its own it starts at line 1. |  |
-| `--source` <name> | Only resolve the file name inside this source tree. 'rimsearcher sources list' names them. | `--root`, `--tree` |
+| `--source` <name> | Only resolve the file name inside this source tree. 'rimsearcher sources list' names them. | `--root`, `--tree`, `--mod`, `--mods` |
 | `--outline` | List the file's types and members with their modifiers and line ranges instead of reading any of them. This is the cheap way to find out what to ask for. | `--members`, `--toc` |
 | `-n`, `--limit` <n> | How many lines to print at most, and on a raw read where the read stops. Left out, nothing is capped: the read prints whatever --lines, --outline or --member asked for, and the whole file if none of them was given. On a decompiled type that runs to thousands of lines. Default: `every line`. | `--max-lines`, `--max-results`, `--count`, `--rows`, `--head` |
 
@@ -1156,7 +1156,7 @@ compiler_generated marks iterator state machines and closure holders. The decomp
 
 | Option | Meaning | Also accepted |
 |---|---|---|
-| `--source` <tree> | Which decompiled source tree to read. Omit to read them all. | `--tree`, `--from-tree` |
+| `--source` <tree> | Which decompiled source tree to read. Omit to read them all. | `--tree`, `--from-tree`, `--mod`, `--mods` |
 | `--derived` | List the types that derive from it, or implement it when it is an interface. Direct ones only unless --transitive. | `--subclasses`, `--implementors`, `--children` |
 | `--transitive` | With --derived, follow the chain all the way down instead of one level. | `--deep`, `--recursive` |
 | `--bases` | List the chain of base types upward instead. | `--base-types`, `--parents`, `--ancestors` |
@@ -1193,7 +1193,7 @@ Answers 'what am I allowed to put here' and 'which classes are actually in use' 
 
 | Argument | Meaning |
 |---|---|
-| `<fieldPath>` | A field path or its last segment, such as compClass. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. Several paths go in one call; --limit and --offset apply to each one on its own, each gets its own count line and its own entry in the 'field' block, and the field_path column says which one a row came from. |
+| `<fieldPath>` | A field path or its last segment, such as compClass. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. '--field' spells out this same argument. Several paths go in one call; --limit and --offset apply to each one on its own, each gets its own count line and its own entry in the 'field' block, and the field_path column says which one a row came from. |
 
 | Option | Meaning | Also accepted |
 |---|---|---|
@@ -1201,6 +1201,7 @@ Answers 'what am I allowed to put here' and 'which classes are actually in use' 
 | `--offset` <n> | Skip this many values before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. |  |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind` |
+| `--field` <path> | A field path, same as giving it as an argument. 'rimsearcher values ThingDef --field statBases' is 'rimsearcher values statBases --type ThingDef'. |  |
 | `--exact-path` | Match the field path given as an argument end to end. | `--whole-path`, `--path-exact` |
 | `--path-contains` <text> | Only match field paths containing this text; when a path argument is given, it has to match as well. Repeat it to widen the selection. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. | `--filter`, `--grep` |
 
@@ -1239,7 +1240,7 @@ When a name asked for is not what this command looks up, a found_as table says w
 
 | Argument | Meaning |
 |---|---|
-| `<fieldPath>` | A field path or just its last segment, such as compClass or defaultProjectile. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. Omit it to search every field instead. *(optional)* |
+| `<fieldPath>` | A field path or just its last segment, such as compClass or defaultProjectile. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. '--field' spells out this same argument. Omit it to search every field instead. *(optional)* |
 | `<value>` | The value to look for. '--value' spells out this same argument, so give it one way or the other. Omit it to list every def that has the field at all. *(optional)* |
 
 | Option | Meaning | Also accepted |
@@ -1248,6 +1249,7 @@ When a name asked for is not what this command looks up, a found_as table says w
 | `--offset` <n> | Skip this many matches before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. |  |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind` |
+| `--field` <path> | The field path, same as giving it as the first argument. 'rimsearcher where ThingDef --field compClass --value CompShield' is 'rimsearcher where compClass CompShield --type ThingDef'. |  |
 | `--exact` | Require the whole value to match, with either a field path or --value. Without it, the value is matched as a substring. | `--exact-match`, `--whole` |
 | `--exact-path` | Match the field path given as an argument end to end. | `--whole-path`, `--path-exact` |
 | `--path-contains` <text> | Only match field paths containing this text; when a path argument is given, it has to match as well. Repeat it to widen the selection. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. | `--filter`, `--grep` |

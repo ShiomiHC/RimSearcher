@@ -18,15 +18,15 @@ Arguments:
 
 Options:
       --file-glob <glob>     Only search files whose path matches this glob. A glob with no '/' matches the file name alone (*.cs is every .cs file at any depth); with a '/' it matches the path relative to the decompiled root, which begins with the source tree's name even under --source, and there '*' stops at a '/' while '**' crosses it. So */Verse/* is one level down, **/Verse/** is any. Default: *.cs.
-                             Also accepted: --path-glob, --files, --file-filter, --glob, --file-pattern, --file-extension, --file-type, --path-filter, --include.
+                             Also accepted: --file, --path-glob, --files, --file-filter, --glob, --file-pattern, --file-extension, --file-type, --path-filter, --include.
       --max-files <n>        How many files the scan may read before it stops, counted after --file-glob has filtered. Left out, every file the glob selects is read. This is the only switch that can make the answer partial: pass it a number and the match count drops to a lower bound. Default: every file.
-                             Also accepted: --file-limit, --scan-limit, --max-scan.
+                             Also accepted: --scan-limit, --max-scan.
       --max-per-file <n>     How many matching lines to print from any one file, at most. Left out, every one is printed — there is no cap to lift. Matches past it are still counted, so the total stays exact. Default: every one.
-                             Also accepted: --per-file, --matches-per-file, --max-matches-per-file, --file-preview.
+                             Also accepted: --per-file, --matches-per-file, --max-matches-per-file.
       --max-line-chars <n>   A line longer than this prints as the neighbourhood of its matches, with '…' for the characters left out. A context line has no match to centre on, so it shows the start of the line instead. Pass 0 to print every line whole. It does not touch --json: the text there is always the whole line. Default: 240.
                              Also accepted: --max-columns, --max-line-length, --max-chars-per-line.
       --source <name>        Which decompiled source tree to search. Omit to search them all. This is the only switch that picks where the C# is read from: snapshots hold defs and translations, so --snapshot does not narrow a code search.
-                             Also accepted: --root, --tree.
+                             Also accepted: --root, --tree, --mod, --mods.
   -C, --context <n|a-b|a+n>  Show lines around each match. A number N is N above and N below; '0-20' is 0 above and 20 below, '10+4' is 10 above and 4 below. Windows that overlap or touch are merged, so no line is printed twice. Default: 0.
                              Also accepted: --context-lines, --around.
   -n, --limit <n>            How many matching lines to return, at most. Left out, every one is returned. Default: every one.

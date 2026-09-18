@@ -1,6 +1,7 @@
-$ rimsearcher where --field compClass
+$ rimsearcher search --query shield
 exit 2
 --- stdout ---
 --- stderr ---
-Unknown option '--field'. On 'where' it is an argument rather than an option: 'rimsearcher where compClass <value>'.
-Run 'rimsearcher where --help' to see what this command accepts.
+Unknown option '--query'. On 'search' it is an argument rather than an option: 'rimsearcher search shield'.
+Missing required argument <query>: Words, a def name, or part of one.
+Run 'rimsearcher search --help' to see what this command accepts.

@@ -430,10 +430,14 @@ public class OutputSnapshotTests
         // 不专门接住的话,印出来的与「这个词从来就不是一条命令」逐字同形。
         { "usage-retired-command", ["find", "compClass", "RimWorld.CompShield"] },
         // 同一个词在别的命令上是选项、在这条上是位置参数,而「这里怎么写」是算得出来的
-        // —— 连值一起填好。这一格钉的是那条**算法**,不是 --field 这个词的归属:它在
-        // read 侧早已删掉(Docs/12 的跨命令碰撞),在 get / inherit 侧也随 2026-09-09
-        // 那批零调用别名一起删了,而这句话照样成立。
-        { "usage-field-is-positional", ["where", "--field", "compClass"] },
+        // —— 连值一起填好。这一格钉的是那条**算法**,不是这个词的归属。载体原是
+        // `where --field compClass`;2026-09-19 那个拼法被收成 <fieldPath> 的选项拼法
+        // (被拒六周每周仍出现,Docs/26 §4),换到 search 的 <query> 上,算法那句照样成立。
+        { "usage-field-is-positional", ["search", "--query", "shield"] },
+        // 上面那个旧载体现在的长相:与 `where compClass` 同一张表,exit 0。
+        { "where-field-option",      ["where", "--field", "compClass"] },
+        // 类型打头 + 选项拼法(60 条历史样本里 38 条的形状):ThingDef 读作 --type,stderr 出声。
+        { "where-type-lead-field",   ["where", "ThingDef", "--field", "compClass"] },
         // 值给了两遍且不一样。位置参数与 --value 说的是同一件事,挑一个跑下去的话
         // 另一个被丢了在输出里看不出来。
         { "usage-value-twice",     ["where", "compClass", "RimWorld.CompShield", "--value", "Other"] },

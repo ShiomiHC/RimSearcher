@@ -59,6 +59,11 @@ public sealed record PositionalSpec
     public bool Required { get; init; } = true;
     /// <summary>吞掉其余全部位置参数。</summary>
     public bool Variadic { get; init; }
+    /// <summary>
+    /// 同一格的选项拼法:填这个名字的选项就是给这一格。`where --field X --value Y` 与 `where X Y`
+    /// 是同一条命令。解析后落进 <c>Positionals</c> 同一格,命令侧不用两头读。
+    /// </summary>
+    public string? Option { get; init; }
 }
 
 /// <summary>

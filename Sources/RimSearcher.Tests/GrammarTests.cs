@@ -2763,10 +2763,12 @@ public class GrammarTests
     [Fact]
     public void 别处认这个参数的名单不许悄悄截断()
     {
-        var (_, err, code) = Fixture.Run("code-search", "x", "--file", "Pawn.cs");
+        // 载体原是 `--file`(docs 认它)。2026-09-19 它成了 --file-glob 的别名,换到 `--path`:
+        // fields / get / inherit 都认,code-search 靠 --path-glob 这个前缀钩子指到 --file-glob。
+        var (_, err, code) = Fixture.Run("code-search", "x", "--path", "Verse/Pawn");
         Assert.Equal(2, code);
         Assert.Contains("Did you mean --file-glob", err, StringComparison.Ordinal);
-        Assert.Contains("The name as typed is accepted by 'docs', but not by 'code-search'.",
+        Assert.Contains("The name as typed is accepted by 'get', 'inherit', 'fields', but not by 'code-search'.",
                         err, StringComparison.Ordinal);
     }
 
@@ -4732,16 +4734,18 @@ public class GrammarTests
     [Fact]
     public void 位置参数被当成选项打进来时给出填好的写法()
     {
-        var (_, err, code) = Fixture.Run("where", "--field", "compClass");
+        // 载体原是 `where --field compClass`。2026-09-19 那个拼法被收成 <fieldPath> 的选项拼法
+        // (见下一条),这一档换到 search 的 <query> 上 —— 测的那条决定没变。
+        var (_, err, code) = Fixture.Run("search", "--query", "shield");
         Assert.Equal(2, code);
-        Assert.Contains("rimsearcher where compClass <value>", err, StringComparison.Ordinal);
+        Assert.Contains("rimsearcher search shield", err, StringComparison.Ordinal);
         // 这一档取代整张选项表 —— 表答的是「这里有什么」,而这里已经知道他要哪个,
         // 连值都填好了。两句一起说,长度翻倍而信息没多。
         Assert.DoesNotContain("This command accepts:", err, StringComparison.Ordinal);
 
         // 没有值可填时就摆出形状,不许凭空捏一个。
-        var (_, bare, _) = Fixture.Run("where", "--field");
-        Assert.Contains("rimsearcher where <fieldPath> <value>", bare, StringComparison.Ordinal);
+        var (_, bare, _) = Fixture.Run("search", "--query");
+        Assert.Contains("rimsearcher search <query>", bare, StringComparison.Ordinal);
 
         // 拼错的选项仍走近似候选:`--values` 前缀命中位置参数 <value>,而它要的显然是 --value。
         var (_, typo, _) = Fixture.Run("where", "compClass", "--values", "x");
@@ -4757,6 +4761,70 @@ public class GrammarTests
         // 钉的就是这件事),于是「表在」与「没瞎指」是同一件事,而且它的锚是唯一的。
         var (_, dropped, _) = Fixture.Run("where", "thingClass", "--from", "vanilla");
         Assert.Contains("This command accepts:", dropped, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 位置参数的选项拼法(<see cref="PositionalSpec.Option"/>):`--field` 在 where / values 上
+    /// 被拒六周、每周仍出现,而报错句 08-01 起就给了改正后的整条命令 —— 按 Docs/26 §1,
+    /// 报错句压不住的是形状问题。60 条历史样本里 38 条是 `where ThingDef --field X`:
+    /// 类型在前、字段用选项。于是 (a) `--field X` 与位置上的 X 落进同一格;(b) 选项拼法在场时
+    /// 像类型的裸首词读作 --type;(c) 同一格既按位置又按选项给了,说清是哪一格;
+    /// (d) `--value` 独自在场那支不变 —— 它不是这一格的拼法(value 那格不挂 Option)。
+    /// </summary>
+    [Fact]
+    public void 位置参数的选项拼法落进同一格()
+    {
+        var (viaOption, _, c1) = Fixture.Run("where", "--field", "compClass", "--json");
+        var (viaArg, _, c2) = Fixture.Run("where", "compClass", "--json");
+        Assert.Equal(0, c1);
+        Assert.Equal(c2, c1);
+        Assert.Equal(viaArg, viaOption);
+
+        // 类型打头 + 选项拼法:ThingDef 读作 --type,X 是字段,--value 照旧。挪格那句出声
+        // (notes 里多一条,与既有的类型打头一档同一条路),拿掉它之后逐字等于明写 --type 的那条。
+        static string AfterNote(string json)
+        {
+            var root = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
+            var notes = root["notes"]!.AsArray();
+            var moved = notes.Single(n => n!["text"]!.GetValue<string>().StartsWith("Read '", StringComparison.Ordinal));
+            notes.Remove(moved);
+            return root.ToJsonString();
+        }
+        static string Json(string json) => System.Text.Json.Nodes.JsonNode.Parse(json)!.ToJsonString();
+        var (typed, _, c3) = Fixture.Run("where", "ThingDef", "--field", "compClass", "--value", "RimWorld.CompShield", "--json");
+        var (plain, _, _) = Fixture.Run("where", "compClass", "RimWorld.CompShield", "--type", "ThingDef", "--json");
+        Assert.Equal(0, c3);
+        Assert.Contains("Read 'ThingDef' as --type ThingDef, not as <fieldPath>", typed, StringComparison.Ordinal);
+        // 「写出来是」那句得装下这一格,选项拼法不许从里面掉出去。
+        Assert.Contains("'rimsearcher where --field compClass --type ThingDef'", typed, StringComparison.Ordinal);
+        Assert.Equal(Json(plain), AfterNote(typed));
+
+        // 没有 --value、只有类型 + 字段:38/60 那个形状,列出该类型里带这个字段的每个 def。
+        var (listed, _, c4) = Fixture.Run("where", "ThingDef", "--field", "compClass", "--json");
+        var (listedPlain, _, _) = Fixture.Run("where", "compClass", "--type", "ThingDef", "--json");
+        Assert.Equal(0, c4);
+        Assert.Equal(Json(listedPlain), AfterNote(listed));
+
+        // 格都填满还剩裸词:点名 <fieldPath> 与站在它位置上的那个词,不落进「多给了 N 个位置参数」。
+        // (`where compClass --field thingClass` 不是这一档 —— 裸词依次补进没用选项给的格,
+        // compClass 读作值;那是 `--field` 声明为 <fieldPath> 的拼法之后唯一一致的读法。)
+        var (_, twice, c5) = Fixture.Run("where", "compClass", "RimWorld.CompShield", "--field", "thingClass");
+        Assert.Equal(2, c5);
+        Assert.Contains("<fieldPath> is given twice: 'compClass' as an argument and --field thingClass as an option", twice, StringComparison.Ordinal);
+        Assert.DoesNotContain("Unexpected argument", twice, StringComparison.Ordinal);
+
+        // values 的 <fieldPath> 是可变位置参数:--field 可以给几次,与裸词等价。
+        var (v1, _, c6) = Fixture.Run("values", "ThingDef", "--field", "compClass", "--json");
+        var (v2, _, _) = Fixture.Run("values", "compClass", "--type", "ThingDef", "--json");
+        Assert.Equal(0, c6);
+        Assert.Equal(Json(v2), AfterNote(v1));
+        var (v3, _, _) = Fixture.Run("values", "--field", "compClass", "--field", "thingClass", "--json");
+        var (v4, _, _) = Fixture.Run("values", "compClass", "thingClass", "--json");
+        Assert.Equal(v4, v3);
+
+        // --value 独自在场仍是「搜遍所有字段」那一问。
+        var (_, _, c7) = Fixture.Run("where", "--value", "RimWorld.CompShield", "--json");
+        Assert.Equal(0, c7);
     }
 
     /// <summary>

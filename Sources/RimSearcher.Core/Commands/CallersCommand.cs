@@ -58,7 +58,8 @@ public sealed class CallersCommand : Command
             new OptionSpec
             {
                 Name = "source",
-                Aliases = ["tree", "from-tree"],
+                // mod / mods:见 CodeShared.Source。
+                Aliases = ["tree", "from-tree", "mod", "mods"],
                 Placeholder = "<tree>",
                 Help = "Only count call sites in this source tree. Both ends are still named from every tree.",
                 Narrows = true,

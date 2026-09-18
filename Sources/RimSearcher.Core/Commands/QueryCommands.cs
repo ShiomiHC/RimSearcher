@@ -1189,7 +1189,9 @@ public sealed class FindCommand : Command
             "absent when no such def is among the rows.\n\n" + Advisory.SiblingHelp + "\n\n" + NameLookup.Help,
         Positionals =
         [
-            new PositionalSpec { Name = "fieldPath", Help = "A field path or just its last segment, such as compClass or defaultProjectile. " + CommonOptions.AnyIndexNote + " Omit it to search every field instead.", Required = false },
+            new PositionalSpec { Name = "fieldPath", Option = "field", Help = "A field path or just its last segment, such as compClass or defaultProjectile. " + CommonOptions.AnyIndexNote + " '--field' spells out this same argument. Omit it to search every field instead.", Required = false },
+            // value 不挂 Option:--value 与这一格的「给了两遍」由命令自己判 —— 它那句能说出两种写法等价,
+            // 解析层那句说不出;而 --value 独自在场(没字段)是一条真的分支,不是这一格的另一种拼法。
             new PositionalSpec { Name = "value", Help = "The value to look for. '--value' spells out this same argument, so give it one way or the other. Omit it to list every def that has the field at all.", Required = false },
         ],
         Options =
@@ -1208,6 +1210,18 @@ public sealed class FindCommand : Command
             // 正好是 <fieldPath>:`HediffDef` 按后缀命中真实存在的 comps[].hediffDef,
             // 于是拿到的不是报错,是一张答着另一个问题的干净的表。
             CommonOptions.Type,
+            new OptionSpec
+            {
+                // <fieldPath> 的选项拼法。`--field` 在这条命令上被拒了六周、每周仍出现,报错句
+                // 08-01 起就给了改正后的整条命令 —— 读者的形状是「类型在前、字段用选项」
+                // (`where ThingDef --field defName`,60 条历史样本里 38 条),与 <value>/--value
+                // 对称。解析层把它落进同一格(PositionalSpec.Option),命令侧仍只读 Positional(0)。
+                Name = "field",
+                Placeholder = "<path>",
+                Help = "The field path, same as giving it as the first argument. 'rimsearcher where ThingDef " +
+                       "--field compClass --value CompShield' is 'rimsearcher where compClass CompShield --type ThingDef'.",
+                // 不算收窄:它是问题本身,位置上的同一个词也不进「within …」那句。
+            },
             new OptionSpec
             {
                 Name = "exact",
@@ -2753,8 +2767,9 @@ public sealed class ValuesCommand : Command
             {
                 Name = "fieldPath",
                 Variadic = true,
+                Option = "field",
                 Help = "A field path or its last segment, such as compClass. " + CommonOptions.AnyIndexNote +
-                       " Several paths go in one call; " +
+                       " '--field' spells out this same argument. Several paths go in one call; " +
                        "--limit and --offset apply to each one on its own, each gets its own count line and " +
                        "its own entry in the 'field' block, and the field_path column says which one a row " +
                        "came from.",
@@ -2763,7 +2778,17 @@ public sealed class ValuesCommand : Command
         Options =
         [
             CommonOptions.Limit("values"), CommonOptions.Offset("values"), CommonOptions.Scope,
-            CommonOptions.Type, CommonOptions.ExactPath(),
+            CommonOptions.Type,
+            new OptionSpec
+            {
+                // 同 where 的 --field:`values ThingDef --field statBases` 是同一个「类型在前、字段用选项」的形状。
+                Name = "field",
+                Placeholder = "<path>",
+                Arity = Arity.Multi,
+                Help = "A field path, same as giving it as an argument. 'rimsearcher values ThingDef --field statBases' " +
+                       "is 'rimsearcher values statBases --type ThingDef'.",
+            },
+            CommonOptions.ExactPath(),
             CommonOptions.PathContainsBeside(),
         ],
         Examples =

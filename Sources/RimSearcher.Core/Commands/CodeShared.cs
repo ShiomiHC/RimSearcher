@@ -17,7 +17,11 @@ internal static class CodeShared
     {
         Name = "source",
         // "scope" 不在这里:那个词在 def 侧的命令上指快照里的 mod,是另一回事(见 CommonOptions.Scope)。
-        Aliases = ["tree", "from-tree"],
+        // mod / mods 在:树按 packageId 命名(vanilla 是唯一例外),与 def 侧 --scope 的 --mod 同一个
+        // 取值空间。`--mod` 在 code-search / read 上被拒六周、每周 5~6 次,stderr 被 2>/dev/null 吞掉时
+        // 空输出与「没有这个符号」同形。会分叉的取值(组名、all,-vanilla)落到这里是响亮的
+        // 「No decompiled source tree named …」,不会体面地答另一个问题。反向(def 侧收 --source)仍不收。
+        Aliases = ["tree", "from-tree", "mod", "mods"],
         Placeholder = "<tree>",
         Help = "Which decompiled source tree to read. Omit to read them all.",
         Narrows = true,

@@ -167,8 +167,18 @@ public static class ArgParser
         // 名字,而 'ThingDef' 那一块落空。判据放宽成「至少两个」:抢走的只有「几个名字里
         // 第一个恰好以 Def 收尾」这一种写法,而那句说明原样印出来,读的人当场看得见。
         // 显式给过 --type 时同样让位(下面那条 usage 错误),两者不一致正是最该出声的时候。
-        var typeLead = declared.Length > 0 && positionals.Count >= declared.Length + 1 &&
-                       (variadic || positionals.Count == declared.Length + 1) &&
+        //
+        // 某一格用选项拼法给了(PositionalSpec.Option,`where ThingDef --field X`)时按**空着的格**数:
+        // 那时裸词只可能是没用选项给的那几格加一个类型。`--field` 在 where / values 上被拒了六周、
+        // 每周仍出现(Docs/26 §4),60 条历史样本里 38 条是这个类型打头的形状,--value 就在旁边 ——
+        // 于是选项拼法在场时,像类型的裸首词读作类型,想给一个以 Def 收尾的值就写 --value。
+        var spelled = declared.Select(d => d.Option is { } on && values.TryGetValue(on, out var sv) && sv.Count > 0 ? sv : null).ToArray();
+        var spelledCount = spelled.Count(s => s is not null);
+        var open = declared.Length - spelledCount;
+        var typeLead = declared.Length > 0 && positionals.Count >= 1 &&
+                       (spelledCount > 0
+                           ? positionals.Count <= open + 1
+                           : positionals.Count >= declared.Length + 1 && (variadic || positionals.Count == declared.Length + 1)) &&
                        !string.Equals(declared[0].Name, "defType", StringComparison.Ordinal) &&
                        DefTypeShape.IsMatch(positionals[0]);
         var typeExplicit = byKey.TryGetValue("type", out var typeOpt0) && values.ContainsKey(typeOpt0.Name);
@@ -179,9 +189,44 @@ public static class ArgParser
             Record(typeOpt, lead);
             // 静默接受,但不静默 —— 不说的话下次还是这么写,而「within --type X」那句
             // 只说得出「筛过了」,说不出「你写的那个词是从哪一格挪过去的」。
+            // 选项拼法在场时裸词列表装不下这一格(`--field X` 不在里面),把它按选项形态补回去。
+            // 不照 argv 整条抄:--db / --config 这类管道选项会跟进来,而那句是给人粘的。
+            var spelledOut = declared.Where((_, i) => spelled[i] is not null)
+                                     .Select((d, i) => $"--{d.Option} {string.Join($" --{d.Option} ", spelled[Array.IndexOf(declared, d)]!)}");
+            var written = string.Join(" ", positionals.Concat(spelledOut));
             notes.Add($"Read '{lead}' as --type {lead}, not as <{declared[0].Name}>: on '{spec.Name}' the def " +
                       $"type is an option. Written out, this call is '{CommandRegistry.ExeName} {spec.Name} " +
-                      string.Join(" ", positionals) + $" --type {lead}'.");
+                      written + $" --type {lead}'.");
+        }
+
+        // 选项拼法落格:按声明顺序,每一格取选项给的,没给的依次拿裸词。前面有格空着时后面的
+        // 选项拼法不落格(表里不留空洞,命令侧照旧从选项读);格都填完还剩裸词,就是同一格
+        // 给了两遍 —— 说清哪一格,不让它落进下面「多给了 N 个」那句。
+        if (spelledCount > 0)
+        {
+            var filled = new List<string>();
+            var raw = new Queue<string>(positionals);
+            for (var i = 0; i < declared.Length; i++)
+            {
+                if (spelled[i] is { } sv)
+                {
+                    if (declared[i].Variadic) filled.AddRange(sv); else filled.Add(sv[^1]);
+                }
+                else if (raw.Count > 0) filled.Add(raw.Dequeue());
+                else break;
+            }
+            if (raw.Count > 0 && variadic)
+                filled.AddRange(raw);
+            else if (raw.Count > 0)
+            {
+                // 点名的裸词取**原来站在那一格位置上**的那个:`where compClass X --field thingClass`
+                // 里多出来的是 X,但与 --field 撞的是 compClass。
+                var twice = declared.Select((d, i) => (d, i)).First(t => spelled[t.i] is not null);
+                var atSlot = twice.i < positionals.Count ? positionals[twice.i] : raw.Peek();
+                errors.Add($"<{twice.d.Name}> is given twice: '{atSlot}' as an argument and --{twice.d.Option} " +
+                           $"{spelled[twice.i]![^1]} as an option. They are the same argument; keep one.");
+            }
+            positionals = filled;
         }
 
         // 可变位置参数上,首位像类型而 --type 又明写了:两个类型不一致,不许悄悄把首位

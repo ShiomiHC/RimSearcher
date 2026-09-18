@@ -60,6 +60,24 @@ public class DeclarationTests
     }
 
     /// <summary>
+    /// 位置参数挂的选项拼法(<see cref="PositionalSpec.Option"/>)必须是同一条命令上真有的、
+    /// 收值的选项 —— 解析器按 Name 在已给的值里找它,名字对不上时那一格静默地永远算「没给」。
+    /// </summary>
+    [Fact]
+    public void 位置参数的选项拼法指向本命令真有的收值选项()
+    {
+        foreach (var spec in Registry.Specs)
+            foreach (var pos in spec.Positionals)
+            {
+                if (pos.Option is null) continue;
+                var twin = spec.Options.SingleOrDefault(o => o.Name == pos.Option);
+                Assert.True(twin is not null, $"'{spec.Name} <{pos.Name}>' says --{pos.Option} spells it, but no such option is declared there.");
+                Assert.True(twin!.Arity != Arity.Flag, $"'{spec.Name} --{pos.Option}' is a switch; it cannot carry <{pos.Name}>.");
+                Assert.True(!pos.Variadic || twin.Arity == Arity.Multi, $"'{spec.Name} <{pos.Name}>' is variadic, so --{pos.Option} must be Multi.");
+            }
+    }
+
+    /// <summary>
     /// **一个名字在别处是正名时,不许在这里当另一个东西的别名。**
     ///
     /// 上一条闸只查一条命令**之内**,而这个洞是跨命令的:`--source` 在 code-search / read

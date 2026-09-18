@@ -84,7 +84,10 @@ public sealed class CodeSearchCommand : Command
                 // 差异,剩下的换词写法列在这里有意接受。
                 // 主名由 R13 定:自由命名 12/12 落在 file-glob,识别复测 10/10。旧主名
                 // files 产出式一票没拿到,降为别名;path-glob 是实测的第二名(6/12)。
-                Aliases = ["path-glob", "files", "file-filter", "glob", "file-pattern", "file-extension", "file-type", "path-filter", "include"],
+                // file 是 2026-09-19 加的:被拒六周、占比 W35→W38 0.15%→3.8% 一路涨,取值全是
+                // `Foo.cs` 这种裸文件名 —— 正是无 '/' 的 glob 的语义。此前它的提示是
+                // --file-glob / --file-limit / --file-preview 三选一,后两个死别名已摘掉。
+                Aliases = ["file", "path-glob", "files", "file-filter", "glob", "file-pattern", "file-extension", "file-type", "path-filter", "include"],
                 Placeholder = "<glob>",
                 Help = "Only search files whose path matches this glob. A glob with no '/' matches the file name " +
                        "alone (*.cs is every .cs file at any depth); with a '/' it matches the path relative to " +
@@ -100,7 +103,7 @@ public sealed class CodeSearchCommand : Command
                 // 全量扫一遍 3.0 秒,那个数够不着;历史上 136 次咬下去全是手写的 N,没有一次
                 // 是它。留着选项本身,因为只有它能把答案变成部分答案,而部分答案要能造得出来。
                 Name = "max-files",
-                Aliases = ["file-limit", "scan-limit", "max-scan"],
+                Aliases = ["scan-limit", "max-scan"],
                 Placeholder = "<n>",
                 Help = "How many files the scan may read before it stops, counted after --file-glob has filtered. " +
                        "Left out, every file the glob selects is read. This is the only switch that can make " +
@@ -114,7 +117,7 @@ public sealed class CodeSearchCommand : Command
                 // code-search 全量重放,上限解除后最大输出 13233 字符,不带管道的 60 条里
                 // 最大值也是这一条 —— 它一次也没挡住过会撑爆的输出。
                 Name = "max-per-file",
-                Aliases = ["per-file", "matches-per-file", "max-matches-per-file", "file-preview"],
+                Aliases = ["per-file", "matches-per-file", "max-matches-per-file"],
                 Placeholder = "<n>",
                 Help = "How many matching lines to print from any one file, at most. Left out, every one is " +
                        "printed — there is no cap to lift. Matches past it are still counted, so the total " +
@@ -142,8 +145,8 @@ public sealed class CodeSearchCommand : Command
             new OptionSpec
             {
                 Name = "source",
-                // "scope" 不在这里 —— 见 CommandBase.Scope 的别名注释。
-                Aliases = ["root", "tree"],
+                // "scope" 不在这里 —— 见 CommandBase.Scope 的别名注释。mod / mods 在:见 CodeShared.Source。
+                Aliases = ["root", "tree", "mod", "mods"],
                 Placeholder = "<name>",
                 Help = "Which decompiled source tree to search. Omit to search them all. This is the only " +
                        "switch that picks where the C# is read from: snapshots hold defs and translations, so " +

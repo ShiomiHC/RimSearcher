@@ -117,7 +117,8 @@ public sealed class ReadCommand : Command
             new OptionSpec
             {
                 Name = "source",
-                Aliases = ["root", "tree"],
+                // mod / mods:见 CodeShared.Source。
+                Aliases = ["root", "tree", "mod", "mods"],
                 Placeholder = "<name>",
                 Help = "Only resolve the file name inside this source tree. 'rimsearcher sources list' " +
                        "names them.",

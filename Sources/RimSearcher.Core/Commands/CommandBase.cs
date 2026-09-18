@@ -123,6 +123,9 @@ public static class CommonOptions
         // 落在 code-search 上 2 次(其中一次写的是组名 races,那边没有同名树,报错了)。
         // 于是两边各删掉自己不被用的那个别名,一次真实用法都没牺牲。
         // "from" 同理:modlist save 有一个真的 --from(从哪份名单读 id)。两个别名都是零用量。
+        //
+        // 2026-09-19 起代码侧的 --source 反过来收了 mod / mods(见 CodeShared.Source):那两个词的
+        // 取值空间两边同一个(packageId),不是 source / scope 这种各指一物的词。这里仍不收 source。
         Aliases = ["mod", "mods"],
         Placeholder = "<expr>",
         // 一词两义:这里的 'vanilla' = Ludeon 出的每一个模块(Core 加全部已装 DLC),

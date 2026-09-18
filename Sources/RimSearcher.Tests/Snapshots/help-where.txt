@@ -14,7 +14,7 @@ Fields in one indexed block — a comps[N] or statBases[N] entry — bind and ov
 When a name asked for is not what this command looks up, a found_as table says what it is instead and gives the command that reaches it. An xml node is an inheritance-layer entry (Name=, ParentName= or Abstract=) and never becomes a def, so only 'inherit' reaches it; interface text lives in keyed translations that belong to no def, so only 'keyed' finds it; a field value is what some defs set a field to (comps[N].compClass and the like), so 'where --value' lists them; a class is the runtime type some defs are built as — the game files them under the nearest def type with a database of its own, so 'list <DefType> --class' reaches them; a def outside --scope is in this snapshot but excluded by the --scope given; a mod is a --scope, not a def. A def turns up when the name is a def but this command reads something narrower: 'inherit' reads only nodes that declare Name=, ParentName= or Abstract=, 'keyed' reads interface text, 'economy' reads priced things; 'get' reaches the def itself.
 
 Arguments:
-  <fieldPath>  A field path or just its last segment, such as compClass or defaultProjectile. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. Omit it to search every field instead. (optional)
+  <fieldPath>  A field path or just its last segment, such as compClass or defaultProjectile. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. '--field' spells out this same argument. Omit it to search every field instead. (optional)
   <value>      The value to look for. '--value' spells out this same argument, so give it one way or the other. Omit it to list every def that has the field at all. (optional)
 
 Options:
@@ -25,6 +25,7 @@ Options:
                               Also accepted: --mod, --mods.
       --type <DefType>        Restrict results to one def type, for example ThingDef or HediffDef.
                               Also accepted: --def-type, --kind.
+      --field <path>          The field path, same as giving it as the first argument. 'rimsearcher where ThingDef --field compClass --value CompShield' is 'rimsearcher where compClass CompShield --type ThingDef'.
       --exact                 Require the whole value to match, with either a field path or --value. Without it, the value is matched as a substring.
                               Also accepted: --exact-match, --whole.
       --exact-path            Match the field path given as an argument end to end.

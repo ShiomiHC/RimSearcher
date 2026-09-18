@@ -1,0 +1,19 @@
+$ rimsearcher where ThingDef --field compClass
+exit 0
+--- stdout ---
+Read 'ThingDef' as --type ThingDef, not as <fieldPath>: on 'where' the def type is an option. Written out, this call is 'rimsearcher where --field compClass --type ThingDef'.
+  - 4 matches within --type ThingDef.
+  - Those 4 matches come from 2 defs: a def that matches on more than one path has a row for each, so the def_name column repeats.
+
+Defs that may be missing from this answer, their export cut short — all of ThingDef
+def_type  defs_cut_short
+ThingDef  1
+verify: rimsearcher snapshot truncated --type ThingDef
+
+Same in every row, not repeated below: def_type=ThingDef.
+def_name            path                value                 code_default  declared_in
+Apparel_ShieldBelt  comps[0].compClass  RimWorld.CompShield   yes           ludeon.rimworld
+Apparel_ShieldBelt  comps[1].compClass  TestMod.CompBoltedOn  no            ludeon.rimworld
+TestModGun          comps[0].compClass  RimWorld.CompShield   yes           test.mod
+TestModGun          comps[1].compClass  TestMod.CompBoltedOn  no            test.mod
+--- stderr ---
