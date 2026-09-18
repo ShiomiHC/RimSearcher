@@ -271,14 +271,11 @@ public sealed class SnapshotStatusCommand : Command
             case EnvironmentMatch.ContentDrift:
                 ctx.Report.Notice(NoticeKind.Staleness,
                     (sameList ? "Same mods, same order, same game build" : "Same game build") +
-                    " — but the files those mods are made of have moved. " +
-                    ContentDrift.Sentence(
-                        selection.Alias ?? Path.GetFileNameWithoutExtension(selection.Path), env.Content!,
-                        names: 0));
-                ctx.Report.Table("xml", ["package_id", "state"],
-                    Roster(
-                        env.Content!.Changed.Select(id => (id, "changed")),
-                        env.Content.Missing.Select(id => (id, "missing"))));
+                    " — but " + ContentDrift.Sentence(env.Content!));
+                ctx.Report.Table(ContentDrift.Table, ContentDrift.Columns,
+                    ContentDrift.Rows(selection.Alias ?? Path.GetFileNameWithoutExtension(selection.Path),
+                                      env.Content!),
+                    unclipped: true);
                 break;
             case EnvironmentMatch.Unknown:
                 ctx.Report.Notice(NoticeKind.Boundary,

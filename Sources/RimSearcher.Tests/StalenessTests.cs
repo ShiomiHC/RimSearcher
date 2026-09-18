@@ -474,81 +474,47 @@ public class StalenessTests
     }
 
     /// <summary>
-    /// 声明句要点出**是哪几个 mod** —— 只说「有东西变了」的话,下一步(是重导还是不管)
-    /// 没有依据,而重导一次要开一遍游戏。
+    /// 漂移是一张表,每个 mod 一行:**是哪几个 mod** 在 package_id 列,下一步在 next 列 ——
+    /// 只说「有东西变了」的话,下一步(是重导还是不管)没有依据,而重导一次要开一遍游戏。
+    /// 两个成因两种 state:changed 的 next 是重导;missing 没有 CLI 能做的下一步,那一格空着,
+    /// 不许写成「重导就好了」。
     /// </summary>
     [Fact]
-    public void 漂移声明点名到mod()
+    public void 漂移表每个mod一行且changed与missing分开()
     {
-        var sentence = ContentDrift.Sentence(
-            "modded", new ContentComparison(["erdelf.humanoidalienraces"], [], 23));
+        var rows = ContentDrift.Rows("modded",
+            new ContentComparison(["erdelf.humanoidalienraces"], ["gone.mod"], 23));
 
-        Assert.Contains("erdelf.humanoidalienraces", sentence, StringComparison.Ordinal);
-        Assert.Contains("Re-export", sentence, StringComparison.Ordinal);
+        Assert.Equal(2, rows.Count);
+        Assert.Equal("erdelf.humanoidalienraces", rows[0]["package_id"]);
+        Assert.Equal(ContentDrift.Changed, rows[0]["state"]);
+        Assert.Equal("rimsearcher export --modlist modded", rows[0]["next"]);
+        Assert.Equal("gone.mod", rows[1]["package_id"]);
+        Assert.Equal(ContentDrift.Missing, rows[1]["state"]);
+        Assert.Null(rows[1]["next"]);
     }
 
     /// <summary>
-    /// status 那条路把名单交给表,句子里不再举例 —— 四个 id 时查询会收成
-    /// <c>and 1 more</c>,status 不许走那条截断。
+    /// status 表上那句总账只有数,名单在表里 —— 四个 id 不许收成 <c>and 1 more</c>。
+    /// 措辞不许把判据说大:比的是尺寸与时间戳,而 Steam 重下一份逐字节相同的文件也会让它响,
+    /// 说成「被编辑过」就是拿一句证不了的话去指挥下一步。主谓跟着数走(1 mod has / 2 mods have)。
     /// </summary>
     [Fact]
-    public void status句不截成andNmore()
+    public void status总账句只有数且主谓跟着数走()
     {
-        var four = new ContentComparison(["a.mod", "b.mod", "c.mod", "d.mod"], [], 5);
-        var status = ContentDrift.Sentence("s", four, names: 0);
-        Assert.DoesNotContain("more", status, StringComparison.Ordinal);
-        Assert.DoesNotContain("a.mod", status, StringComparison.Ordinal);
-        Assert.Contains("4 mods", status, StringComparison.Ordinal);
+        var four = ContentDrift.Sentence(new ContentComparison(["a.mod", "b.mod", "c.mod", "d.mod"], [], 5));
+        Assert.DoesNotContain("more", four, StringComparison.Ordinal);
+        Assert.DoesNotContain("a.mod", four, StringComparison.Ordinal);
+        Assert.Contains("4 mods have Defs or Patches", four, StringComparison.Ordinal);
+        Assert.Contains("changed on disk", four, StringComparison.Ordinal);
+        Assert.DoesNotContain("edited", four, StringComparison.Ordinal);
 
-        var query = ContentDrift.Sentence("s", four);
-        Assert.Contains("and 1 more", query, StringComparison.Ordinal);
-        Assert.Contains("a.mod", query, StringComparison.Ordinal);
-    }
+        var one = ContentDrift.Sentence(new ContentComparison(["a.mod"], [], 5));
+        Assert.Contains("1 mod has Defs or Patches", one, StringComparison.Ordinal);
 
-    /// <summary>
-    /// 措辞不许把判据说大。比的是尺寸与时间戳,而 Steam 重下一份逐字节相同的文件
-    /// 也会让它响 —— 说成「被编辑过」就是拿一句证不了的话去指挥下一步。
-    /// </summary>
-    [Fact]
-    public void 漂移声明不声称文件被编辑过()
-    {
-        var sentence = ContentDrift.Sentence(
-            "modded", new ContentComparison(["a.mod"], [], 5));
-
-        Assert.Contains("changed on disk", sentence, StringComparison.Ordinal);
-        Assert.DoesNotContain("edited", sentence, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// 主谓要跟着数走。第一次跑真数据就撞上「1 mod … have」—— 计数本身是文法系统渲染的,
-    /// 而句子后半段的动词不是,两半各说各的。
-    /// </summary>
-    [Fact]
-    public void 漂移声明的主谓跟着数走()
-    {
-        var one = ContentDrift.Sentence("s", new ContentComparison(["a.mod"], [], 5));
-        Assert.Contains("1 mod", one, StringComparison.Ordinal);
-        Assert.Contains("has Defs or Patches", one, StringComparison.Ordinal);
-
-        var many = ContentDrift.Sentence("s", new ContentComparison(["a.mod", "b.mod"], [], 5));
-        Assert.Contains("2 mods", many, StringComparison.Ordinal);
-        Assert.Contains("have Defs or Patches", many, StringComparison.Ordinal);
-
-        Assert.Contains("its files", ContentDrift.Sentence("s", new ContentComparison([], ["a.mod"], 5)),
-                        StringComparison.Ordinal);
-        Assert.Contains("their files", ContentDrift.Sentence("s", new ContentComparison([], ["a.mod", "b.mod"], 5)),
-                        StringComparison.Ordinal);
-    }
-
-    /// <summary>找不到的 mod 那一半自己有一句话,而且不说「重导就好了」。</summary>
-    [Fact]
-    public void 消失的mod有自己的说法()
-    {
-        var sentence = ContentDrift.Sentence(
-            "modded", new ContentComparison([], ["gone.mod"], 5));
-
-        Assert.Contains("gone.mod", sentence, StringComparison.Ordinal);
-        Assert.Contains("cannot be found on disk", sentence, StringComparison.Ordinal);
+        var gone = ContentDrift.Sentence(new ContentComparison([], ["gone.mod"], 5));
+        Assert.Contains("1 mod the export read cannot be found on disk", gone, StringComparison.Ordinal);
+        Assert.DoesNotContain("gone.mod", gone, StringComparison.Ordinal);
     }
 
     // ---- 端到端:真的命令行入口说了什么 ----
@@ -565,8 +531,9 @@ public class StalenessTests
 
         var stdout = Run(configPath, db, "get", "Apparel_ShieldBelt");
 
-        Assert.Contains("changed on disk", stdout, StringComparison.Ordinal);
-        Assert.Contains("test.mod", stdout, StringComparison.Ordinal);
+        // 表不是句子:package_id / state / next 三列,next 是一条能粘的重导命令。
+        Assert.Contains("package_id", stdout, StringComparison.Ordinal);
+        Assert.Matches(@"test\.mod\s+changed\s+rimsearcher export --modlist e2e-drift", stdout);
     }
 
     /// <summary>
@@ -582,34 +549,35 @@ public class StalenessTests
     {
         var (db, _, modDir, configPath) = SnapshotOfModTree("e2e-drift-place");
         File.AppendAllText(Path.Combine(modDir, "Defs", "Things.xml"), "<!-- edited -->");
-        const string Banner = "changed on disk";
+        const string Header = "package_id";
 
-        // 答案就出自那个 mod:第一行。
+        // 答案就出自那个 mod:表在最前面,第一行是它的表头。
         var hit = Run(configPath, db, "get", "TestModGun");
-        Assert.StartsWith("1 mod in snapshot", hit, StringComparison.Ordinal);
+        Assert.StartsWith(Header, hit, StringComparison.Ordinal);
 
-        // 答案与它无关:话照说,位置在表下面。
+        // 答案与它无关:表照印,位置在全部数据块之后。
         var other = Run(configPath, db, "get", "Apparel_ShieldBelt");
-        Assert.Contains(Banner, other, StringComparison.Ordinal);
-        Assert.False(other.StartsWith("1 mod in snapshot", StringComparison.Ordinal));
-        Assert.True(other.IndexOf(Banner, StringComparison.Ordinal) >
+        Assert.Contains(Header, other, StringComparison.Ordinal);
+        Assert.False(other.StartsWith(Header, StringComparison.Ordinal));
+        Assert.True(other.IndexOf(Header, StringComparison.Ordinal) >
                     other.IndexOf("ludeon.rimworld", StringComparison.Ordinal));
 
         // 零结果最需要它:被漂移改没的那一行,长得就是这个样子。
         var miss = Run(configPath, db, "get", "zzznosuchdef");
-        Assert.StartsWith("1 mod in snapshot", miss, StringComparison.Ordinal);
+        Assert.StartsWith(Header, miss, StringComparison.Ordinal);
 
         // 输出里根本没有 mod 这一维时,证不出无关 —— 一律当有关。
         var agg = Run(configPath, db, "fields", "ThingDef");
-        Assert.StartsWith("1 mod in snapshot", agg, StringComparison.Ordinal);
+        Assert.StartsWith(Header, agg, StringComparison.Ordinal);
 
-        // 位置会变,于是句子里一个方位词都不许有 —— 沉到表下时 "answers below" 指的是
+        // 位置会变,于是表里一个方位词都不许有 —— 沉到表下时 "answers below" 指的是
         // 一片不存在的下文。
         foreach (var stdout in new[] { hit, other, miss, agg })
         {
-            var line = stdout[stdout.IndexOf("1 mod in snapshot", StringComparison.Ordinal)..].Split('\n')[0];
-            Assert.DoesNotContain("below", line, StringComparison.Ordinal);
-            Assert.DoesNotContain("above", line, StringComparison.Ordinal);
+            var at = stdout.IndexOf(Header, StringComparison.Ordinal);
+            var table = string.Join('\n', stdout[at..].Split('\n').Take(2));
+            Assert.DoesNotContain("below", table, StringComparison.Ordinal);
+            Assert.DoesNotContain("above", table, StringComparison.Ordinal);
         }
     }
 
@@ -623,8 +591,8 @@ public class StalenessTests
         var (db, _, _, configPath) = SnapshotOfModTree("e2e-quiet");
         var stdout = Run(configPath, db, "get", "Apparel_ShieldBelt");
 
-        Assert.DoesNotContain("changed on disk", stdout, StringComparison.Ordinal);
-        Assert.DoesNotContain("Re-export", stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain("package_id", stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain("export --modlist", stdout, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -713,6 +681,7 @@ public class StalenessTests
         Assert.Equal(1, xml.GetArrayLength());
         Assert.Equal("test.mod", xml[0].GetProperty("package_id").GetString());
         Assert.Equal("changed", xml[0].GetProperty("state").GetString());
+        Assert.Equal("rimsearcher export --modlist e2e-status-xml", xml[0].GetProperty("next").GetString());
         Assert.Equal(0, json.RootElement.GetProperty("mod_list").GetArrayLength());
     }
 

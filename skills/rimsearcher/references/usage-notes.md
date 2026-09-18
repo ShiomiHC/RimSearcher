@@ -12,10 +12,12 @@ file under `Defs/` and `Patches/` of each mod it could locate on disk. The `xml_
 row says how many mods that covers — only the ones it could locate on disk, so it falls
 short of the snapshot's own count by however many it could not find. That last
 one catches a mod whose contents changed without its `About.xml` version moving, which is the
-ordinary shape of a Steam workshop update. Ordinary queries name up to three of those mods.
-`snapshot status` lists every one in an `xml` table, and every packageId only on one side of
-the enabled list in a `mod_list` table; `--json` exposes both as row arrays, empty when
-nothing differs.
+ordinary shape of a Steam workshop update. Those mods come out as an `xml` table
+(`package_id`, `state` = `changed` or `missing`, `next` = the re-export command): ordinary
+queries print that `xml` table too, above the answer when the answer touches one of those mods
+and below it otherwise. `snapshot status` lists every one in the same `xml` table, and every
+packageId only on one side of the enabled list in a `mod_list` table; `--json` exposes both as
+row arrays, empty when nothing differs.
 
 **Renaming a snapshot.** The name is three files that share it: `snapshots/<name>.db`,
 `modlists/<name>.rml` next to the config file, and `exports/<name>.rsx.jsonl.gz`.

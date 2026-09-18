@@ -271,9 +271,11 @@ public class SkillPromiseTests
         // 每一样各连一道闸,少一样就红。
         new("Four things: same mods, same order, same game build",
             nameof(GrammarTests.一致这句话要同时说清没比的是什么)),
-        new("Ordinary queries name up to three of those mods",
-            "漂移声明点名到mod"),
-        new("`snapshot status` lists every one in an `xml` table",
+        new("ordinary\nqueries print that `xml` table too",
+            "漂移时普通查询也发声"),
+        new("above the answer when the answer touches one of those mods\nand below it otherwise",
+            "漂移横幅点到那个mod时才占表头"),
+        new("`snapshot status` lists every one in the same `xml` table",
             "漂移在status里列出全部packageId"),
         // 2026-09-01:「is the full comparison with the installed game」与紧跟的这句是
         // 同一个命令连说两遍,前一句只给抽象说法、后一句给内容,合成一句。承诺没变。

@@ -186,6 +186,9 @@ public sealed class Report
     /// <summary>那些 mod 一动、这次的答案就可能不对的那条话,以及它点名的 mod。</summary>
     private (Notice Notice, IReadOnlyList<string> Mods)? _deferred;
 
+    /// <summary>同一件事的表形:XML 漂移那张 <c>xml</c> 表,位置同样等结果出来再定。</summary>
+    private (TableBlock Table, IReadOnlyList<string> Mods)? _deferredTable;
+
     /// <summary>
     /// 位置等结果出来再定的一条声明:先按脚注挂上,<see cref="Settle"/> 再决定要不要提回
     /// 表头。发的时候查询还没跑,而判据在结果里。
@@ -204,15 +207,42 @@ public sealed class Report
         return this;
     }
 
+    /// <summary>
+    /// 位置等结果出来再定的一张表。纪律与 <see cref="DeferredNotice"/> 相同 —— 只调位置,
+    /// 一次都不抑制:证得出与答案无关就沉到全部数据块之后,证不出就提到最前面。
+    /// 表而不是句子,是 r19 量到弱档把横幅里的 mod 名当成 def 去 get(Docs/25 §19):
+    /// 表的 next 列给的是一条能粘的命令。
+    /// </summary>
+    public Report DeferredTable(string name, IReadOnlyList<string> columns,
+                                IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
+                                IReadOnlyList<string> aboutMods)
+    {
+        var table = new TableBlock(name, columns, rows, null, true);
+        _deferredTable = (table, aboutMods);
+        _entries.Add(table);
+        return this;
+    }
+
     /// <summary>结果已经在手,把延后的那条摆到它该去的位置。渲染之前调一次。</summary>
     public void Settle()
     {
-        if (_deferred is not { } d) return;
-        _deferred = null;
+        if (_deferred is { } d)
+        {
+            _deferred = null;
+            var at = _entries.IndexOf(d.Notice);
+            if (at >= 0 && !ProvablyUnrelated(d.Mods))
+                _entries[at] = d.Notice with { Footnote = false };
+        }
 
-        var at = _entries.IndexOf(d.Notice);
-        if (at >= 0 && !ProvablyUnrelated(d.Mods))
-            _entries[at] = d.Notice with { Footnote = false };
+        if (_deferredTable is { } t)
+        {
+            _deferredTable = null;
+            if (_entries.Remove(t.Table))
+            {
+                if (ProvablyUnrelated(t.Mods)) _entries.Add(t.Table);
+                else _entries.Insert(0, t.Table);
+            }
+        }
     }
 
     /// <summary>

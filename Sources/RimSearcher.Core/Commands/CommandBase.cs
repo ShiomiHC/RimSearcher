@@ -474,7 +474,10 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
             // 就把表头整块训练成盲区,而表头恰恰是 scope 展开、精确/包含拆分这些真会改变
             // 答案的东西所在。无关时沉到表下,点到了(或证不出无关)照旧在最上面。
             case EnvironmentMatch.ContentDrift:
-                Report.DeferredNotice(NoticeKind.Staleness, ContentDrift.Sentence(name, report.Content!),
+                // 2026-09-18 起是表不是句子:r19 量到弱档把句子里举例的 mod 名当成 def 去 get;
+                // 表的 next 列是一条能粘的命令。与 snapshot status 的 xml 表同形。
+                Report.DeferredTable(ContentDrift.Table, ContentDrift.Columns,
+                    ContentDrift.Rows(name, report.Content!),
                     [.. report.Content!.Changed, .. report.Content.Missing]);
                 return;
 
@@ -488,52 +491,64 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
 }
 
 /// <summary>
-/// 「参考侧 XML 变了」这句话的**唯一产地**。日常查询与 <c>snapshot status</c> 都念它,
+/// 「参考侧 XML 变了」的**唯一产地**:一张 <c>xml</c> 表(package_id / state / next),
+/// 日常查询与 <c>snapshot status</c> 印同一张;status 上面多一句总账(<see cref="Sentence"/>)。
 /// 两处各写一遍的话,详略不同会被读成两件不同的事。
 /// </summary>
 public static class ContentDrift
 {
+    public const string Table = "xml";
+    public static readonly string[] Columns = ["package_id", "state", "next"];
+
+    /// <summary>state 列的封闭词表:文件变了 / mod 从磁盘上没了。两者的下一步不同。</summary>
+    public const string Changed = "changed";
+    public const string Missing = "missing";
+
     /// <summary>
-    /// 两个成因分开说 —— 「文件改了」下一步是重导,「mod 从磁盘上没了」下一步是先把它
-    /// 装回来,混成一句会指错路。
+    /// 每个 mod 一行。<c>changed</c> 的 next 是重导;<c>missing</c> 没有 CLI 能做的下一步
+    /// (得先把 mod 装回来),那一格空着。
     ///
-    /// 措辞刻意说 "changed on disk",不说 "were edited":判据是长度与 mtime,
-    /// 而 Steam 重下一份逐字节相同的文件也会让它响(<see cref="Snapshot.ContentFingerprint"/>)。
-    /// 说成「被编辑过」就是拿一句证不了的话去指挥下一步。
-    ///
-    /// **一个方位词都不许有。** 这句话的位置由结果决定(见 <see cref="Output.Report.Settle"/>):
-    /// 与答案无关时沉到表下,那时一句 "answers below" 指的是一片不存在的下文。
-    /// 而且旧的那部分只是那几个 mod,不是整份答案 —— 指名道姓比指方位既准又不会指错。
+    /// 措辞刻意说 "changed",不说 "edited":判据是长度与 mtime,而 Steam 重下一份逐字节
+    /// 相同的文件也会让它响(<see cref="Snapshot.ContentFingerprint"/>)。
     /// </summary>
-    public static string Sentence(string name, ContentComparison content, int names = 3)
+    public static List<IReadOnlyDictionary<string, object?>> Rows(string snapshot, ContentComparison content)
+    {
+        var rows = new List<IReadOnlyDictionary<string, object?>>();
+        foreach (var id in content.Changed)
+            rows.Add(new Dictionary<string, object?>
+            {
+                ["package_id"] = id,
+                ["state"] = Changed,
+                ["next"] = Snapshot.DataLayers.ExportCommand(snapshot),
+            });
+        foreach (var id in content.Missing)
+            rows.Add(new Dictionary<string, object?>
+            {
+                ["package_id"] = id,
+                ["state"] = Missing,
+                ["next"] = null,
+            });
+        return rows;
+    }
+
+    /// <summary>
+    /// <c>snapshot status</c> 表上那句总账:只有数,名单在表里。「读到的是旧文件」「重导」
+    /// 「没法比」这些后果与出路此前都在句子里,现在由 state / next 两列承担。
+    /// </summary>
+    public static string Sentence(ContentComparison content)
     {
         var parts = new List<string>();
 
         if (content.Changed.Count > 0)
-            parts.Add($"{Tally.Complete(content.Changed.Count).Render("mod")}" +
-                      Named(name, content.Changed, names) +
+            parts.Add($"{Tally.Complete(content.Changed.Count).Render("mod")} " +
                       $"{(content.Changed.Count == 1 ? "has" : "have")} Defs or Patches XML that changed on disk " +
-                      "since the export, so anything read from " +
-                      $"{(content.Changed.Count == 1 ? "it" : "them")} describes the older files. " +
-                      "Re-export to pick them up.");
+                      "since the export.");
 
         if (content.Missing.Count > 0)
-            parts.Add($"{Tally.Complete(content.Missing.Count).Render("mod")} the export read" +
-                      Named(null, content.Missing, names) +
-                      "cannot be found on disk now, so whether " +
-                      $"{(content.Missing.Count == 1 ? "its" : "their")} files still match cannot be checked at all.");
+            parts.Add($"{Tally.Complete(content.Missing.Count).Render("mod")} the export read " +
+                      "cannot be found on disk now.");
 
         return string.Join(" ", parts);
-    }
-
-    /// <summary>
-    /// 查询最多举 <paramref name="names"/> 个 id;<c>snapshot status</c> 传 0,名单改由表承担。
-    /// </summary>
-    private static string Named(string? snapshot, IReadOnlyList<string> ids, int names)
-    {
-        var where = snapshot is { Length: > 0 } ? $" in snapshot '{snapshot}'" : "";
-        if (names <= 0) return $"{where} ";
-        return $"{where} ({NameList.Render(ids, names)}) ";
     }
 }
 
