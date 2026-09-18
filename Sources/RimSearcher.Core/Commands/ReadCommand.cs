@@ -643,9 +643,8 @@ public sealed class ReadCommand : Command
             // 也没有」的那一支 —— 那时它才是这次落空唯一说得住的解释。
             // 口径与 fields 那侧同:查明了成因就不再列泛化的可能性。
             (elsewhere is null
-                ? " The match runs on braces, not C# parsing, so this is not evidence the file lacks it — " +
-                  "'rimsearcher code-search' searches the text itself; '--outline' lists what the same " +
-                  "matching does find."
+                ? " The match runs on braces, not C# parsing; 'rimsearcher code-search' searches the text " +
+                  "itself, and '--outline' lists what brace matching does find."
                 : ""));
 
         if (elsewhere is not null)

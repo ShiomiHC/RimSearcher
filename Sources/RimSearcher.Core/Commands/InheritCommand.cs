@@ -268,13 +268,14 @@ public sealed class InheritCommand : Command
                     $"No patch operation's xpath names '{label}' with @Name= in this snapshot — that is " +
                     "what patch_ops=0 counts. patch_ops_defname and patch_ops_label count xpaths that name " +
                     "it by defName= and by label=. An xpath that reaches it by thingClass or by a wildcard " +
-                    "leaves no trace here, so a 0 is not evidence that the game read this node unpatched.");
+                    // 「so a 0 is not evidence that the game read this node unpatched」2026-09-18 删掉:
+                    // 0 数的是什么、什么留不下痕迹,上面两句已经是全部机制(Docs/23 第八节)。
+                    "leaves no trace here.");
             else
                 ctx.Report.Notice(NoticeKind.Boundary,
                     $"No patch operation's xpath names '{label}' with @Name= in this snapshot — that is " +
                     "what the 0 counts. An xpath that reaches it any other way — by defName, by label, " +
-                    "by thingClass, by a wildcard — leaves no trace here, so the 0 is not evidence that " +
-                    "the game read this node unpatched." + oldLayer);
+                    "by thingClass, by a wildcard — leaves no trace here." + oldLayer);
 
             // 往上走到根。带环保护是必要的:XML 里写得出环,游戏在这一层之后才检出来,
             // 快照存的正是检出之前的原文。

@@ -28,5 +28,5 @@ descriptionHyperlinks[0].def  ChildGun              no            under descript
 burstCount                    1                     yes           not-written
 No value above with 'code_default'=no is one that most of the 2 ThingDefs in this snapshot also carry. Rows marked yes were not compared: what a yes leaves open is settled by the 'xml' column on that same row: here is an XML line writing that same value, not-written is the absence of such a line in the XML read before patches ran.
   - 3 patch xpaths name this def. The 'xml' column above reads the XML as written on disk, before any PatchOperation ran, so a line one of those patches added reads not-written there — 'rimsearcher inherit ChildGun' breaks the count down by how each xpath names it.
-  - The game also prices things like this — market value, cost to make, work amount — and those are computed rather than stored, so no field above would hold them either way. This snapshot never measured them, so it cannot say whether this def is one of the priced ones: 'rimsearcher economy ChildGun' says why and what to re-export.
+  - The game also prices things like this — market value, cost to make, work amount — and those are computed, not stored, so no field above holds them. This snapshot never measured them: 'rimsearcher economy ChildGun' says why and what to re-export.
 --- stderr ---

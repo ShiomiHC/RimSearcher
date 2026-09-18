@@ -116,7 +116,7 @@ public class CodeSideTests
         // 成因查明时那条免责整段撤掉。它讲的是「这次落空可能是我没看见」,而上一句
         // 已经说出这个名字声明在哪儿 —— 并排印时读者读不出这个文件里到底有没有,
         // 而它给的三条下一步全指着与真答案相反的方向。
-        Assert.DoesNotContain("not evidence the file lacks it", stdout);
+        Assert.DoesNotContain("The match runs on braces", stdout);
     }
 
     /// <summary>
@@ -131,7 +131,7 @@ public class CodeSideTests
         var (stdout, _, code) = Fixture.Run("read", "vanilla/RimWorld/CompShield.cs", "--member", "ZzzNoSuchMemberXyz");
 
         Assert.Equal(1, code);
-        Assert.Contains("not evidence the file lacks it", stdout);
+        Assert.Contains("The match runs on braces", stdout);
         Assert.DoesNotContain("The assemblies do have", stdout);
     }
 

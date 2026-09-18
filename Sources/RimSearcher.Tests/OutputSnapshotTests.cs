@@ -870,8 +870,9 @@ public class OutputSnapshotTests
         var (empty, _, code) = Fixture.Run("keyed", "CannotUseNoPower", "--db", db);
         Assert.Equal(1, code);
         Assert.Contains("no keyed translations at all", empty);
-        // 成因归到快照身上,而不是归到问的那个 key 身上。
-        Assert.Contains("property of the snapshot", empty);
+        // 成因归到快照身上,而不是归到问的那个 key 身上:点名那对分不开的导出。
+        // 2026-09-18 起不再带「that is a property of the snapshot, not evidence about …」那截。
+        Assert.Contains("Two exports look like this", empty);
         Assert.DoesNotContain("No keyed translation matches", empty);
 
         // 反面:库里有这一层、只是没这个 key 时,上面那句话一个字都不许出现。
@@ -882,8 +883,8 @@ public class OutputSnapshotTests
         // 不给查询词那一路也要说快照,不能拿一个不存在的 query 拼进句子。
         var (bare, _, bareCode) = Fixture.Run("keyed", "--db", db);
         Assert.Equal(1, bareCode);
-        Assert.Contains("property of the snapshot", bare);
-        Assert.Contains("what this layer holds", bare);
+        Assert.Contains("no keyed translations at all", bare);
+        Assert.Contains("Two exports look like this", bare);
     }
 
     /// <summary>

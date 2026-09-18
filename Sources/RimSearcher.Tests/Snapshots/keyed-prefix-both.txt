@@ -9,5 +9,5 @@ key                translated            original                  mod  source
 CommandSettle      定居                  Settle                         GameplayCommands.xml:386
 CommandSettleDesc  在此处建立新殖民地。  Settle in this location.       GameplayCommands.xml:387
 
-This snapshot never scanned the language files on disk, so every row here is one the game actually had: the absence of an 'on disk' row is not evidence that no installed mod translates it. No 'mod_roots' is configured on this machine, so there is nowhere to scan: set it in the config file and import again to measure that layer.
+This snapshot never scanned the language files on disk, so every row here is one the game actually had and no 'on disk' row could appear. No 'mod_roots' is configured on this machine, so there is nowhere to scan: set it in the config file and import again to measure that layer.
 --- stderr ---

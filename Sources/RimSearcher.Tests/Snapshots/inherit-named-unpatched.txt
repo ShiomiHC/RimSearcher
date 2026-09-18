@@ -7,7 +7,7 @@ abstract       yes
 mod            ludeon.rimworld
 source         Projectiles_Guns.xml
 patch_ops      0
-No patch operation's xpath names 'BaseProjectile' with @Name= in this snapshot — that is what the 0 counts. An xpath that reaches it any other way — by defName, by label, by thingClass, by a wildcard — leaves no trace here, so the 0 is not evidence that the game read this node unpatched. This snapshot (exporter 0.2.0) only counted @Name=; re-export to also count xpaths by defName= and by label=.
+No patch operation's xpath names 'BaseProjectile' with @Name= in this snapshot — that is what the 0 counts. An xpath that reaches it any other way — by defName, by label, by thingClass, by a wildcard — leaves no trace here. This snapshot (exporter 0.2.0) only counted @Name=; re-export to also count xpaths by defName= and by label=.
 3 direct children.
 
 name        def_name    def_type        abstract  mod

@@ -182,8 +182,9 @@ public sealed class SnapshotStatusCommand : Command
         if (truncated > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
                 ExportCap.OverDefs(db.TruncatedDefSpread(), truncated, " in this snapshot",
-                    "For those, a field path missing from 'get' is not evidence that the def lacks it.",
-                    "No field path is missing on those; the rows just show the front of their value."));
+                    "On those, 'get' lists fewer field paths than the def has.",
+                    "No field path is missing on those; the rows just show the front of their value.",
+                    "On those, what 'get' prints is not the whole def."));
 
         // 集合差在**这里**逐条列出 packageId,而每次查询一个字都不说(成因见
         // EnvironmentReport.AddedMods)—— 于是「为什么查询不提这件事」的答案得在这一句里,
@@ -422,7 +423,8 @@ public sealed class SnapshotDiffCommand : Command
         ctx.Report.Notice(NoticeKind.Boundary,
             ExportCap.OverDefs(diff.TruncatedSpread, diff.TruncatedDefs, " on both sides of this comparison",
                 "A field that looks unchanged may have been one of the ones they lost.",
-                "A value that looks unchanged there may still differ past the cut."));
+                "A value that looks unchanged there may still differ past the cut.",
+                "Something that looks unchanged on those may differ past what was exported."));
     }
 }
 
@@ -762,8 +764,9 @@ public sealed class SnapshotImportCommand : Command
             ctx.Report.Notice(NoticeKind.Boundary,
                 // 与 snapshot status 那处逐字同句 —— 同一件事不许两种说法。
                 ExportCap.OverDefs(imported.TruncatedDefSpread(), stats.TruncatedDefs, "",
-                    "For those, a field path missing from 'get' is not evidence that the def lacks it.",
-                    "No field path is missing on those; the rows just show the front of their value."));
+                    "On those, 'get' lists fewer field paths than the def has.",
+                    "No field path is missing on those; the rows just show the front of their value.",
+                    "On those, what 'get' prints is not the whole def."));
         }
 
         // 没收割要说破,两个成因分开说 —— 补救不一样(收回参数 / 去配 mod_roots)。
@@ -775,8 +778,8 @@ public sealed class SnapshotImportCommand : Command
         else if (ctx.Config.ModRoots.Count == 0)
             ctx.Report.Notice(NoticeKind.Boundary,
                 "No 'mod_roots' is configured, so there was nowhere to scan for language files and only the " +
-                "translations the game actually had are indexed. That is a gap in this snapshot, not evidence " +
-                "about the mods on this machine: set 'mod_roots' in the config file and import again.");
+                "translations the game actually had are indexed. Set 'mod_roots' in the config file and " +
+                "import again to index them.");
 
         return 0;
     }

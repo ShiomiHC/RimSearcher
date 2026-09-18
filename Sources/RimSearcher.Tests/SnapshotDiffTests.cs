@@ -188,6 +188,10 @@ public class SnapshotDiffTests
         var (stdout, _, code) = Run(dir, "snapshot", "diff", "classLegacy", "classA");
         Assert.Equal(0, code);
         Assert.Contains("dropped at export time for depth or size", stdout, StringComparison.Ordinal);
+        // 后果句同样退回对两拨都真的那句,不许挂「少了行」那拨专用的读法。
+        Assert.Contains("Something that looks unchanged on those may differ past what was exported.",
+                        stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain("one of the ones they lost", stdout, StringComparison.Ordinal);
         Assert.DoesNotContain("kept every field path", stdout, StringComparison.Ordinal);
         Assert.DoesNotContain("lost field paths", stdout, StringComparison.Ordinal);
     }

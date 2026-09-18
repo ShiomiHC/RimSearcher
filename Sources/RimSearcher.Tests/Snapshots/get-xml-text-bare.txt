@@ -15,5 +15,5 @@ costList[0].thingDef  Steel   no            here
 costList[0].count     1       yes           under costList
 costList[0].quality   Normal  yes           under costList
 No value above with 'code_default'=no is one that most of the 5 ThingDefs in this snapshot also carry. Rows marked yes were not compared: what a yes leaves open is settled by the 'xml' column on that same row: here is an XML line writing that same value, not-written is the absence of such a line in the XML read before patches ran.
-The game also prices things like this — market value, cost to make, work amount — and those are computed rather than stored, so no field above would hold them either way. This snapshot never measured them, so it cannot say whether this def is one of the priced ones: 'rimsearcher economy BareGun' says why and what to re-export.
+The game also prices things like this — market value, cost to make, work amount — and those are computed, not stored, so no field above holds them. This snapshot never measured them: 'rimsearcher economy BareGun' says why and what to re-export.
 --- stderr ---

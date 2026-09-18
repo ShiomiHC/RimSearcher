@@ -258,7 +258,10 @@ public class TruncationCauseTests
     {
         var (stdout, _, code) = Fixture.Run("snapshot", "status", "--db", db);
         Assert.Equal(0, code);
-        return stdout.Split('\n').Single(l => l.Contains("field path", StringComparison.Ordinal));
+        // 三种形态(分开说 / 只切值 / 未分类回退)共用的锚是句首的「N def(s) in this snapshot」;
+        // mod 名单那句里也有「in this snapshot」,但不在句首。
+        return stdout.Split('\n').Single(l =>
+            System.Text.RegularExpressions.Regex.IsMatch(l, @"^\s*-\s+\d+ defs? in this snapshot "));
     }
 
     /// <summary>
@@ -274,7 +277,7 @@ public class TruncationCauseTests
         Assert.Contains("1 def in this snapshot kept every field path and had only values cut to the "
                         + "length cap.", said);
         Assert.DoesNotContain("lost field paths", said);
-        Assert.DoesNotContain("is not evidence that the def lacks it", said);
+        Assert.DoesNotContain("lists fewer field paths than the def has", said);
     }
 
     /// <summary>两拨都有时分成两句,各带各的读法,而且两个数加起来是那个总数。</summary>
@@ -287,8 +290,7 @@ public class TruncationCauseTests
             new MiniDef("Cut", 3, (0, 3, 0, 0)),
             new MiniDef("Clean", 0, (0, 0, 0, 0))));
         Assert.Contains("2 defs in this snapshot lost field paths at export time", said);
-        Assert.Contains("For those, a field path missing from 'get' is not evidence that the def lacks it.",
-                        said);
+        Assert.Contains("On those, 'get' lists fewer field paths than the def has.", said);
         Assert.Contains("Another 1 def kept every field path and had only values cut to the length cap.",
                         said);
         // 没被截的那个不许进任何一拨。
@@ -301,8 +303,10 @@ public class TruncationCauseTests
     {
         var said = StatusLine(Build("agg-legacy", new MiniDef("Legacy", 3, null)));
         Assert.Contains("1 def in this snapshot had fields " + Vague + ".", said);
-        Assert.Contains("For those, a field path missing from 'get' is not evidence that the def lacks it.",
-                        said);
+        // 后果句也得是对两拨都真的那句:没分类就不知道这个 def 是少了路径还是只切了值,
+        // 「列的路径比 def 有的少」对只切了值的那拨(七个库上 27 里的 22)是假的。
+        Assert.Contains("On those, what 'get' prints is not the whole def.", said);
+        Assert.DoesNotContain("lists fewer field paths", said);
         Assert.DoesNotContain("kept every field path", said);
     }
 }

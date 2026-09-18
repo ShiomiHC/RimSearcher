@@ -235,7 +235,7 @@ public sealed class EconomyCommand : Command
             case null:
                 ctx.Report.Notice(NoticeKind.Boundary,
                     "This snapshot was built before this tool measured prices at all, so it has no answer " +
-                    "here — that is a property of the snapshot, not evidence about the game. Export again " +
+                    "here. Export again " +
                     "('rimsearcher export'); 'rimsearcher snapshot status' names the snapshot in use.");
                 NoteTheDetour(ctx);
                 return true;

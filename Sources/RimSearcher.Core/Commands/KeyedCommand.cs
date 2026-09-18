@@ -111,11 +111,9 @@ public sealed class KeyedCommand : Command
         if (total == 0)
         {
             ctx.Report.Notice(NoticeKind.Boundary,
-                "This snapshot has no keyed translations at all, so nothing here can be looked up — that is a " +
-                "property of the snapshot, " +
-                (query is null
-                    ? "not evidence about what this layer holds. "
-                    : $"not evidence about {NameList.Render(asked.Select(q => $"'{q}'").ToList(), asked.Count)}. ") +
+                // 「that is a property of the snapshot, not evidence about …」2026-09-18 删掉:
+                // 「这份库没有这一层」+ 点名那对分不开的导出 + 出路,是全部事实。
+                "This snapshot has no keyed translations at all, so nothing here can be looked up. " +
                 "Two exports look like this and " +
                 "this line cannot tell them apart: one written before this layer was measured at all, and one " +
                 "written from a game whose language data was not loaded. The fix is the same either way — export " +

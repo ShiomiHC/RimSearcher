@@ -370,8 +370,9 @@ public sealed class CodeSearchCommand : Command
                 ctx.Report.Notice(NoticeKind.Truncation,
                     // 模式那句排最前:它在,下一步就不是抬闸。没读完的那句照旧,读完也不会有。
                     (BreAlternation(ctx.Args.Positional(0)!) is { } bre ? bre + " " : "") +
-                    $"No line matched in the {Tally.Complete(filesRead).Render("file")} that were read, " +
-                    "but the scan did not finish, so this is not evidence that nothing matches.");
+                    // 「but the scan did not finish, so this is not evidence that nothing matches」
+                    // 2026-09-18 删掉:下一句就是「The scan stopped after reading N files … Leave --max-files out」。
+                    $"No line matched in the {Tally.Complete(filesRead).Render("file")} that were read.");
             else
                 ctx.Report.Notice(NoticeKind.NextStep,
                     (BreAlternation(ctx.Args.Positional(0)!) is { } bre ? bre + " " : "") +
@@ -521,8 +522,8 @@ public sealed class CodeSearchCommand : Command
         {
             ctx.Report.Notice(NoticeKind.Boundary,
                 $"{Tally.Complete(literal.Distinct(StringComparer.Ordinal).Count()).Render("translation key")} " +
-                "appear in the printed lines, but no snapshot could be opened to say what they display, so " +
-                "this answer is not evidence either way about them. 'rimsearcher snapshot list' shows what is " +
+                "appear in the printed lines, but no snapshot could be opened to say what they display. " +
+                "'rimsearcher snapshot list' shows what is " +
                 "registered; pass --no-resolve-keys to stop asking.");
             return;
         }

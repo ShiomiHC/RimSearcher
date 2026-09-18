@@ -939,9 +939,10 @@ public sealed class GetCommand : Command
             else if (DefTypes.Same(def.DefType, "ThingDef"))
                 ctx.Report.Notice(NoticeKind.Boundary,
                     "The game also prices things like this — market value, cost to make, work amount — and " +
-                    "those are computed rather than stored, so no field above would hold them either way. " +
-                    "This snapshot never measured them, so it cannot say whether this def is one of the " +
-                    $"priced ones: 'rimsearcher economy {def.DefName}' says why and what to re-export.");
+                    "those are computed, not stored, so no field above holds them. " +
+                    // 「either way」「so it cannot say whether this def is one of the priced ones」
+                    // 2026-09-18 删掉:没量过 + 出路就是全部事实。
+                    $"This snapshot never measured them: 'rimsearcher economy {def.DefName}' says why and what to re-export.");
 
             // --limit 与 --path-contains 同样管译文表:不管的话,`get Muffalo --limit 5` 会吐出八十行,
             // 而字段表刚报的「一个都没匹配上」会被一批译文块淹掉。
@@ -3459,7 +3460,7 @@ internal static class Completeness
                    // 而 NoteIndexHoldsValuesOnly 的结尾正好就是那一句。
                    "A single field that picks a class — GenStepDef.genStep, ThinkTreeDef.thinkRoot — is not in " +
                    $"this snapshot at all: it was written by exporter {ctx.Db.Meta.ExporterVersion}, before that " +
-                   "case entered the index, and a zero from that query is not evidence about it. Re-export to reach it.";
+                   "case entered the index. Re-export to reach it.";
 
         return "The runtime type of a nested Class=\"...\" object is not in this snapshot at all: it was " +
                $"written by exporter {ctx.Db.Meta.ExporterVersion}, before that type entered the index, so no " +

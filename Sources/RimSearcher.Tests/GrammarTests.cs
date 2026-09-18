@@ -820,7 +820,10 @@ public class GrammarTests
         var (capped, _, cappedCode) = Fixture.Run("code-search", "zzzznothing", "--max-files", "1");
         Assert.Equal(1, cappedCode);
         Assert.DoesNotContain("rimsearcher search", capped);
-        Assert.Contains("did not finish", capped);
+        // 2026-09-18:「but the scan did not finish, so this is not evidence that nothing matches」
+        // 删掉,「没读完」只由紧跟着的截断句承载 —— 钉那句,不钉被删的反面。
+        Assert.Contains("The scan stopped after reading 1 file", capped);
+        Assert.Contains("Leave --max-files out", capped);
 
         // 机器侧靠 kind 分:真零是「下一步该怎么做」,没读完是截断。
         var (json, _, _) = Fixture.Run("code-search", "zzzznothing", "--max-files", "1", "--json");
@@ -3814,17 +3817,19 @@ public class GrammarTests
         var qA = Fixture.Run("keyed", "CannotUseNoPower", "--config", cfgA, "--db", dbA).Stdout;
         var qB = Fixture.Run("keyed", "CannotUseNoPower", "--config", cfgB, "--db", dbB).Stdout;
 
-        // ① 四份输出都得挡住那个推论。措辞不钉,只钉否定标记在场。
-        // 三种说法都是实打实的否定,不是为了让闸变绿凑进来的:`cannot answer whether X exists`
-        // 与 `is not evidence that…` 挡的是同一个推断,只是一个从工具说、一个从证据说。
+        // ① 四份输出都得说破**测量没发生**。措辞不钉,只钉这个事实在场。
+        // 2026-09-18 之前钉的是否定标记(`not evidence` / `cannot answer`):r16(Docs/23)
+        // 量到那截反面在两档读者上都零边际,查询侧那句改成只说事实 ——「没扫过盘上的
+        // 语言文件,于是不可能出现 on disk 行」。挡住「所以盘上也没有」的是「没扫」这个
+        // 事实本身,三种说法都是它:never scanned / never looked / nowhere to scan。
         // (放宽标记集之前先按实质判过一遍 —— 否则就成了「照着实现写闸」,而那正是
         // 这条闸要绕开的东西。)
-        static bool Denies(string s) => s.Contains("not an answer", StringComparison.Ordinal)
-                                     || s.Contains("not evidence", StringComparison.Ordinal)
-                                     || s.Contains("cannot answer", StringComparison.Ordinal);
+        static bool Unmeasured(string s) => s.Contains("never scanned", StringComparison.Ordinal)
+                                         || s.Contains("never looked", StringComparison.Ordinal)
+                                         || s.Contains("nowhere to scan", StringComparison.Ordinal);
         foreach (var (what, text) in new[] { ("import A", impA), ("import B", impB),
                                              ("query A", qA), ("query B", qB) })
-            Assert.True(Denies(text), $"{what} 报了「没量过」却没挡住「所以磁盘上也没有」这个推论");
+            Assert.True(Unmeasured(text), $"{what} 报了结果却没说破磁盘那一层没量过");
 
         // ② mod_roots 两侧同进同出:B 是「没地方扫」,出路只能是去配它;A 有地方扫,
         //    出路是收回那个开关 —— 提了 mod_roots 反而把人支去改一个已经对的配置。
@@ -4509,7 +4514,9 @@ public class GrammarTests
         var (mid, _, _) = Fixture.Run("where", "Class", "RimWorld.NotAnyClassHere");
         Assert.Contains("for list elements only", mid, StringComparison.Ordinal);
         Assert.Contains("GenStepDef.genStep", mid, StringComparison.Ordinal);
-        Assert.Contains("not evidence about it", mid, StringComparison.Ordinal);
+        // 2026-09-18:「and a zero from that query is not evidence about it」删掉,量程由
+        // 「不在快照里 + 导出器版本 + Re-export」三件事实承着。
+        Assert.Contains("before that case entered the index. Re-export to reach it.", mid, StringComparison.Ordinal);
         Assert.DoesNotContain(ClassLineBothShapes, mid, StringComparison.Ordinal);
 
         // 0.1:一点没量。
@@ -4850,7 +4857,7 @@ public class GrammarTests
         //    不是关于游戏的事实。
         foreach (var (what, text) in new[] { ("not measured", notMeasured), ("skipped", skipped),
                                              ("unavailable", unavailable) })
-            Assert.True(text.Contains("property of the snapshot", StringComparison.Ordinal)
+            Assert.True(text.Contains("before this tool measured prices", StringComparison.Ordinal)
                      || text.Contains("was measured", StringComparison.Ordinal)
                      || text.Contains("could not be measured", StringComparison.Ordinal),
                 $"'{what}' 报了零却没挡住「所以游戏里没有价格」这个推论");
@@ -4913,8 +4920,9 @@ public class GrammarTests
 
         // ④ 而它也不许滑到 ① 去:降级库压根不知道这东西是不是被定价的,
         //    断言它「被定价了」是拿没量过的东西冒充量过的结论。
+        //    2026-09-18:「so it cannot say whether this def is one of the priced ones」删掉,
+        //    ③ 的「never measured」+ 出路已是全部事实;「不滑到 ①」只钉 ① 那句不在。
         Assert.DoesNotContain(priced, unmeasured, StringComparison.Ordinal);
-        Assert.Contains("cannot say whether", unmeasured, StringComparison.Ordinal);
     }
 
     /// <summary>

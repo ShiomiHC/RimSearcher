@@ -581,11 +581,13 @@ internal static class ExportCap
     ///
     /// 两句各带自己的后果(<paramref name="lostMeans"/> / <paramref name="cutMeans"/>):
     /// 少了路径与值被切在每条命令上的读法都不一样,合成一句就得挑一个说,而挑哪个都错一半。
+    /// 没分类的回退句挂的是 <paramref name="eitherMeans"/> —— 对两拨都真的那句;
+    /// 此前挂 <paramref name="lostMeans"/>,对只切了值的那拨(多数)是假的。
     /// </summary>
     public static string OverDefs(SnapshotDb.TruncationSpread? spread, int defs, string among,
-                                  string lostMeans, string cutMeans)
+                                  string lostMeans, string cutMeans, string eitherMeans)
     {
-        if (spread is not { } s) return $"{OverDefs(defs, among)}. {lostMeans}";
+        if (spread is not { } s) return $"{OverDefs(defs, among)}. {eitherMeans}";
 
         var said = new List<string>();
         if (s.LostPaths > 0)
@@ -628,7 +630,7 @@ internal static class DiskLayer
             // --no-harvest-translations 行就是它渲染的),不在每次查询上重念;
             // 补救留一句,不留就把这条边界写成了死路。
             "This snapshot never scanned the language files on disk, so every row here is one the game actually " +
-            "had: the absence of an 'on disk' row is not evidence that no installed mod translates it. " +
+            "had and no 'on disk' row could appear. " +
             // 出路分两支,与 snapshot import 那两句同口径:没配 mod_roots 时「重导一次」
             // 是句空话 —— 再导一遍照样没地方扫。
             (ctx.Config.ModRoots.Count > 0

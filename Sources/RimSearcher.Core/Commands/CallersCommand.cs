@@ -114,8 +114,9 @@ public sealed class CallersCommand : Command
                 (only is { Length: > 0 }
                     ? $"The source tree '{only}' has no call-graph table, so nothing there was searched. "
                     : "No source tree has a call-graph table, so nothing was searched. ") +
-                "This is not an answer about the method — it is the absence of the index the answer " +
-                "comes from. 'rimsearcher sources sync' builds one per tree.");
+                // 「This is not an answer about the method — it is the absence of the index」
+                // 2026-09-18 删掉:「没表 → 没搜」+ 出路已是全部事实(Docs/23 第八节)。
+                "'rimsearcher sources sync' builds one per tree.");
             ctx.Report.Table("calls", Columns, []);
             return 1;
         }
