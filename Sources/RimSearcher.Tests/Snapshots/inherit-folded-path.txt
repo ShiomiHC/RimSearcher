@@ -16,9 +16,6 @@ name     def_type  abstract  mod              source
 BaseGun  ThingDef  yes       ludeon.rimworld  Guns.xml
 'ChildGun' carries 1 field matching 'costList[].count', all reading '75' — that is the value the counts below are compared against.
 
-layer    other_defs  with_path  same_value
-BaseGun  0           0          0
-Each row counts the other defs descending from that layer: how many carry a field path containing 'costList[].count', and how many of those read the same value. A layer that declares a field passes it to every descendant, so a layer whose with_path falls short of other_defs is not the one declaring this field, and one that reaches it may still not be: every descendant writing the field separately counts the same. The snapshot stores no 'declared here' fact — the game resolves inheritance while loading and then discards it.
-  - The same_value column is what tells the two apart — one shared value points at the layer, a spread of values points at each def writing its own.
-  - A descendant that overrides the field still counts in with_path but not in same_value, so the columns differing means overriding, not absence. And field values here are the merged, post-patch ones, so a PatchOperation that added this field to many defs is indistinguishable from a layer declaring it.
+layer    other_defs  with_path  same_value  type_with_path  type_defs
+BaseGun  0           0          0           1               2
 --- stderr ---

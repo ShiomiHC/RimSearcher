@@ -251,8 +251,8 @@ way to state:
   abstract, which layers carry a field (`--path-contains`), and how many patches target a
   node by `Name=`. The tree and those patch counts are the XML **before** PatchOperations ran;
   the field values shown beside them are the snapshot's, already post-patch. Counting
-  witnesses is not the same as finding where a field is declared — the footnote on that
-  output says what the count does and does not settle.
+  witnesses is not the same as finding where a field is declared — `inherit --help` says
+  what the count does and does not settle.
 - **A `list` def type is a storage bucket, not a runtime class.** Multi-class buckets get a
   `class` column and `--class`. Most buckets hold one class — there `--class`
   narrows nothing and the behaviour lives on a nested `Class="…"` field instead: **`where

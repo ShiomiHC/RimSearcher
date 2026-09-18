@@ -52,7 +52,23 @@ public sealed class InheritCommand : Command
             "reports patch_ops_name as 'n/a' rather than 0 because that count was never taken; the defName and " +
             "label counts are still taken. " +
             "For the merged, post-patch values, read any concrete child with 'get' — everything a parent " +
-            "contributes is already in each of its children.",
+            "contributes is already in each of its children.\n\n" +
+            // 见证表的读法(此前是表下三句散文,Docs/25 丁1):列是数,怎么读是机制,机制住这里。
+            "With --path-contains or --exact-path each node also gets a 'witnesses' table, one row per layer " +
+            "of its chain: other_defs (the other defs descending from that layer), with_path (how many of " +
+            "them carry a matching field path) and, when there is a reference value, same_value (how many " +
+            "of those read the asked def's own value) or same_as_mode (the most common value under an " +
+            "abstract node). A layer that declares a field passes it to every descendant, so with_path short " +
+            "of other_defs rules that layer out; with_path equal to other_defs does not rule it in — every " +
+            "descendant writing the field separately counts the same, and the snapshot stores no 'declared " +
+            "here' fact. same_value is what tells those apart: one shared value points at the layer, a " +
+            "spread of values at each def writing its own; a descendant that overrides the field still " +
+            "counts in with_path but not there. type_with_path / type_defs is the same fraction over the " +
+            "whole def type, layer or no layer, so a full row is evidence only to the extent that fraction " +
+            "is smaller. cut_short, when the column is there, counts defs in other_defs whose field list was " +
+            "cut at export; any of those can miss with_path for that reason alone. Field values are the " +
+            "merged, post-patch ones, so a PatchOperation that added the field to many defs is " +
+            "indistinguishable from a layer declaring it.",
         Positionals =
         [
             new PositionalSpec
@@ -83,7 +99,7 @@ public sealed class InheritCommand : Command
                 Help = "Count, for every layer in the chain, the other defs descending from it that carry a " +
                        "field path containing this text, and how many of those carry the same value. This is a " +
                        "witness count, not a record of where the field was declared — the snapshot holds no such " +
-                       "record, and the output below the table says what the count does and does not settle. " +
+                       "record, and the remarks above say what the count does and does not settle. " +
                        // 不在这里补一句 `[]` —— 上面那句是一条完整的等同(与 get 同一种匹配),
                        // 再点名其中一项等于把全称说成部分。产地在 CommonOptions.AnyIndexNote。
                        // 「word」换成「text」:上面那句是一条完整的等同,而 `[]` 形状
@@ -492,9 +508,18 @@ public sealed class InheritCommand : Command
         // 列名自陈参照值的产地(Docs/25 丁2):问的 def 自己的值 → same_value,子树众数 → same_as_mode。
         // 此前两种口径共用一个列名,靠一句脚注说破「这一列比的是众数,节点自己什么都没声明」。
         var sameColumn = byMode ? SameAsMode : SameValue;
-        var columns = reference is null
-            ? new List<string> { "layer", "other_defs", "with_path" }
-            : ["layer", "other_defs", "with_path", sameColumn];
+
+        // 数全进列,读法住 help(Docs/25 丁1)。此前表下三句散文讲怎么读,再一句给整类型的分母、
+        // 一句给被截的 def 数 —— 弱档只读表。
+        //
+        // 整类型的分母恒在:with_path 追平 other_defs,对一个**整个类型都带**的字段是恒真的,
+        // 而恒真的东西长得与铁证一模一样(第九轮盲测:`inherit BasePawn --path-contains tickerType`
+        // 回 165 of 165,而全快照三千多个 ThingDef 每一个都带这条路径)。两列整表同值,文本面
+        // 折成表头上一行。
+        var (typeWithPath, typeDefs) = node.DefType is { Length: > 0 }
+            ? (ctx.Db.TypeDefsWithPath(node.DefType, [pathFilter], exactPath).Defs,
+               ctx.Db.CountDefsOfType(node.DefType, ctx.Unscoped()))
+            : (0, 0);
 
         var rows = new List<IReadOnlyDictionary<string, object?>>();
         var truncated = 0;
@@ -509,60 +534,27 @@ public sealed class InheritCommand : Command
                 ["with_path"] = w.WithPath,
             };
             if (reference is not null) row[sameColumn] = w.SameValue;
+            // 导出时被截字段表的 def 会「没有这条路径」而其实有 —— 正好是让一层被误判成
+            // 「没声明」的方向。数的是这一行分母里的那些;一条都没被截时这一列不出(沉默 = 完整)。
+            row[CutShort] = w.Truncated;
+            row["type_with_path"] = typeWithPath;
+            row["type_defs"] = typeDefs;
             rows.Add(row);
         }
 
-        ctx.Report.Table("witnesses", columns, rows);
-
-        // 数怎么读,说一次。不说的话这张表就是三四列没有单位的整数。
-        ctx.Report.Notice(NoticeKind.NextStep,
-            $"Each row counts the other defs descending from that layer: how many carry a field path {holding} " +
-            $"'{pathFilter}'" + (reference is null ? "" : ", and how many of those read the same value") +
-            ". A layer that declares a field passes it to every descendant, so a layer whose with_path falls " +
-            "short of other_defs is not the one declaring this field, and one that reaches it may still not " +
-            "be: every descendant writing the field separately counts the same. " +
-            "The snapshot stores no 'declared here' " +
-            "fact — the game resolves inheritance while loading and then discards it.");
-
-        // 逆命题那半句已经并进上一条(「追平不能反推」),这里只剩「靠哪一列分」。参照值定不下来
-        // 那一支不再说「那一列不在表里」—— 表里没有它,而为什么没有,上面挑参照值的那句已说。
-        // 众数口径也不再补半句:列名 same_as_mode 自己说了,挑参照值那句说了众数是多少。
-        if (reference is not null)
-            ctx.Report.Notice(NoticeKind.Boundary,
-                $"The {sameColumn} column is what tells the two apart — one shared value points at the layer, " +
-                "a spread of values points at each def writing its own.");
-
-        ctx.Report.Notice(NoticeKind.Boundary,
-            "A descendant that overrides the field still counts in with_path" +
-            (reference is null ? "" : $" but not in {sameColumn}") + ", so the columns differing means overriding, " +
-            "not absence. And field values here are the merged, post-patch ones, so a PatchOperation that added " +
-            "this field to many defs is indistinguishable from a layer declaring it.");
-
-        // with_path 追平 other_defs,对一个**整个类型都带**的字段是恒真的 —— 而恒真的东西
-        // 长得与铁证一模一样。第九轮盲测的落点:`inherit BasePawn --path-contains tickerType` 回
-        // 165 of 165,而全快照三千多个 ThingDef 每一个都带这条路径。分母摆出来,那 165
-        // 才有得比。只在真追平了的时候说 —— 没追平的表本来就没在暗示什么。
-        if (node.DefType is { Length: > 0 } &&
-            rows.Any(r => r["with_path"] is int w && w > 0 && Equals(r["other_defs"], r["with_path"])))
-        {
-            var wide = ctx.Db.TypeDefsWithPath(node.DefType, [pathFilter], exactPath);
-            var all = ctx.Db.CountDefsOfType(node.DefType,
-                Snapshot.ScopeFilter.Parse("all", ctx.Db.PackageIds(), ctx.Config));
-            if (wide.Defs > 0 && all > 0)
-                ctx.Report.Notice(NoticeKind.Boundary,
-                    $"The denominator for a full row: across the whole snapshot, {wide.Defs} of the {all} " +
-                    $"{node.DefType}s carry a path {holding} '{pathFilter}', layer or no layer. A row where " +
-                    "with_path equals other_defs is evidence only to the extent that fraction is smaller.");
-        }
-
-        // 导出时被截字段表的 def 会「没有这条路径」而其实有 —— 那正好是让一层被误判成
-        // 「没声明」的方向。数的是分母里的那些,不是整库:整库的数恒为非零,恒真的
-        // 免责声明会被学着跳过。
-        if (truncated > 0)
-            ctx.Report.Notice(NoticeKind.Boundary,
-                $"{Tally.Complete(truncated).Render("def")} counted in other_defs had the field list cut short " +
-                "at export, so any of those can miss with_path for that reason alone.");
+        var columns = new List<string> { "layer", "other_defs", "with_path" };
+        if (reference is not null) columns.Add(sameColumn);
+        if (truncated > 0) columns.Add(CutShort);
+        if (typeDefs > 0) columns.AddRange(["type_with_path", "type_defs"]);
+        // 没进列的键不留在行里:JSON 面按行原样出,表头才是契约。
+        var keep = columns.ToHashSet(StringComparer.Ordinal);
+        ctx.Report.Table("witnesses", columns,
+            rows.Select(r => (IReadOnlyDictionary<string, object?>)r.Where(kv => keep.Contains(kv.Key))
+                                .ToDictionary(kv => kv.Key, kv => kv.Value)).ToList());
     }
+
+    /// <summary>见证表里「这一行的 other_defs 里有几个 def 的字段表在导出时被截」那一列;只在有的时候出。</summary>
+    public const string CutShort = "cut_short";
 
     private static string Quote(string v) => v.Length == 0 ? "an empty value" : $"'{v}'";
 }

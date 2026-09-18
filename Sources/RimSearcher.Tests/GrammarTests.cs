@@ -2054,14 +2054,13 @@ public class GrammarTests
         // 这条降级出路已经不存在,它指的那个动作也不再有意义。
         Assert.DoesNotContain(FossilGiveADef, byMode, StringComparison.Ordinal);
 
-        // 追平的那一行要带着全类型分母,否则它读起来就是铁证。
+        // 全类型分母是两列(type_with_path / type_defs),追平没追平都在 —— 否则追平那一行读起来就是铁证。
+        // 此前是一句「The denominator for a full row: … N of the M ThingDefs carry …」,只在追平时说。
         var (full, _, _) = Fixture.Run("inherit", "BaseBullet", "--path-contains", "soundDrop");
-        Assert.Contains("The denominator for a full row", full, StringComparison.Ordinal);
-        Assert.Contains("ThingDefs carry a path containing 'soundDrop'", full, StringComparison.Ordinal);
-
-        // 没追平的表不许多这一句 —— 它本来就没在暗示什么。
+        Assert.Contains("type_with_path", full, StringComparison.Ordinal);
+        Assert.Contains("type_defs", full, StringComparison.Ordinal);
         var (partial, _, _) = Fixture.Run("inherit", "Bullet_Revolver", "--path-contains", "projectile.burstCount");
-        Assert.DoesNotContain("The denominator for a full row", partial, StringComparison.Ordinal);
+        Assert.Contains("type_defs", partial, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -4086,12 +4085,18 @@ public class GrammarTests
     [Fact]
     public void 截断免责只在这次的分母真被截时才说()
     {
-        const string Caveat = "counted in other_defs had the field list cut short";
+        // 此前是一句「N defs counted in other_defs had the field list cut short at export, so …」;
+        // 现在是一列 cut_short,一条都没被截时整列不出(Docs/25 丁1)。
+        var Caveat = InheritCommand.CutShort;
 
         // Bullet_Revolver 的字段表被截过(fields_truncated = 3),而 BaseBullet 名下的
         // 分母里正好有它 —— 这一句要出。
-        var (withTruncated, _, _) = Fixture.Run("inherit", "BaseBullet", "--path-contains", "thingClass");
+        var (withTruncated, _, _) = Fixture.Run("inherit", "BaseBullet", "--path-contains", "thingClass", "--json");
         Assert.Contains(Caveat, withTruncated, StringComparison.Ordinal);
+        using var doc = System.Text.Json.JsonDocument.Parse(withTruncated);
+        var cut = doc.RootElement.GetProperty("nodes")[0].GetProperty("witnesses").EnumerateArray()
+                     .Select(r => r.GetProperty(Caveat).GetInt32()).ToList();
+        Assert.Contains(cut, n => n > 0);
 
         // 换成问 Bullet_Revolver 自己,它被排除在分母外,剩下的两条都没被截 —— 不许出。
         // 整库照旧有被截的 def,所以拿整库计数的实现在这一格红。
@@ -4109,12 +4114,13 @@ public class GrammarTests
     [Fact]
     public void 证人表要说破全都带着并不等于这一层写的()
     {
+        // 「追平不能反推」和「各写各的一份数上同形」是这张表的读法 —— 机制住 help(Docs/25 丁1),
+        // 表下不再有散文;输出里承重的是全类型分母那两列,追平没追平都在。
+        var (help, _, _) = Fixture.Run("inherit", "--help");
+        Assert.Contains("with_path equal to other_defs does not rule it in", help, StringComparison.Ordinal);
+        Assert.Contains("every descendant writing the field separately counts the same", help, StringComparison.Ordinal);
         var (text, _, _) = Fixture.Run("inherit", "Bullet_Revolver", "--path-contains", "thingClass");
-        // 逆命题那半句 2026-09-05 从自己的一条 Boundary 并进了上一条(外部回读:与前一句
-        // 说的是同一件事,分两条只是把同一个否定说两遍)。守的事没变 —— 表里必须自己
-        // 说破「追平不能反推」和「各写各的一份数上同形」,只是句子换了承载者。
-        Assert.Contains("one that reaches it may still not be", text, StringComparison.Ordinal);
-        Assert.Contains("every descendant writing the field separately", text, StringComparison.Ordinal);
+        Assert.Contains("type_with_path", text, StringComparison.Ordinal);
     }
 
     /// <summary>
