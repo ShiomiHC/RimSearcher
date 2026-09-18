@@ -1,7 +1,7 @@
 $ rimsearcher get Firefoam --type StatDef
 exit 0
 --- stdout ---
-2 defs share the name 'Firefoam': this is the StatDef one. The other is a ThingDef, shown only without --type. Fields, parent node and translations below are this def's own.
+2 defs share the name 'Firefoam': this is the StatDef one; the other is a ThingDef, shown only without --type.
 0 fields.
 
 def_name     Firefoam

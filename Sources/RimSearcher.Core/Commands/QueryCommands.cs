@@ -547,9 +547,9 @@ public sealed class GetCommand : Command
             // 恰恰说明它知道有歧义、并打算只读一个。
             if (allMatches.Count > 1)
             {
+                // 不去重:NameCollision 数的是被挡在外面的 def 有几个,不是几种类型。
                 var others = allMatches.Where(d => !matches.Contains(d))
                                        .Select(d => d.DefType)
-                                       .Distinct(StringComparer.Ordinal)
                                        .ToList();
                 ctx.Report.Notice(NoticeKind.Boundary, NameCollision.Say(
                     name, allMatches.Count,
@@ -754,56 +754,40 @@ public sealed class GetCommand : Command
                 {
                     // 折叠按「谁设的值」筛,而提问常常是「列表多长」—— 两个维度正交却归同一个
                     // 开关管,一整个列表项被折光时列表看着就变短了。下标前缀不受折叠影响,
-                    // 所以两边都说破:藏了就点名,没藏也把那句正面的话给出来。
+                    // 所以藏了哪些算得出来。
                     var shownIdx = fields.SelectMany(f => PathSegments.IndexPrefixes(f.Path))
                                          .ToHashSet(StringComparer.Ordinal);
                     var hiddenIdx = matchedPaths.SelectMany(PathSegments.IndexPrefixes)
                                                 .Distinct(StringComparer.Ordinal)
                                                 .Where(x => !shownIdx.Contains(x))
                                                 .ToList();
-                    // 「code_default 这一列是什么意思」与「--path-contains 指名字段两边都看得见」
-                    // 都搬进了 SKILL.md —— 逐字不随查询变。**`--defaults` 不能跟着走**:
-                    // 它是这条声明唯一的出路,少了它这句就只说「有 N 条你看不到」而不说
-                    // 怎么看到。出路紧贴它召回的那个数,不隔一句挂在总数后面。
-                    // 第四态那半句同样不能走:上一句刚给出「这个 def 有 M 条字段路径」,
-                    // 不接着说破 null 字段从没进过索引,那个 M 就会被读成「这个 def 的全部
-                    // 字段」,而「字段不存在」与「值是 null」在这里同形。它数的是那两个数
-                    // (没列出的、索引里的),不是那两张表 —— neither 得自己带上主语。
-                    // 否定那个推论的话必须落在**产生那个推论的**那条路径上。此前
-                    // 「值相等 ≠ 没人写」只在 --defaults 渲染出 yes 行时才说,而这一句是
-                    // **不加 --defaults 时唯一提到那些字段的地方** —— 最短、最常走的那条路。
-                    // 实测有人从这句的 carrying 推出「它们带的是类默认 ⇒ 没人写过」,
-                    // 而三处口径(产地注释 / SKILL.md / --defaults Help)当时全是准确的:
-                    // 副本都对,只是没有一份落在他走的那条路上。
-                    // 不新增查询,只是把另一支已经说清的话搬到这一支。
-                    // 2026-09-01 盲测:一个被试在**这条**路上把 xml=no 读成「所以是补丁加的」,
-                    // 而这份快照读的是打完补丁的 XML —— no 在两种口径下含义正相反。那句限定
-                    // 此前只挂在 --defaults 且取景里真有 yes 行的那一支上,而 xml 列在这张表
-                    // 上就已经印着。同一条注释上面写的规矩,这里再犯一次:落点要跟着列走。
-                    // 顺带改掉 there —— 那个词把这一列说成了 --defaults 那边独有的东西。
+                    // 2026-09-18 压成只剩事实。此前这段带着五截辩护(「on those rows and on the
+                    // ones below alike」/「not as not-written」/「is not evidence that nothing wrote」/
+                    // 「is in neither count」/ 没藏时的「Every list index … appears below」),每截
+                    // 都是某次盲测误读的反面;口径是:辩护句是错误的表现面而非错误本身。
+                    // 留下的四件各是一个能核对的事实:没列出几条、出路是 --defaults、索引里
+                    // 有几条路径(null 字段不在内)、xml 列读的是哪份 XML。「under <container>」
+                    // 的含义与 here/parent/not-written 一起在 get --help 与 SKILL 里,这里不重复。
+                    // `--defaults` 仍贴着它召回的那个数:它是这条声明唯一的出路。
+                    // 没有 xml 列的老库改说事实:那一列不在时,两种 def 在这里同形 ——
+                    // 点名那对(实测 4/10 对 0/10 的正是「点名」,不是那截「不构成证据」)。
                     var readWhen = ctx.Db.Meta.IndexesPostPatchXml
                         ? "read after every patch ran"
                         : "read before patches ran";
                     var xmlLayer = ctx.Db.Meta.IndexesXmlWritten
-                        ? $"--defaults lists them; the '{XmlOrigin.Column}' column, on those rows and on the " +
-                          $"ones below alike, is the XML {readWhen}. A row that cannot be pinned to " +
-                          $"a line inside a container the XML did write reads as 'under <container>', not as " +
-                          $"{XmlOrigin.No}."
-                        : "--defaults lists them. That match is not evidence that nothing wrote them: a def " +
-                          "whose XML writes the default value and a def that never mentions the field are " +
-                          "byte-for-byte identical here.";
+                        ? $"The '{XmlOrigin.Column}' column refers to the XML {readWhen}."
+                        : $"Without the '{XmlOrigin.Column}' column, a def whose XML writes the default value " +
+                          "and a def that never mentions the field look the same here.";
                     ctx.Report.Notice(NoticeKind.Filter,
                         $"Not listed: {Tally.Complete(defaulted).Render("field")} whose value matches the " +
-                        "declaring type's own default; " + xmlLayer + " The snapshot holds " +
+                        "declaring type's own default (--defaults lists them). The snapshot holds " +
                         $"{Tally.Complete(total).Render("field path")} for this " +
-                        "def; a null-valued field never entered the index and is in neither count." +
-                        // 外部回读把「没藏时那句正面的话」判成显然事,建议只在真藏了时说。
-                        // 不采纳:沉默与「没算过下标这一维」同形,而这一维本来就不归
-                        // --defaults 管(见闸的说明)。否定不许跟着分支。
+                        "def; a null-valued field never entered the index. " + xmlLayer +
+                        // 藏了就点名;没藏不另说一句。
                         (hiddenIdx.Count > 0
-                            ? " Nothing below shows any field of these list entries, which the def has all the " +
-                              $"same: {NameList.Render(hiddenIdx, Limits.MaxSuggestions)}."
-                            : " Every list index the def has appears below."));
+                            ? " List entries with none of their fields shown below: " +
+                              $"{NameList.Render(hiddenIdx, Limits.MaxSuggestions)}."
+                            : ""));
                 }
             }
 

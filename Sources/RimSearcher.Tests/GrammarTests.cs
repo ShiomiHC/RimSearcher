@@ -1657,7 +1657,7 @@ public class GrammarTests
         // 而否定由上面的 Not listed 那句承住 —— 换承载者,不是丢。
         var (plain, _, _) = Fixture.Run("get", "Apparel_ShieldBelt");
         Assert.DoesNotContain("were compared", plain, StringComparison.Ordinal);
-        Assert.Contains("is not evidence that nothing wrote", plain, StringComparison.Ordinal);
+        Assert.Contains("never mentions the field", plain, StringComparison.Ordinal);
 
         // 加了 --defaults 却一行 yes 都没有(VariantOne 的字段全与新实例不同):这半句
         // 谈的集合读者当场能验证为空,而这里的沉默推不出任何东西 —— 没有 yes 可误读。
@@ -1836,7 +1836,9 @@ public class GrammarTests
     [Fact]
     public void 值相等不等于没人写这句落在默认路径上()
     {
-        const string Denial = "is not evidence that nothing wrote";
+        // 锚在「点名那对分不开的 def」上:2026-09-18 起 Not listed 那句不再带
+        // 「is not evidence that…」那截辩护,只剩这对名字;--defaults 那一支与 Help 也都含它。
+        const string Denial = "never mentions the field";
 
         // 不加 --defaults:那些行根本不在表里,只有 Not listed 那句在说它们。
         var (plain, _, _) = Fixture.Run("get", "Bullet_Revolver");
@@ -4283,20 +4285,20 @@ public class GrammarTests
     /// 却归同一个开关管。一整个列表项被折光时,「这个列表只有一项」就成了看得见的形状。
     ///
     /// 下标前缀不受折叠影响(matchedPaths 是折叠前的),所以这件事算得出来 ——
-    /// **两边都要说**:藏了就点名,没藏就把那句正面的话给出来。
+    /// 藏了就点名。没藏时此前还印一句「Every list index the def has appears below」,
+    /// 2026-09-18 删掉:它是没藏那一支的显然事,与「精简到只剩事实」的口径相反。
     /// </summary>
     [Fact]
-    public void 折叠藏掉整个列表项时要点名没藏时要说没藏()
+    public void 折叠藏掉整个列表项时要点名()
     {
         // --limit 2 把 statBases[0] 那一族整个挤出视野 —— 藏了就点名。
         var (hidden, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--limit", "2");
-        Assert.Contains("Nothing below shows any field of these list entries", hidden, StringComparison.Ordinal);
+        Assert.Contains("List entries with none of their fields shown below:", hidden, StringComparison.Ordinal);
         Assert.Contains("statBases[0]", hidden, StringComparison.Ordinal);
 
-        // 不截时每个下标都露过面 —— 这时候要给正面那句话,不能沉默。
+        // 不截时每个下标都露过面 —— 不点名,也不另说一句。
         var (whole, _, _) = Fixture.Run("get", "Apparel_ShieldBelt");
-        Assert.Contains("Every list index the def has appears below", whole, StringComparison.Ordinal);
-        Assert.DoesNotContain("Nothing below shows any field", whole, StringComparison.Ordinal);
+        Assert.DoesNotContain("List entries with none of their fields", whole, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -4719,17 +4721,19 @@ public class GrammarTests
         Assert.Contains("all of them are shown", all, StringComparison.Ordinal);
 
         var one = NameCollision.Say("Firefoam", 2, ["StatDef"], ["ThingDef"]);
-        Assert.Contains("The other is a ThingDef, shown only without --type.", one, StringComparison.Ordinal);
+        Assert.Equal("2 defs share the name 'Firefoam': this is the StatDef one; the other is a ThingDef, shown only without --type.",
+            one);
 
+        // 剩好几个别的:折成个数,不逐个点名 —— 那张名单读者拿掉 --type 就能自己看到,
+        // 而它在 Nociosphere 这种名字上有六个类型长。2026-09-18 起。
+        // others 传的是被挡在外面的**每个 def** 的类型(不去重):个数数 def,不数类型。
         var many = NameCollision.Say("Space", 6, ["MapGeneratorDef"],
             ["GenStepDef", "RoomStatDef", "TerrainDef", "BiomeDef", "WorldObjectDef"]);
-        Assert.Contains(
-            "The others are GenStepDef, RoomStatDef, TerrainDef, BiomeDef, WorldObjectDef, shown only without --type.",
-            many, StringComparison.Ordinal);
+        Assert.Equal("6 defs share the name 'Space': this is the MapGeneratorDef one; the 5 others are of other def types, shown only without --type.",
+            many);
 
         // 类型名本身以 Def 收尾,尾缀再接一个名词就是「WorldObjectDef def」——
-        // 两支都不许长出这个尾巴。名单本身也不许用 and 串联(五个类型串起来是
-        // 「A and B and C and D and E」),而句尾那句固定话里的 and 不算。
+        // 两支都不许长出这个尾巴,也不许用 and 串联。
         foreach (var line in new[] { one, many })
         {
             Assert.DoesNotContain("Def def", line, StringComparison.Ordinal);

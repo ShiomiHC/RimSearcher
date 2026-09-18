@@ -2,7 +2,7 @@ $ rimsearcher get ObservedLayingCorpse --fixture-injkey
 exit 0
 --- stdout ---
 3 fields.
-Not listed: 1 field whose value matches the declaring type's own default; --defaults lists them; the 'xml' column, on those rows and on the ones below alike, is the XML read after every patch ran. A row that cannot be pinned to a line inside a container the XML did write reads as 'under <container>', not as not-written. The snapshot holds 4 field paths for this def; a null-valued field never entered the index and is in neither count. Every list index the def has appears below.
+Not listed: 1 field whose value matches the declaring type's own default (--defaults lists them). The snapshot holds 4 field paths for this def; a null-valued field never entered the index. The 'xml' column refers to the XML read after every patch ran.
 
 def_name     ObservedLayingCorpse
 def_type     HediffDef

@@ -11,7 +11,9 @@ public static class NameCollision
 {
     /// <param name="total">这个名字一共挂着几个 def。</param>
     /// <param name="mine">本次输出里那些 def 的类型。</param>
-    /// <param name="others">被 <c>--type</c> 挡在外面的类型;为空表示全都在场。</param>
+    /// <param name="others">被 <c>--type</c> 挡在外面的**每个 def** 的类型,不去重;为空表示全都在场。
+    /// 只剩一个别的时点它的名;剩好几个折成个数 —— 那张名单拿掉 --type 就能看到,
+    /// 而它在 Nociosphere 这种名字上有六个类型长。</param>
     public static string Say(string name, int total, IReadOnlyList<string> mine, IReadOnlyList<string> others)
     {
         var head = $"{Tally.Complete(total).Render("def")} share the name '{name}'";
@@ -19,13 +21,11 @@ public static class NameCollision
             return $"{head} across different def types; all of them are shown. Pass --type <DefType> for just one.";
 
         // 尾缀的名词两支都不带 —— 类型名本身就以 Def 收尾,再接一个 "defs" 是
-        // 「WorldObjectDef defs」。单数那支本来就没有,复数跟着它对齐。
-        return $"{head}: this is the {NameList.Render(mine, mine.Count)} one. " +
+        // 「WorldObjectDef defs」。
+        return $"{head}: this is the {NameList.Render(mine, mine.Count)} one; " +
                (others.Count == 1
-                   ? $"The other is a {others[0]}"
-                   : $"The others are {NameList.Render(others, others.Count)}") +
-               // 方位词说的是这句话下面那几段。这句永远排在 def 循环之前,所以它上面
-               // 一个字都没有 —— 原先写的 above 指着一片不存在的上文。
-               ", shown only without --type. Fields, parent node and translations below are this def's own.";
+                   ? $"the other is a {others[0]}"
+                   : $"the {others.Count} others are of other def types") +
+               ", shown only without --type.";
     }
 }
