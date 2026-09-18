@@ -1,5 +1,9 @@
 $ rimsearcher economy --calc-state not_producible --category Building
 exit 1
 --- stdout ---
-No priced thing is left after --category, --calc-state. This snapshot prices 5 things in all — drop one of those to see them.
+0 rows. Dropping any one option below brings back this many things:
+Same in every row, not repeated below: hidden=1.
+filter                       next
+--category Building          rimsearcher economy --calc-state not_producible
+--calc-state not_producible  rimsearcher economy --category Building
 --- stderr ---

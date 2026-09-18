@@ -32,6 +32,7 @@ public sealed class SearchCommand : Command
         JsonKeys =
         [
             new() { Key = "defs", Rows = true, What = "one row per matching def: def_name, def_type, label, matched_on, mod." },
+            EmptyCause.JsonKey,
         ],
     };
 
@@ -48,6 +49,11 @@ public sealed class SearchCommand : Command
         var ftsTotal = total;
         var how = "full-text";
         var addedBySubstring = 0;
+
+        // 同一个查询换个筛子能命中几个 —— 与下面的主查询同一套两段(FTS 接子串补扫)。
+        int Hits(ScopeFilter s, string? t)
+            => ctx.Db.SearchFts(query, s, t, 1, 0).Total +
+               (IsCompoundToken(query) ? ctx.Db.NamesContainingUnmatched(query, s, t).Count : 0);
 
         // FTS 分词按分隔符与驼峰**词首**切,查询词落在名字中段时命中不了
         // (`VoidNode` 找不到 `MonolithGleamingVoidNode`),所以补一遍子串扫描。
@@ -160,6 +166,18 @@ public sealed class SearchCommand : Command
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"Nothing matched '{query}' in this snapshot" +
                 (scope.IsAll ? "" : $" within --scope {scope.Expression}") + ".");
+
+            // 自己给的两个筛子各算一次「单独拿掉能回来几个」(Docs/25 乙1)。查询词没内容时
+            // FTS 没被问过,这两个数就不成立,不算。
+            if (!nothingToMatch)
+            {
+                var causes = new List<EmptyCause>();
+                if (!scope.IsAll)
+                    causes.Add(new(ctx.FilterAsGiven("scope"), Hits(ctx.Unscoped(), type), ctx.Without("scope")));
+                if (type is not null)
+                    causes.Add(new(ctx.FilterAsGiven("type"), Hits(scope, null), ctx.Without("type")));
+                ctx.Report.EmptyBecause(causes);
+            }
 
             // 名字的真实落点当场算得出来:算得出就说算出来的那一条,算不出才退回按形状猜。
             var sighting = NameLookup.Locate(ctx, query, scope);
@@ -452,6 +470,7 @@ public sealed class GetCommand : Command
                        "on a snapshot whose translation table has no 'key' column (pre-measure); next is the " +
                        "command that fills the layer.",
             },
+            EmptyCause.JsonKey,
         ],
     };
 
@@ -517,11 +536,17 @@ public sealed class GetCommand : Command
                 var kept = matches.Where(d => string.Equals(d.DefType, wantType, StringComparison.OrdinalIgnoreCase)).ToList();
                 if (kept.Count == 0)
                 {
+                    // 单名时整份结果是空的,成因是 empty_because 的一行(Docs/25 乙1);几个名字时
+                    // 这一句只关于其中一个,而别的名字可能有块,那时还是一句点名的话。
+                    if (single)
+                    {
+                        ctx.Report.EmptyBecause(new EmptyCause(ctx.FilterAsGiven("type"), matches.Count, ctx.Without("type")));
+                        return 1;
+                    }
                     ctx.Report.Notice(NoticeKind.NextStep,
                         $"'{name}' exists in this snapshot but not as a {wantType}. It is " +
                         $"{string.Join(" and ", matches.Select(d => d.DefType).Distinct(StringComparer.Ordinal))}. " +
                         "Drop --type to see it.");
-                    if (single) return 1;
                     continue;
                 }
                 matches = kept;
@@ -2085,6 +2110,7 @@ public sealed class ListCommand : Command
                 What = "without one: one row per def type — def_type, defs. Which of the two keys is " +
                        "present follows the def type, so a caller that passed one never has to guess.",
             },
+            EmptyCause.JsonKeyCounting("row"),
         ],
     };
 
@@ -2161,11 +2187,9 @@ public sealed class ListCommand : Command
         // 筛空与快照空是两回事,分母就在手边。
         if (all.Count == 0 && everything.Count > 0)
         {
-            ctx.Report.Notice(NoticeKind.NextStep,
-                $"No def type in this snapshot has '{typeFind}' in its name, out of " +
-                $"{Tally.Complete(everything.Count).Render("def type")}. Drop --find to see them all; " +
-                "to filter the defs inside one type instead, name the type: " +
-                $"'rimsearcher list <DefType> --find {typeFind}'.");
+            // 一行 empty_because(Docs/25 乙1);此前是「No def type … has 'x' in its name, out of N.
+            // Drop --find …; to filter the defs inside one type instead, name the type」。
+            ctx.Report.EmptyBecause(new EmptyCause(ctx.FilterAsGiven("find"), everything.Count, ctx.Without("find")), "def type");
             return 1;
         }
 
@@ -2179,10 +2203,10 @@ public sealed class ListCommand : Command
                     "This snapshot holds no defs at all. 'rimsearcher snapshot list' shows when it was taken, " +
                     "and 'rimsearcher export' rebuilds it.");
             else
-                ctx.Report.Notice(NoticeKind.NextStep,
-                    $"No def in this snapshot comes from --scope {scope.Expression}. Snapshot-wide the figure is " +
-                    Tally.Complete(ctx.Db.Types(ScopeFilter.Parse("all", ctx.Db.PackageIds(), ctx.Config)).Count)
-                         .Render("def type") + ". 'rimsearcher mods' lists what this snapshot actually has.");
+                // 此前是「No def in this snapshot comes from --scope X. Snapshot-wide the figure is N def types.
+                // 'rimsearcher mods' lists what this snapshot actually has」。
+                ctx.Report.EmptyBecause(new EmptyCause(ctx.FilterAsGiven("scope"),
+                    ctx.Db.Types(ctx.Unscoped()).Count, ctx.Without("scope")), "def type");
             return 1;
         }
 
@@ -2254,10 +2278,9 @@ public sealed class ListCommand : Command
                 var (_, everywhere) = ctx.Db.ListByType(type, ctx.Unscoped(), 1, 0, wantClass, find);
                 if (everywhere > 0)
                 {
-                    ctx.Report.Notice(NoticeKind.NextStep,
-                        $"No def of type {type}{narrowed} is in scope '{scope.Expression}'" +
-                        $", but this snapshot has {Tally.Complete(everywhere).Render("def")} of it overall. " +
-                        $"Drop --scope, or run 'rimsearcher mods' to see which mods the scope selects.");
+                    // 此前是「No def of type T is in scope 'X', but this snapshot has N of it overall.
+                    // Drop --scope, or run 'rimsearcher mods' …」。
+                    ctx.Report.EmptyBecause(new EmptyCause(ctx.FilterAsGiven("scope"), everywhere, ctx.Without("scope")));
                     return 1;
                 }
             }
@@ -2269,12 +2292,9 @@ public sealed class ListCommand : Command
                 var (_, unfiltered) = ctx.Db.ListByType(type, scope, 1, 0, wantClass);
                 if (unfiltered > 0)
                 {
-                    ctx.Report.Notice(NoticeKind.NextStep,
-                        $"No def of type {type}{(wantClass is null ? "" : $" with class '{wantClass}'")} has " +
-                        $"'{find}' in its name or label, out of {Tally.Complete(unfiltered).Render("def")}. " +
-                        "The filter reads def names and labels only — a def that merely holds this as a field " +
-                        "value is 'rimsearcher where --value', and label text in another language is " +
-                        "'rimsearcher search'.");
+                    // 此前是「No def of type T has 'x' in its name or label, out of N. The filter reads def
+                    // names and labels only — … 'where --value' … 'search'」;筛子读什么住 --find 的 help。
+                    ctx.Report.EmptyBecause(new EmptyCause(ctx.FilterAsGiven("find"), unfiltered, ctx.Without("find")));
                     Advisory.NoteTextIndexHasIt(ctx, find, "--find");
                     return 1;
                 }
@@ -2329,6 +2349,7 @@ public sealed class ListCommand : Command
                 ctx.Report.Notice(NoticeKind.NextStep,
                     $"No def of type {type} has class '{wantClass}'. That type holds " +
                     NameList.Render([.. present.Select(c => $"{c.Class} ({c.Count})")], Limits.MaxSuggestions) + ".");
+                ctx.Report.EmptyBecause(new EmptyCause(ctx.FilterAsGiven("class"), present.Sum(c => c.Count), ctx.Without("class")));
                 return 1;
             }
 

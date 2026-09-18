@@ -218,6 +218,7 @@ public sealed class EconomyCommand : Command
                        "command that fills it. 'things' is then an empty array. Empty when the layer is " +
                        "complete.",
             },
+            EmptyCause.JsonKeyCounting("thing"),
         ],
     };
 
@@ -487,17 +488,25 @@ public sealed class EconomyCommand : Command
 
             if (total == 0 && layerTotal > 0)
             {
-                // 点名是哪几个开关筛空的,而不是笼统说「那些筛子」—— 一次调用里可以同时挂
-                // 四个,而收回哪一个是读的人下一步要敲的东西。
-                var applied = new List<string>();
-                if (!scope.IsAll) applied.Add("--scope");
-                if (category is not null) applied.Add("--category");
-                if (calcState is not null) applied.Add("--calc-state");
-                if (producible) applied.Add("--producible");
-
-                ctx.Report.Notice(NoticeKind.Filter,
-                    $"No priced thing is left after {NameList.Render(applied, 4)}. This snapshot prices " +
-                    $"{Tally.Complete(layerTotal).Render("thing")} in all — drop one of those to see them.");
+                // 给了的每个开关单独收回能回来几个,各是 empty_because 的一行(Docs/25 乙1)—— 一次
+                // 调用里可以同时挂四个,而收回哪一个是读的人下一步要敲的东西。一个都救不回来
+                // (得同时收回两个)才退回那句话。
+                var causes = new List<EmptyCause>();
+                int Left(ScopeFilter s, string? cat, string? state, bool prod)
+                    => ctx.Db.EconomyAll(s, cat, state, prod, sortColumn, 1, 0).Total;
+                if (!scope.IsAll)
+                    causes.Add(new(ctx.FilterAsGiven("scope"), Left(ctx.Unscoped(), category, calcState, producible), ctx.Without("scope")));
+                if (category is not null)
+                    causes.Add(new(ctx.FilterAsGiven("category"), Left(scope, null, calcState, producible), ctx.Without("category")));
+                if (calcState is not null)
+                    causes.Add(new(ctx.FilterAsGiven("calc-state"), Left(scope, category, null, producible), ctx.Without("calc-state")));
+                if (producible)
+                    causes.Add(new(ctx.FilterAsGiven("producible"), Left(scope, category, calcState, false), ctx.Without("producible")));
+                if (!ctx.Report.EmptyBecause(causes, "thing"))
+                    ctx.Report.Notice(NoticeKind.Filter,
+                        $"No priced thing is left after {NameList.Render(causes.Select(c => c.Filter).ToList(), 4)}, and no " +
+                        $"single one of them alone: this snapshot prices {Tally.Complete(layerTotal).Render("thing")} " +
+                        $"in all — '{ctx.Without("scope", "category", "calc-state", "producible")}' lists them.");
                 return 1;
             }
 

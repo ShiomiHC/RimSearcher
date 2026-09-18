@@ -168,6 +168,7 @@ public sealed class ReadCommand : Command
                        "(the 'start-end' range to hand back to --lines). file is in every row, matching " +
                        "'source'.",
             },
+            EmptyCause.JsonKeyCounting("declaration"),
         ],
     };
 
@@ -605,10 +606,12 @@ public sealed class ReadCommand : Command
             var owners = decls.Where(d => Same(d.Name, member)).ToList();
             if (owners.Count > 0)
             {
+                // 谁声明了它照说(那是值域,下一步要填的名字就在里面);「拿掉 --type」是 empty_because 的一行。
                 ctx.Report.Notice(NoticeKind.NextStep,
-                    $"'{member}' is in {rel} after all, just not in a type called '{type}'. It is declared in " +
+                    $"'{member}' is in {rel}, declared in " +
                     string.Join(", ", owners.Select(d => $"{d.Owner ?? "the file itself"} (line {d.StartLine})")) +
-                    ". Drop --type, or name one of those.");
+                    $", not in a type called '{type}'.");
+                ctx.Report.EmptyBecause(new EmptyCause(ctx.FilterAsGiven("type"), owners.Count, ctx.Without("type")), "declaration");
                 return;
             }
         }

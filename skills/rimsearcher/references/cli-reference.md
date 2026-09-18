@@ -288,6 +288,7 @@ A number printed as '635 (holds when classicMortars=on)' depends on a difficulty
 | `costChain` | with defNames: one row per ingredient — product, thingDef, count, unitValue, chainEnd. product is the priced thing this row is an ingredient of, in every row even when only one name was given. chainEnd marks an ingredient with no recipe of its own, where the cost recursion stops and falls back to that ingredient's hand-written market value. |
 | `recipes` | with defNames: every recipe that produces each named thing — product, defName, productCount, workAmount, selfReferential. product carries which thing the recipe makes, in every row even when only one name was given. More than one row for the same product means that thing's fallback market value depends on def load order. |
 | `absent` | only when the economy layer is short in this snapshot: one row — layer, state, next. state is pre-measure (exported before prices were measured), skipped (--no-economy) or unavailable (the exporter could not measure on that game build); next is the command that fills it. 'things' is then an empty array. Empty when the layer is complete. |
+| `empty_because` | one row per option given on this call that, alone, emptied the result: filter (the option as written), hidden (how many things come back with just that option dropped), next (the same call without it, ready to paste). Empty when the result was not empty, or when no single option accounts for it. |
 
 Examples:
 
@@ -415,6 +416,7 @@ defName is not listed as a field: the def_name line above the table is that valu
 |---|---|
 | `defs` | one object per def carrying the name — each with 'def' (identity), 'fields' (path/value/code_default rows, plus 'xml' when the snapshot recorded which XML lines were written) and 'translations'. Both inner tables are always there, empty array and all. 'defs' stays an array even for a single def, because a name can belong to several def types at once. With several names the objects come in the order the names were given, and with --type alone in def-name order; a name that matched nothing has no object here and one note in 'notes' that quotes it. |
 | `absent` | one row per layer these defs would draw on that is short in this snapshot — layer, state, next; empty when every such layer is complete. Today that is 'economy' on a ThingDef when prices were not measured (state pre-measure / skipped / unavailable), 'disk_translations' when the import did not scan the language files on disk (skipped / unconfigured / unmeasured), and 'injection_keys' with --path-contains on a snapshot whose translation table has no 'key' column (pre-measure); next is the command that fills the layer. |
+| `empty_because` | one row per option given on this call that, alone, emptied the result: filter (the option as written), hidden (how many defs come back with just that option dropped), next (the same call without it, ready to paste). Empty when the result was not empty, or when no single option accounts for it. |
 
 Examples:
 
@@ -535,6 +537,7 @@ Rows are marked 'in effect' or 'on disk'. Only 'in effect' is what the game disp
 |---|---|
 | `keys` | one row per keyed translation — key, translated, original, origin ('in effect' or 'on disk'), placeholder, mod, source, and query (which of the queries the row answers, present on a single-query call too). Always an array, including when a single key matched exactly, so the shape does not change with the kind of match. The query column is the one thing that does change with the call: listing the whole layer takes no query, so there the rows have no such column. |
 | `absent` | one row per layer this query needed that this snapshot does not hold — layer, state, next; empty when both are there. 'keyed' with state empty when the snapshot has no keyed translations at all (then 'keys' is empty too); 'disk_translations' (skipped / unconfigured / unmeasured) when the language files on disk were not scanned, so the 'origin' column holds only 'in effect' rows. next is the command that fills the layer. |
+| `empty_because` | one row per option given on this call that, alone, emptied the result: filter (the option as written), hidden (how many keys come back with just that option dropped), next (the same call without it, ready to paste). Empty when the result was not empty, or when no single option accounts for it. |
 
 Examples:
 
@@ -571,6 +574,7 @@ rimsearcher list [defType]... [options]
 |---|---|
 | `defs` | with a def type: one row per def — def_name, label, mod, def_type (which of the types asked for the row came from, present on a single-type call too), plus 'class' when one of the buckets holds more than one def class. 'mod' is where the def was declared, not who last changed it: a def another mod patched still reads as its original mod, and --scope filters that same column. |
 | `types` | without one: one row per def type — def_type, defs. Which of the two keys is present follows the def type, so a caller that passed one never has to guess. |
+| `empty_because` | one row per option given on this call that, alone, emptied the result: filter (the option as written), hidden (how many rows come back with just that option dropped), next (the same call without it, ready to paste). Empty when the result was not empty, or when no single option accounts for it. |
 
 Examples:
 
@@ -619,6 +623,7 @@ A property appears twice over: once as itself under the C# name, and once as the
 | Key | Holds |
 |---|---|
 | `members` | one row per member: assembly, type, kind, member, signature, static, virtual, abstract, override, accessibility. |
+| `empty_because` | one row per option given on this call that, alone, emptied the result: filter (the option as written), hidden (how many members come back with just that option dropped), next (the same call without it, ready to paste). Empty when the result was not empty, or when no single option accounts for it. |
 
 Examples:
 
@@ -774,6 +779,7 @@ Page with --lines, never with a pipe. The first line of the answer says which li
 |---|---|
 | `source` | without --outline: one row per source line — file, line, text, plus kind and declaration when the line came from --member/--type. The text form's line-number gutter is not repeated here. This is the key the three reading modes produce; 'declarations' is absent then. |
 | `declarations` | with --outline: one row per declaration — file, kind, modifiers (the leading run of them, verbatim; null when there are none), name, in (the owner), lines, at (the 'start-end' range to hand back to --lines). file is in every row, matching 'source'. |
+| `empty_because` | one row per option given on this call that, alone, emptied the result: filter (the option as written), hidden (how many declarations come back with just that option dropped), next (the same call without it, ready to paste). Empty when the result was not empty, or when no single option accounts for it. |
 
 Examples:
 
@@ -810,6 +816,7 @@ Matching runs in stages and stops at the first one that finds anything: full-tex
 | Key | Holds |
 |---|---|
 | `defs` | one row per matching def: def_name, def_type, label, matched_on, mod. |
+| `empty_because` | one row per option given on this call that, alone, emptied the result: filter (the option as written), hidden (how many defs come back with just that option dropped), next (the same call without it, ready to paste). Empty when the result was not empty, or when no single option accounts for it. |
 
 Examples:
 
@@ -1118,6 +1125,7 @@ The name can be a full one ('Verse.ThingComp'), a bare one ('ThingComp'), or a f
 | Key | Holds |
 |---|---|
 | `types` | one row per type: assembly, type, namespace, base, interfaces, derived, compiler_generated. Several names put their rows in this one array, in the order the names were given. |
+| `empty_because` | one row per option given on this call that, alone, emptied the result: filter (the option as written), hidden (how many derived types come back with just that option dropped), next (the same call without it, ready to paste). Empty when the result was not empty, or when no single option accounts for it. |
 
 Examples:
 

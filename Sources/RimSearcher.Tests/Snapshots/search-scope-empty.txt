@@ -1,0 +1,10 @@
+$ rimsearcher search shield --scope test.mod
+exit 1
+--- stdout ---
+Nothing matched 'shield' in this snapshot within --scope test.mod.
+
+0 rows. Dropping any one option below brings back this many defs:
+filter            hidden  next
+--scope test.mod  1       rimsearcher search shield
+'rimsearcher list' with no def type lists what kinds of def this snapshot holds, and 'rimsearcher mods' lists which mods it covers.
+--- stderr ---

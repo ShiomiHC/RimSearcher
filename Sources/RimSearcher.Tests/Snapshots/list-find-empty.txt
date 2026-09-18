@@ -1,0 +1,7 @@
+$ rimsearcher list ThingDef --find zzznotathing
+exit 1
+--- stdout ---
+0 rows. Dropping any one option below brings back this many defs:
+filter               hidden  next
+--find zzznotathing  9       rimsearcher list ThingDef
+--- stderr ---

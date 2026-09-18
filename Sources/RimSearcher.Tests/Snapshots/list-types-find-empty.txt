@@ -1,0 +1,7 @@
+$ rimsearcher list --find zzznotathing
+exit 1
+--- stdout ---
+0 rows. Dropping any one option below brings back this many def types:
+filter               hidden  next
+--find zzznotathing  6       rimsearcher list
+--- stderr ---

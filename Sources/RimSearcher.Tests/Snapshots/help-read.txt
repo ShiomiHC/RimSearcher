@@ -43,8 +43,9 @@ Global options (every command takes these, written after the command):
       --config <path>    Use this config file instead of the default one.
 
 --json keys (besides 'notes'):
-  source        without --outline: one row per source line — file, line, text, plus kind and declaration when the line came from --member/--type. The text form's line-number gutter is not repeated here. This is the key the three reading modes produce; 'declarations' is absent then.
-  declarations  with --outline: one row per declaration — file, kind, modifiers (the leading run of them, verbatim; null when there are none), name, in (the owner), lines, at (the 'start-end' range to hand back to --lines). file is in every row, matching 'source'.
+  source         without --outline: one row per source line — file, line, text, plus kind and declaration when the line came from --member/--type. The text form's line-number gutter is not repeated here. This is the key the three reading modes produce; 'declarations' is absent then.
+  declarations   with --outline: one row per declaration — file, kind, modifiers (the leading run of them, verbatim; null when there are none), name, in (the owner), lines, at (the 'start-end' range to hand back to --lines). file is in every row, matching 'source'.
+  empty_because  one row per option given on this call that, alone, emptied the result: filter (the option as written), hidden (how many declarations come back with just that option dropped), next (the same call without it, ready to paste). Empty when the result was not empty, or when no single option accounts for it.
 
 Examples:
   rimsearcher read Pawn.cs --outline

@@ -163,8 +163,8 @@ public class GrammarTests
         Assert.Equal(RimSearcher.Cli.Runner.ExitNoResults, code);
 
         Assert.DoesNotContain("No def type named", stdout, StringComparison.Ordinal);
-        Assert.Contains("test.mod", stdout, StringComparison.Ordinal);   // 说破是哪个 scope 筛空的
-        Assert.Contains("1 def of it overall", stdout, StringComparison.Ordinal);  // 并给出快照里的真实数量
+        // 成因是 empty_because 的一行:哪个 scope 筛空的、拿掉它能回来几个、拿掉它的同一条命令。
+        Assert.Contains("--scope test.mod  1       rimsearcher list HediffDef", stdout, StringComparison.Ordinal);
 
         // 另一半:真不存在的类型仍要照直说,否则这条分流就成了一律不认账。
         var (absent, _, _) = Fixture.Run("list", "NoSuchDefType", "--scope", "test.mod");
@@ -1087,8 +1087,10 @@ public class GrammarTests
         var (wrong, _, wrongCode) = Fixture.Run("read", "vanilla/Verse/Outline.cs",
                                                 "--member", "Shared", "--type", "Nope");
         Assert.Equal(1, wrongCode);
-        Assert.Contains("after all", wrong, StringComparison.Ordinal);
+        // 谁声明了它照说,「拿掉 --type」是 empty_because 的一行。
+        Assert.Contains("not in a type called 'Nope'", wrong, StringComparison.Ordinal);
         Assert.Contains("Outer", wrong, StringComparison.Ordinal);
+        Assert.Contains("--type Nope  2       rimsearcher read vanilla/Verse/Outline.cs --member Shared", wrong, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -2122,7 +2124,7 @@ public class GrammarTests
         Assert.DoesNotContain("blueprintGraphicData", pooled, StringComparison.Ordinal);
         Assert.DoesNotContain("pooled together", pooled, StringComparison.Ordinal);
         var (none, _, _) = Fixture.Run("values", "blueprintGraphicData.texPath", "--exact-path");
-        Assert.Contains(Report.EmptyBecauseCaption, none, StringComparison.Ordinal);
+        Assert.Contains(Report.EmptyBecauseCaption("def"), none, StringComparison.Ordinal);
         Assert.Contains("--exact-path  1       rimsearcher values blueprintGraphicData.texPath", none, StringComparison.Ordinal);
     }
 
@@ -2814,8 +2816,9 @@ public class GrammarTests
 
         var (types, _, tcode) = Fixture.Run(["list", .. empty]);
         Assert.Equal(1, tcode);
-        Assert.Contains("--scope all,-ludeon.rimworld,-test.mod", types, StringComparison.Ordinal);
-        Assert.Matches(@"Snapshot-wide the figure is \d+ def types?\.", types);
+        // 成因是 empty_because 的一行,hidden 数的是整份快照的 def 类型数。
+        Assert.Matches(@"--scope all,-ludeon\.rimworld,-test\.mod  \d+\s+rimsearcher list\n", types);
+        Assert.Contains(Report.EmptyBecauseCaption("def type"), types, StringComparison.Ordinal);
 
         var (values, _, vcode) = Fixture.Run(["values", "defName", .. empty]);
         Assert.Equal(1, vcode);
@@ -3140,7 +3143,7 @@ public class GrammarTests
         // 反向:落空那句话的分母是**过滤之前**的命中数,不是自己筛剩的零。
         var (miss, _, missCode) = Fixture.Run("keyed", "转至此处", "--empty-translation");
         Assert.Equal(1, missCode);
-        Assert.Contains("2 keys matched", miss, StringComparison.Ordinal);
+        Assert.Contains("--empty-translation  2       rimsearcher keyed 转至此处", miss, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -4559,7 +4562,8 @@ public class GrammarTests
         // 筛空 ≠ 类型不存在。
         var (miss, _, mcode) = Fixture.Run("list", "ThingDef", "--find", "zzznotathing");
         Assert.Equal(1, mcode);
-        Assert.Contains("in its name or label, out of", miss, StringComparison.Ordinal);
+        Assert.Contains($"--find zzznotathing  {total}", miss, StringComparison.Ordinal);
+        Assert.Contains("rimsearcher list ThingDef\n", miss, StringComparison.Ordinal);
         Assert.DoesNotContain("No def type named", miss, StringComparison.Ordinal);
 
         // 不给 def 类型时筛的是**类型名** —— 这条路不退 2,它在这一半真的生效。
@@ -4570,7 +4574,8 @@ public class GrammarTests
 
         var (noType, _, ncode) = Fixture.Run("list", "--find", "zzznotatype");
         Assert.Equal(1, ncode);
-        Assert.Contains("No def type in this snapshot has", noType, StringComparison.Ordinal);
+        Assert.Contains(Report.EmptyBecauseCaption("def type"), noType, StringComparison.Ordinal);
+        Assert.Contains("--find zzznotatype  ", noType, StringComparison.Ordinal);
     }
 
     // ---- types 并入 list(功能收束)----

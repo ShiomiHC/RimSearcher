@@ -14,14 +14,17 @@ namespace RimSearcher.Output;
 /// </summary>
 public sealed record EmptyCause(string Filter, int Hidden, string Next)
 {
-    /// <summary>每条会出这张表的命令在 JsonKeys 里挂同一份声明;行式键,零行时是 <c>[]</c>。</summary>
-    public static readonly JsonKeySpec JsonKey = new()
+    /// <summary>每条会出这张表的命令在 JsonKeys 里挂一份声明;行式键,零行时是 <c>[]</c>。数 def 的用这份。</summary>
+    public static readonly JsonKeySpec JsonKey = JsonKeyCounting("def");
+
+    /// <summary>hidden 列数的不是 def 的命令(list 的类型面数 def type,members 数 member…)各点自己的名词。</summary>
+    public static JsonKeySpec JsonKeyCounting(string unit) => new()
     {
         Key = Report.EmptyBecauseTable,
         Rows = true,
         What = "one row per option given on this call that, alone, emptied the result: filter (the option " +
-               "as written), hidden (how many defs come back with just that option dropped), next (the same " +
-               "call without it, ready to paste). Empty when the result was not empty, or when no single " +
-               "option accounts for it.",
+               $"as written), hidden (how many {NounRegistry.Form(unit, 2)} come back with just that option " +
+               "dropped), next (the same call without it, ready to paste). Empty when the result was not " +
+               "empty, or when no single option accounts for it.",
     };
 }

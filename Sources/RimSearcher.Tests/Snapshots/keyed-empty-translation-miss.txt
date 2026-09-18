@@ -1,7 +1,7 @@
-$ rimsearcher keyed CannotUseNoPower --empty-translation
+$ rimsearcher keyed 转至此处 --empty-translation
 exit 1
 --- stdout ---
 0 rows. Dropping any one option below brings back this many keys:
 filter               hidden  next
---empty-translation  1       rimsearcher keyed CannotUseNoPower
+--empty-translation  2       rimsearcher keyed 转至此处
 --- stderr ---

@@ -1,7 +1,7 @@
-$ rimsearcher list HediffDef --scope test.mod
+$ rimsearcher get Apparel_ShieldBelt --type HediffDef
 exit 1
 --- stdout ---
 0 rows. Dropping any one option below brings back this many defs:
 filter            hidden  next
---scope test.mod  1       rimsearcher list HediffDef
+--type HediffDef  1       rimsearcher get Apparel_ShieldBelt
 --- stderr ---

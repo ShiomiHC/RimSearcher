@@ -25,6 +25,7 @@ exit 0
       "mod": "ludeon.rimworld",
       "def_type": "ThingDef"
     }
-  ]
+  ],
+  "empty_because": []
 }
 --- stderr ---

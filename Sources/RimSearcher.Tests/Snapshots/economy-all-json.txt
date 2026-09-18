@@ -140,6 +140,7 @@ exit 0
       "isApparel": false
     }
   ],
-  "absent": []
+  "absent": [],
+  "empty_because": []
 }
 --- stderr ---

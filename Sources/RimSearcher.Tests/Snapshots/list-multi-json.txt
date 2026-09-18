@@ -108,6 +108,7 @@ exit 0
       "mod": "test.mod",
       "def_type": "AlloyPartDef"
     }
-  ]
+  ],
+  "empty_because": []
 }
 --- stderr ---

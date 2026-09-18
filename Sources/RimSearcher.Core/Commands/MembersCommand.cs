@@ -144,6 +144,7 @@ public sealed class MembersCommand : Command
                 What = "one row per member: assembly, type, kind, member, signature, static, virtual, " +
                        "abstract, override, accessibility.",
             },
+            EmptyCause.JsonKeyCounting("member"),
         ],
     };
 
@@ -236,7 +237,7 @@ public sealed class MembersCommand : Command
 
         if (kept.Count == 0)
         {
-            SayNothingPassed(ctx, types[0], declared, inherited, hierarchy);
+            SayNothingPassed(ctx, types[0], all, inherited, hierarchy);
             ctx.Report.Table("members", Columns, []);
             return 1;
         }
@@ -273,9 +274,13 @@ public sealed class MembersCommand : Command
 
         if (kept.Count == 0)
         {
-            ctx.Report.Notice(NoticeKind.Boundary,
-                $"'{byName}' matches {Tally.Complete(declared).Render("member")}, and the other filters " +
-                "on this command kept none of them. Drop them to see what the name alone finds.");
+            // 每个给了的筛子单独拿掉能回来几个,各是 empty_because 的一行;一个都救不回来
+            // (得同时拿掉两个)才退回那句话。
+            if (!ctx.Report.EmptyBecause(SingleDrops(ctx, found), "member"))
+                ctx.Report.Notice(NoticeKind.Boundary,
+                    $"'{byName}' matches {Tally.Complete(declared).Render("member")}, and the other filters " +
+                    $"on this command kept none of them — no single one of them alone. '{ctx.Without(Sieves)}' " +
+                    "is the name by itself.");
             ctx.Report.Table("members", Columns, []);
             return 1;
         }
@@ -304,14 +309,26 @@ public sealed class MembersCommand : Command
     ///
     /// 顺序无所谓 —— 全是合取,而每一条落空的后果都由下面那句话统一交代。
     /// </summary>
-    private static List<MemberRow> Filter(CommandContext ctx, List<MemberRow> rows)
+    /// <summary>这条命令上会筛行的选项,按声明顺序 —— 零行成因按它逐个「单独拿掉」重算。</summary>
+    private static readonly string[] Sieves =
+        ["name", "member-kind", "static", "instance", "virtual", "abstract", "overrides", "access"];
+
+    /// <summary>给了的每个筛子一行:单独拿掉它、别的照旧,能回来几个 member(Docs/25 乙1)。</summary>
+    private static List<EmptyCause> SingleDrops(CommandContext ctx, List<MemberRow> all)
+        => Sieves.Where(ctx.Args.Has)
+                 .Select(o => new EmptyCause(ctx.FilterAsGiven(o), Filter(ctx, all, except: o).Count, ctx.Without(o)))
+                 .ToList();
+
+    private static List<MemberRow> Filter(CommandContext ctx, List<MemberRow> rows, string? except = null)
     {
+        bool On(string option) => !string.Equals(option, except, StringComparison.Ordinal);
+
         var text = ctx.Args.Value("name");
-        if (text is { Length: > 0 })
+        if (text is { Length: > 0 } && On("name"))
             rows = rows.Where(r => r.Name.Contains(text, StringComparison.OrdinalIgnoreCase)).ToList();
 
         var kinds = ctx.Args.Value("member-kind");
-        if (kinds is { Length: > 0 })
+        if (kinds is { Length: > 0 } && On("member-kind"))
         {
             var wanted = kinds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             var unknown = wanted.Where(k => !Kinds.Contains(k, StringComparer.OrdinalIgnoreCase)).ToList();
@@ -327,14 +344,14 @@ public sealed class MembersCommand : Command
                 "--static and --instance ask for opposite halves of the same set, so together they select " +
                 "nothing. Leave both out to get all of them.");
 
-        if (ctx.Args.Flag("static")) rows = rows.Where(r => r.IsStatic).ToList();
-        if (ctx.Args.Flag("instance")) rows = rows.Where(r => !r.IsStatic).ToList();
-        if (ctx.Args.Flag("virtual")) rows = rows.Where(r => r.IsVirtual).ToList();
-        if (ctx.Args.Flag("abstract")) rows = rows.Where(r => r.IsAbstract).ToList();
-        if (ctx.Args.Flag("overrides")) rows = rows.Where(r => r.IsOverride).ToList();
+        if (ctx.Args.Flag("static") && On("static")) rows = rows.Where(r => r.IsStatic).ToList();
+        if (ctx.Args.Flag("instance") && On("instance")) rows = rows.Where(r => !r.IsStatic).ToList();
+        if (ctx.Args.Flag("virtual") && On("virtual")) rows = rows.Where(r => r.IsVirtual).ToList();
+        if (ctx.Args.Flag("abstract") && On("abstract")) rows = rows.Where(r => r.IsAbstract).ToList();
+        if (ctx.Args.Flag("overrides") && On("overrides")) rows = rows.Where(r => r.IsOverride).ToList();
 
         var access = ctx.Args.Value("access");
-        if (access is { Length: > 0 })
+        if (access is { Length: > 0 } && On("access"))
             rows = rows.Where(r => string.Equals(r.Accessibility, access, StringComparison.OrdinalIgnoreCase))
                        .ToList();
 
@@ -346,8 +363,9 @@ public sealed class MembersCommand : Command
     /// 前者去基类找,后者松开过滤器。分不清时说前者,就是把一次筛选说成一件关于这个类型的事实。
     /// </summary>
     private static void SayNothingPassed(
-        CommandContext ctx, TypeHit type, int declared, bool inherited, Hierarchy? hierarchy)
+        CommandContext ctx, TypeHit type, List<MemberRow> all, bool inherited, Hierarchy? hierarchy)
     {
+        var declared = all.Count;
         if (declared == 0)
         {
             var chain = hierarchy?.BaseChain(type.FullName) ?? [];
@@ -360,10 +378,13 @@ public sealed class MembersCommand : Command
             return;
         }
 
+        // 每个给了的筛子单独拿掉能回来几个,各是 empty_because 的一行;一个都救不回来才退回那句话。
+        if (ctx.Report.EmptyBecause(SingleDrops(ctx, all), "member")) return;
         ctx.Report.Notice(NoticeKind.Filter,
             $"{type.FullName} declares {Tally.Complete(declared).Render("member")}" +
             (inherited ? " counting its base types" : "") +
-            ", and none of them passed the filters given here. Dropping one of them shows what is there.");
+            $", and none of them passed the filters given here — no single one of them alone. '{ctx.Without(Sieves)}' " +
+            "lists every one.");
     }
 
     private static readonly string[] Kinds = ["method", "constructor", "property", "field", "event"];

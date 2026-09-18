@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 
 namespace RimSearcher.Tests;
 
@@ -46,6 +46,17 @@ public class OutputSnapshotTests
         { "values-exact-path-empty",  ["values", "blueprintGraphicData.texPath", "--exact-path"] },
         { "values-scope-empty",       ["values", "workerClass", "--scope", "ludeon.rimworld"] },
         { "values-type-filtered-empty", ["values", "workerClass", "--type", "ThingDef"] },
+        // 其余带 empty_because 表的命令各一份零行基线(Docs/25 乙1 第二批)。
+        { "search-scope-empty",         ["search", "shield", "--scope", "test.mod"] },
+        { "get-type-miss",              ["get", "Apparel_ShieldBelt", "--type", "HediffDef"] },
+        { "list-scope-empty",           ["list", "HediffDef", "--scope", "test.mod"] },
+        { "list-find-empty",            ["list", "ThingDef", "--find", "zzznotathing"] },
+        { "list-types-find-empty",      ["list", "--find", "zzznotathing"] },
+        { "keyed-empty-translation-miss", ["keyed", "转至此处", "--empty-translation"] },
+        { "types-declares-empty",       ["types", "Verse.ThingComp", "--derived", "--declares", "NoSuchMember"] },
+        { "members-name-empty",         ["members", "Verse.ThingComp", "--name", "zzznothing"] },
+        { "members-two-sieves-empty",   ["members", "Verse.ThingComp", "--name", "zzznothing", "--static"] },
+        { "read-member-type-miss",      ["read", "vanilla/Verse/Outline.cs", "--member", "Shared", "--type", "Nope"] },
         { "where-value-class-miss",   ["where", "compClass", "RimWorld.CompNoSuchThing"] },
         // scope 展开在**有结果时**也要说:组名那份必须带展开句,写死 packageId 那份不多说一个字。
         { "where-scope-group",      ["where", "thingClass", "RimWorld.Bullet", "--scope", "vanilla"] },

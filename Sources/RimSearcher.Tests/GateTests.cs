@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using RimSearcher.Cli;
 using RimSearcher.Commands;
 using RimSearcher.Output;
@@ -52,10 +52,13 @@ public class GateTests
         var probes = new Dictionary<string, string[]>(StringComparer.Ordinal)
         {
             ["search.defs"] = ["search", "shield"],
+            ["search.empty_because"] = ["search", "shield", "--scope", "test.mod"],
             ["get.defs"] = ["get", "Apparel_ShieldBelt"],
+            ["get.empty_because"] = ["get", "Apparel_ShieldBelt", "--type", "HediffDef"],
             ["get.absent"] = ["get", "OnlyInOtherSnapshot", "--db", Fixture.OtherDb],
             ["list.defs"] = ["list", "ThingDef"],
             ["list.types"] = ["list"],
+            ["list.empty_because"] = ["list", "ThingDef", "--find", "zzznothing"],
             ["where.matches"] = ["where", "thingClass", "RimWorld.Bullet"],
             ["where.paths"] = ["where", "--value", "RimWorld.Bullet"],
             // 零行成因表只在自己给的筛子确实挡掉了东西时有行 —— 拿 --scope 圈空的那条探。
@@ -68,14 +71,17 @@ public class GateTests
             // 主 fixture 是旧口径(只数 @Name=),缺 defName / label 两格 —— 那一行在这里。
             ["inherit.absent"] = ["inherit", "BaseBullet"],
             ["keyed.keys"] = ["keyed", "CannotUseNoPower"],
+            ["keyed.empty_because"] = ["keyed", "CannotUseNoPower", "--empty-translation"],
             // 语料库是没配 mod_roots 建的,这一行在共享夹具上就有。
             ["keyed.absent"] = ["keyed", "CannotUseNoPower"],
             ["economy.things"] = ["economy"],
+            ["economy.empty_because"] = ["economy", "--calc-state", "not_producible", "--category", "Building"],
             // 缺层那张表只在缺层的库上有行 —— 拿建于经济面之前的那份夹具探。
             ["economy.absent"] = ["economy", "--db", Fixture.OtherDb],
             ["code-search.matches"] = ["code-search", "Translate"],
             ["code-search.ui_text"] = ["code-search", "Translate"],
             ["read.source"] = ["read", "CompShield.cs", "--lines", "1-5"],
+            ["read.empty_because"] = ["read", "vanilla/Verse/Outline.cs", "--member", "Shared", "--type", "Nope"],
             ["read.declarations"] = ["read", "CompShield.cs", "--outline"],
             ["snapshot list.snapshots"] = ["snapshot", "list"],
             ["snapshot status.xml"] = ["snapshot", "status"],
@@ -91,7 +97,9 @@ public class GateTests
             // 元数据那四条读的是夹具里那份真程序集(FixtureAssembly),不是手写的 .cs。
             ["il.il"] = ["il", "RimWorld.CompShield.PostSpawnSetup"],
             ["types.types"] = ["types", "Verse.ThingComp"],
+            ["types.empty_because"] = ["types", "Verse.ThingComp", "--derived", "--declares", "NoSuchMember"],
             ["members.members"] = ["members", "Verse.ThingComp"],
+            ["members.empty_because"] = ["members", "Verse.ThingComp", "--name", "zzznothing"],
             ["callers.calls"] = ["callers", "Verse.Widgets.Label"],
             // 夹具里 vanilla 有边表、另外两棵没有 —— 查调用者那一路上这两棵各一行。
             ["callers.absent"] = ["callers", "Verse.Widgets.Label"],

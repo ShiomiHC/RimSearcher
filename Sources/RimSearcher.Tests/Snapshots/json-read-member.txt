@@ -87,6 +87,7 @@ exit 0
       "declaration": "Inner.Shared",
       "text": "\t\t\t}"
     }
-  ]
+  ],
+  "empty_because": []
 }
 --- stderr ---

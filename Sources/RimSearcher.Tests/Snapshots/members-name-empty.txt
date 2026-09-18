@@ -1,0 +1,7 @@
+$ rimsearcher members Verse.ThingComp --name zzznothing
+exit 1
+--- stdout ---
+0 rows. Dropping any one option below brings back this many members:
+filter             hidden  next
+--name zzznothing  4       rimsearcher members Verse.ThingComp
+--- stderr ---

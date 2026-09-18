@@ -400,25 +400,37 @@ public sealed class Report
     /// filter / hidden / next,每个确实挡掉了东西的筛子一行;一个都没挡就一个字不印。
     /// 行的形状见 <see cref="EmptyCause"/>。
     /// </summary>
-    public bool EmptyBecause(params IReadOnlyList<EmptyCause> causes)
+    public bool EmptyBecause(EmptyCause cause, string unit = "def") => EmptyBecause([cause], unit);
+
+    /// <param name="unit">hidden 那一列数的是什么(登记过的可数名词);标题里点名,JSON 面由声明说。</param>
+    public bool EmptyBecause(IReadOnlyList<EmptyCause> causes, string unit = "def")
     {
-        var rows = causes.Where(c => c.Hidden > 0).ToList();
+        var rows = causes.Where(c => c.Hidden > 0)
+                         .Select(c => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
+                         {
+                             ["filter"] = c.Filter,
+                             ["hidden"] = c.Hidden,
+                             ["next"] = c.Next,
+                         }).ToList();
         if (rows.Count == 0) return false;
+        // 同一次输出里只有一张:JSON 面同名块后写的覆盖先写的,所以第二次调用是往第一张里加行。
+        var at = _entries.FindIndex(e => e is TableBlock { Name: EmptyBecauseTable, Collection: null });
+        if (at >= 0)
+        {
+            var t = (TableBlock)_entries[at];
+            _entries[at] = t with { Rows = [.. t.Rows, .. rows] };
+            return true;
+        }
         // 标题只在文本面(JSON 里表名自己在说);它是这张表的事实句:行数是零,而下面每一行
         // 是一个自己给的、单独拿掉就有行回来的筛子。
-        Table(EmptyBecauseTable, ["filter", "hidden", "next"],
-              rows.Select(c => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
-              {
-                  ["filter"] = c.Filter,
-                  ["hidden"] = c.Hidden,
-                  ["next"] = c.Next,
-              }).ToList(),
-              caption: EmptyBecauseCaption, unclipped: true);
+        Table(EmptyBecauseTable, ["filter", "hidden", "next"], rows,
+              caption: EmptyBecauseCaption(unit), unclipped: true);
         return true;
     }
 
     public const string EmptyBecauseTable = "empty_because";
-    public const string EmptyBecauseCaption = "0 rows. Dropping any one option below brings back this many defs:";
+    public static string EmptyBecauseCaption(string unit)
+        => $"0 rows. Dropping any one option below brings back this many {NounRegistry.Form(unit, 2)}:";
 
     public Report Text(string name, IReadOnlyList<string> lines,
                        IReadOnlyList<IReadOnlyDictionary<string, object?>>? rows = null)

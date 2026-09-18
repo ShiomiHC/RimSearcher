@@ -19,6 +19,7 @@ exit 0
       "matched_on": "def_name+label",
       "mod": "ludeon.rimworld"
     }
-  ]
+  ],
+  "empty_because": []
 }
 --- stderr ---

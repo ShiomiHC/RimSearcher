@@ -1,0 +1,9 @@
+$ rimsearcher types Verse.ThingComp --derived --declares NoSuchMember
+exit 1
+--- stdout ---
+One level down only. --transitive follows the chain all the way to the leaves.
+
+0 rows. Dropping any one option below brings back this many derived types:
+filter                   hidden  next
+--declares NoSuchMember  1       rimsearcher types Verse.ThingComp --derived
+--- stderr ---

@@ -102,6 +102,7 @@ public sealed class KeyedCommand : Command
                        "unconfigured / unmeasured) when the language files on disk were not scanned, so the " +
                        "'origin' column holds only 'in effect' rows. next is the command that fills the layer.",
             },
+            EmptyCause.JsonKeyCounting("key"),
         ],
     };
 
@@ -138,7 +139,7 @@ public sealed class KeyedCommand : Command
         var answered = 0;
         var anyPlaceholder = false;
         foreach (var one in asked)
-            if (RunOne(ctx, one, limit, offset, placeholdersOnly, total, table, ref anyPlaceholder) == 0)
+            if (RunOne(ctx, one, limit, offset, placeholdersOnly, total, table, ref anyPlaceholder, asked.Count == 1) == 0)
                 answered++;
 
         // 部分命中仍是结果,全空才 1。
@@ -151,7 +152,8 @@ public sealed class KeyedCommand : Command
 
     private static int RunOne(CommandContext ctx, string query, LimitValue limit, int offset,
                               bool placeholdersOnly, int total,
-                              List<IReadOnlyDictionary<string, object?>> table, ref bool anyPlaceholder)
+                              List<IReadOnlyDictionary<string, object?>> table, ref bool anyPlaceholder,
+                              bool single)
     {
         // 精确 key 命中优先。key 与界面文案不会同形,所以这一步不会抢走「按文案搜」的意图。
         var exact = ctx.Db.KeyedByKey(query);
@@ -231,11 +233,17 @@ public sealed class KeyedCommand : Command
 
             if (placeholdersOnly && matchedTotal > 0)
             {
-                // 主语是 --empty-translation(固定单数),计数进从句 —— 见下面那条注释。
+                // 单个 key 时整份结果是空的,成因是 empty_because 的一行(Docs/25 乙1);几个 key 时
+                // 这一句只关于其中一个,别的可能有行,那时还是一句点名的话。
+                if (single)
+                {
+                    ctx.Report.EmptyBecause(new EmptyCause(ctx.FilterAsGiven("empty-translation"), matchedTotal,
+                                                           ctx.Without("empty-translation")), "key");
+                    return 1;
+                }
                 ctx.Report.Notice(NoticeKind.Filter,
                     $"--empty-translation filtered out every match: {Tally.Complete(matchedTotal).Render("key")} " +
-                    $"matched '{query}', and none of them is a placeholder — each has a real translation. " +
-                    "Drop --empty-translation to see them.");
+                    $"matched '{query}'. Drop --empty-translation to see them.");
                 return 1;
             }
 

@@ -48,6 +48,7 @@ exit 0
       "state": "unconfigured",
       "next": "set 'mod_roots' in the config file, then rimsearcher snapshot import fixture.rsx.jsonl.gz --name fixture"
     }
-  ]
+  ],
+  "empty_because": []
 }
 --- stderr ---

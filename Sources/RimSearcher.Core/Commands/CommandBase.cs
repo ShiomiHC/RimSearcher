@@ -275,22 +275,25 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
     public bool Quiet => Args.Flag("quiet");
 
     /// <summary>
-    /// 这一次的命令行,拿掉 <paramref name="option"/> 那个筛子之后的样子 —— 原样可贴。
-    /// 位置参数照给,收窄参数按声明层重排(<see cref="ParseResult.Narrowing(string)"/>),
-    /// --snapshot 跟着走;--db 不带(它是调用方自己选的寻址,与别处的回显同一口径),
-    /// --json / --limit 这类不改答案集合的也不带。
+    /// 这一次的命令行,拿掉 <paramref name="options"/> 那几个筛子之后的样子 —— 原样可贴。
+    /// 位置参数照给,这条命令自己的选项凡是给了的都照给、按声明顺序排(不只 Narrows 那几个:
+    /// <c>--derived</c> / <c>--member</c> 这类定问题形状的拿掉就不是同一条查询),--snapshot 跟着走;
+    /// 不带的只有分页(--limit / --offset)与调用方自己选的寻址(--db,与别处的回显同一口径)。
     /// </summary>
-    public string Without(string option)
+    public string Without(params string[] options)
     {
         var parts = new List<string> { CommandRegistry.ExeName, Args.Spec.Name };
         parts.AddRange(Args.Positionals.Select(QuoteArg));
-        var narrowing = Args.Narrowing(except: option);
-        if (narrowing.Length > 0) parts.Add(narrowing);
+        foreach (var o in Args.Spec.Options)
+        {
+            if (options.Contains(o.Name, StringComparer.Ordinal) || o.Name is "limit" or "offset") continue;
+            if (Args.Values(o.Name).Count > 0) parts.Add(FilterAsGiven(o.Name));
+        }
         if (Args.Value("snapshot") is { Length: > 0 } snap) parts.Add($"--snapshot {QuoteArg(snap)}");
         return string.Join(" ", parts);
     }
 
-    /// <summary>筛子那一格的写法:<c>--type ThingDef</c> / <c>--exact-path</c>,与 Narrowing 同一套拼法。</summary>
+    /// <summary>筛子那一格的写法:<c>--type ThingDef</c> / <c>--exact-path</c>,照命令行的拼法。</summary>
     public string FilterAsGiven(string option)
     {
         // 无值开关内部存的是 "true",那不是命令行上写的样子。

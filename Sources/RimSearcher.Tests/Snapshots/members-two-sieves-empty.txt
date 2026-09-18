@@ -1,0 +1,5 @@
+$ rimsearcher members Verse.ThingComp --name zzznothing --static
+exit 1
+--- stdout ---
+Verse.ThingComp declares 4 members, and none of them passed the filters given here — no single one of them alone. 'rimsearcher members Verse.ThingComp' lists every one.
+--- stderr ---

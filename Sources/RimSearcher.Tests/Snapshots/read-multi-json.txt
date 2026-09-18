@@ -43,6 +43,7 @@ exit 0
       "line": 3,
       "text": "\tpublic static class Widgets"
     }
-  ]
+  ],
+  "empty_because": []
 }
 --- stderr ---

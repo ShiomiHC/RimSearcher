@@ -129,6 +129,7 @@ exit 0
       "selfReferential": false
     }
   ],
-  "absent": []
+  "absent": [],
+  "empty_because": []
 }
 --- stderr ---

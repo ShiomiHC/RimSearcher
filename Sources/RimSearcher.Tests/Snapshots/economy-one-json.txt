@@ -80,6 +80,7 @@ exit 0
       "selfReferential": true
     }
   ],
-  "absent": []
+  "absent": [],
+  "empty_because": []
 }
 --- stderr ---
