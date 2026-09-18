@@ -315,7 +315,18 @@ public sealed class GetCommand : Command
             // 那边的计数时差一行没人解释。
             "defName is not listed as a field: the def_name line above the table is that value, and the " +
             "counts here leave it out. --path-contains naming it brings that row back; 'where' and 'values' " +
-            "see it as a path either way.\n\n" + IndexGap.Help,
+            "see it as a path either way.\n\n" +
+            "The translations table's 'origin' column says what became of each row. 'in effect' is what the " +
+            "game displays. 'in pack, not applied' is a record the language pack carries that the game did " +
+            "not inject: '(key on no slot)' when the key names no injectable slot of this def — usually a " +
+            "handle taken from a label the author has since changed; the row's 'path' is that key rewritten, " +
+            "so it lines up with nothing in the field table — or '(slot not translatable)' when the slot is " +
+            "real but the game marks it as not translatable. 'in pack' alone is a snapshot that predates the " +
+            "game's verdict. 'file (<mod>)' was read from that mod's language files on disk, ', not enabled' " +
+            "when the mod is installed but not enabled, so the game never read it. Rows that carry no def " +
+            "type come from language files, whose keys are '<defName>.<field>'; the game injects those by " +
+            "name, so on a name shared by several defs they are listed under each.\n\n" +
+            Advisory.SiblingHelp + "\n\n" + IndexGap.Help,
         // 一个名字与一批名字走同一条路:多名只是把「撞名连印」那套块格式的入口从
         // 「同名跨类型」放宽到「调用方点了几个名字」。不给名字、只给 --type 是第三个入口,
         // 同一套块。三个入口一份渲染,单名那条路的输出一个字节不动 —— 下游脚本与 skill
@@ -511,24 +522,20 @@ public sealed class GetCommand : Command
             if (all.Count == 0)
             {
                 // 「不是分桶键」不等于「不存在」:同 list 的那一档,子类型的 def 躺在基类的桶里。
-                var holders = ctx.Db.TypesHoldingClass(wantType!, ctx.Unscoped());
-                ctx.Report.Notice(NoticeKind.NextStep, holders.Count > 0
-                    ? $"'{wantType}' is not a def type in this snapshot, but it is the class of " +
-                      $"{Tally.Complete(holders.Sum(h => h.Count)).Render("def")}: " +
-                      string.Join(", ", holders.Select(h => $"{h.Count} under {h.DefType}")) + ". " +
-                      "The game only gives a def database to types with no concrete Def ancestor, so " +
-                      $"subclasses share their base's bucket. 'rimsearcher get --type {holders[0].DefType}' " +
-                      $"prints that whole bucket; 'rimsearcher list {holders[0].DefType} --class {wantType}' " +
-                      "names just these."
-                    : DefTypeMiss.Say(wantType!, ctx.Db.Types(ctx.Unscoped()).Select(t => t.Type), "get --type"));
+                // 名字是 class 不是 def 类型:found_as 一行(is = class,next 指 list --class),
+                // 「子类共用基类的桶」是机制,住 NameLookup.Help。
+                if (NameLookup.AsClass(ctx, wantType!, ctx.Unscoped()) is { } asClass)
+                    NameLookup.Say(ctx, asClass);
+                else
+                    ctx.Report.Notice(NoticeKind.NextStep,
+                        DefTypeMiss.Say(wantType!, ctx.Db.Types(ctx.Unscoped()).Select(t => t.Type), "get --type"));
                 return 1;
             }
             blocks.AddRange(all);
             // 整类的分界词是 def_name:同一类型下 def_type 行每块都一样,分不开块。
-            whatFollows = $"Every {all[0].DefType} in this snapshot: {Tally.Complete(all.Count).Render("def")} in a row, " +
-                          "one block each, in def-name order. Every count, footnote and truncation warning " +
-                          "below belongs to the block it sits in — read the def_name line at the top of a " +
-                          "block to know which def the lines under it are about.";
+            whatFollows = $"Every {all[0].DefType} in this snapshot: {Tally.Complete(all.Count).Render("def")} follow, " +
+                          "one block each, in def-name order; every count and note below belongs to the block " +
+                          "it sits in, and the def_name line at the top of a block says which.";
         }
 
         foreach (var name in names)
@@ -613,13 +620,11 @@ public sealed class GetCommand : Command
         // 一个名字撞出几块时按 def_type(名字都一样),几个名字时按 def_name。
         if (blocks.Count > 1)
             ctx.Report.Notice(NoticeKind.Boundary, whatFollows ?? (single
-                ? $"What follows is {Tally.Complete(blocks.Count).Render("def")} in a row, one block each. " +
-                  "Every count, footnote and truncation warning below belongs to the block it sits in — " +
-                  "read the def_type line at the top of a block to know which def the lines under it are about."
-                : $"What follows is {Tally.Complete(blocks.Count).Render("def")} in a row, one block each, " +
-                  "in the order the names were given. Every count, footnote and truncation warning below " +
-                  "belongs to the block it sits in — read the def_name line at the top of a block to know " +
-                  "which def the lines under it are about."));
+                ? $"{Tally.Complete(blocks.Count).Render("def")} follow, one block each; every count and note " +
+                  "below belongs to the block it sits in, and the def_type line at the top of a block says which."
+                : $"{Tally.Complete(blocks.Count).Render("def")} follow, one block each, in the order the names " +
+                  "were given; every count and note below belongs to the block it sits in, and the def_name " +
+                  "line at the top of a block says which."));
 
         var limit = ctx.Limit();
         var (paths, exactPath) = ctx.Args.PathFilters();
@@ -950,11 +955,9 @@ public sealed class GetCommand : Command
                 // 而值本来就印在 value 列里。
                 if (xpaths > 0 && !ctx.Db.Meta.IndexesPostPatchXml)
                     ctx.Report.Notice(NoticeKind.Boundary,
-                        $"{xpaths} patch xpath{(xpaths == 1 ? "" : "s")} name this def. The " +
-                        $"'{XmlOrigin.Column}' column above reads the XML as written on disk, before any " +
-                        $"PatchOperation ran, so a line one of those patches added reads {XmlOrigin.No} " +
-                        $"there — 'rimsearcher inherit {def.DefName}' breaks the count down by how each " +
-                        "xpath names it.");
+                        $"{xpaths} patch xpath{(xpaths == 1 ? "" : "s")} name this def; the " +
+                        $"'{XmlOrigin.Column}' column above was read before patches ran. " +
+                        $"'rimsearcher inherit {def.DefName}' breaks the count down by how each xpath names it.");
             }
 
             // 经济面的指路。**这句必须长在 get 上,不能只长在 economy 上** —— 第十五轮盲测:
@@ -1091,33 +1094,14 @@ public sealed class GetCommand : Command
                 if (!normalized && paths.Count > 0)
                     Short(DataLayers.InjectionKeysRow(ctx.Db, ctx.SnapshotName ?? ""));
 
-                // 配不上任何槽位的译文。**游戏那边同样注入不上** —— 所以这不是查询侧的缺陷,
-                // 是数据里真实存在的一种坏译文,而不说破它就与一条正常译文同形地印在表上。
-                var noSlot = translations.Count(t => t.KeyState == InjectionKey.State.NoSlot);
-                if (noSlot > 0)
-                    ctx.Report.Notice(NoticeKind.Boundary,
-                        $"{Tally.Complete(noSlot).Render("row")} above has a key that is on no injectable " +
-                        "slot of this def: the game does not apply that translation either. Its 'path' cell " +
-                        "is that key rewritten, so it lines up with nothing in the field table above.");
-
-                // 「不许译」与「键写错了」出路不同 —— 那一档改键能救,这一档改了也没用。
-                // 合成一条就得让否定那半跟着出路分支,而那正是本项目数过五次的形态。
-                var refused = translations.Count(t => t.KeyState == InjectionKey.State.Refused);
-                if (refused > 0)
-                    ctx.Report.Notice(NoticeKind.Boundary,
-                        $"{Tally.Complete(refused).Render("row")} above names a real slot that the game " +
-                        "marks as not translatable, so the translation sits in the file and never applies.");
-
-                // 「Rows marked 'outside this snapshot' come from language files of mods … not enabled」
-                // 那句脚注 2026-09-18 删掉:origin 格自己写 not enabled(OriginCell),Docs/25 丁2。
+                // 配不上槽位(no-slot)与槽位不许译(refused)两档 2026-09-18 起折进 origin 格
+                // (OriginCell:「in pack, not applied (key on no slot)」),此前各是表下一句;
+                // 「outside this snapshot」那句脚注同理(origin 格写 not enabled)。机制住 Remarks。
 
                 if (byNameOnly && namesakes > 1)
                     ctx.Report.Notice(NoticeKind.Boundary,
-                        $"These rows were matched by defName alone: they come from language files, whose keys are " +
-                        $"'{def.DefName}.<field>' with no def type, and " +
-                        $"{Tally.Complete(namesakes).Render("def")} share this name. " +
-                        "The game injects them by name too, so which of the same-named defs they belong to is not " +
-                        "recorded anywhere.");
+                        $"These rows carry no def type — language-file keys are '{def.DefName}.<field>' — and " +
+                        $"{Tally.Complete(namesakes).Render("def")} share this name; the game injects them by name too.");
             }
         }
 
@@ -1144,11 +1128,19 @@ public sealed class GetCommand : Command
         // 键配不上槽位、或槽位不许译时,游戏照旧把记录留在包里,只是不注。游戏自己的判决
         // 从 0.10.0 起随行带出;没带的老库落到 in pack,那一格说的是**我们只知道它在包里**,
         // 不许写成 in effect(那是替游戏担保一件没测过的事)。
+        // 名册那一档(键配不上槽位 / 槽位不许译)贴在同一格里:两档出路不同(改键能救 / 改了
+        // 也没用),而它们与一条正常的「in pack, not applied」此前逐字同形,靠表下两句分。
+        var slot = t.KeyState switch
+        {
+            InjectionKey.State.NoSlot => " (key on no slot)",
+            InjectionKey.State.Refused => " (slot not translatable)",
+            _ => "",
+        };
         if (t.Origin == TranslationOrigin.Runtime)
-            return t.Applied switch { true => "in effect", false => "in pack, not applied", _ => "in pack" };
+            return (t.Applied switch { true => "in effect", false => "in pack, not applied", _ => "in pack" }) + slot;
         // 装着、没启用的 mod 的文件:游戏没注它,只够召回。取值自陈,不另挂脚注解释。
         var files = t.SourceFileCount is > 1 ? $", {t.SourceFileCount} files" : "";
-        return $"file ({t.SourceMod}{(OutsideSnapshot(t) ? NotEnabled : "")}{files})";
+        return $"file ({t.SourceMod}{(OutsideSnapshot(t) ? NotEnabled : "")}{files})" + slot;
     }
 
     public const string NotEnabled = ", not enabled";
@@ -1191,7 +1183,7 @@ public sealed class FindCommand : Command
             "When the rows include defs the game builds in code at load time (Blueprint_*, Frame_*, meat, " +
             "corpses, and the like) a written_in column says which (code / xml). A def written in code has " +
             "no XML node, so a PatchOperation addressed by its defName has nothing to match; the column is " +
-            "absent when no such def is among the rows.\n\n" + NameLookup.Help,
+            "absent when no such def is among the rows.\n\n" + Advisory.SiblingHelp + "\n\n" + NameLookup.Help,
         Positionals =
         [
             new PositionalSpec { Name = "fieldPath", Help = "A field path or just its last segment, such as compClass or defaultProjectile. " + CommonOptions.AnyIndexNote + " Omit it to search every field instead.", Required = false },
@@ -1274,6 +1266,15 @@ public sealed class FindCommand : Command
             EmptyCause.JsonKey,
             NameLookup.JsonKey,
             Completeness.JsonKey,
+            new()
+            {
+                Key = "absent",
+                Rows = true,
+                What = "one row per layer this query needed that this snapshot does not hold — layer, state, " +
+                       "next; 'xml_written' (pre-measure) when the value asked for is a class name that sits " +
+                       "on official defs and the snapshot has no 'xml' column to say whether their XML wrote " +
+                       "it. Empty otherwise; next is the command that fills the layer.",
+            },
         ],
     };
 
@@ -2306,15 +2307,9 @@ public sealed class ListCommand : Command
 
             // 「不是分桶键」不等于「不存在」:游戏只给「祖先链上没有非抽象 Def」的类型建库,
             // 于是 CreepJoinerAggressiveDef 的 def 全躺在 CreepJoinerBaseDef 桶里。
-            var holders = ctx.Db.TypesHoldingClass(type, scope);
-            if (wantClass is null && holders.Count > 0)
+            if (wantClass is null && NameLookup.AsClass(ctx, type, scope) is { } asClass)
             {
-                ctx.Report.Notice(NoticeKind.NextStep,
-                    $"'{type}' is not a def type in this snapshot, but it is the class of " +
-                    $"{Tally.Complete(holders.Sum(h => h.Count)).Render("def")}: " +
-                    string.Join(", ", holders.Select(h => $"{h.Count} under {h.DefType}")) + ". " +
-                    $"The game only gives a def database to types with no concrete Def ancestor, so subclasses " +
-                    $"share their base's bucket. 'rimsearcher list {holders[0].DefType} --class {type}' lists them.");
+                NameLookup.Say(ctx, asClass);
                 return 1;
             }
 
@@ -3621,18 +3616,8 @@ internal static class Advisory
         // 「What is settled is whether…」那个框架句 2026-09-01 压掉了:它只给下半句搭台,
         // 而下半句自己就带着主语。同批压掉的还有开头那句「X 不是游戏自己的类」——
         // 那是在解释这条 notice 为什么出现,对读者要做的判断不提供任何输入。
-        var settles =
-            !ctx.Db.Meta.IndexesXmlWritten
-                ? "This snapshot has no 'xml' column, so it cannot tell an XML line from C# " +
-                  "putting it there at load; a fresh export can."
-            : ctx.Db.Meta.IndexesPostPatchXml
-                ? "The 'xml' column of 'rimsearcher get <defName> --defaults' settles whether an " +
-                  "XML line wrote it — this snapshot read the XML after every patch ran, so a 'no' " +
-                  "there means C# put it on at load, not a PatchOperation."
-                : "The 'xml' column of 'rimsearcher get <defName> --defaults' settles whether the " +
-                  "def's own XML wrote it. That XML was read before patches ran on this snapshot, " +
-                  "so a 'no' there still leaves a patch and C# apart.";
-
+        // xml 列读的是哪份 XML、no 能排除什么,是 get 的 Remarks 里的机制;这里只指过去。
+        // 没有那一列的快照是缺层:absent 表一行(xml_written),不再用一句话说。
         ctx.Report.Notice(NoticeKind.Boundary,
             // 主语固定成 it,计数全在介词短语里 —— 计数放主语位时动词得跟着单复数变,
             // 而 NounRegistry 管名词不管动词(同一条纪律在 AnnounceExcluded 上也写着)。
@@ -3641,7 +3626,10 @@ internal static class Advisory
             // 「Nothing in the snapshot records who put it there.」2026-09-01 压掉:它与
             // 那半句是同一个命题的两遍,而它自己不给下一步。三轮盲测对这一句零信息量。
             $"'{value}' sits on {Tally.Complete(onOfficial.Sum(m => m.Defs)).Render("def")} declared in " +
-            $"official mods. {settles}");
+            "official mods; the 'xml' column of 'rimsearcher get <defName> --defaults' says whether their " +
+            "XML wrote it.");
+        if (!ctx.Db.Meta.IndexesXmlWritten)
+            ctx.Report.Absent(DataLayers.XmlWrittenRow(ctx.Db, ctx.SnapshotName ?? ""));
     }
 
     /// <summary>
@@ -3804,10 +3792,9 @@ internal static class Advisory
             strict == 0
                 ? $"Nothing here holds exactly '{Quote(value)}': every row has it inside a longer value — " +
                   "see the value column. --exact would return nothing at all."
-                : $"'{Quote(value)}' is matched as a substring, not as a whole value: of the " +
-                  $"{Tally.Complete(here).Render("def")} here, {strict} hold exactly '{Quote(value)}' and " +
-                  $"{here - strict} hold it inside a longer value. The value column says which; " +
-                  "--exact keeps the first group only.");
+                : $"Of the {Tally.Complete(here).Render("def")} here, {strict} hold exactly '{Quote(value)}' and " +
+                  $"{here - strict} hold it inside a longer value (the value column says which); " +
+                  "--exact keeps the first group.");
     }
 
     public static void NoteMixedPathShapes(CommandContext ctx, IReadOnlyList<(string Shape, int Count)> shapes)
@@ -3860,7 +3847,7 @@ internal static class Advisory
             $"{(generated == 1 ? "is" : "are")} built in code at load time ({WrittenIn.Column} = code). " +
             // 页内一个都没有时不许沉默:名字扎堆,首页排序上常常一个都碰不到,而这句话
             // 说的是整个结果集。不点破的话读的人会拿这一页当全集,而列在这里一格都不动。
-            (onThisPage == 0 ? "None of them are on this page." : "That column marks which is which."));
+            (onThisPage == 0 ? "None of them are on this page." : ""));
     }
 
     private static readonly IEqualityComparer<(string, string DefType)> TupleComparer =
@@ -3884,8 +3871,7 @@ internal static class Advisory
         ctx.Report.Notice(NoticeKind.Advisory,
             "Rows above carry the same label and the same def type: " + string.Join("; ", shown) +
             (clashes.Count > shown.Count ? $", and {clashes.Count - shown.Count} more such labels" : "") +
-            ". The defName is the only column that tells them apart; the description, which is not in this " +
-            "table, says which is which — 'rimsearcher get <defName> --path-contains description'.",
+            "; 'rimsearcher get <defName> --path-contains description' tells them apart.",
             footnote: true);
     }
 
@@ -3914,12 +3900,18 @@ internal static class Advisory
         var first = rows.FirstOrDefault(r => PathSegments.ContainerPrefix(r.Path) is not null);
         var block = first.Path is null ? null : PathSegments.ContainerPrefix(first.Path)?.TrimEnd('.');
 
+        // 同块字段互相覆盖是机制,住 SiblingHelp(get / where 的 Remarks);这里点名 + 出路。
         ctx.Report.Notice(NoticeKind.Advisory,
-            $"Set by hand in the same block as the rows above: {NameList.Render(names, Limits.MaxSuggestions)}. " +
+            $"Set by hand in the same block as the rows above: {NameList.Render(names, Limits.MaxSuggestions)}." +
             (block is null
-                ? "Fields in one indexed block bind and override each other, and this table shows only the one asked for."
-                : $"Fields in one {block} entry bind and override each other, and this table shows only the one " +
-                  $"asked for. 'rimsearcher get {first.DefName} --path-contains {block}' lists the whole block."),
+                ? ""
+                : $" 'rimsearcher get {first.DefName} --path-contains {block}' lists the whole {block} entry."),
             footnote: true);
     }
+
+    /// <summary>同块兄弟那条 Advisory 的机制,get 与 where 的 Remarks 各引一份。</summary>
+    public const string SiblingHelp =
+        "Fields in one indexed block — a comps[N] or statBases[N] entry — bind and override each other, " +
+        "and a path filter shows only the one asked for; when the row shown is a hand-set value, the answer " +
+        "names the other hand-set fields of the same block.";
 }

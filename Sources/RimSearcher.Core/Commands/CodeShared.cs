@@ -1,6 +1,7 @@
 using RimSearcher.Cli;
 using RimSearcher.Metadata;
 using RimSearcher.Output;
+using RimSearcher.Snapshot;
 
 namespace RimSearcher.Commands;
 
@@ -90,18 +91,13 @@ internal static class CodeShared
         var changed = lookup.Assemblies.Where(a => a.Origin == AssemblyOrigin.Copy && a.OriginalChanged == true).ToList();
         var gone = lookup.Assemblies.Where(a => a.Origin == AssemblyOrigin.Copy && a.OriginalMissing).ToList();
 
+        // 树旁没有 dll 副本是缺层:absent 表一行一个程序集(Docs/25 甲),此前是一句散文带后果。
         if (installed.Count > 0)
-            ctx.Report.Notice(NoticeKind.Staleness,
-                "Read from where the game has it installed rather than from a copy kept with the source tree — " +
-                $"{Tally.Complete(installed.Count).Render("assembly")}: {Trees(installed)}. What is below and " +
-                "what 'rimsearcher read' shows can therefore be two different builds. " +
-                "'rimsearcher sources sync' keeps a copy alongside the C#, after which both come from one dll.");
+            ctx.Report.Absent([.. installed.Take(6).Select(a => DataLayers.AssemblyCopyRow(a.Tree, a.Name))]);
 
         if (changed.Count > 0)
             ctx.Report.Notice(NoticeKind.Staleness,
-                "What is below comes from the copy kept with the source tree, so it matches the C# that " +
-                "'rimsearcher read' shows. The installed dll has moved on since that copy was taken, which " +
-                "means the running game has different code — " +
+                "The installed dll has moved on since the copy kept with the source tree was taken — " +
                 $"{Tally.Complete(changed.Count).Render("assembly")}: {Trees(changed)}. " +
                 "'rimsearcher sources sync' rebuilds both from the dll on disk now.");
 

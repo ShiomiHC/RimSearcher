@@ -2,7 +2,7 @@ $ rimsearcher get Firefoam Bullet_Revolver
 exit 0
 --- stdout ---
 2 defs share the name 'Firefoam' across different def types; all of them are shown. Pass --type <DefType> for just one.
-What follows is 3 defs in a row, one block each, in the order the names were given. Every count, footnote and truncation warning below belongs to the block it sits in — read the def_name line at the top of a block to know which def the lines under it are about.
+3 defs follow, one block each, in the order the names were given; every count and note below belongs to the block it sits in, and the def_name line at the top of a block says which.
 
 def_name       Firefoam
 def_type       ThingDef

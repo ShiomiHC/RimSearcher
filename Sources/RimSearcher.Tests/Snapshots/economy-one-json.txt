@@ -10,16 +10,16 @@ exit 0
       "total": 1
     },
     {
-      "kind": "boundary",
-      "text": "A tag like '(holds when classicMortars=on)' above names the difficulty setting a number depends on, and the position it holds under. Put the setting the other way and the def swaps in a second cost list, which the tagged number is not from. An export cannot tell which way a given game has it: the setting is read off the storyteller, and no storyteller exists while the game is loading. 'rimsearcher get <defName> --path-contains costListForDifficulty' shows the other list."
+      "kind": "next_step",
+      "text": "A '(holds when …)' tag above marks a number that a difficulty setting can swap out; 'rimsearcher get <defName> --path-contains costListForDifficulty' shows the other cost list."
     },
     {
       "kind": "boundary",
-      "text": "2 recipes can produce TestModGun, so that thing's fallbackMarketValue depends on def load order: the game takes whichever of them comes first in the database. A bulk recipe usually scales its ingredients but not its work amount, so which one wins changes the number."
+      "text": "2 recipes can produce TestModGun, so that thing's fallbackMarketValue is the one the recipe loaded first gives."
     },
     {
       "kind": "boundary",
-      "text": "A recipe above accepts TestModGun as one of its own ingredients, so that thing's fallback market value has its own hand-written price folded into it."
+      "text": "A recipe above accepts TestModGun as one of its own ingredients (selfReferential), so that thing's fallback market value folds in its own price."
     }
   ],
   "things": [

@@ -96,7 +96,16 @@ public sealed class EconomyCommand : Command
             "nothing anywhere holds cost or profit.\n\n" +
             "A number printed as '635 (holds when classicMortars=on)' depends on a difficulty setting that " +
             "an export cannot read: the setting lives on the storyteller, and no storyteller exists while " +
-            "the game is loading. The tag names the setting and the position the printed number holds under.\n\n" +
+            "the game is loading. The tag names the setting and the position the printed number holds under; " +
+            "put the setting the other way and the def swaps in a second cost list, which 'rimsearcher get " +
+            "<defName> --path-contains costListForDifficulty' shows.\n\n" +
+            "chainEndShare is the share of a thing's cost that came from ingredients with no recipe of their " +
+            "own, so at 1 the whole cost is hand-written market values and 'profit' is a difference between " +
+            "those, not what producing the thing consumes. A thing with more than one recipe has a " +
+            "fallbackMarketValue that depends on def load order: the game takes whichever recipe comes " +
+            "first in its database, and a bulk recipe usually scales its ingredients but not its work " +
+            "amount. A recipe that accepts its own product as an ingredient folds that product's " +
+            "hand-written price into its fallback market value.\n\n" +
             NameLookup.Help,
         Positionals =
         [
@@ -560,15 +569,7 @@ public sealed class EconomyCommand : Command
         // 1. 造价全部来自链尾物手填的市场价 —— 那一行的 profit 不反映真实生产消耗。
         //    判据是这个数,**不是「看着像掉落物」**:用手写 RecipeDef 生产的物同样是链尾,
         //    而它们明明可造。
-        var allHandWritten = shown.Count(r => r.ChainEndShare is >= 0.999);
-        if (allHandWritten > 0)
-            ctx.Report.Notice(NoticeKind.Boundary,
-                // 印出来那一格是 `1`,不是 `1.00` —— 渲染侧不补零。说破时引用的数必须是
-                // 读的人眼睛看得见的那个,否则这句话会被当成在说另一行。
-                $"chainEndShare is 1 for {Tally.Complete(allHandWritten).Render("row")} above, which means " +
-                "the whole cost came from ingredients that have no recipe of their own. For those rows " +
-                "'profit' is the market value minus a few other hand-written market values, not minus what " +
-                "producing the thing actually consumes.");
+        //    2026-09-18 起这一档不再挂句:chainEndShare 那一格自己印着 1,它的含义住 Remarks(Docs/25 丁2)。
 
         // 2. ok 且推算价为零 = 算不出:2026-09-18 起那一格自陈 empty-sum(CalcStateShown),
         //    此前这里有一句「Read that as 'the game could not work it out'」。
@@ -581,15 +582,12 @@ public sealed class EconomyCommand : Command
         //    措辞在 2026-08-15 盲测后大幅收短:两档严重度、以及「哪一支在跑」原先全写在
         //    这段话里,而实测表明这段话会被整段丢掉。现在条件贴在数上(见 Qual),这里只留
         //    那两件贴不进单元格的事:**为什么导出判不了**,以及**去哪看另一支**。
+        //    2026-09-18 起只剩出路:标签贴在数上,它的读法与「导出为什么判不了」住 Remarks。
         var withVariant = shown.Count(r => r.CostDifficultyVar is not null);
         if (withVariant > 0)
-            ctx.Report.Notice(NoticeKind.Boundary,
-                "A tag like '(holds when classicMortars=on)' above names the difficulty setting a number " +
-                "depends on, and the position it holds under. Put the setting the other way and the def " +
-                "swaps in a second cost list, which the tagged number is not from. An export cannot tell " +
-                "which way a given game has it: the setting is read off the storyteller, and no storyteller " +
-                "exists while the game is loading. 'rimsearcher get <defName> --path-contains " +
-                "costListForDifficulty' shows the other list.");
+            ctx.Report.Notice(NoticeKind.NextStep,
+                "A '(holds when …)' tag above marks a number that a difficulty setting can swap out; " +
+                "'rimsearcher get <defName> --path-contains costListForDifficulty' shows the other cost list.");
 
         // 4. 多配方 = fallbackMarketValue 有加载顺序依赖(CalculableRecipe 取 DefDatabase 里
         //    第一个匹配,而等比放大的 bulk 配方 workAmount 通常不等比)。
@@ -602,15 +600,12 @@ public sealed class EconomyCommand : Command
             ctx.Report.Notice(NoticeKind.Boundary,
                 string.Join("; ", manyWays.Select(
                     g => $"{Tally.Complete(g.Rows.Count).Render("recipe")} can produce {g.Product}")) +
-                ", so that thing's fallbackMarketValue depends on def load order: the game takes whichever " +
-                "of them comes first in the database. A bulk recipe usually scales its ingredients but not " +
-                "its work amount, so which one wins changes the number.");
+                ", so that thing's fallbackMarketValue is the one the recipe loaded first gives.");
 
         var selfFed = recipes?.Where(g => g.Rows.Any(r => r.SelfReferential)).Select(g => g.Product).ToList() ?? [];
         if (selfFed.Count > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
                 $"A recipe above accepts {NameList.Render(selfFed, Limits.MaxSuggestions)} as one of its own " +
-                "ingredients, so that thing's fallback market value has its own hand-written price folded " +
-                "into it.");
+                "ingredients (selfReferential), so that thing's fallback market value folds in its own price.");
     }
 }

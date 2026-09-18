@@ -9,5 +9,4 @@ FillerKey2099  填充2099    filler line  in effect  yes                       F
 
 layer              state         next
 disk_translations  unconfigured  set 'mod_roots' in the config file, then rimsearcher snapshot import fixture.rsx.jsonl.gz --name fixture
-Placeholder means the language file declares the key without a translation, so the game displays the English text instead of what the translated column shows.
 --- stderr ---

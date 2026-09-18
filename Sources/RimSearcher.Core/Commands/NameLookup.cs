@@ -75,7 +75,9 @@ internal static class NameLookup
         "and gives the command that reaches it. An xml node is an inheritance-layer entry (Name=, ParentName= " +
         "or Abstract=) and never becomes a def, so only 'inherit' reaches it; interface text lives in keyed " +
         "translations that belong to no def, so only 'keyed' finds it; a field value is what some defs set a " +
-        "field to (comps[N].compClass and the like), so 'where --value' lists them; a def outside --scope is " +
+        "field to (comps[N].compClass and the like), so 'where --value' lists them; a class is the runtime " +
+        "type some defs are built as — the game files them under the nearest def type with a database of " +
+        "its own, so 'list <DefType> --class' reaches them; a def outside --scope is " +
         "in this snapshot but excluded by the --scope given; a mod is a --scope, not a def. A def turns up " +
         "when the name is a def but this command reads something narrower: 'inherit' reads only nodes that " +
         "declare Name=, ParentName= or Abstract=, 'keyed' reads interface text, 'economy' reads priced " +
@@ -90,6 +92,24 @@ internal static class NameLookup
         }).ToList();
         if (rows.Count == 0) return;
         ctx.Report.AppendRows(Table, Columns, rows, Caption);
+    }
+
+    /// <summary>
+    /// 名字是某些 def 的运行时 class(<c>Class=</c>),不是 def 类型:get --type / list 拿到一个
+    /// 不是分桶键的名字时也走这一档,出路是 <c>list &lt;桶&gt; --class</c>。
+    /// </summary>
+    public static Sighting? AsClass(CommandContext ctx, string name, ScopeFilter scope)
+    {
+        var holders = ctx.Db.TypesHoldingClass(name, scope);
+        if (holders.Count == 0) return null;
+        var total = holders.Sum(h => h.Count);
+        var where = string.Join(", ", holders.Take(3).Select(h => h.DefType));
+        return new Sighting(Where.Class, name, "class",
+                            $"{Output.Tally.Complete(total).Render("def")} under {where}" +
+                            (holders.Count > 3
+                                ? $" and {Output.Tally.Complete(holders.Count - 3).Render("def type")} more"
+                                : ""),
+                            CommandRegistry.ExeName + " list " + holders[0].DefType + " --class " + name);
     }
 
     /// <summary>这条命令查的不是 def,而名字是个 def:keyed / where 的字段格撞上 def 名时用。</summary>
@@ -139,18 +159,7 @@ internal static class NameLookup
                                 Output.Tally.Complete(type.Count).Render("def"), exe + " list " + type.Type);
 
         // (4) 运行时 class。这一条要在 mod 之前:类名与 mod 名撞车的可能性远小于反过来。
-        var holders = ctx.Db.TypesHoldingClass(name, unscoped);
-        if (holders.Count > 0)
-        {
-            var total = holders.Sum(h => h.Count);
-            var where = string.Join(", ", holders.Take(3).Select(h => h.DefType));
-            return new Sighting(Where.Class, name, "class",
-                                $"{Output.Tally.Complete(total).Render("def")} under {where}" +
-                                (holders.Count > 3
-                                    ? $" and {Output.Tally.Complete(holders.Count - 3).Render("def type")} more"
-                                    : ""),
-                                exe + " list " + holders[0].DefType + " --class " + name);
-        }
+        if (AsClass(ctx, name, unscoped) is { } asClass) return asClass;
 
         // (5) 界面文案。上面每一档判的是「这个**名字**是什么」,这一档判的是「这句**话**
         //     是什么」—— keyed 那一层与 def 无关。search 只索引 def 的 label / description /

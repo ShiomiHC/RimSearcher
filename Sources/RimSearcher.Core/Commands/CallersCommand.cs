@@ -89,7 +89,8 @@ public sealed class CallersCommand : Command
                 What = "one row per source tree this search was blind on — layer ('call_graph:' + the tree), " +
                        "state missing, next (the sync command that builds the table); empty when every tree " +
                        "searched had one. Looking for callers, every tree without a table is listed; looking " +
-                       "for callees, only the tree the named method lives in.",
+                       "for callees, only the tree the named method lives in. Also one row per assembly read " +
+                       "from the installed dll because the tree keeps no copy ('assembly_copy:' + tree/assembly).",
             },
         ],
     };
@@ -213,10 +214,8 @@ public sealed class CallersCommand : Command
         var stale = graphs.Graphs.Where(g => IsStale(root, g)).Select(g => g.Tree).ToList();
         if (stale.Count > 0)
             ctx.Report.Notice(NoticeKind.Staleness,
-                "Built from assemblies that are no longer the ones the tree records — " +
-                $"{Tally.Complete(stale.Count).Render("source tree")}: {NameList.Render(stale, 6)}. " +
-                "The call sites from those trees are the ones the older build had. " +
-                "'rimsearcher sources sync' rebuilds them.");
+                $"The call graph of {Tally.Complete(stale.Count).Render("source tree")} predates the assemblies " +
+                $"the tree now records: {NameList.Render(stale, 6)}. 'rimsearcher sources sync' rebuilds them.");
     }
 
     /// <summary>边表是不是比树旧。判据与树自己的判据同源:来源 dll 的哈希。</summary>

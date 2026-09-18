@@ -728,7 +728,7 @@ public class StalenessTests
         var stdout = Run(configPath, db, "snapshot", "status");
 
         Assert.Contains("ModsConfig.xml", stdout, StringComparison.Ordinal);
-        Assert.Contains("can lag behind what is installed", stdout, StringComparison.Ordinal);
+        Assert.Contains("can lag behind a Steam update", stdout, StringComparison.Ordinal);
         Assert.Contains("game_dir", stdout, StringComparison.Ordinal);
     }
 }

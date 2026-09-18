@@ -27,7 +27,7 @@ exit 0
     },
     {
       "kind": "boundary",
-      "text": "A def inherits its ancestors' fields, so a patch that rewrites an ancestor changes what the game read for 'Bullet_Revolver' as well — and the patch_ops_name on 'Bullet_Revolver' itself does not count that. Above, patch_ops_name is not zero for 1 ancestor."
+      "text": "Patches also name 1 ancestor above (patch_ops_name column); what 'Bullet_Revolver' inherits from them is what those patches left."
     }
   ],
   "absent": [

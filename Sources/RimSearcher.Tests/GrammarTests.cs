@@ -1189,7 +1189,7 @@ public class GrammarTests
         var (collide, _, _) = Fixture.Run("get", "Firefoam");
         Assert.StartsWith("2 defs share the name 'Firefoam'", collide, StringComparison.Ordinal);
         var head = collide.Split('\n')[1].TrimEnd('\r');
-        Assert.Contains("read the def_type line at the top of a block", head, StringComparison.Ordinal);
+        Assert.Contains("the def_type line at the top of a block says which", head, StringComparison.Ordinal);
 
         foreach (var (argv, want) in new[]
                  {
@@ -3776,7 +3776,7 @@ public class GrammarTests
                      Fixture.Run("where", "texPath", "--value", "Things/Building", "--exact").Stdout,
                      Fixture.Run("where", "soundPickup", "--value", "Standard_Pickup").Stdout,
                  })
-            Assert.DoesNotContain("matched as a substring, not as a whole value", quiet, StringComparison.Ordinal);
+            Assert.DoesNotContain("hold it inside a longer value", quiet, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -4667,8 +4667,9 @@ public class GrammarTests
         }
 
         // 指的那条路真的走得通 —— 不许指了个空。
+        // 名字是 class 不是 def 类型:found_as 一行(exit 4),next 指 list --class。
         var (holder, _, hcode) = Fixture.Run("list", "TestVariantDef");
-        Assert.Equal(1, hcode);
+        Assert.Equal(4, hcode);
         Assert.Contains("--class TestVariantDef", holder, StringComparison.Ordinal);
     }
 

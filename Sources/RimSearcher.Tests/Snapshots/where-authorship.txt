@@ -2,7 +2,10 @@ $ rimsearcher where compClass TestMod.CompBoltedOn
 exit 0
 --- stdout ---
 2 defs.
-'TestMod.CompBoltedOn' sits on 1 def declared in official mods. This snapshot has no 'xml' column, so it cannot tell an XML line from C# putting it there at load; a fresh export can.
+'TestMod.CompBoltedOn' sits on 1 def declared in official mods; the 'xml' column of 'rimsearcher get <defName> --defaults' says whether their XML wrote it.
+
+layer        state        next
+xml_written  pre-measure  rimsearcher export --modlist fixture
 
 Defs that may be missing from this answer, their export cut short — every def type that uses this path at all
 def_type  defs_cut_short

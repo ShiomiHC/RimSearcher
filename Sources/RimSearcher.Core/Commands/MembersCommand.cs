@@ -145,6 +145,7 @@ public sealed class MembersCommand : Command
                        "abstract, override, accessibility.",
             },
             EmptyCause.JsonKeyCounting("member"),
+            Snapshot.DataLayers.AssemblyCopyJsonKey,
         ],
     };
 
@@ -253,8 +254,7 @@ public sealed class MembersCommand : Command
 
         if (!inherited && types.Count == 1)
             ctx.Report.Notice(NoticeKind.Boundary,
-                $"Declared by {types[0].FullName} itself. What it inherits is declared on its base types and " +
-                "is not repeated here — '--inherited' walks the chain and lists those as well.");
+                $"Declared by {types[0].FullName} itself; --inherited adds what it inherits from its base types.");
 
         ctx.Report.Table("members", Columns, rows);
         return 0;
@@ -296,9 +296,8 @@ public sealed class MembersCommand : Command
 
         var types = kept.Select(r => r.Type.FullName).Distinct(StringComparer.Ordinal).Count();
         ctx.Report.Notice(NoticeKind.Boundary,
-            $"Asked by member name across every type read here, not within one type — these sit on " +
-            $"{Tally.Complete(types).Render("type")}, named in the 'type' column. Only what each type " +
-            "declares is matched: an inherited member is declared on the base type and appears under it.");
+            $"These sit on {Tally.Complete(types).Render("type")} (the 'type' column), each listed under the " +
+            "type that declares it.");
 
         ctx.Report.Table("members", Columns, rows);
         return 0;

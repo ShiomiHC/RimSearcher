@@ -1,7 +1,7 @@
 $ rimsearcher get --type TestBaseDef
 exit 0
 --- stdout ---
-Every TestBaseDef in this snapshot: 2 defs in a row, one block each, in def-name order. Every count, footnote and truncation warning below belongs to the block it sits in — read the def_name line at the top of a block to know which def the lines under it are about.
+Every TestBaseDef in this snapshot: 2 defs follow, one block each, in def-name order; every count and note below belongs to the block it sits in, and the def_name line at the top of a block says which.
 
 def_name     PlainOne
 def_type     TestBaseDef

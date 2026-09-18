@@ -13,5 +13,4 @@ Apparel_ShieldBelt  Firefoam    100    1
 
 product             defName                  productCount  workAmount  selfReferential
 Apparel_ShieldBelt  Make_Apparel_ShieldBelt  1             3000        no
-chainEndShare is 1 for 1 row above, which means the whole cost came from ingredients that have no recipe of their own. For those rows 'profit' is the market value minus a few other hand-written market values, not minus what producing the thing actually consumes.
 --- stderr ---

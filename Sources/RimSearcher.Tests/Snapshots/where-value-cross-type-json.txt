@@ -26,6 +26,7 @@ exit 0
     }
   ],
   "empty_because": [],
-  "found_as": []
+  "found_as": [],
+  "absent": []
 }
 --- stderr ---

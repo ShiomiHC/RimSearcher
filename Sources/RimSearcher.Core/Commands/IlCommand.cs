@@ -84,6 +84,7 @@ public sealed class IlCommand : Command
                 What = "one row per disassembled method: assembly, type, member, signature, bodyless, " +
                        "first_offset, last_offset, shown_from, shown_to, lines.",
             },
+            Snapshot.DataLayers.AssemblyCopyJsonKey,
         ],
     };
 

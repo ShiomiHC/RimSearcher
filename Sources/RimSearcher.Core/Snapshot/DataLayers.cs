@@ -101,7 +101,7 @@ public static class DataLayers
             new(XmlFingerprint, db.Content is null ? LayerState.Unmeasured : LayerState.Ok,
                 db.Content is null ? export : null,
                 db.Content is null ? "no Defs/Patches fingerprint recorded at export" : null),
-            Bit(XmlWritten, m.IndexesXmlWritten, export, "exporter before 0.5.0: no 'xml' column"),
+            XmlWrittenRow(db, snapshotName),
             Bit(XmlWrittenText, m.IndexesXmlWrittenText, export, "exporter before 0.6.0: no inline text per XML leaf"),
             PostPatchXmlRow(db, snapshotName),
             Bit(TypeFields, m.IndexesTypeFields, export, "exporter before 0.5.0: no per-type field path set"),
@@ -195,6 +195,30 @@ public static class DataLayers
     public static LayerRow PatchOpsDefNameLabelRow(SnapshotDb db, string snapshotName)
         => Bit(PatchOpsDefNameLabel, db.Meta.IndexesPatchOpsByDefNameLabel, ExportCommand(snapshotName),
                "exporter before 0.5.0: only xpaths naming a node by @Name= were counted");
+
+    /// <summary>xml 列:0.5.0 起记每条字段路径是哪份 XML 写的;没这一层时 get 没有那一列,谁写的问不出口。</summary>
+    public static LayerRow XmlWrittenRow(SnapshotDb db, string snapshotName)
+        => Bit(XmlWritten, db.Meta.IndexesXmlWritten, ExportCommand(snapshotName), "exporter before 0.5.0: no 'xml' column");
+
+    /// <summary>
+    /// 反编译树旁没有留 dll 副本,元数据读的是游戏装机处的那一份 —— 于是 members / il / callers 看到的
+    /// 与 'read' 印的 C# 可以是两个构建。sync 会把副本留在树旁。
+    /// </summary>
+    public static LayerRow AssemblyCopyRow(string tree, string assembly)
+        => new(AssemblyCopyPrefix + tree + "/" + assembly, LayerState.Missing, SyncCommand,
+               "no dll copy beside the decompiled tree; metadata was read from the installed dll, which need not be the build the C# came from");
+
+    public const string AssemblyCopyPrefix = "assembly_copy:";
+
+    /// <summary>members / il / types 的 absent 声明:这三条只会因 dll 副本缺席印这张表。</summary>
+    public static readonly Cli.JsonKeySpec AssemblyCopyJsonKey = new()
+    {
+        Key = "absent",
+        Rows = true,
+        What = "one row per assembly whose metadata was read from the installed dll because the decompiled " +
+               "tree keeps no copy of it — layer ('assembly_copy:' + tree/assembly), state missing, next (the " +
+               "sync command that keeps a copy beside the C#); empty when every assembly read had a copy.",
+    };
 
     public static LayerRow PostPatchXmlRow(SnapshotDb db, string snapshotName)
     {

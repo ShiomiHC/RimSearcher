@@ -25,5 +25,5 @@ filter           hidden  next
 layer           state        next
 injection_keys  pre-measure  rimsearcher export --modlist fixture
 
-Set by hand in the same block as the rows above: value. Fields in one statBases[0] entry bind and override each other, and this table shows only the one asked for. 'rimsearcher get Apparel_ShieldBelt --path-contains statBases[0]' lists the whole block.
+Set by hand in the same block as the rows above: value. 'rimsearcher get Apparel_ShieldBelt --path-contains statBases[0]' lists the whole statBases[0] entry.
 --- stderr ---

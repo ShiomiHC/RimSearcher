@@ -288,10 +288,9 @@ public sealed class SnapshotStatusCommand : Command
         // 列表时写下的,不是安装事实 —— 说破它,免得「same version」被当成 Steam 没动过。
         if (env.VersionSource == GameVersionSource.ModsConfig)
             ctx.Report.Notice(NoticeKind.Boundary,
-                "The game version above came from ModsConfig.xml, which the game only rewrites when you save a " +
-                "change on its mod list page. A Steam update within the same 1.x line does not touch it, so that " +
-                "number can lag behind what is installed. Set 'game_dir' in the config and it is read from " +
-                "Assembly-CSharp.dll instead, which is the installed fact.");
+                "The game version above was read from ModsConfig.xml, which the game rewrites only when the " +
+                "mod list is saved, so it can lag behind a Steam update. Set 'game_dir' in the config to read " +
+                "it from Assembly-CSharp.dll.");
 
         return 0;
     }

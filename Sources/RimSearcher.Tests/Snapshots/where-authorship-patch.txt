@@ -2,7 +2,7 @@ $ rimsearcher where compClass TestMod.CompBoltedOn --fixture-presence-patch
 exit 0
 --- stdout ---
 1 def.
-'TestMod.CompBoltedOn' sits on 1 def declared in official mods. The 'xml' column of 'rimsearcher get <defName> --defaults' settles whether an XML line wrote it — this snapshot read the XML after every patch ran, so a 'no' there means C# put it on at load, not a PatchOperation.
+'TestMod.CompBoltedOn' sits on 1 def declared in official mods; the 'xml' column of 'rimsearcher get <defName> --defaults' says whether their XML wrote it.
 
 def_name  def_type  path                value                 code_default  declared_in
 PatchGun  ThingDef  comps[0].compClass  TestMod.CompBoltedOn  no            ludeon.rimworld

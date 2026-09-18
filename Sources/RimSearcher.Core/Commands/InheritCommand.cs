@@ -55,7 +55,9 @@ public sealed class InheritCommand : Command
             "reports patch_ops_name as 'n/a' rather than 0 because that count was never taken; the defName and " +
             "label counts are still taken. " +
             "For the merged, post-patch values, read any concrete child with 'get' — everything a parent " +
-            "contributes is already in each of its children. An ancestor that no mod in the snapshot declares " +
+            "contributes is already in each of its children, and a patch that rewrites an ancestor therefore " +
+            "reaches every descendant — a descendant's own patch_ops counts do not include it. An ancestor " +
+            "that no mod in the snapshot declares " +
             "is listed with declared_in = not-in-snapshot: the mod defining it was not enabled at export, so " +
             "what it contributed is not visible here.\n\n" +
             // 见证表的读法(此前是表下三句散文,Docs/25 丁1):列是数,怎么读是机制,机制住这里。
@@ -337,10 +339,8 @@ public sealed class InheritCommand : Command
             // 等于把活推回去。计数放句尾,免得动词跟着单复数变 —— NounRegistry 不管动词。
             if (patchedUp.Count > 0)
                 ctx.Report.Notice(NoticeKind.Boundary,
-                    $"A def inherits its ancestors' fields, so a patch that rewrites an ancestor changes " +
-                    $"what the game read for '{label}' as well — and the {PatchOpsName} on '{label}' itself " +
-                    $"does not count that. Above, {PatchOpsName} is not zero for " +
-                    $"{Tally.Complete(patchedUp.Count).Render("ancestor")}.");
+                    $"Patches also name {Tally.Complete(patchedUp.Count).Render("ancestor")} above " +
+                    $"({PatchOpsName} column); what '{label}' inherits from them is what those patches left.");
 
             if (pathFilter is { Length: > 0 }) Witnesses(ctx, node, chain, pathFilter, exactPath);
 

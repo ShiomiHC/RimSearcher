@@ -10,12 +10,8 @@ exit 0
       "total": 5
     },
     {
-      "kind": "boundary",
-      "text": "chainEndShare is 1 for 1 row above, which means the whole cost came from ingredients that have no recipe of their own. For those rows 'profit' is the market value minus a few other hand-written market values, not minus what producing the thing actually consumes."
-    },
-    {
-      "kind": "boundary",
-      "text": "A tag like '(holds when classicMortars=on)' above names the difficulty setting a number depends on, and the position it holds under. Put the setting the other way and the def swaps in a second cost list, which the tagged number is not from. An export cannot tell which way a given game has it: the setting is read off the storyteller, and no storyteller exists while the game is loading. 'rimsearcher get <defName> --path-contains costListForDifficulty' shows the other list."
+      "kind": "next_step",
+      "text": "A '(holds when …)' tag above marks a number that a difficulty setting can swap out; 'rimsearcher get <defName> --path-contains costListForDifficulty' shows the other cost list."
     }
   ],
   "things": [

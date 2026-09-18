@@ -616,7 +616,7 @@ public class SkillPromiseTests
 
         // 语料里另外两行是故意留的两种解不出来:语言文件里没有这个 key,以及 key 是拼出来的。
         Assert.Contains("no keyed translation for", stdout, StringComparison.Ordinal);
-        Assert.Contains("not a literal", stdout, StringComparison.Ordinal);
+        Assert.Contains("on something other than a string literal", stdout, StringComparison.Ordinal);
 
         // 关得掉,而且关掉之后一个字都不多说。
         var (off, _, _) = Fixture.Run("code-search", "Translate", "--no-resolve-keys");

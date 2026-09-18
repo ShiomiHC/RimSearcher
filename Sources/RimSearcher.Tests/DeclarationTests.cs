@@ -297,6 +297,12 @@ public class DeclarationTests
                      System.Text.RegularExpressions.Regex.Matches(
                          text, @"(?:Count|Truncation)Notice\([^;]*?,\s*""([^""]+)""\s*[,)]"))
                 used.Add(m.Groups[1].Value);
+            // 第四、五个入口:empty_because 的标题与声明各拿一个名词去变复数
+            // (EmptyBecause(..., "translation") / EmptyCause.JsonKeyCounting("row"))。
+            foreach (System.Text.RegularExpressions.Match m in
+                     System.Text.RegularExpressions.Regex.Matches(
+                         text, @"EmptyBecause\([^;]*?,\s*""([^""]+)""\s*\)|JsonKeyCounting\(\s*""([^""]+)""\s*\)"))
+                used.Add(m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value);
         }
         return used;
     }

@@ -63,6 +63,8 @@ public class GateTests
             ["search.found_as"] = ["search", "BaseBullet"],
             ["get.found_as"] = ["get", "BaseBullet"],
             ["where.found_as"] = ["where", "CompShield"],
+            // 官方 def 上的类名值 + 共享夹具没有 xml 列(0.2.0)→ xml_written 一行。
+            ["where.absent"] = ["where", "compClass", "TestMod.CompBoltedOn"],
             ["inherit.found_as"] = ["inherit", "ThingDef"],
             ["keyed.found_as"] = ["keyed", "Bullet_Revolver"],
             ["list.defs"] = ["list", "ThingDef"],
@@ -114,6 +116,11 @@ public class GateTests
             ["callers.calls"] = ["callers", "Verse.Widgets.Label"],
             // 夹具里 vanilla 有边表、另外两棵没有 —— 查调用者那一路上这两棵各一行。
             ["callers.absent"] = ["callers", "Verse.Widgets.Label"],
+            // 这三条的 absent 只有一种行(树旁没有 dll 副本),共享夹具造不出来;JSON 由
+            // FixtureAssembly.InstalledOnlyJsonFor 在一棵一次性的树上取,argv 在那边。
+            ["members.absent"] = ["members", "Verse.ThingComp"],
+            ["il.absent"] = ["il", "Verse.ThingComp.PostSpawnSetup"],
+            ["types.absent"] = ["types", "Verse.ThingComp"],
             ["code-search.absent"] = ["code-search", "public", "--source", "zz.emptytree"],
         };
 
@@ -140,6 +147,7 @@ public class GateTests
                 "snapshot status" => StalenessTests.StatusJsonFor(key),
                 "snapshot diff" => SnapshotDiffTests.DiffJsonFor(key),
                 "snapshot truncated" when key == "truncated" => TruncationCauseTests.TruncatedJsonFor(),
+                "members" or "il" or "types" when key == "absent" => FixtureAssembly.InstalledOnlyJsonFor(command),
                 _ => Fixture.Run([.. probes[$"{command}.{key}"], "--json"]).Stdout,
             };
             var root = System.Text.Json.JsonDocument.Parse(json).RootElement;

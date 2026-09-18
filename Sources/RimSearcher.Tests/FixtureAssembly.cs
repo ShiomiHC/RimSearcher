@@ -33,6 +33,50 @@ internal static class FixtureAssembly
     /// 于是哈希对得上 —— 对不上的话每条命令都会先说一句「原件已经变了」,
     /// 而那句话正确却与这些测试要看的东西无关。
     /// </summary>
+    /// <summary>
+    /// 给 GateTests 的列名探针:一棵**没有 dll 副本**的树 —— 清单指着安装位置,树旁什么都没抄。
+    /// 元数据于是从安装处读,absent 表给 assembly_copy 一行。共享夹具里不能有这样一棵树:
+    /// 那一行会挂到每条代码命令的输出上,几十份基线一起变。这里自建一次性的根,走 --config。
+    /// </summary>
+    internal static string InstalledOnlyJsonFor(string command)
+    {
+        var dir = Path.Combine(TestTemp.Root, "installed-only-" + Guid.NewGuid().ToString("N")[..8]);
+        var treeDir = Path.Combine(dir, "sources", "vanilla");
+        var installedDir = Path.Combine(dir, "game");
+        Directory.CreateDirectory(treeDir);
+        var installedRel = Path.Combine("Assemblies", Name + ".dll");
+        var installed = Path.Combine(installedDir, installedRel);
+        Directory.CreateDirectory(Path.GetDirectoryName(installed)!);
+        Emit(installed);
+        new SourceTreeState
+        {
+            PackageId = "vanilla",
+            GameVersion = "1.6",
+            Root = installedDir,
+            Assemblies =
+            [
+                new SourceAssembly
+                {
+                    Path = installedRel.Replace(Path.DirectorySeparatorChar, '/'),
+                    Sha256 = AssemblyFilter.Sha256(installed),
+                },
+            ],
+        }.Write(treeDir);
+        var config = Path.Combine(dir, "config.toml");
+        File.WriteAllText(config, "decompiled_dir = '" + Path.Combine(dir, "sources") + "'\n",
+                          new System.Text.UTF8Encoding(false));
+
+        var stdout = new StringWriter { NewLine = "\n" };
+        var stderr = new StringWriter { NewLine = "\n" };
+        string[] argv = command switch
+        {
+            "il" => ["il", "Verse.ThingComp.PostSpawnSetup"],
+            _ => [command, "Verse.ThingComp"],
+        };
+        RimSearcher.Cli.Runner.Run([.. argv, "--config", config, "--json"], stdout, stderr);
+        return stdout.ToString();
+    }
+
     internal static void BuildInto(string treeDir, string installedDir)
     {
         // 放进子目录而不是根下:真实的 mod 一律是 <mod>/Assemblies/*.dll,而副本按这条

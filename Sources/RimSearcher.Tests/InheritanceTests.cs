@@ -100,13 +100,13 @@ public class InheritanceTests
     {
         // Bullet_Revolver 自己 n/a,父 BaseBullet 是 2 —— 与 BaseMechanoid → BasePawn 同构。
         var viaParent = Text("inherit", "Bullet_Revolver");
-        Assert.Contains("inherits its ancestors' fields", viaParent, StringComparison.Ordinal);
         // 带上数字才省得掉「再往上跑一次」那个动作;只说「有祖先被改过」等于把活推回去。
-        Assert.Contains("not zero for 1 ancestor", viaParent, StringComparison.Ordinal);
+        // 「def 继承祖先的字段、补丁经继承到达」是机制,住 Remarks(Docs/25 丁2);句里只剩数与列名。
+        Assert.Contains("Patches also name 1 ancestor above (patch_ops_name column)", viaParent, StringComparison.Ordinal);
 
         // Firefoam 的整条链全 0:那句话一个字不许出现。列的在场与否由字节闸
         // inherit-def / inherit-ancestors-clean 两份基线对照钉住。
-        Assert.DoesNotContain("inherits its ancestors' fields", Text("inherit", "Firefoam"),
+        Assert.DoesNotContain("Patches also name", Text("inherit", "Firefoam"),
                               StringComparison.Ordinal);
     }
 

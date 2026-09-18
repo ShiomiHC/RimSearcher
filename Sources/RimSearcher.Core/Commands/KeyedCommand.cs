@@ -37,7 +37,9 @@ public sealed class KeyedCommand : Command
             "Rows are marked 'in effect' or 'on disk'. Only 'in effect' is what the game displays: keyed " +
             "translations override each other by mod load order and the snapshot keeps the winner, so an " +
             "'on disk' row is a translation that exists in some mod's language files without necessarily " +
-            "being the one that wins.\n\n" + NameLookup.Help,
+            "being the one that wins. A row with placeholder=yes declares the key without a translation, " +
+            "so the game displays the English text there, whatever the translated column shows.\n\n" +
+            NameLookup.Help,
         Positionals =
         [
             new PositionalSpec
@@ -414,13 +416,7 @@ public sealed class KeyedCommand : Command
         // 这份库要是没量过磁盘,那个对照根本不存在 —— absent 表里给它一行。
         ctx.Report.Absent(DataLayers.DiskTranslationsRow(ctx.Db, ctx.Config, ctx.SnapshotName ?? ""));
 
-        // 占位译文实际显示的是英文 —— 表里它与真译文同形,所以点名说破。
-        //
-        // 这一句只剩列义 —— 「哪几行是占位」表上的 placeholder 列自己就印着,
-        // 再数一遍是复述。于是两支同文,--empty-translation 也不再分支。
-        if (anyPlaceholder)
-            ctx.Report.Notice(NoticeKind.Boundary,
-                "Placeholder means the language file declares the key without a translation, so the game " +
-                "displays the English text instead of what the translated column shows.");
+        // placeholder 列的含义住 Remarks(2026-09-18 起,Docs/25 丁2);表上那一列自己印着哪几行是占位。
+        _ = anyPlaceholder;
     }
 }

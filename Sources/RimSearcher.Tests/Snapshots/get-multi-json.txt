@@ -5,7 +5,7 @@ exit 0
   "notes": [
     {
       "kind": "boundary",
-      "text": "What follows is 2 defs in a row, one block each, in the order the names were given. Every count, footnote and truncation warning below belongs to the block it sits in — read the def_name line at the top of a block to know which def the lines under it are about."
+      "text": "2 defs follow, one block each, in the order the names were given; every count and note below belongs to the block it sits in, and the def_name line at the top of a block says which."
     },
     {
       "kind": "count",

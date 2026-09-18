@@ -14,7 +14,7 @@ Same in every row, not repeated below: def_type=ThingDef, abstract=yes, declared
 name            patch_ops_name
 BaseBullet      2
 BaseProjectile  0
-A def inherits its ancestors' fields, so a patch that rewrites an ancestor changes what the game read for 'Bullet_Revolver' as well — and the patch_ops_name on 'Bullet_Revolver' itself does not count that. Above, patch_ops_name is not zero for 1 ancestor.
+Patches also name 1 ancestor above (patch_ops_name column); what 'Bullet_Revolver' inherits from them is what those patches left.
 
 layer                    state        next
 patch_ops_defname_label  pre-measure  rimsearcher export --modlist fixture

@@ -536,8 +536,8 @@ public sealed class CodeSearchCommand : Command
         // 而键解析不到时表根本不在,这时说它就是把人领去对一张不存在的表。
         if (elision.HidTranslate && resolved.Count > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
-                "A shortened line took a .Translate() call into the '…', so the table below can name a " +
-                "key that no longer appears in the line above it. Keys are read from the whole line.");
+                "A shortened line took a .Translate() call into the '…'; keys below are read from the whole " +
+                "line, so one can be missing from the line printed above it.");
         if (resolved.Count > 0)
             ctx.Report.Table("ui_text", ["key", "translated", "original"],
                 resolved.Select(k => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
@@ -549,22 +549,24 @@ public sealed class CodeSearchCommand : Command
 
         // 下面两句的主语都是固定单数(this snapshot / the key),计数进宾语或从句 ——
         // NounRegistry 管名词复数、**不管主谓一致**,「1 key … have」只能靠句子结构避开。
-        var missing = distinct.Count - resolved.Count;
-        if (missing > 0)
+        var missing = distinct.Where(k => !found.ContainsKey(k)).ToList();
+        if (missing.Count > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
                 // 末句曾给这个零补一个死因(「没人声明的 key 就是代码够不着的 key」)——
                 // 站不住:查的是 TranslationOrigin.Runtime,即**导出时游戏实际加载了的**那层,
                 // 而快照的语言、当时启用的 mod、语言文件有没有跟上新 key,每一条都能造出同一个
                 // 零。归因留给 keyed / snapshot status,那边按快照量到哪一步说话。
+                // 点名:只给个数时读者对不出表里少的是哪几个。「def 的 label 走 DefInjected」是
+                // keyed 的 Remarks 里的机制,不在这里说。
                 $"This snapshot has no keyed translation for " +
-                $"{Tally.Complete(missing).Render("translation key")} in these lines. A def's own label goes " +
-                "through DefInjected rather than a key ('rimsearcher get' and 'search' cover those).");
+                $"{Tally.Complete(missing.Count).Render("translation key")} in these lines: " +
+                $"{NameList.Render(missing, Limits.MaxSuggestions)}.");
 
         if (assembled > 0)
             ctx.Report.Notice(NoticeKind.Boundary,
-                $"The key is not a literal in {Tally.Complete(assembled).Render("line")} here — assembled at " +
-                "runtime, or held in a variable — so what those lines display cannot be resolved from the text. " +
-                "'rimsearcher keyed' can still show such a key by name once you know it.");
+                $"{Tally.Complete(assembled).Render("line")} here {(assembled == 1 ? "calls" : "call")} " +
+                ".Translate() on something other than a string literal, so that key is not resolved; " +
+                "'rimsearcher keyed <key>' shows it once you know the name.");
     }
 
     /// <summary>

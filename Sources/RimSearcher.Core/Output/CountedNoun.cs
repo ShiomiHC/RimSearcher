@@ -121,6 +121,7 @@ public static class NounRegistry
         // 界面文案那一层单独登记,不借 "translation":def 的 label 走 DefInjected、
         // keyed 走 key,两层的来源与生效规则都不同。
         ["keyed translation"] = "keyed translations",
+        ["row"] = "rows",
         ["key"] = "keys",
         // code-search 数的是「代码行里出现的 key」,与上面那个 "key"(库里的一条 keyed
         // 记录)不是同一批东西 —— 一行代码里的 key 可能压根不在库里。
@@ -157,7 +158,6 @@ public static class NounRegistry
         ["recipe"] = "recipes",
         // 数的是**印出来的表格行**,不是某一类东西 —— 说破那几条口径边界时,指的就是
         // 读的人眼前数得出来的那几行。
-        ["row"] = "rows",
         // 截断成因那四类各带自己的名词,一个都不能借 "field":值长度那一类一条路径都没丢
         // (下面这两个也是),而深度与集合各是「一整棵没走的子树 / 一条没走完的列表」算一,
         // 底下有多少条字段谁都没数。借了 "field" 就等于替读者报了一个没人量过的数。
