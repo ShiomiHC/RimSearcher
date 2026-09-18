@@ -4674,6 +4674,28 @@ public class GrammarTests
     }
 
     /// <summary>
+    /// found_as 的 next 是要粘回去跑的;点了 --snapshot 的调用不带上它,粘回去查的就是默认那份
+    /// (r19b 与 Vethara 的历史会话里读者都在自己补 --snapshot)。「在别的快照里」那档自己带着
+    /// --snapshot,不许叠成两个。
+    /// </summary>
+    [Fact]
+    public void found_as的next跟着显式的snapshot走()
+    {
+        var (holder, _, hcode) = Fixture.Run("list", "TestVariantDef", "--snapshot", "fixture", Fixture.Pinned);
+        Assert.Equal(Runner.ExitFoundElsewhere, hcode);
+        Assert.Contains("--class TestVariantDef --snapshot fixture", holder, StringComparison.Ordinal);
+
+        var (other, _, ocode) = Fixture.Run("get", "OnlyInOtherSnapshot", "--snapshot", "fixture", Fixture.Pinned);
+        Assert.Equal(Runner.ExitFoundElsewhere, ocode);
+        Assert.Contains("--snapshot other", other, StringComparison.Ordinal);
+        Assert.Equal(1, System.Text.RegularExpressions.Regex.Matches(other, "--snapshot").Count);
+
+        // 没点 --snapshot 就不带:自动选中的那份本来就是粘回去会查的那份。
+        var (plain, _, _) = Fixture.Run("list", "TestVariantDef");
+        Assert.DoesNotContain("--snapshot", plain, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// <c>--value</c> 与位置上的那个值说的是同一件事。
     ///
     /// 此前 <c>where</c> 的分支判据挂在「给没给 --value」上,于是

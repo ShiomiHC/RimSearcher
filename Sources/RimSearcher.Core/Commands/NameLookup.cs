@@ -84,11 +84,16 @@ internal static class NameLookup
         "things; 'get' reaches the def itself.";
 
     /// <summary>把一行(或几行)印进 <c>found_as</c>;同一次输出里只有一张,后来的往里加行。</summary>
+    /// <summary>next 是另一条命令;调用方点了 --snapshot 的话跟着走(同 index_gap),「在别的快照里」那档自己带着。</summary>
     public static void Say(CommandContext ctx, params Sighting[] sightings)
     {
+        var snap = ctx.Args.Value("snapshot");
         var rows = sightings.Select(s => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
         {
-            ["name"] = s.Name, ["is"] = s.Is, ["in"] = s.In, ["next"] = s.Next,
+            ["name"] = s.Name, ["is"] = s.Is, ["in"] = s.In,
+            ["next"] = snap is { Length: > 0 } && !s.Next.Contains("--snapshot", StringComparison.Ordinal)
+                ? $"{s.Next} --snapshot {CommandContext.QuoteArg(snap)}"
+                : s.Next,
         }).ToList();
         if (rows.Count == 0) return;
         ctx.Report.AppendRows(Table, Columns, rows, Caption);

@@ -290,7 +290,11 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
             if (options.Contains(o.Name, StringComparer.Ordinal) || o.Name is "limit" or "offset") continue;
             if (Args.Values(o.Name).Count > 0) parts.Add(FilterAsGiven(o.Name));
         }
-        if (Args.Value("snapshot") is { Length: > 0 } snap) parts.Add($"--snapshot {QuoteArg(snap)}");
+        // --snapshot 是全局选项,不在 Spec.Options 里,拿掉它得单独看:「在别的快照里」那档
+        // 自己接 --snapshot <别名>,原来那份跟着走就成了两个。
+        if (!options.Contains("snapshot", StringComparer.Ordinal) &&
+            Args.Value("snapshot") is { Length: > 0 } snap)
+            parts.Add($"--snapshot {QuoteArg(snap)}");
         return string.Join(" ", parts);
     }
 
