@@ -102,7 +102,7 @@ internal static class NameLookup
                 (holders.Count > 3
                     ? $" and {Output.Tally.Complete(holders.Count - 3).Render("def type")} more"
                     : "") +
-                $"; the query is 'rimsearcher list {holders[0].DefType} --own-class {name}'.");
+                $"; the query is 'rimsearcher list {holders[0].DefType} --class {name}'.");
         }
 
         // (5) 界面文案。上面每一档判的是「这个**名字**是什么」,这一档判的是「这句**话**

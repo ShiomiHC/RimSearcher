@@ -551,14 +551,14 @@ rimsearcher list [defType]... [options]
 
 | Argument | Meaning |
 |---|---|
-| `<defType>` | A def type such as ThingDef. Several go in one call; --limit and --offset apply to each on its own, each gets its own count line, and the def_type column says which type a row came from. Leave them all out and this lists the def types themselves, with how many defs each holds — all of them, unless you pass --limit. --own-class and --offset need a def type and are refused without one. *(optional)* |
+| `<defType>` | A def type such as ThingDef. Several go in one call; --limit and --offset apply to each on its own, each gets its own count line, and the def_type column says which type a row came from. Leave them all out and this lists the def types themselves, with how many defs each holds — all of them, unless you pass --limit. --class and --offset need a def type and are refused without one. *(optional)* |
 
 | Option | Meaning | Also accepted |
 |---|---|---|
 | `-n`, `--limit` <n> | How many defs to return, at most. Left out, every one is returned. Default: `every one`. | `--max-results`, `--count`, `--top`, `--rows`, `--num`, `--head` |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods` |
 | `--offset` <n> | Skip this many defs before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. |  |
-| `--own-class` <ClassName> | Only defs whose own class is this. Def types that hold several classes list them below the count. Many def types hold just one class and pick their behaviour in a nested field instead — GenStepDef is all Verse.GenStepDef, with the GenStep subclass on 'genStep' — and this option cannot see that. 'rimsearcher where Class <ClassName>' can. | `--def-class`, `--class`, `--runtime-class` |
+| `--class` <ClassName> | Only defs whose own class is this. Def types that hold several classes list them below the count. Many def types hold just one class and pick their behaviour in a nested field instead — GenStepDef is all Verse.GenStepDef, with the GenStep subclass on 'genStep' — and this option cannot see that. 'rimsearcher where Class <ClassName>' can. | `--own-class`, `--def-class`, `--runtime-class` |
 | `--find` <text> | Only defs whose name or label contains this. The filter runs before --limit, so a count of what matched is always reported — unlike piping to grep, which only ever sees the current page. | `--filter`, `--grep`, `--search`, `--match` |
 
 `--json` keys, besides the global `notes`:
@@ -574,7 +574,7 @@ Examples:
 rimsearcher list
 rimsearcher list HediffDef
 rimsearcher list GenStepDef --find scatter
-rimsearcher list CreepJoinerBaseDef --own-class CreepJoinerAggressiveDef
+rimsearcher list CreepJoinerBaseDef --class CreepJoinerAggressiveDef
 rimsearcher list ThingDef --scope all,-vanilla
 ```
 

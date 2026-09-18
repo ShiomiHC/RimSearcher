@@ -280,9 +280,9 @@ public static class Fixture
     /// 导出器 0.4.0 那一档的语料 —— **单字段上的 <c>Class=</c>**。
     ///
     /// 形状照抄游戏里的 GenStepDef:def 自己的 class 全是 <c>Verse.GenStepDef</c>(恒定量,
-    /// 于是 <c>--own-class</c> 在这个类型上区分不了任何东西),真正跑哪段代码写在 <c>genStep</c>
+    /// 于是 <c>--class</c> 在这个类型上区分不了任何东西),真正跑哪段代码写在 <c>genStep</c>
     /// 那**一个字段**的 Class= 里。旧判据(路径以 <c>]</c> 收尾)对它一条都发不出,
-    /// 而 <c>list GenStepDef --own-class X</c> 回的那句「No def of type GenStepDef has class 'X'」
+    /// 而 <c>list GenStepDef --class X</c> 回的那句「No def of type GenStepDef has class 'X'」
     /// 读起来正是「没有 def 用这个类」。
     ///
     /// 两个 def:一个写了 Class=(多态),一个没写(只有普通字段) —— 「这个类没人用」
@@ -1031,7 +1031,7 @@ public static class Fixture
             => DefAs(type, "Verse." + type, name, label, mod, file, generated, truncated, fields);
 
         // 运行时 class 与 def_type 不是一回事:游戏只给「祖先链上没有非抽象 Def」的类型建库,
-        // 所以子类型的 def 全落在基类桶里。语料里必须有这么一桶,否则 list --own-class 那条路没人守。
+        // 所以子类型的 def 全落在基类桶里。语料里必须有这么一桶,否则 list --class 那条路没人守。
         void DefAs(string type, string cls, string name, string? label, string mod, string file, bool generated,
                    int truncated, params (string Path, string Value, int Default)[] fields)
         {

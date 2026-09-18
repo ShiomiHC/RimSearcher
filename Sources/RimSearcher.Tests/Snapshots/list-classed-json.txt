@@ -1,11 +1,11 @@
-$ rimsearcher list ThingDef --own-class Verse.ThingDef --limit 2 --json
+$ rimsearcher list ThingDef --class Verse.ThingDef --limit 2 --json
 exit 0
 --- stdout ---
 {
   "notes": [
     {
       "kind": "truncation",
-      "text": "9 defs of type ThingDef, showing the first 2 within --own-class Verse.ThingDef.",
+      "text": "9 defs of type ThingDef, showing the first 2 within --class Verse.ThingDef.",
       "shown": 2,
       "total": 9
     }

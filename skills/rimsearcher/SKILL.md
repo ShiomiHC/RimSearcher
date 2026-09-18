@@ -254,9 +254,9 @@ way to state:
   witnesses is not the same as finding where a field is declared — the footnote on that
   output says what the count does and does not settle.
 - **A `list` def type is a storage bucket, not a runtime class.** Multi-class buckets get a
-  `class` column and `--own-class`. Most buckets hold one class — there `--own-class`
+  `class` column and `--class`. Most buckets hold one class — there `--class`
   narrows nothing and the behaviour lives on a nested `Class="…"` field instead: **`where
-  Class` territory, not `--own-class`**.
+  Class` territory, not `--class`**.
 - **`where Class`** reaches that nested runtime type, but only where it **differs from the
   declared type** — a field running exactly what its C# declares is not indexed under
   `Class` at all, and a snapshot may hold only part of this dimension (the zero says which). So a zero is about

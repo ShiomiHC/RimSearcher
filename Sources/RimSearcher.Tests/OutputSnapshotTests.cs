@@ -326,7 +326,7 @@ public class OutputSnapshotTests
         // 上一行那份基线对它一个字都不响。两份:同质(列不印)与显式点了 class 的那次
         // (用户敲的就是它,回答里更不能是 null)。
         { "list-limited-json",     ["list", "ThingDef", "--limit", "2", "--json"] },
-        { "list-classed-json",     ["list", "ThingDef", "--own-class", "Verse.ThingDef", "--limit", "2", "--json"] },
+        { "list-classed-json",     ["list", "ThingDef", "--class", "Verse.ThingDef", "--limit", "2", "--json"] },
         { "list-scope-empty",      ["list", "HediffDef", "--scope", "test.mod"] },
         // 排除式 scope 的静默错表:被排除掉的那部分照样有命中,而留下的结果表干净、完整、
         // 看不出任何问题。上面那几条 scope 闸全是白名单形式,照不出这个形态。
@@ -342,9 +342,9 @@ public class OutputSnapshotTests
         { "where-value-scope-excluding", ["where", "--value", "Standard_Drop", "--scope", "all,-test.mod"] },
         { "values-scope-excluding", ["values", "soundDrop", "--scope", "all,-test.mod"] },
         { "truncated-scope-excluding", ["snapshot", "truncated", "--scope", "all,-test.mod"] },
-        // 打错类型名再带 --own-class:此前这一支手抄了 DefTypeMiss.Say,抄的是产地后来长出
-        // 近似候选之前的那一版,于是拼错 + --own-class 是唯一拿不到拼写建议的路。两支同一个问题。
-        { "list-typo-classed",     ["list", "ThingDf", "--own-class", "TestVariantDef"] },
+        // 打错类型名再带 --class:此前这一支手抄了 DefTypeMiss.Say,抄的是产地后来长出
+        // 近似候选之前的那一版,于是拼错 + --class 是唯一拿不到拼写建议的路。两支同一个问题。
+        { "list-typo-classed",     ["list", "ThingDf", "--class", "TestVariantDef"] },
         // 几个 def 类型一次问。守的是:每个类型各出一句带类型名的计数、行并进同一张表且
         // def_type 在末列、class 那一列按并集出(一个类型异构就印,同质那几个照填真值)。
         { "list-multi",            ["list", "ThingDef", "AlloyPartDef"] },

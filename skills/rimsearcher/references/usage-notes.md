@@ -218,7 +218,7 @@ different defs.
 is queryable under the field name `Class`, in two parts — list elements (`<li Class="…">`)
 and single class-picking fields (`GenStepDef.genStep`, `ThinkTreeDef.thinkRoot`). A zero
 result ends with a line stating how much of that the snapshot has. Where
-single class-picking fields are missing, `where Class` and `list --own-class` are both
+single class-picking fields are missing, `where Class` and `list --class` are both
 structurally blind to them and only `code-search` can answer; re-export to close the gap.
 
 **Anchoring, walked through.** `code-search MapPortal` finds every mention — dozens of matches
@@ -267,7 +267,7 @@ several unrelated paths, and that header is how you tell which you are looking a
 **Storage buckets.** The game groups subclasses under their base's database, so
 `CreepJoinerAggressiveDef` instances live under `CreepJoinerBaseDef`. `list <SomeClass>`
 tells you where to look rather than claiming the type does not exist. Most buckets hold
-exactly one class; there `--own-class` narrows nothing, and such a def type keeps its whole
+exactly one class; there `--class` narrows nothing, and such a def type keeps its whole
 behaviour on a nested `Class="…"` field instead — every `GenStepDef` in a snapshot is a
 `Verse.GenStepDef`, and which `GenStep` each runs is on `genStep`, indexed as `genStep.Class`.
 

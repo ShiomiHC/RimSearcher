@@ -303,7 +303,7 @@ public sealed class InheritCommand : Command
             // (全部机械族的 comps 都被那条改了),六个受测者里四个就此答「节点自身未被改」——
             // 字面不错,漏掉的是真正生效的那条。这些数在上面那趟往上走里已经查出来了。
             //
-            // 列按 list --own-class 的先例条件化,但理由不是省地方:全零时渲染器会把它折进
+            // 列按 list --class 的先例条件化,但理由不是省地方:全零时渲染器会把它折进
             // 「Same in every row」那句、印成 patch_ops=0,而那正是这条命令改了三轮的形态 ——
             // 一个沉默的 0 断言假事。条件化之后沉默只发生在祖先侧确实没有已知 patch 时。
             var patchedUp = chain.Where(n => n.PatchOps > 0).ToList();

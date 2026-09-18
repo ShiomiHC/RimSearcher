@@ -489,7 +489,7 @@ public sealed class GetCommand : Command
                       string.Join(", ", holders.Select(h => $"{h.Count} under {h.DefType}")) + ". " +
                       "The game only gives a def database to types with no concrete Def ancestor, so " +
                       $"subclasses share their base's bucket. 'rimsearcher get --type {holders[0].DefType}' " +
-                      $"prints that whole bucket; 'rimsearcher list {holders[0].DefType} --own-class {wantType}' " +
+                      $"prints that whole bucket; 'rimsearcher list {holders[0].DefType} --class {wantType}' " +
                       "names just these."
                     : DefTypeMiss.Say(wantType!, ctx.Db.Types(ctx.Unscoped()).Select(t => t.Type), "get --type"));
                 return 1;
@@ -1538,7 +1538,7 @@ public sealed class FindCommand : Command
                 // identity 级的名字不是字段,却是最自然的猜法 —— 它们在 get 的输出里就摆着。
                 var identity = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["class"] = "'rimsearcher list <DefType> --own-class <ClassName>' filters by the def's own class",
+                    ["class"] = "'rimsearcher list <DefType> --class <ClassName>' filters by the def's own class",
                     ["def_type"] = "'rimsearcher list <DefType>' lists a whole type",
                     ["deftype"] = "'rimsearcher list <DefType>' lists a whole type",
                     ["mod"] = "'--scope <packageId>' restricts any query to one mod",
@@ -2023,7 +2023,7 @@ public sealed class ListCommand : Command
                        "each on its own, each gets its own count line, and the def_type column says which " +
                        "type a row came from. Leave them all out and this lists the def types themselves, " +
                        "with how many defs each holds — all of them, unless you pass --limit. " +
-                       "--own-class and --offset need a def type and are refused without one.",
+                       "--class and --offset need a def type and are refused without one.",
             },
         ],
         Options =
@@ -2033,12 +2033,14 @@ public sealed class ListCommand : Command
             CommonOptions.Offset("defs"),
             new OptionSpec
             {
-                Name = "own-class",
-                // n=10 的识别测把三个候选分开了:own-class 10/10 且零靶心误读;
-                // def-class 9/10 但那一份正是「子字段里的 compClass 也算」;
-                // root-class 只有 1/10 —— 9 份把等值读成「及其派生类」的 is-a 匹配,丢掉。
-                // 旧主名 class 留作别名:它是产出式赢家,但单说 class 不带「谁的」。
-                Aliases = ["def-class", "class", "runtime-class"],
+                Name = "class",
+                // 主名按产出定,别名按识别定,两轮量的不是同一件事:
+                // 2026-08-04 的 n=10 识别测里 own-class 10/10 且零靶心误读、def-class 9/10、
+                // root-class 1/10(9 份读成 is-a),于是主名改成 own-class、class 降为别名。
+                // 改名之后的六周,消费方敲 --class 76 次、--own-class 8 次 —— help 里第一眼
+                // 看到的名字十次里九次不是人敲的那个。2026-09-18 换回来:class 当主名,
+                // own-class 留作别名;「谁的类」那半句由 Help 第一句承担,不再压在名字上。
+                Aliases = ["own-class", "def-class", "runtime-class"],
                 Placeholder = "<ClassName>",
                 // 「own」在做功,但光靠它不够:很多 def 类型的 class 是恒定量,多态全在嵌套
                 // 字段上,而这个选项够不着那里。不说破的话,它在那些类型上回的零读起来
@@ -2068,7 +2070,7 @@ public sealed class ListCommand : Command
             "rimsearcher list",
             "rimsearcher list HediffDef",
             "rimsearcher list GenStepDef --find scatter",
-            "rimsearcher list CreepJoinerBaseDef --own-class CreepJoinerAggressiveDef",
+            "rimsearcher list CreepJoinerBaseDef --class CreepJoinerAggressiveDef",
             "rimsearcher list ThingDef --scope all,-vanilla",
         ],
         JsonKeys =
@@ -2129,7 +2131,7 @@ public sealed class ListCommand : Command
     /// <summary>
     /// 不给 def 类型的那一半:列出这份快照有哪些 def 类型。
     ///
-    /// <c>--own-class</c> 与 <c>--offset</c> 只对另一半有意义,却仍然声明在这条命令上 ——
+    /// <c>--class</c> 与 <c>--offset</c> 只对另一半有意义,却仍然声明在这条命令上 ——
     /// 照单收下、悄悄不生效是个沉默口子(与 <see cref="CommandContext.Limit"/> 记的
     /// <c>--limit</c> 被静默夹紧同形),所以当场退 2 并把该走的那条路说出来。
     /// </summary>
@@ -2137,9 +2139,9 @@ public sealed class ListCommand : Command
     {
         // 指的那条路只在名字**真是** def class 时才落到桶上(`list CompShield` 回的是
         // 「No def type named 'CompShield'」),所以两种落点都说出来。
-        if (ctx.Args.Value("own-class") is { } cls)
+        if (ctx.Args.Value("class") is { } cls)
             throw new CliUsageException(
-                $"--own-class needs a def type to narrow inside. If you do not know which def type holds " +
+                $"--class needs a def type to narrow inside. If you do not know which def type holds " +
                 $"the class '{cls}', run 'rimsearcher list {cls}': it names the def type when '{cls}' " +
                 $"is a def class, and reports no such def type when it is not — a class that defs only " +
                 $"reference in a field is found by 'rimsearcher where <field> {cls}' instead.");
@@ -2154,7 +2156,7 @@ public sealed class ListCommand : Command
         ctx.Report.Promises("types");
         var everything = ctx.Db.Types(scope);
 
-        // --find 在这一半筛的是**类型名**。这条路不像 --own-class 那样退 2:它在这里
+        // --find 在这一半筛的是**类型名**。这条路不像 --class 那样退 2:它在这里
         // 真的生效,而「哪些 def 类型名字里带 Gen」是个答得出来的问题。
         var typeFind = ctx.Args.Value("find");
         var all = typeFind is null
@@ -2227,7 +2229,7 @@ public sealed class ListCommand : Command
     {
         var limit = ctx.Limit();
         var offset = ctx.Args.Offset();
-        var wantClass = ctx.Args.Value("own-class");
+        var wantClass = ctx.Args.Value("class");
         var find = ctx.Args.Value("find");
         var scope = ctx.Scope();
 
@@ -2292,7 +2294,7 @@ public sealed class ListCommand : Command
                     $"{Tally.Complete(holders.Sum(h => h.Count)).Render("def")}: " +
                     string.Join(", ", holders.Select(h => $"{h.Count} under {h.DefType}")) + ". " +
                     $"The game only gives a def database to types with no concrete Def ancestor, so subclasses " +
-                    $"share their base's bucket. 'rimsearcher list {holders[0].DefType} --own-class {type}' lists them.");
+                    $"share their base's bucket. 'rimsearcher list {holders[0].DefType} --class {type}' lists them.");
                 return 1;
             }
 
@@ -2307,18 +2309,18 @@ public sealed class ListCommand : Command
                 }
 
                 // 只有一个 class 时,这个选项在这个类型上区分不了任何东西 —— 而不说破的话,
-                // 「确实没有 def 用这个类」与「--own-class 问的根本不是这件事」逐字同形。
+                // 「确实没有 def 用这个类」与「--class 问的根本不是这件事」逐字同形。
                 // 那类型真正的多态在嵌套字段上(GenStepDef 的 167 个 def 全是 Verse.GenStepDef,
                 // 各自跑的 GenStep 子类写在 genStep 那一个字段的 Class= 里),所以转向要指到
                 // 那条路上去,并按快照量到哪一步说话。
                 if (present.Count == 1)
                 {
-                    // 「类恒定的桶把多态放在嵌套字段上」这条通则是 --own-class 自己的 help 文本
-                    // (OptionSpec 里那段,cli-reference 的 --own-class 行就是它渲染出来的),
+                    // 「类恒定的桶把多态放在嵌套字段上」这条通则是 --class 自己的 help 文本
+                    // (OptionSpec 里那段,cli-reference 的 --class 行就是它渲染出来的),
                     // 不在这里再讲一遍;这句只留本次的事实与填好参数的转向。
                     ctx.Report.Notice(NoticeKind.NextStep,
                         $"Every one of the {Tally.Complete(present[0].Count).Render("def")} of type {type} has the " +
-                        $"same class, {present[0].Class}, so --own-class cannot tell them apart. " +
+                        $"same class, {present[0].Class}, so --class cannot tell them apart. " +
                         "The behaviour lives on a nested field instead: " +
                         $"'rimsearcher where Class {wantClass}'.");
                     // 量全了的快照上这一条只会把上面那句用占位符再说一遍。留着的是它另外两档
@@ -2371,10 +2373,10 @@ public sealed class ListCommand : Command
                 // 「def 类型不等于运行时 class」那条区分上。
                 $"Type {type} holds {Tally.Complete(classes.Count).Render("def class")}: " +
                 NameList.Render([.. classes.Select(c => $"{Tail(c.Class)} ({c.Count})")], Limits.MaxSuggestions) +
-                ". Pass --own-class to pick one.");
+                ". Pass --class to pick one.");
 
         // 同质时不印 class 一列(见上),但**值照填** —— 不印是排版,而 JSON 里的 null 在这套
-        // 输出里恒读作「查不出来」。同质恰恰是查得最清楚的那种,而 `--own-class` 点了名的
+        // 输出里恒读作「查不出来」。同质恰恰是查得最清楚的那种,而 `--class` 点了名的
         // 那次更刺眼:用户敲的就是这个 class,回答里它却是 null。
         // 数据里真没有 class 时才是 null,而那时它是实话。
         //
@@ -3181,7 +3183,7 @@ internal static class DefTypeMiss
     /// 判据必须**当场算得出来**(NameLookup 的纪律):真去找那个文件,找不到就一个字不说。
     /// 只认纯标识符,既挡住通配符进 <c>EnumerateFiles</c>,也挡住路径分隔符。
     /// 这一句只给 <c>fields</c>,不给 <c>list</c>:「这个类的字段有哪些」与「这个类的 def
-    /// 有哪些」是两个问题,后者的答案是 <c>list &lt;DefType&gt; --own-class</c>。
+    /// 有哪些」是两个问题,后者的答案是 <c>list &lt;DefType&gt; --class</c>。
     /// </summary>
     public static string? InSourceInstead(CommandContext ctx, string typed)
     {
@@ -3288,7 +3290,7 @@ internal static class Completeness
                 ? ""
                 : $"This snapshot (exporter {ctx.Db.Meta.ExporterVersion}) does not list the fields a type " +
                   "can have, so it cannot tell a field that is null on every def from one the type does not have. ") +
-            // 量全了的快照上不发声,与 where Class / --own-class 两处同一条规矩:那一档只说
+            // 量全了的快照上不发声,与 where Class / --class 两处同一条规矩:那一档只说
             // 「嵌套类型在 .Class 下」,对一个查别的字段落空的读者没有输入。另两档说的是
             // 这份快照没量到那里,那才是这个零可能是假零的成因。
             (ctx.Db.Meta.IndexesAllNestedClass ? "" : NestedClassLine(ctx)));

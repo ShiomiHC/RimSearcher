@@ -876,7 +876,7 @@ public class GrammarTests
             ("ThingDef",          "is a def type in this snapshot", "where compClass"),
             // def 自己的运行时 class。MustNot 锚在那句**兜底话自己**的措辞上 ——
             // 算得出落点就不许退回猜。
-            ("TestVariantDef",    "--own-class TestVariantDef",         "lists what kinds of def this snapshot holds"),
+            ("TestVariantDef",    "--class TestVariantDef",         "lists what kinds of def this snapshot holds"),
             // 字段取值(comps[N].compClass 那一类)
             ("CompShield",        "rimsearcher where compClass CompShield", "no class"),
             // 快照覆盖的 mod
@@ -4464,7 +4464,7 @@ public class GrammarTests
     // ---- 嵌套 Class= 那一维:三档快照各说各的话 ----
 
     /// <summary>
-    /// <c>--own-class</c> 查的是 def **自己**的运行时类。在那个类恒定的类型上,它区分不了
+    /// <c>--class</c> 查的是 def **自己**的运行时类。在那个类恒定的类型上,它区分不了
     /// 任何东西 —— 而「确实没有 def 用这个类」与「这个选项问的根本不是这件事」
     /// 在一句 "No def of type X has class 'Y'" 上逐字同形。
     ///
@@ -4476,16 +4476,16 @@ public class GrammarTests
     public void 类恒定的类型上class选项要说破自己区分不了()
     {
         // modern 那份里 GenStepDef 的两个 def 都是 Verse.GenStepDef。
-        var (miss, _, code) = Fixture.Run("list", "GenStepDef", "--own-class", "RimWorld.GenStep_Nothing",
+        var (miss, _, code) = Fixture.Run("list", "GenStepDef", "--class", "RimWorld.GenStep_Nothing",
                                           "--db", Fixture.ModernDb);
         Assert.Equal(1, code);
-        Assert.Contains("--own-class cannot tell them apart", miss, StringComparison.Ordinal);
+        Assert.Contains("--class cannot tell them apart", miss, StringComparison.Ordinal);
         Assert.DoesNotContain("No def of type", miss, StringComparison.Ordinal);
         // 转向要指到真正能查到多态的那条路上。
         Assert.Contains("where Class RimWorld.GenStep_Nothing", miss, StringComparison.Ordinal);
 
         // 类不止一种时,原来那句照旧 —— 它在那里是准的。
-        var (multi, _, mcode) = Fixture.Run("list", "TestBaseDef", "--own-class", "NoSuchClass");
+        var (multi, _, mcode) = Fixture.Run("list", "TestBaseDef", "--class", "NoSuchClass");
         Assert.Equal(1, mcode);
         Assert.Contains("That type holds", multi, StringComparison.Ordinal);
         Assert.DoesNotContain("cannot tell them apart", multi, StringComparison.Ordinal);
@@ -4627,7 +4627,7 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// <c>--own-class</c> 与 <c>--offset</c> 只在给了 def 类型时才有意义,而它们仍然声明在这条
+    /// <c>--class</c> 与 <c>--offset</c> 只在给了 def 类型时才有意义,而它们仍然声明在这条
     /// 命令上 —— 「不给类型还传了它们」不许照单收下再悄悄不生效
     /// (同 <see cref="CommandContext.Limit"/> 那条静默夹紧)。
     ///
@@ -4636,7 +4636,7 @@ public class GrammarTests
     [Fact]
     public void 不给def类型时不许悄悄吃掉class与offset()
     {
-        foreach (var argv in new[] { new[] { "list", "--own-class", "TestVariantDef" },
+        foreach (var argv in new[] { new[] { "list", "--class", "TestVariantDef" },
                                      ["list", "--offset", "2"] })
         {
             var (stdout, stderr, code) = Fixture.Run(argv);
@@ -4648,7 +4648,7 @@ public class GrammarTests
         // 指的那条路真的走得通 —— 不许指了个空。
         var (holder, _, hcode) = Fixture.Run("list", "TestVariantDef");
         Assert.Equal(1, hcode);
-        Assert.Contains("--own-class TestVariantDef", holder, StringComparison.Ordinal);
+        Assert.Contains("--class TestVariantDef", holder, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -5170,7 +5170,7 @@ public class GrammarTests
     /// 就是),而那要逐条改 —— 这条闸把「静默失效」变成「会红」,不替代那件事。
     ///
     /// 另一层是**锚本身可能落在无关的那处**,而这是立闸时做注入实验才发现的:把
-    /// <c>--own-class cannot tell them apart</c> 改掉之后,闸**没有红** —— 因为
+    /// <c>--class cannot tell them apart</c> 改掉之后,闸**没有红** —— 因为
     /// <c>KeyedCommand</c> 里另有一句完全无关的话也含 <c>cannot tell them apart</c>。
     /// 于是「在产地里找得到」成立,而它找到的根本不是那条断言要盯的句子。
     ///
