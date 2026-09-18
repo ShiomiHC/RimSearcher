@@ -796,7 +796,7 @@ Page with --lines, never with a pipe. The first line of the answer says which li
 
 | Option | Meaning | Also accepted |
 |---|---|---|
-| `--member` <name> | Read the declaration of this member. Give it more than once to read several in one call, in the order given. Every member of that name in the file is returned; --type narrows it to one declaring type. | `--method`, `--method-name`, `--member-name`, `--property` |
+| `--member` <name> | Read the declaration of this member. Give it more than once to read several, in the order given. Every member of that name in the file is returned; --type narrows it to one declaring type. | `--method`, `--method-name`, `--member-name`, `--property` |
 | `--type` <name> | Read this whole type. With --member it instead says which type the member must belong to. | `--class-name`, `--type-name`, `--extract-class` |
 | `--lines` <a-b|a+n|a> | Read raw lines instead: '400-460' is inclusive (',' and ':' work in place of the '-'), '400+60' is sixty lines from 400, '400' starts there and runs to the end of the file. Without --lines the whole file is read. Whatever --lines asks for is printed in full unless --limit says otherwise — that is also what shortens a start-only '400'. | `--line`, `--range`, `--line-range` |
 | `--start` <n> | Read from this line. With --end it is a range; on its own it runs to the end of the file, which --limit then shortens. Same read as --lines, spelled as two options. |  |
@@ -810,7 +810,7 @@ Not options here:
 | Spelling | Where that lives |
 |---|---|
 | `--grep` | 'read' shows a stretch of a file by address: --lines, --member, or --outline. Lines matching a pattern are 'rimsearcher code-search <regex> --file-glob <file>' (add -C <n> for context lines); a member's whole declaration is '--member <name>'. |
-| `--context` | Context lines belong with a pattern, and that is 'rimsearcher code-search <regex> --file-glob <file> -C <n>'. Here --member reads the whole declaration and --lines a range. |
+| `--context` | Context lines belong with a pattern, and that is 'rimsearcher code-search <regex> --file-glob <file> -C <n>'. |
 
 `--json` keys, besides the global `notes`:
 
@@ -1209,7 +1209,7 @@ Answers 'what am I allowed to put here' and 'which classes are actually in use' 
 | `--offset` <n> | Skip this many values before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. |  |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind` |
-| `--field` <path> | A field path, same as giving it as an argument. 'rimsearcher values ThingDef --field techLevel' is 'rimsearcher values techLevel --type ThingDef'. |  |
+| `--field` <path> | A field path. 'rimsearcher values ThingDef --field techLevel' is 'rimsearcher values techLevel --type ThingDef'. |  |
 | `--exact-path` | Match the field path given as an argument end to end. | `--whole-path`, `--path-exact` |
 | `--path-contains` <text> | Only match field paths containing this text; when a path argument is given, it has to match as well. Repeat it to widen the selection. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. | `--filter`, `--grep` |
 
@@ -1257,11 +1257,11 @@ When a name asked for is not what this command looks up, a found_as table says w
 | `--offset` <n> | Skip this many matches before listing. The total is always reported, so you can tell when you have reached the end. Default: `0`. |  |
 | `--scope` <expr> | Restrict results to some of the mods in the snapshot. Comma-separated; a leading '-' excludes. 'all', 'vanilla', a packageId, or a group name from the config file. Writing 'all,-vanilla' means everything except vanilla. 'vanilla' (also 'core', 'base', 'official') means every module Ludeon ships — Core and each DLC in the snapshot — which is not the same thing as a snapshot that happens to be named vanilla; the output spells out what it resolved to. Default: `all`. | `--mod`, `--mods` |
 | `--type` <DefType> | Restrict results to one def type, for example ThingDef or HediffDef. | `--def-type`, `--kind` |
-| `--field` <path> | The field path, same as giving it as the first argument. 'rimsearcher where ThingDef --field compClass --value CompShield' is 'rimsearcher where compClass CompShield --type ThingDef'. |  |
+| `--field` <path> | The field path. 'rimsearcher where ThingDef --field compClass --value CompShield' is 'rimsearcher where compClass CompShield --type ThingDef'. |  |
 | `--exact` | Require the whole value to match, with either a field path or --value. Without it, the value is matched as a substring. | `--exact-match`, `--whole` |
 | `--exact-path` | Match the field path given as an argument end to end. | `--whole-path`, `--path-exact` |
 | `--path-contains` <text> | Only match field paths containing this text; when a path argument is given, it has to match as well. Repeat it to widen the selection. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. | `--filter`, `--grep` |
-| `--value` <text> | The value to look for, same as giving it as an argument. Without a field path, every indexed field is searched and the report names which paths hold it. | `--any-field`, `--search-values`, `--holding` |
+| `--value` <text> | The value to look for. Without a field path, every indexed field is searched and the report names which paths hold it. | `--any-field`, `--search-values`, `--holding` |
 
 `--json` keys, besides the global `notes`:
 

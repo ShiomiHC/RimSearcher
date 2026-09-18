@@ -69,9 +69,9 @@ public sealed class ReadCommand : Command
                 // 可重复(2026-09-19):`read --grep "bool CanCast|bool Activate|OnCooldown|…"` 被拒之后
                 // 读者手拆成三到五条 --member,12 个事件里两个是这种成串的形状(Docs/26 §6.4)。
                 Arity = Arity.Multi,
-                Help = "Read the declaration of this member. Give it more than once to read several in one " +
-                       "call, in the order given. Every member of that name in the file is returned; --type " +
-                       "narrows it to one declaring type.",
+                Help = "Read the declaration of this member. Give it more than once to read several, in the " +
+                       "order given. Every member of that name in the file is returned; --type narrows it to " +
+                       "one declaring type.",
             },
             new OptionSpec
             {
@@ -170,7 +170,7 @@ public sealed class ReadCommand : Command
                 Aliases = ["C", "A", "B", "after", "before", "context-lines", "around"],
                 ValuePlaceholder = "<n>",
                 Where = "Context lines belong with a pattern, and that is 'rimsearcher code-search <regex> " +
-                        "--file-glob <file> -C <n>'. Here --member reads the whole declaration and --lines a range.",
+                        "--file-glob <file> -C <n>'.",
             },
         ],
         Examples =

@@ -17,7 +17,7 @@ Arguments:
   <file>  A path under the decompiled root, a tail of one, a bare file name such as 'Pawn.cs', or a namespace-qualified type name such as 'RimWorld.Bullet'. Several files read in one call, in the order given; every row carries the file it came from, and --limit counts lines inside each file rather than across the batch. A file that cannot be resolved is reported and the others still print.
 
 Options:
-      --member <name>      Read the declaration of this member. Give it more than once to read several in one call, in the order given. Every member of that name in the file is returned; --type narrows it to one declaring type.
+      --member <name>      Read the declaration of this member. Give it more than once to read several, in the order given. Every member of that name in the file is returned; --type narrows it to one declaring type.
                            Also accepted: --method, --method-name, --member-name, --property.
       --type <name>        Read this whole type. With --member it instead says which type the member must belong to.
                            Also accepted: --class-name, --type-name, --extract-class.
@@ -44,7 +44,7 @@ Global options (every command takes these, written after the command):
 
 Not options here:
   --grep     'read' shows a stretch of a file by address: --lines, --member, or --outline. Lines matching a pattern are 'rimsearcher code-search <regex> --file-glob <file>' (add -C <n> for context lines); a member's whole declaration is '--member <name>'.
-  --context  Context lines belong with a pattern, and that is 'rimsearcher code-search <regex> --file-glob <file> -C <n>'. Here --member reads the whole declaration and --lines a range.
+  --context  Context lines belong with a pattern, and that is 'rimsearcher code-search <regex> --file-glob <file> -C <n>'.
 
 --json keys (besides 'notes'):
   source         without --outline: one row per source line — file, line, text, plus kind and declaration when the line came from --member/--type. The text form's line-number gutter is not repeated here. This is the key the three reading modes produce; 'declarations' is absent then.

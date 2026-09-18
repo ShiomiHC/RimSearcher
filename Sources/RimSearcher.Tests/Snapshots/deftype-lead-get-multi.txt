@@ -1,7 +1,7 @@
 $ rimsearcher get ThingDef Apparel_ShieldBelt Bullet_Revolver
 exit 0
 --- stdout ---
-Read 'ThingDef' as --type ThingDef, not as <defName>: on 'get' the def type is an option. Written out, this call is 'rimsearcher get Apparel_ShieldBelt Bullet_Revolver --type ThingDef'.
+Read 'ThingDef' as --type ThingDef, not as <defName>. Written out, this call is 'rimsearcher get Apparel_ShieldBelt Bullet_Revolver --type ThingDef'.
 2 defs follow, one block each, in the order the names were given; every count and note below belongs to the block it sits in, and the def_name line at the top of a block says which.
 
 def_name     Apparel_ShieldBelt

@@ -1,7 +1,7 @@
 $ rimsearcher values ThingDef thingClass
 exit 0
 --- stdout ---
-Read 'ThingDef' as --type ThingDef, not as <fieldPath>: on 'values' the def type is an option. Written out, this call is 'rimsearcher values thingClass --type ThingDef'.
+Read 'ThingDef' as --type ThingDef, not as <fieldPath>. Written out, this call is 'rimsearcher values thingClass --type ThingDef'.
 4 values of 'thingClass' within --type ThingDef.
 
 asked            thingClass

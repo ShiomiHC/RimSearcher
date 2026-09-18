@@ -25,14 +25,14 @@ Options:
                               Also accepted: --mod, --mods.
       --type <DefType>        Restrict results to one def type, for example ThingDef or HediffDef.
                               Also accepted: --def-type, --kind.
-      --field <path>          The field path, same as giving it as the first argument. 'rimsearcher where ThingDef --field compClass --value CompShield' is 'rimsearcher where compClass CompShield --type ThingDef'.
+      --field <path>          The field path. 'rimsearcher where ThingDef --field compClass --value CompShield' is 'rimsearcher where compClass CompShield --type ThingDef'.
       --exact                 Require the whole value to match, with either a field path or --value. Without it, the value is matched as a substring.
                               Also accepted: --exact-match, --whole.
       --exact-path            Match the field path given as an argument end to end.
                               Also accepted: --whole-path, --path-exact.
       --path-contains <text>  Only match field paths containing this text; when a path argument is given, it has to match as well. Repeat it to widen the selection. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax.
                               Also accepted: --filter, --grep.
-      --value <text>          The value to look for, same as giving it as an argument. Without a field path, every indexed field is searched and the report names which paths hold it.
+      --value <text>          The value to look for. Without a field path, every indexed field is searched and the report names which paths hold it.
                               Also accepted: --any-field, --search-values, --holding.
 
 Global options (every command takes these, written after the command):

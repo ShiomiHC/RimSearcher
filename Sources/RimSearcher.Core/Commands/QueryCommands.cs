@@ -1218,8 +1218,8 @@ public sealed class FindCommand : Command
                 // 对称。解析层把它落进同一格(PositionalSpec.Option),命令侧仍只读 Positional(0)。
                 Name = "field",
                 Placeholder = "<path>",
-                Help = "The field path, same as giving it as the first argument. 'rimsearcher where ThingDef " +
-                       "--field compClass --value CompShield' is 'rimsearcher where compClass CompShield --type ThingDef'.",
+                Help = "The field path. 'rimsearcher where ThingDef --field compClass --value CompShield' is " +
+                       "'rimsearcher where compClass CompShield --type ThingDef'.",
                 // 不算收窄:它是问题本身,位置上的同一个词也不进「within …」那句。
             },
             new OptionSpec
@@ -1248,8 +1248,8 @@ public sealed class FindCommand : Command
                 // 嵌套深度 / 集合项数),索引 ⊊ 数据。这一格的全称落在**搜法**上而不是答案上,
                 // 本来就比上面那两处轻,但 every 不带限定时读者读到的仍是「全部字段」。
                 // indexed 是本仓对这件事的既定词(见 NoteIndexHoldsValuesOnly)。
-                Help = "The value to look for, same as giving it as an argument. Without a field path, every indexed field " +
-                       "is searched and the report names which paths hold it.",
+                Help = "The value to look for. Without a field path, every indexed field is searched and the " +
+                       "report names which paths hold it.",
             },
         ],
         Examples =
@@ -2786,8 +2786,8 @@ public sealed class ValuesCommand : Command
                 Name = "field",
                 Placeholder = "<path>",
                 Arity = Arity.Multi,
-                Help = "A field path, same as giving it as an argument. 'rimsearcher values ThingDef --field techLevel' " +
-                       "is 'rimsearcher values techLevel --type ThingDef'.",
+                Help = "A field path. 'rimsearcher values ThingDef --field techLevel' is " +
+                       "'rimsearcher values techLevel --type ThingDef'.",
             },
             CommonOptions.ExactPath(),
             CommonOptions.PathContainsBeside(),

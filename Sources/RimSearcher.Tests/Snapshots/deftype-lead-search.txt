@@ -1,7 +1,7 @@
 $ rimsearcher search ThingDef shield
 exit 0
 --- stdout ---
-Read 'ThingDef' as --type ThingDef, not as <query>: on 'search' the def type is an option. Written out, this call is 'rimsearcher search shield --type ThingDef'.
+Read 'ThingDef' as --type ThingDef, not as <query>. Written out, this call is 'rimsearcher search shield --type ThingDef'.
 1 def within --type ThingDef.
 
 def_name            def_type  label        matched_on      declared_in

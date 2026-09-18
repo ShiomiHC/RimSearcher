@@ -242,9 +242,8 @@ public static class ArgParser
                 .Where(o => o.Name != typeOpt.Name && !slotOptions.Contains(o.Name) && values.TryGetValue(o.Name, out var got) && got.Count > 0)
                 .Select(o => o.Arity == Arity.Flag ? $"--{o.Name}" : string.Join(" ", values[o.Name].Select(v => $"--{o.Name} {Pasteable(v)}")));
             var written = string.Join(" ", positionals.Concat(spelledOut).Concat(otherOptions));
-            notes.Add($"Read '{lead}' as --type {lead}, not as <{declared[0].Name}>: on '{spec.Name}' the def " +
-                      $"type is an option. Written out, this call is '{CommandRegistry.ExeName} {spec.Name} " +
-                      written + $" --type {lead}'.");
+            notes.Add($"Read '{lead}' as --type {lead}, not as <{declared[0].Name}>. Written out, this call is " +
+                      $"'{CommandRegistry.ExeName} {spec.Name} " + written + $" --type {lead}'.");
         }
 
         // 选项拼法落格:按声明顺序,每一格取选项给的,没给的依次拿裸词。前面有格空着时后面的
@@ -272,7 +271,7 @@ public static class ArgParser
                 var twice = declared.Select((d, i) => (d, i)).First(t => spelled[t.i] is not null);
                 var atSlot = twice.i < positionals.Count ? positionals[twice.i] : raw.Peek();
                 errors.Add($"<{twice.d.Name}> is given twice: '{atSlot}' as an argument and --{twice.d.Option} " +
-                           $"{spelled[twice.i]![^1]} as an option. They are the same argument; keep one.");
+                           $"{spelled[twice.i]![^1]} as an option. Keep one.");
             }
             positionals = filled;
         }

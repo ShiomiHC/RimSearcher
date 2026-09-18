@@ -1,7 +1,7 @@
 $ rimsearcher where ThingDef --field compClass
 exit 0
 --- stdout ---
-Read 'ThingDef' as --type ThingDef, not as <fieldPath>: on 'where' the def type is an option. Written out, this call is 'rimsearcher where --field compClass --type ThingDef'.
+Read 'ThingDef' as --type ThingDef, not as <fieldPath>. Written out, this call is 'rimsearcher where --field compClass --type ThingDef'.
   - 4 matches within --type ThingDef.
   - Those 4 matches come from 2 defs: a def that matches on more than one path has a row for each, so the def_name column repeats.
 

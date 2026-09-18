@@ -1,7 +1,7 @@
 $ rimsearcher get NoSuchThingDef Apparel_ShieldBelt
 exit 1
 --- stdout ---
-Read 'NoSuchThingDef' as --type NoSuchThingDef, not as <defName>: on 'get' the def type is an option. Written out, this call is 'rimsearcher get Apparel_ShieldBelt --type NoSuchThingDef'.
+Read 'NoSuchThingDef' as --type NoSuchThingDef, not as <defName>. Written out, this call is 'rimsearcher get Apparel_ShieldBelt --type NoSuchThingDef'.
 
 0 rows. Dropping any one option below brings back this many defs:
 filter                 hidden  next
