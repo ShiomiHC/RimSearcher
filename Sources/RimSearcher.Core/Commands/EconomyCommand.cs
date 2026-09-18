@@ -263,7 +263,8 @@ public sealed class EconomyCommand : Command
     }
 
     /// <summary>
-    /// 拒绝之后说一句数据的机制:索引里的 marketValue 是 XML 基值,不是游戏算出的价。
+    /// 拒绝之后只说一句数据的机制:索引里的 marketValue 是 XML 基值,不是游戏算出的价。
+    /// 「没有成本与利润字段」不再说 —— 拒绝句已经说了这份库里没有价格。
     ///
     /// 此前还带一句情景假设「Ranking defs by that field answers a different question, and its
     /// output does not say so」。第十七轮(Docs/24)三个配置 30 份:带与不带在每一格都相同,删。
@@ -272,9 +273,7 @@ public sealed class EconomyCommand : Command
     /// </summary>
     private static void NoteTheDetour(CommandContext ctx)
         => ctx.Report.Notice(NoticeKind.Boundary,
-            "Fields called marketValue are still in this snapshot, but that is the base value written in " +
-            "XML, not the price the game computes from it, and no field anywhere holds cost to make or " +
-            "profit.");
+            "The marketValue fields in this snapshot are XML base values, not computed prices.");
 
     /// <summary>
     /// 一个或几个名字。几个名字**不各出一块**,而是并进同一张 things / costChain / recipes ——

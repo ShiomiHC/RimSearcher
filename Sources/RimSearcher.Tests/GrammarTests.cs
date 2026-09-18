@@ -4884,8 +4884,8 @@ public class GrammarTests
         //    第四种不发这句:那一路量过了,没有要绕的路。
         foreach (var (what, text) in new[] { ("not measured", notMeasured), ("skipped", skipped),
                                              ("unavailable", unavailable) })
-            Assert.Contains("not the price the game computes", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("not the price the game computes", measuredEmpty, StringComparison.Ordinal);
+            Assert.Contains("XML base values, not computed prices", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("XML base values, not computed prices", measuredEmpty, StringComparison.Ordinal);
     }
 
     /// <summary>
