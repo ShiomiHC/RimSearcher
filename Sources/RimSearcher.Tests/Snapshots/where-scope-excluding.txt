@@ -3,7 +3,7 @@ exit 0
 --- stdout ---
 --scope all,-test.mod (= ludeon.rimworld).
   - 5 defs within --scope all,-test.mod.
-  - 1 of the 5 defs matched here is created by the game in code at load time, from no XML node at all: Meat_Muffalo. A PatchOperation addressed by defName cannot reach them — patches run on the XML, where these do not exist. The 'written_in' column marks which is which.
+  - 1 of the 5 defs matched here is built in code at load time (written_in = code). That column marks which is which.
   - What --scope all,-test.mod left out is not empty for this query: with --scope test.mod instead, it finds 4 defs.
 
 Defs that may be missing from this answer, their export cut short — every def type that uses this path at all

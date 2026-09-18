@@ -1191,7 +1191,11 @@ public sealed class FindCommand : Command
             // 两行后的「Match the field path given as an argument end to end」已经说完。
             "'swimmingGraphicData.shaderType'. This replaces grepping " +
             "the XML: the values here are the merged, post-patch ones, and a class reference is an exact match " +
-            "rather than a text hit.",
+            "rather than a text hit.\n\n" +
+            "When the rows include defs the game builds in code at load time (Blueprint_*, Frame_*, meat, " +
+            "corpses, and the like) a written_in column says which (code / xml). A def written in code has " +
+            "no XML node, so a PatchOperation addressed by its defName has nothing to match; the column is " +
+            "absent when no such def is among the rows.",
         Positionals =
         [
             new PositionalSpec { Name = "fieldPath", Help = "A field path or just its last segment, such as compClass or defaultProjectile. " + CommonOptions.AnyIndexNote + " Omit it to search every field instead.", Required = false },
@@ -1831,8 +1835,8 @@ public sealed class FindCommand : Command
         //
         // 句子数整个结果集(与上面两句同口径),列跟着这一页 —— 于是首页一个 ImpliedDef
         // 都没碰上时,句子照样出声,而那句会自己说清楚「不都在这一页上」。
-        var generated = ctx.Db.FindGeneratedDefs(pq, value, exact, scope, Limits.MaxSuggestions, type);
-        Advisory.NoteGeneratedDefs(ctx, generated.Names, generated.Total, defs,
+        var generated = ctx.Db.FindGeneratedDefs(pq, value, exact, scope, type);
+        Advisory.NoteGeneratedDefs(ctx, generated, defs,
             rows.Count(r => r.Def.Generated));
 
         // 表上方 —— 理由同 list 那处。数 def 而不是 matches:这条命令一行是一个
@@ -1868,7 +1872,7 @@ public sealed class FindCommand : Command
                 : "every def type that uses this path at all");
 
         ctx.Report.Table("matches",
-            generated.Total > 0
+            generated > 0
                 ? ["def_name", "def_type", "path", "value", FieldDefault.Column, WrittenIn.Column, "declared_in"]
                 : new[] { "def_name", "def_type", "path", "value", FieldDefault.Column, "declared_in" },
             rows.Select(r => (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>
@@ -1878,7 +1882,7 @@ public sealed class FindCommand : Command
                 ["path"] = r.Path,
                 ["value"] = r.Value,
                 [FieldDefault.Column] = FieldDefault.Render(r.Default),
-                [WrittenIn.Column] = generated.Total > 0 ? WrittenIn.Render(r.Def.Generated) : null,
+                [WrittenIn.Column] = generated > 0 ? WrittenIn.Render(r.Def.Generated) : null,
                 ["declared_in"] = r.Def.SourceMod,
             }).ToList());
 
@@ -3825,24 +3829,22 @@ internal static class Advisory
     ///
     /// 因此它不是 footnote —— 它改的是每一行怎么读,不是给某一行加注。
     /// </summary>
-    public static void NoteGeneratedDefs(
-        CommandContext ctx, IReadOnlyList<string> names, int generated, int defs, int onThisPage)
+    public static void NoteGeneratedDefs(CommandContext ctx, int generated, int defs, int onThisPage)
     {
         if (generated == 0) return;
         // 分母取 def 数不取行数:两边都按 DISTINCT def 数,才是一个比例。表头那个数
         // 数的是(def, 路径)行,拿它当分母会把比例算小(`capacity Consciousness`
         // 是 155 行 / 80 个 def)。
+        // 「from no XML node at all」「A PatchOperation addressed by defName cannot reach them — patches
+        // run on the XML, where these do not exist」与三个例子名 2026-09-18 删掉:列值 code 自己
+        // 说了它是哪一类,补丁够不着是机制,住 --help;名单就是那一列。留的是整集里有几个
+        // (页内读不出)与它们在不在这一页。
         ctx.Report.Notice(NoticeKind.Boundary,
             $"{generated} of the {Tally.Complete(defs).Render("def")} matched here " +
-            $"{(generated == 1 ? "is" : "are")} created by the game in code at load time, from no XML node " +
-            $"at all: {NameList.Render(names, Limits.MaxSuggestions, generated)}. " +
-            "A PatchOperation addressed by defName cannot reach them — patches run on the XML, where these " +
-            "do not exist. " +
+            $"{(generated == 1 ? "is" : "are")} built in code at load time ({WrittenIn.Column} = code). " +
             // 页内一个都没有时不许沉默:名字扎堆,首页排序上常常一个都碰不到,而这句话
             // 说的是整个结果集。不点破的话读的人会拿这一页当全集,而列在这里一格都不动。
-            (onThisPage == 0
-                ? $"None of them are on this page; the '{WrittenIn.Column}' column marks them where they are."
-                : $"The '{WrittenIn.Column}' column marks which is which."));
+            (onThisPage == 0 ? "None of them are on this page." : "That column marks which is which."));
     }
 
     private static readonly IEqualityComparer<(string, string DefType)> TupleComparer =

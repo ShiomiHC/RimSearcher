@@ -2009,9 +2009,12 @@ public class GrammarTests
         var (mixed, _, code) = Fixture.Run("where", "soundDrop", "Standard_Drop");
         Assert.Equal(0, code);
         Assert.Contains("written_in", mixed, StringComparison.Ordinal);
-        Assert.Contains("created by the game in code at load time", mixed, StringComparison.Ordinal);
+        Assert.Contains("built in code at load time (written_in = code)", mixed, StringComparison.Ordinal);
         Assert.Contains("Meat_Muffalo", mixed, StringComparison.Ordinal);
-        Assert.Contains("PatchOperation addressed by defName cannot reach them", mixed, StringComparison.Ordinal);
+        // 补丁够不着是机制,住 --help,不在表下。
+        Assert.DoesNotContain("PatchOperation", mixed, StringComparison.Ordinal);
+        var (help, _, _) = Fixture.Run("where", "--help");
+        Assert.Contains("a PatchOperation addressed by its defName has nothing to match", help, StringComparison.Ordinal);
 
         // 逐行:JSON 的每一行都带着判据,不必回头读 notes。
         var (json, _, _) = Fixture.Run("where", "soundDrop", "Standard_Drop", "--json");
@@ -2025,13 +2028,13 @@ public class GrammarTests
         // 整集口径:把 Meat_Muffalo 挤出这一页,句子照样在,并且说破它不在页上。
         var (paged, _, _) = Fixture.Run("where", "soundDrop", "Standard_Drop", "--limit", "1");
         Assert.DoesNotContain("Meat_Muffalo\n", paged, StringComparison.Ordinal);
-        Assert.Contains("created by the game in code at load time", paged, StringComparison.Ordinal);
+        Assert.Contains("built in code at load time (written_in = code)", paged, StringComparison.Ordinal);
         Assert.Contains("None of them are on this page", paged, StringComparison.Ordinal);
 
         // 一个都没有时,这一列与这句话一起消失。
         var (none, _, _) = Fixture.Run("where", "thingClass", "--scope", "test.mod");
         Assert.DoesNotContain("written_in", none, StringComparison.Ordinal);
-        Assert.DoesNotContain("created by the game in code at load time", none, StringComparison.Ordinal);
+        Assert.DoesNotContain("built in code at load time", none, StringComparison.Ordinal);
     }
 
     /// <summary>

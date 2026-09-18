@@ -1194,6 +1194,8 @@ rimsearcher where [fieldPath] [value] [options]
 
 The field path is matched from the end, a segment at a time, so 'compClass' finds 'comps[3].compClass' without you knowing the index, and 'graphicData.shaderType' does not reach 'swimmingGraphicData.shaderType'. This replaces grepping the XML: the values here are the merged, post-patch ones, and a class reference is an exact match rather than a text hit.
 
+When the rows include defs the game builds in code at load time (Blueprint_*, Frame_*, meat, corpses, and the like) a written_in column says which (code / xml). A def written in code has no XML node, so a PatchOperation addressed by its defName has nothing to match; the column is absent when no such def is among the rows.
+
 | Argument | Meaning |
 |---|---|
 | `<fieldPath>` | A field path or just its last segment, such as compClass or defaultProjectile. '[]' stands for any index: 'comps[].props.energyMax' matches every comps[N].props.energyMax. Omit it to search every field instead. *(optional)* |
