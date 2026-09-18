@@ -111,20 +111,22 @@ public class InheritanceTests
     }
 
     /// <summary>
-    /// 「链到根了」与「父节点所在的 mod 没启用」必须分得开。两者在祖先表上长得一模一样:
-    /// 都是表格到此为止。不说破,读的人会把「看不见」读成「没有」。
+    /// 「链到根了」与「父节点所在的 mod 没启用」必须分得开。此前是表下一句散文说破;
+    /// 2026-09-18 起断链的那个名字自己占 ancestors 一行,declared_in = not-in-snapshot ——
+    /// 分不开的两态在表里分开了,那句话就不需要了(Docs/25 §19)。
     /// </summary>
     [Fact]
     public void 断链与到根分得开()
     {
         var broken = Text("inherit", "TestModGun");
         Assert.Contains("BaseFromSomeDisabledMod", broken, StringComparison.Ordinal);
-        Assert.Contains("not enabled", broken, StringComparison.Ordinal);
+        Assert.Contains(InheritCommand.NotInSnapshot, broken, StringComparison.Ordinal);
+        Assert.DoesNotContain("not enabled", broken, StringComparison.Ordinal);
 
         // Bullet_Revolver 一路走到 BaseProjectile(它没有 ParentName),是真的到根了。
         var whole = Text("inherit", "Bullet_Revolver");
         Assert.Contains("BaseProjectile", whole, StringComparison.Ordinal);
-        Assert.DoesNotContain("not enabled", whole, StringComparison.Ordinal);
+        Assert.DoesNotContain(InheritCommand.NotInSnapshot, whole, StringComparison.Ordinal);
     }
 
     /// <summary>

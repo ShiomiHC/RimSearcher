@@ -26,8 +26,9 @@ public sealed class IlCommand : Command
             "Iterators and async methods keep almost nothing in the method itself — the instructions live in " +
             "a compiler-generated state machine, and that is what a transpiler has to match. This command " +
             "says so and names the method to ask for instead; --state-machine goes there directly.\n\n" +
-            "Page with --from/--to, which are IL offsets, not line numbers. A method with no body at all " +
-            "(abstract, extern, an engine intrinsic) is reported as such rather than as an empty result.",
+            "Page with --from/--to, which are IL offsets, not line numbers. The bodyless column says which " +
+            "kind of method has no IL at all: abstract (its implementations do — 'rimsearcher types <type> " +
+            "--derived' lists them), extern (the body is native code), or runtime (the engine supplies it).",
         Positionals =
         [
             new PositionalSpec
@@ -121,11 +122,13 @@ public sealed class IlCommand : Command
 
             if (method.Bodyless)
             {
-                ctx.Report.Notice(NoticeKind.Boundary,
-                    $"{method.Type.FullName}.{method.SourceName} has no method body — it is abstract, extern, " +
-                    "or implemented by the runtime itself. There is no IL to show. Its overriding " +
-                    "implementations do have one: " +
-                    $"'rimsearcher types {method.Type.FullName} --derived'.");
+                // 三种没有方法体的下一步不同:只有 abstract 才有实现它的类型可问。种类在 bodyless
+                // 那一列;此前这里把三种并列着猜,而 --derived 那条出路对 extern / runtime 是空的。
+                ctx.Report.Notice(NoticeKind.Boundary, method.BodyKind == "abstract"
+                    ? $"{method.Type.FullName}.{method.SourceName} is abstract, so it has no IL: " +
+                      $"'rimsearcher types {method.Type.FullName} --derived' lists the types that implement it."
+                    : $"{method.Type.FullName}.{method.SourceName} has no IL in this assembly " +
+                      $"(bodyless = {method.BodyKind}).");
                 rows.Add(Row(method, null));
                 continue;
             }
@@ -149,10 +152,9 @@ public sealed class IlCommand : Command
 
             if (!follow && found.StateMachine is { } sm)
                 ctx.Report.Notice(NoticeKind.Boundary,
-                    $"{found.Type.FullName}.{found.SourceName} is an iterator or async method, so what is above " +
-                    "is only the shell that builds the state machine — the instructions that actually run are " +
-                    $"in {sm.Type.FullName}::MoveNext, and that is what a transpiler has to match. " +
-                    $"'rimsearcher il {found.Type.FullName}.{found.SourceName} --state-machine' shows them.");
+                    $"{found.Type.FullName}.{found.SourceName} is an {found.StateMachineKind} method: the IL " +
+                    $"above only builds the state machine, and the body runs in {sm.Type.FullName}::MoveNext. " +
+                    $"'rimsearcher il {found.Type.FullName}.{found.SourceName} --state-machine' shows it.");
         }
 
         ctx.Report.Table("il", ["assembly", "type", "member", "signature", "bodyless",
@@ -167,7 +169,7 @@ public sealed class IlCommand : Command
             ["type"] = m.Type.FullName,
             ["member"] = m.Name,
             ["signature"] = m.Signature,
-            ["bodyless"] = m.Bodyless,
+            ["bodyless"] = m.BodyKind ?? "no",
             ["first_offset"] = l?.FirstOffset,
             ["last_offset"] = l?.LastOffset,
             ["shown_from"] = l?.ShownFrom,

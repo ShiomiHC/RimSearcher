@@ -16,7 +16,7 @@ BaseProjectile  ThingDef  yes       ludeon.rimworld  Projectiles_Guns.xml
 
 name  def_name         def_type  abstract  declared_in
       Bullet_Revolver  ThingDef  no        ludeon.rimworld
-An abstract node has no fields of its own in a snapshot. Everything it declares is already merged, post-patch, into each child: 'rimsearcher get Bullet_Revolver'.
+'rimsearcher get Bullet_Revolver' shows the merged, post-patch fields of a concrete child.
 
 def_name        Bullet_Revolver
 def_type        ThingDef

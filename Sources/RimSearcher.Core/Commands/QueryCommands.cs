@@ -980,10 +980,11 @@ public sealed class GetCommand : Command
                 // 推荐 'economy HospitalBed',回来的是建筑医疗床的市价与钢材)。
                 // 与下面没量过那一档同一个判据,那一档从一开始就带着它。
                 if (DefTypes.Same(def.DefType, "ThingDef") && ctx.Db.EconomyByName(def.DefName).Count > 0)
+                    // 「computed, not stored」是机制,r17 量到常见档把机制句读成规格(自己把定价复现一遍);
+                    // 这里只剩「不是字段」这个事实与出路。
                     ctx.Report.Notice(NoticeKind.NextStep,
-                        $"The game also prices this thing. Its market value, cost to make and work amount are " +
-                        $"computed, not stored, so no field above holds them — " +
-                        $"'rimsearcher economy {def.DefName}' is the only road to those numbers.");
+                        $"Market value, cost to make and work amount are not fields: " +
+                        $"'rimsearcher economy {def.DefName}' has them.");
             }
             else if (DefTypes.Same(def.DefType, "ThingDef"))
                 // 三态(没到那版 / 跳过 / 量不成)各是一个状态词,与 economy 自己拒绝时印的是同一张表 ——

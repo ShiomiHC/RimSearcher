@@ -8,7 +8,9 @@ inherits_from   BaseFromSomeDisabledMod
 declared_in     test.mod
 source          Guns.xml
 patch_ops_name  n/a
-The chain stops at 'BaseFromSomeDisabledMod', which no mod in this snapshot declares. The mod that defines it was not enabled when the snapshot was taken, so what it contributed is not visible here.
+
+name                     def_type  abstract  declared_in      source
+BaseFromSomeDisabledMod                      not-in-snapshot
 
 layer                    state        next
 patch_ops_defname_label  pre-measure  rimsearcher export --modlist fixture

@@ -2,7 +2,7 @@ $ rimsearcher keyed 没有电力
 exit 0
 --- stdout ---
 1 key for '没有电力'.
-To find the code that prints it, search for the key as a literal: 'rimsearcher code-search "\"CannotUseNoPower\""'. A key assembled from parts is not written inline anywhere, so that search does not reach it.
+To find the code that prints it, search for the key as a literal: 'rimsearcher code-search "\"CannotUseNoPower\""'.
 
 key               translated  original  origin     placeholder  declared_in  source       query
 CannotUseNoPower  没有电力    No power  in effect  no                        Misc.xml:12  没有电力

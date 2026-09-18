@@ -2,5 +2,5 @@ $ rimsearcher keyed NoSuchUiKey
 exit 1
 --- stdout ---
 No keyed translation matches 'NoSuchUiKey'.
-Two things are outside this layer by construction. A def's own label or description is translated through DefInjected, not through a key: 'rimsearcher search NoSuchUiKey' covers those. And a key the code assembles at runtime ('"Stat_" + x') is in the language files by name, but appears in no source line as a literal.
+A def's own label or description is not keyed: 'rimsearcher search NoSuchUiKey' covers those.
 --- stderr ---

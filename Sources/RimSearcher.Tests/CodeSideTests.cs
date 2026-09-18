@@ -27,7 +27,7 @@ public class CodeSideTests
     /// <summary>
     /// 覆写方法上的零个调用者要点名基类链。callvirt 记的是调用点写的那个名字,
     /// 于是「没人调用它」几乎总是「调用点写的是基类那个名字」—— 不点名的话,
-    /// 这个 0 与「这个方法确实没人用」逐字同形。
+    /// 这个 0 与「这个方法确实没人用」逐字同形。机制住 help,输出里是事实 + 填好参数的出路。
     /// </summary>
     [Fact]
     public void 覆写方法上的零个调用者要指向基类()
@@ -35,8 +35,29 @@ public class CodeSideTests
         var (stdout, _, code) = Fixture.Run("callers", "RimWorld.CompShield.PostSpawnSetup");
 
         Assert.Equal(Runner.ExitLayerAbsent, code);   // absent:有树没有边表,零不是量出来的
-        Assert.Contains("Verse.ThingComp", stdout);
-        Assert.Contains("overrides", stdout);
+        Assert.Contains("is also declared by Verse.ThingComp", stdout);
+        Assert.Contains("rimsearcher callers Verse.ThingComp.PostSpawnSetup", stdout);
+        Assert.DoesNotContain("overrides", stdout);
+    }
+
+    /// <summary>
+    /// 没有方法体的三种(abstract / extern / runtime)元数据分得开,bodyless 那一列就印哪一种,
+    /// 而不是三种并列着猜;只有 abstract 才有「实现它的类型」这条出路。
+    /// </summary>
+    [Fact]
+    public void 没有方法体的种类印在bodyless列里()
+    {
+        var (stdout, _, _) = Fixture.Run("il", "Verse.CompProperties.Resolve");
+
+        Assert.Contains("is abstract, so it has no IL", stdout);
+        Assert.Contains("rimsearcher types Verse.CompProperties --derived", stdout);
+        Assert.DoesNotContain("extern", stdout);
+        var (json, _, _) = Fixture.Run("il", "Verse.CompProperties.Resolve", "--json");
+        Assert.Contains("\"bodyless\": \"abstract\"", json);
+
+        // 有方法体的行是 no,不是 yes/no 那一族里的 false。
+        var (withBody, _, _) = Fixture.Run("il", "RimWorld.CompShield.PostSpawnSetup", "--json");
+        Assert.Contains("\"bodyless\": \"no\"", withBody);
     }
 
     /// <summary>

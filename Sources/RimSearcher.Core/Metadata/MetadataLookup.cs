@@ -39,10 +39,19 @@ public sealed record MethodHit
     public required bool Bodyless { get; init; }
 
     /// <summary>
+    /// 没有方法体时是哪一种:<c>abstract</c> / <c>extern</c> / <c>runtime</c>(引擎内部调用)。
+    /// 有方法体时为 <c>null</c>。三种的下一步不同 —— 只有 abstract 才有「实现它的类型」可问。
+    /// </summary>
+    public string? BodyKind { get; init; }
+
+    /// <summary>
     /// 这个方法的指令实际住在别处 —— 迭代器与 async 的方法体只是个壳,真正的指令在状态机的
     /// <c>MoveNext</c> 里。<c>null</c> = 不是这种方法。
     /// </summary>
     public MethodHit? StateMachine { get; init; }
+
+    /// <summary><c>iterator</c> / <c>async</c> / <c>async iterator</c>;没有状态机时为 <c>null</c>。</summary>
+    public string? StateMachineKind { get; init; }
 }
 
 /// <summary>元数据里的一个成员,不限于方法。</summary>
@@ -415,6 +424,7 @@ public sealed class MetadataLookup : IDisposable
                     SourceName = SourceNameOf(il),
                     Signature = SignatureText.Method(md, m, il),
                     Bodyless = m.RelativeVirtualAddress == 0,
+                    BodyKind = BodyKindOf(m),
                 };
             }
             catch { return null; }
@@ -433,10 +443,23 @@ public sealed class MetadataLookup : IDisposable
             SourceName = SourceNameOf(il),
             Signature = SignatureText.Method(md, m, il),
             Bodyless = m.RelativeVirtualAddress == 0,
+            BodyKind = BodyKindOf(m),
         };
 
         var sm = FindStateMachine(type, md, m);
-        return sm is null ? hit : hit with { StateMachine = sm };
+        return sm is null ? hit : hit with { StateMachine = sm.Value.Hit, StateMachineKind = sm.Value.Kind };
+    }
+
+    /// <summary>
+    /// RVA 为 0 的方法是哪一种没有方法体。元数据分得开,输出就不该把三种并列着猜。
+    /// </summary>
+    internal static string? BodyKindOf(MethodDefinition m)
+    {
+        if (m.RelativeVirtualAddress != 0) return null;
+        if ((m.Attributes & MethodAttributes.Abstract) != 0) return "abstract";
+        if ((m.Attributes & MethodAttributes.PinvokeImpl) != 0) return "extern";
+        if ((m.ImplAttributes & (MethodImplAttributes.InternalCall | MethodImplAttributes.Runtime)) != 0) return "runtime";
+        return "no-body";
     }
 
     /// <summary>
@@ -446,15 +469,20 @@ public sealed class MetadataLookup : IDisposable
     /// <c>Pawn/&lt;GetGizmos&gt;d__346::MoveNext</c> —— 而那 20 行看上去是个完整答案。
     /// 特性上记着状态机是哪个类型,照它走,不猜名字。
     /// </summary>
-    private MethodHit? FindStateMachine(TypeHit type, MetadataReader md, MethodDefinition m)
+    private (MethodHit Hit, string Kind)? FindStateMachine(TypeHit type, MetadataReader md, MethodDefinition m)
     {
         foreach (var ah in m.GetCustomAttributes())
         {
             var attr = md.GetCustomAttribute(ah);
             var name = AttributeTypeName(md, attr);
-            if (name is not ("IteratorStateMachineAttribute" or "AsyncStateMachineAttribute"
-                             or "AsyncIteratorStateMachineAttribute"))
-                continue;
+            var kind = name switch
+            {
+                "IteratorStateMachineAttribute" => "iterator",
+                "AsyncStateMachineAttribute" => "async",
+                "AsyncIteratorStateMachineAttribute" => "async iterator",
+                _ => null,
+            };
+            if (kind is null) continue;
 
             // 这一族特性的唯一构造参数是状态机类型。值在 blob 里编码成一个类型名字符串,
             // 而它的形态随编译器变;稳的是「宿主类型的嵌套类型里,名字带着这个方法名的那个」。
@@ -475,7 +503,7 @@ public sealed class MetadataLookup : IDisposable
                     if (md.GetString(sm.Name) != "MoveNext") continue;
                     var nestedType = Describe(type.Assembly, md, nh);
                     if (nestedType is null) continue;
-                    return new MethodHit
+                    return (new MethodHit
                     {
                         Type = nestedType,
                         Handle = smh,
@@ -483,7 +511,8 @@ public sealed class MetadataLookup : IDisposable
                         SourceName = "MoveNext",
                         Signature = SignatureText.Method(md, sm, "MoveNext"),
                         Bodyless = sm.RelativeVirtualAddress == 0,
-                    };
+                        BodyKind = BodyKindOf(sm),
+                    }, kind);
                 }
             }
         }

@@ -4951,7 +4951,7 @@ public class GrammarTests
     [Fact]
     public void 没量过经济面时get照样指路()
     {
-        const string priced = "The game also prices this thing";
+        const string priced = "are not fields: 'rimsearcher economy";
 
         // 三种 ThingDef,三种该有的反应。
         var (measuredPriced, _, _) = Fixture.Run("get", "Apparel_ShieldBelt");
@@ -4992,7 +4992,7 @@ public class GrammarTests
     [Fact]
     public void 定价那条指路不落在非ThingDef的块下()
     {
-        const string priced = "The game also prices this thing";
+        const string priced = "are not fields: 'rimsearcher economy";
 
         // fixture 里 Firefoam 同时是 ThingDef 与 StatDef,两块一次印出。
         var (both, _, _) = Fixture.Run("get", "Firefoam");

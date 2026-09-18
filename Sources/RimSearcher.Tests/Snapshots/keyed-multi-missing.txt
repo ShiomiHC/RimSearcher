@@ -3,7 +3,7 @@ exit 0
 --- stdout ---
 1 keyed translation for 'CannotUseNoPower'.
   - No keyed translation matches 'NoSuchUiKey'.
-  - Two things are outside this layer by construction. A def's own label or description is translated through DefInjected, not through a key: 'rimsearcher search NoSuchUiKey' covers those. And a key the code assembles at runtime ('"Stat_" + x') is in the language files by name, but appears in no source line as a literal.
+  - A def's own label or description is not keyed: 'rimsearcher search NoSuchUiKey' covers those.
 
 key               translated  original  origin     placeholder  declared_in  source       query
 CannotUseNoPower  没有电力    No power  in effect  no                        Misc.xml:12  CannotUseNoPower

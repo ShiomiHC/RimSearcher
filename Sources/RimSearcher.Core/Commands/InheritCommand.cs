@@ -28,6 +28,9 @@ public sealed class InheritCommand : Command
     /// </summary>
     public const string PatchOpsName = "patch_ops_name";
 
+    /// <summary>ancestors 表里断链那一行的 declared_in:ParentName 指着的名字没有任何 mod 声明。</summary>
+    public const string NotInSnapshot = "not-in-snapshot";
+
     public override CommandSpec Spec => new()
     {
         Name = "inherit",
@@ -52,7 +55,9 @@ public sealed class InheritCommand : Command
             "reports patch_ops_name as 'n/a' rather than 0 because that count was never taken; the defName and " +
             "label counts are still taken. " +
             "For the merged, post-patch values, read any concrete child with 'get' — everything a parent " +
-            "contributes is already in each of its children.\n\n" +
+            "contributes is already in each of its children. An ancestor that no mod in the snapshot declares " +
+            "is listed with declared_in = not-in-snapshot: the mod defining it was not enabled at export, so " +
+            "what it contributed is not visible here.\n\n" +
             // 见证表的读法(此前是表下三句散文,Docs/25 丁1):列是数,怎么读是机制,机制住这里。
             "With --path-contains or --exact-path each node also gets a 'witnesses' table, one row per layer " +
             "of its chain: other_defs (the other defs descending from that layer), with_path (how many of " +
@@ -297,24 +302,36 @@ public sealed class InheritCommand : Command
             // 「Same in every row」那句、印成 patch_ops=0,而那正是这条命令改了三轮的形态 ——
             // 一个沉默的 0 断言假事。条件化之后沉默只发生在祖先侧确实没有已知 patch 时。
             var patchedUp = chain.Where(n => n.PatchOps > 0).ToList();
-            if (chain.Count > 0)
+            // 断链的那个名字也占一行:declared_in = not-in-snapshot。此前它只在表下一句散文里,
+            // 而表上「到根了」与「上面那个 mod 没启用」长得一模一样。
+            var ancestors = chain.Select(n =>
+            {
+                var row = new Dictionary<string, object?>
+                {
+                    ["name"] = n.Name,
+                    ["def_type"] = n.DefType,
+                    ["abstract"] = n.Abstract,
+                    ["declared_in"] = n.SourceMod,
+                    ["source"] = n.SourceFile,
+                };
+                if (patchedUp.Count > 0) row[PatchOpsName] = n.PatchOps;
+                return (IReadOnlyDictionary<string, object?>)row;
+            }).ToList();
+            if (unresolved is not null)
+                ancestors.Add(new Dictionary<string, object?>
+                {
+                    ["name"] = unresolved,
+                    ["def_type"] = null,
+                    ["abstract"] = null,
+                    ["declared_in"] = NotInSnapshot,
+                    ["source"] = null,
+                });
+            if (ancestors.Count > 0)
                 ctx.Report.Table("ancestors",
                     patchedUp.Count > 0
                         ? ["name", "def_type", "abstract", PatchOpsName, "declared_in", "source"]
                         : ["name", "def_type", "abstract", "declared_in", "source"],
-                    chain.Select(n =>
-                    {
-                        var row = new Dictionary<string, object?>
-                        {
-                            ["name"] = n.Name,
-                            ["def_type"] = n.DefType,
-                            ["abstract"] = n.Abstract,
-                            ["declared_in"] = n.SourceMod,
-                            ["source"] = n.SourceFile,
-                        };
-                        if (patchedUp.Count > 0) row[PatchOpsName] = n.PatchOps;
-                        return (IReadOnlyDictionary<string, object?>)row;
-                    }).ToList());
+                    ancestors);
 
             // 带上数字才省得掉「再往上跑一次 inherit」那个动作;只说「祖先里有被改的」
             // 等于把活推回去。计数放句尾,免得动词跟着单复数变 —— NounRegistry 不管动词。
@@ -324,14 +341,6 @@ public sealed class InheritCommand : Command
                     $"what the game read for '{label}' as well — and the {PatchOpsName} on '{label}' itself " +
                     $"does not count that. Above, {PatchOpsName} is not zero for " +
                     $"{Tally.Complete(patchedUp.Count).Render("ancestor")}.");
-
-            // 断链要说破:ParentName 指着一个本快照里没有的名字,意思是那个 mod 没启用,
-            // 而不是「到根了」。两者在表格上长得一模一样。
-            if (unresolved is not null)
-                ctx.Report.Notice(NoticeKind.Boundary,
-                    $"The chain stops at '{unresolved}', which no mod in this snapshot declares. " +
-                    "The mod that defines it was not enabled when the snapshot was taken, so what it " +
-                    "contributed is not visible here.");
 
             if (pathFilter is { Length: > 0 }) Witnesses(ctx, node, chain, pathFilter, exactPath);
 
@@ -361,8 +370,8 @@ public sealed class InheritCommand : Command
                     var concrete = children.FirstOrDefault(c => !c.Abstract && c.DefName is { Length: > 0 });
                     if (concrete is not null)
                         ctx.Report.Notice(NoticeKind.NextStep,
-                            $"An abstract node has no fields of its own in a snapshot. Everything it declares is " +
-                            $"already merged, post-patch, into each child: 'rimsearcher get {concrete.DefName}'.");
+                            $"'rimsearcher get {concrete.DefName}' shows the merged, post-patch fields of a " +
+                            "concrete child.");
                 }
             }
         }
@@ -432,7 +441,7 @@ public sealed class InheritCommand : Command
         {
             ctx.Report.Notice(NoticeKind.Boundary,
                 $"'{node.DefName ?? node.Name}' declares no Name= and inherits from no node that does, so there " +
-                "is no layer above it to test: whatever it carries, it carries by itself.");
+                "is no layer above it to test.");
             return;
         }
 

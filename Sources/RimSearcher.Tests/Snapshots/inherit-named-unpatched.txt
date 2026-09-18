@@ -13,7 +13,7 @@ name        def_name    def_type        abstract  declared_in
 BaseBullet              ThingDef        yes       ludeon.rimworld
             Firefoam    ThingDef        no        ludeon.rimworld
             VariantOne  TestVariantDef  no        test.mod
-An abstract node has no fields of its own in a snapshot. Everything it declares is already merged, post-patch, into each child: 'rimsearcher get Firefoam'.
+'rimsearcher get Firefoam' shows the merged, post-patch fields of a concrete child.
 
 layer                    state        next
 patch_ops_defname_label  pre-measure  rimsearcher export --modlist fixture

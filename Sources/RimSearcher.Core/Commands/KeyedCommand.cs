@@ -31,7 +31,9 @@ public sealed class KeyedCommand : Command
             "It works in both directions. Given a key it shows what the game displays for it; given a phrase " +
             "in either language it shows which keys carry that text, which is how you get from a line on " +
             "screen to the code that prints it: take the key from here and run " +
-            "'rimsearcher code-search \"\\\"TheKey\\\"\"'.\n\n" +
+            "'rimsearcher code-search \"\\\"TheKey\\\"\"'. A key the code assembles at runtime " +
+            "('\"Stat_\" + x') is in the language files by name but on no source line as a literal, so " +
+            "that search does not reach it.\n\n" +
             "Rows are marked 'in effect' or 'on disk'. Only 'in effect' is what the game displays: keyed " +
             "translations override each other by mod load order and the snapshot keeps the winner, so an " +
             "'on disk' row is a translation that exists in some mod's language files without necessarily " +
@@ -270,13 +272,10 @@ public sealed class KeyedCommand : Command
             // `rimsearcher search ''` 跑不了、`rimsearcher search *` 正好走进同一个坑 ——
             // 递出去的下一步必须是敲得动的。上面那支已经把该说的说完了。
             else if (!FtsText.HasNothingToMatch(query))
-                // 两条射程线,都是这一层原理上到不了的地方 —— 说破它们,免得「这里没有」
-                // 被读成「游戏里没有这句话」。
-                ctx.Report.Notice(NoticeKind.Boundary,
-                    "Two things are outside this layer by construction. A def's own label or description is " +
-                    "translated through DefInjected, not through a key: 'rimsearcher search " + query + "' " +
-                    "covers those. And a key the code assembles at runtime ('\"Stat_\" + x') is in the " +
-                    "language files by name, but appears in no source line as a literal.");
+                // 这一层原理上到不了的两处都是机制,住 help;这里只剩填好参数的出路。
+                ctx.Report.Notice(NoticeKind.NextStep,
+                    "A def's own label or description is not keyed: 'rimsearcher search " + query + "' " +
+                    "covers those.");
             return 1;
         }
 
@@ -322,15 +321,12 @@ public sealed class KeyedCommand : Command
         {
             var keys = shown.Select(r => r.Key).Distinct(StringComparer.Ordinal).ToList();
             ctx.Report.Notice(NoticeKind.NextStep, keys.Count == 1
-                // 末句是那条出路的射程,不是替它的落空开脱:拼装出来的 key 不以字面量
-                // 落在任何一行源码里,零就是这么来的。两支逐字相同。
+                // 拼装 key 那条射程是机制,住 help(2026-09-18 从两支尾巴搬走)。
                 ? "To find the code that prints it, search for the key as a literal: " +
-                  $"'rimsearcher code-search \"\\\"{keys[0]}\\\"\"'. A key assembled from parts is not " +
-                  "written inline anywhere, so that search does not reach it."
+                  $"'rimsearcher code-search \"\\\"{keys[0]}\\\"\"'."
                   // 计数上面那句已经报过,这句要说的不是「有几个」,是「哪一个由你挑」。
                 : "These rows do not all carry the same key, so the code search goes after whichever row is " +
-                  "the one you meant: 'rimsearcher code-search \"\\\"<key>\\\"\"' with the key from that row. " +
-                  "A key assembled from parts is not written inline anywhere, so that search does not reach it.");
+                  "the one you meant: 'rimsearcher code-search \"\\\"<key>\\\"\"' with the key from that row.");
         }
 
         return 0;

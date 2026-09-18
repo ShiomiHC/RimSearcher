@@ -17,7 +17,7 @@ exit 0
     },
     {
       "kind": "next_step",
-      "text": "An abstract node has no fields of its own in a snapshot. Everything it declares is already merged, post-patch, into each child: 'rimsearcher get Bullet_Revolver'."
+      "text": "'rimsearcher get Bullet_Revolver' shows the merged, post-patch fields of a concrete child."
     },
     {
       "kind": "count",

@@ -85,7 +85,7 @@ rimsearcher callers <symbol>... [options]
 
 Answered from a call-graph table built by 'rimsearcher sources sync', one per source tree. A tree without one is not searched, and the output names those trees — a caller living there would not appear below.
 
-The recorded target is the method named at the call site. A callvirt names the base method even when the object it runs on is a subclass, so calls that dispatch to an override at run time are counted against the base — 'rimsearcher types <type> --derived' finds the overrides themselves.
+The recorded target is the method named at the call site. A callvirt names the base method even when the object it runs on is a subclass, so calls that dispatch to an override at run time are counted against the base — 'rimsearcher types <type> --derived' finds the overrides themselves. The same rule is why a method the game invokes only through an override can have no caller at all here. Calls made by name at run time — reflection, Harmony patches — are in no instruction stream and are not counted either; 'rimsearcher code-search' finds the strings that name a method.
 
 --callees turns it around and lists what the named method calls.
 
@@ -449,7 +449,7 @@ Name the method as 'Verse.Pawn.Tick', 'Verse.Pawn::Tick', or 'M:Verse.Pawn.Tick'
 
 Iterators and async methods keep almost nothing in the method itself — the instructions live in a compiler-generated state machine, and that is what a transpiler has to match. This command says so and names the method to ask for instead; --state-machine goes there directly.
 
-Page with --from/--to, which are IL offsets, not line numbers. A method with no body at all (abstract, extern, an engine intrinsic) is reported as such rather than as an empty result.
+Page with --from/--to, which are IL offsets, not line numbers. The bodyless column says which kind of method has no IL at all: abstract (its implementations do — 'rimsearcher types <type> --derived' lists them), extern (the body is native code), or runtime (the engine supplies it).
 
 | Argument | Meaning |
 |---|---|
@@ -487,7 +487,7 @@ rimsearcher inherit <name>... [options]
 
 This is the one part of a snapshot that is read from the mods' XML rather than from the objects the game had in memory, because the game resolves inheritance while loading and then discards it. Abstract parents exist only here: they never become defs, so 'get' will not find them.
 
-What is shown is the XML before PatchOperations are applied. patch_ops_name counts xpaths that name the node with @Name=; patch_ops_defname and patch_ops_label count xpaths that name it by defName= and by label=, and a snapshot exported before those were measured has neither column (its 'absent' table says so). An xpath that reaches a node by thingClass or by a wildcard is counted nowhere in this layer, so a 0 is not evidence that the node reached the game unpatched. A node without a Name= reports patch_ops_name as 'n/a' rather than 0 because that count was never taken; the defName and label counts are still taken. For the merged, post-patch values, read any concrete child with 'get' — everything a parent contributes is already in each of its children.
+What is shown is the XML before PatchOperations are applied. patch_ops_name counts xpaths that name the node with @Name=; patch_ops_defname and patch_ops_label count xpaths that name it by defName= and by label=, and a snapshot exported before those were measured has neither column (its 'absent' table says so). An xpath that reaches a node by thingClass or by a wildcard is counted nowhere in this layer, so a 0 is not evidence that the node reached the game unpatched. A node without a Name= reports patch_ops_name as 'n/a' rather than 0 because that count was never taken; the defName and label counts are still taken. For the merged, post-patch values, read any concrete child with 'get' — everything a parent contributes is already in each of its children. An ancestor that no mod in the snapshot declares is listed with declared_in = not-in-snapshot: the mod defining it was not enabled at export, so what it contributed is not visible here.
 
 With --path-contains or --exact-path each node also gets a 'witnesses' table, one row per layer of its chain: other_defs (the other defs descending from that layer), with_path (how many of them carry a matching field path) and, when there is a reference value, same_value (how many of those read the asked def's own value) or same_as_mode (the most common value under an abstract node). The 'reference' block above the table says which value that is and where it came from: the asked def itself (self_fields is how many of its fields matched), or the most common value under an abstract node (mode_defs carry it, out of distinct_values seen there). reference none means the def carries no matching field, or several with different values (self_values lists them and next narrows to one) — then neither same_ column is printed. A layer that declares a field passes it to every descendant, so with_path short of other_defs rules that layer out; with_path equal to other_defs does not rule it in — every descendant writing the field separately counts the same, and the snapshot stores no 'declared here' fact. same_value is what tells those apart: one shared value points at the layer, a spread of values at each def writing its own; a descendant that overrides the field still counts in with_path but not there. type_with_path / type_defs is the same fraction over the whole def type, layer or no layer, so a full row is evidence only to the extent that fraction is smaller. cut_short, when the column is there, counts defs in other_defs whose field list was cut at export; any of those can miss with_path for that reason alone. Field values are the merged, post-patch ones, so a PatchOperation that added the field to many defs is indistinguishable from a layer declaring it.
 
@@ -530,7 +530,7 @@ rimsearcher keyed [query]... [options]
 
 This is the layer defs do not cover. A def's label and description are translated through DefInjected and belong to 'get' and 'search'; everything else on screen — button captions, alerts, tooltips, failure reasons — is a keyed translation, and only this command reads those.
 
-It works in both directions. Given a key it shows what the game displays for it; given a phrase in either language it shows which keys carry that text, which is how you get from a line on screen to the code that prints it: take the key from here and run 'rimsearcher code-search "\"TheKey\""'.
+It works in both directions. Given a key it shows what the game displays for it; given a phrase in either language it shows which keys carry that text, which is how you get from a line on screen to the code that prints it: take the key from here and run 'rimsearcher code-search "\"TheKey\""'. A key the code assembles at runtime ('"Stat_" + x') is in the language files by name but on no source line as a literal, so that search does not reach it.
 
 Rows are marked 'in effect' or 'on disk'. Only 'in effect' is what the game displays: keyed translations override each other by mod load order and the snapshot keeps the winner, so an 'on disk' row is a translation that exists in some mod's language files without necessarily being the one that wins.
 
@@ -1133,6 +1133,8 @@ rimsearcher types <name>... [options]
 The name can be a full one ('Verse.ThingComp'), a bare one ('ThingComp'), or a fragment — a full name is tried first, then a bare one, then anything ending in it, and the first of those that matches is what you get. Several types can carry the same bare name across mods; all of them are listed rather than one being picked.
 
 --derived walks downward and --bases upward. Both stop at the edge of the synced trees: System.Object and the rest of the framework are not in any tree, so a base chain ending somewhere else is the chain leaving what was read, not a gap in it.
+
+compiler_generated marks iterator state machines and closure holders. The decompiler turns those back into yield and lambda, so they have no file of their own in the tree; 'rimsearcher il' reads them.
 
 | Argument | Meaning |
 |---|---|

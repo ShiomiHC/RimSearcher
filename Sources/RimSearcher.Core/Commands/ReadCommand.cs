@@ -670,8 +670,7 @@ public sealed class ReadCommand : Command
             if (bases.Count > 0)
                 ctx.Report.Notice(NoticeKind.NextStep,
                     NameList.Render([.. bases.Select(b => $"{b.Type} extends {b.Base}")], Limits.MaxSuggestions) +
-                    ". The decompiler does not repeat inherited members: 'rimsearcher read " +
-                    $"{bases[0].Base}.cs --member {member}' looks one level up.");
+                    $": 'rimsearcher read {bases[0].Base}.cs --member {member}' looks one level up.");
         }
     }
 

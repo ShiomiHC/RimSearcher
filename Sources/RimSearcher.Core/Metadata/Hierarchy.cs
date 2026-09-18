@@ -132,6 +132,7 @@ public sealed class Hierarchy
                 SourceName = MetadataLookup.SourceNameOf(md.GetString(m.Name)),
                 Signature = SignatureText.Method(md, m, md.GetString(m.Name)),
                 Bodyless = m.RelativeVirtualAddress == 0,
+                BodyKind = MetadataLookup.BodyKindOf(m),
             });
         }
         return result;

@@ -2,7 +2,7 @@ $ rimsearcher keyed filler --empty-translation
 exit 0
 --- stdout ---
 1 key for 'filler' within --empty-translation.
-To find the code that prints it, search for the key as a literal: 'rimsearcher code-search "\"FillerKey2099\""'. A key assembled from parts is not written inline anywhere, so that search does not reach it.
+To find the code that prints it, search for the key as a literal: 'rimsearcher code-search "\"FillerKey2099\""'.
 
 key            translated  original     origin     placeholder  declared_in  source           query
 FillerKey2099  填充2099    filler line  in effect  yes                       Filler.xml:2100  filler

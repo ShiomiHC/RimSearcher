@@ -28,7 +28,11 @@ public sealed class CallersCommand : Command
             "would not appear below.\n\n" +
             "The recorded target is the method named at the call site. A callvirt names the base method even " +
             "when the object it runs on is a subclass, so calls that dispatch to an override at run time are " +
-            "counted against the base — 'rimsearcher types <type> --derived' finds the overrides themselves.\n\n" +
+            "counted against the base — 'rimsearcher types <type> --derived' finds the overrides themselves. " +
+            "The same rule is why a method the game invokes only through an override can have no caller at " +
+            "all here. Calls made by name at run time — reflection, Harmony patches — are in no instruction " +
+            "stream and are not counted either; 'rimsearcher code-search' finds the strings that name a " +
+            "method.\n\n" +
             "--callees turns it around and lists what the named method calls.",
         Positionals =
         [
@@ -180,12 +184,7 @@ public sealed class CallersCommand : Command
             else ctx.Report.CountNotice(tally, "caller");
         }
 
-        if (!callees)
-            ctx.Report.Notice(NoticeKind.Boundary,
-                "Reflection and Harmony patches call by name at run time, and those calls are in no " +
-                "instruction stream — they are absent from the count above rather than reported as zero. " +
-                "'rimsearcher code-search' finds the strings that name a method.");
-
+        // 反射 / Harmony 按名调用不在指令流里 —— 机制,住 help;此前每次都印,是常量横幅。
         ctx.Report.Table("calls", Columns, rows);
         return 0;
     }
@@ -244,13 +243,16 @@ public sealed class CallersCommand : Command
         if (callees)
         {
             var bodyless = methods.Where(m => m.Bodyless).ToList();
+            // 没有方法体的三种里只有 abstract 才有实现可问;种类元数据分得开,不并列着猜。
+            // 「只读字段就返回的方法一个调用都没有」是情景举例,2026-09-18 删(Docs/25 §19)。
             ctx.Report.Notice(NoticeKind.Boundary,
                 bodyless.Count == methods.Count
-                    ? $"{names} has no method body — abstract, extern, or implemented by the runtime — so it " +
-                      "calls nothing. The implementations do: 'rimsearcher types " +
-                      $"{methods[0].Type.FullName} --derived'."
-                    : $"{names} calls nothing that the tables record. A method whose body only reads fields " +
-                      "and returns has no call in it at all.");
+                    ? bodyless.All(m => m.BodyKind == "abstract")
+                        ? $"{names} is abstract, so it calls nothing: 'rimsearcher types " +
+                          $"{methods[0].Type.FullName} --derived' lists the types that implement it."
+                        : $"{names} has no method body ({string.Join(", ", bodyless.Select(m => m.BodyKind).Distinct())}), " +
+                          "so it calls nothing."
+                    : $"{names} calls nothing that the tables record.");
             return;
         }
 
@@ -262,14 +264,13 @@ public sealed class CallersCommand : Command
         var member = methods[0].SourceName;
         var bases = DeclaringBases(lookup, methods[0]);
 
+        // 「调用点写的是基类的名字」与「游戏经覆写调进 mod 代码」都是机制,住 help;
+        // 这里只剩事实(还有谁声明了这个成员)与填好参数的出路。
         ctx.Report.Notice(NoticeKind.Boundary,
             bases.Count > 0
-                ? head + $"It overrides {member}, which the base chain declares as well — " +
-                         $"{NameList.Render(bases, 4)}. A call written against one of those types names that " +
-                         "type, so its call sites are counted under it, not here: " +
-                         $"'rimsearcher callers {bases[^1]}.{member}' asks the outermost one."
-                : head + "The game calls into mod code through overrides rather than by name, so a method " +
-                         "the game invokes can have no caller anywhere in the instruction streams.");
+                ? head + $"{member} is also declared by {NameList.Render(bases, 4)}: " +
+                         $"'rimsearcher callers {bases[^1]}.{member}' counts the calls written against that type."
+                : head.TrimEnd());
     }
 
     /// <summary>
