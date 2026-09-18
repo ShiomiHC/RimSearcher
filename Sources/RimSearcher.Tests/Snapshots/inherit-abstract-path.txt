@@ -10,11 +10,11 @@ patch_ops      0
 No patch operation's xpath names 'BaseProjectile' with @Name= in this snapshot — that is what the 0 counts. An xpath that reaches it any other way — by defName, by label, by thingClass, by a wildcard — leaves no trace here. This snapshot (exporter 0.2.0) only counted @Name=; re-export to also count xpaths by defName= and by label=.
 'BaseProjectile' is a node, not a def, so it carries no value of its own. The counts below are compared against the most common value under it instead: 'Standard_Drop', on 2 defs — the only value that appears there.
 
-layer           other_defs  with_path  same_value
+layer           other_defs  with_path  same_as_mode
 BaseProjectile  3           2          2
 Each row counts the other defs descending from that layer: how many carry a field path containing 'soundDrop', and how many of those read the same value. A layer that declares a field passes it to every descendant, so a layer whose with_path falls short of other_defs is not the one declaring this field, and one that reaches it may still not be: every descendant writing the field separately counts the same. The snapshot stores no 'declared here' fact — the game resolves inheritance while loading and then discards it.
-  - The same_value column is what tells the two apart — one shared value points at the layer, a spread of values points at each def writing its own. It is the most common value under this node — the node itself declares nothing.
-  - A descendant that overrides the field still counts in with_path but not in same_value, so the columns differing means overriding, not absence. And field values here are the merged, post-patch ones, so a PatchOperation that added this field to many defs is indistinguishable from a layer declaring it.
+  - The same_as_mode column is what tells the two apart — one shared value points at the layer, a spread of values points at each def writing its own.
+  - A descendant that overrides the field still counts in with_path but not in same_as_mode, so the columns differing means overriding, not absence. And field values here are the merged, post-patch ones, so a PatchOperation that added this field to many defs is indistinguishable from a layer declaring it.
   - 1 def counted in other_defs had the field list cut short at export, so any of those can miss with_path for that reason alone.
   - 3 direct children.
 

@@ -2046,13 +2046,13 @@ public class GrammarTests
     {
         var (byMode, _, code) = Fixture.Run("inherit", "BaseProjectile", "--path-contains", "soundDrop");
         Assert.Equal(0, code);
-        Assert.Contains("same_value", byMode, StringComparison.Ordinal);
+        // 口径不同由列名自陈(Docs/25 丁2):众数口径的列叫 same_as_mode,不叫 same_value;
+        // 此前靠一句脚注「the node itself declares nothing」说破。
+        Assert.Contains("  " + InheritCommand.SameAsMode, byMode, StringComparison.Ordinal);
         Assert.Contains("is a node, not a def, so it carries no value of its own", byMode, StringComparison.Ordinal);
         Assert.Contains("'Standard_Drop'", byMode, StringComparison.Ordinal);
         // 这条降级出路已经不存在,它指的那个动作也不再有意义。
         Assert.DoesNotContain(FossilGiveADef, byMode, StringComparison.Ordinal);
-        // 口径不同就得说破:这一列比的是众数,节点自己什么都没声明。
-        Assert.Contains("the node itself declares nothing", byMode, StringComparison.Ordinal);
 
         // 追平的那一行要带着全类型分母,否则它读起来就是铁证。
         var (full, _, _) = Fixture.Run("inherit", "BaseBullet", "--path-contains", "soundDrop");
@@ -4068,7 +4068,10 @@ public class GrammarTests
         // 抽象节点这一侧也必须有 —— 它此前正是「静默丢掉一列」的那个形状。
         var (node, _, _) = Fixture.Run("inherit", "BaseBullet", "--path-contains", "thingClass", "--json");
         foreach (var r in Witnesses(node).EnumerateArray())
-            Assert.True(r.TryGetProperty("same_value", out _), "抽象节点按众数比,same_value 必须在场");
+        {
+            Assert.True(r.TryGetProperty(InheritCommand.SameAsMode, out _), "抽象节点按众数比,same_as_mode 必须在场");
+            Assert.False(r.TryGetProperty(InheritCommand.SameValue, out _), "众数口径下不许再叫 same_value");
+        }
     }
 
     /// <summary>

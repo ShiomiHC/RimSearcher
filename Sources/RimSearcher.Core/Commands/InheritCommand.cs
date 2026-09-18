@@ -17,6 +17,10 @@ namespace RimSearcher.Commands;
 /// </summary>
 public sealed class InheritCommand : Command
 {
+    /// <summary>见证表里「有几个后代读到参照值」那一列的两个名字 —— 参照值是问的 def 自己的值 / 子树众数。</summary>
+    public const string SameValue = "same_value";
+    public const string SameAsMode = "same_as_mode";
+
     public override CommandSpec Spec => new()
     {
         Name = "inherit",
@@ -505,9 +509,12 @@ public sealed class InheritCommand : Command
             }
         }
 
+        // 列名自陈参照值的产地(Docs/25 丁2):问的 def 自己的值 → same_value,子树众数 → same_as_mode。
+        // 此前两种口径共用一个列名,靠一句脚注说破「这一列比的是众数,节点自己什么都没声明」。
+        var sameColumn = byMode ? SameAsMode : SameValue;
         var columns = reference is null
             ? new List<string> { "layer", "other_defs", "with_path" }
-            : ["layer", "other_defs", "with_path", "same_value"];
+            : ["layer", "other_defs", "with_path", sameColumn];
 
         var rows = new List<IReadOnlyDictionary<string, object?>>();
         var truncated = 0;
@@ -521,7 +528,7 @@ public sealed class InheritCommand : Command
                 ["other_defs"] = w.Descendants,
                 ["with_path"] = w.WithPath,
             };
-            if (reference is not null) row["same_value"] = w.SameValue;
+            if (reference is not null) row[sameColumn] = w.SameValue;
             rows.Add(row);
         }
 
@@ -537,20 +544,17 @@ public sealed class InheritCommand : Command
             "The snapshot stores no 'declared here' " +
             "fact — the game resolves inheritance while loading and then discards it.");
 
-        // 逆命题那半句已经并进上一条(「追平不能反推」),这里只剩「靠哪一列分」。
-        ctx.Report.Notice(NoticeKind.Boundary,
-            (reference is null
-                ? "No single value could be fixed to compare against, so " +
-                  "the same_value column — the one that does tell those two apart — is not in this table."
-                : "The same_value column is what tells the two apart — one shared value points at the layer, " +
-                  "a spread of values points at each def writing its own." +
-                  (byMode
-                      ? " It is the most common value under this node — the node itself declares nothing."
-                      : "")));
+        // 逆命题那半句已经并进上一条(「追平不能反推」),这里只剩「靠哪一列分」。参照值定不下来
+        // 那一支不再说「那一列不在表里」—— 表里没有它,而为什么没有,上面挑参照值的那句已说。
+        // 众数口径也不再补半句:列名 same_as_mode 自己说了,挑参照值那句说了众数是多少。
+        if (reference is not null)
+            ctx.Report.Notice(NoticeKind.Boundary,
+                $"The {sameColumn} column is what tells the two apart — one shared value points at the layer, " +
+                "a spread of values points at each def writing its own.");
 
         ctx.Report.Notice(NoticeKind.Boundary,
             "A descendant that overrides the field still counts in with_path" +
-            (reference is null ? "" : " but not in same_value") + ", so the columns differing means overriding, " +
+            (reference is null ? "" : $" but not in {sameColumn}") + ", so the columns differing means overriding, " +
             "not absence. And field values here are the merged, post-patch ones, so a PatchOperation that added " +
             "this field to many defs is indistinguishable from a layer declaring it.");
 
