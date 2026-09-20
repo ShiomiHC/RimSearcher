@@ -8,7 +8,7 @@ def_type     ThingDef
 label        muffalo meat
 class        Verse.ThingDef
 declared_in  ludeon.rimworld
-source       ImpliedDefs (created in code, not from an XML file)
+source       ImpliedDefs (created in code)
 xml          not indexed (exporter 0.2.0)
 
 Same in every row, not repeated below: code_default=no.

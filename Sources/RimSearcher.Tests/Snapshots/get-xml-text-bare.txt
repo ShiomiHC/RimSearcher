@@ -14,7 +14,7 @@ path                  value   code_default  xml
 costList[0].thingDef  Steel   no            here
 costList[0].count     1       yes           under costList
 costList[0].quality   Normal  yes           under costList
-No value above with 'code_default'=no is one that most of the 5 ThingDefs in this snapshot also carry. Rows marked yes were not compared: what a yes leaves open is settled by the 'xml' column on that same row: here is an XML line writing that same value, not-written is the absence of such a line in the XML read before patches ran.
+No value above with 'code_default'=no is one that most of the 5 ThingDefs in this snapshot also carry. Rows marked yes were not compared.
 
 layer    state        next
 economy  pre-measure  rimsearcher export --modlist presence-text

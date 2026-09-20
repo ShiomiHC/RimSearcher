@@ -25,7 +25,7 @@ things[0].chance              0.25             no            here
 things[0].hp                  0                yes           not-written
 descriptionHyperlinks[0].def  ChildGun         no            under descriptionHyperlinks
 burstCount                    1                yes           not-written
-No value above with 'code_default'=no is one that most of the 5 ThingDefs in this snapshot also carry. Rows marked yes were not compared: what a yes leaves open is settled by the 'xml' column on that same row: here is an XML line writing that same value, not-written is the absence of such a line in the XML read before patches ran.
+No value above with 'code_default'=no is one that most of the 5 ThingDefs in this snapshot also carry. Rows marked yes were not compared.
 3 patch xpaths name this def; the 'xml' column above was read before patches ran. 'rimsearcher inherit ChildGun' breaks the count down by how each xpath names it.
 
 layer    state        next

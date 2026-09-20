@@ -19,7 +19,7 @@ recipeMaker.researchPrerequisite  SpecializedLimbs      no            here+patch
 costList[0].thingDef              Steel                 no            here
 costList[0].count                 75                    no            here
 costList[0].quality               Normal                yes           not-written
-No value above with 'code_default'=no is one that most of the 2 ThingDefs in this snapshot also carry. Rows marked yes were not compared: what a yes leaves open is settled by the 'xml' column on that same row: here is an XML line writing that same value, not-written is the absence of such a line in the XML read after every patch ran.
+No value above with 'code_default'=no is one that most of the 2 ThingDefs in this snapshot also carry. Rows marked yes were not compared.
 
 layer    state        next
 economy  pre-measure  rimsearcher export --modlist presence-patch

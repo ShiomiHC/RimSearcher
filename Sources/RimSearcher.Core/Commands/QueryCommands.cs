@@ -667,8 +667,10 @@ public sealed class GetCommand : Command
                 new("description", paths.Count > 0 ? Clip(def.Description) : def.Description),
                 new("class", def.Class),
                 new("declared_in", def.SourceMod),
+                // 括号里只说它是什么;「not from an XML file」那半是对着「把 ImpliedDefs 当文件名」
+                // 这个假想误读写的,2026-09-20 剪掉。
                 new("source", def.Generated
-                    ? $"{def.SourceFile} (created in code, not from an XML file)"
+                    ? $"{def.SourceFile} (created in code)"
                     : def.SourceFile),
             };
 
@@ -3481,18 +3483,12 @@ internal static class Completeness
         // 0.5.0 起这两者不再同形:xml 列就在同一行上,here 是「写了同样的值」,
         // no 是「从没提过这个字段」。再说「看起来一样」是假话 —— 分档,不是删,
         // 旧快照上没有那一列,原句仍是这条路上唯一说破它的地方。
-        // 那个括注在 0.7.0 上是假的:那些库的路径**读在补丁之后**,而 no 于是也强了一档
-        // (补丁加的行不再落进 no,它们带 +patch)。分档,不是删掉 —— 老快照上那个括注
-        // 正是它们的 no 唯一说得清的边界。
-        var readWhen = ctx.Db.Meta.IndexesPostPatchXml
-            ? "read after every patch ran"
-            : "read before patches ran";
-        // 有 xml 列的那一支不再带否定:「yes 不等于没人写」在那张表上是**列义**,
-        // 而列就在同一行印着。否定留给读不出来的那一支。
+        // 有 xml 列的那一支什么都不加:「yes 留下的问题由同一行的 xml 列定」是**列义**,住 help
+        // (「the 'xml' column says whether this def's own XML wrote the path …」)。2026-09-20 删:
+        // 那半句印了 276 次,随后文字提到 xml 列的 0/12,与 bfd0ec7 立的「列义住 help」同一口径。
+        // 否定只留给读不出来的那一支 —— 没有那一列的老库上,两种 def 在这里真的同形。
         var yesMeans = ctx.Db.Meta.IndexesXmlWritten
-            ? $"what a yes leaves open is settled by the '{XmlOrigin.Column}' column on that same row: " +
-              $"{XmlOrigin.Here} is an XML line writing that same " +
-              $"value, {XmlOrigin.No} is the absence of such a line in the XML {readWhen}"
+            ? null
             : "a def whose XML writes that same value and a def that never mentions the field both " +
               "show yes here";
 
@@ -3514,14 +3510,17 @@ internal static class Completeness
               $"'{FieldDefault.Column}' is not this def having made a choice — the count in brackets: " +
               $"{NameList.Render(listed, listed.Count)}." +
               (carryYesMeans
-                  ? $" Only rows whose '{FieldDefault.Column}' is no were compared: {yesMeans}."
+                  ? $" Only rows whose '{FieldDefault.Column}' is no were compared" +
+                    (yesMeans is null ? "." : $": {yesMeans}.")
                   : "")
             // 否定支砍掉「所以没有一个是透过那一列显出来的全类默认值」:那是前半句的改写,
             // 而 SKILL.md 讲过这条线是干什么的。「yes 没参与比较」那半句留着 ——
             // 它守的是「没比过」被读成「比过了没有」,而那正是这一支印在一张全 yes 表下面时的样子。
             : $"No value above with '{FieldDefault.Column}'=no is one that most of the {total} " +
               $"{def.DefType}s in this snapshot also carry." +
-              (carryYesMeans ? $" Rows marked yes were not compared: {yesMeans}." : ""));
+              (carryYesMeans
+                  ? " Rows marked yes were not compared" + (yesMeans is null ? "." : $": {yesMeans}.")
+                  : ""));
     }
 
     /// <summary>
