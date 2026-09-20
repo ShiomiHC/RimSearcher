@@ -2,7 +2,7 @@ $ rimsearcher get Apparel_ShieldBelt
 exit 0
 --- stdout ---
 12 fields.
-Not listed: 1 field whose value matches the declaring type's own default (--defaults lists them). The snapshot holds 13 field paths for this def; a null-valued field never entered the index. Without the 'xml' column, a def whose XML writes the default value and a def that never mentions the field look the same here.
+Not listed: 1 field whose value matches the declaring type's own default (--defaults lists them). The snapshot holds 13 field paths for this def; a null-valued field never entered the index. The 'xml' column refers to the XML read before patches ran.
 
 def_name     Apparel_ShieldBelt
 def_type     ThingDef
@@ -10,28 +10,27 @@ label        shield belt
 class        Verse.ThingDef
 declared_in  ludeon.rimworld
 source       Apparel_Belts.xml
-xml          not indexed (exporter 0.2.0)
 
 Same in every row, not repeated below: code_default=no.
-path                                value
-soundImpactDefault                  BulletImpact_Ground
-soundDrop                           Standard_Drop
-soundPickup                         Standard_Pickup
-soundInteract                       Standard_Pickup
-thingClass                          RimWorld.Apparel
-comps[1].compClass                  TestMod.CompBoltedOn
-comps[0].props.energyMax            0.5
-comps[0].props.energyLossPerDamage  0.033
-statBases[0].stat                   MarketValue
-statBases[0].value                  120
-statBases[1].stat                   EnergyShieldRechargeRate
-statBases[1].value                  0.13
+path                                value                     xml
+soundImpactDefault                  BulletImpact_Ground       not-written
+soundDrop                           Standard_Drop             here
+soundPickup                         Standard_Pickup           here
+soundInteract                       Standard_Pickup           here
+thingClass                          RimWorld.Apparel          here
+comps[1].compClass                  TestMod.CompBoltedOn      here
+comps[0].props.energyMax            0.5                       here
+comps[0].props.energyLossPerDamage  0.033                     here
+statBases[0].stat                   MarketValue               here
+statBases[0].value                  120                       here
+statBases[1].stat                   EnergyShieldRechargeRate  here
+statBases[1].value                  0.13                      here
 Values that most of the 9 ThingDefs in this snapshot also carry — the count in brackets: soundDrop (9), soundImpactDefault (9), soundPickup (9), soundInteract (8).
   - Market value, cost to make and work amount are not fields: 'rimsearcher economy Apparel_ShieldBelt' has them.
   - 1 translation.
 
-path   translated  original     language           origin
-label  护盾腰带    shield belt  ChineseSimplified  in pack
+path   key  translated  original     language           origin
+label       护盾腰带    shield belt  ChineseSimplified  in effect
 
 layer              state         next
 disk_translations  unconfigured  set 'mod_roots' in the config file, then rimsearcher snapshot import fixture.rsx.jsonl.gz --name fixture

@@ -14,6 +14,13 @@ public static class Fixture
     public const string Language = "ChineseSimplified";
     public const string GameVersion = "1.6.0000 rev1";
 
+    /// <summary>
+    /// 每份夹具 meta 行里的导出器版本。此前各份各标一代(0.1 → 0.10),拿来钉「这一层在那一代
+    /// 之前没量」的世代分支;2026-09-20 地板抬到 0.12、世代分支删掉之后,夹具之间只剩层的差别,
+    /// 版本号统一成一个够新的。故意**不**引 DataMod 的常量:导出器抬版本不该让这里的基线动。
+    /// </summary>
+    public const string DefExporterVersion = "0.13.0";
+
     private static readonly object Gate = new();
     private static string? _dbPath;
 
@@ -46,41 +53,33 @@ public static class Fixture
     /// </summary>
     public static string CoreDb { get { _ = Db; return CoreDbPath; } }
 
-    /// <summary>
-    /// 导出器 0.4.0 那一档 —— 单字段上的 <c>Class=</c> 也量过了。主 fixture 是 0.2.0
-    /// (只量列表元素)、other 是 0.1.0(一点没量),三档的措辞必须互不相同。
-    /// </summary>
+    /// <summary>单字段上的 <c>Class=</c>(GenStepDef.genStep 那种形状)的语料。</summary>
     public static string ModernDb { get { _ = Db; return Path.Combine(SnapshotDir, "modern.db"); } }
 
-    /// <summary>0.1.0 那一档,给「这份快照根本没量过」的措辞当落点。</summary>
+    /// <summary>另一份快照,只有一个别处没有的 def。</summary>
     public static string OtherDb { get { _ = Db; return Path.Combine(SnapshotDir, "other.db"); } }
 
     /// <summary>一份**旧代**(SnapshotRetention 轮转出来的 `{name}.prev`)。跨快照那句不许点它。</summary>
     public static string PrevDb { get { _ = Db; return Path.Combine(SnapshotDir, "other.prev.db"); } }
 
     /// <summary>
-    /// 导出器 0.5.0:XML 写成的路径、按 defName/label 的 patch 计数、类型字段全集都在。
-    /// 主 fixture 停在 0.2.0,other 停在 0.1.0 —— 新层缺席与在场两条路都要有落点。
-    /// **停在 0.5.0 不动**:它是旧路径(没记下 XML 行内文本)的闸。
+    /// XML 写成的路径、按 defName/label 的 patch 计数、类型字段全集 —— 短形式标签下的
+    /// 值回连与 under 那几档的语料。xml_written 不带行内文本,与 <see cref="PresenceTextDb"/> 分工。
     /// </summary>
     public static string PresenceDb { get { _ = Db; return Path.Combine(SnapshotDir, "presence.db"); } }
 
-    /// <summary>
-    /// 导出器 0.6.0:xml_written 带行内文本,短形式标签底下的候选格能分开。
-    /// 0.5.0 那份 <see cref="PresenceDb"/> 故意不带,两条路各有落点。
-    /// </summary>
+    /// <summary>xml_written 带行内文本,短形式标签底下的候选格能分开。</summary>
     public static string PresenceTextDb { get { _ = Db; return Path.Combine(SnapshotDir, "presence-text.db"); } }
 
     /// <summary>
-    /// 导出器 0.7.0:xml_written 的路径取自**打完补丁**的合并 XML,每条带「这一行是补丁
-    /// 加的」标记。0.6.0 那份 <see cref="PresenceTextDb"/> 收的是原文,两条路各有落点。
+    /// xml_written 的路径取自**打完补丁**的合并 XML,每条带「这一行是补丁加的」标记。
+    /// 别的几份 PatchRoute 为 none,收的是原文 —— 两条路各有落点。
     /// </summary>
     public static string PresencePatchDb { get { _ = Db; return Path.Combine(SnapshotDir, "presence-patch.db"); } }
 
     /// <summary>
-    /// 导出器 0.8.0:带注入键层,于是译文的 path 归一到字段表那一侧的文法、译者写的那一串
-    /// 留在 key 列。别的几份夹具都早于这一档,那边钉的是**没归一**时的输出 ——
-    /// 两种输出说的话必须不一样,而不另立一份就只有一种在场。
+    /// 注入键名册齐全的语料:译文的 path 归一到字段表那一侧的文法、译者写的那一串留在 key 列,
+    /// 三个键态(在册 / 不在册 / 不许译)各一条。
     /// </summary>
     public static string InjKeyDb { get { _ = Db; return Path.Combine(SnapshotDir, "injkey.db"); } }
 
@@ -152,10 +151,7 @@ public static class Fixture
                 WriteOtherExport(prevExport, "OnlyInPrevGeneration", "PrevMod.CompOnlyInPrev");
                 new SnapshotImporter().Import(prevExport, Path.Combine(SnapshotDir, "other.prev.db"));
 
-                // 第四份:导出器 0.4.0,**单字段上的 Class= 也量过了**那一档。
-                // 主 fixture 停在 0.2.0(只量列表元素)、other 停在 0.1.0(一点没量),
-                // 三档各有一个落点 —— 而这三档说的话必须不一样:中间那档对
-                // `where Class <单字段上的类>` 回的零,与「量过了、没人用」逐字同形。
+                // 第四份:单字段上的 Class=(路径不以 ] 收尾)。
                 var modernExport = Path.Combine(dir, "modern" + IntermediateFormat.FileExtension);
                 WriteModernExport(modernExport);
                 new SnapshotImporter().Import(modernExport, Path.Combine(SnapshotDir, "modern.db"));
@@ -196,7 +192,7 @@ public static class Fixture
         w.WriteLine(new JsonLine()
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindMeta)
             .Int(IntermediateFormat.KeyFormatVersion, IntermediateFormat.FormatVersion)
-            .Str(IntermediateFormat.KeyExporterVersion, "0.1.0")
+            .Str(IntermediateFormat.KeyExporterVersion, DefExporterVersion)
             .Str(IntermediateFormat.KeyExportedAtUtc, "2026-01-02T00:00:00.0000000Z")
             .Str(IntermediateFormat.KeyGameVersion, GameVersion)
             .Str(IntermediateFormat.KeyLanguage, Language)
@@ -277,7 +273,7 @@ public static class Fixture
     private static readonly Dictionary<string, string> _economyDbs = [];
 
     /// <summary>
-    /// 导出器 0.4.0 那一档的语料 —— **单字段上的 <c>Class=</c>**。
+    /// **单字段上的 <c>Class=</c>** 的语料。
     ///
     /// 形状照抄游戏里的 GenStepDef:def 自己的 class 全是 <c>Verse.GenStepDef</c>(恒定量,
     /// 于是 <c>--class</c> 在这个类型上区分不了任何东西),真正跑哪段代码写在 <c>genStep</c>
@@ -297,7 +293,7 @@ public static class Fixture
         w.WriteLine(new JsonLine()
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindMeta)
             .Int(IntermediateFormat.KeyFormatVersion, IntermediateFormat.FormatVersion)
-            .Str(IntermediateFormat.KeyExporterVersion, "0.4.0")
+            .Str(IntermediateFormat.KeyExporterVersion, DefExporterVersion)
             .Str(IntermediateFormat.KeyExportedAtUtc, "2026-01-03T00:00:00.0000000Z")
             .Str(IntermediateFormat.KeyGameVersion, GameVersion)
             .Str(IntermediateFormat.KeyLanguage, Language)
@@ -324,7 +320,7 @@ public static class Fixture
 
         GenStep("FixtureScatterLumps",
             new ExportedField("order", "900", DefaultState.Differs),
-            // 这一条就是 0.2 那档发不出来的那种:路径不以 ] 收尾。
+            // 路径不以 ] 收尾 —— 只按列表元素判 Class= 的判据对它发不出来。
             new ExportedField("genStep.Class", "RimWorld.GenStep_ScatterLumpsMineable", DefaultState.Differs),
             new ExportedField("genStep.nearMapCenter", "True", DefaultState.Differs));
 
@@ -344,7 +340,7 @@ public static class Fixture
     }
 
     /// <summary>
-    /// 导出器 0.5.0 的语料 —— XML 写没写、按 defName/label 的 patch 计数、类型字段全集。
+    /// XML 写没写、按 defName/label 的 patch 计数、类型字段全集的语料。
     ///
     /// ChildGun 自己的 XML 写了 damage,父 BaseGun 写了 speed 与 thingClass;
     /// neverSet 只在类型字段全集里,每个 def 上都是 null。
@@ -359,7 +355,7 @@ public static class Fixture
         w.WriteLine(new JsonLine()
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindMeta)
             .Int(IntermediateFormat.KeyFormatVersion, IntermediateFormat.FormatVersion)
-            .Str(IntermediateFormat.KeyExporterVersion, "0.5.0")
+            .Str(IntermediateFormat.KeyExporterVersion, DefExporterVersion)
             .Str(IntermediateFormat.KeyExportedAtUtc, "2026-01-05T00:00:00.0000000Z")
             .Str(IntermediateFormat.KeyGameVersion, GameVersion)
             .Str(IntermediateFormat.KeyLanguage, Language)
@@ -391,7 +387,7 @@ public static class Fixture
         Def("ChildGun",
             new ExportedField("thingClass", "RimWorld.Bullet", DefaultState.Differs),
             // 第三方的类坐在官方 def 上,与主 fixture 那对同形 —— 这里是为了让
-            // NoteValueAuthorship 出路那半句的**补丁前那一档**有落点(这份标 0.5.0)。
+            // NoteValueAuthorship 出路那半句的**补丁前那一档**(PatchRoute=none)有落点。
             new ExportedField("comps[0].compClass", "TestMod.CompBoltedOn", DefaultState.Differs),
             new ExportedField("damage", "12", DefaultState.Differs),
             new ExportedField("speed", "70", DefaultState.Differs),
@@ -502,7 +498,7 @@ public static class Fixture
     }
 
     /// <summary>
-    /// 导出器 0.7.0 的语料 —— 路径取自打完补丁的合并 XML。
+    /// 路径取自打完补丁的合并 XML 的语料。
     ///
     /// PatchGun:<c>damage</c> 是作者写的(here),<c>speed</c> 是补丁加在祖先上的
     /// (parent+patch),<c>recipeMaker.researchPrerequisite</c> 是补丁加在自己身上的
@@ -519,7 +515,7 @@ public static class Fixture
         w.WriteLine(new JsonLine()
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindMeta)
             .Int(IntermediateFormat.KeyFormatVersion, IntermediateFormat.FormatVersion)
-            .Str(IntermediateFormat.KeyExporterVersion, "0.7.0")
+            .Str(IntermediateFormat.KeyExporterVersion, DefExporterVersion)
             .Str(IntermediateFormat.KeyExportedAtUtc, "2026-01-07T00:00:00.0000000Z")
             .Str(IntermediateFormat.KeyGameVersion, GameVersion)
             .Str(IntermediateFormat.KeyLanguage, Language)
@@ -548,7 +544,7 @@ public static class Fixture
         }
 
         Def("PatchGun", "patch gun",
-            // 与 presence 那份同形,这里是**补丁后那一档**的落点(这份标 0.7.0)。
+            // 与 presence 那份同形,这里是**补丁后那一档**的落点(PatchRoute=harmony)。
             // 两份摆一起,出路那半句改了其中一档另一档不会静默跟着错。
             new ExportedField("comps[0].compClass", "TestMod.CompBoltedOn", DefaultState.Differs),
             // 同主语料:defName 也是一行,而 Written 里它早就登记着(here)—— 这份带 xml 列,
@@ -631,18 +627,15 @@ public static class Fixture
     }
 
     /// <summary>
-    /// 导出器 0.6.0 的语料 —— xml_written 带行内文本。
+    /// xml_written 带行内文本的语料。
     ///
     /// ChildGun 的 costList.Steel 文本是 75,于是 count 是 here、quality 是 no;
     /// PatchedGun 的文本对不上任何候选格,退回 under;TwinGun 的 count 与 quality
     /// 同是 75,对上两格,那两格都 under;BareGun 的标签是空的,没有文本可落格。
     /// </summary>
     /// <summary>
-    /// 导出器 0.8.0 的语料 —— 注入键层在场,于是三档归一各有一个落点:
-    /// 把手式(注入键表配得上)、下标式(本来就是字段路径)、配不上任何槽位的那一条。
-    ///
-    /// 单独一份而不是塞进主 fixture:主 fixture 钉在 0.2.0,那一档说的是「没量过」,
-    /// 而每一份 get / list 基线都靠着它。
+    /// 注入键层三档归一各有一个落点:把手式(注入键表配得上)、下标式(本来就是字段路径)、
+    /// 配不上任何槽位的那一条。
     /// </summary>
     private static void WriteInjKeyExport(string path)
     {
@@ -654,7 +647,7 @@ public static class Fixture
         w.WriteLine(new JsonLine()
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindMeta)
             .Int(IntermediateFormat.KeyFormatVersion, IntermediateFormat.FormatVersion)
-            .Str(IntermediateFormat.KeyExporterVersion, "0.10.0")
+            .Str(IntermediateFormat.KeyExporterVersion, DefExporterVersion)
             .Str(IntermediateFormat.KeyExportedAtUtc, "2026-09-05T00:00:00.0000000Z")
             .Str(IntermediateFormat.KeyGameVersion, GameVersion)
             .Str(IntermediateFormat.KeyLanguage, Language)
@@ -694,7 +687,7 @@ public static class Fixture
             .ToString());
         records++;
 
-        // 槽位名册。0.9.0 起一个槽位一行、一个不漏,所以 `label` 这种没把手的也在册 ——
+        // 槽位名册。一个槽位一行、一个不漏,所以 `label` 这种没把手的也在册 ——
         // 在不在册是这张表要答的唯一问题,漏发就答不出。第二条把手带 -2 后缀 ——
         // 同名元素在同一个列表里出现两次时游戏自己就这么区分
         // (GetBestHandleWithIndexForListElement)。
@@ -765,7 +758,7 @@ public static class Fixture
         w.WriteLine(new JsonLine()
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindMeta)
             .Int(IntermediateFormat.KeyFormatVersion, IntermediateFormat.FormatVersion)
-            .Str(IntermediateFormat.KeyExporterVersion, "0.6.0")
+            .Str(IntermediateFormat.KeyExporterVersion, DefExporterVersion)
             .Str(IntermediateFormat.KeyExportedAtUtc, "2026-01-06T00:00:00.0000000Z")
             .Str(IntermediateFormat.KeyGameVersion, GameVersion)
             .Str(IntermediateFormat.KeyLanguage, Language)
@@ -932,7 +925,7 @@ public static class Fixture
         w.WriteLine(new JsonLine()
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindMeta)
             .Int(IntermediateFormat.KeyFormatVersion, IntermediateFormat.FormatVersion)
-            .Str(IntermediateFormat.KeyExporterVersion, "0.2.0")
+            .Str(IntermediateFormat.KeyExporterVersion, DefExporterVersion)
             .Str(IntermediateFormat.KeyExportedAtUtc, "2026-01-04T00:00:00.0000000Z")
             .Str(IntermediateFormat.KeyGameVersion, GameVersion)
             .Str(IntermediateFormat.KeyLanguage, Language)
@@ -1003,7 +996,7 @@ public static class Fixture
     }
 
     public static void WriteExport(string path, bool omitEndMarker = false, long? wrongRecordCount = null,
-                                   int? formatVersion = null)
+                                   int? formatVersion = null, string? exporterVersion = null)
     {
         using var fs = File.Create(path);
         using var gz = new GZipStream(fs, CompressionLevel.Optimal);
@@ -1014,7 +1007,7 @@ public static class Fixture
         w.WriteLine(new JsonLine()
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindMeta)
             .Int(IntermediateFormat.KeyFormatVersion, formatVersion ?? IntermediateFormat.FormatVersion)
-            .Str(IntermediateFormat.KeyExporterVersion, "0.2.0")
+            .Str(IntermediateFormat.KeyExporterVersion, exporterVersion ?? DefExporterVersion)
             .Str(IntermediateFormat.KeyExportedAtUtc, "2026-01-01T00:00:00.0000000Z")
             .Str(IntermediateFormat.KeyGameVersion, GameVersion)
             .Str(IntermediateFormat.KeyLanguage, Language)
@@ -1032,10 +1025,24 @@ public static class Fixture
 
         // 运行时 class 与 def_type 不是一回事:游戏只给「祖先链上没有非抽象 Def」的类型建库,
         // 所以子类型的 def 全落在基类桶里。语料里必须有这么一桶,否则 list --class 那条路没人守。
+        // 三层按规则从字段表推出来(2026-09-20 夹具抬到 0.13 时补):type_fields = 该类型所有 def
+        // 的路径并集;xml_written = 这个 def 上 code_default 为 Differs 的路径,减去几条**不是 XML 写的**
+        // (引擎在 ResolveReferences 里塞的 soundImpactDefault、Unity 指针、委托、modContentPack)。
+        var typePaths = new Dictionary<string, SortedSet<string>>(StringComparer.Ordinal);
+        var xmlWritten = new List<(string Type, string Name, List<string> Paths)>();
+        string[] notFromXml = ["soundImpactDefault", "uiIcon.m_CachedPtr", "wanderDestValidator.method",
+                               "modContentPack.name", "shortHash"];
+
         void DefAs(string type, string cls, string name, string? label, string mod, string file, bool generated,
                    int truncated, params (string Path, string Value, int Default)[] fields)
         {
             var pairs = fields.Select(f => new ExportedField(f.Path, f.Value, f.Default)).ToList();
+            if (!typePaths.TryGetValue(type, out var set))
+                typePaths[type] = set = new SortedSet<string>(StringComparer.Ordinal) { "defName", "label", "description" };
+            set.UnionWith(fields.Select(f => f.Path));
+            if (!generated)
+                xmlWritten.Add((type, name, fields.Where(f => f.Default == DefaultState.Differs && !notFromXml.Contains(f.Path))
+                                                  .Select(f => f.Path).ToList()));
             w.WriteLine(new JsonLine()
                 .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindDef)
                 .Str(IntermediateFormat.KeyDefType, type)
@@ -1141,9 +1148,7 @@ public static class Fixture
             // 唯一一条 def 指向 def 的字段。没有它,「这个 def 名被谁引用着」整份语料里无处可验,
             // 而那正是 find 的 Examples 写着的问法(`where defaultProjectile Bullet_Revolver`)。
             ("verbs[0].defaultProjectile", "Bullet_Revolver", DefaultState.Differs),
-            // 列表元素的运行时类型(导出器 0.2.0 起才发这一维)。这是主快照里唯一一条
-            // `.Class`,而 other 那份标着 0.1.0 —— 「量过了、没人用」与「这份快照根本
-            // 没量」各有一个落点。
+            // 列表元素的运行时类型。这是主快照里唯一一条 `.Class`。
             ("comps[0].Class", "RimWorld.CompProperties_Shield", DefaultState.Differs),
             ("comps[0].compClass", "RimWorld.CompShield", DefaultState.Same),
             // 与 Apparel_ShieldBelt 那条成对,见那边的注释。
@@ -1283,8 +1288,46 @@ public static class Fixture
         // 关联若要求 def_type 相等就会把它们的 inherits_from 整批弄丢。
         XmlNode("TestVariantDef", "", "BaseProjectile", false, "VariantOne", "test.mod", "Variants.xml", 0);
 
+        foreach (var (type, paths) in typePaths)
+        {
+            w.WriteLine(new JsonLine()
+                .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindTypeFields)
+                .Str(IntermediateFormat.KeyDefType, type)
+                .Strs(IntermediateFormat.KeyPaths, [.. paths])
+                .ToString());
+            records++;
+        }
+        foreach (var (type, name, paths) in xmlWritten)
+        {
+            w.WriteLine(new JsonLine()
+                .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindXmlWritten)
+                .Str(IntermediateFormat.KeyDefType, type)
+                .Str(IntermediateFormat.KeyNodeKey, name)
+                .Bool(IntermediateFormat.KeyKeyIsName, false)
+                .Strs(IntermediateFormat.KeyPaths, [.. paths])
+                .ToString());
+            records++;
+        }
+
+        // 译文槽位名册:三条译文各一个槽位,键与路径同串(label / description 没有把手)。
+        void InjKey(string defName, string path)
+        {
+            w.WriteLine(new JsonLine()
+                .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindInjKey)
+                .Str(IntermediateFormat.KeyDefType, "ThingDef")
+                .Str(IntermediateFormat.KeyDefName, defName)
+                .Str(IntermediateFormat.KeyPath, path)
+                .Str(IntermediateFormat.KeySuggestedPath, path)
+                .Bool(IntermediateFormat.KeyIsCollection, false)
+                .Bool(IntermediateFormat.KeyTranslationAllowed, true)
+                .Bool(IntermediateFormat.KeyFullListTranslationAllowed, false)
+                .ToString());
+            records++;
+        }
+
         void Injection(string defName, string path, string translated, string original)
         {
+            InjKey(defName, path);
             w.WriteLine(new JsonLine()
                 .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindDefInjection)
                 .Str(IntermediateFormat.KeyDefType, "ThingDef")
@@ -1292,6 +1335,8 @@ public static class Fixture
                 .Str(IntermediateFormat.KeyPath, path)
                 .Str(IntermediateFormat.KeyTranslated, translated)
                 .Str(IntermediateFormat.KeyOriginal, original)
+                .Bool(IntermediateFormat.KeyInjected, true)
+                .Str(IntermediateFormat.KeySourceFile, "DefInjected/ThingDef/Things.xml")
                 .ToString());
             records++;
         }
@@ -1503,18 +1548,18 @@ public static class Fixture
     public const string Pinned = "--fixture-pinned";
 
     /// <summary>
-    /// 同上,换成 0.5.0 那份夹具。<c>--db</c> 是绝对路径、含机器名,不能进基线,
+    /// 同上,换成 <see cref="PresenceDb"/>。<c>--db</c> 是绝对路径、含机器名,不能进基线,
     /// 所以走哨兵词 —— 与 <see cref="Pinned"/> 同一手法。
     /// </summary>
     public const string PresenceArg = "--fixture-presence";
 
-    /// <summary>同上,换成 0.6.0 那份(带 XML 行内文本)。</summary>
+    /// <summary>同上,换成 <see cref="PresenceTextDb"/>。</summary>
     public const string PresenceTextArg = "--fixture-presence-text";
 
-    /// <summary>同上,换成 0.8.0 那份(带注入键层,译文的键归一过)。</summary>
+    /// <summary>同上,换成 <see cref="InjKeyDb"/>。</summary>
     public const string InjKeyArg = "--fixture-injkey";
 
-    /// <summary>同上,换成 0.7.0 那份(路径取自打完补丁的 XML)。</summary>
+    /// <summary>同上,换成 <see cref="PresencePatchDb"/>。</summary>
     public const string PresencePatchArg = "--fixture-presence-patch";
 
     /// <summary>指向一个不存在的配置文件 —— 测试不许读本机 config。</summary>

@@ -19,7 +19,7 @@ exit 0
     },
     {
       "kind": "filter",
-      "text": "Not listed: 1 field whose value matches the declaring type's own default (--defaults lists them). The snapshot holds 13 field paths for this def; a null-valued field never entered the index. Without the 'xml' column, a def whose XML writes the default value and a def that never mentions the field look the same here."
+      "text": "Not listed: 1 field whose value matches the declaring type's own default (--defaults lists them). The snapshot holds 13 field paths for this def; a null-valued field never entered the index. The 'xml' column refers to the XML read before patches ran."
     },
     {
       "kind": "advisory",
@@ -43,7 +43,7 @@ exit 0
     },
     {
       "kind": "filter",
-      "text": "Not listed: 1 field whose value matches the declaring type's own default (--defaults lists them). The snapshot holds 8 field paths for this def; a null-valued field never entered the index. Without the 'xml' column, a def whose XML writes the default value and a def that never mentions the field look the same here."
+      "text": "Not listed: 1 field whose value matches the declaring type's own default (--defaults lists them). The snapshot holds 8 field paths for this def; a null-valued field never entered the index. The 'xml' column refers to the XML read before patches ran."
     },
     {
       "kind": "boundary",
@@ -70,69 +70,80 @@ exit 0
         "description": "",
         "class": "Verse.ThingDef",
         "declared_in": "ludeon.rimworld",
-        "source": "Apparel_Belts.xml",
-        "xml": "not indexed (exporter 0.2.0)"
+        "source": "Apparel_Belts.xml"
       },
       "fields": [
         {
           "path": "soundImpactDefault",
           "value": "BulletImpact_Ground",
-          "code_default": "no"
+          "code_default": "no",
+          "xml": "not-written"
         },
         {
           "path": "soundDrop",
           "value": "Standard_Drop",
-          "code_default": "no"
+          "code_default": "no",
+          "xml": "here"
         },
         {
           "path": "soundPickup",
           "value": "Standard_Pickup",
-          "code_default": "no"
+          "code_default": "no",
+          "xml": "here"
         },
         {
           "path": "soundInteract",
           "value": "Standard_Pickup",
-          "code_default": "no"
+          "code_default": "no",
+          "xml": "here"
         },
         {
           "path": "thingClass",
           "value": "RimWorld.Apparel",
-          "code_default": "no"
+          "code_default": "no",
+          "xml": "here"
         },
         {
           "path": "comps[1].compClass",
           "value": "TestMod.CompBoltedOn",
-          "code_default": "no"
+          "code_default": "no",
+          "xml": "here"
         },
         {
           "path": "comps[0].props.energyMax",
           "value": "0.5",
-          "code_default": "no"
+          "code_default": "no",
+          "xml": "here"
         },
         {
           "path": "comps[0].props.energyLossPerDamage",
           "value": "0.033",
-          "code_default": "no"
+          "code_default": "no",
+          "xml": "here"
         },
         {
           "path": "statBases[0].stat",
           "value": "MarketValue",
-          "code_default": "no"
+          "code_default": "no",
+          "xml": "here"
         },
         {
           "path": "statBases[0].value",
           "value": "120",
-          "code_default": "no"
+          "code_default": "no",
+          "xml": "here"
         },
         {
           "path": "statBases[1].stat",
           "value": "EnergyShieldRechargeRate",
-          "code_default": "no"
+          "code_default": "no",
+          "xml": "here"
         },
         {
           "path": "statBases[1].value",
           "value": "0.13",
-          "code_default": "no"
+          "code_default": "no",
+          "xml": "here"
         }
       ],
       "translations": [
@@ -141,7 +152,8 @@ exit 0
           "translated": "护盾腰带",
           "original": "shield belt",
           "language": "ChineseSimplified",
-          "origin": "in pack"
+          "origin": "in effect",
+          "key": null
         }
       ]
     },
@@ -154,44 +166,50 @@ exit 0
         "class": "Verse.ThingDef",
         "declared_in": "ludeon.rimworld",
         "source": "Projectiles_Guns.xml",
-        "inherits_from": "BaseBullet (see 'rimsearcher inherit Bullet_Revolver')",
-        "xml": "not indexed (exporter 0.2.0)"
+        "inherits_from": "BaseBullet (see 'rimsearcher inherit Bullet_Revolver')"
       },
       "fields": [
         {
           "path": "soundImpactDefault",
           "value": "BulletImpact_Ground",
-          "code_default": "no"
+          "code_default": "no",
+          "xml": "not-written"
         },
         {
           "path": "soundDrop",
           "value": "Standard_Drop",
-          "code_default": "no"
+          "code_default": "no",
+          "xml": "here"
         },
         {
           "path": "soundPickup",
           "value": "Standard_Pickup",
-          "code_default": "no"
+          "code_default": "no",
+          "xml": "here"
         },
         {
           "path": "soundInteract",
           "value": "Standard_Pickup",
-          "code_default": "no"
+          "code_default": "no",
+          "xml": "here"
         },
         {
           "path": "thingClass",
           "value": "RimWorld.Bullet",
-          "code_default": "no"
+          "code_default": "no",
+          "xml": "here"
         },
         {
           "path": "projectile.damageAmountBase",
           "value": "12",
-          "code_default": "no"
+          "code_default": "no",
+          "xml": "here"
         },
         {
           "path": "projectile.speed",
           "value": "70",
-          "code_default": "unknown"
+          "code_default": "unknown",
+          "xml": "not-written"
         }
       ],
       "translations": []

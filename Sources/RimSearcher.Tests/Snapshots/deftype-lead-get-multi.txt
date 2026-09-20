@@ -10,30 +10,29 @@ label        shield belt
 class        Verse.ThingDef
 declared_in  ludeon.rimworld
 source       Apparel_Belts.xml
-xml          not indexed (exporter 0.2.0)
 12 fields.
-Not listed: 1 field whose value matches the declaring type's own default (--defaults lists them). The snapshot holds 13 field paths for this def; a null-valued field never entered the index. Without the 'xml' column, a def whose XML writes the default value and a def that never mentions the field look the same here.
+Not listed: 1 field whose value matches the declaring type's own default (--defaults lists them). The snapshot holds 13 field paths for this def; a null-valued field never entered the index. The 'xml' column refers to the XML read before patches ran.
 
 Same in every row, not repeated below: code_default=no.
-path                                value
-soundImpactDefault                  BulletImpact_Ground
-soundDrop                           Standard_Drop
-soundPickup                         Standard_Pickup
-soundInteract                       Standard_Pickup
-thingClass                          RimWorld.Apparel
-comps[1].compClass                  TestMod.CompBoltedOn
-comps[0].props.energyMax            0.5
-comps[0].props.energyLossPerDamage  0.033
-statBases[0].stat                   MarketValue
-statBases[0].value                  120
-statBases[1].stat                   EnergyShieldRechargeRate
-statBases[1].value                  0.13
+path                                value                     xml
+soundImpactDefault                  BulletImpact_Ground       not-written
+soundDrop                           Standard_Drop             here
+soundPickup                         Standard_Pickup           here
+soundInteract                       Standard_Pickup           here
+thingClass                          RimWorld.Apparel          here
+comps[1].compClass                  TestMod.CompBoltedOn      here
+comps[0].props.energyMax            0.5                       here
+comps[0].props.energyLossPerDamage  0.033                     here
+statBases[0].stat                   MarketValue               here
+statBases[0].value                  120                       here
+statBases[1].stat                   EnergyShieldRechargeRate  here
+statBases[1].value                  0.13                      here
 Values that most of the 9 ThingDefs in this snapshot also carry — the count in brackets: soundDrop (9), soundImpactDefault (9), soundPickup (9), soundInteract (8).
   - Market value, cost to make and work amount are not fields: 'rimsearcher economy Apparel_ShieldBelt' has them.
   - 1 translation.
 
-path   translated  original     language           origin
-label  护盾腰带    shield belt  ChineseSimplified  in pack
+path   key  translated  original     language           origin
+label       护盾腰带    shield belt  ChineseSimplified  in effect
 
 def_name       Bullet_Revolver
 def_type       ThingDef
@@ -42,19 +41,18 @@ class          Verse.ThingDef
 declared_in    ludeon.rimworld
 source         Projectiles_Guns.xml
 inherits_from  BaseBullet (see 'rimsearcher inherit Bullet_Revolver')
-xml            not indexed (exporter 0.2.0)
 7 fields.
-  - Not listed: 1 field whose value matches the declaring type's own default (--defaults lists them). The snapshot holds 8 field paths for this def; a null-valued field never entered the index. Without the 'xml' column, a def whose XML writes the default value and a def that never mentions the field look the same here.
+  - Not listed: 1 field whose value matches the declaring type's own default (--defaults lists them). The snapshot holds 8 field paths for this def; a null-valued field never entered the index. The 'xml' column refers to the XML read before patches ran.
   - The exporter stopped short on this def: at least 3 fields were dropped at export time for depth or size. Added to the 8 paths that did get indexed, that is at least 11 field paths on this def.
 
-path                         value                code_default
-soundImpactDefault           BulletImpact_Ground  no
-soundDrop                    Standard_Drop        no
-soundPickup                  Standard_Pickup      no
-soundInteract                Standard_Pickup      no
-thingClass                   RimWorld.Bullet      no
-projectile.damageAmountBase  12                   no
-projectile.speed             70                   unknown
+path                         value                code_default  xml
+soundImpactDefault           BulletImpact_Ground  no            not-written
+soundDrop                    Standard_Drop        no            here
+soundPickup                  Standard_Pickup      no            here
+soundInteract                Standard_Pickup      no            here
+thingClass                   RimWorld.Bullet      no            here
+projectile.damageAmountBase  12                   no            here
+projectile.speed             70                   unknown       not-written
 Values that most of the 9 ThingDefs in this snapshot also carry — the count in brackets: soundDrop (9), soundImpactDefault (9), soundPickup (9), soundInteract (8).
 
 layer              state         next

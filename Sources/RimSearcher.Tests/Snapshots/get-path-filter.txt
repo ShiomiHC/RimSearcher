@@ -9,20 +9,16 @@ label        shield belt
 class        Verse.ThingDef
 declared_in  ludeon.rimworld
 source       Apparel_Belts.xml
-xml          not indexed (exporter 0.2.0)
 
-path                                value                 code_default
-comps[0].compClass                  RimWorld.CompShield   yes
-comps[1].compClass                  TestMod.CompBoltedOn  no
-comps[0].props.energyMax            0.5                   no
-comps[0].props.energyLossPerDamage  0.033                 no
-No value above with 'code_default'=no is one that most of the 9 ThingDefs in this snapshot also carry. Rows marked yes were not compared: a def whose XML writes that same value and a def that never mentions the field both show yes here.
+path                                value                 code_default  xml
+comps[0].compClass                  RimWorld.CompShield   yes           not-written
+comps[1].compClass                  TestMod.CompBoltedOn  no            here
+comps[0].props.energyMax            0.5                   no            here
+comps[0].props.energyLossPerDamage  0.033                 no            here
+No value above with 'code_default'=no is one that most of the 9 ThingDefs in this snapshot also carry. Rows marked yes were not compared.
 Market value, cost to make and work amount are not fields: 'rimsearcher economy Apparel_ShieldBelt' has them.
 
 0 rows. Dropping any one option below brings back this many translations:
 filter                 hidden  next
 --path-contains comps  1       rimsearcher get Apparel_ShieldBelt
-
-layer           state        next
-injection_keys  pre-measure  rimsearcher export --modlist fixture
 --- stderr ---

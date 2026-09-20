@@ -1698,16 +1698,13 @@ public sealed class SnapshotDb : IDisposable
     }
 
     /// <summary>
-    /// 这个 def 的槽位名册。<c>null</c> = 这份快照没量过这一层(导出器早于 0.9.0,**0.8.0
-    /// 也算在内** —— 那一版的表不全,见 <see cref="ExportMeta.IndexesInjectionKeys"/>),
-    /// 空表 = 量过了、这个 def 一个可注入槽位都没有。同 <see cref="TypeDeclaredPaths"/>
-    /// 那条缝:两者合成一个空列表,调用方就会把「没导」说成「没有」。
-    ///
-    /// 0.9.0 起这是**全集**,所以「这个 def 能译什么」拿它回答是准的。
+    /// 这个 def 的槽位名册。<c>null</c> = 这份库没有这一层(表不在或不是字典形状),
+    /// 空表 = 量过了、这个 def 一个可注入槽位都没有。两者合成一个空列表,调用方就会把
+    /// 「没导」说成「没有」。名册是**全集**,所以「这个 def 能译什么」拿它回答是准的。
     /// </summary>
     public IReadOnlyList<InjectionKeyRow>? InjectionKeys(string defName)
     {
-        if (!Meta.IndexesInjectionKeys || !HasInjectionKeys) return null;
+        if (!HasInjectionKeys) return null;
         var p = new Dictionary<string, object?> { ["@n"] = defName };
         var rows = new List<InjectionKeyRow>();
         // 两种形状:字符串列的旧库,与四列全进字典的新库。同 TypeFieldsAreSubtrees,靠列名认。
@@ -1741,6 +1738,28 @@ public sealed class SnapshotDb : IDisposable
     /// 「这一层整个是空的」—— 后者是数据侧的问题,不是答案。
     /// </summary>
     public int KeyedCount() => Scalar("SELECT COUNT(*) FROM keyed");
+
+    // ---- 层账用的「这一层里真有行吗」。世代位删掉之后(2026-09-20,地板 0.12)层在不在只能
+    // 按库里的行判:一份导出器版本够新、某一层却一行没写的库,层账要能变红,不能靠版本恒 ok。
+    public bool HasXmlWrittenRows => _xwRows ??= Scalar("SELECT EXISTS(SELECT 1 FROM xml_written)") != 0;
+    private bool? _xwRows;
+    public bool HasXmlWrittenText => _xwText ??= Scalar("SELECT EXISTS(SELECT 1 FROM xml_written WHERE inner_text IS NOT NULL)") != 0;
+    private bool? _xwText;
+    public bool HasTypeFieldRows
+    {
+        get
+        {
+            if (_tfRows is { } v) return v;
+            var (_, from, _) = TypeDeclaredSource();
+            return (_tfRows = Scalar($"SELECT EXISTS(SELECT 1 FROM {from})") != 0).Value;
+        }
+    }
+    private bool? _tfRows;
+    /// <summary>运行时译文行带着游戏自己的判决:译文表空着时也算在场 —— 没有行可判不是缺层。</summary>
+    public bool HasInjectionApplied => _applied ??= Scalar(
+        "SELECT NOT EXISTS(SELECT 1 FROM translations WHERE source_file IS NULL) "
+        + "OR EXISTS(SELECT 1 FROM translations WHERE applied IS NOT NULL)") != 0;
+    private bool? _applied;
 
     /// <summary>
     /// 这份库的 keyed 记不记得同一句话在这个 mod 里钺了几份。同
@@ -2210,10 +2229,7 @@ public sealed class SnapshotDb : IDisposable
 
     private List<XmlNodeRow> ReadNodes(string where, IDictionary<string, object?> p)
     {
-        var extra = Meta.IndexesPatchOpsByDefNameLabel;
-        var cols = extra
-            ? "def_type, name, parent_name, abstract, def_name, label, source_mod, source_file, patch_ops, patch_ops_defname, patch_ops_label"
-            : "def_type, name, parent_name, abstract, def_name, label, source_mod, source_file, patch_ops";
+        const string cols = "def_type, name, parent_name, abstract, def_name, label, source_mod, source_file, patch_ops, patch_ops_defname, patch_ops_label";
         var rows = new List<XmlNodeRow>();
         using var rd = Query(
             $"SELECT {cols} FROM xml_nodes {where} ORDER BY abstract DESC, name, def_name", p);
@@ -2223,44 +2239,37 @@ public sealed class SnapshotDb : IDisposable
                 rd.GetInt32(3) != 0,
                 rd.IsDBNull(4) ? null : rd.GetString(4), rd.IsDBNull(5) ? null : rd.GetString(5),
                 rd.IsDBNull(6) ? null : rd.GetString(6), rd.IsDBNull(7) ? null : rd.GetString(7),
-                rd.GetInt32(8),
-                extra ? rd.GetInt32(9) : 0,
-                extra ? rd.GetInt32(10) : 0));
+                rd.GetInt32(8), rd.GetInt32(9), rd.GetInt32(10)));
         return rows;
     }
 
     /// <summary>
-    /// 这个 def 的字段路径在 XML 里写在哪一层。<c>null</c> = 这份快照没量过。
+    /// 这个 def 的字段路径在 XML 里写在哪一层。
     /// 字典的值是 <c>here</c> 或 <c>parent</c>;不在字典里的路径就是两边都没写。
     /// </summary>
-    public Dictionary<string, string>? XmlWrittenMarks(string defType, string defName)
+    public Dictionary<string, string> XmlWrittenMarks(string defType, string defName)
         => XmlWrittenMarks(defType, defName, out _, out _, out _);
 
     /// <param name="containers">
     /// XML 侧写过的每一条路径的各级前缀。索引路径 join 落空、而它的容器在这里时,
     /// 说明两边在描述同一个容器、只是写法对不上 —— 那一格不是 no。
     /// </param>
-    public Dictionary<string, string>? XmlWrittenMarks(string defType, string defName,
-                                                       out HashSet<string> containers)
+    public Dictionary<string, string> XmlWrittenMarks(string defType, string defName,
+                                                      out HashSet<string> containers)
         => XmlWrittenMarks(defType, defName, out containers, out _, out _);
 
-    /// <param name="texts">
-    /// 每条 XML 叶子路径的行内文本。<c>null</c> = 这份快照没量过(能力位为假),
-    /// 查询侧走候选数那条旧路,不许把缺列当空串去比。
-    /// </param>
+    /// <param name="texts">每条 XML 叶子路径的行内文本。</param>
     /// <param name="patchedPaths">
     /// 补丁加进来的路径。<c>null</c> = 这份快照收的是打补丁**之前**的原文,
     /// 「作者写的」与「别的 mod 加的」在它里面分不开,查询侧一律不加后缀。
     /// </param>
-    public Dictionary<string, string>? XmlWrittenMarks(string defType, string defName,
-                                                       out HashSet<string> containers,
-                                                       out Dictionary<string, string>? texts,
-                                                       out HashSet<string>? patchedPaths)
+    public Dictionary<string, string> XmlWrittenMarks(string defType, string defName,
+                                                      out HashSet<string> containers,
+                                                      out Dictionary<string, string> texts,
+                                                      out HashSet<string>? patchedPaths)
     {
         containers = new HashSet<string>(StringComparer.Ordinal);
-        texts = null;
         patchedPaths = null;
-        if (!Meta.IndexesXmlWritten) return null;
 
         var hereKeys = new HashSet<string>(StringComparer.Ordinal);
         var parentKeys = new HashSet<string>(StringComparer.Ordinal);
@@ -2285,8 +2294,7 @@ public sealed class SnapshotDb : IDisposable
 
         var xmlType = xmlNode?.DefType ?? defType;
         var marks = new Dictionary<string, string>(StringComparer.Ordinal);
-        var withText = Meta.IndexesXmlWrittenText;
-        var textsLocal = withText ? new Dictionary<string, string>(StringComparer.Ordinal) : null;
+        var textsLocal = new Dictionary<string, string>(StringComparer.Ordinal);
         texts = textsLocal;
         var withPatched = Meta.IndexesPostPatchXml;
         var patchedLocal = withPatched ? new HashSet<string>(StringComparer.Ordinal) : null;
@@ -2300,11 +2308,8 @@ public sealed class SnapshotDb : IDisposable
                 {
                     ["@k"] = key, ["@t"] = defType, ["@x"] = xmlType,
                 };
-                var cols = withPatched ? "path, inner_text, patched"
-                         : withText ? "path, inner_text"
-                         : "path";
                 using var rd = Query(
-                    $"SELECT {cols} FROM xml_written WHERE node_key = @k " +
+                    "SELECT path, inner_text, patched FROM xml_written WHERE node_key = @k " +
                     "AND (def_type = @t COLLATE NOCASE OR def_type = @x COLLATE NOCASE)", p);
                 while (rd.Read())
                 {
@@ -2312,8 +2317,7 @@ public sealed class SnapshotDb : IDisposable
                     if (!marks.ContainsKey(path))
                     {
                         marks[path] = mark;
-                        if (textsLocal is not null)
-                            textsLocal[path] = rd.IsDBNull(1) ? "" : rd.GetString(1);
+                        textsLocal[path] = rd.IsDBNull(1) ? "" : rd.GetString(1);
                         if (patchedLocal is not null && !rd.IsDBNull(2) && rd.GetInt64(2) != 0)
                             patchedLocal.Add(path);
                     }
@@ -2478,8 +2482,8 @@ public sealed class SnapshotDb : IDisposable
     private bool TranslationsHaveKey => _trKey ??= HasColumn("translations", "key_state");
     private bool? _trKey;
 
-    /// <summary>注入键层在场:版本位到了**且**表长成那个形状(0.8.0 有表却答不出它要答的问题)。</summary>
-    public bool InjectionKeysIndexed => Meta.IndexesInjectionKeys && HasInjectionKeys;
+    /// <summary>注入键层在场:表长成字典那个形状。</summary>
+    public bool InjectionKeysIndexed => HasInjectionKeys;
 
     private bool HasInjectionKeys => _ik ??= HasColumn("injection_keys", "suggested_path")
                                           || InjectionKeysAreDictionary;
@@ -2589,7 +2593,6 @@ public sealed class SnapshotDb : IDisposable
     /// </summary>
     public int? TypeDeclaredPathMaxSegments(string defType)
     {
-        if (!Meta.IndexesTypeFields) return null;
         var (pathExpr, from, where) = TypeDeclaredSource();
         var p = new Dictionary<string, object?> { ["@t"] = defType };
         using var rd = Query(
@@ -2600,11 +2603,9 @@ public sealed class SnapshotDb : IDisposable
         return rd.GetInt32(0);
     }
 
-    public IReadOnlyList<string>? TypeDeclaredPaths(string defType, IReadOnlyList<string>? pathFilters = null,
-                                                    bool exactPath = false)
+    public IReadOnlyList<string> TypeDeclaredPaths(string defType, IReadOnlyList<string>? pathFilters = null,
+                                                   bool exactPath = false)
     {
-        if (!Meta.IndexesTypeFields) return null;
-
         var (pathExpr, from, where) = TypeDeclaredSource();
         var p = new Dictionary<string, object?> { ["@t"] = defType };
         var filters = (pathFilters ?? []).Where(f => !string.IsNullOrEmpty(f)).ToList();

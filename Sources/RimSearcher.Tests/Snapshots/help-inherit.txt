@@ -36,7 +36,6 @@ Global options (every command takes these, written after the command):
 
 --json keys (besides 'notes'):
   nodes     one object per XML node answering to the names — each with 'node' (identity and patch count), 'ancestors', 'children' when it has any, and 'reference' plus 'witnesses' when --path-contains or --exact-path is given. With several names the objects come in the order the names were given; a name that matched nothing has no object here and one note in 'notes' that quotes it.
-  absent    one row when this snapshot was exported before xpaths were counted by defName= and label= — layer 'patch_ops_defname_label', state pre-measure, next (the export command that measures them); empty when the identity blocks carry all three counts.
   found_as  one row per name asked for that turns up as something other than what this command looks up: name, is (def / def outside --scope / xml node / abstract xml node / def type / class / interface text / mod in this snapshot / mod not in this snapshot / field value / def in another snapshot / xml node in another snapshot), in (where exactly), next (a command that reaches it, ready to paste). Empty when the name was found here, or turns up nowhere.
 
 Examples:

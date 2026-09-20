@@ -19,8 +19,7 @@ exit 0
         "description": "",
         "class": "Verse.StatDef",
         "declared_in": "ludeon.rimworld",
-        "source": "Stats_Basics.xml",
-        "xml": "not indexed (exporter 0.2.0)"
+        "source": "Stats_Basics.xml"
       },
       "fields": [],
       "translations": []

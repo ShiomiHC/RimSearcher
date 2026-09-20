@@ -27,7 +27,7 @@ Global options (`--snapshot`, `--db`, `--json`, `--quiet`, `--config`) go **afte
 | What does this def actually contain? | `rimsearcher get <defName>` — several names at once print one block each, in the order given |
 | Every def of one type, in full | `rimsearcher get --type <DefType> --json` with **no def name** — one block per def, def-name order, one process |
 | Which C# class does this def actually run? | `rimsearcher get <defName>` — the `*Class` rows |
-| Does the vanilla XML write this line — Replace or Add? | `rimsearcher get <defName> --defaults` — the `xml` column: `here` / `parent` / `not-written` / `under <container>`, and a `+patch` suffix when another mod's patch put the line there (Replace still finds it; your patch then depends on that mod staying loaded). What exactly it denies depends on the exporter, and `code_default` below carries that. A snapshot without that column says so. `get --help` carries the rest: how list entries join back to def-name tags, and what `under` leaves undecided. |
+| Does the vanilla XML write this line — Replace or Add? | `rimsearcher get <defName> --defaults` — the `xml` column: `here` / `parent` / `not-written` / `under <container>`, and a `+patch` suffix when another mod's patch put the line there (Replace still finds it; your patch then depends on that mod staying loaded). What exactly it denies depends on the exporter, and `code_default` below carries that. `get --help` carries the rest: how list entries join back to def-name tags, and what `under` leaves undecided. |
 | What is this called? I only know part. | `rimsearcher search <words>` |
 | Which defs use this class / value? | `rimsearcher where <field> <value>` |
 | Which defs pick this class with `Class="…"`? | `rimsearcher where Class <ClassName>` |
@@ -281,8 +281,7 @@ way to state:
   a value), `undeclared` (no field of the type is called that) or `value-not-path` (the text
   is a value some field holds — `where --value` reads that column); next is a command to
   paste. The declared set behind `null-on-type` / `undeclared` is collected to a bounded
-  nesting depth and the notice says how deep it reached. A snapshot that carries no such
-  list says so. `fields` also says when it found no value either — so a silent answer never
+  nesting depth and the notice says how deep it reached. `fields` also says when it found no value either — so a silent answer never
   stands in for a checked one.
 
 ## Snapshots

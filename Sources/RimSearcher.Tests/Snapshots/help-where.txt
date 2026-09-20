@@ -51,7 +51,6 @@ Global options (every command takes these, written after the command):
   empty_because  one row per option given on this call that, alone, emptied the result: filter (the option as written), hidden (how many defs come back with just that option dropped), next (the same call without it, ready to paste). Empty when the result was not empty, or when no single option accounts for it.
   found_as       one row per name asked for that turns up as something other than what this command looks up: name, is (def / def outside --scope / xml node / abstract xml node / def type / class / interface text / mod in this snapshot / mod not in this snapshot / field value / def in another snapshot / xml node in another snapshot), in (where exactly), next (a command that reaches it, ready to paste). Empty when the name was found here, or turns up nowhere.
   completeness   an object, present only when some def in scope had its export cut short: scope (which def types this covers, in words), defs_cut_short (how many), types (one row per def type with its own count), verify (a ready command that lists them). Absent means no def in that scope lost fields at export.
-  absent         one row per layer this query needed that this snapshot does not hold — layer, state, next; 'xml_written' (pre-measure) when the value asked for is a class name that sits on official defs and the snapshot has no 'xml' column to say whether their XML wrote it. Empty otherwise; next is the command that fills the layer.
 
 Examples:
   rimsearcher where compClass RimWorld.CompShield

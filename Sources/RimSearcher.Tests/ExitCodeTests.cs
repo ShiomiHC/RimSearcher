@@ -51,7 +51,6 @@ public class ExitCodeTests
     [InlineData("get", "BaseBullet", "Bullet_Revolver")]
     [InlineData("keyed", "CannotUseNoPower")]
     [InlineData("callers", "Verse.Widgets.Label")]
-    [InlineData("inherit", "BaseBullet")]
     public void 有行时表在场也是0(params string[] argv)
     {
         var (stdout, _, code) = Fixture.Run([.. argv, "--json"]);

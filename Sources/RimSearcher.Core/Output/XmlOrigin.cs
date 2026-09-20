@@ -9,22 +9,21 @@ namespace RimSearcher.Output;
 /// <c>here</c> = 这个 def 自己的 XML 写了这条路径,Replace 找得到节点;
 /// <c>parent</c> = 只有祖先写了,指向这个 def 的 xpath 上这条节点不在,Add 才找得到;
 /// <c>not-written</c> = 这一格没写(含:列表项已按 defName 标签归位,但这一格对应的行不在)。
-/// 0.7.0 起路径取自**打完补丁**的合并 XML,别的 mod 的 patch 加进来的一行于是带
-/// <c>+patch</c> 后缀(出路仍是 Replace,但从此依赖那个 mod 在场);0.6.0 及更早读的是
-/// 磁盘上的原文、PatchOperation 还没跑,那种行在那些库上照样报 not-written,而它的出路是 Add,
-/// 于是会插出第二份 —— 那份时间差的出口是 inherit 的 patch_ops 三个计数
+/// 路径取自**打完补丁**的合并 XML,别的 mod 的 patch 加进来的一行于是带
+/// <c>+patch</c> 后缀(出路仍是 Replace,但从此依赖那个 mod 在场);导出时拿不到那份文档
+/// (PatchRoute=none)的库读的是磁盘上的原文、PatchOperation 还没跑,那种行照样报 not-written,
+/// 而它的出路是 Add,于是会插出第二份 —— 那份时间差的出口是 inherit 的 patch_ops 三个计数
 /// (06「patch 溯源」定的口径:0 不说,非 0 报数);
 /// <c>under X</c> = XML 在容器 X 下写过东西,值回连之后仍说不准这一格。
-/// 缺层时这一列根本不出现,由能力位那句通知说,不许印成 <c>not-written</c>。
 ///
 /// RimWorld 允许拿 defName 当列表元素的标签名(<c>costList.Steel</c>、<c>things.AncientAmmoStack.chance</c>),
 /// 索引按 <c>costList[0].thingDef</c>。值回连拿同一元素各格的值 V 去对 XML 的 <c>容器.V</c>
 /// (自己写的和祖先写的都算),那个 V 就是标签名。
 ///
 /// 归位之后还得分清标签底下写了什么,否则会给出错的确定答案:短形式只写标签名加一段
-/// 文本,文本落哪一格由该类型的 LoadDataFromXmlCustom 决定。0.5.0 的 xml_written 只记
-/// 路径不记内容,候选多于一个时(costList 的 count 与 quality)就是说不准;0.6.0 起记下
-/// 那段文本,跟候选格的值一比就能分开。报 here 会把 Replace 指向一个从没写过的节点。
+/// 文本,文本落哪一格由该类型的 LoadDataFromXmlCustom 决定。xml_written 记下那段文本,
+/// 跟候选格的值一比就能分开;只记路径不记内容的话,候选多于一个时(costList 的 count 与
+/// quality)就是说不准,报 here 会把 Replace 指向一个从没写过的节点。
 /// </summary>
 public static class XmlOrigin
 {
@@ -81,9 +80,7 @@ public static class XmlOrigin
     /// <summary>
     /// 这一格的 xml 列取值。精确路径优先;否则值回连;再否则看容器前缀是不是还在。
     /// </summary>
-    /// <param name="xmlTexts">
-    /// 每条 XML 叶子路径的行内文本。<c>null</c> = 这份快照没量过,走候选数那条旧路。
-    /// </param>
+    /// <param name="xmlTexts">每条 XML 叶子路径的行内文本。</param>
     /// <param name="patchedPaths">
     /// 补丁加进来的那些路径。<c>null</c> = 这份快照收的是打补丁**之前**的原文,分不开
     /// 「作者写的」与「别的 mod 加的」—— 那时一律不加后缀,而不是当成没被加过。
@@ -93,7 +90,7 @@ public static class XmlOrigin
         IReadOnlyDictionary<string, string> xmlMarks,
         HashSet<string> containers,
         IReadOnlyDictionary<string, List<ElementCell>> cellsByElement,
-        IReadOnlyDictionary<string, string>? xmlTexts = null,
+        IReadOnlyDictionary<string, string> xmlTexts,
         IReadOnlySet<string>? patchedPaths = null)
     {
         if (xmlMarks.TryGetValue(path, out var exact))
@@ -137,9 +134,8 @@ public static class XmlOrigin
                 if (anchorMark is null) return No;
 
                 // 短形式 <Steel>75</Steel> 只写两件事:标签名,和一段文本。
-                // 候选只剩一格时没得选(statBases 的 value)—— 有没有文本都走这一档。
-                // 剩多格时(costList 的 count 与 quality):0.5.0 没记下文本,报 here 就是
-                // 给了个错的确定答案,退回 under;0.6.0 拿文本跟候选格的值比。
+                // 候选只剩一格时没得选(statBases 的 value)。
+                // 剩多格时(costList 的 count 与 quality)拿行内文本跟候选格的值比。
                 var candidates = 0;
                 foreach (var c in cells)
                 {
@@ -148,7 +144,7 @@ public static class XmlOrigin
                     if (xmlMarks.ContainsKey(element + "." + c.Leaf)) continue;
                     if (++candidates > 1) break;
                 }
-                if (xmlTexts is null || candidates <= 1)
+                if (candidates <= 1)
                     return candidates == 1
                         ? WithPatch(anchorMark, anchor, patchedPaths)
                         : Under(container);

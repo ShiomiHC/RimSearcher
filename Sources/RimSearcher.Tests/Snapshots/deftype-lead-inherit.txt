@@ -7,13 +7,15 @@ Where the name does turn up:
 name      is        in      next
 ThingDef  def type  9 defs  rimsearcher list ThingDef
 
-def_name        Bullet_Revolver
-def_type        ThingDef
-abstract        no
-inherits_from   BaseBullet
-declared_in     ludeon.rimworld
-source          Projectiles_Guns.xml
-patch_ops_name  n/a
+def_name           Bullet_Revolver
+def_type           ThingDef
+abstract           no
+inherits_from      BaseBullet
+declared_in        ludeon.rimworld
+source             Projectiles_Guns.xml
+patch_ops_name     n/a
+patch_ops_defname  0
+patch_ops_label    0
 2 ancestors.
 
 Same in every row, not repeated below: def_type=ThingDef, abstract=yes, declared_in=ludeon.rimworld, source=Projectiles_Guns.xml.
@@ -21,7 +23,4 @@ name            patch_ops_name
 BaseBullet      2
 BaseProjectile  0
 Patches also name 1 ancestor above (patch_ops_name column); what 'Bullet_Revolver' inherits from them is what those patches left.
-
-layer                    state        next
-patch_ops_defname_label  pre-measure  rimsearcher export --modlist fixture
 --- stderr ---

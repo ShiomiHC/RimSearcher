@@ -185,10 +185,9 @@ public sealed class SearchCommand : Command
             if (sighting is not null) NameLookup.Say(ctx, sighting);
             else ctx.Report.Notice(NoticeKind.NextStep,
                 (looksLikeClass
-                    // 嵌套 `Class=` **是**被索引的(导出器 0.2.0 起),所以不许说「索引不到」——
+                    // 嵌套 `Class=` **是**被索引的,所以不许说「索引不到」——
                     // 那句话会把 `where Class` 的零判成「工具看不见」,而不是「确实没有」。
-                    // 覆盖到哪一层随快照的导出器版本变,所以念 NestedClassLine 那个唯一产地,
-                    // 不在这里另写一句会过时的。
+                    // 念 NestedClassLine 那个唯一产地,不在这里另写一句。
                     ? $"Nothing in this snapshot is called that under any other guise either — no def type, " +
                       $"no class, no mod. " + Completeness.NestedClassLine(ctx) +
                       // 两条出路各标自己列出什么;「类可以不经过 def 被 C# 直接 new」那半是情景假设,
@@ -430,9 +429,8 @@ public sealed class GetCommand : Command
                 // tell whether anyone set it),两处产地此前强度不同。
                 //
                 // 那句「照着默认值写一遍与根本没写完全同形」此前压着没搬进来 —— 等的是信道
-                // 复验。复验跑完了(见 yesMeans 处):抽象地说「工具区分不了」实测 0/10,
-                // 把两个 def 各自点名才 4/10,两次复制合并 8/20 对 0/30、p=0.0002。于是搬进来,
-                // 与输出侧 yesMeans 同形 —— 那正是这两处口径必须一致的那条闸盯着的东西。
+                // 复验。复验跑完了:抽象地说「工具区分不了」实测 0/10,
+                // 把两个 def 各自点名才 4/10,两次复制合并 8/20 对 0/30、p=0.0002。于是搬进来。
                 // 「因为它们最常被读成作者选的」这半句 2026-09-07 删掉:它是个理由,而它
                 // 想防的那次误读由后面「照着默认值写一遍与根本没写完全同形」那句直接点名 ——
                 // 上面那轮实测(0/10 对 4/10)量的正是后面那句,不是这个理由。
@@ -689,12 +687,6 @@ public sealed class GetCommand : Command
             if (xmlNode?.ParentName is { Length: > 0 } parentName)
                 pairs.Add(new("inherits_from", $"{parentName} (see 'rimsearcher inherit {def.DefName}')"));
 
-            // 缺层写在 identity 里,不另起一句 notice —— get 的声明区已经顶着行数上限,
-            // 再加一条会把「有几句」本身读成噪声;也不许写 Re-export,那是过期警告的词。
-            if (!ctx.Db.Meta.IndexesXmlWritten)
-                pairs.Add(new(XmlOrigin.Column,
-                    $"not indexed (exporter {ctx.Db.Meta.ExporterVersion})"));
-
             // 只有一个 def 时,identity 块**不**排在最前:它是一叠名字,而 line 1 是管道下
             // 唯一的幸存者,那个位置得留给「几条、全不全」。名字是调用方自己敲进来的,
             // 少看一眼不会把截断读成完整。块改挂在字段表正上方(见下面那句 Detail)。
@@ -838,10 +830,7 @@ public sealed class GetCommand : Command
                     var readWhen = ctx.Db.Meta.IndexesPostPatchXml
                         ? "read after every patch ran"
                         : "read before patches ran";
-                    var xmlLayer = ctx.Db.Meta.IndexesXmlWritten
-                        ? $"The '{XmlOrigin.Column}' column refers to the XML {readWhen}."
-                        : $"Without the '{XmlOrigin.Column}' column, a def whose XML writes the default value " +
-                          "and a def that never mentions the field look the same here.";
+                    var xmlLayer = $"The '{XmlOrigin.Column}' column refers to the XML {readWhen}.";
                     ctx.Report.Notice(NoticeKind.Filter,
                         $"Not listed: {Tally.Complete(defaulted).Render("field")} whose value matches the " +
                         "declaring type's own default (--defaults lists them). The snapshot holds " +
@@ -899,22 +888,12 @@ public sealed class GetCommand : Command
             if (alone) ctx.Report.Detail("def", pairs);
 
             // xml 列的取值只从 XmlOrigin 出。值回连要用同一元素的其它格,所以全量取一次
-            // 再按元素前缀分组 —— 不按格查库,旧快照根本不走这条路。
-            var xmlContainers = new HashSet<string>(StringComparer.Ordinal);
-            Dictionary<string, string>? xmlTexts = null;
-            HashSet<string>? xmlPatched = null;
-            var xmlMarks = ctx.Db.Meta.IndexesXmlWritten
-                ? ctx.Db.XmlWrittenMarks(def.DefType, def.DefName, out xmlContainers, out xmlTexts,
-                                         out xmlPatched)
-                : null;
-            var cellsByElement = xmlMarks is null
-                ? null
-                : XmlOrigin.CellsByElement(ctx.Db.AllFieldCells(def.Id));
+            // 再按元素前缀分组 —— 不按格查库。
+            var xmlMarks = ctx.Db.XmlWrittenMarks(def.DefType, def.DefName, out var xmlContainers, out var xmlTexts,
+                                                  out var xmlPatched);
+            var cellsByElement = XmlOrigin.CellsByElement(ctx.Db.AllFieldCells(def.Id));
 
-            var fieldCols = xmlMarks is null
-                ? new[] { "path", "value", FieldDefault.Column }
-                : ["path", "value", FieldDefault.Column, XmlOrigin.Column];
-            ctx.Report.Table("fields", fieldCols,
+            ctx.Report.Table("fields", ["path", "value", FieldDefault.Column, XmlOrigin.Column],
                 fields.Select(f =>
                 {
                     var row = new Dictionary<string, object?>
@@ -926,9 +905,8 @@ public sealed class GetCommand : Command
                         // 「没比成」不是「有人改过」。
                         [FieldDefault.Column] = FieldDefault.Render(f.Default),
                     };
-                    if (xmlMarks is not null)
-                        row[XmlOrigin.Column] = XmlOrigin.Resolve(
-                            f.Path, xmlMarks, xmlContainers, cellsByElement!, xmlTexts, xmlPatched);
+                    row[XmlOrigin.Column] = XmlOrigin.Resolve(
+                        f.Path, xmlMarks, xmlContainers, cellsByElement, xmlTexts, xmlPatched);
                     return (IReadOnlyDictionary<string, object?>)row;
                 }).ToList());
 
@@ -938,17 +916,16 @@ public sealed class GetCommand : Command
             // yes 行,以及这条否定是不是已经由上面的 Not listed 那句承住了(见那边的注释)。
             Completeness.NoteWidelySharedValues(ctx, def, fields, withDefaults, defaulted);
 
-            // 0.6.0 及更早的快照,xml 列读的是磁盘上的 XML 原文、PatchOperation 还没跑,
-            // 于是别的 mod 用 PatchOperationAdd 加进来的一行在那里报 no,而 no 的出路是 Add ——
-            // 会插出第二份。06「patch 溯源」给这份时间差定的处置是逐条报数而不是写一句常驻
-            // 免责声明:0 不说,非 0 报出数字。那条口径当初只兑现在 inherit 上,而推出 Add 的
-            // 那条路走的是 get。0.7.0 起时间差本身没了(见下面那个能力位判据)。
+            // 导出时拿不到打完补丁的文档(PatchRoute=none)的快照,xml 列读的是磁盘上的 XML 原文、
+            // PatchOperation 还没跑,于是别的 mod 用 PatchOperationAdd 加进来的一行在那里报 no,
+            // 而 no 的出路是 Add —— 会插出第二份。06「patch 溯源」给这份时间差定的处置是逐条报数
+            // 而不是写一句常驻免责声明:0 不说,非 0 报出数字。
             //
             // 这个数**只会低估**,两头都漏,所以它非 0 时是硬信号、为 0 时什么都不是:
             // xpath 按 thingClass 或通配符寻址的不留痕迹;既没有 Name= 也没有 ParentName、
             // 又不 abstract 的普通 def 根本不进 xml_nodes,连计数都没有。为 0 与查不到都沉默,
             // 常驻的那半句话在 --help 与 --defaults 的说明里。
-            if (xmlMarks is not null)
+            if (!ctx.Db.Meta.IndexesPostPatchXml)
             {
                 var node = ctx.Db.NodesNamed(def.DefName)
                     .FirstOrDefault(n => string.Equals(n.DefType, def.DefType, StringComparison.Ordinal)
@@ -960,7 +937,7 @@ public sealed class GetCommand : Command
                 // 收了打完补丁的 XML 之后这句话的前提就没了 —— 补丁加的行在列里自带
                 // '+patch',逐行说,比整段告诫准。剩下的只有「补丁改了值」那一路,
                 // 而值本来就印在 value 列里。
-                if (xpaths > 0 && !ctx.Db.Meta.IndexesPostPatchXml)
+                if (xpaths > 0)
                     ctx.Report.Notice(NoticeKind.Boundary,
                         $"{xpaths} patch xpath{(xpaths == 1 ? "" : "s")} name this def; the " +
                         $"'{XmlOrigin.Column}' column above was read before patches ran. " +
@@ -1056,21 +1033,15 @@ public sealed class GetCommand : Command
                 ctx.Report.EmptyBecause(
                     new EmptyCause(ctx.FilterAsGiven(pathOption), beforePathFilter, ctx.Without(pathOption)),
                     "translation");
-                if (!ctx.Db.Meta.IndexesInjectionKeys)
+                if (!ctx.Db.InjectionKeysIndexed)
                     Short(DataLayers.InjectionKeysRow(ctx.Db, ctx.SnapshotName ?? ""));
             }
 
             // 表恒在场,空着也在场。--json 的自述契约是「表键恒在,没命中就是空数组」,而
             // 此前它被 translations.Count > 0 挡在外面,于是「筛空了」与「这个 def 一条译文
             // 都没有」在 JSON 面逐字同形(键都不见)。文本面不变 —— 零行的表渲染出来是零字节。
-            // key 列只在归一过的快照上摆。老快照那一列每格都空,而空格会被读成
-            // 「游戏认的键就是 path 这一串」—— 那正好是假的。缺层另起一句宣布
-            // (同 xml 列在 0.5.0 之前那一档的办法:不摆空列,把缺席说出来)。
-            var normalized = ctx.Db.Meta.IndexesInjectionKeys;
             ctx.Report.Table("translations",
-                normalized
-                    ? ["path", "key", "translated", "original", "language", "origin"]
-                    : ["path", "translated", "original", "language", "origin"],
+                ["path", "key", "translated", "original", "language", "origin"],
                 translations.Select(t =>
                 {
                     var row = new Dictionary<string, object?>
@@ -1083,7 +1054,7 @@ public sealed class GetCommand : Command
                     };
                     // 归一之后 path 与游戏认的那一串不再逐字相同,而写语言文件的人要的是后者。
                     // 相同时留空:两栏一模一样只会让读者以为它们是两件事。
-                    if (normalized) row["key"] = t.Key is { } k && k != t.Path ? k : null;
+                    row["key"] = t.Key is { } k && k != t.Path ? k : null;
                     return (IReadOnlyDictionary<string, object?>)row;
                 }).ToList());
 
@@ -1102,7 +1073,7 @@ public sealed class GetCommand : Command
                 // 仍旧只在**给了过滤器**时发。无条件发过一版,`StalenessTests` 立刻红:
                 // 干净的一次普通查询要求声明区零字节,而两套文法这件事只在按坐标找东西的人
                 // 身上兑现 —— 不按坐标找的人拿到的是「每条命令 6 行」里少掉的一行。
-                if (!normalized && paths.Count > 0)
+                if (!ctx.Db.InjectionKeysIndexed && paths.Count > 0)
                     Short(DataLayers.InjectionKeysRow(ctx.Db, ctx.SnapshotName ?? ""));
 
                 // 配不上槽位(no-slot)与槽位不许译(refused)两档 2026-09-18 起折进 origin 格
@@ -1137,8 +1108,8 @@ public sealed class GetCommand : Command
     {
         // 运行时那一档三个取值,不是两个。**「语言包里有这条记录」不等于「它生效了」** ——
         // 键配不上槽位、或槽位不许译时,游戏照旧把记录留在包里,只是不注。游戏自己的判决
-        // 从 0.10.0 起随行带出;没带的老库落到 in pack,那一格说的是**我们只知道它在包里**,
-        // 不许写成 in effect(那是替游戏担保一件没测过的事)。
+        // 随行带出;没带判决的行(磁盘语言文件收割来的)落到 in pack,那一格说的是**我们只
+        // 知道它在包里**,不许写成 in effect(那是替游戏担保一件没测过的事)。
         // 名册那一档(键配不上槽位 / 槽位不许译)贴在同一格里:两档出路不同(改键能救 / 改了
         // 也没用),而它们与一条正常的「in pack, not applied」此前逐字同形,靠表下两句分。
         var slot = t.KeyState switch
@@ -1291,15 +1262,6 @@ public sealed class FindCommand : Command
             EmptyCause.JsonKey,
             NameLookup.JsonKey,
             Completeness.JsonKey,
-            new()
-            {
-                Key = "absent",
-                Rows = true,
-                What = "one row per layer this query needed that this snapshot does not hold — layer, state, " +
-                       "next; 'xml_written' (pre-measure) when the value asked for is a class name that sits " +
-                       "on official defs and the snapshot has no 'xml' column to say whether their XML wrote " +
-                       "it. Empty otherwise; next is the command that fills the layer.",
-            },
         ],
     };
 
@@ -1656,7 +1618,7 @@ public sealed class FindCommand : Command
                 // (每个 def 都是 null / 不存盘的运行时缓存)在这种局面下一条都不成立。
                 if (deeper is not null) ctx.Report.Notice(NoticeKind.NextStep, deeper);
                 // identity 那一档不说:那时候答案已经给全了,再挂一句索引边界是纯噪音。
-                // `class` 是**唯一**的例外:导出器 0.2.0 起 `<path>.Class` 是一条真路径,
+                // `class` 是**唯一**的例外:`<path>.Class` 是一条真路径,
                 // 敲 `where Class X` 的人问的多半是嵌套子对象的类型,而 identity 那句只答了
                 // 「def 自己的 class」。
                 else if (!identity.ContainsKey(path) || string.Equals(path, "class", StringComparison.OrdinalIgnoreCase))
@@ -1708,13 +1670,9 @@ public sealed class FindCommand : Command
             // 而「1397 个值里没有」读起来正是「找遍了」。
             var isClassPath = path.Equals("Class", StringComparison.OrdinalIgnoreCase) ||
                               path.EndsWith(".Class", StringComparison.Ordinal);
-            // 索引缺口是**算出来的**成因,抽象基类只是个猜测。缺口在场时猜测让位 ——
-            // 两句并排摆着,读的人会挑后者(它更具体),然后去查一批根本不存在的子类。
-            var indexGap = isClassPath && !ctx.Db.Meta.IndexesAllNestedClass;
-
             // 本次查询**自己施加的过滤**是算得出来的成因,而抽象基类只是个猜测。算得出来的
-            // 排在最前,并让猜测退场 —— 与 indexGap 同一条纪律:两句并排摆着,读的人会挑
-            // 更具体的那句,然后去查一批根本不存在的子类。
+            // 排在最前,并让猜测退场:两句并排摆着,读的人会挑更具体的那句,然后去查一批
+            // 根本不存在的子类。
             //
             // scope 只在第一行被回显过,而回显不是成因 —— 「我圈了这几个 mod」与
             // 「零是这个圈造成的」差着一次重查,而这次重查是白拿的:同一条 SQL,scope 换成 all。
@@ -1747,7 +1705,7 @@ public sealed class FindCommand : Command
                     // 每条出路的标签就是它列出什么(派生类 / 使用者),两种落点靠标签分开,
                     // 不再把成因当情景写在前面。判据从严(ClassNameShape 把 `True`、`.ogg`、`1.5` 挡在外面)。
                     : $" 'rimsearcher values {path}' lists them." +
-                      (ClassNameShape.Looks(value) && !indexGap && hiddenByScope == 0
+                      (ClassNameShape.Looks(value) && hiddenByScope == 0
                           ? $" 'rimsearcher code-search \"class \\w+ : {ClassNameShape.Tail(value)}\\b\"' lists " +
                             $"the classes deriving from '{ClassNameShape.Tail(value)}'; " +
                             $"'rimsearcher code-search \"{ClassNameShape.Tail(value)}\"' lists who constructs it."
@@ -1759,12 +1717,6 @@ public sealed class FindCommand : Command
                 ctx.Report.EmptyBecause(new EmptyCause(ctx.FilterAsGiven("scope"), hiddenByScope, ctx.Without("scope")));
 
             // 边界排在建议**之后**:它限定的是上面那整段,而不是其中某一条。
-            //
-            // 量全了的那一档在这里**不发声**:它说的是「'find Class <ClassName>' 才是查得到
-            // 它的那条查询」,而 isClassPath 的意思正是调用方刚跑完那条 —— 把人指回他站着的
-            // 地方。留下的两档说的是另一回事:这份快照没量到那里,所以你手上这个零是假的。
-            if (isClassPath && !ctx.Db.Meta.IndexesAllNestedClass)
-                ctx.Report.Notice(NoticeKind.Boundary, Completeness.NestedClassLine(ctx));
             // 值侧是单语的 —— `where label "shield belt"` 在中文快照上必然空手,
             // 而那个 def 就在文本索引里躺着。与上面的近似候选叠加,不替换。
             if (value is { Length: > 0 }) Advisory.NoteTextIndexHasIt(ctx, value);
@@ -2365,10 +2317,6 @@ public sealed class ListCommand : Command
                         $"'rimsearcher where Class {wantClass}'.");
                     // 与下面「类型里有几种 class、没有你要的那种」那支同一条纪律:--class 单独拿掉能回来多少。
                     ctx.Report.EmptyBecause(new EmptyCause(ctx.FilterAsGiven("class"), present[0].Count, ctx.Without("class")));
-                    // 量全了的快照上这一条只会把上面那句用占位符再说一遍。留着的是它另外两档
-                    // 携带的免责:那条转向在这份快照上会回一个**假零**,不说破就是个闭环。
-                    if (!ctx.Db.Meta.IndexesAllNestedClass)
-                        ctx.Report.Notice(NoticeKind.Boundary, Completeness.NestedClassLine(ctx));
                     return 1;
                 }
 
@@ -2605,7 +2553,7 @@ public sealed class FieldsCommand : Command
                 }
 
                 var declared = ctx.Db.TypeDeclaredPaths(type, filters, exactPath);
-                if (declared is { Count: > 0 })
+                if (declared.Count > 0)
                 {
                     // 事实句 + index_gap 一行;「没进值索引」「类型有、def 没有」是同一件事的反面与重述。
                     ctx.Report.Notice(NoticeKind.Boundary,
@@ -2625,7 +2573,6 @@ public sealed class FieldsCommand : Command
                     ? $" No def of '{type}' holds {PathFilterText.Say(filters)} as a value either."
                     : "";
 
-                if (declared is { Count: 0 })
                 {
                     // 量程跟着这句否定一起说。声明集是按递归深度收的,而类型图有环 ——
                     // 「展开完」不存在(Docs/22 第 12.2 节:471 个类型的强连通分量)。
@@ -2650,15 +2597,6 @@ public sealed class FieldsCommand : Command
                                       Completeness.DeclarationSearch(filters[0]));
                     return 1;
                 }
-                ctx.Report.Notice(NoticeKind.Boundary,
-                    $"'{type}' has field paths, but none {(exactPath ? "is" : "contains")} {PathFilterText.Say(filters)}." +
-                    notAValue +
-                    $" Drop {(exactPath ? "--exact-path" : "--path-contains")} to see them all.");
-                // 同一条纪律:成因查明了就不再列那三种「字段可能在、只是没进索引」的可能。
-                // 那段免责整段假定问的是个字段名,而这次问的不是。
-                if (asValue is not null) SayValueNotPath(ctx, type, filters[0], asValue);
-                else Completeness.NoteIndexHoldsValuesOnly(ctx, filters[0]);
-                return 1;
             }
             ctx.Report.Notice(NoticeKind.NextStep, DefTypeMiss.Say(type, ctx.Db.Types(ctx.Scope()).Select(t => t.Type), "fields"));
             // 叠加不替换:上面那句说的是「def 类型里没有它」,这条说的是「它在别处,而且
@@ -3350,19 +3288,10 @@ internal static class Completeness
             : $"'{DeclarationSearch(path)}' finds the declaration, which does say.";
 
         ctx.Report.Notice(NoticeKind.Boundary,
-            $"No indexed value sits at that path. {how} " +
             // 「导出器在某个 def 上停短,那条路径也不在索引里 → 'snapshot truncated'」那段 2026-09-20 删:
             // 40 次实印,`snapshot truncated` 被照做 0 次(基线 1%)。截断那一层的读法住
             // snapshot status 的 Remarks 与 get 的截断行。
-
-            (ctx.Db.Meta.IndexesTypeFields
-                ? ""
-                : $"This snapshot (exporter {ctx.Db.Meta.ExporterVersion}) does not list the fields a type " +
-                  "can have, so it cannot tell a field that is null on every def from one the type does not have. ") +
-            // 量全了的快照上不发声,与 where Class / --class 两处同一条规矩:那一档只说
-            // 「嵌套类型在 .Class 下」,对一个查别的字段落空的读者没有输入。另两档说的是
-            // 这份快照没量到那里,那才是这个零可能是假零的成因。
-            (ctx.Db.Meta.IndexesAllNestedClass ? "" : NestedClassLine(ctx)));
+            $"No indexed value sits at that path. {how}");
     }
 
     /// <summary>
@@ -3483,17 +3412,10 @@ internal static class Completeness
         // 是 4/10;这是 get 那句同一手法的复制(那边 4/10 对 0/20),两次合并 8/20 对 0/30,
         // p=0.0002。要点是两边都得是读者叫得出、能去核对的东西 —— 抽象地说「工具区分不了」
         // 在 read --outline 那条上实测仍是 0/10。
-        // 0.5.0 起这两者不再同形:xml 列就在同一行上,here 是「写了同样的值」,
-        // no 是「从没提过这个字段」。再说「看起来一样」是假话 —— 分档,不是删,
-        // 旧快照上没有那一列,原句仍是这条路上唯一说破它的地方。
-        // 有 xml 列的那一支什么都不加:「yes 留下的问题由同一行的 xml 列定」是**列义**,住 help
+        // 这两者不同形:xml 列就在同一行上,here 是「写了同样的值」,no 是「从没提过这个字段」。
+        // 「yes 留下的问题由同一行的 xml 列定」是**列义**,住 help
         // (「the 'xml' column says whether this def's own XML wrote the path …」)。2026-09-20 删:
         // 那半句印了 276 次,随后文字提到 xml 列的 0/12,与 bfd0ec7 立的「列义住 help」同一口径。
-        // 否定只留给读不出来的那一支 —— 没有那一列的老库上,两种 def 在这里真的同形。
-        var yesMeans = ctx.Db.Meta.IndexesXmlWritten
-            ? null
-            : "a def whose XML writes that same value and a def that never mentions the field both " +
-              "show yes here";
 
         // 这半句只在**本次取景里真有 yes 行**时才拼。两条被砍掉的路径各有各的毛病:
         //   不加 --defaults 时,yes 行被整批滤走、表折成 `code_default=no`,而
@@ -3514,8 +3436,7 @@ internal static class Completeness
             ? $"Values that most of the {total} {def.DefType}s in this snapshot also carry — the count in " +
               $"brackets: {NameList.Render(listed, listed.Count)}." +
               (carryYesMeans
-                  ? $" Only rows whose '{FieldDefault.Column}' is no were compared" +
-                    (yesMeans is null ? "." : $": {yesMeans}.")
+                  ? $" Only rows whose '{FieldDefault.Column}' is no were compared."
                   : "")
             // 否定支砍掉「所以没有一个是透过那一列显出来的全类默认值」:那是前半句的改写,
             // 而 SKILL.md 讲过这条线是干什么的。「yes 没参与比较」那半句留着 ——
@@ -3523,37 +3444,17 @@ internal static class Completeness
             : $"No value above with '{FieldDefault.Column}'=no is one that most of the {total} " +
               $"{def.DefType}s in this snapshot also carry." +
               (carryYesMeans
-                  ? " Rows marked yes were not compared" + (yesMeans is null ? "." : $": {yesMeans}.")
+                  ? " Rows marked yes were not compared."
                   : ""));
     }
 
     /// <summary>
-    /// 嵌套 <c>Class="…"</c> 的运行时类型这一维,手上这份快照量到哪一步。
-    ///
-    /// **三档,不是两档。** 0.2.0 只发列表元素(判据是「路径以 ] 收尾」),0.4.0 起单字段
-    /// 上的 <c>Class=</c> 才一并发。中间那一档最险:<c>where Class X</c> 照样回零,而那个零
-    /// 与「量过了、确实没人用它」逐字同形 —— 一句 "is the query that reaches it" 会把人
-    /// 送去查一条对 <c>&lt;genStep Class="…"&gt;</c> 根本不存在的路径,走空了再照这句
-    /// 试一遍,闭环。所以中间档必须点名它够不着的是哪一类。
+    /// 嵌套 <c>Class="…"</c> 的运行时类型住在哪条路径下 —— 两个「像类名」的落空处念的同一句。
     /// </summary>
     public static string NestedClassLine(CommandContext ctx)
     {
-        if (ctx.Db.Meta.IndexesAllNestedClass)
-            return "The runtime type of a nested Class=\"...\" object — in a list or on a single field — is " +
-                   "indexed as '<path>.Class', so 'rimsearcher where Class <ClassName>' is the query that reaches it.";
-
-        if (ctx.Db.Meta.IndexesNestedClass)
-            return "The runtime type of a nested Class=\"...\" object is indexed as '<path>.Class' for list " +
-                   "elements only (<li Class=\"...\">), so 'rimsearcher where Class <ClassName>' reaches those. " +
-                   // 句尾不重复指 code-search:三个调用点各自都已经指过了,
-                   // 而 NoteIndexHoldsValuesOnly 的结尾正好就是那一句。
-                   "A single field that picks a class — GenStepDef.genStep, ThinkTreeDef.thinkRoot — is not in " +
-                   $"this snapshot at all: it was written by exporter {ctx.Db.Meta.ExporterVersion}, before that " +
-                   "case entered the index. Re-export to reach it.";
-
-        return "The runtime type of a nested Class=\"...\" object is not in this snapshot at all: it was " +
-               $"written by exporter {ctx.Db.Meta.ExporterVersion}, before that type entered the index, so no " +
-               "query here reaches it — re-export to get 'rimsearcher where Class <ClassName>'.";
+        return "The runtime type of a nested Class=\"...\" object — in a list or on a single field — is " +
+               "indexed as '<path>.Class', so 'rimsearcher where Class <ClassName>' is the query that reaches it.";
     }
 
     /// <summary>
@@ -3647,7 +3548,6 @@ internal static class Advisory
         // 而下半句自己就带着主语。同批压掉的还有开头那句「X 不是游戏自己的类」——
         // 那是在解释这条 notice 为什么出现,对读者要做的判断不提供任何输入。
         // xml 列读的是哪份 XML、no 能排除什么,是 get 的 Remarks 里的机制;这里只指过去。
-        // 没有那一列的快照是缺层:absent 表一行(xml_written),不再用一句话说。
         ctx.Report.Notice(NoticeKind.Boundary,
             // 主语固定成 it,计数全在介词短语里 —— 计数放主语位时动词得跟着单复数变,
             // 而 NounRegistry 管名词不管动词(同一条纪律在 AnnounceExcluded 上也写着)。
@@ -3658,8 +3558,6 @@ internal static class Advisory
             $"'{value}' sits on {Tally.Complete(onOfficial.Sum(m => m.Defs)).Render("def")} declared in " +
             "official mods; the 'xml' column of 'rimsearcher get <defName> --defaults' says whether their " +
             "XML wrote it.");
-        if (!ctx.Db.Meta.IndexesXmlWritten)
-            ctx.Report.Absent(DataLayers.XmlWrittenRow(ctx.Db, ctx.SnapshotName ?? ""));
     }
 
     /// <summary>

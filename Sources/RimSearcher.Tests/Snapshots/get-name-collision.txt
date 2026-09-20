@@ -11,34 +11,32 @@ class          Verse.ThingDef
 declared_in    ludeon.rimworld
 source         Buildings_Special.xml
 inherits_from  BaseProjectile (see 'rimsearcher inherit Firefoam')
-xml            not indexed (exporter 0.2.0)
 8 fields.
 
 Same in every row, not repeated below: code_default=no.
-path                                   value
-soundImpactDefault                     BulletImpact_Ground
-soundDrop                              Standard_Drop
-soundPickup                            Standard_Pickup
-soundInteract                          Standard_Pickup
-thingClass                             RimWorld.Building
-statBases[0].stat                      MarketValue
-graphicData.texPath                    Things/Building/Nozzle
-building.blueprintGraphicData.texPath  Things/Building/Blueprint_Nozzle
+path                                   value                             xml
+soundImpactDefault                     BulletImpact_Ground               not-written
+soundDrop                              Standard_Drop                     here
+soundPickup                            Standard_Pickup                   here
+soundInteract                          Standard_Pickup                   here
+thingClass                             RimWorld.Building                 here
+statBases[0].stat                      MarketValue                       here
+graphicData.texPath                    Things/Building/Nozzle            here
+building.blueprintGraphicData.texPath  Things/Building/Blueprint_Nozzle  here
 Values that most of the 9 ThingDefs in this snapshot also carry — the count in brackets: soundDrop (9), soundImpactDefault (9), soundPickup (9), soundInteract (8).
   - Market value, cost to make and work amount are not fields: 'rimsearcher economy Firefoam' has them.
   - 2 translations.
 
-Same in every row, not repeated below: language=ChineseSimplified, origin=in pack.
-path         translated      original
-description  一团灭火泡沫。  A blob of firefoam.
-label        灭火泡沫        firefoam
+Same in every row, not repeated below: language=ChineseSimplified, origin=in effect.
+path         key  translated      original
+description       一团灭火泡沫。  A blob of firefoam.
+label             灭火泡沫        firefoam
 
 def_name     Firefoam
 def_type     StatDef
 class        Verse.StatDef
 declared_in  ludeon.rimworld
 source       Stats_Basics.xml
-xml          not indexed (exporter 0.2.0)
 0 fields.
 
 layer              state         next

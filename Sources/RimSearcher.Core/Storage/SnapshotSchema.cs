@@ -20,10 +20,8 @@ public static class SnapshotSchema
     /// 0.5.0 起 xml_nodes 多了 patch_ops_defname / patch_ops_label,并加 xml_written
     /// 与 type_fields 两张表。0.6.0 起 xml_written 多了 inner_text,0.7.0 多了 patched。
     /// 0.8.0 起加 injection_keys 表,translations 多了 source_file / source_file_count。
-    /// 都不涨这一档:
-    /// 精确相等的 schema 检查会让磁盘上的旧库整份打不开,而缺的那一层由导出器版本上
-    /// 的能力位说话(同 content_fingerprint 那条缝)。新导入的库有这些列/表;旧库没有,
-    /// 查询侧能力位为假时不去碰它们。
+    /// 都不涨这一档:精确相等的 schema 检查会让磁盘上的旧库整份打不开。缺层那一档的读法
+    /// (导出器版本上的能力位)2026-09-20 随 0.12 地板一起删了 —— 地板之下的库一份都不在了。
     ///
     /// type_fields 后来把 path 抽成 type_field_paths 字典(1373 万行里只有 52 万条不同
     /// 路径,平均 116 字符),再后来整张表拆成 type_subtrees + subtree_paths(那 1373 万行
@@ -197,13 +195,7 @@ public static class SnapshotSchema
         -- 不归一的话 `--path-contains stages[0]` 对译文那栏恒回零,与「这个 def 没这条译文」同形。
         -- key_state 说的是另一件事:这个键在不在**槽位名册**上(injection_keys)。
         -- 三态见 Snapshot.InjectionKey.State。**它不记「键是哪种拼法」** ——
-        -- 拼法读者看 key 那一格就是,而两件事挤在一列里正是 0.8.0 那版的错法。
-        --
-        -- **两列同时为 NULL = 这次导入没查名册**(导出器早于 0.9.0),
-        -- 那种库里 path 仍是数据源原样。不许把 NULL 当成 resolved —— 那等于宣布查过了。
-        --
-        -- 上面四列都是后加的,**没有涨 schema_version**:旧库照旧能读,只是少几条判据
-        -- (同 type_fields 的 path_id,靠列名认)。
+        -- 拼法读者看 key 那一格就是。
         CREATE TABLE translations (
             def_id     INTEGER,
             def_type   TEXT,
@@ -212,8 +204,8 @@ public static class SnapshotSchema
             key        TEXT,
             key_state  TEXT,
             -- 游戏自己的判决:这条 defInjection 真注进去了吗。NULL = 没这一位
-            -- (导出器早于 0.10.0,或这一行是从磁盘语言文件收割来的 —— 那些行
-            -- 游戏根本没读过)。与 key_state 两条独立的路:这一列是实测,那一列是推算。
+            -- (这一行是从磁盘语言文件收割来的 —— 游戏根本没读过)。
+            -- 与 key_state 两条独立的路:这一列是实测,那一列是推算。
             applied    INTEGER,
             translated TEXT,
             original   TEXT,
@@ -229,15 +221,11 @@ public static class SnapshotSchema
         -- 语言文件里两种都合法、都真注入得上,所以译者写的那一串得先归一到一种,
         -- 否则 --path 就要求调用方先猜对是哪一种。
         --
-        -- **这是槽位名册:一个可注入槽位一行,一个不漏**(导出器 0.9.0 起)。全在册才使得
-        -- 「这个键在不在册」问得出口,而那一问是译文表 key_state 的唯一依据。0.8.0 那版
-        -- 只发「带信息」的行(两键不同的、或不许译且有文本的),于是问不出口,判据退化成
-        -- 拿字段表比对 —— 整表注入的键不带元素下标(rulePack.rulesStrings),字段表里那条
-        -- 路径带(…rulesStrings[0]),逐字比一次不中。实测 1348 条判「配不上槽位」里 956 条
-        -- 是这么冤枉的。所以 0.8.0 的库在能力位上算「没量过」,见 ExportMeta。
-        --
-        -- 空表与「这一档没导」在 SQL 上同形,不许当成「量过了、没有」;查询侧靠能力位
-        -- (IndexesInjectionKeys)决定读不读。
+        -- **这是槽位名册:一个可注入槽位一行,一个不漏**。全在册才使得「这个键在不在册」
+        -- 问得出口,而那一问是译文表 key_state 的唯一依据。只发「带信息」的行(两键不同的、
+        -- 或不许译且有文本的)的话问不出口,判据退化成拿字段表比对 —— 整表注入的键不带
+        -- 元素下标(rulePack.rulesStrings),字段表里那条路径带(…rulesStrings[0]),逐字比
+        -- 一次不中。实测 1348 条判「配不上槽位」里 956 条是这么冤枉的。
         -- 四列字符串全进字典:49.7 万行里 def_type 只有 222 个不同值(1595 倍冗余)、
         -- def_name 1.4 万(31 倍)、两条路径各 4 万上下(各 4 倍)。表连索引 103.0M → 31.3M。
         --
@@ -314,18 +302,15 @@ public static class SnapshotSchema
             source_mod  TEXT,
             source_file TEXT,
             patch_ops   INTEGER NOT NULL DEFAULT 0,
-            -- 0.5.0 起才有值。旧库没有这两列,查询侧靠能力位决定读不读,不许把缺列当 0。
             patch_ops_defname INTEGER NOT NULL DEFAULT 0,
             patch_ops_label   INTEGER NOT NULL DEFAULT 0
         );
 
-        -- 每个 XML 节点(含不参与继承的普通 def)实际写出来的字段路径。
-        -- patch 之前的原文,用来回答 Replace 还是 Add。
-        -- inner_text:0.6.0 起才有值。叶子的行内文本;Class= 那一行是属性值。
-        -- 旧库没有这一列,查询侧靠能力位决定读不读,不许把缺列当「没写过」。
-        -- patched:0.7.0 起才有值。真 = 打完补丁的文档里有这一行、磁盘上的原文没有。
-        -- 那一档路径只在 0.7.0 起才出现在这张表里 —— 老库里它们干脆不在,而「不在」
-        -- 在 xml 列上印的是 no(该 Add),与这里的「补丁加的」(该 Replace)正相反。
+        -- 每个 XML 节点(含不参与继承的普通 def)实际写出来的字段路径,用来回答 Replace 还是 Add。
+        -- inner_text:叶子的行内文本;Class= 那一行是属性值。
+        -- patched:真 = 打完补丁的文档里有这一行、磁盘上的原文没有。导出时拿不到那份文档
+        -- (PatchRoute=none)的库里它们干脆不在,而「不在」在 xml 列上印的是 not-written(该 Add),
+        -- 与「补丁加的」(该 Replace)正相反。
         CREATE TABLE xml_written (
             def_type    TEXT NOT NULL,
             node_key    TEXT NOT NULL,

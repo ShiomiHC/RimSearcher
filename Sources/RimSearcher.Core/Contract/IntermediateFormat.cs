@@ -30,11 +30,11 @@ namespace RimSearcher.Contract
         ///
         /// 0.5.0 起多了 kind=xmlwritten / kind=typefields,以及 xmlnode 上的
         /// patch_ops_defname / patch_ops_label。0.6.0 起 xmlwritten 另带与 paths
-        /// 同序的 texts。0.8.0 起多了 kind=injkey(注入键层)。都不涨这一档:缺的那一层由导出器版本上的能力位说话
-        /// (与 IndexesNestedClass 同一套),旧文件仍能导入、旧库仍能打开;
-        /// 涨了就会把磁盘上的旧导出整批拒收,而「看不见 ≠ 不存在」要的是宣布缺层,
-        /// 不是把整份快照关掉。旧 CLI 读到不认识的 kind 会静默落空,但它本来就没有
-        /// 对应列,不会把空说成「量过了、是零」。旧 CLI 读到不认识的键同样落空。
+        /// 同序的 texts。0.8.0 起多了 kind=injkey(注入键层)。都没涨这一档 —— 当时靠导出器
+        /// 版本上的能力位宣布缺层,让旧文件仍能导入。那一套 2026-09-20 删了:层齐不齐现在由
+        /// <see cref="Snapshot.ExportMeta.FloorMinor"/> 那道导出器地板拒收,格式号只答「文件能不能读」。
+        /// 旧 CLI 读到不认识的 kind 会静默落空,但它本来就没有对应列,不会把空说成
+        /// 「量过了、是零」。旧 CLI 读到不认识的键同样落空。
         ///
         /// 每一档都必须拒收前一档,而不是降级读:缺的那一层在查询结果里与
         /// 「事实上就没有」逐字同形,库里无从区分。

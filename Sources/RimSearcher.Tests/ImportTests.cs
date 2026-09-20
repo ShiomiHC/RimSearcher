@@ -141,6 +141,27 @@ public class ImportTests
         Assert.Contains(IntermediateFormat.FormatVersion.ToString(), ex.Message);
     }
 
+    /// <summary>
+    /// 格式号之外还有导出器地板(<see cref="ExportMeta.FloorMinor"/>):0.5–0.10 逐层加进来的
+    /// xml_written / type_fields / injection_keys 都没涨格式号,地板之下的文件读进来就是
+    /// 「层空着」与「量过了没有」同形。消息要带文件的版本与地板,并指向重导。
+    /// </summary>
+    [Fact]
+    public void 地板之下的导出器版本被拒绝()
+    {
+        var export = Temp("oldexporter" + IntermediateFormat.FileExtension);
+        Fixture.WriteExport(export, exporterVersion: "0.11.0");
+        var ex = Assert.ThrowsAny<Exception>(() => new SnapshotImporter().Import(export, Temp("oldexporter.db")));
+        Assert.Contains("exporter 0.11.0", ex.Message, StringComparison.Ordinal);
+        Assert.Contains($"{ExportMeta.FloorMajor}.{ExportMeta.FloorMinor} or later", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("rimsearcher export", ex.Message, StringComparison.Ordinal);
+
+        // 地板本身读得进来。
+        var ok = Temp("flooredexporter" + IntermediateFormat.FileExtension);
+        Fixture.WriteExport(ok, exporterVersion: $"{ExportMeta.FloorMajor}.{ExportMeta.FloorMinor}.0");
+        new SnapshotImporter().Import(ok, Temp("flooredexporter.db"));
+    }
+
     /// <summary>被拒的导入不许留下半个库文件 —— 否则下次打开的是一份垃圾。</summary>
     [Fact]
     public void 导入失败不留下半成品库()
@@ -167,7 +188,7 @@ public class ImportTests
             w.WriteLine(new JsonLine()
                 .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindMeta)
                 .Int(IntermediateFormat.KeyFormatVersion, IntermediateFormat.FormatVersion)
-                .Str(IntermediateFormat.KeyExporterVersion, "0.6.0")
+                .Str(IntermediateFormat.KeyExporterVersion, Fixture.DefExporterVersion)
                 .Str(IntermediateFormat.KeyExportedAtUtc, "2026-01-06T00:00:00.0000000Z")
                 .Str(IntermediateFormat.KeyGameVersion, Fixture.GameVersion)
                 .Str(IntermediateFormat.KeyLanguage, Fixture.Language)
@@ -211,7 +232,7 @@ public class ImportTests
             w.WriteLine(new JsonLine()
                 .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindMeta)
                 .Int(IntermediateFormat.KeyFormatVersion, IntermediateFormat.FormatVersion)
-                .Str(IntermediateFormat.KeyExporterVersion, "0.7.0")
+                .Str(IntermediateFormat.KeyExporterVersion, Fixture.DefExporterVersion)
                 .Str(IntermediateFormat.KeyExportedAtUtc, "2026-01-07T00:00:00.0000000Z")
                 .Str(IntermediateFormat.KeyGameVersion, Fixture.GameVersion)
                 .Str(IntermediateFormat.KeyLanguage, Fixture.Language)

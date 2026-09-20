@@ -9,9 +9,8 @@ label        shield belt
 class        Verse.ThingDef
 declared_in  ludeon.rimworld
 source       Apparel_Belts.xml
-xml          not indexed (exporter 0.2.0)
 
-Same in every row, not repeated below: code_default=no.
+Same in every row, not repeated below: code_default=no, xml=here.
 path               value
 statBases[0].stat  MarketValue
 statBases[1].stat  EnergyShieldRechargeRate
@@ -21,9 +20,6 @@ Market value, cost to make and work amount are not fields: 'rimsearcher economy 
 0 rows. Dropping any one option below brings back this many translations:
 filter                         hidden  next
 --exact-path statBases[].stat  1       rimsearcher get Apparel_ShieldBelt
-
-layer           state        next
-injection_keys  pre-measure  rimsearcher export --modlist fixture
 
 Set by hand in the same block as the rows above: value. 'rimsearcher get Apparel_ShieldBelt --path-contains statBases[0]' lists the whole statBases[0] entry.
 --- stderr ---

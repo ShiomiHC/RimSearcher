@@ -296,7 +296,7 @@ public class SnapshotDiffTests
         w.WriteLine(new JsonLine()
             .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindMeta)
             .Int(IntermediateFormat.KeyFormatVersion, IntermediateFormat.FormatVersion)
-            .Str(IntermediateFormat.KeyExporterVersion, "0.4.0")
+            .Str(IntermediateFormat.KeyExporterVersion, Fixture.DefExporterVersion)
             .Str(IntermediateFormat.KeyExportedAtUtc, "2026-01-01T00:00:00.0000000Z")
             .Str(IntermediateFormat.KeyGameVersion, Fixture.GameVersion)
             .Str(IntermediateFormat.KeyLanguage, Fixture.Language)

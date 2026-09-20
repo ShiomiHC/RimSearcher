@@ -15,7 +15,6 @@ namespace RimSearcher.Snapshot;
 /// <item><see cref="Unavailable"/>:导出器想量、量不成(游戏侧签名对不上等)—— 出路不在这台机器的命令行上。</item>
 /// <item><see cref="Unmeasured"/>:这份库本可以量、这一次没量(导入时关了 / 那一格没记)—— 出路是重导入。</item>
 /// <item><see cref="Unconfigured"/>:量的前提没配(<c>mod_roots</c> 等)—— 出路是先配再导入。</item>
-/// <item><see cref="Partial"/>:量了一部分(老导出器只量列表元素的 Class)—— 出路是重导。</item>
 /// <item><see cref="Empty"/>:量过了,一行都没有;成因分不出来 —— 出路仍是重导,但可能重导之后照旧。</item>
 /// <item><see cref="Missing"/>:磁盘上没有(源码树 / 表)—— 出路是建它。</item>
 /// </list>
@@ -28,7 +27,6 @@ public enum LayerState
     Unavailable,
     Unmeasured,
     Unconfigured,
-    Partial,
     Empty,
     Missing,
 }
@@ -43,7 +41,6 @@ public static class LayerStateText
         LayerState.Unavailable => "unavailable",
         LayerState.Unmeasured => "unmeasured",
         LayerState.Unconfigured => "unconfigured",
-        LayerState.Partial => "partial",
         LayerState.Empty => "empty",
         LayerState.Missing => "missing",
         _ => throw new ArgumentOutOfRangeException(nameof(state), state, null),
@@ -77,8 +74,6 @@ public static class DataLayers
     public const string XmlWrittenText = "xml_written_text";
     public const string PostPatchXml = "post_patch_xml";
     public const string TypeFields = "type_fields";
-    public const string NestedClass = "nested_class";
-    public const string PatchOpsDefNameLabel = "patch_ops_defname_label";
     public const string TruncationCauses = "truncation_causes";
     public const string ExportTimings = "export_timings";
     public const string ImportTimings = "import_timings";
@@ -96,17 +91,15 @@ public static class DataLayers
             KeyedRow(db, snapshotName),
             DiskTranslationsRow(db, config, snapshotName),
             InjectionKeysRow(db, snapshotName),
-            Bit(InjectionApplied, m.RecordsInjectionApplied, export,
-                "exporter before 0.10.0: every language-pack row counted as in effect"),
+            Bit(InjectionApplied, db.HasInjectionApplied, export,
+                "no 'applied' verdict on any translation row: every language-pack row counts as in effect"),
             new(XmlFingerprint, db.Content is null ? LayerState.Unmeasured : LayerState.Ok,
                 db.Content is null ? export : null,
                 db.Content is null ? "no Defs/Patches fingerprint recorded at export" : null),
             XmlWrittenRow(db, snapshotName),
-            Bit(XmlWrittenText, m.IndexesXmlWrittenText, export, "exporter before 0.6.0: no inline text per XML leaf"),
+            Bit(XmlWrittenText, db.HasXmlWrittenText, export, "no inline text on any XML leaf"),
             PostPatchXmlRow(db, snapshotName),
-            Bit(TypeFields, m.IndexesTypeFields, export, "exporter before 0.5.0: no per-type field path set"),
-            NestedClassRow(db, snapshotName),
-            PatchOpsDefNameLabelRow(db, snapshotName),
+            Bit(TypeFields, db.HasTypeFieldRows, export, "no per-type field path set"),
             TruncationCausesRow(db, snapshotName),
             Bit(ExportTimings, db.ExportTimings is { Count: > 0 }, export, "exporter before 0.11.0: no per-layer timing"),
             Bit(ImportTimings, db.ImportTimings is { Count: > 0 }, import, "imported before per-stage timing was kept"),
@@ -179,26 +172,14 @@ public static class DataLayers
     /// <summary>出路的前半截,产地唯一 —— 闸按这个字面钉「没配根时出路先去配根」。</summary>
     public const string ConfigureModRootsThen = "set 'mod_roots' in the config file, then ";
 
-    /// <summary>
-    /// 注入键层:0.9.0 起译文的键归一、与字段路径同一套文法。没这一层时 get 的译文表没有 key 列,
-    /// 而 path 那一列写的是游戏的注入键原文 —— 与字段表的路径文法不同,按坐标找的人会两边都对不上。
-    /// </summary>
+    /// <summary>注入键层:译文的键归一、与字段路径同一套文法,get 的译文表靠它填 key 列。</summary>
     public static LayerRow InjectionKeysRow(SnapshotDb db, string snapshotName)
         => Bit(InjectionKeys, db.InjectionKeysIndexed, ExportCommand(snapshotName),
-               "exporter before 0.9.0: translation paths stored as raw injection keys, no 'key' column");
+               "no injection-key roster: the 'key' column of translations cannot be filled");
 
-    /// <summary>
-    /// 补丁计数的两列 patch_ops_defname / patch_ops_label(0.5.0 起):xpath 按 defName= 与 label=
-    /// 点名的次数。没这一层时 inherit 的 identity 块只有 patch_ops_name 一格,按 defName 定位的
-    /// 补丁在那份库上哪一格都不留痕。
-    /// </summary>
-    public static LayerRow PatchOpsDefNameLabelRow(SnapshotDb db, string snapshotName)
-        => Bit(PatchOpsDefNameLabel, db.Meta.IndexesPatchOpsByDefNameLabel, ExportCommand(snapshotName),
-               "exporter before 0.5.0: only xpaths naming a node by @Name= were counted");
-
-    /// <summary>xml 列:0.5.0 起记每条字段路径是哪份 XML 写的;没这一层时 get 没有那一列,谁写的问不出口。</summary>
+    /// <summary>xml 列:每条字段路径是哪份 XML 写的;一行没有时 get 的那一列整列是 no。</summary>
     public static LayerRow XmlWrittenRow(SnapshotDb db, string snapshotName)
-        => Bit(XmlWritten, db.Meta.IndexesXmlWritten, ExportCommand(snapshotName), "exporter before 0.5.0: no 'xml' column");
+        => Bit(XmlWritten, db.HasXmlWrittenRows, ExportCommand(snapshotName), "no xml_written rows: the 'xml' column has nothing to read");
 
     /// <summary>
     /// 反编译树旁没有留 dll 副本,元数据读的是游戏装机处的那一份 —— 于是 members / il / callers 看到的
@@ -221,26 +202,10 @@ public static class DataLayers
     };
 
     public static LayerRow PostPatchXmlRow(SnapshotDb db, string snapshotName)
-    {
-        var m = db.Meta;
-        if (m.IndexesPostPatchXml) return new(PostPatchXml, LayerState.Ok, null, null);
-        return m.ExporterAtLeast(0, 7)
-            ? new(PostPatchXml, LayerState.Unavailable, ExportCommand(snapshotName),
-                  "the exporter found no patched XML document to read, so 'xml' reflects the files on disk")
-            : new(PostPatchXml, LayerState.PreMeasure, ExportCommand(snapshotName),
-                  "exporter before 0.7.0: 'xml' reflects the files on disk, before patches");
-    }
-
-    public static LayerRow NestedClassRow(SnapshotDb db, string snapshotName)
-    {
-        var m = db.Meta;
-        if (m.IndexesAllNestedClass) return new(NestedClass, LayerState.Ok, null, null);
-        return m.IndexesNestedClass
-            ? new(NestedClass, LayerState.Partial, ExportCommand(snapshotName),
-                  "exporter before 0.4.0: Class= measured on list elements only")
-            : new(NestedClass, LayerState.PreMeasure, ExportCommand(snapshotName),
-                  "exporter before 0.2.0: Class= not measured");
-    }
+        => db.Meta.IndexesPostPatchXml
+            ? new(PostPatchXml, LayerState.Ok, null, null)
+            : new(PostPatchXml, LayerState.Unavailable, ExportCommand(snapshotName),
+                  "the exporter found no patched XML document to read, so 'xml' reflects the files on disk");
 
     /// <summary>
     /// 「分得清为什么被截」这一层。列在不在与列里有没有数是两件事:0.13.0 之前的文件进了新库,
@@ -286,7 +251,7 @@ public static class DataLayers
                "the directory exists and holds no decompiled file; sync rebuilds it from what the snapshot's mods load");
 
     private static LayerRow Bit(string layer, bool present, string next, string why)
-        => present ? new(layer, LayerState.Ok, null, null) : new(layer, LayerState.PreMeasure, next, why);
+        => present ? new(layer, LayerState.Ok, null, null) : new(layer, LayerState.Empty, next, why);
 
     /// <summary>渲染成表行。<c>why</c> 只在全账里要。</summary>
     public static IReadOnlyList<IReadOnlyDictionary<string, object?>> Rows(IEnumerable<LayerRow> rows, bool withWhy)

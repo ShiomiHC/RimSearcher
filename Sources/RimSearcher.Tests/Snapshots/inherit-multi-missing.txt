@@ -3,13 +3,15 @@ exit 0
 --- stdout ---
 No XML node answers to NoSuchNode, so nothing below is about it.
 
-name            BaseBullet
-def_type        ThingDef
-abstract        yes
-inherits_from   BaseProjectile
-declared_in     ludeon.rimworld
-source          Projectiles_Guns.xml
-patch_ops_name  2
+name               BaseBullet
+def_type           ThingDef
+abstract           yes
+inherits_from      BaseProjectile
+declared_in        ludeon.rimworld
+source             Projectiles_Guns.xml
+patch_ops_name     2
+patch_ops_defname  0
+patch_ops_label    0
 1 ancestor.
 
 name            def_type  abstract  declared_in      source
@@ -19,7 +21,4 @@ BaseProjectile  ThingDef  yes       ludeon.rimworld  Projectiles_Guns.xml
 name  def_name         def_type  abstract  declared_in
       Bullet_Revolver  ThingDef  no        ludeon.rimworld
 'rimsearcher get Bullet_Revolver' shows the merged, post-patch fields of a concrete child.
-
-layer                    state        next
-patch_ops_defname_label  pre-measure  rimsearcher export --modlist fixture
 --- stderr ---

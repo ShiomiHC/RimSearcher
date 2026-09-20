@@ -9,5 +9,4 @@ def_type     StatDef
 class        Verse.StatDef
 declared_in  ludeon.rimworld
 source       Stats_Basics.xml
-xml          not indexed (exporter 0.2.0)
 --- stderr ---

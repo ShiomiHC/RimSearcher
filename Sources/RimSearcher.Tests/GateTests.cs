@@ -81,8 +81,6 @@ public class GateTests
             ["values.empty_because"] = ["values", "workerClass", "--scope", "ludeon.rimworld"],
             ["mods.mods"] = ["mods"],
             ["inherit.nodes"] = ["inherit", "BaseBullet"],
-            // 主 fixture 是旧口径(只数 @Name=),缺 defName / label 两格 —— 那一行在这里。
-            ["inherit.absent"] = ["inherit", "BaseBullet"],
             ["keyed.keys"] = ["keyed", "CannotUseNoPower"],
             ["keyed.empty_because"] = ["keyed", "CannotUseNoPower", "--empty-translation"],
             // 语料库是没配 mod_roots 建的,这一行在共享夹具上就有。

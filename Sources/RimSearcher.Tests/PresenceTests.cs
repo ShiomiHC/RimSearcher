@@ -5,26 +5,21 @@ using RimSearcher.Storage;
 namespace RimSearcher.Tests;
 
 /// <summary>
-/// 0.5.0 起三件「在不在」进索引。新层在场与缺席两条路都要有闸:
-/// 缺席不许印成 0,在场不许再挂「工具证不了」的假话。
+/// 三件「在不在」(XML 写没写 / 按 defName·label 的 patch 计数 / 类型字段全集)进索引之后,
+/// 在场那条路不许再挂「工具证不了」的假话。缺席那一档随 0.12 地板一起删了(2026-09-20)。
 /// </summary>
 public class PresenceTests
 {
     /// <summary>
-    /// yes 行那句免责被 xml 列作废了一半:它说「XML 写了同样的值」与「从没提过这个字段」
-    /// 在这里看起来一样,而 0.5.0 的表里,那两者就是同一行上的 xml=here 与 xml=no。
-    /// 旧快照上没有那一列,原句照旧成立 —— 分档,不是删。
+    /// yes 行不挂「XML 写了同样的值」与「从没提过这个字段」看起来一样那句:
+    /// 那两者就是同一行上的 xml=here 与 xml=not-written,列自己说。
     /// </summary>
     [Fact]
-    public void 新快照的yes行不再说两者看起来一样()
+    public void yes行不再说两者看起来一样()
     {
         var (fresh, _, _) = Fixture.Run("get", "ChildGun", "--defaults", Fixture.PresenceArg);
         Assert.DoesNotContain("both show yes here", fresh, StringComparison.Ordinal);
         Assert.Contains(XmlOrigin.Column, fresh, StringComparison.Ordinal);
-
-        // 旧快照:那一列不在,那句话是这条路上唯一说破它的地方,一个字都不许少。
-        var (old, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--defaults");
-        Assert.Contains("both show yes here", old, StringComparison.Ordinal);
     }
 
     // ---- B2 patch 计数 ----
@@ -41,26 +36,11 @@ public class PresenceTests
     }
 
     [Fact]
-    public void 新快照三格并排_不出absent表()
+    public void 三格并排()
     {
         var (text, _, _) = Fixture.Run("inherit", "BaseGun", "--db", Fixture.PresenceDb);
         Assert.Contains("patch_ops_defname", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("patch_ops_defname_label", text, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void 旧快照不把没数过的defName计数印成零()
-    {
-        // 老库上后两格不在,absent 表一行说破并给出路(重导);此前是一句「only counted @Name=;
-        // re-export to also count…」。
-        var (text, _, _) = Fixture.Run("inherit", "BaseProjectile");
-        Assert.Contains("patch_ops_defname_label  pre-measure  rimsearcher export --modlist ", text,
-                        StringComparison.Ordinal);
-        var (json, _, _) = Fixture.Run("inherit", "BaseProjectile", "--json");
-        using var doc = System.Text.Json.JsonDocument.Parse(json);
-        var node = doc.RootElement.GetProperty("nodes")[0].GetProperty("node");
-        Assert.False(node.TryGetProperty("patch_ops_defname", out _));
-        Assert.False(node.TryGetProperty("patch_ops_label", out _));
+        Assert.Contains("patch_ops_label", text, StringComparison.Ordinal);
     }
 
     // ---- B1 XML 写没写 ----
@@ -172,17 +152,6 @@ public class PresenceTests
             Assert.Equal(XmlOrigin.No, row.GetProperty(XmlOrigin.Column).GetString());
     }
 
-    [Fact]
-    public void 旧快照get不把xml写成印成没写()
-    {
-        var (text, _, _) = Fixture.Run("get", "Apparel_ShieldBelt");
-        Assert.Contains("not indexed (exporter 0.2.0)", text, StringComparison.Ordinal);
-        var (json, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--json");
-        using var doc = System.Text.Json.JsonDocument.Parse(json);
-        var row = doc.RootElement.GetProperty("defs")[0].GetProperty("fields")[0];
-        Assert.False(row.TryGetProperty(XmlOrigin.Column, out _));
-    }
-
     // ---- B3 类型字段全集 ----
 
     [Fact]
@@ -206,15 +175,6 @@ public class PresenceTests
         // 摊平成路径不存在「展开完」这回事(Docs/22 第 12 节)。所以它得把自己的量程说出来 ——
         // 不说的话,「嵌套过深所以没测到」与「这个类型真没这个字段」印出来完全同形。
         Assert.Matches(@"reaches \d+ segments deep", missing);
-    }
-
-    [Fact]
-    public void 旧快照fields落空说清分不开()
-    {
-        var (text, _, code) = Fixture.Run("fields", "ThingDef", "--path-contains", "zzzzNoSuch");
-        Assert.Equal(1, code);
-        Assert.Contains("does not list the fields a type can have", text, StringComparison.Ordinal);
-        Assert.Contains("null on every def from one the type does not have", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -582,18 +542,6 @@ public class PresenceTests
         // 不回库找号。真加了不会错,只是白建三条 —— 而白建的索引没人读得出来。
         Assert.DoesNotContain("ON injection_key_", SnapshotSchema.InjectionKeyIndexes,
                               StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void 旧导出导入后新表是空的()
-    {
-        using var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Fixture.Db};Pooling=False");
-        raw.Open();
-        using var cmd = raw.CreateCommand();
-        cmd.CommandText = "SELECT COUNT(*) FROM xml_written";
-        Assert.Equal(0L, (long)cmd.ExecuteScalar()!);
-        cmd.CommandText = "SELECT COUNT(*) FROM type_subtrees";
-        Assert.Equal(0L, (long)cmd.ExecuteScalar()!);
     }
 
     // ---- 0.6.0:记下文本之后,短形式多候选格能分开 ----

@@ -11,7 +11,7 @@ exit 0
     },
     {
       "kind": "filter",
-      "text": "Not listed: 1 field whose value matches the declaring type's own default (--defaults lists them). The snapshot holds 13 field paths for this def; a null-valued field never entered the index. Without the 'xml' column, a def whose XML writes the default value and a def that never mentions the field look the same here. List entries with none of their fields shown below: comps[0], comps[1], statBases[0], and 1 more."
+      "text": "Not listed: 1 field whose value matches the declaring type's own default (--defaults lists them). The snapshot holds 13 field paths for this def; a null-valued field never entered the index. The 'xml' column refers to the XML read before patches ran. List entries with none of their fields shown below: comps[0], comps[1], statBases[0], and 1 more."
     },
     {
       "kind": "advisory",
@@ -44,19 +44,20 @@ exit 0
         "description": "",
         "class": "Verse.ThingDef",
         "declared_in": "ludeon.rimworld",
-        "source": "Apparel_Belts.xml",
-        "xml": "not indexed (exporter 0.2.0)"
+        "source": "Apparel_Belts.xml"
       },
       "fields": [
         {
           "path": "soundImpactDefault",
           "value": "BulletImpact_Ground",
-          "code_default": "no"
+          "code_default": "no",
+          "xml": "not-written"
         },
         {
           "path": "soundDrop",
           "value": "Standard_Drop",
-          "code_default": "no"
+          "code_default": "no",
+          "xml": "here"
         }
       ],
       "translations": [
@@ -65,7 +66,8 @@ exit 0
           "translated": "护盾腰带",
           "original": "shield belt",
           "language": "ChineseSimplified",
-          "origin": "in pack"
+          "origin": "in effect",
+          "key": null
         }
       ]
     }

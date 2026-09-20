@@ -12,8 +12,7 @@ public sealed record ImportStats(
     int HarvestedTranslations, int KeyedInEffect, int KeyedHarvested,
     int TruncatedDefs, int XmlNodes, int EconomyRows,
     /// <summary>
-    /// 槽位名册的行数。**零不是「一个可注入槽位都没有」** —— 0.9.0 之前的导出没有这一层
-    /// (或者有而不全)。两种成因靠导出器版本上的能力位分,不靠这个数。
+    /// 槽位名册的行数。
     /// </summary>
     int InjKeys,
     /// <summary>
@@ -569,8 +568,8 @@ public sealed class SnapshotImporter
                     continue;
                 }
 
-                // 0.9.0 起这一层是**槽位名册**,一个槽位一行,于是它跟 def 一样大到不能缓在
-                // 内存里(0.8.0 那版只发带信息的行,25 万条,缓着无所谓)。边读边落地,靠的是
+                // 这一层是**槽位名册**,一个槽位一行,于是它跟 def 一样大到不能缓在
+                // 内存里。边读边落地,靠的是
                 // 导出器把 def 全写完才写 injkey —— 那个顺序是本方法唯一的依赖,所以显式判一次:
                 // 反过来的话 def_id 会静默错挂,而错挂的行与正确的行同形。
                 if (kind == IntermediateFormat.KindInjKey)
@@ -647,17 +646,12 @@ public sealed class SnapshotImporter
                 "WHERE def_name_id = $n AND (path_id = $k OR suggested_path_id = $k) " +
                 "AND ($t IS NULL OR def_type_id = $t) LIMIT 2");
 
-            var rostered = meta.IndexesInjectionKeys;
             var slotSeen = new Dictionary<(string? Type, string Name, string Key),
                                           (string? Type, string Path, string State)>();
 
             (string Path, string? Key, string? Type, string? State) Resolve(
                 string? defType, string defName, string key)
             {
-                // 没有名册就不判:老快照照旧存数据源原样,两列写 null。**0.8.0 也走这条** ——
-                // 那一版的名册答不出「在不在册」(见 ExportMeta.IndexesInjectionKeys)。
-                if (!rostered) return (key, null, defType, null);
-
                 var probe = defType is { Length: > 0 } ? defType : null;
                 if (!slotSeen.TryGetValue((probe, defName, key), out var hit))
                 {

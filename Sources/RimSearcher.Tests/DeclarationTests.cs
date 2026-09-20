@@ -288,8 +288,7 @@ public class DeclarationTests
             ("is past the end", "Report.PastEnd", 1),
             // 只剩按字段数那句(get 的);整份库那句成了 defs_with_* 的格(Docs/25 丁1)。
             ("for depth or size", "ExportCap", 1),
-            // 三档快照三句话,都在 NestedClassLine 这一个方法里。
-            ("The runtime type of a nested Class", "Completeness.NestedClassLine", 3),
+            ("The runtime type of a nested Class", "Completeness.NestedClassLine", 1),
         ];
 
         var code = new System.Text.StringBuilder();

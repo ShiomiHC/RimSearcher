@@ -34,13 +34,13 @@ public static class InjectionKey
     public static string CanonicalIndex(string fieldPath) => AnyIndex.Replace(fieldPath, "[0]");
 
     /// <summary>
-    /// 这条译文的键在**槽位名册**上找得到吗。名册是导出器 0.9.0 起一个槽位一行的
+    /// 这条译文的键在**槽位名册**上找得到吗。名册是一个槽位一行的
     /// <c>injection_keys</c>,产地是游戏自己的 <c>ForEachPossibleDefInjection</c>。
     ///
     /// 三个取值各自单义,合并任何两个都会让一种「印出来与真相同形」重新出现。
     /// 缺这一列(<c>null</c>)是第四态:这份快照没有名册,问不出口。
     ///
-    /// **这一列不再记「键是哪种拼法」。** 0.8.0 那版记的是 handle / index / unmapped /
+    /// **这一列不记「键是哪种拼法」。** 早先一版记的是 handle / index / unmapped /
     /// untested —— 拼法与在不在册两件事挤在一列里,而判在不在册用的是字段表当替身:
     /// 整表注入的键不带元素下标,字段表里那条路径带,逐字比一次不中,于是 1348 条里
     /// 956 条被判成坏译文。拼法这件事读者本来也不需要:<c>key</c> 那一格就是原样。

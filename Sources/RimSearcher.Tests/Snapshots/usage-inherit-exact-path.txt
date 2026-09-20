@@ -1,13 +1,15 @@
 $ rimsearcher inherit Bullet_Revolver --exact-path projectile.damageAmountBase
 exit 0
 --- stdout ---
-def_name        Bullet_Revolver
-def_type        ThingDef
-abstract        no
-inherits_from   BaseBullet
-declared_in     ludeon.rimworld
-source          Projectiles_Guns.xml
-patch_ops_name  n/a
+def_name           Bullet_Revolver
+def_type           ThingDef
+abstract           no
+inherits_from      BaseBullet
+declared_in        ludeon.rimworld
+source             Projectiles_Guns.xml
+patch_ops_name     n/a
+patch_ops_defname  0
+patch_ops_label    0
 2 ancestors within --exact-path projectile.damageAmountBase.
 
 Same in every row, not repeated below: def_type=ThingDef, abstract=yes, declared_in=ludeon.rimworld, source=Projectiles_Guns.xml.
@@ -24,7 +26,4 @@ Same in every row, not repeated below: with_path=0, same_value=0, type_with_path
 layer           other_defs
 BaseBullet      0
 BaseProjectile  2
-
-layer                    state        next
-patch_ops_defname_label  pre-measure  rimsearcher export --modlist fixture
 --- stderr ---

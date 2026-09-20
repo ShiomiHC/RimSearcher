@@ -11,9 +11,8 @@ class          Verse.ThingDef
 declared_in    ludeon.rimworld
 source         Projectiles_Guns.xml
 inherits_from  BaseBullet (see 'rimsearcher inherit Bullet_Revolver')
-xml            not indexed (exporter 0.2.0)
 
-path                   value  code_default
-projectile.burstCount  1      yes
-No value above with 'code_default'=no is one that most of the 9 ThingDefs in this snapshot also carry. Rows marked yes were not compared: a def whose XML writes that same value and a def that never mentions the field both show yes here.
+path                   value  code_default  xml
+projectile.burstCount  1      yes           not-written
+No value above with 'code_default'=no is one that most of the 9 ThingDefs in this snapshot also carry. Rows marked yes were not compared.
 --- stderr ---

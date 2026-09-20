@@ -1,19 +1,18 @@
 $ rimsearcher inherit Firefoam
 exit 0
 --- stdout ---
-def_name        Firefoam
-def_type        ThingDef
-abstract        no
-inherits_from   BaseProjectile
-declared_in     ludeon.rimworld
-source          Buildings_Special.xml
-patch_ops_name  n/a
+def_name           Firefoam
+def_type           ThingDef
+abstract           no
+inherits_from      BaseProjectile
+declared_in        ludeon.rimworld
+source             Buildings_Special.xml
+patch_ops_name     n/a
+patch_ops_defname  0
+patch_ops_label    0
 1 ancestor.
 
 name            def_type  abstract  declared_in      source
 BaseProjectile  ThingDef  yes       ludeon.rimworld  Projectiles_Guns.xml
-
-layer                    state        next
-patch_ops_defname_label  pre-measure  rimsearcher export --modlist fixture
 Outside this layer: 1 def also named 'Firefoam', declaring no Name=, ParentName= or Abstract= (StatDef). An ordinary def takes part in no inheritance, which is why 'rimsearcher get Firefoam' counts 2 where this command counts 1.
 --- stderr ---

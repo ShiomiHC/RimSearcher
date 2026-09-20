@@ -43,25 +43,21 @@ public class InheritanceTests
     /// 补丁计数的口径由列名自陈,不再靠句子(Docs/25 丁2,2026-09-18)。此前 identity 块后跟三支
     /// 散文(被点名 N 次 / 0 数的是什么 / 无名没量),来历是 <c>Human</c> 那个反例:它声明了 Name=、
     /// 那一格是 0,同时被 HAR 按 defName 换掉 class —— 沉默的 0 断言了一件假事。现在三格并排
-    /// (patch_ops_name / patch_ops_defname / patch_ops_label),0 / 2 / 1 自己读得出来;
-    /// 只在旧库缺后两格时才出声,形态是 absent 表一行(层 patch_ops_defname_label,pre-measure,
-    /// 出路重导)。thingClass 与通配符哪一格都不算,是这一层的口径,住在 --help。
+    /// (patch_ops_name / patch_ops_defname / patch_ops_label),0 / 2 / 1 自己读得出来。
+    /// thingClass 与通配符哪一格都不算,是这一层的口径,住在 --help。
     /// </summary>
     [Fact]
-    public void patch计数三格并排_旧库缺两格时absent表说破()
+    public void patch计数三格并排不带解释句()
     {
-        // 主 fixture 是旧口径(只数 @Name=):有 Name= 的节点一行 absent,不再有任何解释句。
         var unpatched = Text("inherit", "BaseProjectile");
-        Assert.Contains("patch_ops_defname_label  pre-measure  rimsearcher export --modlist ", unpatched,
-                        StringComparison.Ordinal);
-        Assert.Contains(InheritCommand.PatchOpsName + "  0", unpatched, StringComparison.Ordinal);
+        Assert.Matches(InheritCommand.PatchOpsName + @"\s+0\n", unpatched);
+        Assert.Matches(@"patch_ops_defname\s+0\n", unpatched);
+        Assert.Matches(@"patch_ops_label\s+0\n", unpatched);
         Assert.DoesNotContain("@Name=", unpatched, StringComparison.Ordinal);
         Assert.DoesNotContain("leaves no trace", unpatched, StringComparison.Ordinal);
 
-        // 新口径的库:三格都在,absent 表不出。
         var counted = Text("inherit", "BaseGun", "--db", Fixture.PresenceDb);
-        Assert.DoesNotContain("patch_ops_defname_label", counted, StringComparison.Ordinal);
-        Assert.Contains("patch_ops_defname", counted, StringComparison.Ordinal);
+        Assert.Matches(@"patch_ops_defname\s+2\n", Text("inherit", "ChildGun", "--db", Fixture.PresenceDb));
         Assert.Contains("patch_ops_label", counted, StringComparison.Ordinal);
     }
 

@@ -1,7 +1,7 @@
 $ rimsearcher fields ThingDef --path-contains MarketValue
 exit 1
 --- stdout ---
-'ThingDef' has field paths, but none contains 'MarketValue'. Drop --path-contains to see them all.
+'ThingDef' has field paths, but none contains 'MarketValue', and none of the fields the type itself declares has it either.
 'MarketValue' is a value on 'ThingDef', not a field name: it sits at statBases[].stat / statFactors[].stat on 3 defs.
 
 asked        state           next

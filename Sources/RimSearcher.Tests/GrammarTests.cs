@@ -407,8 +407,8 @@ public class GrammarTests
         // (Docs/25 丁2)。文本面钉的只剩那一格的拼法与取值。
         var (patchedText, _, _) = Fixture.Run("inherit", "BaseBullet");
         var (unnamedText, _, _) = Fixture.Run("inherit", "Bullet_Revolver");
-        Assert.Contains(InheritCommand.PatchOpsName + "  2", patchedText);
-        Assert.Contains(InheritCommand.PatchOpsName + "  n/a", unnamedText);
+        Assert.Matches(InheritCommand.PatchOpsName + @"\s+2\n", patchedText);
+        Assert.Matches(InheritCommand.PatchOpsName + @"\s+n/a\n", unnamedText);
     }
 
     /// <summary>
@@ -908,9 +908,8 @@ public class GrammarTests
         Assert.Contains("rimsearcher where Class", stdout, StringComparison.Ordinal);
         Assert.Contains("code-search", stdout, StringComparison.Ordinal);
 
-        // 那句索引边界必须来自唯一产地(措辞随快照的导出器版本分三支),不是在这条路上另写
-        // 一份会过时的。主语料是 0.2.0,于是取的必须是「只量了列表元素」那一支。
-        Assert.Contains("for list elements only", stdout, StringComparison.Ordinal);
+        // 那句索引边界必须来自唯一产地(NestedClassLine),不是在这条路上另写一份。
+        Assert.Contains("indexed as '<path>.Class'", stdout, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1646,11 +1645,11 @@ public class GrammarTests
         var (hit, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--defaults");
         Assert.Contains("Only rows whose 'code_default' is no were compared", hit, StringComparison.Ordinal);
 
-        // 不加 --defaults:yes 行整批不在表里(表折成 code_default=no),这半句无所指,
-        // 而否定由上面的 Not listed 那句承住 —— 换承载者,不是丢。
+        // 不加 --defaults:yes 行整批不在表里(表折成 code_default=no),这半句无所指;
+        // 「yes 分不开写过默认值与没写」那条否定由同一行的 xml 列承着,不是句子。
         var (plain, _, _) = Fixture.Run("get", "Apparel_ShieldBelt");
         Assert.DoesNotContain("were compared", plain, StringComparison.Ordinal);
-        Assert.Contains("never mentions the field", plain, StringComparison.Ordinal);
+        Assert.Contains("The 'xml' column refers to the XML", plain, StringComparison.Ordinal);
 
         // 加了 --defaults 却一行 yes 都没有(VariantOne 的字段全与新实例不同):这半句
         // 谈的集合读者当场能验证为空,而这里的沉默推不出任何东西 —— 没有 yes 可误读。
@@ -1769,17 +1768,17 @@ public class GrammarTests
         var (help, _, _) = Fixture.Run("get", "--help");
 
         foreach (var text in new[] { onlyYes, hit, help })
-        {
             Assert.DoesNotContain(FossilDeclaredDefault, text, StringComparison.Ordinal);
 
-            // 锚点从「fresh instance of the declaring type」换成那两个被点名的 def。
-            // 前者说的是 yes **是什么意思**,准确,但盲测里 0/10 —— 读者拿它接着推
-            // 「所以没人写」;把两个分不开的 def 各自点名之后是 4/10(两次复制合并
-            // 8/20 对 0/30,p=0.0002)。这条闸盯的是「输出与 help 口径同形」,同形的
-            // 那件事现在是这一对,不是那句定义。
-            Assert.Contains("whose XML writes that same value and a def that never mentions the field",
-                            text, StringComparison.Ordinal);
-        }
+        // 锚点从「fresh instance of the declaring type」换成那两个被点名的 def。
+        // 前者说的是 yes **是什么意思**,准确,但盲测里 0/10 —— 读者拿它接着推
+        // 「所以没人写」;把两个分不开的 def 各自点名之后是 4/10(两次复制合并
+        // 8/20 对 0/30,p=0.0002)。2026-09-20 起这一对只住 help:输出里同一行的 xml 列
+        // 就把两个 def 分开了(列义住 help,bfd0ec7),那半句在输出里是列义的复述。
+        Assert.Contains("whose XML writes that same value and a def that never mentions the field",
+                        help, StringComparison.Ordinal);
+        foreach (var text in new[] { onlyYes, hit })
+            Assert.DoesNotContain("never mentions the field", text, StringComparison.Ordinal);
 
         // 2026-09-01 补的第二件:**xml 列读的是哪一份 XML**。0.7.0 之后运行时按快照分档印
         // 「read after every patch ran」/「read before patches ran」,而 --defaults 的选项说明
@@ -1800,15 +1799,6 @@ public class GrammarTests
             Assert.DoesNotContain(FossilFromVersion, help, StringComparison.Ordinal);
         }
 
-        // 曾经这里钉「否定排在『值相等』那个事实之前」(旧编号 r17 抓到受测者只读可独立成立的
-        // 前半句、自己接上「所以没写」)。2026-09-18 起否定半句「is not evidence that nothing
-        // wrote」删掉 —— 同型的 Not listed 反面半句第十六轮量到两档零边际 —— 剩下的只有
-        // 点名那对分不开的 def,没有可独立成立的前半句可排了;闸改钉那对在场。
-        foreach (var text in new[] { onlyYes, hit })
-        {
-            Assert.Contains("whose XML writes that same value", text, StringComparison.Ordinal);
-            Assert.Contains("never mentions the field both show yes here", text, StringComparison.Ordinal);
-        }
     }
 
     /// <summary>
@@ -1822,29 +1812,28 @@ public class GrammarTests
     /// 这给「改一处先查全部副本」补了一个维度:除了「有几处文案、哪些说反了」,
     /// 还有**「读者可能走的每条路径上,那句话在不在」**。与「输出侧的一句话只有落在
     /// 必经路径上才测得到」是同一件事的另一面。
+    ///
+    /// 2026-09-20 起承载者是 xml 列:Not listed 那句只指向它(「The 'xml' column refers to the
+    /// XML read …」),而 --defaults 那一支的 yes 行自己带着 xml=here / not-written。
     /// </summary>
     [Fact]
     public void 值相等不等于没人写这句落在默认路径上()
     {
-        // 锚在「点名那对分不开的 def」上:2026-09-18 起 Not listed 那句不再带
-        // 「is not evidence that…」那截辩护,只剩这对名字;--defaults 那一支与 Help 也都含它。
-        const string Denial = "never mentions the field";
+        const string Pointer = "The 'xml' column refers to the XML";
 
         // 不加 --defaults:那些行根本不在表里,只有 Not listed 那句在说它们。
         var (plain, _, _) = Fixture.Run("get", "Bullet_Revolver");
         Assert.Contains("Not listed:", plain, StringComparison.Ordinal);
-        Assert.Contains(Denial, plain, StringComparison.Ordinal);
+        Assert.Contains(Pointer, plain, StringComparison.Ordinal);
 
         // JSON 侧同样 —— 那条失效样本走的就是 --json。
-        Assert.Contains(Denial, Fixture.Run("get", "Bullet_Revolver", "--json").Stdout,
+        Assert.Contains(Pointer, Fixture.Run("get", "Bullet_Revolver", "--json").Stdout,
                         StringComparison.Ordinal);
 
-        // 加了 --defaults 之后 Not listed 那句消失(那些行进表了),否定改由
-        // NoteWidelySharedValues 的句尾承载 —— 换了个承载者,不是丢了。
-        // 钉住这两支是因为有人只匹配了 advisory 的开头一句就判「这条路径上没有」。
-        foreach (var extra in new[] { new[] { "--defaults" }, ["--defaults", "--json"] })
-            Assert.Contains(Denial, Fixture.Run(["get", "Bullet_Revolver", .. extra]).Stdout,
-                            StringComparison.Ordinal);
+        // 加了 --defaults 之后 Not listed 那句消失(那些行进表了),yes 行与 xml 列同行。
+        var (withDefaults, _, _) = Fixture.Run("get", "Bullet_Revolver", "--defaults");
+        Assert.DoesNotContain("Not listed:", withDefaults, StringComparison.Ordinal);
+        Assert.Matches(@"projectile\.burstCount\s+1\s+yes\s+not-written", withDefaults);
 
         // 「carrying」那个读法不许回来:它把「值相等」说成「它们带的就是类默认」。
         Assert.DoesNotContain(FossilCarryingDefault, plain, StringComparison.Ordinal);
@@ -4227,7 +4216,8 @@ public class GrammarTests
     /// 「Two things keep a field out of this index without any sign here …」2026-09-20 按真实语料删了
     /// (490 次实印,随后用缓存 / null 措辞的 9%,低于基线 14%;读者的下一步是改查询),锚点随之换。
     ///
-    /// find / values / fields 三条反查路都判,因为补一处剩两处的输出一字不变。
+    /// find / values 两条反查路都判,因为补一处剩一处的输出一字不变。fields 那条走的是类型
+    /// 声明集(index_gap 表),不念这句。
     /// </summary>
     [Fact]
     public void 反查落空要说破索引里装的只是值()
@@ -4239,9 +4229,6 @@ public class GrammarTests
 
         var (values, _, _) = Fixture.Run("values", "noSuchField");
         Assert.Contains(Line, values, StringComparison.Ordinal);
-
-        var (fields, _, _) = Fixture.Run("fields", "ThingDef", "--path-contains", "zzznosuchtext");
-        Assert.Contains(Line, fields, StringComparison.Ordinal);
 
         // identity 那一档不说 —— 答案已经给全了,再挂一句索引边界是纯噪音。
         // 这一条反着守:少了它,「到处都说一遍」也能让上面三条全绿。
@@ -4309,30 +4296,13 @@ public class GrammarTests
         Assert.DoesNotContain("List entries with none of their fields", whole, StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// 嵌套 <c>&lt;li Class="…"&gt;</c> 的运行时类型这一维,要按导出器版本分说:0.2.0 起
-    /// 导出器给列表元素发一条 <c>&lt;path&gt;.Class</c>,而**老快照对 `where Class X` 回的那个零,
-    /// 与「量过了、确实没人用它」逐字同形**。两个世界各要一个落点:主快照标 0.2.0,
-    /// other 那份标 0.1.0。
-    /// </summary>
+    /// <summary>嵌套 <c>&lt;li Class="…"&gt;</c> 的运行时类型这一维是能查到东西的。</summary>
     [Fact]
-    public void 嵌套类型这一维量没量过要按导出器版本分说()
+    public void 嵌套类型这一维查得到()
     {
-        // 量过的那份:这一维真的能查到东西。
         var (hit, _, code) = Fixture.Run("where", "Class", "RimWorld.CompProperties_Shield");
         Assert.Equal(0, code);
         Assert.Contains("TestModGun", hit, StringComparison.Ordinal);
-
-        // 量过的那份落空时:指的路是这一维本身。
-        var (miss, _, _) = Fixture.Run("where", "noSuchField", "x");
-        Assert.Contains("indexed as '<path>.Class'", miss, StringComparison.Ordinal);
-
-        // 没量过的那份:不许长成一样。说破是这份快照没量,而不是没人用。
-        var other = Path.Combine(Fixture.SnapshotDir, "other.db");
-        _ = Fixture.Db;
-        var (old, _, _) = Fixture.Run("where", "noSuchField", "x", "--db", other);
-        Assert.Contains("before that type entered the index", old, StringComparison.Ordinal);
-        Assert.DoesNotContain("indexed as '<path>.Class'", old, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -4503,45 +4473,23 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 三档快照对「嵌套类型查得到吗」说的话必须互不相同,而**量全了的那档在这里一个字都不说**。
-    ///
-    /// 中间那档(0.2~0.3,只量列表元素)最险:<c>where Class &lt;单字段上的类&gt;</c> 照样回零,
-    /// 而一句 "is the query that reaches it" 会把人送去查一条对 <c>genStep</c> 根本不存在
-    /// 的路径 —— 走空了,落空句再把同一条规则念一遍,闭环。
-    ///
-    /// 0.4 那档在这个调用点上是**同一个闭环的另一半**:句子说「'find Class &lt;ClassName&gt;'
-    /// 才是查得到它的那条查询」,而走到这里的前提(<c>isClassPath</c>)正是调用方刚跑完那条。
-    /// 于是它把人指回他站着的地方。沉默在这里是有内容的 —— 与本工具别处一致,只有出问题才发声,
-    /// 那两档一发声就是「你手上这个零是假的」。
+    /// <c>where Class X</c> 落空时**一个字都不说**嵌套类型那句:句子说「'where Class &lt;ClassName&gt;'
+    /// 才是查得到它的那条查询」,而走到这里的前提(<c>isClassPath</c>)正是调用方刚跑完那条 ——
+    /// 它会把人指回他站着的地方。
     /// </summary>
     [Fact]
-    public void 嵌套类型这一维按快照量到哪一步说话()
+    public void where_Class落空不再指一遍刚跑过的那条()
     {
-        // 0.4:量全了 —— 不许再指一遍刚跑过的那条查询。
         var (modern, _, _) = Fixture.Run("where", "Class", "RimWorld.NotAnyClassHere", "--db", Fixture.ModernDb);
         Assert.DoesNotContain(ClassLineBothShapes, modern, StringComparison.Ordinal);
         Assert.DoesNotContain(ClassLineReaches, modern, StringComparison.Ordinal);
-
-        // 0.2:只量了列表元素 —— 必须点名它够不着的是哪一类,且不许说成「查得到」。
-        var (mid, _, _) = Fixture.Run("where", "Class", "RimWorld.NotAnyClassHere");
-        Assert.Contains("for list elements only", mid, StringComparison.Ordinal);
-        Assert.Contains("GenStepDef.genStep", mid, StringComparison.Ordinal);
-        // 2026-09-18:「and a zero from that query is not evidence about it」删掉,量程由
-        // 「不在快照里 + 导出器版本 + Re-export」三件事实承着。
-        Assert.Contains("before that case entered the index. Re-export to reach it.", mid, StringComparison.Ordinal);
-        Assert.DoesNotContain(ClassLineBothShapes, mid, StringComparison.Ordinal);
-
-        // 0.1:一点没量。
-        var (old, _, _) = Fixture.Run("where", "Class", "RimWorld.NotAnyClassHere", "--db", Fixture.OtherDb);
-        Assert.Contains("not in this snapshot at all", old, StringComparison.Ordinal);
-        Assert.DoesNotContain("for list elements only", old, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// 单字段上的 <c>Class=</c> 在 0.4 那档要真查得到 —— 这是整条 def→代码 的桥。
+    /// 单字段上的 <c>Class=</c> 要真查得到 —— 这是整条 def→代码 的桥。
     /// </summary>
     [Fact]
-    public void 单字段上的类在量全了的快照里查得到()
+    public void 单字段上的类查得到()
     {
         var (hit, _, code) = Fixture.Run("where", "Class", "RimWorld.GenStep_ScatterLumpsMineable",
                                          "--db", Fixture.ModernDb);

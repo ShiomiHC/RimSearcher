@@ -520,7 +520,6 @@ When a name asked for is not what this command looks up, a found_as table says w
 | Key | Holds |
 |---|---|
 | `nodes` | one object per XML node answering to the names — each with 'node' (identity and patch count), 'ancestors', 'children' when it has any, and 'reference' plus 'witnesses' when --path-contains or --exact-path is given. With several names the objects come in the order the names were given; a name that matched nothing has no object here and one note in 'notes' that quotes it. |
-| `absent` | one row when this snapshot was exported before xpaths were counted by defName= and label= — layer 'patch_ops_defname_label', state pre-measure, next (the export command that measures them); empty when the identity blocks carry all three counts. |
 | `found_as` | one row per name asked for that turns up as something other than what this command looks up: name, is (def / def outside --scope / xml node / abstract xml node / def type / class / interface text / mod in this snapshot / mod not in this snapshot / field value / def in another snapshot / xml node in another snapshot), in (where exactly), next (a command that reaches it, ready to paste). Empty when the name was found here, or turns up nowhere. |
 
 Examples:
@@ -1016,7 +1015,7 @@ defs_with_paths_dropped counts defs whose export stopped short — past a field 
 | `snapshot` | an object, not an array: the chosen snapshot compared with the installed game, including defs_with_paths_dropped and defs_with_values_cut (a snapshot exported before those were told apart has defs_with_fields_dropped instead). |
 | `xml` | one row per snapshot mod whose Defs or Patches XML moved or cannot be found: package_id, state. Empty when none. |
 | `mod_list` | one row per packageId that is enabled in the game but missing from this snapshot, or in this snapshot but no longer enabled: package_id, state. Empty when the lists match. |
-| `layers` | one row per data layer this snapshot could hold: layer, state, next, why. 'state' is 'ok' or one of pre-measure / skipped / unavailable / unmeasured / unconfigured / partial / empty; 'next' is the command that fills the layer (null on 'ok' rows). Queries print the same row shape as 'absent' for a layer they needed and found short — without 'why'. |
+| `layers` | one row per data layer this snapshot could hold: layer, state, next, why. 'state' is 'ok' or one of pre-measure / skipped / unavailable / unmeasured / unconfigured / empty / missing; 'next' is the command that fills the layer (null on 'ok' rows). Queries print the same row shape as 'absent' for a layer they needed and found short — without 'why'. |
 
 Examples:
 
@@ -1272,7 +1271,6 @@ When a name asked for is not what this command looks up, a found_as table says w
 | `empty_because` | one row per option given on this call that, alone, emptied the result: filter (the option as written), hidden (how many defs come back with just that option dropped), next (the same call without it, ready to paste). Empty when the result was not empty, or when no single option accounts for it. |
 | `found_as` | one row per name asked for that turns up as something other than what this command looks up: name, is (def / def outside --scope / xml node / abstract xml node / def type / class / interface text / mod in this snapshot / mod not in this snapshot / field value / def in another snapshot / xml node in another snapshot), in (where exactly), next (a command that reaches it, ready to paste). Empty when the name was found here, or turns up nowhere. |
 | `completeness` | an object, present only when some def in scope had its export cut short: scope (which def types this covers, in words), defs_cut_short (how many), types (one row per def type with its own count), verify (a ready command that lists them). Absent means no def in that scope lost fields at export. |
-| `absent` | one row per layer this query needed that this snapshot does not hold — layer, state, next; 'xml_written' (pre-measure) when the value asked for is a class name that sits on official defs and the snapshot has no 'xml' column to say whether their XML wrote it. Empty otherwise; next is the command that fills the layer. |
 
 Examples:
 

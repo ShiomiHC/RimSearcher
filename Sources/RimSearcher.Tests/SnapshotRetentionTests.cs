@@ -154,7 +154,7 @@ public class SnapshotRetentionTests
     {
         var dir = FreshDir("gen");
         Import(dir, "current", 10);
-        var (stdout, _, code) = Import(dir, "current", 10, exporterVersion: "0.7.0");
+        var (stdout, _, code) = Import(dir, "current", 10, exporterVersion: "0.13.0");
         Assert.Equal(0, code);
         Assert.DoesNotContain("left in place", stdout, StringComparison.Ordinal);
         Assert.True(File.Exists(Path.Combine(dir, "current.prev.db")));
@@ -246,7 +246,7 @@ public class SnapshotRetentionTests
     }
 
     private static (string Stdout, string Stderr, int Code) Import(string dir, string name, int damage,
-                                                                   string exporterVersion = "0.4.0",
+                                                                   string exporterVersion = "0.12.0",
                                                                    int xmlPaths = 0,
                                                                    params string[] extra)
     {
@@ -264,7 +264,7 @@ public class SnapshotRetentionTests
         return (stdout.ToString(), stderr.ToString(), code);
     }
 
-    private static void WriteMini(string path, int damage, string exporterVersion = "0.4.0", int xmlPaths = 0)
+    private static void WriteMini(string path, int damage, string exporterVersion = "0.12.0", int xmlPaths = 0)
     {
         using var fs = File.Create(path);
         using var gz = new GZipStream(fs, CompressionLevel.Optimal);

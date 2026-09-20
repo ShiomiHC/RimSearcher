@@ -122,7 +122,7 @@ public sealed class SnapshotStatusCommand : Command
                 Key = "layers",
                 Rows = true,
                 What = "one row per data layer this snapshot could hold: layer, state, next, why. 'state' is 'ok' " +
-                       "or one of pre-measure / skipped / unavailable / unmeasured / unconfigured / partial / empty; " +
+                       "or one of pre-measure / skipped / unavailable / unmeasured / unconfigured / empty / missing; " +
                        "'next' is the command that fills the layer (null on 'ok' rows). Queries print the same " +
                        "row shape as 'absent' for a layer they needed and found short — without 'why'.",
             },

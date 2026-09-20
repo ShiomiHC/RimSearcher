@@ -11,16 +11,15 @@ class          Verse.ThingDef
 declared_in    ludeon.rimworld
 source         Projectiles_Guns.xml
 inherits_from  BaseBullet (see 'rimsearcher inherit Bullet_Revolver')
-xml            not indexed (exporter 0.2.0)
 
-path                         value                code_default
-soundImpactDefault           BulletImpact_Ground  no
-soundDrop                    Standard_Drop        no
-soundPickup                  Standard_Pickup      no
-soundInteract                Standard_Pickup      no
-thingClass                   RimWorld.Bullet      no
-projectile.damageAmountBase  12                   no
-projectile.burstCount        1                    yes
-projectile.speed             70                   unknown
-Values that most of the 9 ThingDefs in this snapshot also carry — the count in brackets: soundDrop (9), soundImpactDefault (9), soundPickup (9), soundInteract (8). Only rows whose 'code_default' is no were compared: a def whose XML writes that same value and a def that never mentions the field both show yes here.
+path                         value                code_default  xml
+soundImpactDefault           BulletImpact_Ground  no            not-written
+soundDrop                    Standard_Drop        no            here
+soundPickup                  Standard_Pickup      no            here
+soundInteract                Standard_Pickup      no            here
+thingClass                   RimWorld.Bullet      no            here
+projectile.damageAmountBase  12                   no            here
+projectile.burstCount        1                    yes           not-written
+projectile.speed             70                   unknown       not-written
+Values that most of the 9 ThingDefs in this snapshot also carry — the count in brackets: soundDrop (9), soundImpactDefault (9), soundPickup (9), soundInteract (8). Only rows whose 'code_default' is no were compared.
 --- stderr ---

@@ -10,9 +10,8 @@ class          Verse.TestVariantDef
 declared_in    test.mod
 source         Variants.xml
 inherits_from  BaseProjectile (see 'rimsearcher inherit VariantOne')
-xml            not indexed (exporter 0.2.0)
 
-path         value             code_default
-workerClass  Verse.TestWorker  no
+path         value             code_default  xml
+workerClass  Verse.TestWorker  no            here
 No value above with 'code_default'=no is one that most of the 2 TestBaseDefs in this snapshot also carry.
 --- stderr ---

@@ -180,17 +180,6 @@ public class TranslationLayerTests
             .Bool(IntermediateFormat.KeyFullListTranslationAllowed, false)
             .ToString();
 
-    /// <summary>运行时 defInjection 一行。**故意不带 injected** —— 0.10.0 之前那一档就是这样。</summary>
-    private static string DefInjLine(string defName, string path, string translated) =>
-        new JsonLine()
-            .Str(IntermediateFormat.KeyKind, IntermediateFormat.KindDefInjection)
-            .Str(IntermediateFormat.KeyDefType, "HediffDef")
-            .Str(IntermediateFormat.KeyDefName, defName)
-            .Str(IntermediateFormat.KeyPath, path)
-            .Str(IntermediateFormat.KeyTranslated, translated)
-            .Str(IntermediateFormat.KeyOriginal, "")
-            .ToString();
-
     /// <summary>
     /// 注入键层进得了库,两个键串各占一列。
     ///
@@ -202,7 +191,7 @@ public class TranslationLayerTests
     [Fact]
     public void 注入键层的两个键串各自入库()
     {
-        using var db = ImportLines("injkeys", "0.9.0",
+        using var db = ImportLines("injkeys", Fixture.DefExporterVersion,
             InjKeyLine("ObservedLayingCorpse", "stages.0.label", "stages.observed_corpse.label"),
             InjKeyLine("ObservedLayingCorpse", "description", "description", allowed: false));
 
@@ -227,7 +216,7 @@ public class TranslationLayerTests
     [Fact]
     public void 名册字典化之后每一列都原样读得回来()
     {
-        using var db = ImportLines("injkeydict", "0.9.0",
+        using var db = ImportLines("injkeydict", Fixture.DefExporterVersion,
             InjKeyLine("ObservedLayingCorpse", "stages.0.label", "stages.observed_corpse.label"),
             // 同一条路径在两行里出现 —— 字典跨行共用,那正是省下来的东西。
             InjKeyLine("SecondHediff", "stages.0.label", "stages.observed_corpse.label"),
@@ -269,7 +258,7 @@ public class TranslationLayerTests
     public void 字典化之前的名册照旧读得出来()
     {
         string path;
-        using (var fresh = ImportLines("injkeylegacy", "0.9.0",
+        using (var fresh = ImportLines("injkeylegacy", Fixture.DefExporterVersion,
             InjKeyLine("ObservedLayingCorpse", "stages.0.label", "stages.observed_corpse.label"),
             InjKeyLine("ObservedLayingCorpse", "description", "description", allowed: false)))
             path = fresh.Path;
@@ -316,36 +305,6 @@ public class TranslationLayerTests
         Assert.Equal("stages.observed_corpse.label",
                      rows.Single(r => r.Path == "stages.0.label").SuggestedPath);
         Assert.False(rows.Single(r => r.Path == "description").TranslationAllowed);
-    }
-
-    /// <summary>
-    /// 导出器早于 0.9.0 的快照对这一层回 <c>null</c>,不是空表。
-    ///
-    /// 合成一个空列表就等于宣布「量过了、这个 def 没有可注入槽位」,而真相是这份快照
-    /// 根本没量过 —— 那两句话的下一步一个是「别费劲了」、一个是「重导一次」。
-    /// </summary>
-    [Fact]
-    public void 没量过注入键层的快照回空而不是空表()
-    {
-        using var db = ImportLines("injkeysold", "0.7.0");
-        Assert.Null(db.InjectionKeys("ObservedLayingCorpse"));
-    }
-
-    /// <summary>
-    /// **0.8.0 也回 <c>null</c>** —— 那一版有这张表,可它答不出这张表要答的问题。
-    ///
-    /// 0.8.0 只收「带信息」的槽位(有把手式、或不许译且有文本),于是「这个键在不在册」
-    /// 问不出来;判据退化成拿字段表比对,而整表注入的键不带元素下标,在字段表里一次也不中。
-    /// 实测 1348 条判「配不上槽位」里 956 条是这么冤枉的,还配着一句「游戏那边同样注入
-    /// 不上」的假话。一个会印假话的层,报「没测」比报「测过」离真相近 ——
-    /// 这条闸钉的就是「有表 ≠ 答得出」。
-    /// </summary>
-    [Fact]
-    public void 名册不全的那一版当没量过()
-    {
-        using var db = ImportLines("injkeyspartial", "0.8.0",
-            InjKeyLine("ObservedLayingCorpse", "stages.0.label", "stages.observed_corpse.label"));
-        Assert.Null(db.InjectionKeys("ObservedLayingCorpse"));
     }
 
     /// <summary>
@@ -407,21 +366,6 @@ public class TranslationLayerTests
 
         // 运行时那一档此前 source_file 恒空 —— 游戏其实一直知道译文出自哪个文件。
         Assert.Equal("DefInjected/HediffDef/Hediffs.xml", rows["label"].SourceFile);
-    }
-
-    /// <summary>
-    /// 导出器早于 0.10.0 时这一位是 <c>null</c>,不是 <c>false</c>,也不是 <c>true</c>。
-    ///
-    /// 补成 true 等于替游戏担保一件没测过的事;补成 false 等于宣布这条译文没生效。
-    /// 两个方向都会让一句没量过的话长得像量过。
-    /// </summary>
-    [Fact]
-    public void 没带判决的老快照那一位是空()
-    {
-        using var db = ImportLines("noverdict", "0.9.0",
-            InjKeyLine("ObservedLayingCorpse", "label", "label"),
-            DefInjLine("ObservedLayingCorpse", "label", "看到尸体"));
-        Assert.Null(db.Translations("ObservedLayingCorpse").Single().Applied);
     }
 
     /// <summary>

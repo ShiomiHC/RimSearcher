@@ -1,12 +1,14 @@
 $ rimsearcher inherit BaseProjectile --path-contains soundDrop
 exit 0
 --- stdout ---
-name            BaseProjectile
-def_type        ThingDef
-abstract        yes
-declared_in     ludeon.rimworld
-source          Projectiles_Guns.xml
-patch_ops_name  0
+name               BaseProjectile
+def_type           ThingDef
+abstract           yes
+declared_in        ludeon.rimworld
+source             Projectiles_Guns.xml
+patch_ops_name     0
+patch_ops_defname  0
+patch_ops_label    0
 
 reference        Standard_Drop
 reference_from   most common value under BaseProjectile
@@ -22,7 +24,4 @@ BaseBullet              ThingDef        yes       ludeon.rimworld
             Firefoam    ThingDef        no        ludeon.rimworld
             VariantOne  TestVariantDef  no        test.mod
 'rimsearcher get Firefoam' shows the merged, post-patch fields of a concrete child.
-
-layer                    state        next
-patch_ops_defname_label  pre-measure  rimsearcher export --modlist fixture
 --- stderr ---

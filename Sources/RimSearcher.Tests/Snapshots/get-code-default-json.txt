@@ -15,7 +15,7 @@ exit 0
     },
     {
       "kind": "advisory",
-      "text": "Values that most of the 9 ThingDefs in this snapshot also carry — the count in brackets: soundDrop (9), soundImpactDefault (9), soundPickup (9), soundInteract (8). Only rows whose 'code_default' is no were compared: a def whose XML writes that same value and a def that never mentions the field both show yes here."
+      "text": "Values that most of the 9 ThingDefs in this snapshot also carry — the count in brackets: soundDrop (9), soundImpactDefault (9), soundPickup (9), soundInteract (8). Only rows whose 'code_default' is no were compared."
     }
   ],
   "defs": [
@@ -28,49 +28,56 @@ exit 0
         "class": "Verse.ThingDef",
         "declared_in": "ludeon.rimworld",
         "source": "Projectiles_Guns.xml",
-        "inherits_from": "BaseBullet (see 'rimsearcher inherit Bullet_Revolver')",
-        "xml": "not indexed (exporter 0.2.0)"
+        "inherits_from": "BaseBullet (see 'rimsearcher inherit Bullet_Revolver')"
       },
       "fields": [
         {
           "path": "soundImpactDefault",
           "value": "BulletImpact_Ground",
-          "code_default": "no"
+          "code_default": "no",
+          "xml": "not-written"
         },
         {
           "path": "soundDrop",
           "value": "Standard_Drop",
-          "code_default": "no"
+          "code_default": "no",
+          "xml": "here"
         },
         {
           "path": "soundPickup",
           "value": "Standard_Pickup",
-          "code_default": "no"
+          "code_default": "no",
+          "xml": "here"
         },
         {
           "path": "soundInteract",
           "value": "Standard_Pickup",
-          "code_default": "no"
+          "code_default": "no",
+          "xml": "here"
         },
         {
           "path": "thingClass",
           "value": "RimWorld.Bullet",
-          "code_default": "no"
+          "code_default": "no",
+          "xml": "here"
         },
         {
           "path": "projectile.damageAmountBase",
           "value": "12",
-          "code_default": "no"
+          "code_default": "no",
+          "xml": "here"
         },
         {
           "path": "projectile.burstCount",
           "value": "1",
-          "code_default": "yes"
+          "code_default": "yes",
+          "xml": "not-written"
         },
         {
           "path": "projectile.speed",
           "value": "70",
-          "code_default": "unknown"
+          "code_default": "unknown",
+          "xml": "not-written"
         }
       ],
       "translations": []

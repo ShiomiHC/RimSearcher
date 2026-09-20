@@ -144,14 +144,6 @@ public sealed class InheritCommand : Command
                        "With several names the objects come in the order the names were given; a name that " +
                        "matched nothing has no object here and one note in 'notes' that quotes it.",
             },
-            new()
-            {
-                Key = "absent",
-                Rows = true,
-                What = "one row when this snapshot was exported before xpaths were counted by defName= and " +
-                       "label= — layer 'patch_ops_defname_label', state pre-measure, next (the export command " +
-                       "that measures them); empty when the identity blocks carry all three counts.",
-            },
             NameLookup.JsonKey,
         ],
     };
@@ -245,7 +237,6 @@ public sealed class InheritCommand : Command
 
             var named = node.Name is { Length: > 0 };
             var label = named ? node.Name : node.DefName ?? "";
-            var countedExtra = ctx.Db.Meta.IndexesPatchOpsByDefNameLabel;
             var identity = new List<KeyValuePair<string, object?>>
             {
                 new("name", node.Name),
@@ -260,11 +251,8 @@ public sealed class InheritCommand : Command
                 // 印 n/a 而不是留空 —— 留空会让整行在文本面消失(Renderers 跳过空值)。
                 new(PatchOpsName, named ? node.PatchOps : "n/a"),
             };
-            if (countedExtra)
-            {
-                identity.Add(new("patch_ops_defname", node.PatchOpsDefName));
-                identity.Add(new("patch_ops_label", node.PatchOpsLabel));
-            }
+            identity.Add(new("patch_ops_defname", node.PatchOpsDefName));
+            identity.Add(new("patch_ops_label", node.PatchOpsLabel));
             ctx.Report.Detail("node", identity);
 
             // 此前紧跟着 identity 块的三支散文(无 Name= / 被点名 N 次 / 0 数的是什么)2026-09-18
@@ -377,10 +365,6 @@ public sealed class InheritCommand : Command
         }
 
         ctx.Report.EndItems();
-
-        // 旧库缺 patch_ops_defname / patch_ops_label 两格:一层缺席,absent 表一行(Docs/25 甲)。
-        if (nodes.Count > 0 && !ctx.Db.Meta.IndexesPatchOpsByDefNameLabel)
-            ctx.Report.Absent(DataLayers.PatchOpsDefNameLabelRow(ctx.Db, ctx.SnapshotName ?? ""));
 
         // 「几个节点答应同一个名字」是按**名字**说的话。几个名字一起给时,块总数大于 1
         // 是理所当然的,而它与「这一个名字底下有两个节点」是两件事 —— 合起来数会把前者

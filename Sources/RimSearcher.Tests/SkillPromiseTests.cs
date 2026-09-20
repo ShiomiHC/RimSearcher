@@ -306,9 +306,7 @@ public class SkillPromiseTests
         // 底下那条闸自己照跑,它盯的是**输出**,不是文档。
         // 2026-09-02:版本下限从 SKILL.md 与 help 里一并拿掉 —— 「from 0.5.0 on」是导出器的
         // 变更史,读者手上没有版本号(只有 snapshot status 印它),两档各按输出里真印的
-        // 标签点名。承诺剩下的是「缺那一列时会说」,闸不变。
-        new("A snapshot without that column says so",
-            nameof(PresenceTests.旧快照get不把xml写成印成没写)),
+        // 标签点名。2026-09-20:「缺那一列时会说」随 0.12 地板一起撤下 —— 没有缺那一列的库了。
         // 2026-09-01:原文写的是「落空不等于类型没这个字段,去读声明类」—— 那是 type_fields
         // 之前的出路,现在 fields 自己就把两态分开了。免责收窄到 get/where,新出路连同它的
         // 版本下限一起钉住。
@@ -317,8 +315,6 @@ public class SkillPromiseTests
         // members / read 的 declares 落在同一个对立面上(类型自己声明的 vs 实际到手的)。
         new("state is `null-on-this-def`\n  (other defs of the type carry the path), `null-on-type` (the type declares it, no def has\n  a value), `undeclared`",
             nameof(PresenceTests.新快照fields能分开全是null和没有这个字段)),
-        new("A snapshot that carries no such list says so",
-            nameof(PresenceTests.旧快照fields落空说清分不开)),
         // 2026-09-01:原文钉的是「resolved defs and fields 相同就留着旧的」—— 那正是**造成**
         // 缺陷的口径:导出器换代多出一整个 XML 层,def 一个没动,新库被丢弃。实现改成四项齐比后,
         // 这句承诺连同它的闸都得跟着走,否则闸绿护着的是已经改掉的那个行为。

@@ -12,13 +12,9 @@ label        shield belt
 class        Verse.ThingDef
 declared_in  ludeon.rimworld
 source       Apparel_Belts.xml
-xml          not indexed (exporter 0.2.0)
 Market value, cost to make and work amount are not fields: 'rimsearcher economy Apparel_ShieldBelt' has them.
 
 0 rows. Dropping any one option below brings back this many translations:
 filter                       hidden  next
 --path-contains MarketValue  1       rimsearcher get Apparel_ShieldBelt
-
-layer           state        next
-injection_keys  pre-measure  rimsearcher export --modlist fixture
 --- stderr ---

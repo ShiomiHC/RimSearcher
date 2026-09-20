@@ -27,84 +27,22 @@ public sealed record ExportMeta(
     public string Fingerprint => ComputeFingerprint(GameVersion, Language, Mods);
 
     /// <summary>
-    /// 这份快照量过**列表元素**(<c>&lt;li Class="…"&gt;</c>)的运行时类型吗(导出器 0.2.0 起)。
+    /// 读得进来的最老导出器。<see cref="IntermediateFormat.FormatVersion"/> 答「文件能不能读」,
+    /// 这一档答「层齐不齐」:0.5–0.10 逐层加进来的 xml_written / type_fields / injection_keys
+    /// 都没涨格式号,靠这里拒收。地板之下的文件与库一个都不在盘上了,每层的世代分支随之删除
+    /// (2026-09-20);再往上抬时只改这两个数。
+    /// </summary>
+    public const int FloorMajor = 0, FloorMinor = 12;
+
+    /// <summary>
+    /// 这份快照的 xml_written 是**打完补丁**的路径全集吗 —— 当次真拿到了那份文档
+    /// (<see cref="PatchRoute"/> 不是 <c>none</c>)。
     ///
-    /// 老快照对 <c>where Class X</c> 回零,而那与「量过了、确实没人用它」同形。
-    /// </summary>
-    public bool IndexesNestedClass => AtLeast(ExporterVersion, 0, 2);
-
-    /// <summary>
-    /// 单字段上的 <c>Class="…"</c> 也量过了吗(导出器 0.4.0 起)。
-    ///
-    /// 0.2 那一档的判据是「路径以 ] 收尾」,于是 <c>&lt;genStep Class="GenStep_RocksFromGrid"&gt;</c>
-    /// 这种**不在列表里**的多态一条都没进索引 —— 而 <c>where Class X</c> 对它回的零,
-    /// 与「列表里量过了、确实没人用」逐字同形。三种世界各说各的话,判据在这里分档。
-    /// </summary>
-    public bool IndexesAllNestedClass => AtLeast(ExporterVersion, 0, 4);
-
-    /// <summary>
-    /// 这份快照记下了每个 XML 节点实际写出来的字段路径吗(导出器 0.5.0 起)。
-    /// 老快照的 <c>code_default=yes</c> 分不开「XML 写过默认值」与「根本没写」。
-    /// </summary>
-    public bool IndexesXmlWritten => AtLeast(ExporterVersion, 0, 5);
-
-    /// <summary>
-    /// 这份快照除了 <c>@Name=</c> 还数过按 defName / label 定位的 xpath 吗(导出器 0.5.0 起)。
-    /// 老快照的 <c>patch_ops=0</c> 把那两种定位与「没被改过」压成同一个零。
-    /// </summary>
-    public bool IndexesPatchOpsByDefNameLabel => AtLeast(ExporterVersion, 0, 5);
-
-    /// <summary>
-    /// 这份快照记下了每个 def 类型能有的字段路径全集吗(导出器 0.5.0 起)。
-    /// 老快照里「这个类型有这个字段但全是 null」与「类型根本没有这个字段」同形。
-    /// </summary>
-    public bool IndexesTypeFields => AtLeast(ExporterVersion, 0, 5);
-
-    /// <summary>
-    /// 这份快照记下了每条 xml_written 叶子路径的行内文本吗(导出器 0.6.0 起)。
-    ///
-    /// 老快照上短形式标签底下的候选格多于一个时,「这段文本就是这一格」与
-    /// 「这段文本落在别的格 / 对不上」同形 —— 一律 under,分不开。
-    /// </summary>
-    public bool IndexesXmlWrittenText => AtLeast(ExporterVersion, 0, 6);
-
-    /// <summary>
-    /// 这份快照的 xml_written 是**打完补丁**的路径全集吗(导出器 0.7.0 起,且当次真拿到了
-    /// 那份文档 —— <see cref="PatchRoute"/> 不是 <c>none</c>)。
-    ///
-    /// 老快照收的是磁盘上的原文,于是别的 mod 用 PatchOperationAdd 加进来的一行,在
+    /// 拿不到时收的是磁盘上的原文,于是别的 mod 用 PatchOperationAdd 加进来的一行,在
     /// <c>xml</c> 列上报 <c>no</c> —— 与「谁都没写过、该 Add」逐字同形,而出路正相反。
     /// </summary>
     public bool IndexesPostPatchXml =>
-        AtLeast(ExporterVersion, 0, 7)
-        && !string.IsNullOrEmpty(PatchRoute)
-        && PatchRoute != IntermediateFormat.PatchRouteNone;
-
-    /// <summary>
-    /// 这份快照记下了**完整的**注入键层吗(导出器 0.9.0 起)。
-    ///
-    /// 老快照的译文表存的是**译者写的那一串**:同一个槽位在把手式与下标式两种键下各存
-    /// 一份,而 <c>--path</c> 只能匹配上其中一种 —— 另一种回的零与「这个 def 没这条译文」
-    /// 逐字同形。这一档之后两种键归一,且「这个字段不许译」不再与「谁都没译」同形。
-    ///
-    /// **0.8.0 有这张表却在这里算「没测」**,不是保守,是那一版的表**答不出它要答的问题**:
-    /// 它只收「带信息」的槽位,于是「这个键在不在名册上」问不出来,判据退化成拿字段表比对,
-    /// 而整表注入的键(不带元素下标)在字段表里一次也不中 —— 实测 1348 条「配不上槽位」
-    /// 里 956 条是这么来的,配着一句「游戏那边同样注入不上」的假话。一个会印假话的层,
-    /// 报「没测」比报「测过」离真相近。
-    /// </summary>
-    public bool IndexesInjectionKeys => AtLeast(ExporterVersion, 0, 9);
-
-    /// <summary>
-    /// 运行时译文行带着**游戏自己的判决**吗(导出器 0.10.0 起)。
-    ///
-    /// 语言包里有这条记录 ≠ 它生效了。没这一位时导出侧把包里每一条都当生效,
-    /// 而 baseline 上光键配不上槽位的就有 1348 行 —— 它们一律印成 origin=「in effect」。
-    /// </summary>
-    public bool RecordsInjectionApplied => AtLeast(ExporterVersion, 0, 10);
-
-    /// <summary>版本位的通用形态,给 <see cref="DataLayers"/> 分「没到那一版」与「到了却没量成」用。</summary>
-    public bool ExporterAtLeast(int major, int minor) => AtLeast(ExporterVersion, major, minor);
+        !string.IsNullOrEmpty(PatchRoute) && PatchRoute != IntermediateFormat.PatchRouteNone;
 
     private static bool AtLeast(string version, int major, int minor)
     {
@@ -162,6 +100,14 @@ public sealed record ExportMeta(
                 "this build reads — the in-game exporter is ahead of the CLI. Update the CLI (rebuild and " +
                 "re-publish it); exporting again would produce the same file.");
 
+        var exporter = Str(IntermediateFormat.KeyExporterVersion, "unknown");
+        if (!AtLeast(exporter, FloorMajor, FloorMinor))
+            throw new SnapshotFormatError(
+                $"This export was written by exporter {exporter}, and this build reads {FloorMajor}.{FloorMinor} or later. " +
+                "It is refused rather than imported in part: the layers that exporter did not write would answer as " +
+                "'nothing found' instead of 'not in this file'. Export again from the game ('rimsearcher export') — " +
+                "re-importing this file cannot add what was never written into it.");
+
         var mods = new List<ModRef>();
         if (root.TryGetProperty(IntermediateFormat.KeyMods, out var modsEl) && modsEl.ValueKind == JsonValueKind.Array)
             foreach (var m in modsEl.EnumerateArray())
@@ -172,7 +118,7 @@ public sealed record ExportMeta(
 
         return new ExportMeta(
             version,
-            Str(IntermediateFormat.KeyExporterVersion, "unknown"),
+            exporter,
             Str(IntermediateFormat.KeyExportedAtUtc),
             Str(IntermediateFormat.KeyGameVersion, "unknown"),
             Str(IntermediateFormat.KeyLanguage, "unknown"),

@@ -9,9 +9,8 @@ label        shield belt
 class        Verse.ThingDef
 declared_in  ludeon.rimworld
 source       Apparel_Belts.xml
-xml          not indexed (exporter 0.2.0)
 
-Same in every row, not repeated below: code_default=no.
+Same in every row, not repeated below: code_default=no, xml=here.
 path                                value
 comps[0].props.energyMax            0.5
 comps[0].props.energyLossPerDamage  0.033
@@ -21,7 +20,4 @@ Market value, cost to make and work amount are not fields: 'rimsearcher economy 
 0 rows. Dropping any one option below brings back this many translations:
 filter                         hidden  next
 --path-contains comps[].props  1       rimsearcher get Apparel_ShieldBelt
-
-layer           state        next
-injection_keys  pre-measure  rimsearcher export --modlist fixture
 --- stderr ---
