@@ -8,8 +8,9 @@ namespace RimSearcher.Commands;
 ///
 /// 行只在成因**当场算得出来**时出:同类别的 def 有值 / 类型声明了但没人赋值 / 类型根本
 /// 没声明 / 那段文本其实是某个字段的取值。算不出来是哪一种(值索引空、声明层也答不出)
-/// 的那一档仍是 <see cref="Completeness.NoteIndexHoldsValuesOnly"/> 那句 —— 它压着一轮
-/// 实测(10/10 对 0/10),改形态要重测。
+/// 的那一档仍是 <see cref="Completeness.NoteIndexHoldsValuesOnly"/> 那句:只说「值索引底下没有」
+/// 加一条填好的声明搜索;成因机制只住这里的 <see cref="Help"/>(那句里曾复述过一遍,2026-09-20
+/// 按真实语料删了,见该方法的注释)。
 ///
 /// 成因为什么让值缺席(null 不进索引、名值对把字段名搬进了值列)是机制,住 <see cref="Help"/>,
 /// 两条命令的 Remarks 引它;表里只有状态词与填好参数的下一条命令。

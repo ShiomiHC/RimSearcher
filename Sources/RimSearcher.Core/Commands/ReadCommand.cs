@@ -281,16 +281,14 @@ public sealed class ReadCommand : Command
         var rows = new List<IReadOnlyDictionary<string, object?>>();
         var read = 0;
         var failed = 0;
-        var braceMatched = false;
 
         foreach (var wanted in asked)
         {
             var status = ReadOne(ctx, root, wanted, sourceName, members, type, range, outline,
-                                 asked.Count > 1, lines, rows, ref braceMatched);
+                                 asked.Count > 1, lines, rows);
             if (status == 0) read++; else failed++;
         }
 
-        if (braceMatched) SayBraceMatched(ctx);
         if (read == 0) return 1;
 
         if (outline) ctx.Report.Table("declarations", OutlineColumns, rows);
@@ -304,8 +302,7 @@ public sealed class ReadCommand : Command
     /// </summary>
     private static int ReadOne(CommandContext ctx, string root, string wanted, string? sourceName,
                                IReadOnlyList<string> members, string? type, string? range, bool outline, bool batch,
-                               List<string> lines, List<IReadOnlyDictionary<string, object?>> rows,
-                               ref bool braceMatched)
+                               List<string> lines, List<IReadOnlyDictionary<string, object?>> rows)
     {
         var hits = Resolve(root, wanted, sourceName);
 
@@ -360,24 +357,13 @@ public sealed class ReadCommand : Command
         // 全量后只有 6 条超过 harness 的 30000 字符,其中 5 条接了管道。
         var window = cap;
 
-        // 那条能力边界(靠配平括号找声明)是**脚注**,几个文件一起读时按文件重复几遍
-        // 只会被当成噪声,所以攒起来最后发一次。
-        //
-        // 只在真读到东西时挂:落空那条路自己那句话里已经说了同一件事(「匹配靠括号,
-        // 所以这不是文件里没有它的证据」),再挂一遍是同一句话说两遍。
-        if (outline)
-        {
-            var status = Outline(ctx, rel, text, cap, rows);
-            if (status == 0) braceMatched = true;
-            return status;
-        }
+        // 命中的返回上不挂「配平括号不是解析」那句(2026-09-20 删):它印过 1186 次,
+        // 1163 次在命中上,而它说的「认不出与不在文件里同形」只关落空那一支 —— 那一支
+        // SayNoDeclaration 自己说。消费方自己的审计也写着「成功场景不需要这句」。
+        if (outline) return Outline(ctx, rel, text, cap, rows);
 
         if (members.Count > 0 || type is { Length: > 0 })
-        {
-            var status = Declaration(ctx, rel, text, members, type, cap, lines, rows);
-            if (status == 0) braceMatched = true;
-            return status;
-        }
+            return Declaration(ctx, rel, text, members, type, cap, lines, rows);
 
         return Raw(ctx, rel, text, range, cap, window, lines, rows, batch);
     }
@@ -599,29 +585,6 @@ public sealed class ReadCommand : Command
     }
 
     // ---- 说清楚 ----
-
-    /// <summary>
-    /// 配平括号不是解析,这句话必须跟着每一次成员级返回走 —— 它限定的是这次返回的
-    /// **完整性**(尤其 --outline 那句「文件里的声明都在这儿」),不是一条通用教学。
-    /// 只在真用了轮廓的两条路上说;裸行读没有任何推断,不需要它。
-    ///
-    /// 压到一行:路径刚在上面印过,不再复述;「去 code-search」这条下一步写在 SKILL.md 里。
-    ///
-    /// **「找不到不等于没有」这半句单说是无效的,得说出漏的是哪一类。** 盲测三臂各 10 次,
-    /// 抽象地点名同形 0/10,点名一个读者能去核对的具体类别 5/10。
-    /// 举本地函数是核过的:AttackTargetFinder.cs 第 297 行的 <c>BestTargetOnCell</c> 住在方法体里,
-    /// <c>--member</c> 落空 —— 扫描只在根、namespace、类型三处认声明,方法体内一律当语句。
-    /// 这个例子已经换过三次(operators → namespace 下的 delegate → enum 成员 → 本地函数),
-    /// 每次都是因为前一类修进来了;点名的类别必须是**此刻**真认不出的,否则整句是假话。
-    /// event 不用提,它在(kind 标成 field,按名字找得到);显式接口实现也在,
-    /// 只是名字被剥了前缀;委托两档都在,namespace 下的 Owner 为空;enum 成员 kind 是 enum-member。
-    /// </summary>
-    private static void SayBraceMatched(CommandContext ctx)
-        => ctx.Report.Notice(NoticeKind.Boundary,
-            "Found by matching braces, not by parsing C#: a declaration this scan does not recognise " +
-            "and one that is not in the file look the same here. A local " +
-            "function declared inside a method body is one kind it does not recognise.",
-            footnote: true);
 
     private static void SayNoDeclaration(CommandContext ctx, string rel, string[] text,
                                          IReadOnlyList<CsDecl> decls, string? member, string? type)

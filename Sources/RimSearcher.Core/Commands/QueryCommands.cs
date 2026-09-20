@@ -3323,12 +3323,12 @@ internal static class Completeness
     /// <c>'rimsearcher code-search'</c> 不带参数 —— 那不是一条命令,是一个名词,抄不走。
     /// 本仓别处的纪律是**命令填好了再印**(<c>snapshot truncated</c> 的脚注就是填好的)。
     ///
-    /// **「两个无声成因」那句提过要砍(它不带可跑的出路),盲测判它留下。** 两臂各 10 次,
-    /// 只差这 145 个字符,任务是从一个 <c>where shortHash</c> 的零里出结论:带这句的十份
-    /// **全部**用「缓存」措辞(「未保存的运行时缓存」「未序列化的缓存」),不带的十份**零份**
-    /// 用 —— 后者靠先验绕到了等价结论,措辞一律是「动态计算分配」。10/10 对 0/10,
-    /// p=1.1e-05。它不是没人读的填充,是 100% 被读进去并成为答案来源的那一句;这轮没改变
-    /// 对错,只因为被试恰好有先验,而没有先验的字段(mod 的私有字段)上它就是唯一来源。
+    /// **「两个无声成因」那句(null on every def / unsaved runtime cache)2026-09-20 删。** 它曾靠盲测留下
+    /// (两臂各 10 次,带它的 10/10 用「缓存」措辞,不带的 0/10,p=1.1e-05),但那道题面是「零就是答案,
+    /// 解释成因」。真实语料里它印了 490 次,随后文字 41 条里用缓存 / null 措辞的 4 条(9%),低于全语料
+    /// 基线 14%;读者对零的反应是「管道有问题 / 路径写错了」—— 下一步 114 次原样重跑、137 次换个
+    /// where、89 次 get。真实的零绝大多数是查询打错,成因句对着一个几乎不出现的场景写。
+    /// 产地 tools/audit-blindtest-prose.py。
     /// </summary>
     public static void NoteIndexHoldsValuesOnly(CommandContext ctx, string? path = null)
     {
@@ -3341,15 +3341,12 @@ internal static class Completeness
 
         ctx.Report.Notice(NoticeKind.Boundary,
             $"No indexed value sits at that path. {how} " +
-            "Two things keep a field out of this index without any sign here: a value that was null " +
-            "on every def, and a field the game marks as an unsaved runtime cache. " +
-            // 第三种成因点的是「导出器在那个 def 上停下来了」,不是四种上限里的某一种 ——
-            // 此前这里写死了「每 def 条数上限」,而实测七个快照上那一种一次都没撞到,
-            // 真发生的是深度与集合。**值长度那一类不在这句里**:它不让字段缺席。
+            // 导出器在某个 def 上停下来了(深度 / 集合 / 每 def 条数上限),那个 def 的这条路径就不在
+            // 索引里 —— 这一种留了记号,所以能指一条命令。**值长度那一类不在这句里**:它不让字段缺席。
             (ctx.Db.TruncatedDefCount() > 0
-                ? "A third, the exporter stopping short on a def — past its field cap, past the depth " +
-                  "cap, or partway down a list — does leave a sign: 'rimsearcher snapshot truncated' " +
-                  "lists those defs" +
+                ? "The exporter stopped short on some defs — past their field cap, past the depth " +
+                  "cap, or partway down a list — and a path cut that way is not indexed either: " +
+                  "'rimsearcher snapshot truncated' lists those defs" +
                   // 「哪一种上限」只有分类过的库答得出。旧库上这半句会指向一句它印不出来的话。
                   (ctx.Db.TruncationCausesMeasured ? ", and 'get' on one says which cap it hit. " : ". ")
                 : "") +

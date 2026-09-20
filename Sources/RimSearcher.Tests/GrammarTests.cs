@@ -1427,22 +1427,25 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 配平括号不是解析,这句边界只跟着**用了轮廓的**那几条路走。裸行读没有任何推断,
-    /// 那里不该多这一句。
+    /// 命中的返回上不挂「配平括号不是解析」那句。2026-09-20 之前它是三条推断路径(--outline /
+    /// --member / --type)命中时的常驻脚注;真实语料 1186 次里 1163 次印在命中上,而它说的
+    /// 「认不出与不在文件里同形」只关落空那一支,那一支 SayNoDeclaration 自己说。
+    /// 落空那句的锚点是「runs on braces, not C# parsing」,与这里钉的不是同一句。
     /// </summary>
     [Fact]
-    public void 能力边界只挂在做了推断的那几条路上()
+    public void 能力边界不挂在命中的返回上()
     {
         foreach (var argv in new[]
                  {
                      new[] { "read", "vanilla/Verse/Outline.cs", "--outline" },
                      ["read", "vanilla/Verse/Outline.cs", "--member", "Shared"],
                      ["read", "vanilla/Verse/Outline.cs", "--type", "Inner"],
+                     ["read", "vanilla/Verse/Outline.cs", "--lines", "1-5"],
                  })
-            Assert.Contains("not by parsing C#", Fixture.Run(argv).Stdout, StringComparison.Ordinal);
+            Assert.DoesNotContain("not by parsing C#", Fixture.Run(argv).Stdout, StringComparison.Ordinal);
 
-        var (raw, _, _) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--lines", "1-5");
-        Assert.DoesNotContain("not by parsing C#", raw, StringComparison.Ordinal);
+        var (miss, _, _) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--member", "NoSuchMember");
+        Assert.Contains("runs on braces, not C# parsing", miss, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -3310,13 +3313,9 @@ public class GrammarTests
     /// 实证:`AttackTargetFinder.cs` 里 `BestTargetOnCell` 是方法体内的本地函数,轮廓没有它,
     /// `--member` 落空,而 "every" 把那份清单变成了「文件里没有」的证据。
     ///
-    /// 自述侧钉的是**盲区在场**,不是某一句措辞:那句话改过四次(盲测显示光说「找不到不等于
-    /// 没有」是 0/10,补上一个能去核对的具体类别才到 5/10;运算符修进来之后那个类别换成
-    /// namespace 下的委托类型,再换成 enum 成员,再换成本地函数)。逐字锚会把当初的措辞连同
-    /// 它的无效一起焊死,所以钉两样 —— 扫描方式,和那个能去核对的具体类别。钉的不是那几个
-    /// 字母,是「输出里点名了一个读者能去核对、且这套扫描确实认不出的类别」。
-    ///
-    /// 这条闸比对**两个独立产地**,不复述任何一边的理由 —— 与磁盘层那条同型。
+    /// 自述侧那句脚注(「Found by matching braces … A local function … is one kind it does not
+    /// recognise」)2026-09-20 起不再印在命中的输出上 —— 真实语料 1186 次里 1163 次印在命中上,
+    /// 而它只关落空那一支。这条闸剩下的是推荐侧:落空句不许把 --outline 说成完整的。
     /// </summary>
     [Fact]
     public void 推荐outline时的说法不许强于它自述的说法()
@@ -3324,9 +3323,9 @@ public class GrammarTests
         var (miss, _, _) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--member", "Shard");
         var (outline, _, _) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--outline");
 
-        // 自述侧:盲区说破,这是被比对的那个基准。
-        Assert.Contains("not by parsing C#", outline, StringComparison.Ordinal);
-        Assert.Contains("local function", outline, StringComparison.Ordinal);
+        // 自述侧的那句脚注 2026-09-20 起不在命中的输出上(见 能力边界不挂在命中的返回上);
+        // 这里只剩推荐侧的一半:不许把 --outline 说成完整的。
+        Assert.DoesNotContain("not by parsing C#", outline, StringComparison.Ordinal);
 
         // 推荐侧:不许出现全称量词。逐字钉 every 太窄 —— 钉的是「这个能力被说成完整的」。
         foreach (var absolute in new[] { "every declaration", "all declarations", "the complete list" })
@@ -4223,16 +4222,17 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 反查落空时要说破**这个索引里装的只是值**:导出器见 null 直接 return(DefExporter),
-    /// 那条路径从来没进过索引,于是「这个字段不存在」与「它在,只是每个 def 上都是 null」
-    /// 在输出上完全同形。
+    /// 反查落空时要说破**这个索引里装的只是值**:「No indexed value sits at that path」+ 一条填好的
+    /// 声明搜索。成因机制(null 不进索引 / runtime cache)只住 IndexGap.Help;输出里那句
+    /// 「Two things keep a field out of this index without any sign here …」2026-09-20 按真实语料删了
+    /// (490 次实印,随后用缓存 / null 措辞的 9%,低于基线 14%;读者的下一步是改查询),锚点随之换。
     ///
     /// find / values / fields 三条反查路都判,因为补一处剩两处的输出一字不变。
     /// </summary>
     [Fact]
     public void 反查落空要说破索引里装的只是值()
     {
-        const string Line = "keep a field out of this index without any sign here";
+        const string Line = "No indexed value sits at that path";
 
         var (find, _, _) = Fixture.Run("where", "noSuchField", "x");
         Assert.Contains(Line, find, StringComparison.Ordinal);

@@ -171,7 +171,7 @@ public class SkillPromiseTests
         // Raise it, or read on with --lines 2021-2447.」,续读区间是算好的实参,文档给的
         // 是占位符 `a-b`。上面那句假话正是「照搬没跑过」的产物,而 CLI 这一侧跑过。
         new("match **braces, not C#**",
-            "能力边界只挂在做了推断的那几条路上"),
+            "能力边界不挂在命中的返回上"),
 
         // ---- --json / 退出码 / 参数 ----
         new("every prose sentence moves into `notes` as `{kind, text}`",
