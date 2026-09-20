@@ -55,7 +55,7 @@ internal static class SourcesShared
         {
             ctx.Report.Notice(NoticeKind.NextStep,
                 $"What changed is a question for git: run 'git -C \"{root}\" diff' for the working diff, " +
-                "'git log -p -- <file>' for one file's history.");
+                "'git log -p -- <file>' for one file's history.", teach: true);
             return;
         }
 

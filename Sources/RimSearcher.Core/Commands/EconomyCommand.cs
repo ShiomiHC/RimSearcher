@@ -339,7 +339,7 @@ public sealed class EconomyCommand : Command
                     $"None of these is priced in this snapshot: {NameList.Render(missing, Limits.MaxSuggestions)}.");
                 if (!SayWhereElse(ctx, missing))
                     ctx.Report.Notice(NoticeKind.NextStep,
-                        "'rimsearcher search <name>' matches on labels and translated text as well as defNames.");
+                        "'rimsearcher search <name>' matches on labels and translated text as well as defNames.", teach: true);
             }
             return 1;
         }
@@ -586,7 +586,7 @@ public sealed class EconomyCommand : Command
         if (withVariant > 0)
             ctx.Report.Notice(NoticeKind.NextStep,
                 "A '(holds when …)' tag above marks a number that a difficulty setting can swap out; " +
-                "'rimsearcher get <defName> --path-contains costListForDifficulty' shows the other cost list.");
+                "'rimsearcher get <defName> --path-contains costListForDifficulty' shows the other cost list.", teach: true);
 
         // 4. 多配方 = fallbackMarketValue 有加载顺序依赖(CalculableRecipe 取 DefDatabase 里
         //    第一个匹配,而等比放大的 bulk 配方 workAmount 通常不等比)。

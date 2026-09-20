@@ -254,7 +254,7 @@ public sealed class MembersCommand : Command
 
         if (!inherited && types.Count == 1)
             ctx.Report.Notice(NoticeKind.Boundary,
-                $"Declared by {types[0].FullName} itself; --inherited adds what it inherits from its base types.");
+                $"Declared by {types[0].FullName} itself; --inherited adds what it inherits from its base types.", teach: true);
 
         ctx.Report.Table("members", Columns, rows);
         return 0;

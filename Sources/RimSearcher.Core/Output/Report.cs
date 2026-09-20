@@ -40,6 +40,13 @@ public abstract record ReportEntry;
 public sealed record Notice(NoticeKind Kind, string Text, bool Footnote = false) : ReportEntry
 {
     /// <summary>
+    /// 教学句:说的是一条路或一个机制,这次是信息、同一会话里第二次起是复述。事实句(计数、
+    /// 截断、这次落空的成因)每次都是新事实,不标。标了的在 <see cref="Report.TeachViaHook"/>
+    /// 时不进 stdout / --json,只进 run-log,由消费方的会话级 hook 补送并按会话折叠。
+    /// </summary>
+    public bool Teach { get; init; }
+
+    /// <summary>
     /// 这条说明所报的计数,结构化形态。<c>null</c> = 它不是一句计数。
     ///
     /// 理由与 <c>snapshot</c> 键逐字相同(见 <c>JsonRenderer</c> 那处注释):机器侧要拿总数时,
@@ -124,10 +131,20 @@ public sealed class Report
     private readonly List<ReportEntry> _entries = [];
     private readonly List<string> _promised = [];
 
-    /// <summary>声明与数据块按 Add 的先后排在一起 —— 文本渲染器读这一份。</summary>
+    /// <summary>声明与数据块按 Add 的先后排在一起 —— run-log 读这一份,一条不少。</summary>
     public IReadOnlyList<ReportEntry> Entries => _entries;
 
-    public IReadOnlyList<Notice> Notices => _entries.OfType<Notice>().ToList();
+    /// <summary>
+    /// 教学句改走会话级 hook:run-log 在写(<see cref="RunLog.Enabled"/>)时由 Runner 置上。
+    /// 一句话只有两个出口 —— 要么 stdout,要么 run-log 再经 hook —— 不会两边都印。
+    /// </summary>
+    public bool TeachViaHook { get; set; }
+
+    /// <summary>渲染器读这一份:教学句走 hook 时它们不在这里。</summary>
+    public IReadOnlyList<ReportEntry> Rendered
+        => TeachViaHook ? _entries.Where(e => e is not Notice { Teach: true }).ToList() : _entries;
+
+    public IReadOnlyList<Notice> Notices => Rendered.OfType<Notice>().ToList();
     public IReadOnlyList<Block> Blocks => _entries.OfType<Block>().ToList();
 
     /// <summary>这条命令答应过要有的顶层数据键,哪怕这次一行都没有。</summary>
@@ -175,11 +192,11 @@ public sealed class Report
     }
 
     public Report Notice(NoticeKind kind, string text, bool footnote = false, Tally? count = null,
-                         IReadOnlyDictionary<string, object?>? data = null)
+                         IReadOnlyDictionary<string, object?>? data = null, bool teach = false)
     {
         // 声明多半是「一句 + 若干条件句」拼出来的,末尾那个分隔空格在所有条件句都空掉时
         // 留在行尾。一处一处 TrimEnd 修不干净 —— 组合是随快照能力变的,不是随代码变的。
-        _entries.Add(new Notice(kind, text.TrimEnd(), footnote) { Count = count, Data = data });
+        _entries.Add(new Notice(kind, text.TrimEnd(), footnote) { Count = count, Data = data, Teach = teach });
         return this;
     }
 

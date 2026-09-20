@@ -434,7 +434,7 @@ public sealed class CodeSearchCommand : Command
         if (ctx.Args.Has("snapshot"))
             ctx.Report.Notice(NoticeKind.Boundary,
                 $"--snapshot {ctx.Args.Value("snapshot")} did not narrow this search; --source is what picks " +
-                "among the decompiled trees, and 'rimsearcher sources list' names them.");
+                "among the decompiled trees, and 'rimsearcher sources list' names them.", teach: true);
 
         // 不带 '/' 也不带 '.' 的 glob 是**按命名空间取景**的写法落到了文件名上。
         // 盲测里六份里六份把「只搜 Verse 命名空间」写成 --file-glob '*Verse*',而它挑出的

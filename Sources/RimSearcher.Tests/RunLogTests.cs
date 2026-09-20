@@ -62,19 +62,78 @@ public class RunLogTests
         return JsonDocument.Parse(lines[0]).RootElement.Clone();
     }
 
+    /// <summary>
+    /// 环境变量在场时唯一变的是教学句撤出 stdout(见 <see cref="教学句在run_log在写时只走hook"/>);
+    /// 这里选一个不带教学句的查询,钉住其余一切逐字不变。
+    /// </summary>
     [Fact]
     public void 未设环境变量时不产生文件且输出不变()
     {
         var path = UniqueLog();
-        var off = RunChild(logPath: null, "get", "Apparel_ShieldBelt");
+        var off = RunChild(logPath: null, "get", "Bullet_Revolver");
         Assert.False(File.Exists(path));
         Assert.Equal(0, off.Code);
 
-        var on = RunChild(path, "get", "Apparel_ShieldBelt");
+        var on = RunChild(path, "get", "Bullet_Revolver");
         Assert.Equal(off.Stdout, on.Stdout);
         Assert.Equal(off.Stderr, on.Stderr);
         Assert.Equal(off.Code, on.Code);
         Assert.True(File.Exists(path));
+    }
+
+    /// <summary>
+    /// 教学句(<c>Notice.Teach</c>)只有两个出口:环境变量不在时进 stdout;在时不进 stdout / --json,
+    /// 只进 run-log,记 <c>teach: true</c>,由消费方的会话级 hook 补送并折叠。事实句两种情况都在 stdout。
+    ///
+    /// 依据(2026-09-20,真实语料):经济面那句被照抄的 13 次没有一次是同会话第二次见到之后;
+    /// 而 run-log 一天里它印了 1913 次、多在脚本循环的 --json 里,没有读者。第一次是信息,之后是字节。
+    /// </summary>
+    [Fact]
+    public void 教学句在run_log在写时只走hook()
+    {
+        const string teach = "'rimsearcher economy Apparel_ShieldBelt' has them.";
+        var off = RunChild(logPath: null, "get", "Apparel_ShieldBelt");
+        Assert.Contains(teach, off.Stdout);
+
+        var path = UniqueLog();
+        var on = RunChild(path, "get", "Apparel_ShieldBelt");
+        Assert.DoesNotContain(teach, on.Stdout);
+        // 事实句照旧
+        Assert.Contains("fields.", on.Stdout);
+
+        var row = OnlyLine(path);
+        Assert.True(row.GetProperty("teachViaHook").GetBoolean());
+        var notices = row.GetProperty("notices").EnumerateArray().ToList();
+        var t = Assert.Single(notices, n => n.GetProperty("text").GetString()!.Contains(teach));
+        Assert.True(t.GetProperty("teach").GetBoolean());
+        foreach (var n in notices.Where(n => !n.GetProperty("teach").GetBoolean()))
+            Assert.Contains(n.GetProperty("text").GetString()!, on.Stdout);
+
+        // --json 同一条规矩:notes 里没有它
+        var json = RunChild(UniqueLog(), "get", "Apparel_ShieldBelt", "--json");
+        Assert.DoesNotContain(teach, json.Stdout);
+        var jsonOff = RunChild(null, "get", "Apparel_ShieldBelt", "--json");
+        Assert.Contains(teach, jsonOff.Stdout);
+    }
+
+    /// <summary>
+    /// 归档:run-log 在写时,同一行再追加到 config 目录下 <c>runlog/&lt;yyyy-MM-dd&gt;.jsonl</c>;
+    /// 不在写时不归档。归档跟 --config 的目录走 —— 这里就是测试临时目录,不是 ~/.rimsearcher。
+    /// </summary>
+    [Fact]
+    public void run_log在写时同一行归档到config目录()
+    {
+        var archive = Path.Combine(TestTemp.Root, "runlog", DateTime.Now.ToString("yyyy-MM-dd") + ".jsonl");
+        var before = File.Exists(archive) ? File.ReadAllLines(archive).Length : 0;
+
+        var path = UniqueLog();
+        RunChild(path, "get", "Apparel_ShieldBelt");
+        var line = File.ReadAllText(path).Replace("\r\n", "\n").TrimEnd('\n');
+        Assert.Contains(line, File.ReadAllText(archive));
+
+        RunChild(null, "get", "Apparel_ShieldBelt");
+        // 并行的别的测试也在往同一份归档追加,只能断言「这次没追加我这一行的孪生」:数一下这一行出现几次
+        Assert.Equal(1, File.ReadAllText(archive).Split(line).Length - 1);
     }
 
     [Fact]
@@ -94,7 +153,8 @@ public class RunLogTests
         Assert.Equal("fixture", row.GetProperty("snapshot").GetString());
 
         foreach (var n in row.GetProperty("notices").EnumerateArray())
-            Assert.Contains(n.GetProperty("text").GetString()!, stdout);
+            if (!n.GetProperty("teach").GetBoolean())
+                Assert.Contains(n.GetProperty("text").GetString()!, stdout);
     }
 
     [Fact]
@@ -135,6 +195,7 @@ public class RunLogTests
         Assert.Equal(JsonValueKind.Null, OnlyLine(path).GetProperty("usageMessage").ValueKind);
     }
 
+    /// <summary>run-log 记全;--json 的 notes 是它去掉教学句(run-log 在写时它们走 hook)之后的那一份,顺序不变。</summary>
     [Fact]
     public void notices条数与json的notes一致()
     {
@@ -144,11 +205,13 @@ public class RunLogTests
         using var doc = JsonDocument.Parse(stdout);
         var notes = doc.RootElement.GetProperty("notes").GetArrayLength();
         var row = OnlyLine(path);
-        Assert.Equal(notes, row.GetProperty("notices").GetArrayLength());
+        var logged = row.GetProperty("notices").EnumerateArray().Where(n => !n.GetProperty("teach").GetBoolean()).ToList();
+        Assert.True(row.GetProperty("notices").GetArrayLength() > logged.Count, "这条查询本该带一句教学句");
+        Assert.Equal(notes, logged.Count);
         for (var i = 0; i < notes; i++)
         {
             var a = doc.RootElement.GetProperty("notes")[i];
-            var b = row.GetProperty("notices")[i];
+            var b = logged[i];
             Assert.Equal(a.GetProperty("kind").GetString(), b.GetProperty("kind").GetString());
             Assert.Equal(a.GetProperty("text").GetString(), b.GetProperty("text").GetString());
         }

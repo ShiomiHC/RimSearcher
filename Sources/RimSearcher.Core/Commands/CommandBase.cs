@@ -274,7 +274,7 @@ public sealed class CommandContext(RimConfig config, ParseResult args)
 
     public RimConfig Config { get; } = config;
     public ParseResult Args { get; } = args;
-    public Report Report { get; } = new() { Narrowing = args.Narrowing() };
+    public Report Report { get; } = new() { Narrowing = args.Narrowing(), TeachViaHook = RunLog.Enabled };
     public bool Json => Args.Flag("json");
     public bool Quiet => Args.Flag("quiet");
 

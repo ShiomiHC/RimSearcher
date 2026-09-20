@@ -273,7 +273,7 @@ public sealed class KeyedCommand : Command
                 // 这一层原理上到不了的两处都是机制,住 help;这里只剩填好参数的出路。
                 ctx.Report.Notice(NoticeKind.NextStep,
                     "A def's own label or description is not keyed: 'rimsearcher search " + query + "' " +
-                    "covers those.");
+                    "covers those.", teach: true);
             return 1;
         }
 
@@ -324,7 +324,7 @@ public sealed class KeyedCommand : Command
                   $"'rimsearcher code-search \"\\\"{keys[0]}\\\"\"'."
                   // 计数上面那句已经报过,这句要说的不是「有几个」,是「哪一个由你挑」。
                 : "These rows do not all carry the same key, so the code search goes after whichever row is " +
-                  "the one you meant: 'rimsearcher code-search \"\\\"<key>\\\"\"' with the key from that row.");
+                  "the one you meant: 'rimsearcher code-search \"\\\"<key>\\\"\"' with the key from that row.", teach: true);
         }
 
         return 0;

@@ -36,7 +36,7 @@ public static class TextRenderer
         // 而多数命令是 1~3 段。
         var runs = NoticeRuns(report);
         var seen = 0;
-        foreach (var entry in report.Entries)
+        foreach (var entry in report.Rendered)
         {
             switch (entry)
             {
@@ -106,7 +106,7 @@ public static class TextRenderer
             runLength = 0;
         }
 
-        foreach (var entry in report.Entries)
+        foreach (var entry in report.Rendered)
             switch (entry)
             {
                 case Notice { Footnote: false }:

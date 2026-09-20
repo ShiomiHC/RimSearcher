@@ -15,6 +15,23 @@ public static class RunLog
     public const string SchemaId = "rimsearcher.run-log.v1";
     public const string EnvVar = "RIMSEARCHER_RUN_LOG";
 
+    /// <summary>环境变量指着路径 = 这台机器上有 hook 在读 run-log;教学句据此改走 hook。</summary>
+    public static bool Enabled => !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(EnvVar));
+
+    /// <summary>
+    /// 归档:run-log 本体归 hook 轮转(16 MB,一天多),量「哪句印了几次」要更长的账。
+    /// 同一条记录再追加一份到数据目录的 <c>runlog/&lt;yyyy-MM-dd&gt;.jsonl</c>,按本地日期分文件,
+    /// 不轮转。只在 run-log 在写时归档 —— 没设环境变量的调用(终端里的人、别的仓)仍是零 IO。
+    /// 盲测隔离靠 RIMSEARCHER_CONFIG 指到别处,归档跟着 config 的目录走,不会混进真账。
+    /// </summary>
+    public static string? ArchiveDir { get; set; }
+
+    /// <summary>config 还没解析出来(用法错那一路)时,按 config 的默认寻址推目录。</summary>
+    private static string ResolveArchiveDir()
+        => ArchiveDir ?? Path.Combine(
+            Path.GetDirectoryName(Environment.GetEnvironmentVariable("RIMSEARCHER_CONFIG")
+                                  ?? Config.RimConfig.DefaultPath)!, "runlog");
+
     /// <summary>
     /// 并发形态:文件以 append 打开,一次 <see cref="FileStream.Write(ReadOnlySpan{byte})"/>
     /// 写出整行 UTF-8(含末尾 LF),不 seek、不拆成多次 write。
@@ -41,14 +58,28 @@ public static class RunLog
         var path = Environment.GetEnvironmentVariable(EnvVar);
         if (string.IsNullOrEmpty(path)) return;
 
+        var line = Format(argv, exit, report, snapshot, quiet, usageMessage);
         try
         {
-            AppendLine(path, Format(argv, exit, report, snapshot, quiet, usageMessage));
+            AppendLine(path, line);
         }
         catch (Exception ex)
         {
             stderr.Write(OutputText.Finish(
                 $"Could not write the run log at '{path}': {ex.Message}"));
+        }
+
+        var dir = ResolveArchiveDir();
+        var archive = Path.Combine(dir, DateTime.Now.ToString("yyyy-MM-dd") + ".jsonl");
+        try
+        {
+            Directory.CreateDirectory(dir);
+            AppendLine(archive, line);
+        }
+        catch (Exception ex)
+        {
+            stderr.Write(OutputText.Finish(
+                $"Could not write the run log archive at '{archive}': {ex.Message}"));
         }
     }
 
@@ -69,6 +100,8 @@ public static class RunLog
                     ["kind"] = JsonRenderer.SnakeCase(n.Kind.ToString()),
                     ["text"] = n.Text,
                     ["footnote"] = n.Footnote,
+                    // 教学句:report.TeachViaHook 时它没进 stdout,hook 的差集会把它补上
+                    ["teach"] = n.Teach,
                     ["count"] = n.Count is { } c
                         ? new Dictionary<string, object?> { ["shown"] = c.Shown, ["total"] = c.Total }
                         : null,
@@ -93,6 +126,9 @@ public static class RunLog
             // 恒有的布尔:这次是不是调用方要求只出数据。hook 靠它区分「声明被管道筛掉」
             // 与「调用方自己不要声明」—— 缺这个键,补送会把主动省略的部分全塞回来。
             ["quiet"] = quiet,
+            // 教学句这次有没有从 stdout 撤下来(见 Notice.Teach)。hook 不需要它 —— 差集自会补 ——
+            // 但读账的人要靠它分清「印了」与「记了」
+            ["teachViaHook"] = report?.TeachViaHook ?? false,
             // 用法错那一句不经 Report,自己一个键。null = 这次不是用法错
             ["usageMessage"] = string.IsNullOrWhiteSpace(usageMessage) ? null : usageMessage.Trim(),
             ["notices"] = notices,

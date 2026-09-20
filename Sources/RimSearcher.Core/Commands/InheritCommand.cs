@@ -176,7 +176,7 @@ public sealed class InheritCommand : Command
         var sighting = Sighting(ctx, name);
         if (sighting is not null) NameLookup.Say(ctx, sighting);
         else ctx.Report.Notice(NoticeKind.NextStep,
-            "'rimsearcher search " + name + "' matches on labels and translations as well as defNames.");
+            "'rimsearcher search " + name + "' matches on labels and translations as well as defNames.", teach: true);
         return 1;
     }
 
@@ -218,7 +218,7 @@ public sealed class InheritCommand : Command
                 if (Sighting(ctx, n) is { } sighting) { NameLookup.Say(ctx, sighting); any = true; }
             if (!any)
                 ctx.Report.Notice(NoticeKind.NextStep,
-                    "'rimsearcher search <name>' matches on labels and translations as well as defNames.");
+                    "'rimsearcher search <name>' matches on labels and translations as well as defNames.", teach: true);
             return 1;
         }
 
@@ -371,7 +371,7 @@ public sealed class InheritCommand : Command
                     if (concrete is not null)
                         ctx.Report.Notice(NoticeKind.NextStep,
                             $"'rimsearcher get {concrete.DefName}' shows the merged, post-patch fields of a " +
-                            "concrete child.");
+                            "concrete child.", teach: true);
                 }
             }
         }

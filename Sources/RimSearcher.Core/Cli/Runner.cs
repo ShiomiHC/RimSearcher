@@ -307,6 +307,10 @@ public static class Runner
         RimConfig config;
         try { config = RimConfig.Load(parsed.Value("config")); }
         catch (TomlError ex) { stderr.Write(OutputText.Finish(ex.Message)); return ExitUsage; }
+        // run-log 归档跟着 config 的目录走:--config / RIMSEARCHER_CONFIG 指到别处(测试、盲测隔离)时,账也在别处。
+        RunLog.ArchiveDir = Path.Combine(
+            Path.GetDirectoryName(config.Path) is { Length: > 0 } d ? d : Path.GetDirectoryName(RimConfig.DefaultPath)!,
+            "runlog");
 
         var ctx = new CommandContext(config, parsed) { Progress = stderr };
         report = ctx.Report;

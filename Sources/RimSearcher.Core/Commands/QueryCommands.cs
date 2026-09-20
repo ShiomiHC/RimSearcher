@@ -1001,7 +1001,7 @@ public sealed class GetCommand : Command
                     // 这里只剩「不是字段」这个事实与出路。
                     ctx.Report.Notice(NoticeKind.NextStep,
                         $"Market value, cost to make and work amount are not fields: " +
-                        $"'rimsearcher economy {def.DefName}' has them.");
+                        $"'rimsearcher economy {def.DefName}' has them.", teach: true);
             }
             else if (DefTypes.Same(def.DefType, "ThingDef"))
                 // 三态(没到那版 / 跳过 / 量不成)各是一个状态词,与 economy 自己拒绝时印的是同一张表 ——
