@@ -778,9 +778,11 @@ public sealed class GetCommand : Command
                     // 名值对的机制住 IndexGap.Help;这里一句事实 + 一行 index_gap。
                     ctx.Report.Notice(NoticeKind.Filter,
                         PathFilterSummary.Say(paths, "on the def", "field", matched, total, whole, whose) +
+                        // 「not in any path」2026-09-20 删:上一句已经说了路径上匹配了几条;
+                        // 30 次实印,--value 那条出路被照做 33%(基线 6%),半句否定没人读。
                         (alsoValue.Count > 0
                             ? " This def also carries " +
-                              $"{PathFilterText.Say(alsoValue)} as a field's value, not in any path."
+                              $"{PathFilterText.Say(alsoValue)} as a field's value."
                             : ""));
                     foreach (var t in alsoValue)
                         IndexGap.Say(ctx, t, IndexGap.ValueNotPath, $"{CommandRegistry.ExeName} where --value {t}");
@@ -965,11 +967,15 @@ public sealed class GetCommand : Command
                         $"'rimsearcher inherit {def.DefName}' breaks the count down by how each xpath names it.");
             }
 
-            // 经济面的指路。**这句必须长在 get 上,不能只长在 economy 上** —— 第十五轮盲测:
-            // 十五个受测样本里,凡是走到 `economy` 的都读对了,而单 def 的价格/造价题上
-            // 三档里两档从没走到过,因为 `get` 已经给了看着完整的一屏,没有任何东西提示
-            // 还有别的地方。`economy --help` 里那句「asking 'get' for a cost returns nothing」
-            // 说的正是这件事,却印在门的另一侧:要读到它,你得先找到这扇门。
+            // 经济面的指路。**这句必须长在 get 上,不能只长在 economy 上**:`economy --help` 里那句
+            // 「asking 'get' for a cost returns nothing」印在门的另一侧,要读到它得先找到这扇门。
+            //
+            // 真实语料(2026-08-04 → 09-20,排掉本仓、盲测仓 rsblind 与审计本 CLI 的会话):带这句的
+            // get 222 次,之后三条内敲 economy 24 次(10.8%),不带的 5268 次里 1.8%。但 24 次里 9 次
+            // 本会话早用过 economy、7 次 get 与 economy 写在同一个命令块 —— 句子可归因的约 10 次
+            // (≈4.5%),一条有证词(「rimsearcher 自己提示了一条我不知道的路」)。承重的是那条可粘贴的
+            // 命令(24 次里 13 次逐字照抄)。第十五轮盲测的 38 次里 15 次是 rsblind 的被试,
+            // 「11 倍」是那次污染算出来的数。产地 tools/audit-blindtest-prose.py。
             //
             // 只指路、不搬数:handoff §4 明令经济语义不进 get 的 def 查询含义,而且那些数
             // 不是字段,混进字段表会正好造成这一层要防的那个误读。
@@ -3001,10 +3007,12 @@ public sealed class ValuesCommand : Command
 
         // 这张表把几条路径的值**并成了一池**,而 matched_paths 只列得下前几条。不指出
         // 收窄的办法,读的人手上就只有一个没法拆开的池子。
+        // 「not from one field」2026-09-20 删:148 次实印,没人把它读成单个字段的值域,而 --exact-path
+        // 那条出路被照做 19%(基线 2%)—— 承重的是出路,不是那半句否定。
         if (cov.PathTotal > 1 && !pq.Exact)
             ctx.Report.Notice(NoticeKind.Boundary,
                 $"The values of '{path}' come from {Tally.Complete(cov.PathTotal).Render("field path")} " +
-                "pooled together, not from one field. Any path named for it above goes back in with " +
+                "pooled together. Any path named for it above goes back in with " +
                 "--exact-path to pool that one alone; '[]' there stands for any index.",
                 footnote: true);
 
@@ -3343,15 +3351,10 @@ internal static class Completeness
 
         ctx.Report.Notice(NoticeKind.Boundary,
             $"No indexed value sits at that path. {how} " +
-            // 导出器在某个 def 上停下来了(深度 / 集合 / 每 def 条数上限),那个 def 的这条路径就不在
-            // 索引里 —— 这一种留了记号,所以能指一条命令。**值长度那一类不在这句里**:它不让字段缺席。
-            (ctx.Db.TruncatedDefCount() > 0
-                ? "The exporter stopped short on some defs — past their field cap, past the depth " +
-                  "cap, or partway down a list — and a path cut that way is not indexed either: " +
-                  "'rimsearcher snapshot truncated' lists those defs" +
-                  // 「哪一种上限」只有分类过的库答得出。旧库上这半句会指向一句它印不出来的话。
-                  (ctx.Db.TruncationCausesMeasured ? ", and 'get' on one says which cap it hit. " : ". ")
-                : "") +
+            // 「导出器在某个 def 上停短,那条路径也不在索引里 → 'snapshot truncated'」那段 2026-09-20 删:
+            // 40 次实印,`snapshot truncated` 被照做 0 次(基线 1%)。截断那一层的读法住
+            // snapshot status 的 Remarks 与 get 的截断行。
+
             (ctx.Db.Meta.IndexesTypeFields
                 ? ""
                 : $"This snapshot (exporter {ctx.Db.Meta.ExporterVersion}) does not list the fields a type " +
@@ -3506,9 +3509,10 @@ internal static class Completeness
         //   **截断前**的数(见 SnapshotDb.Fields),否则同一个 def 换个 --limit 就换一句结论。
         var carryYesMeans = defaultRowsListed && defaulted > 0;
         ctx.Report.Notice(NoticeKind.Advisory, listed.Count > 0
-            ? $"Values that most of the {total} {def.DefType}s in this snapshot also carry, so their " +
-              $"'{FieldDefault.Column}' is not this def having made a choice — the count in brackets: " +
-              $"{NameList.Render(listed, listed.Count)}." +
+            // 「so their code_default is not this def having made a choice」2026-09-20 删:733 次实印、
+            // 随后文字 78 条,没有一条写「它自己选的」;那半句防的读法在真实使用里不发生。
+            ? $"Values that most of the {total} {def.DefType}s in this snapshot also carry — the count in " +
+              $"brackets: {NameList.Render(listed, listed.Count)}." +
               (carryYesMeans
                   ? $" Only rows whose '{FieldDefault.Column}' is no were compared" +
                     (yesMeans is null ? "." : $": {yesMeans}.")
