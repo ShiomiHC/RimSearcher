@@ -5,11 +5,11 @@ exit 0
   "notes": [
     {
       "kind": "truncation",
-      "text": "vanilla/Verse/Outline.cs, lines 1-3 of 34. Pass --lines 4+3 for the next page. Reaching the end that way takes 11 pages at this size; --outline instead lists the file's declarations with each one's line range, to pass back to --lines."
+      "text": "vanilla/Verse/Outline.cs, lines 1-3 of 34. Pass --lines 4+3 for the next page."
     },
     {
       "kind": "truncation",
-      "text": "vanilla/Verse/Widgets.cs, lines 1-3 of 12. Pass --lines 4+3 for the next page. Reaching the end that way takes 3 pages at this size; --outline instead lists the file's declarations with each one's line range, to pass back to --lines."
+      "text": "vanilla/Verse/Widgets.cs, lines 1-3 of 12. Pass --lines 4+3 for the next page."
     }
   ],
   "source": [

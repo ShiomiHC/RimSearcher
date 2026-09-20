@@ -1266,31 +1266,20 @@ public class GrammarTests
     }
 
     /// <summary>
-    /// 还剩三页以上时要指出 `--outline` 这条路。
+    /// 截断行到 `Pass --lines … for the next page.` 为止,后面不再挂劝改道的句子。
     ///
-    /// **这句是「别拿 grep/head 砍输出」这条契约现在唯一的承重点。** SKILL.md 里那条禁令
-    /// 已按盲测删掉(8 个被试 4 v 4,两臂都零管道、答案全对,而且都自发用上了
-    /// `--outline`/`--member`/`--lines`)—— 删得掉的前提是工具自己在人想砍输出的那一刻
-    /// 给出了出路。08 量到 87% 的那个世系里,`get`/`code-search`/`read` 恰恰都不支持
-    /// `--offset`,那时的结论是「规矩对最需要它的场合没给出路,不是调用方不守规矩」。
-    /// 这句一旦消失而禁令又已不在,就直接退回那个世系。
+    /// 2026-09-20 之前这里咬的是「Reaching the end that way takes N pages at this size;
+    /// --outline instead lists …」,Docs/14 把它当成「别拿 grep/head 砍输出」那条契约的唯一承重点。
+    /// 消费侧实测(2090 次实印)承不起:之后 78% 直接离开该文件、3% 去 outline,而且这 3%
+    /// 不随页数变 —— 那个数没有人读;触发它的 read 83% 本来就是 `--lines` 显式区间读,
+    /// 「翻到底」是它替读者假设的路。整句去掉,`--outline` 由 help 与 skill 承接。
     /// </summary>
     [Fact]
-    public void 页数多到该换路子时要指出outline()
+    public void 截断行到翻页提示为止不劝改道()
     {
         var (paged, _, _) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--lines", "1+8");
-        Assert.Contains("--lines 9+8", paged, StringComparison.Ordinal);
-        // 逐字咬,免得别处凑巧出现 `--outline` 就算过。剩几页要算得出来,而不是含混的「很多」。
-        Assert.Contains(
-            "Reaching the end that way takes 4 pages at this size; --outline instead lists "
-                + "the file's declarations with each one's line range, to pass back to --lines.",
-            paged,
-            StringComparison.Ordinal);
-
-        // 翻一两页是正常分页,不值得换路子 —— 那时这句不出现,否则每次分页都在劝人改道。
-        var (few, _, _) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--lines", "1+20");
-        Assert.DoesNotContain("--outline", few, StringComparison.Ordinal);
-        Assert.Contains("--lines 21+20", few, StringComparison.Ordinal);
+        var first = paged.Split('\n')[0].TrimEnd();
+        Assert.Equal("vanilla/Verse/Outline.cs, lines 1-8 of 34. Pass --lines 9+8 for the next page.", first);
     }
 
     /// <summary>
