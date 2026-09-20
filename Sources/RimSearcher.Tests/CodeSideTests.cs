@@ -140,12 +140,12 @@ public class CodeSideTests
         // 成因查明时那条免责整段撤掉。它讲的是「这次落空可能是我没看见」,而上一句
         // 已经说出这个名字声明在哪儿 —— 并排印时读者读不出这个文件里到底有没有,
         // 而它给的三条下一步全指着与真答案相反的方向。
-        Assert.DoesNotContain("The match runs on braces", stdout);
+        Assert.DoesNotContain("lists what brace matching does find", stdout);
     }
 
     /// <summary>
-    /// 反过来:元数据里也没有时,那条免责**要在**。它此时是这次落空唯一说得住的解释 ——
-    /// 花括号确实可能漏掉一个存在的声明。
+    /// 反过来:元数据里也没有时,那两条出路**要在**(code-search 搜文本、--outline 列括号认得出的)。
+    /// 「The match runs on braces, not C# parsing」那半 2026-09-20 删了 —— 机制住 --help;钉的是出路。
     ///
     /// 没有这一格的话,上面那条断言在「免责句被无条件删掉」时也是绿的。
     /// </summary>
@@ -155,7 +155,7 @@ public class CodeSideTests
         var (stdout, _, code) = Fixture.Run("read", "vanilla/RimWorld/CompShield.cs", "--member", "ZzzNoSuchMemberXyz");
 
         Assert.Equal(1, code);
-        Assert.Contains("The match runs on braces", stdout);
+        Assert.Contains("lists what brace matching does find", stdout);
         Assert.DoesNotContain("The assemblies do have", stdout);
     }
 

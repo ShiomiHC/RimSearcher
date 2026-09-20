@@ -596,8 +596,11 @@ public class StalenessTests
     }
 
     /// <summary>
-    /// 量过了、没变 —— 这一支也要说清没比的是什么。判据是尺寸与时间戳,
+    /// 量过了、没变 —— 这一支也要说清比的是什么。判据是尺寸与时间戳,
     /// 说成「文件一致」就是把一句证不了的话当成背书发出去。
+    ///
+    /// 射程外(Languages/、纹理、音频)与假阳性(重新下载同样的字节读成变化)2026-09-20 起住
+    /// --help:29 次实印,随后文字没人提;它们是比对的机制,不是这一次比对的事实。
     /// </summary>
     [Fact]
     public void 量过了也要说清比的只是尺寸与时间戳()
@@ -605,11 +608,12 @@ public class StalenessTests
         var (db, _, _, configPath) = SnapshotOfModTree("e2e-status");
         var stdout = Run(configPath, db, "snapshot", "status");
 
-        Assert.Contains("file size and timestamp", stdout, StringComparison.Ordinal);
-        // 射程外那几处要点名,否则「一致」会被读成整个 mod 目录都比过了。
-        Assert.Contains("Languages/", stdout, StringComparison.Ordinal);
-        // 假阳性那一面也要说 —— 不说的话,一次 Steam 校验引发的告警会被当成工具坏了。
-        Assert.Contains("identical bytes", stdout, StringComparison.Ordinal);
+        Assert.Contains("Compared are file size and timestamp under Defs/ and Patches/.", stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain("identical bytes", stdout, StringComparison.Ordinal);
+
+        var help = Run(configPath, db, "snapshot", "status", "--help");
+        Assert.Contains("Languages/", help, StringComparison.Ordinal);
+        Assert.Contains("identical bytes", help, StringComparison.Ordinal);
     }
 
     /// <summary>

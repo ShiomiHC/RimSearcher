@@ -637,9 +637,11 @@ public sealed class ReadCommand : Command
             // 有没有,而那三条下一步全都指着与真答案相反的方向。这条免责留给「元数据里
             // 也没有」的那一支 —— 那时它才是这次落空唯一说得住的解释。
             // 口径与 fields 那侧同:查明了成因就不再列泛化的可能性。
+            // 「The match runs on braces, not C# parsing;」2026-09-20 删:19 次实印,随后文字没人提括号或解析,
+            // 出路(code-search / --outline)被照做 63%(基线 41%)。机制住 --help。
             (elsewhere is null
-                ? " The match runs on braces, not C# parsing; 'rimsearcher code-search' searches the text " +
-                  "itself, and '--outline' lists what brace matching does find."
+                ? " 'rimsearcher code-search' searches the text itself, and '--outline' lists what brace " +
+                  "matching does find."
                 : ""));
 
         if (elsewhere is not null)

@@ -205,24 +205,9 @@ public class TruncationCauseTests
         Assert.DoesNotContain("dropped", said);
     }
 
-    /// <summary>
-    /// 指路句「'get' 会告诉你撞的是哪一种上限」只在**真分过类**的库上说。
-    ///
-    /// 「有那四列」与「列里有数」是两件事:0.13.0 之前导出的那份文件进了新库,四列拿的是
-    /// DEFAULT 0 —— 有列而一个成因也答不出来。指向一句它印不出来的话,比不指路更糟。
-    /// </summary>
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void 指路句只在真分过类的库上说(bool classified)
-    {
-        var db = Build(classified ? "guide-y" : "guide-n",
-                       new MiniDef("T", 2, classified ? (1, 0, 0, 1) : null));
-        var (stdout, _, _) = Fixture.Run("values", "nosuchpath", "--db", db);
-        Assert.Contains("'rimsearcher snapshot truncated' lists those defs", stdout);
-        if (classified) Assert.Contains("says which cap it hit", stdout);
-        else Assert.DoesNotContain("says which cap it hit", stdout);
-    }
+    // 「values / where 落空时指向 'snapshot truncated'」那段 2026-09-20 删(40 次实印、0 次照做),
+    // 连同「只在真分过类的库上说 which cap it hit」那条闸;分类与否的差别现在只在 get 的截断行与
+    // snapshot status 上体现,各自有闸。
 
     /// <summary>
     /// 混着来时,加进总数的只有**没进索引**的那几类。值长度不算 —— 它的路径就在表里。

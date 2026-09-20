@@ -77,7 +77,9 @@ public sealed class SnapshotStatusCommand : Command
             "Ordinary queries stay quiet when the snapshot matches the game, and say one line when it does not, " +
             "naming at most three mods. This command is where the full comparison lives: every packageId whose " +
             "Defs or Patches XML moved or cannot be found, and every packageId only on one side of the mod list, " +
-            "each as a row.\n\n" +
+            "each as a row. The XML comparison is by file size and timestamp under Defs/ and Patches/, not by " +
+            "contents: a re-download of identical bytes reads as a change, and an edit that keeps both is the " +
+            "one case it misses. Languages/, textures and audio are outside it entirely.\n\n" +
             // 两拨的读法住这里;输出里只有两格数(Docs/25 丁1)。
             "defs_with_paths_dropped counts defs whose export stopped short — past a field cap, past the depth " +
             "cap, or partway down a list; on those, 'get' lists fewer field paths than the def has. " +
@@ -258,9 +260,9 @@ public sealed class SnapshotStatusCommand : Command
                     ? "The files inside those mods are not compared: this snapshot has no XML fingerprint, so a " +
                       $"mod edited since the export ({db.Meta.ExportedAtUtc} UTC) leaves this line reading " +
                       "'matches' all the same. Re-export to start recording that layer."
-                    : "Compared are file size and timestamp under Defs/ and Patches/, not file contents — a " +
-                      "re-download of identical bytes reads as a change, and an edit that keeps both is the one " +
-                      "case this misses. Languages/, textures and audio are outside it entirely.");
+                    // 「re-download 读成变化 / 保住两者的编辑漏掉 / Languages、纹理、音频不在内」2026-09-20
+                    // 搬进 Remarks:29 次实印,随后文字没人提;是机制,不是这次比对的事实。
+                    : "Compared are file size and timestamp under Defs/ and Patches/.");
                 break;
             case EnvironmentMatch.VersionDrift:
                 ctx.Report.Notice(NoticeKind.Staleness,

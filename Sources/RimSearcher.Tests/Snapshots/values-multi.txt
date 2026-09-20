@@ -30,5 +30,5 @@ RimWorld.Building            2     thingClass
 RimWorld.Bullet              1     thingClass
 Verse.ThingWithComps         1     thingClass
 
-The values of 'compClass' come from 2 field paths pooled together, not from one field. Any path named for it above goes back in with --exact-path to pool that one alone; '[]' there stands for any index.
+The values of 'compClass' come from 2 field paths pooled together. Any path named for it above goes back in with --exact-path to pool that one alone; '[]' there stands for any index.
 --- stderr ---

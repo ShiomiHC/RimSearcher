@@ -28,7 +28,7 @@ statBases[0].stat                   MarketValue
 statBases[0].value                  120
 statBases[1].stat                   EnergyShieldRechargeRate
 statBases[1].value                  0.13
-Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_default' is not this def having made a choice — the count in brackets: soundDrop (9), soundImpactDefault (9), soundPickup (9), soundInteract (8).
+Values that most of the 9 ThingDefs in this snapshot also carry — the count in brackets: soundDrop (9), soundImpactDefault (9), soundPickup (9), soundInteract (8).
   - Market value, cost to make and work amount are not fields: 'rimsearcher economy Apparel_ShieldBelt' has them.
   - 1 translation.
 
@@ -55,7 +55,7 @@ soundInteract                Standard_Pickup      no
 thingClass                   RimWorld.Bullet      no
 projectile.damageAmountBase  12                   no
 projectile.speed             70                   unknown
-Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_default' is not this def having made a choice — the count in brackets: soundDrop (9), soundImpactDefault (9), soundPickup (9), soundInteract (8).
+Values that most of the 9 ThingDefs in this snapshot also carry — the count in brackets: soundDrop (9), soundImpactDefault (9), soundPickup (9), soundInteract (8).
 
 layer              state         next
 disk_translations  unconfigured  set 'mod_roots' in the config file, then rimsearcher snapshot import fixture.rsx.jsonl.gz --name fixture

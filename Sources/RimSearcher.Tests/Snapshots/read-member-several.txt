@@ -1,7 +1,7 @@
 $ rimsearcher read vanilla/Verse/Outline.cs --member Verbatim --member Shared --member Nope
 exit 0
 --- stdout ---
-No member named 'Nope' was found in vanilla/Verse/Outline.cs (34 lines, 9 declarations). Closest by spelling: Open. The match runs on braces, not C# parsing; 'rimsearcher code-search' searches the text itself, and '--outline' lists what brace matching does find.
+No member named 'Nope' was found in vanilla/Verse/Outline.cs (34 lines, 9 declarations). Closest by spelling: Open. 'rimsearcher code-search' searches the text itself, and '--outline' lists what brace matching does find.
   - 3 declarations in vanilla/Verse/Outline.cs, 11 lines.
   - 'Shared' is declared more than once here: Outer.Shared (line 15), Inner.Shared (line 25). '--type <name>' narrows it to one.
 

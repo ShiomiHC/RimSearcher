@@ -1430,7 +1430,7 @@ public class GrammarTests
     /// 命中的返回上不挂「配平括号不是解析」那句。2026-09-20 之前它是三条推断路径(--outline /
     /// --member / --type)命中时的常驻脚注;真实语料 1186 次里 1163 次印在命中上,而它说的
     /// 「认不出与不在文件里同形」只关落空那一支,那一支 SayNoDeclaration 自己说。
-    /// 落空那句的锚点是「runs on braces, not C# parsing」,与这里钉的不是同一句。
+    /// 落空那句钉的是出路「lists what brace matching does find」,与这里钉的不是同一句。
     /// </summary>
     [Fact]
     public void 能力边界不挂在命中的返回上()
@@ -1445,7 +1445,7 @@ public class GrammarTests
             Assert.DoesNotContain("not by parsing C#", Fixture.Run(argv).Stdout, StringComparison.Ordinal);
 
         var (miss, _, _) = Fixture.Run("read", "vanilla/Verse/Outline.cs", "--member", "NoSuchMember");
-        Assert.Contains("runs on braces, not C# parsing", miss, StringComparison.Ordinal);
+        Assert.Contains("lists what brace matching does find", miss, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -1887,7 +1887,7 @@ public class GrammarTests
         // statBases[1].stat 的值 EnergyShieldRechargeRate 的一部分。
         var (both, _, code) = Fixture.Run("get", "Apparel_ShieldBelt", "--path-contains", "energy");
         Assert.Equal(0, code);
-        Assert.Contains("as a field's value, not in any path", both, StringComparison.Ordinal);
+        Assert.Contains("as a field's value.", both, StringComparison.Ordinal);
         Assert.Contains("where --value energy", both, StringComparison.Ordinal);
 
         // 整段命中过:没有这种歧义,不许多话。
@@ -2170,7 +2170,7 @@ public class GrammarTests
         var (whole, _, _) = Fixture.Run("get", "Apparel_ShieldBelt", "--path-contains", "statBases[].stat");
         Assert.Contains("statBases[1].stat", whole, StringComparison.Ordinal);
         Assert.DoesNotContain("as a whole path segment", whole, StringComparison.Ordinal);
-        Assert.DoesNotContain("as a field's value, not in any path", whole, StringComparison.Ordinal);
+        Assert.DoesNotContain("as a field's value.", whole, StringComparison.Ordinal);
 
         // 反向:读者写**真下标**时,under 那句拿 Shape() 的结果去比,同样得对得上。
         var (indexedHead, _, _) = Fixture.Run("where", "statBases[0].MarketValue");
@@ -4381,8 +4381,9 @@ public class GrammarTests
         var (shared, _, _) = Fixture.Run("get", "Apparel_ShieldBelt");
         // 指的是那一列的**名字**,不是它印出来的取值:整列同值时渲染器会把它折进表上方
         // 那一行,于是「上面的一个 no」在表里根本不存在。
-        Assert.Contains($"their '{FieldDefault.Column}' is not this def having made a choice", shared,
-            StringComparison.Ordinal);
+        // 「so their code_default is not this def having made a choice」2026-09-20 删(733 次实印无人回声);
+        // 钉的是事实句 + 括号里的数。
+        Assert.Contains("in this snapshot also carry — the count in brackets:", shared, StringComparison.Ordinal);
         Assert.Contains("soundImpactDefault (9)", shared, StringComparison.Ordinal);
         // 这句话与折叠行同时在场时才有意义 —— 折叠没发生的话,它指的列就该在表里。
         Assert.Contains($"Same in every row, not repeated below: {FieldDefault.Column}=no", shared,
@@ -4395,7 +4396,7 @@ public class GrammarTests
         var (own, _, _) = Fixture.Run("get", "VariantOne");
         Assert.Contains($"No value above with '{FieldDefault.Column}'=no is one that most of the", own,
             StringComparison.Ordinal);
-        Assert.DoesNotContain("is not this def having made a choice", own, StringComparison.Ordinal);
+        Assert.DoesNotContain("the count in brackets", own, StringComparison.Ordinal);
     }
 
     // ---- mod 列表这一层(收束时才发现它一道闸都没有)----

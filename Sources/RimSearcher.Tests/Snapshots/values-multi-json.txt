@@ -11,7 +11,7 @@ exit 0
     },
     {
       "kind": "boundary",
-      "text": "The values of 'compClass' come from 2 field paths pooled together, not from one field. Any path named for it above goes back in with --exact-path to pool that one alone; '[]' there stands for any index."
+      "text": "The values of 'compClass' come from 2 field paths pooled together. Any path named for it above goes back in with --exact-path to pool that one alone; '[]' there stands for any index."
     },
     {
       "kind": "boundary",

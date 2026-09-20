@@ -24,7 +24,7 @@ thingClass                             RimWorld.Building
 statBases[0].stat                      MarketValue
 graphicData.texPath                    Things/Building/Nozzle
 building.blueprintGraphicData.texPath  Things/Building/Blueprint_Nozzle
-Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_default' is not this def having made a choice — the count in brackets: soundDrop (9), soundImpactDefault (9), soundPickup (9), soundInteract (8).
+Values that most of the 9 ThingDefs in this snapshot also carry — the count in brackets: soundDrop (9), soundImpactDefault (9), soundPickup (9), soundInteract (8).
   - Market value, cost to make and work amount are not fields: 'rimsearcher economy Firefoam' has them.
   - 2 translations.
 
@@ -61,7 +61,7 @@ soundInteract                Standard_Pickup      no
 thingClass                   RimWorld.Bullet      no
 projectile.damageAmountBase  12                   no
 projectile.speed             70                   unknown
-Values that most of the 9 ThingDefs in this snapshot also carry, so their 'code_default' is not this def having made a choice — the count in brackets: soundDrop (9), soundImpactDefault (9), soundPickup (9), soundInteract (8).
+Values that most of the 9 ThingDefs in this snapshot also carry — the count in brackets: soundDrop (9), soundImpactDefault (9), soundPickup (9), soundInteract (8).
 
 layer              state         next
 disk_translations  unconfigured  set 'mod_roots' in the config file, then rimsearcher snapshot import fixture.rsx.jsonl.gz --name fixture
