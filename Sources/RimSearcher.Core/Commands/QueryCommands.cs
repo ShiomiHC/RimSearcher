@@ -1033,7 +1033,7 @@ public sealed class GetCommand : Command
                 ctx.Report.EmptyBecause(
                     new EmptyCause(ctx.FilterAsGiven(pathOption), beforePathFilter, ctx.Without(pathOption)),
                     "translation");
-                if (!ctx.Db.InjectionKeysIndexed)
+                if (!ctx.Db.HasInjectionKeyRows)
                     Short(DataLayers.InjectionKeysRow(ctx.Db, ctx.SnapshotName ?? ""));
             }
 
@@ -1073,7 +1073,7 @@ public sealed class GetCommand : Command
                 // 仍旧只在**给了过滤器**时发。无条件发过一版,`StalenessTests` 立刻红:
                 // 干净的一次普通查询要求声明区零字节,而两套文法这件事只在按坐标找东西的人
                 // 身上兑现 —— 不按坐标找的人拿到的是「每条命令 6 行」里少掉的一行。
-                if (!ctx.Db.InjectionKeysIndexed && paths.Count > 0)
+                if (!ctx.Db.HasInjectionKeyRows && paths.Count > 0)
                     Short(DataLayers.InjectionKeysRow(ctx.Db, ctx.SnapshotName ?? ""));
 
                 // 配不上槽位(no-slot)与槽位不许译(refused)两档 2026-09-18 起折进 origin 格

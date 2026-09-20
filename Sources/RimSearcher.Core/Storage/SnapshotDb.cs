@@ -1674,14 +1674,9 @@ public sealed class SnapshotDb : IDisposable
     {
         var p = new Dictionary<string, object?> { ["@n"] = defName };
         var rows = new List<TranslationRow>();
-        // 后加的两列靠列名认,不靠 schema_version —— 涨了版本每一份旧库连同 --keep
-        // 留下的那些旧代都会拒读,而它们唯一的用途正是 snapshot diff(同 type_fields)。
-        var extra = TranslationsHaveSourceFile;
-        var keyed = TranslationsHaveKey;
         using var rd = Query(
-            "SELECT def_name, def_type, path, translated, original, language, source_mod, origin" +
-            (extra ? ", source_file, source_file_count" : "") +
-            (keyed ? ", key, key_state, applied" : "") + " FROM translations " +
+            "SELECT def_name, def_type, path, translated, original, language, source_mod, origin, " +
+            "source_file, source_file_count, key, key_state, applied FROM translations " +
             "WHERE def_name = @n COLLATE NOCASE ORDER BY origin, path", p);
         while (rd.Read())
             rows.Add(new TranslationRow(rd.GetString(0),
@@ -1689,39 +1684,32 @@ public sealed class SnapshotDb : IDisposable
                 rd.IsDBNull(3) ? null : rd.GetString(3), rd.IsDBNull(4) ? null : rd.GetString(4),
                 rd.IsDBNull(5) ? null : rd.GetString(5), rd.IsDBNull(6) ? null : rd.GetString(6),
                 rd.GetString(7),
-                extra && !rd.IsDBNull(8) ? rd.GetString(8) : null,
-                extra && !rd.IsDBNull(9) ? rd.GetInt32(9) : null,
-                keyed && !rd.IsDBNull(extra ? 10 : 8) ? rd.GetString(extra ? 10 : 8) : null,
-                keyed && !rd.IsDBNull(extra ? 11 : 9) ? rd.GetString(extra ? 11 : 9) : null,
-                keyed && !rd.IsDBNull(extra ? 12 : 10) ? rd.GetInt32(extra ? 12 : 10) != 0 : null));
+                rd.IsDBNull(8) ? null : rd.GetString(8),
+                rd.IsDBNull(9) ? null : rd.GetInt32(9),
+                rd.IsDBNull(10) ? null : rd.GetString(10),
+                rd.IsDBNull(11) ? null : rd.GetString(11),
+                rd.IsDBNull(12) ? null : rd.GetInt32(12) != 0));
         return rows;
     }
 
     /// <summary>
-    /// 这个 def 的槽位名册。<c>null</c> = 这份库没有这一层(表不在或不是字典形状),
-    /// 空表 = 量过了、这个 def 一个可注入槽位都没有。两者合成一个空列表,调用方就会把
-    /// 「没导」说成「没有」。名册是**全集**,所以「这个 def 能译什么」拿它回答是准的。
+    /// 这个 def 的槽位名册。空表 = 量过了、这个 def 一个可注入槽位都没有。
+    /// 名册是**全集**,所以「这个 def 能译什么」拿它回答是准的。
     /// </summary>
-    public IReadOnlyList<InjectionKeyRow>? InjectionKeys(string defName)
+    public IReadOnlyList<InjectionKeyRow> InjectionKeys(string defName)
     {
-        if (!HasInjectionKeys) return null;
         var p = new Dictionary<string, object?> { ["@n"] = defName };
         var rows = new List<InjectionKeyRow>();
-        // 两种形状:字符串列的旧库,与四列全进字典的新库。同 TypeFieldsAreSubtrees,靠列名认。
         // 谓词走字典的 IN 子查询而不是挂在 JOIN 上 —— 后者会让优化器从主表驱动,
         // 字典化就白做了(路径字典那次实测 1.78s 对 2.08s)。
-        var sql = InjectionKeysAreDictionary
-            ? "SELECT n.def_name, t.def_type, p.path, q.path, k.is_collection, "
+        const string sql = "SELECT n.def_name, t.def_type, p.path, q.path, k.is_collection, "
               + "k.translation_allowed, k.full_list_translation_allowed FROM injection_keys k "
               + "JOIN injection_key_names n ON n.id = k.def_name_id "
               + "LEFT JOIN injection_key_types t ON t.id = k.def_type_id "
               + "JOIN injection_key_paths p ON p.id = k.path_id "
               + "JOIN injection_key_paths q ON q.id = k.suggested_path_id "
               + "WHERE k.def_name_id IN (SELECT id FROM injection_key_names "
-              + "WHERE def_name = @n COLLATE NOCASE) ORDER BY p.path"
-            : "SELECT def_name, def_type, path, suggested_path, is_collection, translation_allowed, "
-              + "full_list_translation_allowed FROM injection_keys "
-              + "WHERE def_name = @n COLLATE NOCASE ORDER BY path";
+              + "WHERE def_name = @n COLLATE NOCASE) ORDER BY p.path";
         using var rd = Query(sql, p);
         while (rd.Read())
             rows.Add(new InjectionKeyRow(rd.GetString(0), rd.IsDBNull(1) ? null : rd.GetString(1),
@@ -1743,6 +1731,9 @@ public sealed class SnapshotDb : IDisposable
     // 按库里的行判:一份导出器版本够新、某一层却一行没写的库,层账要能变红,不能靠版本恒 ok。
     public bool HasXmlWrittenRows => _xwRows ??= Scalar("SELECT EXISTS(SELECT 1 FROM xml_written)") != 0;
     private bool? _xwRows;
+    /// <summary>注入键名册里有行。层账与 get 的 key 列都按它判「这一层在不在」。</summary>
+    public bool HasInjectionKeyRows => _ikRows ??= Scalar("SELECT EXISTS(SELECT 1 FROM injection_keys)") != 0;
+    private bool? _ikRows;
     public bool HasXmlWrittenText => _xwText ??= Scalar("SELECT EXISTS(SELECT 1 FROM xml_written WHERE inner_text IS NOT NULL)") != 0;
     private bool? _xwText;
     public bool HasTypeFieldRows
@@ -1761,29 +1752,18 @@ public sealed class SnapshotDb : IDisposable
         + "OR EXISTS(SELECT 1 FROM translations WHERE applied IS NOT NULL)") != 0;
     private bool? _applied;
 
-    /// <summary>
-    /// 这份库的 keyed 记不记得同一句话在这个 mod 里钺了几份。同
-    /// <see cref="TranslationsHaveSourceFile"/>,**靠列名认**。
-    /// </summary>
-    private bool KeyedHasSourceFileCount => _kSfc ??= HasColumn("keyed", "source_file_count");
-    private bool? _kSfc;
-
-    /// <summary>
-    /// 新列**接在末尾**：前面八个序号于是不动,读取侧只靠 FieldCount 判它在不在。
-    /// 插在中间的话每一个 rd.GetXxx(n) 都得跟着改,而改错一个不报错。
-    /// </summary>
-    private string KeyedColumns =>
-        "key, translated, original, language, source_file, source_line, source_mod, placeholder, origin"
-        + (KeyedHasSourceFileCount ? ", source_file_count" : "");
+    private const string KeyedColumns =
+        "key, translated, original, language, source_file, source_line, source_mod, placeholder, origin, "
+        + "source_file_count";
 
     /// <summary>
     /// 同一份列,带表别名。JOIN 到 <c>keyed_fts</c> 时 <c>key</c> / <c>translated</c> /
     /// <c>original</c> 三个名字**两张表都有**,不加前缀是 SQL 歧义;而拿
     /// <c>Replace("key", "k.key")</c> 从上面那份拼会顺手改掉 <c>keyed</c> 里的 key。
     /// </summary>
-    private string KeyedColumnsPrefixed =>
+    private const string KeyedColumnsPrefixed =
         "k.key, k.translated, k.original, k.language, k.source_file, k.source_line, k.source_mod, " +
-        "k.placeholder, k.origin" + (KeyedHasSourceFileCount ? ", k.source_file_count" : "");
+        "k.placeholder, k.origin, k.source_file_count";
 
     private IReadOnlyList<KeyedRow> ReadKeyed(string sql, Dictionary<string, object?>? p = null)
     {
@@ -2161,17 +2141,15 @@ public sealed class SnapshotDb : IDisposable
         // 并列时按值排序定序:名次靠随机决定的话,同一份快照两次运行会给出两个参照值。
         using var rd = Query(
             cte +
-            // 内层那个数用的是另一个别名(fv2),接不上 FvJoin/FvValue 的 fv/fvp/fvv,
-            // 所以这三处按形状内联。**分组是 NOCASE 的,不能改成按号分组** ——
+            // 内层那个数用的是另一个别名(fv2),接不上 FvJoin/FvValue 的 fv/fvp/fvv。
+            // **分组是 NOCASE 的,不能改成按号分组** ——
             // 号与值一一对应,而 NOCASE 会把只差大小写的两个值并成一格,两者不是同一个划分。
             "SELECT " + FvValue + ", COUNT(DISTINCT fv.def_id) AS c, " +
-            "  (SELECT COUNT(*) FROM (SELECT DISTINCT "
-            + (ValuesAreDictionary ? "fvv2.value" : "fv2.value") + " COLLATE NOCASE "
+            "  (SELECT COUNT(*) FROM (SELECT DISTINCT fvv2.value COLLATE NOCASE "
             + "FROM field_values fv2 " +
-            (FieldValuesAreDictionary ? "JOIN field_value_paths fvp2 ON fvp2.id = fv2.path_id " : "") +
-            (ValuesAreDictionary ? "LEFT JOIN field_value_values fvv2 ON fvv2.id = fv2.value_id " : "") +
-            "     JOIN kin k2 ON k2.id = fv2.def_id WHERE " +
-            (FieldValuesAreDictionary ? "fvp2.path" : "fv2.path") + " LIKE @f ESCAPE '\\')) " +
+            "JOIN field_value_paths fvp2 ON fvp2.id = fv2.path_id " +
+            "LEFT JOIN field_value_values fvv2 ON fvv2.id = fv2.value_id " +
+            "     JOIN kin k2 ON k2.id = fv2.def_id WHERE fvp2.path LIKE @f ESCAPE '\\')) " +
             $"FROM field_values fv {FvJoin} JOIN kin k ON k.id = fv.def_id " +
             "WHERE " + PathIs($"path LIKE @f ESCAPE '\\'") + " " +
             "GROUP BY " + FvValue + " COLLATE NOCASE ORDER BY c DESC, " + FvValue + " LIMIT 1", p);
@@ -2360,78 +2338,32 @@ public sealed class SnapshotDb : IDisposable
     public const string TypeDeclaredPathsWhere = "WHERE n.name = @t COLLATE NOCASE";
 
     /// <summary>
-    /// 拆表之前的那两种形状共用的谓词。与 <c>idx_tf_type_nc</c> 必须是同一种排序 ——
-    /// BINARY 的索引配 NOCASE 的谓词等于没有索引,那张表 1373 万行,失配实测 12.2s 对 0.113s。
-    /// 新库里既没有这张表也没有那条索引,这个常量只走在旧库上。
+    /// 每一处 <c>FROM field_values fv</c> 后面跟的那一段:把路径与值从字典接回来。
+    /// **这一对只管取值,不管筛选** —— 筛选走 <see cref="PathIs"/>。
     /// </summary>
-    public const string TypeDeclaredPathsLegacyWhere = "WHERE t.def_type = @t COLLATE NOCASE";
-
-    /// <summary>
-    /// 这份库的声明层是不是拆成子树的那一版。**靠表在不在认,不靠版本号** ——
-    /// schema_version 相等的检查一旦为此涨档,磁盘上每一份旧库都会拒读,连同 <c>--keep</c>
-    /// 留下的那些旧代,而它们唯一的用途正是拿来 <c>snapshot diff</c>,重导对它们不适用。
-    ///
-    /// <c>PRAGMA table_info</c> 对不存在的表回零行,于是探一列就够。
-    /// </summary>
-    private bool TypeFieldsAreSubtrees => _tfSub ??= HasColumn("subtree_paths", "path_id");
-    private bool? _tfSub;
-
-    /// <summary>
-    /// 拆表之前那两种形状里,较新的一种(路径进了字典)。同 <see cref="TypeFieldsAreSubtrees"/>,
-    /// 靠列名认。
-    /// </summary>
-    private bool TypeFieldsAreDictionary => _tfDict ??= HasColumn("type_fields", "path_id");
-    private bool? _tfDict;
-
-    /// <summary>
-    /// 这份库的字段路径住在字典表里,还是逐行存在 <c>field_values.path</c> 上。
-    /// 同 <see cref="TypeFieldsAreDictionary"/>,**靠列名认** —— 两种形状能出自同一个导出器,
-    /// 而 <c>--keep</c> 留下的旧代永远是老形状,那些库唯一的用途正是拿来 diff。
-    /// </summary>
-    private bool FieldValuesAreDictionary => _fvDict ??= HasColumn("field_values", "path_id");
-    private bool? _fvDict;
-
-    /// <summary>
-    /// 每一处 <c>FROM field_values fv</c> 后面跟的那一段,以及 SELECT / GROUP BY 里那个路径列。
-    /// 字典库把路径接回来,旧库什么都不接。**这一对只管取值,不管筛选** —— 筛选走
-    /// <see cref="PathIs"/>。
-    /// </summary>
-    private string FvJoin =>
-        (FieldValuesAreDictionary ? "JOIN field_value_paths fvp ON fvp.id = fv.path_id " : "")
+    private const string FvJoin =
+        "JOIN field_value_paths fvp ON fvp.id = fv.path_id "
         // 值那一侧必须是 LEFT:value_id 可空(原来的 value 为 NULL),内连会把那些行整个丢掉。
         // 用不到 fvv 的查询里这条 JOIN 不花钱 —— 挂在主键上的、一列都没引用的 LEFT JOIN
         // 会被 SQLite 直接省掉(omit-noop-join)。
-        + (ValuesAreDictionary ? "LEFT JOIN field_value_values fvv ON fvv.id = fv.value_id" : "");
+        + "LEFT JOIN field_value_values fvv ON fvv.id = fv.value_id";
 
     /// <inheritdoc cref="FvJoin"/>
-    private string FvPath => FieldValuesAreDictionary ? "fvp.path" : "fv.path";
+    private const string FvPath = "fvp.path";
 
     /// <summary>
-    /// 这份库的 <c>leaf</c> 住在路径字典上,还是逐行存在 <c>field_values</c> 里。
-    /// 它是 <c>NoiseFilter.Leaf(path)</c> 的返回值,path 的纯函数,所以挪得动;
-    /// 旧库里它还在大表上。同 <see cref="FieldValuesAreDictionary"/>,靠列名认。
+    /// <c>leaf</c> 住在路径字典上:它是 <c>NoiseFilter.Leaf(path)</c> 的返回值,path 的纯函数。
     /// </summary>
-    private bool LeafLivesOnPaths => _fvLeaf ??= HasColumn("field_value_paths", "leaf");
-    private bool? _fvLeaf;
+    private const string FvLeaf = "fvp.leaf";
+
+    /// <summary>
+    /// leaf 谓词。<paramref name="cond"/> 写成对裸列名 <c>leaf</c> 的条件,
+    /// 跑在 2.6 万行的路径字典里再回表(同 <see cref="PathIs"/> 那条实测)。
+    /// </summary>
+    private static string LeafIs(string cond) => PathIs(cond);
 
     /// <inheritdoc cref="FvJoin"/>
-    private string FvLeaf => LeafLivesOnPaths ? "fvp.leaf" : "fv.leaf";
-
-    /// <summary>
-    /// leaf 谓词。<paramref name="cond"/> 写成对裸列名 <c>leaf</c> 的条件。
-    /// 新库上它跑在 2.6 万行的路径字典里再回表(同 <see cref="PathIs"/> 那条实测),
-    /// 旧库上原样加一层括号 —— 那时 <c>leaf</c> 就在 <c>field_values</c> 上,不会有歧义。
-    /// </summary>
-    private string LeafIs(string cond) => LeafLivesOnPaths ? PathIs(cond) : $"({cond})";
-
-    /// <summary>
-    /// 这份库的值住在字典表里,还是逐行存在 <c>field_values.value</c> 上。同上,靠列名认。
-    /// </summary>
-    private bool ValuesAreDictionary => _fvVal ??= HasColumn("field_values", "value_id");
-    private bool? _fvVal;
-
-    /// <inheritdoc cref="FvJoin"/>
-    private string FvValue => ValuesAreDictionary ? "fvv.value" : "fv.value";
+    private const string FvValue = "fvv.value";
 
     /// <summary>
     /// 值谓词。<paramref name="cond"/> 写成对裸列名 <c>value</c> 的条件。
@@ -2442,10 +2374,8 @@ public sealed class SnapshotDb : IDisposable
     ///
     /// NULL 的语义两条路一致:<c>value_id</c> 为空时 IN 不中,与 <c>NULL = @v</c> 同样为假。
     /// </summary>
-    private string ValueIs(string cond)
-        => ValuesAreDictionary
-            ? $"fv.value_id IN (SELECT id FROM field_value_values WHERE {cond})"
-            : $"({cond})";
+    private static string ValueIs(string cond)
+        => $"fv.value_id IN (SELECT id FROM field_value_values WHERE {cond})";
 
     /// <summary>
     /// 路径谓词。<paramref name="cond"/> 写成对裸列名 <c>path</c> 的条件,由这里决定它跑在哪张表上。
@@ -2455,47 +2385,9 @@ public sealed class SnapshotDb : IDisposable
     /// 谓词跑在大表上,字典化白做(改造前后同一条查询 1.78s 对 2.08s,反而更慢)。
     /// 写成对 <c>path_id</c> 的 IN 子查询就把顺序钉死了:先在 2.6 万行的字典上扫出一批号,
     /// 再顺 <c>idx_fv_pathid</c> 回表。
-    ///
-    /// 旧库上原样加一层括号,与改造前逐字同一条谓词。
     /// </summary>
-    private string PathIs(string cond)
-        => FieldValuesAreDictionary
-            ? $"fv.path_id IN (SELECT id FROM field_value_paths WHERE {cond})"
-            : $"({cond})";
-
-    /// <summary>
-    /// 这份库的 translations 记不记得译文出自哪个语言文件、同一句在这个 mod 里出现过几次。
-    /// 同 <see cref="TypeFieldsAreDictionary"/>,**靠列名认**。
-    /// </summary>
-    private bool TranslationsHaveSourceFile => _trSf ??= HasColumn("translations", "source_file");
-    private bool? _trSf;
-
-    /// <summary>
-    /// 这份库有 injection_keys 这张表吗。<c>PRAGMA table_info</c> 对不存在的表回零行,
-    /// 于是探一列就够 —— 能力位说的是「导出带没带这一层」,这个探的是「库里建没建」,
-    /// 两者都得真才敢读。
-    /// </summary>
-    /// <summary>
-    /// 这份库的 translations 带不带「译者写的那一串」与归一的四态。
-    /// 同 <see cref="TranslationsHaveSourceFile"/>,**靠列名认**。
-    /// </summary>
-    private bool TranslationsHaveKey => _trKey ??= HasColumn("translations", "key_state");
-    private bool? _trKey;
-
-    /// <summary>注入键层在场:表长成字典那个形状。</summary>
-    public bool InjectionKeysIndexed => HasInjectionKeys;
-
-    private bool HasInjectionKeys => _ik ??= HasColumn("injection_keys", "suggested_path")
-                                          || InjectionKeysAreDictionary;
-    private bool? _ik;
-
-    /// <summary>
-    /// 这份库的名册是不是四列全进字典的那一版。同 <see cref="TypeFieldsAreSubtrees"/>,靠列名认 ——
-    /// <c>--keep</c> 留下的旧代永远是老形状,而它们唯一的用途正是拿来 diff。
-    /// </summary>
-    private bool InjectionKeysAreDictionary
-        => _ikDict ??= HasColumn("injection_keys", "suggested_path_id");
-    private bool? _ikDict;
+    private static string PathIs(string cond)
+        => $"fv.path_id IN (SELECT id FROM field_value_paths WHERE {cond})";
 
     private bool? _hasTruncationBreakdown;
 
@@ -2562,24 +2454,16 @@ public sealed class SnapshotDb : IDisposable
     }
 
     /// <summary>
-    /// 磁盘上有三种形状,三条路给的是同一份东西(见 SnapshotSchema 的 type_names 那段)。
-    /// 子树那条不必去重:每条路径恰属一个首段,所以同一类型下两棵子树的路径集不相交。
+    /// 声明层的读法(见 SnapshotSchema 的 type_names 那段)。
+    /// 不必去重:每条路径恰属一个首段,所以同一类型下两棵子树的路径集不相交。
     /// </summary>
-    private (string PathExpr, string From, string Where) TypeDeclaredSource()
-    {
-        if (TypeFieldsAreSubtrees)
-            return ("d.path",
-                    "type_names n "
-                    + "JOIN type_subtrees ts ON ts.type_id = n.id "
-                    + "JOIN subtree_paths sp ON sp.subtree_id = ts.subtree_id "
-                    + "JOIN type_field_paths d ON d.id = sp.path_id",
-                    TypeDeclaredPathsWhere);
-
-        var dict = TypeFieldsAreDictionary;
-        return (dict ? "d.path" : "t.path",
-                dict ? "type_fields t JOIN type_field_paths d ON d.id = t.path_id" : "type_fields t",
-                TypeDeclaredPathsLegacyWhere);
-    }
+    private static (string PathExpr, string From, string Where) TypeDeclaredSource()
+        => ("d.path",
+            "type_names n "
+            + "JOIN type_subtrees ts ON ts.type_id = n.id "
+            + "JOIN subtree_paths sp ON sp.subtree_id = ts.subtree_id "
+            + "JOIN type_field_paths d ON d.id = sp.path_id",
+            TypeDeclaredPathsWhere);
 
     /// <summary>
     /// 这个类型的声明路径里最深的那条有几段(点与下标各算一段)。

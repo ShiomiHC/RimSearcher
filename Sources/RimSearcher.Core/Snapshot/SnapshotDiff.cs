@@ -56,8 +56,8 @@ public static class SnapshotDiff
             // 两侧各自包一层,把 field_values 摊平成同一个形状 (def_id, path, value, rid)。
             // **两侧的形状可以不同** —— 新库的路径住在字典表里、`--keep` 留下的旧代还是
             // 逐行存字符串,而 diff 的正主就是拿旧代比新库。逐 alias 探列名,而不是假定同形。
-            var newerFv = FieldView(db, "newer");
-            var priorFv = FieldView(db, "prior");
+            var newerFv = FieldView("newer");
+            var priorFv = FieldView("prior");
 
             var FieldUnion = $"""
                 SELECT n.def_name AS def_name, n.def_type AS def_type, fv.path AS path,
@@ -132,27 +132,17 @@ public static class SnapshotDiff
     }
 
     /// <summary>
-    /// 一侧的字段行,摊平成 (def_id, path, value, rid)。字典化的库从 field_value_paths 取
-    /// 路径,旧库直接取自己的 path 列 —— 上层那段 SQL 因此两种库通吃,也吃得下两种混着比。
+    /// 一侧的字段行,摊平成 (def_id, path, value, rid),路径与值从各自的字典接回来。
     ///
     /// <c>rid</c> 单列出来:外层拿它判 LEFT JOIN 有没有配上,而子查询没有 rowid。
     /// </summary>
-    private static string FieldView(SqliteConnection db, string alias)
-    {
-        if (!HasColumn(db, alias, "field_values", "path_id"))
-            return $"(SELECT v.def_id AS def_id, v.path AS path, v.value AS value, v.rowid AS rid "
-                 + $"   FROM {alias}.field_values v)";
-
-        // 值也可能进了字典。**LEFT** JOIN:value_id 可空,内连会把值为空的行整个丢掉,
+    private static string FieldView(string alias)
+        // 值那一侧 **LEFT** JOIN:value_id 可空,内连会把值为空的行整个丢掉,
         // 而「这一侧没有值」正是 diff 要报的一种变化。
-        var valueDict = HasColumn(db, alias, "field_values", "value_id");
-        return "(SELECT v.def_id AS def_id, p.path AS path, "
-             + (valueDict ? "w.value" : "v.value") + " AS value, v.rowid AS rid "
+        => "(SELECT v.def_id AS def_id, p.path AS path, w.value AS value, v.rowid AS rid "
              + $"   FROM {alias}.field_values v "
              + $"   JOIN {alias}.field_value_paths p ON p.id = v.path_id"
-             + (valueDict ? $" LEFT JOIN {alias}.field_value_values w ON w.id = v.value_id" : "")
-             + ")";
-    }
+             + $" LEFT JOIN {alias}.field_value_values w ON w.id = v.value_id)";
 
     private static bool HasColumn(SqliteConnection db, string alias, string table, string column)
     {

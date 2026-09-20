@@ -174,7 +174,7 @@ public static class DataLayers
 
     /// <summary>注入键层:译文的键归一、与字段路径同一套文法,get 的译文表靠它填 key 列。</summary>
     public static LayerRow InjectionKeysRow(SnapshotDb db, string snapshotName)
-        => Bit(InjectionKeys, db.InjectionKeysIndexed, ExportCommand(snapshotName),
+        => Bit(InjectionKeys, db.HasInjectionKeyRows, ExportCommand(snapshotName),
                "no injection-key roster: the 'key' column of translations cannot be filled");
 
     /// <summary>xml 列:每条字段路径是哪份 XML 写的;一行没有时 get 的那一列整列是 no。</summary>

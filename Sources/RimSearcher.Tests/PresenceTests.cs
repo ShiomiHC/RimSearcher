@@ -441,67 +441,6 @@ public class PresenceTests
     }
 
     /// <summary>
-    /// 拆表之前的两种形状还躺在磁盘上(<c>--keep</c> 留下的十二份旧代永远不会被重导),
-    /// 所以读侧必须照旧读得动它们。
-    ///
-    /// **注入实验会静默地没注入**,而没注入正好长得像「新形状读通了」—— 所以先钉注入本身:
-    /// 旧表在、新表不在。三种形状各走一遍,同一句话必须逐字相同。
-    /// </summary>
-    [Theory]
-    [InlineData(true)]   // type_fields(def_type, path_id) —— 路径进了字典的那一档
-    [InlineData(false)]  // type_fields(def_type, path)    —— 最早那一档
-    public void 拆表之前的旧形状照旧读得出来(bool dictionary)
-    {
-        // 落在本进程独占的根里,用完**不删** —— 这份库刚被 CLI 读过,而读侧开着
-        // mmap_size=1G,紧接着 File.Delete 在 Windows 上会间歇性地撞上「文件正被
-        // 另一个进程使用」(实测十轮红一次)。清理交给 TestTemp 下次启动按 pid 做。
-        var path = Path.Combine(TestTemp.Root,
-                                $"rs-legacy-tf-{(dictionary ? "dict" : "plain")}-{Guid.NewGuid():N}.db");
-        File.Copy(Fixture.PresenceDb, path, overwrite: true);
-        using (var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={path};Pooling=False"))
-        {
-            raw.Open();
-            using var cmd = raw.CreateCommand();
-            cmd.CommandText = dictionary
-                ? """
-                  CREATE TABLE type_fields (def_type TEXT NOT NULL, path_id INTEGER NOT NULL);
-                  INSERT INTO type_fields (def_type, path_id)
-                    SELECT n.name, sp.path_id FROM type_names n
-                      JOIN type_subtrees ts ON ts.type_id = n.id
-                      JOIN subtree_paths sp ON sp.subtree_id = ts.subtree_id;
-                  DROP TABLE type_subtrees; DROP TABLE subtree_paths; DROP TABLE type_names;
-                  """
-                : """
-                  CREATE TABLE type_fields (def_type TEXT NOT NULL, path TEXT NOT NULL);
-                  INSERT INTO type_fields (def_type, path)
-                    SELECT n.name, d.path FROM type_names n
-                      JOIN type_subtrees ts ON ts.type_id = n.id
-                      JOIN subtree_paths sp ON sp.subtree_id = ts.subtree_id
-                      JOIN type_field_paths d ON d.id = sp.path_id;
-                  DROP TABLE type_subtrees; DROP TABLE subtree_paths; DROP TABLE type_names;
-                  """;
-            cmd.ExecuteNonQuery();
-
-            // 注入真发生了吗:旧表有行,新表不在。
-            cmd.CommandText = "SELECT COUNT(*) FROM type_fields";
-            Assert.Equal(19L, (long)cmd.ExecuteScalar()!);
-            cmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE name = 'subtree_paths'";
-            Assert.Equal(0L, (long)cmd.ExecuteScalar()!);
-        }
-
-        var (nulls, _, nullCode) = Fixture.Run("fields", "ThingDef", "--path-contains", "neverSet",
-                                               "--db", path);
-        Assert.Equal(1, nullCode);
-        Assert.Contains("every def of the type has them as null", nulls, StringComparison.Ordinal);
-
-        var (missing, _, missCode) = Fixture.Run("fields", "ThingDef", "--path-contains", "noSuchFieldXYZ",
-                                                 "--db", path);
-        Assert.Equal(1, missCode);
-        Assert.Contains("none of the fields the type itself declares has it either", missing, StringComparison.Ordinal);
-        Assert.Matches(@"reaches \d+ segments deep", missing);
-    }
-
-    /// <summary>
     /// NOCASE 的查找配 BINARY 的索引等于没有索引。这条规则本来只长在 <c>idx_fv_leaf_nc</c>
     /// 的注释里,而注释挡不住下一张表 —— <c>type_fields</c> 就那么踩了,1373 万行上 12.2s。
     ///

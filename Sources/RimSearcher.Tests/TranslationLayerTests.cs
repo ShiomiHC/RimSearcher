@@ -250,64 +250,6 @@ public class TranslationLayerTests
     }
 
     /// <summary>
-    /// 字典化之前的名册还躺在磁盘上(<c>--keep</c> 留下的旧代永远不会被重导),读侧照旧读得动。
-    ///
-    /// **注入实验会静默地没注入**,所以先钉注入本身:旧列在、新列不在。
-    /// </summary>
-    [Fact]
-    public void 字典化之前的名册照旧读得出来()
-    {
-        string path;
-        using (var fresh = ImportLines("injkeylegacy", Fixture.DefExporterVersion,
-            InjKeyLine("ObservedLayingCorpse", "stages.0.label", "stages.observed_corpse.label"),
-            InjKeyLine("ObservedLayingCorpse", "description", "description", allowed: false)))
-            path = fresh.Path;
-
-        using (var raw = new Microsoft.Data.Sqlite.SqliteConnection(
-            $"Data Source={path};Pooling=False"))
-        {
-            raw.Open();
-            using var cmd = raw.CreateCommand();
-            cmd.CommandText = """
-                CREATE TABLE ik_old (def_id INTEGER, def_type TEXT, def_name TEXT NOT NULL,
-                                     path TEXT NOT NULL, suggested_path TEXT NOT NULL,
-                                     is_collection INTEGER NOT NULL DEFAULT 0,
-                                     translation_allowed INTEGER NOT NULL DEFAULT 1,
-                                     full_list_translation_allowed INTEGER NOT NULL DEFAULT 0);
-                INSERT INTO ik_old SELECT k.def_id, t.def_type, n.def_name, p.path, q.path,
-                                          k.is_collection, k.translation_allowed,
-                                          k.full_list_translation_allowed
-                  FROM injection_keys k
-                  LEFT JOIN injection_key_types t ON t.id = k.def_type_id
-                  JOIN injection_key_names n ON n.id = k.def_name_id
-                  JOIN injection_key_paths p ON p.id = k.path_id
-                  JOIN injection_key_paths q ON q.id = k.suggested_path_id;
-                DROP TABLE injection_keys;
-                ALTER TABLE ik_old RENAME TO injection_keys;
-                DROP TABLE injection_key_types; DROP TABLE injection_key_names;
-                DROP TABLE injection_key_paths;
-                """;
-            cmd.ExecuteNonQuery();
-
-            // 注入真发生了吗:旧列在、新列不在。
-            cmd.CommandText = "SELECT COUNT(*) FROM pragma_table_info('injection_keys') "
-                            + "WHERE name = 'suggested_path'";
-            Assert.Equal(1L, (long)cmd.ExecuteScalar()!);
-            cmd.CommandText = "SELECT COUNT(*) FROM pragma_table_info('injection_keys') "
-                            + "WHERE name = 'suggested_path_id'";
-            Assert.Equal(0L, (long)cmd.ExecuteScalar()!);
-        }
-
-        using var old = SnapshotDb.Open(path);
-        var rows = old.InjectionKeys("ObservedLayingCorpse");
-        Assert.NotNull(rows);
-        Assert.Equal(2, rows!.Count);
-        Assert.Equal("stages.observed_corpse.label",
-                     rows.Single(r => r.Path == "stages.0.label").SuggestedPath);
-        Assert.False(rows.Single(r => r.Path == "description").TranslationAllowed);
-    }
-
-    /// <summary>
     /// 三个键态各自落在自己那一格,而且 <c>key</c> 一字不改。
     ///
     /// 判据是**槽位名册**(injection_keys),不是字段表。这条闸盯的正是拿字段表当替身的
