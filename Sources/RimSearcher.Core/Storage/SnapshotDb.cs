@@ -139,18 +139,6 @@ public sealed record TranslationRow(string DefName, string? DefType, string Path
                                    string? SourceFile = null, int? SourceFileCount = null,
                                    string? Key = null, string? KeyState = null, bool? Applied = null);
 
-/// <summary>
-/// 一个「可以被注入译文」的槽位。<paramref name="Path"/> 是下标式键串(<c>stages.0.label</c>),
-/// <paramref name="SuggestedPath"/> 是把手式(<c>stages.observed_corpse.label</c>)——
-/// 语言文件里两种都合法、都真注入得上,所以译者写的那一串得先归一到一种。
-///
-/// <paramref name="TranslationAllowed"/> 为假 = 这个字段不许注入译文
-/// (<c>NoTranslate</c> / <c>Unsaved</c>,或它的某一级祖先带)。这一格是「谁都没译」与
-/// 「白译也没用」的分界,而两者在译文表里同形 —— 都是没有行。
-/// </summary>
-public sealed record InjectionKeyRow(string DefName, string? DefType, string Path, string SuggestedPath,
-                                     bool IsCollection, bool TranslationAllowed,
-                                     bool FullListTranslationAllowed);
 
 /// <summary>
 /// 一条界面文案译文。<paramref name="Key"/> 是 <c>"X".Translate()</c> 里那个 X ——
@@ -338,14 +326,16 @@ public sealed class SnapshotDb : IDisposable
                 "came from. Databases built by other tools are not read. Export again with this version.");
         }
 
-        if (!meta.TryGetValue(SnapshotSchema.MetaKeySchemaVersion, out var vs) ||
-            !int.TryParse(vs, out var v) || v != SnapshotSchema.Version)
+        // 形状闸:本构建读哪些表哪些列,库里就得有。期望从 DDL 自己建出来,库那侧读
+        // sqlite_master —— 两边都不是人填的数字,于是不存在「改了表忘了涨版本」这一态。
+        // 只查缺,不查多:多出的列与索引差异不影响读。可缺的列见 SnapshotSchema.OptionalColumns。
+        var missing = SnapshotSchema.FirstMissing(db);
+        if (missing is not null)
         {
             db.Dispose();
             throw new SnapshotFormatError(
-                $"'{System.IO.Path.GetFileName(path)}' was built with snapshot schema version {vs ?? "unknown"}, " +
-                $"and this build reads version {SnapshotSchema.Version}. Re-import the export file " +
-                "('rimsearcher snapshot import') to rebuild it.");
+                $"'{System.IO.Path.GetFileName(path)}' has no {missing} that this build reads: its tables were " +
+                "laid out by an older build. Re-import the export file ('rimsearcher snapshot import') to rebuild it.");
         }
 
         var exportMeta = ExportMeta.Parse(meta[SnapshotSchema.MetaKeyRaw]);
@@ -1689,32 +1679,6 @@ public sealed class SnapshotDb : IDisposable
                 rd.IsDBNull(10) ? null : rd.GetString(10),
                 rd.IsDBNull(11) ? null : rd.GetString(11),
                 rd.IsDBNull(12) ? null : rd.GetInt32(12) != 0));
-        return rows;
-    }
-
-    /// <summary>
-    /// 这个 def 的槽位名册。空表 = 量过了、这个 def 一个可注入槽位都没有。
-    /// 名册是**全集**,所以「这个 def 能译什么」拿它回答是准的。
-    /// </summary>
-    public IReadOnlyList<InjectionKeyRow> InjectionKeys(string defName)
-    {
-        var p = new Dictionary<string, object?> { ["@n"] = defName };
-        var rows = new List<InjectionKeyRow>();
-        // 谓词走字典的 IN 子查询而不是挂在 JOIN 上 —— 后者会让优化器从主表驱动,
-        // 字典化就白做了(路径字典那次实测 1.78s 对 2.08s)。
-        const string sql = "SELECT n.def_name, t.def_type, p.path, q.path, k.is_collection, "
-              + "k.translation_allowed, k.full_list_translation_allowed FROM injection_keys k "
-              + "JOIN injection_key_names n ON n.id = k.def_name_id "
-              + "LEFT JOIN injection_key_types t ON t.id = k.def_type_id "
-              + "JOIN injection_key_paths p ON p.id = k.path_id "
-              + "JOIN injection_key_paths q ON q.id = k.suggested_path_id "
-              + "WHERE k.def_name_id IN (SELECT id FROM injection_key_names "
-              + "WHERE def_name = @n COLLATE NOCASE) ORDER BY p.path";
-        using var rd = Query(sql, p);
-        while (rd.Read())
-            rows.Add(new InjectionKeyRow(rd.GetString(0), rd.IsDBNull(1) ? null : rd.GetString(1),
-                rd.GetString(2), rd.GetString(3),
-                rd.GetInt32(4) != 0, rd.GetInt32(5) != 0, rd.GetInt32(6) != 0));
         return rows;
     }
 

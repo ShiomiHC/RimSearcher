@@ -370,25 +370,49 @@ public class ImportTests
     // ---- 版本 ----
 
     /// <summary>
-    /// schema 版本对不上时要给一条能照做的消息,而不是让 SQLite 抛一个
-    /// 「no such column」出来 —— 后者会被读成「数据坏了」。
+    /// 形状闸从库自身结构与本构建 DDL 得出,不靠人填的版本号。缺一列就拒读并**点名那一格**;
+    /// 消息里得有出路(重导入)。
     /// </summary>
     [Fact]
-    public void 打开陌生schema版本的库时消息可照做()
+    public void 缺了本构建要读的列时拒读并点名()
     {
-        var path = Temp("wrongver.db");
+        var path = Temp("shape-missing.db");
+        File.Copy(Fixture.CoreDb, path, overwrite: true);
         using (var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={path};Pooling=False"))
         {
             raw.Open();
             using var cmd = raw.CreateCommand();
-            cmd.CommandText = "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT); " +
-                              $"INSERT INTO meta VALUES ('schema_version', '{SnapshotSchema.Version + 99}');";
+            cmd.CommandText = "ALTER TABLE translations DROP COLUMN key_state";
             cmd.ExecuteNonQuery();
         }
 
         var ex = Assert.ThrowsAny<Exception>(() => SnapshotDb.Open(path));
-        Assert.Contains((SnapshotSchema.Version + 99).ToString(), ex.Message);
-        Assert.Contains("export", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("column 'translations.key_state'", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("snapshot import", ex.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 登记为可缺的列(截断成因四列)缺了照常开 —— 7 份 <c>--keep</c> 留下的旧代正是这个样子,
+    /// 缺席由 <c>DefsHaveTruncationBreakdown</c> 说破而不是拒读。
+    /// </summary>
+    [Fact]
+    public void 可缺列缺了照常打开()
+    {
+        var path = Temp("shape-optional.db");
+        File.Copy(Fixture.CoreDb, path, overwrite: true);
+        using (var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={path};Pooling=False"))
+        {
+            raw.Open();
+            using var cmd = raw.CreateCommand();
+            foreach (var col in new[] { "cap", "length", "depth", "items" })
+            {
+                cmd.CommandText = $"ALTER TABLE defs DROP COLUMN truncated_by_{col}";
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        using var db = SnapshotDb.Open(path);
+        Assert.False(db.DefsHaveTruncationBreakdown);
     }
 
     [Fact]

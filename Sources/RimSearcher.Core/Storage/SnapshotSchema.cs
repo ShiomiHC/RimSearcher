@@ -3,39 +3,23 @@
 namespace RimSearcher.Storage;
 
 /// <summary>
-/// 快照库 schema。**不兼容上游 db** —— 自立 schema_version,读到无 meta 或版本不符的库
-/// 就拒读并指导重导(错误消息不含本机路径,留发布缝)。
+/// 快照库 schema。**不兼容上游 db** —— 无 meta 表的库拒读;表/列对不上本构建的库也拒读并
+/// 指导重导入(错误消息不含本机路径,留发布缝)。
 /// </summary>
+/// <remarks>
+/// 形状闸不靠版本号(2026-09-20 起)。此前的 <c>schema_version</c> 停在 8 之后至少五次表形变化
+/// 都没涨 —— 每次理由相同:精确相等的检查会让 <c>--keep</c> 留下的旧代整份拒读,而它们唯一的
+/// 用途正是 <c>snapshot diff</c>。于是数字一次都没说过话,读侧靠九个「探某列在不在」的分支
+/// 兼容;那些分支在盘上恒真恒假,已删。
+///
+/// 现在的闸是 <see cref="FirstMissing"/>:期望形状从 <see cref="Ddl"/> 在内存里建出来,库那侧读
+/// <c>sqlite_master</c>,两边都不是人填的。**表或列一改,旧库自动拒读并点名缺的那一格**,
+/// 拒读消息指向重导入;<c>.prev</c> 读不动是这条规矩的代价。只加索引不影响读,不触发。
+/// 一列若允许旧库缺(「量没量过」那一类),登记进 <see cref="OptionalColumns"/>,并且必须有
+/// 自己的说破谓词 —— 缺席不能被读成零。
+/// </remarks>
 public static class SnapshotSchema
 {
-    /// <summary>schema 版本。表结构变化时 +1。</summary>
-    /// <remarks>
-    /// 3:加了 xml_nodes 继承层。
-    /// 4:field_values 加了 is_default —— 一条值与 C# 声明默认值的关系。
-    /// 5:加了 keyed 表 —— 界面文案那一层译文。
-    /// 6:加了 shared_values —— 一条值在同类型里有多普遍。
-    /// 7:加了 harvested_roots —— 磁盘那一层**量没量过**,见下。
-    /// 8:加了 economy 三表 + economy_state —— 经济面,以及它**量没量成**,见下。
-    ///
-    /// 0.5.0 起 xml_nodes 多了 patch_ops_defname / patch_ops_label,并加 xml_written
-    /// 与 type_fields 两张表。0.6.0 起 xml_written 多了 inner_text,0.7.0 多了 patched。
-    /// 0.8.0 起加 injection_keys 表,translations 多了 source_file / source_file_count。
-    /// 都不涨这一档:精确相等的 schema 检查会让磁盘上的旧库整份打不开。缺层那一档的读法
-    /// (导出器版本上的能力位)2026-09-20 随 0.12 地板一起删了 —— 地板之下的库一份都不在了。
-    ///
-    /// type_fields 后来把 path 抽成 type_field_paths 字典(1373 万行里只有 52 万条不同
-    /// 路径,平均 116 字符),再后来整张表拆成 type_subtrees + subtree_paths(那 1373 万行
-    /// 是一次 JOIN 的展开结果,两个因子合起来只有 3.85%)。这两条与上面几条不同 ——
-    /// 它们改的是**既有表的形状**,于是声明层在磁盘上有三种样子。
-    ///
-    /// 同样不涨版本,同样的理由,而且拆表这一次理由更硬:磁盘上现有十九份库,其中十二份是
-    /// --keep 留下的旧代,它们**永远不会**被重导,而重导正是拒读消息唯一能指的出路。
-    /// 区分不靠导出器版本(三种形状能出自同一个导出器),靠 SnapshotDb 探表/列在不在 ——
-    /// 那比版本号更精确:版本号说的是「这份库建于哪一档」,探到的是「它现在长什么样」。
-    /// </remarks>
-    public const int Version = 8;
-
-    public const string MetaKeySchemaVersion = "schema_version";
     public const string MetaKeyRaw = "export_meta_json";
     public const string MetaKeyFingerprint = "fingerprint";
     public const string MetaKeyImportedAtUtc = "imported_at_utc";
@@ -618,6 +602,59 @@ public static class SnapshotSchema
         CREATE INDEX idx_econ_chain_thing ON economy_cost_chain(thing_def);
         CREATE INDEX idx_econ_recipes ON economy_recipes(economy_id);
         """;
+
+    /// <summary>
+    /// 旧库允许缺的列。四个截断成因列 0.13.0 起才有,7 份 <c>--keep</c> 留下的旧代没有;
+    /// 缺席由 <c>SnapshotDb.DefsHaveTruncationBreakdown</c> 说破,呈现侧只说总数,不印四个零。
+    /// </summary>
+    public static readonly IReadOnlySet<string> OptionalColumns = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "defs.truncated_by_cap", "defs.truncated_by_length", "defs.truncated_by_depth", "defs.truncated_by_items",
+    };
+
+    private static IReadOnlyList<string>? _expected;
+
+    /// <summary>
+    /// 本构建读的每一格 <c>table.column</c>(可缺的除外)。从 <see cref="Ddl"/> 在内存库里建出来再读
+    /// <c>sqlite_master</c>,进程内算一次(实测 1.3 ms)。
+    /// </summary>
+    public static IReadOnlyList<string> ExpectedColumns()
+    {
+        if (_expected is not null) return _expected;
+        using var mem = new SqliteConnection("Data Source=:memory:;Pooling=False");
+        mem.Open();
+        Create(mem);
+        _expected = Columns(mem).Where(c => !OptionalColumns.Contains(c)).ToList();
+        return _expected;
+    }
+
+    /// <summary>
+    /// 这份库缺的第一格(<c>column 'defs.x'</c> / <c>table 'x'</c>),没缺就是 null。
+    /// 只查缺不查多:多出的列、索引差异都不影响读。
+    /// </summary>
+    public static string? FirstMissing(SqliteConnection db)
+    {
+        var have = new HashSet<string>(Columns(db), StringComparer.Ordinal);
+        var tables = new HashSet<string>(have.Select(c => c[..c.IndexOf('.')]), StringComparer.Ordinal);
+        foreach (var c in ExpectedColumns())
+        {
+            if (have.Contains(c)) continue;
+            var table = c[..c.IndexOf('.')];
+            return tables.Contains(table) ? $"column '{c}'" : $"table '{table}'";
+        }
+        return null;
+    }
+
+    private static List<string> Columns(SqliteConnection db)
+    {
+        var cols = new List<string>();
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = "SELECT m.name, p.name FROM sqlite_master m JOIN pragma_table_info(m.name) p " +
+                          "WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite_%'";
+        using var rd = cmd.ExecuteReader();
+        while (rd.Read()) cols.Add(rd.GetString(0) + "." + rd.GetString(1));
+        return cols;
+    }
 
     public static void Create(SqliteConnection db)
     {

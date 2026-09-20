@@ -180,6 +180,30 @@ public class TranslationLayerTests
             .Bool(IntermediateFormat.KeyFullListTranslationAllowed, false)
             .ToString();
 
+    private sealed record RosterRow(string DefName, string? DefType, string Path, string SuggestedPath,
+                                    bool TranslationAllowed);
+
+    /// <summary>名册按 Core 同一条 JOIN 读回 —— Core 自己没有读名册整行的入口(get 只按行数判层在不在)。</summary>
+    private static List<RosterRow> Roster(string path, string defName)
+    {
+        using var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={path};Mode=ReadOnly;Pooling=False");
+        raw.Open();
+        using var cmd = raw.CreateCommand();
+        cmd.CommandText = "SELECT n.def_name, t.def_type, p.path, q.path, k.translation_allowed FROM injection_keys k "
+                        + "JOIN injection_key_names n ON n.id = k.def_name_id "
+                        + "LEFT JOIN injection_key_types t ON t.id = k.def_type_id "
+                        + "JOIN injection_key_paths p ON p.id = k.path_id "
+                        + "JOIN injection_key_paths q ON q.id = k.suggested_path_id "
+                        + "WHERE n.def_name = $n ORDER BY p.path";
+        cmd.Parameters.AddWithValue("$n", defName);
+        var rows = new List<RosterRow>();
+        using var rd = cmd.ExecuteReader();
+        while (rd.Read())
+            rows.Add(new RosterRow(rd.GetString(0), rd.IsDBNull(1) ? null : rd.GetString(1),
+                                   rd.GetString(2), rd.GetString(3), rd.GetInt32(4) != 0));
+        return rows;
+    }
+
     /// <summary>
     /// 注入键层进得了库,两个键串各占一列。
     ///
@@ -195,9 +219,8 @@ public class TranslationLayerTests
             InjKeyLine("ObservedLayingCorpse", "stages.0.label", "stages.observed_corpse.label"),
             InjKeyLine("ObservedLayingCorpse", "description", "description", allowed: false));
 
-        var rows = db.InjectionKeys("ObservedLayingCorpse");
-        Assert.NotNull(rows);
-        Assert.Equal(2, rows!.Count);
+        var rows = Roster(db.Path, "ObservedLayingCorpse");
+        Assert.Equal(2, rows.Count);
 
         var handled = rows.Single(r => r.Path == "stages.0.label");
         Assert.Equal("stages.observed_corpse.label", handled.SuggestedPath);
@@ -222,9 +245,8 @@ public class TranslationLayerTests
             InjKeyLine("SecondHediff", "stages.0.label", "stages.observed_corpse.label"),
             InjKeyLine("ObservedLayingCorpse", "description", "description", allowed: false));
 
-        var rows = db.InjectionKeys("ObservedLayingCorpse");
-        Assert.NotNull(rows);
-        Assert.Equal(2, rows!.Count);
+        var rows = Roster(db.Path, "ObservedLayingCorpse");
+        Assert.Equal(2, rows.Count);
         var handled = rows.Single(r => r.Path == "stages.0.label");
         Assert.Equal("ObservedLayingCorpse", handled.DefName);
         Assert.Equal("HediffDef", handled.DefType);

@@ -767,7 +767,6 @@ public sealed class SnapshotImporter
             using (var insertMeta = Prepare(db, "INSERT INTO meta (key, value) VALUES ($k,$v)"))
             {
                 void Put(string k, string? v) { Bind(insertMeta, "$k", k); Bind(insertMeta, "$v", v); insertMeta.ExecuteNonQuery(); }
-                Put(SnapshotSchema.MetaKeySchemaVersion, SnapshotSchema.Version.ToString());
                 Put(SnapshotSchema.MetaKeyRaw, meta.RawJson);
                 Put(SnapshotSchema.MetaKeyFingerprint, meta.Fingerprint);
                 Put(SnapshotSchema.MetaKeyImportedAtUtc, DateTime.UtcNow.ToString("O"));
