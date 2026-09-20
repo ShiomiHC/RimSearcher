@@ -292,7 +292,7 @@ public sealed class SnapshotStatusCommand : Command
             ctx.Report.Notice(NoticeKind.Boundary,
                 "The game version above was read from ModsConfig.xml, which the game rewrites only when the " +
                 "mod list is saved, so it can lag behind a Steam update. Set 'game_dir' in the config to read " +
-                "it from Assembly-CSharp.dll.");
+                "it from Assembly-CSharp.dll.", teach: true);
 
         return 0;
     }

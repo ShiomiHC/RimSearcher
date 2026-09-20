@@ -626,7 +626,7 @@ public sealed class GetCommand : Command
                   "below belongs to the block it sits in, and the def_type line at the top of a block says which."
                 : $"{Tally.Complete(blocks.Count).Render("def")} follow, one block each, in the order the names " +
                   "were given; every count and note below belongs to the block it sits in, and the def_name " +
-                  "line at the top of a block says which."));
+                  "line at the top of a block says which."), teach: true);
 
         var limit = ctx.Limit();
         var (paths, exactPath) = ctx.Args.PathFilters();

@@ -297,7 +297,7 @@ public sealed class MembersCommand : Command
         var types = kept.Select(r => r.Type.FullName).Distinct(StringComparer.Ordinal).Count();
         ctx.Report.Notice(NoticeKind.Boundary,
             $"These sit on {Tally.Complete(types).Render("type")} (the 'type' column), each listed under the " +
-            "type that declares it.");
+            "type that declares it.", teach: true);
 
         ctx.Report.Table("members", Columns, rows);
         return 0;
