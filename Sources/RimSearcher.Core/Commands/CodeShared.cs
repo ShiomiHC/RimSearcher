@@ -46,7 +46,7 @@ internal static class CodeShared
             throw new CliUsageException(
                 $"No decompiled source tree named '{only}'. 'rimsearcher sources list' names every tree.");
 
-        var assemblies = AssemblyStore.ResolveAll(root, !everyTree && only is { Length: > 0 } ? [only] : null);
+        var assemblies = AssemblyStore.ResolveAll(root, AssemblyStore.InstallRoots(ctx.Config), !everyTree && only is { Length: > 0 } ? [only] : null);
         if (assemblies.Count == 0)
             throw new CliUsageException(
                 (!everyTree && only is { Length: > 0 }
@@ -77,7 +77,7 @@ internal static class CodeShared
         {
             var root = SourcesShared.Root(ctx);
             if (!Directory.Exists(root)) return null;
-            var assemblies = AssemblyStore.ResolveAll(root, null);
+            var assemblies = AssemblyStore.ResolveAll(root, AssemblyStore.InstallRoots(ctx.Config));
             return assemblies.Count == 0 ? null : new MetadataLookup(assemblies);
         }
         catch (IOException) { return null; }

@@ -138,12 +138,17 @@ public static class AssemblyStore
     ///
     /// 回退是有意的:老树没有副本,而「这台机器上装着的那一份」总比什么都不答强 ——
     /// 代价是它可能不是这棵树的来源,所以 <see cref="ResolvedAssembly.Origin"/> 把这件事带出去。
+    ///
+    /// <paramref name="installRoots"/> 是本机配置的安装根(game_dir 与 mod_roots)。原件不在盘上时,
+    /// 只有清单记的来源落在其中某个之下才算卸载;来源不在任何安装根之下,「原件还在不在」在本机
+    /// 无从回答 —— 树是别的机器上建的,或者这是只装了代码树的环境 —— 于是不报卸载。
     /// </summary>
-    public static IReadOnlyList<ResolvedAssembly> Resolve(string treeDir)
+    public static IReadOnlyList<ResolvedAssembly> Resolve(string treeDir, IReadOnlyCollection<string> installRoots)
     {
         var tree = Path.GetFileName(treeDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))!;
         var state = SourceTreeState.Read(treeDir);
         var result = new List<ResolvedAssembly>();
+        var reachable = state is not null && UnderAny(state.Root, installRoots);
 
         // 清单是唯一的名单来源 —— 副本目录里多出来的文件不算数(换过 mod 版本后
         // 旧 dll 的副本会留在那儿,把它当成这棵树的一部分会凭空多出一个程序集)。
@@ -182,7 +187,7 @@ public static class AssemblyStore
                     Path = copy,
                     Origin = AssemblyOrigin.Copy,
                     InstalledPath = installed,
-                    OriginalMissing = !originalHere,
+                    OriginalMissing = !originalHere && reachable,
                     OriginalChanged = originalHere ? !SameHash(installed, entry.Sha256) : null,
                 });
             }
@@ -203,9 +208,23 @@ public static class AssemblyStore
         return result;
     }
 
+    /// <summary>本机配置的安装根:game_dir 加 mod_roots,没配的不算。</summary>
+    public static IReadOnlyList<string> InstallRoots(RimSearcher.Config.RimConfig config)
+        => [.. new[] { config.GameDir }.Concat(config.ModRoots).Where(r => !string.IsNullOrWhiteSpace(r)).Select(r => r!)];
+
+    private static bool UnderAny(string path, IReadOnlyCollection<string> roots)
+    {
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var full = WithSeparator(Path.GetFullPath(path));
+        return roots.Any(r => full.StartsWith(WithSeparator(Path.GetFullPath(r)), comparison));
+    }
+
+    private static string WithSeparator(string dir)
+        => dir.EndsWith(Path.DirectorySeparatorChar) ? dir : dir + Path.DirectorySeparatorChar;
+
     /// <summary>全部树里的程序集。<paramref name="only"/> 非空时只看这些树。</summary>
     public static IReadOnlyList<ResolvedAssembly> ResolveAll(
-        string root, IReadOnlyCollection<string>? only = null)
+        string root, IReadOnlyCollection<string> installRoots, IReadOnlyCollection<string>? only = null)
     {
         var all = new List<ResolvedAssembly>();
         if (!Directory.Exists(root)) return all;
@@ -215,7 +234,7 @@ public static class AssemblyStore
             var name = Path.GetFileName(dir)!;
             if (name.Length == 0 || name.StartsWith('.')) continue;
             if (only is { Count: > 0 } && !only.Contains(name, StringComparer.OrdinalIgnoreCase)) continue;
-            all.AddRange(Resolve(dir));
+            all.AddRange(Resolve(dir, installRoots));
         }
         return all;
     }

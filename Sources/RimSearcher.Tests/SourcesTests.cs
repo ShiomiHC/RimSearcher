@@ -466,9 +466,51 @@ public class SourcesTests
                 ],
             }.Write(tree);
 
-            var resolved = RimSearcher.Metadata.AssemblyStore.Resolve(tree);
+            var resolved = RimSearcher.Metadata.AssemblyStore.Resolve(tree, [temp]);
             Assert.Equal(2, resolved.Count);
             Assert.Equal(2, resolved.Select(r => r.Path).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        }
+        finally
+        {
+            try { Directory.Delete(temp, recursive: true); } catch { /* 临时目录清不掉不算失败 */ }
+        }
+    }
+
+    /// <summary>
+    /// 一棵有副本的树,来源 mod 目录已删。两种环境对「原件没了」的答案必须不同:
+    /// 来源在本机安装根之下 = 真卸载,要说;不在任何安装根之下(别的机器建的树、只装代码树的
+    /// 环境)= 本机无从回答,不说 —— 否则每条 C# 查询都带一句「已卸载」,会被当成异常去追。
+    /// </summary>
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public void 原件缺席只在来源落在本机安装根之下时算卸载(bool rootConfigured, bool expectMissing)
+    {
+        var temp = Path.Combine(Path.GetTempPath(), "rimsearcher-gone-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var workshop = Path.Combine(temp, "workshop");
+            var modRoot = Path.Combine(workshop, "12345");
+            var dll = Path.Combine(modRoot, "Assemblies", "Gone.dll");
+            Directory.CreateDirectory(Path.GetDirectoryName(dll)!);
+            File.WriteAllText(dll, "gone");
+
+            var tree = Path.Combine(temp, "tree");
+            Directory.CreateDirectory(tree);
+            Assert.Equal(1, RimSearcher.Metadata.AssemblyStore.CopyInto(tree, modRoot, [dll]));
+            new SourceTreeState
+            {
+                PackageId = "x",
+                GameVersion = GameVersion,
+                Root = modRoot,
+                Assemblies = [new SourceAssembly { Path = "Assemblies/Gone.dll", Sha256 = "" }],
+            }.Write(tree);
+            Directory.Delete(modRoot, recursive: true);
+
+            var resolved = Assert.Single(RimSearcher.Metadata.AssemblyStore.Resolve(tree, rootConfigured ? [workshop] : []));
+            Assert.Equal(RimSearcher.Metadata.AssemblyOrigin.Copy, resolved.Origin);
+            Assert.Equal(expectMissing, resolved.OriginalMissing);
+            Assert.Null(resolved.OriginalChanged);
         }
         finally
         {
