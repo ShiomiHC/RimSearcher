@@ -1,0 +1,19 @@
+<Project>
+  <Import Project="..\..\RimTooling\Sources\RimTooling.ModBuild\Sdk\Sdk.props" />
+
+  <PropertyGroup>
+    <AssemblyName>RimSearcher.DataMod</AssemblyName>
+    <RootNamespace>RimSearcher.DataMod</RootNamespace>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <UseHarmony>true</UseHarmony>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\RimSearcher.Core\Contract\*.cs" LinkBase="Contract" />
+  </ItemGroup>
+
+  <Import Project="..\..\RimTooling\Sources\RimTooling.ModBuild\Sdk\Sdk.targets" />
+</Project>

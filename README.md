@@ -1,361 +1,86 @@
 # RimSearcher
-[![Latest Release](https://img.shields.io/github/v/release/kearril/RimSearcher?style=flat-square&color=333&logo=github)](https://github.com/kearril/RimSearcher/releases/latest)
 
-一个基于 MCP 的 RimWorld 源码检索与分析服务。它把本地 RimWorld C# / XML 数据建立为可查询索引，让 AI 助手能在真实源码上定位、追踪、阅读和解释逻辑，减少“幻觉式回答”。
+给 RimWorld mod 开发用的查询命令行，主要供 LLM 编码助手通过 skill 调用，也可以直接在终端里使用。
 
-采用 Roslyn + XML 继承解析，支持高并发只读查询。
-> MCP 协议版本: `2025-11-25`
+它查的是游戏**实际加载**之后的状态，而不是磁盘上的 XML：补丁全部应用，继承全部展开，
+游戏运行时用代码生成的 def（尸体、肉、蓝图、配方等）也都在内。
 
----
+## 能回答什么
 
-## 1. 核心特性
+- **一个 def 最终的内容**：应用补丁、展开继承之后的全部字段，以及它的译文。每个值都标有来源：
+  这个 def 自己的 XML、父节点、别的 mod 的补丁、代码里的默认值，还是加载时由代码改写。
+- **继承关系**：一个 XML 节点继承自谁、被谁继承，抽象父节点也算在内。
+- **反查**：哪些 def 用到某个 C# 类，或者某个字段取某个值。
+- **一个字段能取哪些值**：一个 def 类型实际用到哪些字段，每个字段出现过哪些值。
+- **经济数据**：游戏算出来的物品价值、制作成本和工时。
+- **界面文本**：一段界面文字对应哪个译文键，反过来也能查。
+- **C# 侧**：在反编译出来的游戏与 mod 代码里查类型、成员、调用方和引用点，搜正则，读源码和 IL。
+- **快照对比**：同一份 mod 名单在游戏或 mod 更新前后的两份快照之间，def 与字段的差异。
 
-### 精准 C# 解析（Roslyn）
-- 单次解析提取类型继承和成员索引（方法/属性/字段/事件）
-- 支持类大纲、成员体提取、继承链追踪
-- 支持方法、属性、构造器、索引器、运算符级别读取
+## 怎么得到这些数据
 
-### XML Def 继承合并
-- 递归解析 `ParentName` 链路
-- 合并父子节点并处理列表容器/覆盖逻辑
-- 输出可直接阅读的“最终 Def 结果”
+CLI 以指定的 mod 名单无人值守地启动游戏，游戏内的导出器把加载结果写成文件，CLI 再把它导入成一份 SQLite 快照。
+快照可以有多份，每份对应一份 mod 名单。C# 侧由 CLI 反编译游戏实际加载的程序集，写成源码树。
 
-### C# 与 XML 语义桥接
-- 从 Def 自动提取关联 C# 类型（如 thingClass / compClass / workerClass）
-- 在 `inspect` 中同时展示 Def 信息与关联代码路径
+面向 RimWorld 1.7。导出与反编译需要装好的游戏，只支持 Windows；Linux 上可以查询别处建好的快照与源码树。
 
-### 面向查询性能优化
-- 预建索引 + N-gram 候选筛选
-- 启动后冻结索引（`FrozenDictionary`）优化只读查询吞吐
-- 搜索结果带上限控制，避免超长输出拖慢上下文
+## 构建
 
-### 低 Token 消耗（LLM 友好）
-- 采用先定位再深入的查询链路（`locate` → `inspect`/`trace` → `read_code`），避免一次返回大段无关文本
-- `locate` / `trace` / `search_regex` 工具采用结果上限与预览截断，控制上下文体积并保持关键信息密度
-- `read_code` 支持按 `methodName`/`extractClass` 精确读取代码，未指定成员时再按小范围行号读取，避免一次返回整个文件
+需要 Windows、Steam 版 RimWorld 1.7、创意工坊的 Harmony、.NET SDK 10.0.404 或更新的 10.x、PowerShell 7，
+以及 Native AOT 所用的 MSVC 工具链（Visual Studio 的「使用 C++ 的桌面开发」）。
 
-### 运行模型与边界
-- 本地运行，核心检索不依赖网络
-- 网络请求仅用于版本更新提示（可关闭）
+[RimTooling](https://github.com/ShiomiHC/RimTooling) 是 git 子模块。游戏目录按 Steam 安装信息找，不在 Steam 库里的设环境变量 `RimWorldDir`。
 
----
-
-## 2. 六大工具
-
-以下为实际注册的 MCP 工具名与能力说明。
-
-###  `rimworld-searcher__locate`
-全局模糊定位入口。
-
-**支持内容**
-- C# 类型、成员（方法/属性/字段）、XML Def、文件名
-- 过滤语法：`type:` `method:` `field:` `def:`
-- CamelCase 缩写与拼写容错（如 `JDW`）
-
-**示例查询**
-```text
-def:Apparel_ShieldBelt
-type:CompShield
-method:CompTick
-field:energy
+```powershell
+git clone --recursive https://github.com/ShiomiHC/RimSearcher.git
+cd RimSearcher
+pwsh build.ps1
 ```
 
----
+克隆时没有带 `--recursive` 的，先执行 `git submodule update --init`。GitHub 的「Download ZIP」不含子模块。
+没有 MSVC 工具链的用 `pwsh build.ps1 -Jit`，产物需要装机的 .NET 10 运行时，启动较慢。
 
-###  `rimworld-searcher__inspect`
-深度分析单个 Def 或 C# 类型。
+## 安装与首次使用
 
-**Def 模式**
-- 展示 Def 类型、来源文件
-- 返回继承合并后的 XML
-- 提取关联 C# 类型并尝试映射到索引文件
+1. 把 `dist/` 的内容放到一个目录，并把该目录加进 `PATH`。导出器 `RimSearcher.DataMod.dll` 须与 `rimsearcher.exe` 同目录。
+2. 写 `%USERPROFILE%\.rimsearcher\config.toml`，路径用单引号：
 
-**C# 模式**
-- 返回继承关系图
-- 返回类成员大纲（字段/属性/方法签名）
+   ```toml
+   game_dir = 'D:\SteamLibrary\steamapps\common\RimWorld'
+   decompiled_dir = 'D:\rimsearcher\decompiled'
+   mod_roots = [
+     'D:\SteamLibrary\steamapps\common\RimWorld\Data',
+     'D:\SteamLibrary\steamapps\common\RimWorld\Mods',
+     'D:\SteamLibrary\steamapps\workshop\content\294100',
+   ]
+   ```
 
-**示例**
-```text
-Apparel_ShieldBelt
-RimWorld.CompShield
-```
+3. 把游戏当前启用的 mod 存成名单，导出一份快照，再反编译程序集：
 
----
+   ```powershell
+   rimsearcher modlist save mylist
+   rimsearcher export --modlist mylist
+   rimsearcher sources sync
+   ```
 
-###  `rimworld-searcher__trace`
-交叉引用追踪工具。
+4. 用支持 skill 的助手时，把 `skills/rimsearcher` 复制到它的 skill 目录（Claude Code 是 `~/.claude/skills/rimsearcher`）。
 
-**模式**
-- `inheritors`：列出某基类/接口的子类
-- `usages`：查找符号文本引用（C# + XML），带行号预览
+命令的用法见 `rimsearcher --help` 与 [skills/rimsearcher](skills/rimsearcher/SKILL.md)。
 
-**示例**
-```text
-symbol: ThingComp, mode: inheritors
-symbol: CompShield, mode: usages
-```
+## 目录
 
----
+| 路径 | 内容 |
+| --- | --- |
+| `Sources/RimSearcher.Cli/` | `rimsearcher` 命令的入口 |
+| `Sources/RimSearcher.Core/` | 命令、快照库、反编译树检索 |
+| `Sources/RimSearcher.DataMod/` | 游戏内导出器 |
+| `RimTooling/` | 子模块：命令行框架、平台与 RimWorld 基础库、mod 工程的构建口径 |
+| `skills/rimsearcher/` | 给 LLM 编码助手的 skill：哪个问题用哪条命令，输出怎么读 |
 
-###  `rimworld-searcher__read_code`
-精确读取 C# 代码片段。
+## 来源
 
-**支持读取方式**
-- 指定成员：`methodName`（支持方法/属性/构造器/索引器/运算符）
-- 指定类型：`extractClass`
-- 指定行区间：`startLine` + `lineCount`
+fork 自 [kearril/RimSearcher](https://github.com/kearril/RimSearcher)，之后整体重写，与上游不共享代码路线。
 
-**路径支持**
-- 绝对路径
-- 已索引文件名（如 `CompShield.cs`）
-- 文件基名（如 `CompShield`）
+## 许可
 
-**示例**
-```text
-path: CompShield.cs, methodName: CompTick
-```
-
----
-
-###  `rimworld-searcher__search_regex`
-全局正则检索（C# + XML）。
-
-**特性**
-- 可选 `fileFilter`（如 `.cs` / `.xml`）
-- 结果按文件分组，显示行号预览
-- 内置输出截断提示，避免超大响应
-
-**示例**
-```text
-pattern: class.*:.*ThingComp
-fileFilter: .cs
-```
-
----
-
-###  `rimworld-searcher__list_directory`
-目录浏览工具。
-
-**特性**
-- 列出目录下文件与子目录（子目录以 `/` 结尾）
-- 支持 `limit` 分页提示
-- 受 `PathSecurity` 白名单约束（除非显式关闭）
-
----
-
-## 2.5 系统架构
-
-```text
-RimSearcher Architecture (Narrow)
-
-MCP Client 
-  |
-  | JSON-RPC (MCP)
-  v
-RimSearcher.cs (runtime)
-  |- request routing / concurrency / cancel / progress / logging bridge
-  v
-Program.cs (bootstrap)
-  |- load config + PathSecurity
-  |- try cache -> fallback full scan -> save cache
-  |- start MCP server
-  |
-  +-- IndexCacheService
-  |     |- .cache/index/manifest.json
-  |     `- .cache/index/index.bin (compressed snapshot)
-  |
-  `-- UpdateChecker
-        `- .cache/.update-cache (latest version + check time)
-
-Tool Layer
-  |- locate | inspect | trace | read_code | search_regex | list_directory
-  |
-  +-- SourceIndexer
-  |     |- RoslynHelper / FuzzyMatcher / QueryParser
-  |     `- Local C# source (Assembly-CSharp)
-  |
-  `-- DefIndexer
-        |- XmlInheritanceHelper / FuzzyMatcher / QueryParser
-        `- Local RimWorld XML (Data/Defs...)
-```
-
-**启动流程**
-1. 读取配置（优先 `RIMSEARCHER_CONFIG`，未设置时回退到同目录 `config.json`）
-2. 初始化路径安全策略
-3. 自动准备缓存目录（`<exe目录>/.cache/index`）
-4. 尝试加载索引缓存（`manifest.json` + `index.bin`）
-5. 缓存未命中时扫描 C# / XML 并建索引，然后回写缓存
-6. 冻结索引（读优化）
-7. 注册工具并启动 MCP 服务
-
----
-
-## 3. 典型工作流
-
-### 场景：分析护盾腰带如何生效
-1. `locate(def:Apparel_ShieldBelt)`：定位 Def
-2. `inspect(Apparel_ShieldBelt)`：看合并后 XML 与关联 C# 类型
-3. `inspect(RimWorld.CompShield)`：看继承链和类大纲
-4. `read_code(path=CompShield.cs, methodName=CompTick)`：读取核心逻辑
-5. `trace(symbol=CompShield, mode=usages)`：追踪相关引用
-
----
-
-## 4. 性能与安全
-
-| 维度 | 当前实现 |
-|------|----------|
-| 索引策略 | 启动优先加载本地缓存，未命中时扫描并冻结索引（`FrozenDictionary`） |
-| 索引缓存 | `manifest.json + index.bin`，默认目录 `<exe目录>/.cache/index` |
-| 模糊匹配 | N-gram 候选过滤 + 评分排序 |
-| 并发控制 | MCP 请求并发上限 10 |
-| 正则搜索保护 | 全局/单文件命中上限 + 行数上限 + regex 超时 |
-| 路径安全 | 白名单根目录校验（`SkipPathSecurity=false` 时生效） |
-
-### 索引缓存说明
-
-- 缓存目录：`RimSearcher.Server.exe` 同目录下 `/.cache/index`
-- 缓存文件：`manifest.json`（元数据）+ `index.bin`（压缩索引快照）
-- 首次启动通常会全量建索引并写缓存；二次启动通常会直接命中缓存，这能显著提升二次启动速度
-- 若需要强制重建，删除 `/.cache/index` 后重启该程序即可
-- 当前策略下，配置路径变化或缓存结构版本变化会触发自动重建
-
-
----
-
-## 5. 快速开始
-
-### 前置要求
-> 运行 Release 版 `RimSearcher.Server.exe` 需要 [.NET 10 Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)；
-> 
-> 若需本地编译源码，则需要安装 .NET 10 SDK。
-
-### 安装步骤
-1. 从 [Releases](https://github.com/kearril/RimSearcher/releases) 下载 `RimSearcher.Server.exe`。
-2. 创建 `config.json`
-
-配置示例：
-```json
-{
-  "CsharpSourcePaths": [
-    "C:/Path/To/Your/RimWorld/Source"
-  ],
-  "XmlSourcePaths": [
-    "C:/SteamLibrary/steamapps/common/RimWorld/Data"
-  ],
-  "SkipPathSecurity": false,
-  "CheckUpdates": true
-}
-```
-
-字段说明：
-- `CsharpSourcePaths`: C# 源码目录（反编译源码目录，需要自己反编译导出游戏源码文件，这里不提供）
-- `XmlSourcePaths`: RimWorld `Data` 目录
-- `SkipPathSecurity`: `true` 时关闭路径白名单检查（仅建议本地可信环境）
-- `CheckUpdates`: 是否启用版本更新提示
-
-3. 在 MCP 客户端中把 `RimSearcher.Server.exe` 注册为 **stdio MCP Server**，并设置环境变量 `RIMSEARCHER_CONFIG` 指向上一步的 `config.json`。
-
-> 兼容模式说明：
-> - 若设置了 `RIMSEARCHER_CONFIG`，优先读取该路径。
-> - 若未设置，则回退到 `RimSearcher.Server.exe` 同目录下的 `config.json`。
-
-### 安装到 AI 助手（不同客户端配置差异）
-
-#### 通用 MCP 客户端（Claude Desktop / Gemini CLI / Cursor 等）
-```json
-{
-  "mcpServers": {
-    "RimSearcher": {
-      "command": "D:/Tools/RimSearcher/RimSearcher.Server.exe",
-      "args": [],
-      "env": {
-        "RIMSEARCHER_CONFIG": "D:/your/custom/path/config.json"
-      }
-    }
-  }
-}
-```
-
-#### GitHub Copilot（`servers` 结构）
-```json
-{
-  "servers": {
-    "RimSearcher": {
-      "command": "D:/Tools/RimSearcher/RimSearcher.Server.exe",
-      "args": [],
-      "env": {
-        "RIMSEARCHER_CONFIG": "D:/your/custom/path/config.json"
-      }
-    }
-  }
-}
-```
-
-#### OpenCode（`mcp` 结构）
-```json
-{
-  "mcp": {
-    "RimSearcher": {
-      "type": "local",
-      "command": ["D:/Tools/RimSearcher/RimSearcher.Server.exe"],
-      "enabled": true,
-      "environment": {
-        "RIMSEARCHER_CONFIG": "D:/your/custom/path/config.json"
-      }
-    }
-  }
-}
-```
-
-常见注意事项：
-- `command` 使用 `RimSearcher.Server.exe` 的绝对路径。
-- 推荐始终配置 `RIMSEARCHER_CONFIG` 指向明确路径，避免多环境切换时误读配置。
-- 若不设置 `RIMSEARCHER_CONFIG`，才要求 `config.json` 与 exe 在同一目录。
-- 修改客户端 MCP 配置后，重启客户端或重载 MCP 服务。
-- 若客户端有工具白名单/权限开关，确保已允许 `RimSearcher`。
-
-### 本地验证
-手动验证时：
-- 方式 A：设置环境变量 `RIMSEARCHER_CONFIG` 指向目标 `config.json`。
-- 方式 B：不设置环境变量，把 `config.json` 放到 `RimSearcher.Server.exe` 同目录。
-
-![配置示例](Image/Snipaste_2026-02-07_23-20-57.png)
-
-然后运行 `RimSearcher.Server.exe`，若最后一条看到类似的JSON-RPC2.0日志即表示启动成功（不同版本可能看到的日志不同，但只要看到`RimSearcher MCP server started`都可视为成功启动）：
-- 首次构建：`Program: Cache unavailable, rebuilding index` -> `Program: Index build completed ...` -> `Program: Index cache saved`
-- 缓存命中：`Program: Index loaded from cache`
-- 服务就绪：`RimSearcher MCP server started`
-
-![启动成功示例](Image/Snipaste_2026-02-27_16-12-43.png)
-
-快速检查是否接入成功：
-- 客户端工具列表中能看到 `rimworld-searcher__locate`、`rimworld-searcher__inspect` 等 6 个工具。
-- 执行一次 `locate`（例如 `def:Apparel_ShieldBelt`）能返回结果。
-
----
-
-## 6. 更新提示说明
-
-- 更新检查为非阻塞后台任务，不影响核心检索服务。
-- 仅在 `CheckUpdates=true` 时启用。
-- 若遇到 GitHub 匿名限流，更新检查会静默失败，不影响工具功能。
-- 更新信息默认通过日志通道输出；若 MCP 客户端不展示日志，则可能看不到该提示。
-- 更新检查缓存文件路径：`<exe目录>/.cache/.update-cache`（与 `index` 文件夹同级）。
-
----
-
-## 免责声明
-
-- 本项目为第三方开源工具，与 Ludeon Studios 及 RimWorld 官方无隶属、赞助或背书关系。
-- 本工具仅对用户本地提供的源码/XML进行索引与检索，不内置或分发任何游戏原始资源。
-- 检索与分析结果仅供学习、调试与研究参考。
-- 使用者应自行确保其数据来源、反编译行为与使用方式符合当地法律法规、RimWorld 相关协议及各 Mod 许可证要求。
-- 因使用本工具造成的任何直接或间接损失，项目作者与贡献者不承担责任。
-
----
-
-## License
-MIT
-
-> 如果这个项目对你有帮助，欢迎点个 Star⭐。
+[MIT](LICENSE)
